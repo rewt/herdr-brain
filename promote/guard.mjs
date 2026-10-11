@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadEvents, withLock } from '../lib/store.mjs';
+import { completionFingerprint } from '../lib/completion.mjs';
 import { fold, laterRuns, openRuns, blockersOf, releases, itemStatus } from '../lib/state.mjs';
 
-export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org }, operation = () => {}, recordLocked = false) {
+export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, completionExpected, superseded = [] }, operation = () => {}, recordLocked = false) {
   const checkGit = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
     if (expectedHead !== undefined) {
@@ -22,6 +23,8 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     const state = fold(events), current = state.runs.get(run), item = state.items.get(current?.item);
     if (!current || !item) throw new Error(`unknown promotion run ${run}; nothing merged`);
     if (item.kind !== 'work' || item.role === 'human' || item.meta.operator_reserved) throw new Error(`${run} is not ordinary authorized work; nothing merged`);
+    if (completionExpected !== undefined && completionFingerprint(state, item.id) !== completionExpected) throw new Error(`${run} changed since batch preparation; nothing merged`);
+    if (superseded.some(id => { const old = state.runs.get(id); return !old || old.item !== item.id || old.started.seq >= current.started.seq || old.report || old.abandoned; })) throw new Error('invalid superseded runs; nothing merged');
     if (current.abandoned || current.report?.outcome !== 'done') throw new Error(`${run} requires a recorded done report; nothing merged`);
     if (laterRuns(state, run).length) throw new Error(`${run} is superseded; nothing merged`);
     if (!current.workspace || fs.realpathSync(current.workspace) !== fs.realpathSync(workspace) || (current.meta.lane && current.meta.lane !== topic)) throw new Error(`${run} does not belong to this lane workspace; nothing merged`);
@@ -30,10 +33,10 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (item.outcome && item.outcome.run !== run) throw new Error(`current outcome does not belong to ${run}; nothing merged`);
     const blocked = blockersOf(state, item.id).some((id) => !releases(state, id, itemStatus(state, id)));
     const overlapping = [...state.runs.values()].some((r) => {
-      if (r.id === run || r.report || r.abandoned || !r.workspace) return false;
+      if (r.id === run || superseded.includes(r.id) || r.report || r.abandoned || !r.workspace) return false;
       try { return fs.realpathSync(r.workspace) === fs.realpathSync(workspace); } catch { return r.workspace === current.workspace; }
     });
-    if (item.closed || blocked || overlapping || openRuns(state, item.id).length || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(state, item.id))) throw new Error(`${run} record readiness changed: work, closure, blockers or outcome; nothing merged`);
+    if (item.closed || blocked || overlapping || openRuns(state, item.id).some(r => !superseded.includes(r.id)) || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(state, item.id))) throw new Error(`${run} record readiness changed: work, closure, blockers or outcome; nothing merged`);
     checkGit();
     return operation();
   };

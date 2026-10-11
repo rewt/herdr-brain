@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
-import { captureBatchCompletion } from './completion.mjs';
+import { captureCompletionMember } from './completion.mjs';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
@@ -58,20 +58,30 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (job.sourceHead && job.sourceHead !== head) throw new Error('lane tip changed since train capture');
     const captured = { ...job, workspace, sourceHead: head };
     withPromotionGuard({ canonical, identity, ...captured });
+    if (plan.completion && !plan.completion.git_only) {
+      const excluded = plan.completion.jobs.filter(b => b.job !== job.id && plan.results[b.job] && plan.results[b.job].outcome !== 'promoted')
+        .map(b => ({ item: b.item, run: b.run, superseded: [], disposition: 'historical',
+          reason: plan.results[b.job].reason || plan.results[b.job].outcome,
+          next_action: 'Inspect the retained excluded lane before authorizing a new request.' }));
+      captureCompletionMember({ canonical, identity, job, prepared: plan.completion, excluded });
+    }
     if (job.run) {
       const at = fold(loadEvents(job.org).events).runs.get(job.run)?.report?.at;
       if (at) captured.report_at = at;
     }
     return captured;
   };
-  const guards = jobs => jobs.map(job => ({ canonical, identity, ...job, expectedHead: job.sourceHead }));
+  const guards = jobs => jobs.map(job => ({ canonical, identity, ...job, expectedHead: job.sourceHead,
+    completionExpected: plan.completion?.jobs?.find(b => b.job === job.id)?.expected }));
   const result = (job, value) => { plan.results[job.id] = value; save(); };
   // Batch phase is live telemetry; attempt.phase remains the recovery checkpoint.
   // In particular, an in-flight gate still resumes from its prepared candidate.
   const phase = value => { plan.phase = value; save(); };
   // Capture completion inputs before any gate or integration, never on recovery
   // of a legacy successful train that lacked this evidence.
-  if (!plan.completion && !plan.attempts?.length) plan.completion = captureBatchCompletion({ canonical, identity, jobs: plan.jobs, main });
+  if (!plan.completion && !plan.attempts?.length) plan.completion = plan.jobs.every(j => !j.run)
+    ? { version: 1, git_only: true }
+    : { version: 1, identity, canonical, branch: main, base: git(['rev-parse', main]), jobs: [], refused: [] };
   plan.started_at ??= new Date().toISOString();
   plan.external_lock_required ??= Boolean(profile?.externalLock);
   plan.results ??= {}; plan.attempts ??= []; plan.groups ??= [plan.jobs.map(j => j.id)];
@@ -161,7 +171,10 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       for (const id of ids) {
         const job = plan.jobs.find(j => j.id === id);
         try { jobs.push(capture(job)); }
-        catch (error) { result(job, { outcome: 'refused', reason: error.message, batch: plan.id }); }
+        catch (error) {
+          if (plan.completion?.refused && !plan.completion.jobs.some(b => b.job === job.id) && !plan.completion.refused.includes(job.id)) plan.completion.refused.push(job.id);
+          result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
+        }
       }
       if (!jobs.length) return null;
       const base = git(['rev-parse', main]);

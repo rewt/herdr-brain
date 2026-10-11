@@ -6,7 +6,13 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
-import { reconcileBatchCompletion } from '../completion.mjs';
+import { reconcileBatchCompletion, recordedBatchCompletion } from '../completion.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
+import { receiptDirectory } from '../../supervisor/context.mjs';
+import { reconcile } from '../../supervisor/reconcile.mjs';
+import { withPromotionGuards } from '../guard.mjs';
+import { completionFingerprint } from '../../lib/completion.mjs';
+import { fold } from '../../lib/state.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
@@ -40,24 +46,26 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
   fs.writeFileSync(preload, `if(process.argv[1]?.endsWith('org.mjs')&&process.argv.includes('complete-batch')&&require('fs').existsSync(${JSON.stringify(fault)})){if(require('fs').readFileSync(${JSON.stringify(fault)},'utf8')==='lost-ack'){process.stdout.write=()=>true;}else{console.error('injected record refusal');process.exit(1);}}`);
   env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --require ${preload}`;
   const queue = queueFor(repo), members = [];
-  const lane = (topic, bad = false) => {
+  const lane = (topic, bad = false, options = {}) => {
     const workspace = path.join(root, topic); git(['worktree', 'add', '-qb', `lane/${topic}`, workspace]);
     fs.writeFileSync(path.join(workspace, bad ? 'bad' : topic), topic); git(['add', '.'], workspace); git(['commit', '-qm', topic], workspace);
-    const item = record(['add', topic]), run = record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0];
+    const item = record(['add', topic]);
+    const superseded = options.supersede ? [record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0]] : [];
+    const run = record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0];
     const report = path.join(root, `${topic}.md`);
-    fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Implemented ${topic}\nheadline: Implemented ${topic}\n---\n`);
+    fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Implemented ${topic}\nheadline: Implemented ${topic}\n${options.questions ? "questions:\n  - question: Does this behavior need adjustment?\n    category: design\n    recommend: no\n    why: The implementation is complete\n" : ""}---\n`);
     record(['ingest', report]);
     const head = git(['rev-parse', 'HEAD'], workspace);
     const job = enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0,
-      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, expectedHead: head })[0];
-    const member = { topic, workspace, item, run, head, job }; members.push(member); return member;
+      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, expectedHead: head, superseded })[0];
+    const member = { topic, workspace, item, run, head, job, superseded }; members.push(member); return member;
   };
   const drain = () => ok(exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain']));
   const show = id => JSON.parse(record(['show', id, '--json']));
   const gates = () => fs.existsSync(count) ? fs.readFileSync(count, 'utf8').trim().split('\n').length : 0;
   const events = () => fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   t.after(async () => { await waitForInboxIdle(path.join(org, 'supervisor/inbox.log')); fs.rmSync(root, { recursive: true, force: true }); });
-  return { root, repo, org, env, git, record, queue, lane, drain, show, gates, events, fault, members };
+  return { root, repo, org, env, git, record, queue, lane, drain, show, gates, events, fault, members, checker };
 }
 
 for (const size of [1, 3]) test(`native ${size}-member batch reconciles atomically before cleanup and duplicate recovery`, t => {
@@ -81,7 +89,7 @@ for (const size of [1, 3]) test(`native ${size}-member batch reconciles atomical
 test('integrated record refusal retains every lane and resumes records without another gate', t => {
   const f = fixture(t); const first = f.lane('first'), second = f.lane('second');
   fs.writeFileSync(f.fault, 'refuse'); f.drain();
-  assert.equal(f.gates(), 1); assert.equal(f.queue.load().interrupted.length, 1);
+  assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
   for (const m of [first, second]) { assert.equal(f.show(m.item).closed, null); assert.ok(fs.existsSync(m.workspace)); }
   assert.ok(f.queue.load().results.every(r => r.reconciliation.state === 'pending'));
   const receipt = f.queue.load().results[0].receipt, log = fs.readFileSync(f.queue.load().results[0].log, 'utf8');
@@ -91,7 +99,7 @@ test('integrated record refusal retains every lane and resumes records without a
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, proof.attempts);
   for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
   assert.equal(f.events().filter(e => e.type === 'promotion.reconciled').length, 1);
-  assert.equal(f.queue.load().interrupted.length, 0);
+  assert.equal((f.queue.load().interrupted ?? []).length, 0);
 });
 
 test('bisected batch accounts for its exclusion without mutating newer excluded work', t => {
@@ -119,7 +127,7 @@ for (const change of ['new-run', 'blocker', 'missing-member']) test(`recovery re
   f.drain(); assert.equal(f.gates(), gates);
   for (const m of [first, second]) { assert.equal(f.show(m.item).closed, null); assert.ok(fs.existsSync(m.workspace)); }
   assert.equal(f.events().filter(e => e.type === 'promotion.reconciled').length, 0);
-  assert.equal(f.queue.load().interrupted.length, 1);
+  assert.equal((f.queue.load().interrupted ?? []).length, 1);
 });
 
 
@@ -144,4 +152,184 @@ for (const mode of ['operator-reserved', 'human']) test(`native completion refus
   assert.ok(fs.existsSync(member.workspace)); assert.equal(f.show(member.item).closed, null);
   assert.equal(f.queue.load().results[0].outcome, 'refused');
   assert.match(f.queue.load().results[0].reason, /not ordinary authorized work/);
+});
+
+
+function rewriteJob(f, member, changes) {
+  f.queue.transaction(data => Object.assign(data.pending.find(j => j.id === member.job.id), changes));
+}
+
+for (const mode of ['unknown-run', 'wrong-record', 'duplicate-item']) test(`native admission isolates ${mode} while valid members reconcile`, t => {
+  const f = fixture(t), first = f.lane('first'), bad = f.lane('invalid'), second = f.lane('second');
+  if (mode === 'unknown-run') rewriteJob(f, bad, { run: 'R-99999' });
+  if (mode === 'wrong-record') {
+    const wrong = path.join(f.root, 'wrong-record'); f.record(['init', wrong]);
+    rewriteJob(f, bad, { org: wrong });
+  }
+  if (mode === 'duplicate-item') rewriteJob(f, bad, { run: first.run });
+  f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  const rows = f.queue.load().results;
+  assert.equal(rows.find(r => r.id === bad.job.id).outcome, 'refused');
+  assert.ok(fs.existsSync(bad.workspace)); assert.equal(f.show(bad.item).closed, null);
+  for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
+  assert.deepEqual(f.events().find(e => e.type === 'promotion.reconciled').items, [first.item, second.item]);
+  f.drain(); assert.equal(f.gates(), 1);
+});
+
+test('bound and unbound requests use separate native batches', t => {
+  const f = fixture(t), first = f.lane('first'), unbound = f.lane('unbound'), second = f.lane('second');
+  rewriteJob(f, unbound, { run: undefined, expectedHead: undefined, superseded: undefined });
+  f.drain(); assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  assert.ok(f.queue.load().results.every(r => r.outcome === 'promoted'));
+  assert.equal(new Set(f.queue.load().results.map(r => r.batch)).size, 3);
+  for (const m of [first, second]) assert.equal(f.show(m.item).closed.as, 'done');
+  assert.equal(f.show(unbound.item).closed, null);
+});
+
+test('a done report with questions is refused before the gate while valid members complete', t => {
+  const f = fixture(t), bad = f.lane('questioned', false, { questions: true }), good = f.lane('resolved');
+  const badBefore = f.show(bad.item);
+  assert.equal(f.show(bad.run).report.extra.questions.length, 1);
+  f.drain(); assert.equal(f.gates(), 1);
+  const row = f.queue.load().results.find(r => r.id === bad.job.id);
+  assert.equal(row.outcome, 'refused'); assert.match(row.reason, /resolution.*blockers\/questions/);
+  assert.ok(fs.existsSync(bad.workspace)); assert.deepEqual(f.show(bad.item), badBefore);
+  assert.equal(f.show(good.item).closed.as, 'done');
+  assert.equal(f.git(['merge-base', f.git(['rev-parse', 'main']), bad.head]), f.git(['rev-parse', `${bad.head}^`]));
+  assert.deepEqual(f.events().find(e => e.type === 'promotion.reconciled').excluded, [bad.item]);
+  assert.equal((f.queue.load().interrupted ?? []).length, 0);
+});
+
+test('included item notes during the gate refuse integration without refreshing captured fingerprints', t => {
+  const f = fixture(t), m = f.lane('changed'), base = f.git(['rev-parse', 'main']);
+  fs.appendFileSync(f.checker, `require('child_process').execFileSync(process.execPath, ${JSON.stringify([path.join(source, 'bin/org.mjs'), 'note', m.item, 'Gate-time change'])}, {env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});`);
+  f.drain(); assert.equal(f.gates(), 1); assert.equal(f.git(['rev-parse', 'main']), base);
+  assert.ok(fs.existsSync(m.workspace)); assert.equal(f.show(m.item).closed, null);
+  assert.equal(f.queue.load().results[0].outcome, 'refused');
+  assert.match(f.queue.load().results[0].reason, /changed since batch preparation/);
+  assert.equal((f.queue.load().interrupted ?? []).length, 0);
+});
+
+test('the held record lock checks the original fingerprint immediately before fast-forward', t => {
+  const f = fixture(t), m = f.lane('guarded'), base = f.git(['rev-parse', 'main']);
+  const expected = completionFingerprint(fold(f.events()), m.item);
+  const guard = { canonical: f.repo, identity: f.queue.project.identity, workspace: m.workspace,
+    topic: m.topic, run: m.run, org: f.org, expectedHead: m.head, completionExpected: expected };
+  withPromotionGuards([guard], () => assert.ok(fs.existsSync(path.join(f.org, 'lock'))));
+  f.record(['note', m.item, 'Changed after capture']);
+  assert.throws(() => withPromotionGuards([guard], () => f.git(['merge', '--ff-only', m.head])), /changed since batch preparation/);
+  assert.equal(f.git(['rev-parse', 'main']), base); assert.equal(fs.existsSync(path.join(f.org, 'lock')), false);
+});
+
+test('native completion explicitly retires superseded open runs through the record transaction', t => {
+  const f = fixture(t), m = f.lane('superseding', false, { supersede: true }), other = f.lane('other');
+  const oldReport = f.show(m.run).report;
+  f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  assert.ok(f.show(m.superseded[0]).abandoned); assert.deepEqual(f.show(m.run).report, oldReport);
+  assert.deepEqual(f.events().find(e => e.type === 'promotion.reconciled').superseded, m.superseded);
+  for (const member of [m, other]) { assert.equal(f.show(member.item).closed.as, 'done'); assert.equal(fs.existsSync(member.workspace), false); }
+});
+
+function manualRecovery(f, rows, mode = 'complete') {
+  const original = JSON.parse(fs.readFileSync(rows[0].receipt + '.record.json'));
+  const manifest = path.join(f.repo, '.lane/manual-recovery.json'), prepared = path.join(f.repo, '.lane/manual-prepared.json');
+  if (mode === 'wrong-head') f.git(['reset', '--hard', original.tip], rows[0].workspace);
+  const items = (mode === 'missing-member' ? original.items.slice(0, 1) : original.items)
+    .map((e, index) => ({ item: e.item, run: e.run, head: mode === 'wrong-head' && index === 0 ? original.tip : e.head,
+      superseded: e.superseded, why: 'Inspected record changes and retained native gate proof.' }));
+  const excluded = [...original.excluded];
+  if (mode === 'missing-member') excluded.push({ item: original.items[1].item, run: original.items[1].run,
+    superseded: [], disposition: 'historical', reason: 'Recovery deferred', next_action: 'Inspect this integrated member separately' });
+  fs.mkdirSync(path.dirname(manifest), { recursive: true });
+  fs.writeFileSync(manifest, JSON.stringify({ batch: 'manual-recovery', candidate: f.git(['rev-parse', 'main']), items, excluded }));
+  const args = ['--repo', f.repo, '--org', f.org, '--role', 'supervisor', '--prepared', prepared];
+  reconcile(['prepare', ...args, '--manifest', manifest, '--gate-log', rows[0].log]);
+  return reconcile(['finish', ...args, '--gate-exit', '0', '--tip', f.git(['rev-parse', 'main'])]);
+}
+
+for (const mode of ['complete', 'missing-member', 'wrong-head', 'reopened', 'new-run']) test(`manual reconciliation recovery ${mode} retains proof and handles cleanup`, async t => {
+  const f = fixture(t), first = f.lane('first'), second = f.lane('second');
+  fs.writeFileSync(f.fault, 'refuse'); f.drain(); fs.unlinkSync(f.fault);
+  const rows = f.queue.load().results, receipt = rows[0].receipt;
+  const attempts = JSON.parse(fs.readFileSync(receipt)).attempts;
+  const original = fs.readFileSync(receipt + '.record.json', 'utf8');
+  f.record(['note', first.item, 'Inspected change requires a newly prepared receipt']);
+  f.drain(); assert.equal((f.queue.load().interrupted ?? []).length, 1);
+  manualRecovery(f, rows, mode);
+  if (mode === 'missing-member' || mode === 'wrong-head') {
+    f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
+    assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
+    for (const m of [first, second]) assert.ok(fs.existsSync(m.workspace));
+    return;
+  }
+  if (mode === 'reopened') f.record(['reopen', first.item, '--note', 'Further work']);
+  if (mode === 'new-run') f.record(['start', first.item, '--workspace', first.workspace]);
+  if (mode === 'complete') {
+    const directory = receiptDirectory(f.org, f.queue.project.identity); fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, `${first.run}.json`), JSON.stringify({ identity: f.queue.project.identity,
+      org: f.org, run: first.run, lane: first.topic, head: first.head, phase: 'acknowledged', queue: { jobs: [first.job] } }));
+    const retry = spawnSync(process.execPath, [path.join(source, 'supervisor/supervisor.mjs'), 'promote', first.run,
+      '--repo', f.repo, '--org', f.org, '--role', 'supervisor', '--retry', '--why', 'Inspected manual reconciliation'],
+      { cwd: f.repo, env: f.env, encoding: 'utf8' });
+    assert.equal(retry.status, 0, retry.stderr); assert.equal(JSON.parse(retry.stdout).result, 'resuming_completion');
+    const deadline = Date.now() + loadTimeout(10000);
+    while (f.queue.load().current || (f.queue.load().interrupted ?? []).length) {
+      assert.ok(Date.now() < deadline, 'normal resume worker completes bookkeeping');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  } else f.drain();
+  assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
+  assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);
+  for (const m of [first, second]) {
+    const row = f.queue.load().results.findLast(r => r.id === m.job.id);
+    assert.equal(row.reconciliation.recovered.batch, 'manual-recovery');
+    assert.equal(recordedBatchCompletion({ result: row, project: { ...f.queue.project, org: f.org }, run: { id: m.run, item: m.item } }), true);
+    assert.equal(fs.existsSync(m.workspace), m === first && mode !== 'complete');
+  }
+  const before = f.events(); f.drain(); assert.equal(f.gates(), 1); assert.deepEqual(f.events(), before);
+});
+
+
+test('native admission refuses omitted superseded attempts without wedging valid work', t => {
+  const f = fixture(t), bad = f.lane('omitted', false, { supersede: true }), good = f.lane('good');
+  rewriteJob(f, bad, { superseded: [] });
+  f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  assert.equal(f.queue.load().results.find(r => r.id === bad.job.id).outcome, 'refused');
+  assert.equal(f.show(bad.superseded[0]).abandoned, null); assert.ok(fs.existsSync(bad.workspace));
+  assert.equal(f.show(good.item).closed.as, 'done');
+});
+
+for (const mode of ['covered', 'missing-exclusion']) test(`bisected manual recovery ${mode} accounts for newer excluded work`, t => {
+  const f = fixture(t), first = f.lane('first', false, { supersede: true }), second = f.lane('second'), bad = f.lane('broken', true);
+  fs.writeFileSync(f.fault, 'refuse'); f.drain(); fs.unlinkSync(f.fault); assert.equal(f.gates(), 3);
+  f.record(['note', first.item, 'Inspected pending native completion']);
+  f.record(['start', bad.item, '--workspace', bad.workspace]);
+  const excludedBefore = f.show(bad.item), rows = f.queue.load().results;
+  const original = JSON.parse(fs.readFileSync(rows[0].receipt + '.record.json'));
+  const manifest = path.join(f.repo, '.lane/recovery.json'), prepared = path.join(f.repo, '.lane/recovery-prepared.json');
+  fs.mkdirSync(path.dirname(manifest), { recursive: true });
+  fs.writeFileSync(manifest, JSON.stringify({ batch: 'bisected-recovery', candidate: original.tip,
+    items: original.items, excluded: mode === 'covered' ? original.excluded : [] }));
+  const args = ['--repo', f.repo, '--org', f.org, '--role', 'supervisor', '--prepared', prepared];
+  reconcile(['prepare', ...args, '--manifest', manifest, '--gate-log', rows[0].log]);
+  reconcile(['finish', ...args, '--gate-exit', '0', '--tip', original.tip]);
+  f.drain(); assert.equal(f.gates(), 3); assert.deepEqual(f.show(bad.item), excludedBefore);
+  assert.ok(fs.existsSync(bad.workspace));
+  assert.equal((f.queue.load().interrupted ?? []).length, mode === 'covered' ? 0 : 1);
+  for (const m of [first, second]) assert.equal(fs.existsSync(m.workspace), mode !== 'covered');
+  assert.ok(f.show(first.superseded[0]).abandoned);
+});
+
+
+test('a refused questioned dependency cannot let another member integrate before completion refuses', t => {
+  const f = fixture(t), dependent = f.lane('dependent'), bad = f.lane('questioned', false, { questions: true }), good = f.lane('good');
+  f.record(['block', dependent.item, '--by', bad.item]);
+  f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  for (const m of [dependent, bad]) {
+    assert.equal(f.queue.load().results.find(r => r.id === m.job.id).outcome, 'refused');
+    assert.equal(f.show(m.item).closed, null); assert.ok(fs.existsSync(m.workspace));
+  }
+  assert.equal(f.show(good.item).closed.as, 'done');
+  assert.deepEqual(new Set(f.events().find(e => e.type === 'promotion.reconciled').excluded), new Set([dependent.item, bad.item]));
 });

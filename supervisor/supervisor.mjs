@@ -176,7 +176,14 @@ export function main(argv = process.argv.slice(2)) {
       if (jobs?.length !== 1) throw new Error('retry requires one acknowledged queue job; inspect evidence');
       const outcome = completedJob(loadQueue(), jobs[0].id);
       if (!outcome) throw new Error('retry requires a confirmed refused queue job; pending or uncertain attempts need inspection');
-      if (outcome.outcome === 'promoted') { print(saved); return; }
+      if (outcome.outcome === 'promoted') {
+        if (outcome.reconciliation?.state === 'pending') {
+          if (outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw Error('completion retry requires the same acknowledged binding');
+          const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
+          print({ result: 'resuming_completion', ...JSON.parse(call(promote, ['--resume', '--repo', project.canonical])) });
+        } else print(saved);
+        return;
+      }
       if (!['refused', 'timeout'].includes(outcome.outcome) || outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw new Error('retry requires a confirmed refused queue job with the same binding; inspect evidence');
       const { prior_attempts, ...attempt } = saved;
       prior = [...(prior_attempts ?? []), { ...attempt, result: outcome }];

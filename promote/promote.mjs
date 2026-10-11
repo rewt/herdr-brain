@@ -118,6 +118,7 @@ function settings(project, opt) {
   if (run !== undefined && !org) throw new Error('--if-current-run requires a record');
   return { to, attempts, retry, herdr: opt.herdr ?? 'herdr', laneCLI,
     org, expectedHead, run,
+    superseded: opt['superseded-runs'] === undefined ? [] : JSON.parse(opt['superseded-runs']),
     requiredTests: opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']),
     workflow: opt.workflow ?? process.env.PROMOTE_WORKFLOW_ENGINE === '1',
     validate,
@@ -128,11 +129,12 @@ export function enqueue(queue, topics, options) {
   if (options.requiredTests !== undefined && (!Array.isArray(options.requiredTests) || options.requiredTests.length > 512 || options.requiredTests.some(f => typeof f !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(f) || f.split('/').includes('..') || path.isAbsolute(f)))) throw Error('invalid required test files');
   if (options.expectedHead !== undefined && (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.expectedHead) || topics.length !== 1)) throw new Error('expected head requires one lane and a full commit hash');
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
+  if (options.superseded !== undefined && (!Array.isArray(options.superseded) || (options.superseded.length && !options.run) || new Set(options.superseded).size !== options.superseded.length || options.superseded.some(id => !/^R-\d+$/.test(id)))) throw Error('invalid explicit superseded runs');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
   return queue.transaction((data) => topics.map((topic) => {
     const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && ['refused', 'timeout'].includes(job.result?.outcome)));
     if (existing) {
-      if (JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
+      if (JSON.stringify(existing.superseded ?? []) !== JSON.stringify(options.superseded ?? []) || JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
       return { id: existing.id, topic, duplicate: true };
     }
     const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options };
@@ -266,6 +268,14 @@ function finishBatchJob(job, result, queue) {
   // Reconciliation precedes telemetry and every lifecycle cleanup operation.
   // Failed integration/replacement proof also requires retaining the lane.
   // A velocity note is telemetry and must not prevent lifecycle cleanup.
+  if (job.run && result.reconciliation?.state === 'complete') {
+    const env = { ...process.env, ORG_DIR: job.org };
+    try {
+      const run = JSON.parse(invoke(process.execPath, [RECORD, 'show', job.run, '--json'], { cwd: queue.project.canonical, env }));
+      const item = JSON.parse(invoke(process.execPath, [RECORD, 'show', run.item, '--json'], { cwd: queue.project.canonical, env }));
+      if (!item.closed || item.runs.at(-1) !== run.id) throw Error('item reopened or run superseded after completion; lane retained');
+    } catch (error) { return { ...result, warnings: [...warnings, error.message], reason: error.message }; }
+  }
   if ((result.warnings?.length ?? 0) === 0 && result.workspace) {
     warnings.push(...cleanup(job, queue, result.workspace));
     try {
@@ -357,7 +367,7 @@ export async function drain(queue) {
         if (next.laneCLI === LANE) {
           // Snapshot whatever is available now. No accumulation timer/window.
           // Different command/config inputs retain their independent gates.
-          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, job.workflow ?? false]);
+          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, job.workflow ?? false, Boolean(job.run)]);
           const jobs = [next];
           while (jobs.length < policy.maxBatch && data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
           const job = { id: randomUUID(), phase: 'batching', jobs };
@@ -476,12 +486,17 @@ async function main() {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, to: { type: 'string' },
     validate: { type: 'string' }, herdr: { type: 'string' }, 'lane-cli': { type: 'string' },
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },
-    'required-tests': { type: 'string' }, 'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
-    drain: { type: 'boolean' }, status: { type: 'boolean' }, workflow: { type: 'boolean' },
+    'superseded-runs': { type: 'string' }, 'required-tests': { type: 'string' }, 'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
+    resume: { type: 'boolean' }, drain: { type: 'boolean' }, status: { type: 'boolean' }, workflow: { type: 'boolean' },
   } });
   const queue = queueFor(opt.repo);
   if (opt.status) { process.stdout.write(JSON.stringify({ queue: queue.file, ...queue.load() }, null, 2) + '\n'); return; }
   if (opt.drain) { await drain(queue); return; }
+  if (opt.resume) {
+    if (positionals.length) throw Error('--resume takes no lane topics');
+    const worker = await start(queue);
+    process.stdout.write(JSON.stringify({ worker, queue: queue.file }) + '\n'); return;
+  }
   if (!positionals.length) throw new Error('usage: promote.mjs TOPIC [TOPIC ...] [--repo PROJECT] [--to SUPERVISOR] | --status | --drain');
   const jobs = enqueue(queue, positionals, settings(queue.project, opt));
   const worker = await start(queue);

@@ -21,6 +21,46 @@ need the guarded manual recovery path. Later notices verify the reconciliation
 marker instead of closing members individually. Git-only queues without a record
 make no organizational completion claim.
 
+For a native batch pending after a relevant note or resolved blocker changes its
+fingerprint, the canonical project supervisor can recover it as follows:
+
+1. Inspect the retained `train.json`, its `.record.json`, and gate log. Confirm
+   every integrated member still has the same current done run and exact lane
+   head, and resolve any new approval or blocker. Preserve the original receipts.
+   A newer run needs its own reviewed work; this recovery cannot substitute it.
+2. Create a new manual manifest with a new batch ID. Copy every included
+   `item`, `run`, `head` and explicit `superseded` list from the native `.record.json`,
+   add an inspection reason in `why` (and `resolution` for report questions), and
+   copy every historical exclusion unchanged. Set `candidate` to the native
+   receipt's integrated `tip`. Use the manual `prepare` and `finish` commands below
+   with a new prepared filename and the retained native gate log. Attest to the
+   already successful gate exit with `--gate-exit 0`; no new gate is needed.
+3. Resume bookkeeping through the normal queue worker from the canonical
+   supervisor, using an acknowledged included run:
+
+   ```sh
+   node /path/to/herdr-brain/supervisor/supervisor.mjs promote R-N \
+     --repo /path/to/project --org /path/to/record --role supervisor \
+     --retry --why "Inspected and manually reconciled the retained native batch"
+   ```
+
+   This starts the normal worker via `promote.mjs --resume`; do not invoke
+   `--drain` from the supervisor shell. The queue recognizes the new reconciliation
+   marker only when it covers every original included run and exact integrated
+   head, every explicit superseded attempt, and every historical exclusion. It
+   retains the original native fingerprints and successful attempts, clears the
+   interrupted batch and cleans the completed lanes. Incomplete or different-head
+   manual coverage stays pending. Reopened items and newer runs retain their lanes.
+   Later notices verify this marker as well. Markers from older runtimes without
+   per-member heads cannot authorize this recovery; use the reviewed implementation.
+
+Native record-bound requests and unbound Git requests form separate batches.
+Each member derives the shared completion transaction before any gate; invalid
+members are refused individually. The final fast-forward guard rechecks each
+original completion fingerprint while holding the record lock. Native enqueue
+supports `--superseded-runs '["R-OLD"]'` with `--if-current-run R-NEW` to name older
+open attempts explicitly; omitted attempts refuse admission and remain intact.
+
 1. Rebase and independently review the exact candidate. Record every included
    item's final report and finish its review/approval blockers. List every item
    considered for the batch, including exclusions. Explicitly name older open

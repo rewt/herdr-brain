@@ -32,7 +32,7 @@ and the affected pending request IDs. Requests stay pending in arrival order;
 after fixing the cause, retry the drain. A successful settings read clears the
 refusal. Captured and interrupted batches keep their original membership.
 
-Compatible requests (same validation override and lane configuration) form a
+Compatible requests (same validation override, lane configuration and run-binding mode) form a
 batch. `lane promote-batch` holds the existing Git promotion lock, checks clean
 canonical and lane worktrees, and stacks the captured lane commits in an owned
 scratch branch using native Git rebases. Each replay must equal Git's mechanical
@@ -61,7 +61,10 @@ integration. Promoted lane refs adopt only their proved replay after main moves;
 post-integration edits preserve the lane with a warning rather than overwriting it.
 
 For reviewed work, bind the request to one exact commit and, when applicable,
-its authorized record run:
+its authorized record run. Name any older open attempts with
+`--superseded-runs '["R-OLD"]'`; the guarded completion transaction retires only
+those explicit attempts after integration. To resume retained batch bookkeeping,
+use the supervisor recovery steps in [promotion completion](../supervisor/PROMOTION-COMPLETION.md):
 
 ```sh
 node promote/promote.mjs topic --expected-head FULL_COMMIT_HASH --if-current-run R-123 --org /record

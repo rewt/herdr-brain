@@ -51,8 +51,12 @@ export function reconcile(argv) {
       const state = fold(loaded.events), seen = new Set();
       const bind = (entry, included) => {
         const item = state.items.get(entry.item), run = state.runs.get(entry.run);
-        if (!item || !run || run.item !== item.id || item.runs.at(-1) !== run.id || item.closed || run.abandoned || seen.has(item.id)) throw Error('manifest has stale, duplicate or mismatched item/run');
+        if (!item || !run || run.item !== item.id || seen.has(item.id)) throw Error('manifest has stale, duplicate or mismatched item/run');
         seen.add(item.id);
+        // Historical exclusions account for an earlier decision without
+        // rebinding or changing newer excluded work, as in the native adapter.
+        if (!included && entry.disposition === 'historical') return { ...entry };
+        if (item.runs.at(-1) !== run.id || item.closed || run.abandoned) throw Error('manifest has stale, duplicate or mismatched item/run');
         if (included) {
           if (!run.workspace || git(run.workspace, ['status', '--porcelain']) || gitProject(run.workspace).identity !== project.identity || !hash(entry.head) ||
               git(run.workspace, ['rev-parse', 'HEAD']) !== entry.head) throw Error(`${entry.item} head/workspace differs from its manifest`);

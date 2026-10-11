@@ -14,7 +14,7 @@ import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
 import { promotionMemoryFixture, healthyMemory, pressuredMemory } from '../../test/helpers/promotion-memory-fixture.mjs';
-import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+import { waitForInboxIdle, stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const host = path.join(source, 'promote/host-gate.mjs');
@@ -31,7 +31,8 @@ function fixture(t, { externalLock = false, ...changes } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gate-profile-'))), repo = path.join(root, 'repo');
   fixtureFleet(t, root);
   fs.mkdirSync(repo);
-  const env = { ...testSlotEnvironment(), HOME: path.join(root, 'home'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  // These lifecycle cases inspect synchronous delivery; opt into a bounded wait.
+  const env = { ...testSlotEnvironment(), HOME: path.join(root, 'home'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '10' };
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)|MONITOR_PROMOTION_|.*TEST_SLOT_TOKEN)/.test(key)) delete env[key];
   const slot = path.join(root, 'slot'); env.MONITOR_TEST_SLOT_PATH = env.MONITOR_TEST_SLOT_COMPAT_PATH = slot;
   env.PROFILE_EVIDENCE = path.join(root, 'evidence');
@@ -67,7 +68,13 @@ function fixture(t, { externalLock = false, ...changes } = {}) {
   const asyncRun = () => spawnChild(t, process.execPath, [host, repo, receipt, ...argv], { cwd: repo, env });
   const saved = () => JSON.parse(fs.readFileSync(path.join(directory, 'host-gate.json')));
   const slotSaved = () => JSON.parse(fs.readFileSync(path.join(directory, 'test-slot-wait.json')));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(async () => {
+    await until(() => !fs.existsSync(path.join(repo, '.git/promote/worker.lock')));
+    await stopFixtureInbox(path.join(repo, '.git/supervisor/inbox.log'), {
+      script: path.join(source, 'supervisor/prompt-supervisor.mjs'),
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   return { root, repo, env, bin, gate, slot, directory, receipt, head, before, git, run, asyncRun, saved, slotSaved, declare };
 }
 
@@ -517,7 +524,7 @@ test('two-lane host envelope timeout returns batch re-enqueue wording', t => {
   assert.equal(r.status, 0, r.stderr + r.stdout);
   const results = queue.load().results; assert.equal(results.length, 2);
   for (const result of results) {
-    assert.equal(result.outcome, 'timeout');
+    assert.equal(result.outcome, 'timeout', JSON.stringify({ outcome: result.outcome, code: result.code, reason: result.reason }));
     assert.equal(result.reason, 'gate wall-clock limit exceeded; batch timed out; re-enqueue lanes individually');
     const host = JSON.parse(fs.readFileSync(result.host_receipt)); assert.equal(host.phase, 'timeout'); assert.equal(host.gate_timeout.descendant ?? false, false);
   }

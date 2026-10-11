@@ -487,7 +487,7 @@ try {
       git(workspace, ['add', '.']); git(workspace, ['commit', '-qm', topic]);
     }
     write(path.join(worktrees.get('queue-refusal'), 'dirty'), 'uncommitted work');
-    const extra = { ORG_DIR: '', LANE_CONFIG: '', LANE_VALIDATE: undefined, NODE_TEST_CONTEXT: undefined };
+    const extra = { ORG_DIR: '', LANE_CONFIG: '', LANE_VALIDATE: undefined, NODE_TEST_CONTEXT: undefined, SUPERVISOR_INPUT_WAIT_SECONDS: undefined };
     // No .lane.json, .promote.json, record or Herdr workspace for this project.
     // Notices go to this run's already owned supervisor PTY via its scoped adapter.
     const request = json(node(script, ['queue-first', 'queue-second', 'queue-refusal', '--to', supervisor.name,
@@ -498,13 +498,28 @@ try {
     await until(() => !fs.existsSync(path.join(repo, '.git/promote/worker.lock')), 'promotion worker exited');
     pids.delete(request.worker.pid);
     const state = JSON.parse(read(queueFile));
-    assert.deepEqual(state.results.map((r) => [r.topic, r.outcome, r.delivered]), [
-      ['queue-first', 'promoted', true], ['queue-second', 'promoted', true], ['queue-refusal', 'refused', true],
+    assert.equal(state.current, null);
+    assert.deepEqual(state.pending, []);
+    assert.deepEqual(state.results.map((r) => [r.topic, r.outcome]), [
+      ['queue-first', 'promoted'], ['queue-second', 'promoted'], ['queue-refusal', 'refused'],
     ]);
+    // Default delivery hands off to an acknowledged independent inbox owner.
+    // The queue receipt is a snapshot; actual PTY receipt is proved below.
+    for (const result of state.results) {
+      assert.equal(result.delivery_id, 'promote:' + result.id);
+      assert.equal(result.inbox, path.join(repo, '.git/supervisor/inbox.log'));
+      assert.equal(typeof result.delivered, 'boolean');
+      assert.equal(result.queued, !result.delivered);
+    }
     await until(() => state.results.every((r) => inbox().includes(`[promote-queue] id=${r.id} `)), 'every promotion notice reached supervisor PTY');
     const messages = inbox().split('\n').filter(Boolean).map(JSON.parse).map((entry) => entry.line)
       .filter((line) => line.includes('[promote-queue]'));
     assert.deepEqual(messages.map((line) => /lane=(\S+)/.exec(line)[1]), ['queue-first', 'queue-second', 'queue-refusal']);
+    for (const result of state.results) {
+      const received = messages.filter(line => line.startsWith('[promote-queue] id=' + result.id + ' '));
+      assert.equal(received.length, 1, 'each job reaches the supervisor PTY exactly once');
+      assert.ok(received[0].includes('lane=' + result.topic + ' outcome=' + result.outcome));
+    }
     assert.ok(!fs.existsSync(worktrees.get('queue-first')) && !fs.existsSync(worktrees.get('queue-second')));
     assert.ok(fs.existsSync(worktrees.get('queue-refusal')));
     assert.match(state.results[2].reason, /not clean/);

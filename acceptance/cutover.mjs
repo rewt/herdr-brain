@@ -34,7 +34,17 @@ export function switchedFiles({ copy, candidate, workspace, target, legacyTarget
   contents.launcher = replace(contents.launcher, JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs')), JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs')));
   contents.continue = '# open-session refuses busy sessions; retain the request and retry after the named session stops.\n' + contents.continue;
   contents.arm = `#!/bin/sh\nset -eu\nRUN=\${1:?run required}; shift\n# Herdr watch/watch.mjs delivers through the project's record inbox and autopilot.\nexec sh ${q(path.join(candidate, 'supervisor/arm-watch.sh'))} "$RUN" --org ${q(path.join(path.dirname(copy), '.org'))} --cwd ${q(copy)} --to ${q(target)} --idle-grace 900 "$@" --detach --log ${q(path.join(copy, '.lane/supervisor/watch-logs'))}/"$RUN".log\n`;
-  contents.dispatch = replace(contents.dispatch, `env -u HERDR_PANE_ID nohup .lane/supervisor/notify-watch.sh $RUN --to ${legacyTarget} > .lane/supervisor/watch-logs/$RUN.log 2>&1 < /dev/null &!`, 'env -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID .lane/supervisor/arm-watch.sh $RUN');
+  const watcherBase = `env -u HERDR_PANE_ID nohup .lane/supervisor/notify-watch.sh $RUN --to ${legacyTarget} > .lane/supervisor/watch-logs/$RUN.log 2>&1 < /dev/null &`;
+  // The October 10 run-scope fix changed zsh's &! to & plus this exact disown.
+  // Recognize the measured clauses only; duplicate or unknown launches refuse.
+  const watcherClauses = [watcherBase + '!', watcherBase + '\n' +
+    'disown 2>/dev/null || true  # a fast-exiting watcher may already have left the job table'];
+  const armClause = 'env -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID .lane/supervisor/arm-watch.sh $RUN';
+  const count = clause => contents.dispatch.split(clause).length - 1;
+  const legacyCount = watcherClauses.reduce((total, clause) => total + count(clause), 0);
+  assert.equal(legacyCount + count(armClause), 1, 'cutover premise drift: watcher launch clause');
+  if (legacyCount) contents.dispatch = replace(contents.dispatch, watcherClauses.find(count), armClause);
+  assert.ok(!contents.dispatch.includes('nohup .lane/supervisor/notify-watch.sh'), 'cutover premise drift: watcher launch clause');
   // Keep the cap and kernel lock; count the detached standalone watcher after
   // the switch. Its --org/--cwd arguments now precede --to.
   contents.dispatch = replace(contents.dispatch,

@@ -44,6 +44,52 @@ test('all current edits apply to relocated inventory scripts and refuse premise 
   assert.throws(() => switchedFiles(spec), /premise drift/);
 });
 
+test('current background and exact disown cutover preserves all switches and rollback bytes', (t) => {
+  const { copy, spec, edits } = inventory(t);
+  const file = path.join(copy, '.lane/supervisor/dispatch.sh');
+  const original = fs.readFileSync(file, 'utf8');
+  const base = `env -u HERDR_PANE_ID nohup .lane/supervisor/notify-watch.sh $RUN --to ${spec.legacyTarget} > .lane/supervisor/watch-logs/$RUN.log 2>&1 < /dev/null &`;
+  const current = base + '\n' + 'disown 2>/dev/null || true  # a fast-exiting watcher may already have left the job table';
+  assert.equal(original.split(base + '!').length - 1, 1);
+  fs.writeFileSync(file, original.replace(base + '!', current));
+  const originals = capture(copy);
+  assert.deepEqual(switchedFiles(spec), edits, 'both supported clauses produce the same complete cutover');
+  for (const [key, rel] of switches) fs.writeFileSync(path.join(copy, rel), edits[key]);
+  assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs'), []);
+  assert.deepEqual(callers(copy, 'notify-watch.sh'), []);
+  restore(copy, originals);
+  assert.deepEqual(capture(copy), originals, 'modern background/disown bytes and executable modes restore exactly');
+});
+
+test('watcher launch cutover refuses missing disown, unknown clauses and duplicate launches without writing files', (t) => {
+  const { copy, spec, edits } = inventory(t);
+  const file = path.join(copy, '.lane/supervisor/dispatch.sh');
+  const original = fs.readFileSync(file, 'utf8');
+  const base = `env -u HERDR_PANE_ID nohup .lane/supervisor/notify-watch.sh $RUN --to ${spec.legacyTarget} > .lane/supervisor/watch-logs/$RUN.log 2>&1 < /dev/null &`;
+  const legacy = base + '!';
+  const current = base + '\n' + 'disown 2>/dev/null || true  # a fast-exiting watcher may already have left the job table';
+  const arm = 'env -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID .lane/supervisor/arm-watch.sh $RUN';
+  for (const clause of [
+    base,
+    current.replace('|| true', '|| false'),
+    current.replace('--to ' + spec.legacyTarget, '--to foreign-target'),
+    current.replace('2>&1', '2>/dev/null'),
+    legacy + '\n' + legacy,
+    current + '\n' + current,
+    legacy + '\n' + current,
+    legacy + '\n' + arm,
+    arm + '\n' + arm,
+    legacy + '\n' + current.replace('--to ' + spec.legacyTarget, '--to foreign-target'),
+  ]) {
+    fs.writeFileSync(file, original.replace(legacy, clause));
+    const before = capture(copy);
+    assert.throws(() => switchedFiles(spec), /cutover premise drift: watcher launch clause/, clause);
+    assert.deepEqual(capture(copy), before, 'refusal must not install a partial switch');
+  }
+  fs.writeFileSync(file, original);
+  assert.deepEqual(switchedFiles(spec), edits, 'ordinary legacy control still passes');
+});
+
 test('tidy cutover accepts old and equivalent dry-run calls and refuses unrelated drift', (t) => {
   const { copy, spec, edits } = inventory(t);
   const file = path.join(copy, '.lane/supervisor/tidy-tabs.sh');

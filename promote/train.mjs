@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
-import { captureCompletionMember } from './completion.mjs';
+import { captureCompletionMember, accountUncapturedMember } from './completion.mjs';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
@@ -73,7 +73,10 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   };
   const guards = jobs => jobs.map(job => ({ canonical, identity, ...job, expectedHead: job.sourceHead,
     completionExpected: plan.completion?.jobs?.find(b => b.job === job.id)?.expected }));
-  const result = (job, value) => { plan.results[job.id] = value; save(); };
+  const result = (job, value) => {
+    if (['refused', 'timeout'].includes(value.outcome)) accountUncapturedMember(plan, job);
+    plan.results[job.id] = value; save();
+  };
   // Batch phase is live telemetry; attempt.phase remains the recovery checkpoint.
   // In particular, an in-flight gate still resumes from its prepared candidate.
   const phase = value => { plan.phase = value; save(); };
@@ -133,6 +136,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       } catch (error) { warnings.push(error.message.trim()); }
       const integratedAt = attempt.integrated_at;
       result(job, { outcome: 'promoted', tip, source_head: job.sourceHead, workspace: job.workspace, warnings,
+        ...(warnings.length ? { replacement_pending: true } : {}),
         reason: warnings.length ? warnings.join('; ') : 'green batch fast-forward', batch: plan.id,
         gate: attempt.gate, integrated_at: integratedAt, report_at: job.report_at ?? null,
         report_to_main_s: job.report_at ? Math.max(0, (Date.parse(integratedAt) - Date.parse(job.report_at)) / 1000) : null });
@@ -172,7 +176,6 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         const job = plan.jobs.find(j => j.id === id);
         try { jobs.push(capture(job)); }
         catch (error) {
-          if (plan.completion?.refused && !plan.completion.jobs.some(b => b.job === job.id) && !plan.completion.refused.includes(job.id)) plan.completion.refused.push(job.id);
           result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
         }
       }

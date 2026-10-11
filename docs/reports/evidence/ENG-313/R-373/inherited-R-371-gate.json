@@ -1,0 +1,31 @@
+{
+  "schema": "lane-validation/v1",
+  "key": "6472a660a2ee15ded4f325caff043f670ed3ea840eab4970e1e6d0246f77aaac",
+  "head": "e62a33d9cf0c64af58ce1d10edd87ba48d8de1a8",
+  "tree": "595b95900d9ece220bbff43c7ebf07bb18482821",
+  "branch": "lane/batch-reconciliation",
+  "tier": "fast",
+  "command": "node test/helpers/run.mjs promote/test/completion.test.mjs promote/test/train.test.mjs promote/test/promote.test.mjs promote/test/conformance.test.mjs promote/test/workflow-train.test.mjs supervisor/test/reconcile.test.mjs supervisor/test/supervisor.test.mjs",
+  "host_suites": [],
+  "environment_fingerprint": "2708c39a2cd995ccc63335d6fef80e93ff309e9a94328372d0d1c13329271458",
+  "exit_code": 0,
+  "signal": null,
+  "started_at": "2026-10-11T14:04:15.895Z",
+  "finished_at": "2026-10-11T14:09:43.877Z",
+  "duration_s": 327.9771365,
+  "log": "/Users/rewt/development/rewt/herdr-brain/.git/lane-validation/6472a660a2ee15ded4f325caff043f670ed3ea840eab4970e1e6d0246f77aaac.4b6836f7-97d5-4882-b2eb-2b3e33811efc.log",
+  "log_hash": "6ce81f1f9f49982ef70f3173154371e4961c105e3841caaa9e90e47f4376f98c",
+  "reused": false,
+  "execution_receipt": "/Users/rewt/development/rewt/herdr-brain/.git/lane-validation/6472a660a2ee15ded4f325caff043f670ed3ea840eab4970e1e6d0246f77aaac.4b6836f7-97d5-4882-b2eb-2b3e33811efc.log.execution.json",
+  "executed": true,
+  "outcome": "green",
+  "gate_timeout": null,
+  "command_duration_s": 327.94155637489166,
+  "longest_silence_s": 98.72057366697118,
+  "limits": {
+    "wall_seconds": 4500,
+    "wall_source": "default",
+    "idle_seconds": 0,
+    "idle_source": "off"
+  }
+}

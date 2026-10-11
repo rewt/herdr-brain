@@ -13,7 +13,8 @@ import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { runProjectGateSync } from './gate-profile.mjs';
-import { reconcileBatchCompletion } from './completion.mjs';
+import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
+import { verifyTrainResult } from './evidence.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const LANE = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
@@ -225,7 +226,10 @@ function performBatch(batch, queue) {
       train.results ??= {};
       const limit = host.gate_timeout?.kind === 'idle' ? 'no-output' : 'wall-clock';
       const reason = `gate ${limit} limit exceeded; ${batch.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`;
-      for (const job of batch.jobs) train.results[job.id] ??= { outcome: 'timeout', reason, batch: batch.id, host_receipt: hostFile };
+      for (const job of batch.jobs) {
+        train.results[job.id] ??= { outcome: 'timeout', reason, batch: batch.id, host_receipt: hostFile };
+        if (['timeout', 'refused'].includes(train.results[job.id].outcome)) accountUncapturedMember(train, job);
+      }
       train.phase = 'complete'; train.groups = [];
       writeFileAtomic(receipt, JSON.stringify(train, null, 2) + '\n');
       return batch.jobs.map(job => ({ job, result: { ...train.results[job.id], log, receipt } }));
@@ -256,7 +260,7 @@ function performBatch(batch, queue) {
 
 function finishBatchJob(job, result, queue) {
   if (result.outcome !== 'promoted' || result.reconciliation?.state === 'pending') return result;
-  const warnings = [...(result.warnings ?? [])];
+  const warnings = result.replacement_pending ? [] : [...(result.warnings ?? [])];
   if (result.report_to_main_s !== null && result.report_to_main_s !== undefined && job.org && job.run) {
     try {
       const text = `Promotion: report-to-main ${result.report_to_main_s.toFixed(3)} seconds; report ${result.report_at}; main ${result.integrated_at}; batch ${result.batch}; tip ${result.tip}; receipt ${result.receipt}`;
@@ -275,6 +279,21 @@ function finishBatchJob(job, result, queue) {
       const item = JSON.parse(invoke(process.execPath, [RECORD, 'show', run.item, '--json'], { cwd: queue.project.canonical, env }));
       if (!item.closed || item.runs.at(-1) !== run.id) throw Error('item reopened or run superseded after completion; lane retained');
     } catch (error) { return { ...result, warnings: [...warnings, error.message], reason: error.message }; }
+  }
+  if (result.replacement_pending && result.reconciliation?.state === 'complete') {
+    let release;
+    try {
+      release = acquireLock(path.join(queue.project.identity, 'lane-promote.lock'));
+      if (!verifyTrainResult({ ...result, id: job.id }, { project: queue.project, saved: { head: job.expectedHead, run: job.run, org: job.org, lane: job.topic } })) throw Error('lane replacement lacks original integrated proof');
+      if (git(result.workspace, ['rev-parse', 'HEAD']) !== result.tip) invoke(process.execPath, [fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url)), JSON.stringify({
+        workspace: result.workspace, repo: queue.project.canonical, common: queue.project.identity,
+        branch: `refs/heads/lane/${job.topic}`, from: result.source_head, to: result.tip,
+        main: git(queue.project.canonical, ['symbolic-ref', '--short', 'HEAD']),
+        mainHead: git(queue.project.canonical, ['rev-parse', 'HEAD']),
+      })], { cwd: queue.project.canonical });
+      result = { ...result, replacement_pending: false, warnings, reason: 'green batch fast-forward; lane replacement recovered' };
+    } catch (error) { return { ...result, reason: `lane replacement pending: ${error.message}` }; }
+    finally { release?.(); }
   }
   if ((result.warnings?.length ?? 0) === 0 && result.workspace) {
     warnings.push(...cleanup(job, queue, result.workspace));

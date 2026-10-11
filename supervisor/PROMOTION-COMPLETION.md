@@ -15,6 +15,11 @@ When native integration succeeds but completion refuses, the queue reports
 **integrated; reconciliation pending**, retains lanes and evidence, and keeps an
 owned resumable batch. The queue's supported recovery reuses the completed train
 and retries bookkeeping without host admission, validation or integration. A
+canonical refusal or host timeout accounts for every never-captured member
+without inventing a record binding; any existing binding remains a historical
+exclusion. If the refusal also prevented a proved integrated lane-head replacement,
+bookkeeping retries that replacement after reconciliation and current-run checks,
+using the existing clean-worktree and compare-and-swap helper before cleanup. A
 changed included run/blocker/report still requires inspection; it never refreshes
 the original fingerprint silently. Legacy successful trains without preparation
 need the guarded manual recovery path. Later notices verify the reconciliation
@@ -53,6 +58,35 @@ fingerprint, the canonical project supervisor can recover it as follows:
    manual coverage stays pending. Reopened items and newer runs retain their lanes.
    Later notices verify this marker as well. Markers from older runtimes without
    per-member heads cannot authorize this recovery; use the reviewed implementation.
+
+For a legacy native train with no `completion` preparation, this implementation
+supports the same inspected manual exit. First resume bookkeeping once to write
+the coverage-only `train.json.record.json`. It derives original item/run identities
+from the retained `train.jobs` and the record, exact integrated heads from verified
+train results, explicit superseded runs from the original jobs, and historical
+exclusions for every known original excluded run. It captures no new fingerprints
+and never submits this receipt to `record complete-batch`. Inspect this coverage
+and follow steps 1–3 above using a separate manual prepared receipt.
+
+The manual marker must be later than the retained last integration, have the same
+canonical Git identity, cover all original runs, heads, superseded attempts and
+historical exclusions, and attest to the exact retained nonempty native log and
+its SHA-256. The native adapter still verifies each integrated attempt's original
+green gate log/hash, committed tree, reviewed diff and ancestry before accepting
+the marker. Missing preparation alone authorizes neither a new native transaction
+nor a synthetic gate. Legacy receipts lacking original run/head bindings,
+integration timestamps or verifiable gate evidence stay pending for inspection;
+this migration does not manufacture missing evidence. Reopened included items and
+newer included runs keep their lanes, even after a covering reconciliation.
+
+Both native and manual adapters intentionally require an explicit record to equal
+the record discovered from the canonical project checkout, ignoring inherited
+`ORG_DIR`. Foreign or undiscoverable records are refused. This is the supported
+compatibility boundary of the shared adapter; it is not a claim that all older
+native queue installations used canonical records. Configure canonical discovery
+before migrating such installations. Original receipt/log evidence remains intact;
+runtime activation and the full promotion tier belong to the reviewed candidate's
+canonical promotion workflow.
 
 Native record-bound requests and unbound Git requests form separate batches.
 Each member derives the shared completion transaction before any gate; invalid

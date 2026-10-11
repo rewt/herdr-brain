@@ -469,7 +469,7 @@ test(`legacy queue and late notices recover only inspected exact coverage: ${mod
   assert.deepEqual(f.events(), before); assert.equal(f.gates(), 3);
 });
 
-for (const failTelemetry of [false, true]) test(`legacy replacement recovery cleans completed lanes with telemetry failure: ${failTelemetry}`, t => {
+for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false, true]) test(`${variant} replacement recovery cleans completed lanes with telemetry failure: ${failTelemetry}`, t => {
   const f = fixture(t), first = f.lane('first'), second = f.lane('second');
   fs.writeFileSync(path.join(f.queue.project.identity, 'hooks/post-merge'), '#!/bin/sh\ntouch canonical-dirty\n', { mode: 0o755 });
   f.drain(); assert.equal(f.gates(), 1);
@@ -477,11 +477,13 @@ for (const failTelemetry of [false, true]) test(`legacy replacement recovery cle
   assert.ok(rows.some(r => r.replacement_pending && f.git(['rev-parse', 'HEAD'], r.workspace) !== r.tip));
   fs.unlinkSync(path.join(f.repo, 'canonical-dirty'));
   const train = JSON.parse(fs.readFileSync(receipt)), attempts = train.attempts;
-  delete train.completion; fs.writeFileSync(receipt, JSON.stringify(train));
-  if (fs.existsSync(receipt + '.record.json')) fs.unlinkSync(receipt + '.record.json');
+  if (variant === 'legacy') {
+    delete train.completion; fs.writeFileSync(receipt, JSON.stringify(train));
+    if (fs.existsSync(receipt + '.record.json')) fs.unlinkSync(receipt + '.record.json');
+  } else f.record(['note', first.item, 'Inspected native fingerprint drift']);
   f.drain(); assert.equal(f.gates(), 1);
   const original = fs.readFileSync(receipt + '.record.json', 'utf8');
-  assert.equal(JSON.parse(original).recovery_only, true);
+  assert.equal(!!JSON.parse(original).recovery_only, variant === 'legacy');
   assert.throws(() => manualRecovery(f, rows), /head\/workspace differs/);
   for (const row of rows) {
     if (f.git(['rev-parse', 'HEAD'], row.workspace) === row.tip) continue;

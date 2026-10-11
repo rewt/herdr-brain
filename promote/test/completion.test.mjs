@@ -484,6 +484,13 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
   f.drain(); assert.equal(f.gates(), 1);
   const original = fs.readFileSync(receipt + '.record.json', 'utf8');
   assert.equal(!!JSON.parse(original).recovery_only, variant === 'legacy');
+  assert.equal(f.queue.load().interrupted.length, 1);
+  for (const m of [first, second]) {
+    const pending = f.queue.load().results.find(r => r.id === m.job.id);
+    assert.equal(pending.reconciliation.state, 'pending');
+    assert.equal(f.show(m.item).closed, null);
+    assert.match(pending.reconciliation.reason, variant === 'prepared' ? /changed since batch preparation/ : /lacks original record preparation/);
+  }
   assert.throws(() => manualRecovery(f, rows), /head\/workspace differs/);
   for (const row of rows) {
     if (f.git(['rev-parse', 'HEAD'], row.workspace) === row.tip) continue;

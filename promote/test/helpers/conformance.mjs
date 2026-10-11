@@ -6,11 +6,25 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { collectMetrics } from '../../metrics.mjs';
 import { testSlotEnvironment } from '../../../test/helpers/test-slot-env.mjs';
+import { stopFixtureInbox } from '../../../test/helpers/inbox.mjs';
+import { loadTimeout } from '../../../lib/deadline.mjs';
 
 export const cli = fileURLToPath(new URL('../../../lanes/lane.mjs', import.meta.url));
 export function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rev465-'))), repo = path.join(root, 'repo');
-  fs.mkdirSync(repo); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(repo);
+  t.after(async () => {
+    const workerLock = path.join(repo, '.git/promote/worker.lock');
+    const deadline = Date.now() + loadTimeout(10000);
+    while (fs.existsSync(workerLock)) {
+      assert.ok(Date.now() < deadline, 'fixture queue sender did not stop before inbox cleanup');
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    await stopFixtureInbox(path.join(repo, '.git/supervisor/inbox.log'), {
+      script: fileURLToPath(new URL('../../../supervisor/prompt-supervisor.mjs', import.meta.url)),
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   const config = path.join(root, 'config.json'); fs.writeFileSync(config, '{}');
   const env = { ...testSlotEnvironment(), LANE_CONFIG: config, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(ORG_|HERDR_(?!TEST_|MONITOR_FLEET)|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];

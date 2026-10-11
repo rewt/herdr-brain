@@ -486,7 +486,7 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
   assert.equal(!!JSON.parse(original).recovery_only, variant === 'legacy');
   assert.equal(f.queue.load().interrupted.length, 1);
   for (const m of [first, second]) {
-    const pending = f.queue.load().results.find(r => r.id === m.job.id);
+    const pending = f.queue.load().results.findLast(r => r.id === m.job.id);
     assert.equal(pending.reconciliation.state, 'pending');
     assert.equal(f.show(m.item).closed, null);
     assert.match(pending.reconciliation.reason, variant === 'prepared' ? /changed since batch preparation/ : /lacks original record preparation/);

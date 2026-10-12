@@ -130,11 +130,14 @@ STOP appearing during review prevents correction dispatch and returns a resumabl
 and correction evidence are retained. Pending or uncertain promotions still need
 inspection rather than a retry.
 
-At a release boundary, the operator builds a tag with `bash herdr/release.sh build TAG`.
-The tagged snapshot runs the complete offline gate once before it becomes an
-immutable release. `--live` additionally runs the live acceptance harness.
-Activation and distribution remain operator controlled; workers never run the
-release gate. Historical candidates remain readable with `record releases`.
+Releases are the project supervisor's job, with no operator step. When promotions
+have landed, tag `main` as `rc-<UTC yyyymmddThhmmss000Z>-<10-char sha>` and run
+`bash herdr/release.sh ship TAG` as one bare command. Ship builds the tag (the release
+gate runs once in the git-archive snapshot), activates it, checks that the installed
+`org`, `lane` and `settle-watch` start, and rolls back to the previous release if they
+don't. Record the result on the goal. A failed gate leaves the current release
+untouched: fix it in a lane and cut a new tag. Workers never run the release gate.
+Historical candidates remain readable with `record releases`.
 
 ## Identity desks
 

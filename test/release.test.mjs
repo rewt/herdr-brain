@@ -111,14 +111,38 @@ test('activation switches three launchers, retires the old plugin once, and roll
   assert.equal(fs.existsSync(path.join(f.home, 'before')), false);
   for (const action of ['restore', 'dev']) assert.notEqual(f.run([action]).status, 0);
 });
-test('a regular launcher or retired Brain plist refuses activation before any links switch', t => {
+test('a regular launcher refuses activation before any links switch', t => {
   const f = scratch(t); f.ok(['build', 't1']);
   fs.writeFileSync(path.join(f.bin, 'lane'), 'mine');
   assert.match(f.run(['activate', 't1']).stderr, /not a link; refusing/);
-  fs.unlinkSync(path.join(f.bin, 'lane')); fs.writeFileSync(f.plist, 'legacy plist');
-  assert.match(f.run(['activate', 't1']).stderr, /still starts Brain watch.*launchctl bootout/);
   assert.equal(fs.existsSync(path.join(f.home, 'current')), false);
-  assert.equal(fs.readFileSync(f.plist, 'utf8'), 'legacy plist');
+});
+test('activation retires the old Brain LaunchAgent plist by moving it aside, then switches links', t => {
+  const f = scratch(t); f.ok(['build', 't1']);
+  fs.writeFileSync(f.plist, 'legacy plist');
+  const r = f.ok(['activate', 't1']);
+  assert.match(r.stdout, /retired the Brain watch LaunchAgent/);
+  assert.equal(fs.existsSync(f.plist), false);
+  const aside = fs.readdirSync(path.dirname(f.plist)).filter(name => name.startsWith(`${path.basename(f.plist)}.retired-`));
+  assert.equal(aside.length, 1);
+  assert.equal(fs.readFileSync(path.join(path.dirname(f.plist), aside[0]), 'utf8'), 'legacy plist');
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t1'));
+});
+test('ship builds, activates and checks the installed launchers in one command', t => {
+  const f = scratch(t); f.ok(['ship', 't1']);
+  const r = f.ok(['ship', 't2']);
+  assert.match(r.stdout, /shipped t2/);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t2'));
+  assert.equal(fs.readlinkSync(path.join(f.home, 'previous')), f.release('t1'));
+});
+test('ship rolls back to the previous release when the installed launchers fail their check', t => {
+  const f = scratch(t); f.ok(['ship', 't1']);
+  f.write('bin/org.mjs', 'process.exit(3);'); f.git('add', '.'); f.git('commit', '-qm', 't3'); f.git('tag', 't3');
+  const r = f.run(['ship', 't3']);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /installed org failed to start/);
+  assert.match(r.stderr, /rolling back/);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t1'));
 });
 test('failed plugin unlink warns and leaves the launchers usable', t => {
   const f = scratch(t); f.ok(['build', 't1']);

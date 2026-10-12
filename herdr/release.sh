@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Immutable local releases. The operator controls activation and distribution.
-# Usage: release.sh build TAG [--live] | activate TAG | rollback | status
+# Usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status
+# ship = build (release gate in the archive) + activate + check the installed launchers; it rolls
+# back to the previous release if that check fails. Agents run it as one bare command.
 # HERDR_MONITOR_HOME, HERDR_MONITOR_BIN and HERDR_MONITOR_REPO select destinations.
 # HERDR_MONITOR_PLIST selects the retired Brain LaunchAgent to check.
 set -euo pipefail
@@ -69,13 +71,41 @@ retire_plugin() {
   fi
   "${HERDR_BIN_PATH:-herdr}" plugin unlink rewt.herdr-monitor >/dev/null || echo "release: warning: could not unlink retired Herdr plugin" >&2
 }
+retire_brain_service() {
+  # The retired Brain watch LaunchAgent would restart a command releases no longer ship: stop it and move it aside.
+  [ -e "$LEGACY_PLIST" ] || [ -L "$LEGACY_PLIST" ] || return 0
+  # Only the real default plist belongs to the loaded service; a test's HERDR_MONITOR_PLIST never stops it.
+  if [ -z "${HERDR_MONITOR_PLIST:-}" ] && [ "${RELEASE_NO_LAUNCHD:-}" != 1 ]; then
+    launchctl bootout "gui/$(id -u)/com.rewt.herdr-brain" 2>/dev/null || true
+  fi
+  local aside="$LEGACY_PLIST.retired-$(date +%Y%m%d%H%M%S)"
+  mv "$LEGACY_PLIST" "$aside" || die "could not move aside $LEGACY_PLIST"
+  say "retired the Brain watch LaunchAgent (moved to $aside)"
+}
+verify_installed() {
+  # The launchers projects call must run from the new current release.
+  node "$BIN_DIR/org" help >/dev/null 2>&1 || { echo "release: installed org failed to start" >&2; return 1; }
+  node "$BIN_DIR/lane" --help >/dev/null 2>&1 || { echo "release: installed lane failed to start" >&2; return 1; }
+  node --check "$HOME_DIR/current/contrib/settle-watch.mjs" 2>/dev/null || { echo "release: installed settle-watch does not load" >&2; return 1; }
+}
+ship() {
+  local tag=$1
+  build "$tag"
+  activate "$tag"
+  if verify_installed; then say "shipped $tag"; return 0; fi
+  if [ -L "$HOME_DIR/previous" ]; then
+    echo "release: rolling back after the failed post-activation check" >&2
+    rollback
+  fi
+  die "ship $tag failed its post-activation check"
+}
 activate() {
   local tag=$1 dir="$HOME_DIR/releases/$1"
   valid_tag "$tag"
   [ -d "$dir" ] && [ ! -L "$dir" ] && [ -f "$dir/.release-commit" ] || die "no built release $tag; run: release.sh build $tag"
   for l in $LAUNCHERS; do absent_or_link "$BIN_DIR/${l%%:*}"; [ -f "$dir/${l#*:}" ] || die "release is missing ${l#*:}"; done
   absent_or_link "$HOME_DIR/current"; absent_or_link "$HOME_DIR/previous"
-  [ ! -e "$LEGACY_PLIST" ] && [ ! -L "$LEGACY_PLIST" ] || die "$LEGACY_PLIST still starts Brain watch; stop and remove it first: launchctl bootout gui/$(id -u)/com.rewt.herdr-brain; rm $LEGACY_PLIST"
+  retire_brain_service
   mkdir -p "$BIN_DIR"
   if [ -L "$HOME_DIR/current" ] && [ "$(readlink "$HOME_DIR/current")" != "$dir" ]; then
     ln -sfn "$(readlink "$HOME_DIR/current")" "$HOME_DIR/previous"
@@ -102,7 +132,8 @@ status() {
 case "${1:-}" in
   build) [ $# -eq 2 ] || { [ $# -eq 3 ] && [ "$3" = --live ]; } || die "usage: release.sh build TAG [--live]"; build "$2" "${3:-}" ;;
   activate) [ $# -eq 2 ] || die "usage: release.sh activate TAG"; activate "$2" ;;
+  ship) [ $# -eq 2 ] || die "usage: release.sh ship TAG"; ship "$2" ;;
   rollback) [ $# -eq 1 ] || die "usage: release.sh rollback"; rollback ;;
   status) [ $# -eq 1 ] || die "usage: release.sh status"; status ;;
-  *) die "usage: release.sh build TAG [--live] | activate TAG | rollback | status" ;;
+  *) die "usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status" ;;
 esac

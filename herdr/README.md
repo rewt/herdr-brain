@@ -8,9 +8,14 @@ packages. Herdr and native Codex or Claude supply agent panes when used.
 bash herdr/release.sh build TAG
 bash herdr/release.sh build TAG --live
 bash herdr/release.sh activate TAG
+bash herdr/release.sh ship TAG   # build + activate + check; rolls back on failure
 bash herdr/release.sh rollback
 bash herdr/release.sh status
 ```
+
+Agents release with `ship`. Activation moves the retired Brain watch LaunchAgent
+(`~/Library/LaunchAgents/com.rewt.herdr-brain.plist`) aside after stopping it, so no
+manual step precedes the first release.
 
 Build copies exactly `git archive TAG` into `releases/TAG.partial`, runs
 the `release` command and its `timeout_seconds` (and optional

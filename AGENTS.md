@@ -20,8 +20,10 @@
   It discovers the project and record; no housekeeping config is required. For
   worker checks or tasks that forbid live pane mutations, use `--once --dry-run`
   with `--state-dir "$PWD/.lane/housekeeping-preview"` instead.
-- The release acceptance harness (`acceptance/run.mjs`) runs once per release candidate, not per lane
-  (operator, 2026-10-02); never run the live harness in a lane. A lane that changes `acceptance/` itself runs its offline tests and at most
+- Releases: the project supervisor tags `main` and runs `bash herdr/release.sh ship TAG` as one bare
+  command (build with the release gate, activate, check, roll back on failure); see supervisor/PROTOCOL.md.
+  Lanes never run it. The release acceptance harness (`acceptance/run.mjs`) runs only with `build TAG --live`,
+  never in a lane. A lane that changes `acceptance/` itself runs its offline tests and at most
   one `--skip-live` pass.
 - bch-cloak runs `contrib/settle-watch.mjs` from the installed release
   (`~/.local/share/herdr-monitor/current/contrib/`), with `--model` and `--effort`, and runs

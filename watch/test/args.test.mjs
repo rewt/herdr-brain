@@ -8,6 +8,14 @@ import test from '../../test/helpers/bounded-test.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
 
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
+async function exited(pid, ms = 10000) {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    try { process.kill(pid, 0); } catch (error) { if (error.code === 'ESRCH') return; throw error; }
+    if (Date.now() > deadline) return;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+}
 const quote = value => `'${String(value).replaceAll("'", "'\\''")}'`;
 
 for (const scenario of ['supplied', 'repeated', 'discovered']) {
@@ -39,7 +47,7 @@ for (const scenario of ['supplied', 'repeated', 'discovered']) {
 }
 
 for (const scenario of ['supplied', 'repeated', 'discovered']) {
-  test(`detach carries ${scenario} bindings once into the real child`, t => {
+  test(`detach carries ${scenario} bindings once into the real child`, async t => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'watch-detach-args-')));
     const receipts = createReceiptTracker();
     t.after(() => { receipts.cleanup(); fs.rmSync(root, { recursive: true, force: true }); });
@@ -68,8 +76,12 @@ for (const scenario of ['supplied', 'repeated', 'discovered']) {
     const expected = [process.execPath, WATCH, ...(scenario === 'discovered'
       ? ['R-6', ...extra, '--org', org, '--cwd', root, '--to', recipient]
       : ['R-6', '--org', org, '--to', recipient, '--cwd', cwd, ...extra])];
-    if (result.status === 0) receipts.remember(JSON.parse(result.stdout).pid, expected.join(' '));
+    const pid = result.status === 0 ? JSON.parse(result.stdout).pid : undefined;
+    if (pid) receipts.remember(pid, expected.join(' '));
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.deepEqual(JSON.parse(fs.readFileSync(argvFile, 'utf8')), expected);
+    // The child stops by itself on the abandoned run; let it (and its record call) finish rather than
+    // killing it mid-call, which leaves the record child behind as a surviving fixture.
+    await exited(pid);
   });
 }

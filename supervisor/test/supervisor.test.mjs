@@ -211,7 +211,8 @@ test('bound promotion rechecks queued runs and record changes during validation 
     if (mode.startsWith('gate-')) f.env.VALIDATION_PHASE = 'promotion';
     if (mode === 'queued-run') f.start();
     const refused = h.drain(); assert.equal(refused.outcome, 'refused');
-    assert.match(refused.reason, mode.endsWith('run') ? /superseded/ : /record readiness changed/);
+    // A question under the item now refuses with its own reason before the general readiness check.
+    assert.match(refused.reason, mode.endsWith('run') ? /superseded/ : /open operator question HUM-\d+/);
     assert.equal(f.git(['rev-parse', 'main']), base); assert.ok(fs.existsSync(f.workspace));
     const log = fs.readFileSync(refused.log, 'utf8');
     if (mode === 'queued-run') assert.doesNotMatch(log, /validating in/);

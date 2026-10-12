@@ -9,7 +9,7 @@ import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { supervisorBinding } from '../supervisor/session-binding.mjs';
 import { enterSupervisor } from '../supervisor/entry.mjs';
 import { openProjectControls } from './project-entry.mjs';
-import { quote } from '../discovery/runtime.mjs';
+import { quote } from '../lib/shell.mjs';
 import { projectEntrySettings } from '../discovery/settings.mjs';
 
 try {

@@ -22,9 +22,6 @@ import { renderToday, todayJson } from '../lib/today.mjs';
 import { blockJson, renderBlock } from '../lib/block.mjs';
 import { digestJson, readDigestJournal } from '../lib/digest.mjs';
 import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
-import { desksCommand } from '../settle/desks-command.mjs';
-import { routesCommand } from '../lanes/routes-command.mjs';
-import { housekeepingCommand } from '../housekeeping/command.mjs';
 import { completeBatchCommand } from '../lib/completion.mjs';
 import { releaseRecordCommand } from '../lib/release-record.mjs';
 import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mjs';
@@ -1074,13 +1071,19 @@ function priorities(argv) {
   return 0;
 }
 
+const lazy = (file, name) => async (argv) => (await import(file))[name](argv);
+
 const COMMANDS = {
   lesson, lessons,
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
   release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
   releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, digest, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
+  start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, digest, recap, priorities, console: consoleApp,
+  // Module views load only when used, so a fault in one of them cannot break every record command.
+  desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
+  routes: lazy('../lanes/routes-command.mjs', 'routesCommand'),
+  housekeeping: lazy('../housekeeping/command.mjs', 'housekeepingCommand'),
 };
 
 function main(argv) {
@@ -1099,7 +1102,7 @@ process.stdout.on('error', (error) => {
 });
 
 try {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
   if (error instanceof UserError || error instanceof FleetError || String(error.code).startsWith('ERR_PARSE_ARGS')) {
     err(`record: ${error.message}\n`);

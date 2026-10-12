@@ -1,7 +1,7 @@
 // Per-launch hooks; no user settings or hook trust records are written here.
 import path from 'node:path';
 import { gitProject } from '../lib/project.mjs';
-import { quote } from '../discovery/runtime.mjs';
+import { quote } from '../lib/shell.mjs';
 import { permissionProject, permissionDecision, permissionOutput, DENIAL_NUDGE } from '../brain/lib/permission-policy.mjs';
 import { auditPermission } from '../brain/lib/permission-audit.mjs';
 import { stewardConfig, operatorAlert } from '../brain/lib/steward.mjs';

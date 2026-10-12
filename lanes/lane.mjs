@@ -37,6 +37,7 @@ import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, 
 import { suiteName, hostSuitePlan } from './host-suites.mjs';
 
 import {
+  loadRegistry,
   markTopicSessionsDone,
   newSessionId,
   registryDirectoryFor,

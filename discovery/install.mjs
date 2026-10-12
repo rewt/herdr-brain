@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
-import { quote } from './runtime.mjs';
+import { quote } from '../lib/shell.mjs';
 import { resolveNative } from './native-binary.mjs';
 import { selectSandbox } from './confinement.mjs';
 const { values } = parseArgs({ options: { bin: { type: 'string' }, codex: { type: 'string' }, claude: { type: 'string' }, validator: { type: 'string' }, remove: { type: 'boolean' }, check: { type: 'boolean' } } });

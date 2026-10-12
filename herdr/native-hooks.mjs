@@ -2,7 +2,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
-import { quote } from '../discovery/runtime.mjs';
+import { quote } from '../lib/shell.mjs';
 import { bytes } from './entry-transaction.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);

@@ -18,10 +18,11 @@ import { selectSandbox } from './confinement.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
 import { suiteName, hostSuitePlan } from '../lanes/host-suites.mjs';
 import { createHash } from 'node:crypto';
+import { quote } from '../lib/shell.mjs';
 import { DEFAULT_REQUEST_TIMEOUT, ENTRY_COMMAND_GRACE, entryValidationTimeout, HOST_OPERATION_TIMEOUT } from './deadlines.mjs';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
-export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
+export { quote };
 export function command(binary, args, cwd, env = {}, timeout = DEFAULT_REQUEST_TIMEOUT) {
   const r = spawnSync(binary, args, { cwd, env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout, killSignal: 'SIGKILL' });
   if (r.error || r.status !== 0) throw new Error((`${r.stdout ?? ''}${r.stderr ?? ''}` || r.error?.message || `exit ${r.status}`).trim());

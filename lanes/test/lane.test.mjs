@@ -877,6 +877,28 @@ test("promote accepts a gitignored session registry in the canonical checkout", 
   }
 });
 
+test("close reads a legacy session registry file without failing", () => {
+  const fixture = makeFixture({ main: "main", validate: "true", registry: ".lane/sessions.json" });
+  try {
+    writeFileSync(
+      join(fixture.repo, ".gitignore"),
+      readFileSync(resolve(HERE, "..", ".gitignore"), "utf8"),
+    );
+    git(fixture.repo, ["add", ".gitignore"]);
+    git(fixture.repo, ["commit", "-m", "add ignore rules"], { stdio: "ignore" });
+    const path = openLane(fixture, "legacy-registry");
+    commitFile(path, "lane.txt", "lane\n", "lane change");
+    mkdirSync(join(fixture.repo, ".lane"));
+    writeFileSync(join(fixture.repo, ".lane", "sessions.json"), "[]\n");
+
+    const run = lane(fixture, ["close", "legacy-registry"]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.doesNotMatch(run.stderr, /metadata update failed|loadRegistry is not defined/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("promote refuses a conflicting rebase and names the file", () => {
   const fixture = makeFixture();
   try {

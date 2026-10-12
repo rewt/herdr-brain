@@ -30,8 +30,10 @@
 - The release acceptance harness (`acceptance/run.mjs`) runs once per release candidate, not per lane
   (operator, 2026-10-02); never run the live harness in a lane. A lane that changes `acceptance/` itself runs its offline tests and at most
   one `--skip-live` pass.
-- bch-cloak runs `contrib/settle-watch.mjs` from this checkout by absolute path, with `--model` and
-  `--effort`. Keep that file's path, flags and behaviour until bch-cloak's release-gated switch (ENG-64).
+- bch-cloak runs `contrib/settle-watch.mjs` from the installed release
+  (`~/.local/share/herdr-monitor/current/contrib/`), with `--model` and `--effort`, and runs
+  `supervisor/reconcile.mjs` from this checkout on every promotion. Keep both files' paths, flags and
+  behaviour, and keep shipping `contrib/` and `lib/cli-help.mjs` in every release (ENG-64).
 
 Contract:
 

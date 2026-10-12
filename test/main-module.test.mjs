@@ -123,3 +123,12 @@ test('isMain resolves both paths and returns false for missing, dangling or diff
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('record loads settle, lanes and housekeeping views only when their command runs', () => {
+  const org = fs.readFileSync(path.join(source, 'bin/org.mjs'), 'utf8');
+  const statics = [...org.matchAll(/^import [^;]* from '([^']+)';$/gmu)].map((match) => match[1]);
+  for (const view of ['../settle/desks-command.mjs', '../lanes/routes-command.mjs', '../housekeeping/command.mjs']) {
+    assert.ok(!statics.includes(view), `${view} must load lazily`);
+    assert.ok(org.includes(`lazy('${view}'`), `${view} must stay reachable`);
+  }
+});

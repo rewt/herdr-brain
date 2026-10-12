@@ -1,5 +1,5 @@
 import { chatHerdrMode, installedHerdrRead } from './chat-herdr.mjs';
-import { quote } from './runtime.mjs';
+import { quote } from '../lib/shell.mjs';
 import fs from 'node:fs';
 import { releaseSettings } from '../release/config.mjs';
 import path from 'node:path';

@@ -8,7 +8,7 @@ import { stripVTControlCharacters } from 'node:util';
 import { spawnSync } from 'node:child_process';
 import { readFleet, fleetPath, staleProject, excludedFleetRoot } from '../lib/fleet.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
-import { withInstallationLock } from '../herdr/entry-lock.mjs';
+import { withInstallationLock } from '../lib/install-lock.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { projectEntrySettings } from '../discovery/settings.mjs';
 import { gitProject } from '../lib/project.mjs';

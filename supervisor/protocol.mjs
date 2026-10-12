@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { quote } from '../discovery/runtime.mjs';
+import { quote } from '../lib/shell.mjs';
 import { coldStart, renderColdStart } from './context.mjs';
 
 export function supervisorPolicy(context, root) {

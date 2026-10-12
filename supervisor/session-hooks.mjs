@@ -1,7 +1,7 @@
 // Native lifecycle transport, shared by the two existing launch adapters.
 import path from 'node:path';
 import fs from 'node:fs';
-import { quote } from '../discovery/runtime.mjs';
+import { quote } from '../lib/shell.mjs';
 import { rememberSupervisor } from './session-binding.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { unattendedHookArguments, supervisorSessionKind } from './unattended.mjs';

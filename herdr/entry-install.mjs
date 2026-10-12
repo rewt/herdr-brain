@@ -6,7 +6,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
-import { quote } from '../discovery/runtime.mjs';
+import { quote } from '../lib/shell.mjs';
 import { state, same, bytes, writable, recover, transact } from './entry-transaction.mjs';
 import { snapshot } from './entry-runtime.mjs';
 import { withInstallationLock } from './entry-lock.mjs';

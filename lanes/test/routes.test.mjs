@@ -41,7 +41,7 @@ test("one resolution supplies launch plumbing and opaque run metadata", () => {
     );
   }
   assert.ok(resolved.env.includes("AI_PERSONA=personal"));
-  assert.deepEqual(resolved.args, ["-p", "claude-mem-bastian"]);
+  assert.deepEqual(resolved.args, []);
 });
 
 test("selection policy uses opaque pool names and only names configured routes", () => {
@@ -67,43 +67,13 @@ test("legacy effort arguments remain readable while explicit effort is canonical
   assert.equal(resolveRoute(legacy, { route: "engineer" }).effort, "max");
 });
 
-test("always_args omits native aliases of emitted Codex model and effort options", () => {
-  const config = {
-    routes: { engineer: { kind: "codex", model: "route-model", effort: "high" } },
-    always_args: { codex: ["-m", "fallback", "--config", "model_reasoning_effort=low", "--sandbox", "workspace-write"] },
-  };
-  assert.deepEqual(resolveLaunchRoute(config, { route: "engineer" }).args, ["--sandbox", "workspace-write"]);
-});
 
-test("Codex always_args preserves unrelated config keys alongside canonical effort", () => {
-  const optionForms = (expression) => [
-    ["-c", expression], ["--config", expression], [`--config=${expression}`],
-    [`-c${expression}`], [`-c=${expression}`],
-  ];
-  for (const args of [[], ["-c", "model_reasoning_effort=high"]]) {
-    for (const unrelated of optionForms("sandbox_workspace_write.network_access=true")) {
-      for (const fallback of optionForms(' "model_reasoning_effort" = "low" ')) {
-        const config = {
-          routes: { engineer: { kind: "codex", model: "route-model", effort: "high", args } },
-          always_args: { codex: [...fallback, ...unrelated, "-p", "NAME"] },
-        };
-        const launch = resolveLaunchRoute(config, { route: "engineer" });
-        assert.equal(launch.effort, "high");
-        assert.deepEqual(launch.args, [...args, ...unrelated, "-p", "NAME"]);
-      }
-    }
+
+
+test('retired always_args values parse and never change launch arguments', () => {
+  for (const always_args of [null, true, ['bad'], { codex: ['--sandbox', 'danger-full-access'] }]) {
+    const config = { routes: { engineer: { kind: 'codex', args: ['-p', 'native'] } }, always_args };
+    assert.doesNotThrow(() => validateRoutesConfig(config));
+    assert.deepEqual(resolveLaunchRoute(config, { route: 'engineer' }).args, ['-p', 'native']);
   }
-});
-
-test("Codex always_args deduplicates only the same config key across native aliases", () => {
-  const config = {
-    routes: { engineer: { kind: "codex", effort: "high", args: ["-c", "sandbox_workspace_write.network_access=false"] } },
-    always_args: { codex: [
-      "--config", 'sandbox_workspace_write . "network_access" = true',
-      "-c", "history.persistence=none",
-    ] },
-  };
-  assert.deepEqual(resolveLaunchRoute(config, { route: "engineer" }).args, [
-    "-c", "sandbox_workspace_write.network_access=false", "-c", "history.persistence=none",
-  ]);
 });

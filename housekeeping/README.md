@@ -13,7 +13,7 @@ node /path/to/herdr-monitor/housekeeping/housekeeping.mjs --start
 ```
 
 Release activation delivers this startup instruction through
-the [installed supervisor entry policy](../discovery/README.md). It needs no
+the [supervisor policy](../discovery/README.md). It needs no
 project AGENTS.md edit. Native
 fresh Herdr starts receive worker policy and never start a schedule. Installation
 itself starts no project loop; the canonical supervisor performs the start.

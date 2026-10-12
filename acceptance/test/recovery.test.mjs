@@ -163,11 +163,13 @@ test('cleanup stops and awaits a supervisor executing dispatch before reading ow
     console.log(JSON.stringify({result}));
   `, { mode: 0o755 });
   const candidate = path.join(root, 'candidate');
-  for (const dir of ['discovery/adapters', 'bin', 'dispatch']) fs.mkdirSync(path.join(candidate, dir), { recursive: true });
-  fs.writeFileSync(path.join(candidate, 'discovery/adapters/codex.mjs'), "console.log('offline policy');");
+  for (const dir of ['supervisor', 'discovery', 'bin', 'dispatch']) fs.mkdirSync(path.join(candidate, dir), { recursive: true });
+  fs.writeFileSync(path.join(candidate, 'discovery/client.mjs'), "console.log('{}');");
+  fs.writeFileSync(path.join(candidate, 'supervisor/supervisor.mjs'), "console.log('Supervisor cold start');");
   fs.writeFileSync(path.join(candidate, 'bin/org.mjs'), `
     import fs from 'node:fs';
     if(process.argv[2]==='add')console.log('ENG-1');
+    else if(process.argv[2]==='status')console.log('{}');
     else {fs.writeFileSync(${JSON.stringify(path.join(root, 'late-command'))},'forbidden');console.log('{}');}
   `);
   fs.writeFileSync(path.join(candidate, 'dispatch/dispatch.mjs'), `

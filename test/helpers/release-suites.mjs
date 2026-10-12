@@ -17,7 +17,7 @@ export function releasePhases(files) {
     const directory = path.posix.dirname(file);
     // The longest lane test and copied-product probes get the full deadline.
     // Acceptance and future lane files are isolated for the same reason.
-    const isolated = /^(lanes|acceptance)\//.test(file) || file === 'discovery/test/acceptance.test.mjs';
+    const isolated = /^(lanes|acceptance)\//.test(file);
     const key = isolated ? file : directory;
     if (!directories.has(key)) directories.set(key, []);
     directories.get(key).push(file);

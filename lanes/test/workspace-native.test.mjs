@@ -19,7 +19,7 @@ test('native dispatch opens a one-tab lane from a project with no Herdr workspac
   const repo = path.join(root, 'repo'), bin = path.join(root, 'bin'), evidence = path.join(root, 'evidence');
   for (const dir of [repo, bin, evidence]) fs.mkdirSync(dir);
   const env = { ...process.env, TMPDIR: root, ACCEPTANCE_ROOT: root, ORG_ACTOR: 'eng133-native-test',
-    GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', MONITOR_ENTRY_BYPASS: '1' };
+    GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_DIR|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_|GIT_CONFIG_VALUE_)/u.test(key)) delete env[key];
   env.LANE_CONFIG = path.join(root, "lane.json");
   env.LANE_WORKTREE_ROOT = path.join(root, "worktrees");

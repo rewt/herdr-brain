@@ -333,7 +333,7 @@ test('supervisor, discovery and record views recover gate evidence and the opera
   assert.equal(doc.candidates[0].question, c.question); assert.match(renderColdStart(doc), /Release candidates/);
   assert.ok(doc.next.some(n => n.action === 'await_release_operator'));
   const policy = entryPolicy({ ...f.project, workspace: f.repo, org: path.join(f.repo, '.org'), role: 'worker', entry: {}, branch: 'main' }, ROOT);
-  assert.match(policy, /workers use.*never run the release gate/);
+  assert.match(policy, /Workers use.*never run the release gate/);
   const delegated = JSON.parse(f.ok(process.execPath, [path.join(ROOT, 'supervisor/supervisor.mjs'), 'release', '--repo', f.repo, '--role', 'supervisor']));
   assert.equal(delegated.candidate.id, c.id);
   const [listed] = f.record(['releases', '--json']).candidates;

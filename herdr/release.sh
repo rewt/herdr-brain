@@ -20,9 +20,6 @@
 # HERDR_MONITOR_PLIST (the retired Brain plist activation checks for; default
 # ~/Library/LaunchAgents/com.rewt.herdr-brain.plist). RELEASE_NO_HERDR=1 skips the plugin
 # step, RELEASE_NO_LAUNCHD=1 the retired-plist check and RELEASE_NO_NPM=1 the npm check.
-# HERDR_MONITOR_ENTRY_BIN defaults to $HOME_DIR/entry/bin. HERDR_MONITOR_CODEX
-# and HERDR_MONITOR_CLAUDE override native executable discovery; '-' skips Claude.
-# Activation installs reversible PATH snippets for fresh zsh/bash shells.
 set -euo pipefail
 
 HOME_DIR=${HERDR_MONITOR_HOME:-$HOME/.local/share/herdr-monitor}
@@ -31,7 +28,6 @@ REPO=${HERDR_MONITOR_REPO:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 LEGACY_PLIST=${HERDR_MONITOR_PLIST:-$HOME/Library/LaunchAgents/com.rewt.herdr-brain.plist}
 PLUGIN=rewt.herdr-monitor
 LAUNCHERS="record:bin/org.mjs org:bin/org.mjs lane:lanes/lane.mjs"
-ENTRY_DRIVER="$(cd "$(dirname "$0")" && pwd)/entry-install.mjs"
 
 die() { echo "release: $*" >&2; exit 1; }
 say() { echo "release: $*"; }
@@ -130,16 +126,13 @@ activate() {
   local tag=$1 dir="$HOME_DIR/releases/$1"
   git check-ref-format "refs/tags/$tag" >/dev/null || die "invalid release identifier: $tag"
   [ -d "$dir" ] || die "no release $tag; run: release.sh build $tag"
-  # Check every launcher/entry destination before switching current. Older
-  # releases without discovery remove the new transport when rolled back.
+  # Check every launcher destination before switching current.
   for l in $LAUNCHERS; do
     local name=${l%%:*}
     [ -e "$BIN_DIR/$name" ] && [ ! -L "$BIN_DIR/$name" ] && die "$BIN_DIR/$name is not a link; refusing to replace it"
   done
   retired_brain_service
-  entry "$dir" --check
   remember
-  entry "$dir"
   # Re-activating the active release (after a failed step) must not make it its own previous.
   if [ -L "$HOME_DIR/current" ] && [ "$(readlink "$HOME_DIR/current")" != "$dir" ]; then
     ln -sfn "$(readlink "$HOME_DIR/current")" "$HOME_DIR/previous"
@@ -159,22 +152,9 @@ rollback() {
   esac
 }
 
-entry() {
-  local tree=$1; shift
-  local bin=${HERDR_MONITOR_ENTRY_BIN:-$HOME_DIR/entry/bin}
-  if [ -f "$tree/discovery/install.mjs" ]; then
-    HERDR_MONITOR_HOME="$HOME_DIR" node "$ENTRY_DRIVER" --product "$tree" --hook-runtime "$HOME_DIR/current" "$@"
-  elif [ -e "$bin/.monitor-entry.json" ] || [ -e "$bin/.monitor-shell.json" ]; then
-    HERDR_MONITOR_HOME="$HOME_DIR" node "$ENTRY_DRIVER" --remove "$@"
-  fi
-  return 0
-}
-
 restore() {
   local before="$HOME_DIR/before"
   [ -d "$before" ] || die "nothing to restore: no activation was recorded"
-  HERDR_MONITOR_HOME="$HOME_DIR" node "$ENTRY_DRIVER" --remove --check
-  HERDR_MONITOR_HOME="$HOME_DIR" node "$ENTRY_DRIVER" --remove
   for l in $LAUNCHERS; do
     local name=${l%%:*}
     if [ -f "$before/$name" ]; then
@@ -210,7 +190,6 @@ status() {
   echo "current:  $(readlink "$HOME_DIR/current" 2>/dev/null || echo none)"
   echo "previous: $(readlink "$HOME_DIR/previous" 2>/dev/null || echo none)"
   for l in $LAUNCHERS; do local name=${l%%:*}; echo "$name -> $(readlink "$BIN_DIR/$name" 2>/dev/null || echo missing)"; done
-  echo "entry:    ${HERDR_MONITOR_ENTRY_BIN:-$HOME_DIR/entry/bin} (fresh zsh/bash shells)"
   ls "$HOME_DIR/releases" 2>/dev/null | sed 's/^/release:  /'
 }
 

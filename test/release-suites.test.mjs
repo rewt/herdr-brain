@@ -18,7 +18,7 @@ test('release suites cover tierFiles(release) exactly once and isolate heavy fil
   assert.deepEqual(groups.flatMap(([, rows]) => rows).sort(), [...files].sort());
   assert.equal(new Set(groups.map(([name]) => name)).size, groups.length);
   assert.ok(groups.every(([, rows]) => rows.length > 0 && rows.length <= MAX_SUITE_FILES));
-  for (const file of files.filter(file => /^(lanes|acceptance)\//.test(file) || file === 'discovery/test/acceptance.test.mjs')) {
+  for (const file of files.filter(file => /^(lanes|acceptance)\//.test(file))) {
     assert.deepEqual(groups.find(([, rows]) => rows.includes(file))[1], [file]);
   }
   const promotion = tierFiles('promotion');
@@ -50,7 +50,7 @@ async function scenario(t, failure) {
   const lock = path.join(root, 'slot.lock');
   const preload = path.join(root, 'load.mjs');
   fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");
-  const files = ['discovery/test/acceptance.test.mjs', 'lanes/test/lane.test.mjs', 'acceptance/test/later.test.mjs'];
+  const files = ['discovery/test/lessons.test.mjs', 'lanes/test/lane.test.mjs', 'acceptance/test/later.test.mjs'];
   for (const [i, file] of files.entries()) {
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), `

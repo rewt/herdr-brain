@@ -6,11 +6,9 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { makeSnapshotWritable } from '../snapshot.mjs';
 import { commandFailure, classifyFailure } from '../limits.mjs';
-import { cases, cutoverChecks, runCase } from '../cases.mjs';
+import { cases, runCase } from '../cases.mjs';
 import { resultLine } from '../results.mjs';
 import { createOwnedTempRoot } from '../temp.mjs';
-import { discovery } from '../live.mjs';
-import { createVerification } from '../verify.mjs';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-snapshot-')));
@@ -82,8 +80,8 @@ test('actual scratch permission failures and npm stderr become HARNESS through c
   try { fs.writeFileSync(file, 'retire'); } catch (caught) { error = caught; }
   assert.equal(error?.code, 'EACCES', 'fixture must run as an unprivileged user');
   const results = [];
-  await runCase(results, cases.switches, () => { throw error; }, { scratchRoot: scratch });
-  await runCase(results, cases.retirement, () => assert.fail('dependent body ran'), { scratchRoot: scratch });
+  await runCase(results, cases.snapshot, () => { throw error; }, { scratchRoot: scratch });
+  await runCase(results, { ...cases.policy, prerequisites: [cases.snapshot.key] }, () => assert.fail('dependent body ran'), { scratchRoot: scratch });
   for (const result of results) {
     assert.equal(result.status, 'PENDING'); assert.equal(result.origin, 'harness');
     assert.match(resultLine(result), /HARNESS/);
@@ -91,7 +89,7 @@ test('actual scratch permission failures and npm stderr become HARNESS through c
   const npm = `npm error code EACCES\nnpm error path ${scratch}/candidate/app/node_modules\nnpm error EACCES: permission denied, mkdir '${scratch}/candidate/app/node_modules'`;
   assert.equal(classifyFailure(commandFailure(npm, { scratchRoot: scratch })).origin, 'harness');
   const checks = [];
-  await runCase(checks, cutoverChecks.canary, () => { throw commandFailure(npm); }, { scratchRoot: scratch });
+  await runCase(checks, cases.release, () => { throw commandFailure(npm); }, { scratchRoot: scratch });
   assert.equal(checks[0].origin, 'harness');
   for (const code of ['EROFS', 'ENOSPC', 'EDQUOT', 'EMFILE', 'ENFILE', 'EIO', 'EPERM']) {
     assert.equal(classifyFailure(Object.assign(Error(`${code}: '${file}'`), { code, path: file }), { scratchRoot: scratch }).origin, 'harness');
@@ -141,53 +139,4 @@ test('unresolved links, missing roots, relative and mixed paths fail closed; rea
   assert.equal(classifyFailure(commandFailure(`EACCES: '${scratch}/file' and '${foreign}/file'`, { scratchRoots: [scratch] })).status, 'FAIL');
   assert.equal(classifyFailure(Object.assign(Error('copy denied'), { code: 'EACCES', path: `${scratch}/file`, dest: `${foreign}/file` }), { scratchRoots: [scratch] }).status, 'FAIL');
   assert.equal(classifyFailure(commandFailure(`EACCES: '${alias}/missing/file'`, { scratchRoots: [scratch] })).origin, 'harness');
-});
-
-test('discovery setup failures use newly registered separate roots before candidate execution', async (t) => {
-  const fixtureRoot = fixture(t), scratchRoots = [], discoveryRoots = [];
-  const root = createOwnedTempRoot(path.join(fixtureRoot, 'primary-'), scratchRoots);
-  t.after(() => { for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true }); });
-  const candidate = path.join(root, 'candidate'), evidence = path.join(root, 'evidence');
-  fs.mkdirSync(candidate); fs.mkdirSync(evidence);
-  fs.writeFileSync(path.join(root, 'ownership.json'), '{}');
-  const results = [], failedPaths = [];
-  const forbidden = () => assert.fail('setup failed before candidate or model execution');
-  const write = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value); };
-  await discovery({ root, scratchRoots, discoveryRoots, candidate, evidence, opt: {}, env: {},
-    test: (definition, body) => runCase(results, definition, body, { scratchRoots }),
-    pending: forbidden, initRepo: (repo) => {
-      failedPaths.push(repo);
-      throw Object.assign(Error(`ENOSPC: mkdir '${repo}'`), { code: 'ENOSPC', path: repo });
-    }, run: forbidden, node: forbidden, git: forbidden, h: forbidden, until: forbidden,
-    write, read: (file) => fs.readFileSync(file, 'utf8') });
-  assert.equal(results.length, 2); assert.equal(discoveryRoots.length, 2);
-  assert.equal(scratchRoots.length, 3);
-  for (const [index, result] of results.entries()) {
-    assert.equal(result.status, 'PENDING'); assert.equal(result.origin, 'harness');
-    assert.match(resultLine(result), /HARNESS/);
-    assert.equal(fs.realpathSync(path.dirname(failedPaths[index])), discoveryRoots[index]);
-    assert.ok(scratchRoots.includes(discoveryRoots[index]));
-  }
-  const foreign = path.join(fixtureRoot, 'foreign'); fs.mkdirSync(foreign);
-  assert.equal(classifyFailure(commandFailure(`ENOSPC: '${foreign}/project'`, { scratchRoots })).status, 'FAIL');
-});
-
-test('session and verifier temp roots classify direct and command errors while preserving safety failures', async (t) => {
-  const fixtureRoot = fixture(t), scratchRoots = [], discoveryRoots = [];
-  const root = createOwnedTempRoot(path.join(fixtureRoot, 'primary-'), scratchRoots);
-  t.after(() => { for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true }); });
-  const session = createOwnedTempRoot('/private/tmp/herdr-session-test-', scratchRoots, discoveryRoots);
-  const verifier = createVerification({ name: 'proof', repo: root, installation: root, toolRoots: [] },
-    { root, scratchRoots, discoveryRoots, run: () => assert.fail('no model or native execution') });
-  assert.ok(scratchRoots.includes(session)); assert.ok(scratchRoots.includes(verifier.temp));
-  assert.ok(discoveryRoots.includes(session)); assert.ok(discoveryRoots.includes(verifier.temp));
-  const results = [];
-  for (const [index, directory] of [session, verifier.temp].entries()) {
-    const file = path.join(directory, 'denied'); fs.writeFileSync(file, 'immutable', { mode: 0o444 });
-    await runCase(results, index ? cases.routingQuestion : cases.discovery, () => fs.writeFileSync(file, 'bad'), { scratchRoots });
-    assert.equal(results[index].status, 'PENDING'); assert.equal(results[index].origin, 'harness');
-    const message = `npm error code EACCES\nnpm error path ${directory}/missing/file`;
-    assert.equal(classifyFailure(commandFailure(message, { scratchRoots })).origin, 'harness');
-    assert.equal(classifyFailure(commandFailure(`acceptance_product_boundary: EACCES '${file}'`, { scratchRoots })).status, 'FAIL');
-  }
 });

@@ -14,15 +14,11 @@ fast-forward merge. Settle reviews do not run a suite.
 frozen folds remain imported by their tests rather than being reported as empty
 passing tests. Every bounded test file belongs to promotion or release; the tier
 regression also verifies that fast checks remain included in promotion. The
-explicit `promotion` list contains 69 full files; the `release` list discovers the
-other 54 files. Selected fast cases from mixed release files remain in the
-promotion logic and lane commands. The complete release command runs each of
-all 123 bounded files once through core, cycle, lanes, acceptance and release-only
-steps, plus the native slot suite. New files default to release until explicitly
-assigned to promotion. See [validation tiers](../validation-tiers.md) for the
-behavior inventory and measured promotion timing. The
-native test-slot suite has its own runner because it intentionally exercises
-real detached groups. Provider/kernel checks report their prerequisite skips.
+explicit promotion list and dynamically discovered release list cover the current
+inventory. Selected fast cases from mixed release files remain in the promotion
+logic and lane commands. The complete release command runs each current file once
+through core, cycle, lanes, acceptance and release-only steps, plus the native slot
+suite. New files default to release until explicitly assigned to promotion.
 
 The project release wrapper executes the offline release tier against the
 prepared candidate before writing build evidence and starting acceptance. A failed check prevents that

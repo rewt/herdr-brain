@@ -4,10 +4,7 @@ Herdr Monitor gives coding agents a durable record and isolated Git lanes. A fre
 session recovers tasks, reports and decisions from the record instead of a long
 chat history.
 
-Install a release once on the machine. Enter an existing Git project through a
-fresh Codex or Claude shell session: Monitor supplies the workflow, creates a
-worker lane and records the actual task as the agent works. There is no project
-`init`, required instruction-file edit or required user configuration.
+Install a release once and dispatch work into explicit Git lanes.
 
 **Start with [the adoption guide](docs/ADOPTING.md).** It covers installation,
 uninstall, project overrides, the agent cycle and release rollback.
@@ -18,7 +15,7 @@ lists the work required before any publication.
 ## What happens
 
 - A worker gets its own checkout, the project's instructions, record context and
-  bounded commands to commit, validate, integrate and report its work.
+  the lane and record commands to commit, validate, integrate and report its work.
 - A supervisor dispatches recorded work, receives a final watch notice, settles
   reports through independent review, and authorizes queued local promotion.
 - Housekeeping handles finished worker tabs and interrupted sessions. Only the
@@ -48,25 +45,19 @@ or item status.
 
 ## Requirements and limits
 
-Node.js 20+, npm, Git 2.38+, Bash, Python 3 available as `python3`, a supported
-Herdr installation (the manifest requires 0.8.0+) and native Codex are needed
-for the normal machine install. macOS and Linux on arm64/x64 ship checksummed
-validation lifetime owners and require no C compiler. A rejected or missing
-bundle tries a bounded `/usr/bin/cc` source build, then refuses validation if
-neither is available. Python handles release plugin discovery and restoration. Install Python 3
-through your OS package manager or Python installer and keep `python3` on PATH.
-See the guide's [prerequisite checks](docs/ADOPTING.md#install-on-a-machine).
-Claude is optional. The scratch walkthrough was proved on macOS; native Codex is
-the default validation provider. The Linux bubblewrap provider remains an
-explicit scratch-only experiment. Absolute harness paths, desktop/remote
-sessions and custom shells need their own entry transport; see the guide.
+Node.js 20+, Git 2.38+ and native Codex or Claude are needed for agent work.
+Herdr supplies panes and agent launches. Bash manages local releases; the
+promotion kernel-lock bridge uses zsh, and release plugin discovery uses Python 3.
+The product has no npm dependencies. Native harness configurations own permissions
+and sandboxing. The bundled non-setuid process reader supports process identity
+checks inside harness sandboxes.
 
 ## References
 
 | Module | Reference |
 | --- | --- |
 | Record | `node bin/org.mjs help` (`org` is the permanent `record` alias); [Lessons](docs/reference/lessons.md) |
-| Entry and project settings | [Discovery](discovery/README.md) |
+| Fleet and project chats | [Discovery](discovery/README.md) |
 | Machine installation | [Herdr](herdr/README.md) |
 | Lanes and routes | [Lanes](lanes/README.md) |
 | Dispatch / watch | [Dispatch](dispatch/README.md), [Watch](watch/README.md) |

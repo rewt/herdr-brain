@@ -8,31 +8,23 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
-import { discovery } from './live.mjs';
-import { lessonsEntryCase } from './lessons.mjs';
-import { auditCopies, relocate, within, copiedSandbox } from './security.mjs';
-import { HarnessLimit, Pending, commandFailure, requirePrerequisite, requireSuccessfulChecks } from './limits.mjs';
+import { HarnessLimit, Pending, commandFailure, requirePrerequisite } from './limits.mjs';
 import { installSignalCleanup, removeCredentials, credentialResidue } from './signal-cleanup.mjs';
 import { stopProducers, awaitProducers } from './producers.mjs';
-import { safeGitArgs } from './verify.mjs';
 import { retainedRoots, resultLine, gateOutcome } from './results.mjs';
 import { liveSocket } from './probe.mjs';
-import { cases, cutoverChecks, runCase } from './cases.mjs';
+import { cases, runCase } from './cases.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
 import { createOwnedTempRoot, createLiveSessionTemp } from './temp.mjs';
-import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory, assertNoticeContract } from './cutover.mjs';
 import { settleCase } from './settle.mjs';
 import { supervisorCase } from './supervisor.mjs';
 import { assertHousekeepingActions } from './housekeeping.mjs';
-import { assertSupervisorEntry } from './entry.mjs';
 import { startFocusMonitor, assertFocus } from './focus.mjs';
 import { cleanupWorkspaces, cleanupInboxes } from './cleanup.mjs';
 import { testSlotEnvironment, scratchProductHomes, assertScratchHomes, enterScratchHomes } from './environment.mjs';
 import { fleetPath } from '../lib/fleet.mjs';
 import { loadAwareCommand } from './commands.mjs';
 import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
-import { startLegacyConsumer } from './legacy-consumer.mjs';
-import { copyExistingProject } from './existing-project.mjs';
 import { noticeDeliveryBudgetMs } from './notice-budget.mjs';
 import { matchingRun } from '../supervisor/tidy-tabs.mjs';
 
@@ -51,19 +43,6 @@ export function initializeHerdrOwnership(root, { binary, socketPath, fleetRoot }
     creationRoots: [fs.realpathSync(fleetRoot)], workspaces: [], tabs: [], panes: [] }));
 }
 
-export async function runCutoverCases({ results, test, switches, retirement, scratchRoots }) {
-  await test(cases.switches, async () => {
-    const checks = [];
-    const detail = await switches((definition, fn) => runCase(checks, definition, fn, { scratchRoots }), checks);
-    requireSuccessfulChecks(checks);
-    return detail;
-  });
-  await test(cases.retirement, () => {
-    requirePrerequisite(results, cases.switches.key);
-    return retirement();
-  });
-}
-
 export async function abandonWatcher(job, { record, h, until, read, close }) {
   record(['abandon', job.run, '--note', 'Acceptance failure path complete']);
   // Notice confirmation may still be running when the PTY receipt arrives.
@@ -80,15 +59,12 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
 const { values: opt } = parseArgs({ options: {
   candidate: { type: 'string' }, source: { type: 'string', default: SOURCE },
-  'bch-cloak': { type: 'string' }, keep: { type: 'boolean', default: false },
-  'claude-profile': { type: 'string' },
+  keep: { type: 'boolean', default: false },
   'skip-live': { type: 'boolean', default: false },
-  'discovery-model': { type: 'string', default: 'gpt-5.6-luna' },
-  'discovery-effort': { type: 'string', default: 'low' },
 } });
-if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--bch-cloak LIVE_REPO] [--claude-profile DEDICATED_PROFILE] [--keep]'); process.exit(2); }
+if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--keep]'); process.exit(2); }
 const scratchRoots = [];
-const realHome = os.homedir(), authHome = process.env.CODEX_HOME ?? path.join(realHome, '.codex');
+const realHome = os.homedir();
 const root = createOwnedTempRoot(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tmp', 'herdr-acceptance-'), scratchRoots);
 const evidence = path.join(root, 'evidence');
 fs.mkdirSync(evidence);
@@ -99,10 +75,9 @@ let logFile, candidateCommit, fixture, supervisor, defaultOrg;
 let focusMonitor, focusError;
 let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
-const legacyConsumers = new Set();
 const discoveryRoots = [];
 const env = harnessEnvironment(process.env, root);
-// General cases also enter native validation. Keep their machine fleet short,
+// Keep the scripted cycle fleet separately owned and short,
 // separately owned and included in the same cleanup registry.
 const fleetRoot = createLiveSessionTemp(scratchRoots, discoveryRoots);
 env.HERDR_MONITOR_FLEET = path.join(fleetRoot, 'f');
@@ -129,31 +104,8 @@ function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_00
   }
   return r;
 }
-const scratchHome = path.join(root, 'copy-home'); fs.mkdirSync(scratchHome);
-const copiedPolicy = path.join(root, 'copied.sb');
-// Independent kernel write boundary: copied code cannot escape through a
-// dynamically computed record path even if a textual audit misses its spelling.
-write(copiedPolicy, copiedSandbox(root, [fs.realpathSync(path.join(path.dirname(process.execPath), '..'))])
-  + `(allow file-read* file-write* (subpath ${JSON.stringify(fleetRoot)}))\n`);
-let liveCopyReady = false, copy, live;
-function copyInvocation(command, args, options = {}) {
-  if (!liveCopyReady) throw new Error('copied scripts were not successfully relocated/audited');
-  auditCopies(copy, { live, home: realHome, root });
-  const org = options.extra?.ORG_DIR;
-  if (!org || !fs.existsSync(org) || !within(root, org)) throw new Error('copied invocation requires an explicit scratch ORG_DIR');
-  // Allow the installed native Herdr executable only as a tool for the scoped
-  // adapter. Live project code, activated releases and records stay unreadable.
-  const native = JSON.parse(read(path.join(root, 'ownership.json'))).binary;
-  const toolPolicy = read(copiedPolicy) + [native, fs.realpathSync(native)].map((file) => `(allow file-read* (literal ${JSON.stringify(file)}))\n`).join('');
-  write(copiedPolicy, toolPolicy);
-  const extra = { ...options.extra, HOME: scratchHome, TMPPREFIX: path.join(root, 'zsh'), ACCEPTANCE_PINNED_ORG: org };
-  return { command: '/usr/bin/sandbox-exec', args: ['-f', copiedPolicy, command, ...args],
-    options: { ...options, extra, ...(options.isolatedEnv ? { isolatedEnv: { ...options.isolatedEnv, ...extra } } : {}) } };
-}
-function runCopy(command, args, options = {}) {
-  const call = copyInvocation(command, args, options);
-  return run(call.command, call.args, call.options);
-}
+const scratchHome = path.join(root, 'session-home'); fs.mkdirSync(scratchHome);
+const safeGitArgs = (repo, args) => ['--no-pager', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-C', repo, ...args];
 const node = (file, args, options) => run(process.execPath, [file, ...args], options);
 const git = (cwd, args) => run('git', safeGitArgs(cwd, args)).stdout.trim();
 const candidate = path.join(root, 'candidate');
@@ -175,7 +127,7 @@ async function test(definition, fn) {
   write(`${phaseFile}.tmp`, JSON.stringify({ key: definition.key, id }));
   fs.renameSync(`${phaseFile}.tmp`, phaseFile);
   try {
-    const result = await runCase(results, definition, fn, { scratchRoots, existingProjectConfigured: Boolean(opt['bch-cloak']),
+    const result = await runCase(results, definition, fn, { scratchRoots,
       load: () => load.snapshot(definition === cases.focus ? 0 : window) });
     result.load = load.snapshot(window);
     result.evidence = `${id}.jsonl`;
@@ -249,10 +201,6 @@ async function closeScope() {
     // Stop PTY workers and adapter admissions before reading dispatch journals:
     // an active default-cycle dispatch may publish another watcher receipt.
     stopProducers(root);
-    for (const consumer of legacyConsumers) {
-      try { await consumer.stop(); }
-      catch (error) { errors.push(`legacy consumer cleanup: ${error.message}`); }
-    }
     await awaitProducers(root);
     // PIDs originate only in successful candidate detach receipts or in this
     // scratch record’s dispatch journals (including partially failed dispatch).
@@ -264,11 +212,6 @@ async function closeScope() {
           const job = JSON.parse(read(path.join(org, 'dispatch', file)));
           if (job.watcher?.pid) pids.add(job.watcher.pid);
         } catch (error) { errors.push(`watcher journal ${file}: ${error.message}`); }
-      }
-    }
-    if (fs.existsSync(path.join(root, 'legacy-watcher-pids'))) {
-      for (const value of read(path.join(root, 'legacy-watcher-pids')).trim().split('\n')) {
-        const pid = Number(value); if (Number.isSafeInteger(pid) && pid > 1) pids.add(pid);
       }
     }
     for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') errors.push(e.message); } }
@@ -346,11 +289,10 @@ installSignalCleanup({ root, onSignal: () => { stopping = true; }, cleanup: asyn
 } });
 
 try {
-  const missing = ['node', 'git', 'bash', 'zsh', 'rg', 'python3', 'tar', 'npm', 'chmod', 'sandbox-exec', 'herdr',
-    ...(opt['skip-live'] ? [] : ['codex'])].filter((tool) => run('which', [tool], { ok: false }).status !== 0);
+  const missing = ['node', 'git', 'bash', 'zsh', 'rg', 'python3', 'tar', 'npm', 'chmod', 'herdr'].filter((tool) => run('which', [tool], { ok: false }).status !== 0);
   if (missing.length) {
     await test(cases.tools, () => { throw new HarnessLimit(`missing prerequisite: ${missing.join(', ')}`); });
-    throw new Pending('prerequisites unavailable; no candidate or copied code executed');
+    throw new Pending('prerequisites unavailable; no candidate code executed');
   }
   if (process.env.HERDR_ENV === '1') {
     try { focusMonitor = await startFocusMonitor({ socketPath: liveSocket(process.env), evidence }); }
@@ -388,19 +330,11 @@ try {
     write(probe, `import {loadDiscoveredRoutes,resolveLaunchRoute} from ${JSON.stringify(path.join(candidate, 'lanes/routes.mjs'))};\nconsole.log(JSON.stringify(resolveLaunchRoute(loadDiscoveredRoutes().config)));\n`);
     node(probe, [], { cwd: fresh });
   });
-  await test(cases.entry, () => {
-    requireCandidate('dispatch/dispatch.mjs'); requireCandidate('watch/watch.mjs');
-    const bootstrap = path.join(root, 'entry-project'); initRepo(bootstrap);
-    for (const name of ['.org', '.lane.json', 'AGENTS.md']) assert.ok(!fs.existsSync(path.join(bootstrap, name)), 'entry bootstrap must start from a separate untouched project');
-    if (present('discovery/install.mjs') && present('discovery/adapters/codex.mjs')) {
-      const binary = fs.realpathSync(run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim());
-      const policy = node(path.join(candidate, 'discovery/adapters/codex.mjs'), ['--repo', bootstrap, '--binary', binary, '--role', 'supervisor', '--policy-only'], { cwd: bootstrap }).stdout;
-      write(path.join(evidence, 'new-project-discovery.txt'), policy);
-      assertSupervisorEntry(policy);
-      assert.ok(fs.existsSync(path.join(bootstrap, '.org/events.jsonl')), 'product entry must bootstrap its own project record');
-      return 'actual supervisor entry executed in an untouched project and bootstrapped the record; this does not execute a dispatch/watch cycle';
-    }
-    assert.fail('candidate has no installed supervisor entry to execute and bootstrap an unconfigured project');
+  await test(cases.policy, () => {
+    requireCandidate('supervisor/supervisor.mjs');
+    const brief = node(path.join(candidate, 'supervisor/supervisor.mjs'), ['brief', '--repo', fresh, '--org', path.join(fresh, '.org')], { cwd: fresh }).stdout;
+    assert.match(brief, /Supervisor cold start/);
+    return 'foreground supervisor cold start reads the initialized record without entry adapters';
   });
   await test(cases.fixture, async () => {
     if (process.env.HERDR_ENV !== '1') throw new HarnessLimit('run inside Herdr (HERDR_ENV=1); no session inspected');
@@ -632,371 +566,11 @@ try {
     assert.equal(fs.readlinkSync(path.join(home, 'current')), path.join(home, 'releases/candidate'));
     release('restore'); assert.ok(!fs.existsSync(path.join(bin, 'record')));
     assert.equal(fs.readlinkSync(path.join(bin, 'org')), path.join(candidate, 'bin/org.mjs'));
-    if (present('herdr/entry-install.mjs')) {
-      assert.ok(!fs.existsSync(path.join(home, 'entry/bin/codex')));
-      assert.ok(!fs.existsSync(path.join(userHome, '.zshenv')));
-    }
-    return 'candidate code archived into immutable scratch releases; launcher migration and reversible entry install checked in an isolated user home; npm/plugin/launchd excluded';
+    assert.ok(!fs.existsSync(path.join(userHome, '.zshenv')));
+    return 'immutable scratch releases and launcher activation, rollback and restore checked in an isolated home';
   });
-  // Existing-project compatibility and proposed switches are one section of the
-  // gate. Every file comes from a fresh read-only copy, never the inventory kit.
-  live = opt['bch-cloak'] ? path.resolve(opt['bch-cloak']) : undefined;
-  copy = path.join(root, 'existing/bch-cloak');
-  const backup = path.join(root, 'backup');
-  await test(cases.copy, () => {
-    requirePrerequisite(results, cases.fixture.key);
-    const inventory = copyExistingProject({ live, copy, backup });
-    for (const rel of [...switches.map(([, file]) => file), '.lane/supervisor/apply-settle.sh',
-      'scripts/lane/launch-supervisor.mjs', '.lane/supervisor/continue.sh'])
-      assert.ok(inventory.files.some(file => file.file === rel), `required cutover file missing: ${rel}`);
-    write(path.join(evidence, 'live-copy-manifest.json'), JSON.stringify(inventory.files, null, 2));
-    write(path.join(evidence, 'historical-callers.json'), JSON.stringify(inventory.historical, null, 2));
-    const scan = run('rg', ['-n', 'org |herdr-monitor|herdr-brain|lane.mjs|notify-watch|settle-watch', copy], { ok: false });
-    write(path.join(evidence, 'existing-call-inventory.txt'), scan.stdout);
-    // Only path constants are relocated; route table and command arguments stay intact.
-    const transform = (directory) => {
-      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        const file = path.join(directory, entry.name);
-        if (entry.isDirectory()) { transform(file); continue; }
-        write(file, relocate(read(file), { live, home: realHome, scratchHome, copy, candidate, root,
-          launcher: file === path.join(copy, 'scripts/lane/launch-supervisor.mjs') })
-          .replaceAll('wFN', supervisor.workspace).replaceAll('supervisor-opus', supervisor.name).replaceAll('supervisor-fable', supervisor.name));
-      }
-    };
-    transform(copy); auditCopies(copy, { live, home: realHome, root }); liveCopyReady = true;
-    return 'live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)';
-  });
-  const existingReady = () => { requirePrerequisite(results, cases.copy.key); requirePrerequisite(results, cases.fixture.key); };
-  await test(cases.wrappers, async () => {
-    existingReady(); requireCandidate('contrib/settle-watch.mjs');
-    initRepo(copy);
-    const org = path.join(path.dirname(copy), '.org'); node(path.join(candidate, 'bin/org.mjs'), ['init', org]);
-    const item = node(path.join(candidate, 'bin/org.mjs'), ['add', 'Legacy wrapper'], { cwd: copy, extra: { ORG_DIR: org } }).stdout.match(/^(\S+)/)[1];
-    const report = path.join(root, 'legacy-report.md');
-    const output = node(path.join(candidate, 'bin/org.mjs'), ['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low', '--workspace', copy, '--report', report], { extra: { ORG_DIR: org } }).stdout;
-    const id = output.match(/^(R-\d+)/)[1]; node(path.join(candidate, 'bin/org.mjs'), ['set', id, `agent=${supervisor.name}`], { extra: { ORG_DIR: org } });
-    const existingWs = h('workspace', 'create', '--cwd', copy, '--label', 'acceptance-existing-project', '--no-focus');
-    const cwdProbes = [], cwdStart = Date.now();
-    try {
-      await until(() => {
-        const pane = h('pane', 'get', existingWs.root_pane.pane_id).pane;
-        cwdProbes.push({ elapsedMs: Date.now() - cwdStart, pane });
-        return pane.foreground_cwd === copy;
-      }, 'existing-project shell cwd before metadata lookup');
-    } catch (error) { throw new HarnessLimit(error.message); }
-    finally { write(path.join(evidence, 'existing-shell-cwd-probe.json'), JSON.stringify(cwdProbes, null, 2)); }
-    // Retain native resolver and UI metadata separately. The caller's native
-    // lookup must work even if UI metadata never appears in the bounded poll.
-    h('worktree', 'list', '--workspace', existingWs.workspace.workspace_id);
-    const probes = [], metadataStart = Date.now();
-    let metadataReady = false;
-    try {
-      await until(() => {
-        const workspace = h('workspace', 'list').workspaces.find((w) => w.workspace_id === existingWs.workspace.workspace_id);
-        const configured = h('workspace', 'list').workspaces.find((w) => w.workspace_id === supervisor.workspace);
-        probes.push({ elapsedMs: Date.now() - metadataStart, workspace, configured });
-        metadataReady = workspace?.worktree?.checkout_path === copy && workspace.worktree.repo_root === copy;
-        return metadataReady;
-      }, 'canonical workspace metadata before wrapper execution', 15_000);
-    } catch (error) {
-      if (error.message !== 'timeout: canonical workspace metadata before wrapper execution') throw error;
-    } finally { write(path.join(evidence, 'workspace-metadata-probe.json'), JSON.stringify(probes, null, 2)); }
-    const persona = path.join(root, 'persona-env');
-    write(persona, `#!/bin/sh\nprintf 'CLAUDE_CONFIG_DIR=%s\\n' ${quote(path.join(root, 'persona'))}\n`); fs.chmodSync(persona, 0o755);
-    fs.mkdirSync(path.dirname(copy), { recursive: true });
-    // Invocation builder resolves routing.json, passes its exact --model/--effort.
-    const probe = path.join(root, 'legacy-routes.mjs');
-    write(probe, `import assert from 'node:assert/strict';import {buildSupervisorInvocation} from ${JSON.stringify(path.join(copy, 'scripts/lane/launch-supervisor.mjs'))};for(const route of ['executive','settle','settle-critical']){const i=buildSupervisorInvocation(${JSON.stringify(copy)},['--route',route,'--',...(route==='executive'?['--open']:['${id}']),'--dry-run']);assert.ok(i.args.includes('--model'));assert.ok(i.args.includes('--effort'));console.log(JSON.stringify(i));}`);
-    runCopy(process.execPath, [probe], { extra: { ORG_DIR: org } });
-    const isolation = ['--dry-run', '--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
-    const executive = runCopy('/bin/sh', [path.join(copy, '.lane/supervisor/continue.sh'), ...isolation], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
-    const settle = runCopy('/bin/sh', [path.join(copy, '.lane/supervisor/arm-watch.sh'), id, ...isolation], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
-    const routing = runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
-    for (const r of [executive, settle, routing]) {
-      if (r.status !== 0 && /acceptance_(?:harness_limit|product_boundary)/.test(r.stdout + r.stderr)) {
-        throw commandFailure(r.stdout + r.stderr);
-      }
-    }
-    if (!metadataReady) {
-      for (const r of [executive, settle]) {
-        assert.notEqual(r.status, 0, 'frozen contrib caller must expose the background identity gap');
-        assert.match(r.stdout, /no Herdr workspace has .* as its canonical checkout/);
-      }
-    } else {
-      for (const r of [executive, settle]) assert.equal(r.status, 0, r.stdout + r.stderr);
-    }
-    assert.equal(routing.status, 0, routing.stdout + routing.stderr);
-    write(path.join(evidence, 'existing-wrappers.json'), JSON.stringify({ metadataReady,
-      legacy: { executive: executive.status, settle: settle.status }, routing: routing.status }, null, 2));
-    // The launcher keeps contrib/settle-watch.mjs (ENG-64); its split replacement was removed.
-    return metadataReady ? 'routing suite and both copied wrappers pass through contrib/settle-watch.mjs'
-      : 'routing suite passes; frozen contrib wrappers expose the background identity gap';
-  });
-  await test(cases.path, () => {
-    existingReady();
-    // The live close script runs against the configured scratch record and sees
-    // only this run’s panes. Dry-run prevents its legacy path policy deleting.
-    runCopy('/bin/zsh', ['-f', path.join(copy, '.lane/supervisor/close-finished-agents.sh'), '--dry-run'], { cwd: copy, extra: { ORG_DIR: fixture.org } });
-    const settle = path.join(root, 'settle.md'); write(settle, 'next_action: dispatch-review\nsettled_run: R-1\ndispatch_command: "dispatch ITEM review-lane lane/happy-path"\n');
-    // apply-settle dry-run reads its own relocated record; stage a run there.
-    const org = path.join(path.dirname(copy), '.org');
-    runCopy('/bin/zsh', ['-f', path.join(copy, '.lane/supervisor/apply-settle.sh'), settle, 'R-1', '--dry-run'], { cwd: copy, extra: { ORG_DIR: org } });
-    const rec = (a) => node(path.join(candidate, 'bin/org.mjs'), a, { cwd: copy, extra: { ORG_DIR: org } }).stdout;
-    const item = rec(['add', 'Settle PATH acceptance', '--role', 'orchestrator']).match(/^(\S+)/)[1];
-    const id = rec(['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low']).match(/^(R-\d+)/)[1];
-    write(settle, `---\nrun: ${id}\noutcome: done\nsummary: Exercise the copied settle command consumer.\nheadline: The settle command consumer ran\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\nnext_action: dispatch-review\nsettled_run: R-1\norg_commands: ["org add 'Independent acceptance review' --role reviewer"]\ndispatch_command: "dispatch ITEM review-lane lane/happy-path"\n---\n\nIntentionally no Draft section: stop after record commands, before any review desk.\n`);
-    const applied = runCopy('/bin/zsh', ['-f', path.join(copy, '.lane/supervisor/apply-settle.sh'), settle, id], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
-    assert.notEqual(applied.status, 0, 'fixture must stop before review desk dispatch');
-    assert.match(applied.stderr, /substring not found/);
-    assert.ok(json(rec(['show', id, '--json'])).report, 'O ingest used the actual org launcher on PATH');
-    assert.ok(JSON.parse(rec(['status', '--json'])).items.some((i) => i.title === 'Independent acceptance review'));
-    return 'copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk';
-  });
-  let cutover, cutoverCanary;
-  const switchCase = async (check, checks) => {
-    existingReady();
-    for (const file of ['watch/watch.mjs', 'supervisor/arm-watch.sh', 'dispatch/record-worker.mjs']) assert.ok(present(file), `cutover candidate lacks ${file}`);
-    const originals = capture(copy);
-    const target = `cutover-${process.pid}`;
-    // Stable name is scratch-local; never seize a live supervisor-opus name.
-    const receiver = h('tab', 'create', '--workspace', supervisor.workspace, '--cwd', copy, '--label', 'supervisor', '--no-focus');
-    const pane = receiver.root_pane.pane_id;
-    h('pane', 'run', pane, [process.execPath, path.join(root, 'worker.mjs'), root, 'supervisor', target].map(quote).join(' '));
-    await until(() => node(path.join(root, 'herdr.mjs'), ['agent', 'get', pane], { ok: false }).status === 0, 'cutover supervisor receipt');
-    const org = path.join(path.dirname(copy), '.org');
-    if (!fs.existsSync(org)) node(path.join(candidate, 'bin/org.mjs'), ['init', org]);
-    const rec = (args) => node(path.join(candidate, 'bin/org.mjs'), args, { cwd: copy, extra: { ORG_DIR: org } }).stdout;
-    const base = switchedFiles({ copy, candidate, workspace: supervisor.workspace, target, legacyTarget: supervisor.name, home: scratchHome });
-    cutover = { originals, base, target, pane, org, rec };
-    for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
-    auditCopies(copy, { live, home: realHome, root });
-    const execute = (rel, args = [], options = {}) => runCopy(rel.endsWith('.mjs') ? process.execPath : '/bin/zsh',
-      [...(rel.endsWith('.mjs') ? [] : ['-f']), path.join(copy, rel), ...args], { cwd: copy, extra: { ORG_DIR: org, HERDR_PANE_ID: pane }, ...options });
-    const persona = path.join(root, 'cutover-persona');
-    write(persona, `#!/bin/sh\nprintf 'CLAUDE_CONFIG_DIR=%s\\n' ${quote(path.join(root, 'persona'))}\n`); fs.chmodSync(persona, 0o755);
-    const isolation = ['--dry-run', '--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
-    await check(cutoverChecks.name, () => {
-      execute('.lane/supervisor/session-start.sh');
-      assert.equal(h('agent', 'get', target).agent.pane_id, pane);
-      const events = read(path.join(org, 'events.jsonl'));
-      h('agent', 'rename', pane, `${target}-away`);
-      const missing = execute('.lane/supervisor/dispatch.sh', ['ENG-unknown', 'refusal', 'engineer', 'codex', 'scripted', 'low', fixture.brief, path.join(root, 'refusal.md')], { ok: false });
-      assert.notEqual(missing.status, 0); assert.match(missing.stdout + missing.stderr, /no org run started/);
-      assert.equal(read(path.join(org, 'events.jsonl')), events);
-      execute('.lane/supervisor/session-start.sh');
-      assert.equal(h('agent', 'get', target).agent.pane_id, pane);
-      return 'same owned pane renamed after restart; absent target refused without record event';
-    });
-    await check(cutoverChecks.routes, () => {
-      runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org } });
-      execute('.lane/supervisor/continue.sh', isolation);
-      return 'actual copied routing suite and executive wrapper dry run';
-    });
-    async function legacyCanary(stage, mode = stage === 'switched' ? 'held' : 'done') {
-      const topic = `cutover-${stage}`;
-      const wt = path.join(scratchHome, '.herdr/worktrees/bch-cloak', `lane-${topic}`);
-      fs.mkdirSync(path.dirname(wt), { recursive: true });
-      // The ordinary app build is outside the watcher switch. Prebuild the trusted
-      // empty fixture lane, then execute the unchanged legacy lane dispatch.
-      git(copy, ['add', '-A']); git(copy, ['commit', '--allow-empty', '-qm', 'Scratch cutover files']);
-      h('worktree', 'create', '--cwd', copy, '--branch', `lane/${topic}`, '--base', 'main', '--path', wt, '--no-focus');
-      const item = rec(['add', 'Cutover scripted canary', '--role', 'engineer']).match(/^(\S+)/)[1];
-      const report = path.join(root, `cutover-${stage}.md`), ask = path.join(root, `cutover-${stage}-ask.md`);
-      write(ask, `You are run R-RUN. Write the report to ${report}; commit a scratch file.\n`);
-      write(path.join(root, 'mode'), mode);
-      const composerReceipt = path.join(root, 'script-composers', supervisor.pane);
-      const setComposer = async mode => {
-        h('agent', 'prompt', supervisor.name, `acceptance-composer ${mode}`);
-        await until(() => fs.existsSync(composerReceipt) && JSON.parse(read(composerReceipt)).mode === mode,
-          `scratch supervisor ${mode} composer`);
-      };
-      let consumer;
-      try {
-        if (stage === 'legacy') {
-          await setComposer('legacy');
-          consumer = await startLegacyConsumer({ root, copy, org,
-            herdr: path.join(root, 'bin/herdr'), target: supervisor.name, env, evidence, load,
-            onStart: handle => legacyConsumers.add(handle),
-            launch(command, args, options) {
-              const call = copyInvocation(command, args, { cwd: copy, extra: { ORG_DIR: org }, isolatedEnv: options.env });
-              return spawn(call.command, call.args, { ...options, env: checkHomes(call.options.isolatedEnv) });
-            },
-          });
-        }
-        const dispatched = execute('.lane/supervisor/dispatch.sh', [item, topic, 'engineer', 'codex', 'scripted', 'low', ask, report], { timeout: 90_000 });
-        const runId = dispatched.stdout.match(/(R-\d+) .*agent=/)?.[1]; assert.ok(runId, 'legacy dispatch receipt missing');
-        const watchReceipt = dispatched.stdout.split('\n').find((line) => line.startsWith('{'));
-        if (watchReceipt) pids.add(JSON.parse(watchReceipt).pid);
-        const info = json(rec(['show', runId, '--json']));
-        const job = { run: runId, info, wt };
-        if (stage === 'switched') {
-          await until(() => fs.existsSync(report), 'held worker report');
-          const duplicate = execute('.lane/supervisor/arm-watch.sh', [runId], { ok: false });
-          assert.notEqual(duplicate.status, 0, 'arm wrapper must refuse a second active watcher');
-          h('agent', 'prompt', info.meta.agent, 'acceptance-state idle');
-        }
-
-        await until(() => inbox().includes(`report=${report}`) && fs.existsSync(report), 'cutover final delivery');
-        const notices = inbox().split('\n').filter(Boolean).map(JSON.parse).filter((v) => v.line.startsWith(`[org-report] run=${runId} `) && v.line.includes(`report=${report}`));
-        assert.equal(notices.length, 1, 'one canary delivery');
-        const log = path.join(copy, '.lane/supervisor/watch-logs', `${runId}.log`);
-        await until(() => fs.existsSync(log) && read(log).includes('[org-report]'), 'canary delivery log');
-        assert.match(read(log), /\[org-report\]/);
-        if (stage !== 'legacy') assert.ok(!read(log).includes('verdict='));
-        else {
-          assert.match(read(log), /delivered by notify-watch/);
-          assert.match(notices[0].line, /outcome=done verdict=/);
-          const deliveryLog = path.join(copy, '.lane/supervisor/notify-log.tsv');
-          await until(() => fs.existsSync(deliveryLog) && read(deliveryLog).includes(`\tsupervisor-events\tsent\t${notices[0].line}`), 'legacy outbox delivery receipt');
-          await until(() => !fs.readdirSync(path.join(copy, '.lane/supervisor/outbox')).filter(name => name.endsWith('.msg'))
-            .some(name => read(path.join(copy, '.lane/supervisor/outbox', name)).includes(`report=${report}`)), 'legacy canary outbox drained');
-          await consumer.stop();
-          const delivered = read(deliveryLog).split('\n').filter(line => line.includes(`\tsupervisor-events\tsent\t${notices[0].line}`));
-          assert.equal(delivered.length, 1, 'one event-service delivery receipt');
-          const confirmed = inbox().split('\n').filter(Boolean).map(JSON.parse).filter(v => v.line === notices[0].line);
-          assert.equal(confirmed.length, 1, 'one PTY delivery after consumer stopped');
-        }
-        rec(['check', report]); rec(['ingest', report, '--run', runId]);
-        fs.copyFileSync(log, path.join(evidence, `cutover-${stage}-watch.log`));
-        return job;
-      } finally {
-        try { await consumer?.stop(); }
-        finally { if (stage === 'legacy' && !stopping) await setComposer('shaded'); }
-      }
-    }
-    await check(cutoverChecks.canary, async () => {
-      cutoverCanary = await legacyCanary('switched');
-      return `${cutoverCanary.run}: actual copied dispatch -> arm -> released watch -> real PTY notice -> record ingest`;
-    });
-    await check(cutoverChecks.recovery, () => {
-      const logs = path.join(copy, '.lane/supervisor/watch-logs');
-      const older = path.join(logs, 'R-900.log'), newer = path.join(logs, 'R-901.log');
-      write(older, 'old log\n[org-report] run=R-900 late-notice-from-older-run\n');
-      write(newer, ('stale-notice-from-newer-run\n').repeat(200));
-      try {
-        const output = execute('.lane/supervisor/tidy-tabs.sh', ['--dry-run', '--workspace', supervisor.workspace, '--log-lines', '8']).stdout;
-        assert.ok(output.includes(`[org-report] run=${cutoverCanary.run} `), 'canary absent from actual tidy recovery output');
-        assert.ok(output.includes('late-notice-from-older-run'), 'late notice in older log was lost behind another log');
-        assert.ok(output.includes('stale-notice-from-newer-run'), 'newer log tail absent');
-        assert.ok(output.split('stale-notice-from-newer-run').length - 1 <= 8, 'tail must be bounded per run');
-        write(path.join(evidence, 'cutover-tidy.txt'), output);
-      } finally { fs.unlinkSync(older); fs.unlinkSync(newer); }
-      return 'actual tidy retains a bounded tail from every run, including a late older-run notice';
-    });
-    await check(cutoverChecks.cleanup, async () => {
-      const jobs = [cutoverCanary];
-      // Additional real idle PTY workers consume pre-recorded fixture reports.
-      // Dispatch/watch delivery is independently witnessed by the done canary;
-      // this cycle tests cleanup's recorded-outcome decision, not another watch.
-      for (const outcome of ['blocked', 'needs_human']) {
-        const topic = `cutover-cleanup-${outcome.replace('_', '-')}`;
-        const wt = path.join(scratchHome, '.herdr/worktrees/bch-cloak', `lane-${topic}`);
-        const ws = h('worktree', 'create', '--cwd', copy, '--branch', `lane/${topic}`, '--base', 'main', '--path', wt, '--no-focus');
-        const agent = `lane-cleanup-${outcome.replace('_', '-')}-${process.pid}`;
-        const item = rec(['add', `Cleanup ${outcome} fixture`, '--role', 'engineer']).match(/^(\S+)/)[1];
-        const report = path.join(root, `cleanup-${outcome}.md`);
-        const runId = rec(['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low', '--workspace', wt, '--report', report]).match(/^(R-\d+)/)[1];
-        h('agent', 'start', agent, '--kind', 'codex', '--pane', ws.root_pane.pane_id);
-        runCopy(process.execPath, [path.join(candidate, 'dispatch/record-worker.mjs'), runId,
-          '--org', org, '--agent', agent, '--pane', ws.root_pane.pane_id, '--cwd', wt], { cwd: copy, extra: { ORG_DIR: org } });
-        write(report, `---\nrun: ${runId}\noutcome: ${outcome}\nsummary: Trusted cleanup fixture.\nheadline: The worker needs a decision\nblockers: ["Acceptance decision fixture"]\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
-        rec(['check', report]); rec(['ingest', report, '--run', runId]);
-        jobs.push({ run: runId, info: json(rec(['show', runId, '--json'])) });
-      }
-      const before = jobs.map((job) => {
-        const run = json(rec(['show', job.run, '--json'])), agent = h('agent', 'get', job.info.meta.agent).agent;
-        assert.equal(matchingRun(agent, [run])?.id, job.run, 'cleanup fixture must match its recorded launch occupant');
-        return { run: job.run, outcome: run.report.outcome, pane: agent.pane_id,
-          tab: agent.tab_id, workspace: agent.workspace_id, status: agent.agent_status };
-      });
-      assert.deepEqual(before.map((v) => v.outcome), ['done', 'blocked', 'needs_human']);
-      assert.ok(before.every((v) => ['idle', 'done'].includes(v.status)), 'all report workers must be idle to exercise the outcome guard');
-      const preview = execute('.lane/supervisor/close-finished-agents.sh', ['--dry-run']).stdout;
-      for (const [index, job] of jobs.entries()) {
-        if (index === 0) continue;
-        assert.ok(preview.split('\n').some(line => line.startsWith(`[dry-run] keep ${before[index].tab} `) &&
-          line.endsWith(`: waiting on recorded ${before[index].outcome} outcome for ${job.info.meta.agent}`)),
-          `${before[index].outcome} worker must reach the recorded-outcome guard`);
-      }
-      write(path.join(evidence, 'cutover-cleanup-preview.txt'), preview);
-      // Execute the installed tidy -> close-finished-agents path with mutations,
-      // not the released housekeeping module or a dry run.
-      const output = execute('.lane/supervisor/tidy-tabs.sh', ['--workspace', supervisor.workspace]).stdout;
-      write(path.join(evidence, 'cutover-cleanup.txt'), output);
-      const workspaces = h('workspace', 'list').workspaces;
-      // Successful topology lists prove absence/preservation; a native read
-      // error must remain a harness limit rather than look like a closed tab.
-      const after = before.map((v) => {
-        const alive = workspaces.some((w) => w.workspace_id === v.workspace);
-        return { ...v, tabPresent: alive && h('tab', 'list', '--workspace', v.workspace).tabs.some((tab) => tab.tab_id === v.tab),
-          panePresent: alive && h('pane', 'list', '--workspace', v.workspace).panes.some((pane) => pane.pane_id === v.pane) };
-      });
-      write(path.join(evidence, 'cutover-cleanup.json'), JSON.stringify({ before, after }, null, 2));
-      assert.deepEqual(after.map((v) => v.tabPresent), [false, true, true], 'copied cleanup must close only the done worker tab');
-      assert.deepEqual(after.map((v) => v.panePresent), [false, true, true], 'blocked/needs_human workers must remain available');
-      assert.ok(output.includes(`closed ${before[0].tab}`), 'copied cleanup closure receipt absent');
-      return 'actual installed tidy/cleanup cycle closed recorded done; idle blocked and needs_human report workers retained';
-    });
-    await check(cutoverChecks.notices, () => {
-      const protocol = read(path.join(copy, '.lane/supervisor/SETTLE.md'));
-      const grammar = read(path.join(copy, '.lane/supervisor/WORK-PATTERN.md'));
-      assertNoticeContract(protocol, grammar);
-      const probe = path.join(root, 'cutover-notices.mjs');
-      write(probe, `import assert from 'node:assert/strict';import * as n from ${JSON.stringify(path.join(candidate, 'watch/notice.mjs'))};const v={run:'R-1',item:'ENG-1',agent:'worker',report:'/scratch/report',state:'idle',error:'probe',minutes:1};for(const [fn,prefix] of Object.entries({blockedNotice:'watch-blocked',noReportNotice:'watch-no-report',invalidReportNotice:'watch-invalid-report',longRunningNotice:'watch-long-running',unavailableNotice:'watch-unavailable'})){const line=n[fn](v);assert.ok(line.startsWith('['+prefix+']'));console.log(line);}const line=n.reportNotice({...v,outcome:'done',headline:'Canary',check:'pass'});assert.match(line,/outcome=done.*headline=.*check=pass.*report=/);assert.ok(!line.includes('verdict='));console.log(line);`);
-      runCopy(process.execPath, [probe], { cwd: copy, extra: { ORG_DIR: org } });
-      return 'actual released notice constructors executed; real blocked/missing/invalid delivery and grace are checked by missing-worker, invalid-worker, blocked-worker and watch-grace';
-    });
-    await check(cutoverChecks.retirement, () => {
-      assert.deepEqual(callers(copy, 'notify-watch.sh'), []);
-      const retired = execute('.lane/supervisor/notify-watch.sh', ['R-1'], { ok: false });
-      assert.notEqual(retired.status, 0); assert.match(retired.stderr, /retired/);
-      return 'all executable callers switched; old entry visibly refuses';
-    });
-    // Rollback restores every exact relocated byte and mode before invoking
-    // restored legacy consumers; raw live bytes remain separately in backup.
-    restore(copy, originals);
-    await check(cutoverChecks.rollback, () => {
-      assert.ok(callers(copy, 'contrib/settle-watch.mjs').length);
-      runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org } });
-      execute('.lane/supervisor/continue.sh', isolation);
-      if (cutoverCanary) execute('.lane/supervisor/arm-watch.sh', [cutoverCanary.run, ...isolation]);
-      return `all ${switches.length} exact scratch baselines restored; actual legacy suite and both wrappers executed`;
-    });
-    await check(cutoverChecks.legacy, async () => {
-      const legacy = await legacyCanary('legacy');
-      return `${legacy.run}: restored dispatch -> notify-watch outbox -> scratch-owned supervisor-events -> real PTY receipt, exactly once; consumer stopped with lifecycle and delivery receipts`;
-    });
-    const sessionCap = { exercised: false, reason: 'Host process listing can be denied by the sandbox; dispatch cap coverage uses deterministic offline ps fixtures only.' };
-    write(path.join(evidence, 'cutover-switches.json'), JSON.stringify({ files: switches, checks, sessionCap, rollback: originals.map(({ key, file, mode }) => ({ key, file, mode, exact: true })) }, null, 2));
-    for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
-    return `${switches.length} switches applied, executed and restored; detailed receipts in cutover-switches.json; process-based session cap not exercised (offline fixture coverage only)`;
-  };
-  // ENG-64 keeps contrib/settle-watch.mjs while bch-cloak's launcher calls it:
-  // the switched callers, plus an omitted non-executable backup, refuse removal.
-  const retirementCase = () => {
-    assert.ok(cutover, 'passed switch case has no fixture receipt');
-    const compat = path.join(candidate, 'contrib/settle-watch.mjs');
-    assert.ok(fs.existsSync(compat), 'candidate compatibility entry missing');
-    const saved = fs.readFileSync(compat), mode = fs.statSync(compat).mode & 0o777;
-    try {
-      assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs').map(v => path.relative(copy, v.file)), ['scripts/lane/launch-supervisor.mjs']);
-      assert.throws(() => retireContrib(copy, compat), /retirement refused/);
-      const trap = path.join(copy, '.lane/supervisor/nested/retirement-probe.py.bak-20261001-copy');
-      write(trap, `import subprocess\nsubprocess.run(['node', ${JSON.stringify(compat)}, '--open'])\n`); fs.chmodSync(trap, 0o644);
-      const wrapper = path.join(copy, '.lane/supervisor/nested/retirement-probe.sh');
-      write(wrapper, `#!/bin/sh\npython3 ${quote(trap)}\n`); fs.chmodSync(wrapper, 0o755);
-      assert.ok(callerInventory(copy).active.includes(trap), 'referenced non-executable backup must stay active');
-      assert.throws(() => retireContrib(copy, compat), /retirement refused/);
-      runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: cutover.org } });
-    } finally { fs.rmSync(path.join(copy, '.lane/supervisor/nested'), { recursive: true, force: true }); restore(copy, cutover.originals); }
-    assert.deepEqual(fs.readFileSync(compat), saved); assert.equal(fs.statSync(compat).mode & 0o777, mode);
-    return 'retirement refused while the copied launcher calls contrib/settle-watch.mjs, including an omitted backup caller; blob and baselines unchanged';
-  };
-  await runCutoverCases({ results, test, switches: switchCase, retirement: retirementCase, scratchRoots });
-  await test(cases.lessons, () => lessonsEntryCase({ opt, root, scratchRoots, discoveryRoots, candidate, evidence, run, node, initRepo, h, until, write, read }));
-  await discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, authHome, test, pending, initRepo, run, node, git, h, until, write, read });
   await test(cases.defaultCycle, async () => {
-    for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs', 'discovery/adapters/codex.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);
+    for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);
     requirePrerequisite(results, cases.fixture.key);
     const repo = path.join(root, 'default-cycle'); initRepo(repo);
     // Ordinary project validation, never workflow configuration.
@@ -1007,9 +581,8 @@ try {
     defaultOrg = path.join(repo, '.org');
     const ask = path.join(root, 'default-cycle-ask.md'); write(ask, 'Commit one scratch file and report.\n');
     write(path.join(root, 'mode'), 'done');
-    const binary = run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim();
-    write(path.join(root, 'default-supervisor-task.json'), JSON.stringify({ repo, home: scratchHome, ask, binary }));
-    // The real PTY supervisor executes product entry, record creation and
+    write(path.join(root, 'default-supervisor-task.json'), JSON.stringify({ repo, home: scratchHome, ask }));
+    // The real PTY supervisor executes record creation and
     // dispatch, then consumes watch's notice and checks/ingests through the CLI.
     h('agent', 'prompt', supervisor.name, 'acceptance-default-cycle');
     const receipt = path.join(root, 'default-supervisor-job.json');
@@ -1029,7 +602,7 @@ try {
     node(path.join(candidate, 'lanes/lane.mjs'), ['check'], { cwd: info.workspace, extra });
     node(path.join(candidate, 'lanes/lane.mjs'), ['promote', job.lane], { cwd: repo, extra });
     node(path.join(candidate, 'lanes/lane.mjs'), ['close', job.lane], { cwd: repo, extra });
-    return `${job.run}: supervisor entry bootstrapped record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation and fast-forward passed`;
+    return `${job.run}: supervisor initialized record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation and fast-forward passed`;
   });
   await test(cases.settle, async () => {
     requireCandidate('settle/settle.mjs');

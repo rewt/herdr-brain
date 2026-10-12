@@ -1,16 +1,16 @@
 // Operator-created project conversations. Receipts belong to the machine's
 // fleet home; project files and records are only read by this launcher.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { stripVTControlCharacters } from 'node:util';
 import { spawnSync } from 'node:child_process';
-import { readFleet, staleProject, excludedFleetRoot } from '../lib/fleet.mjs';
+import { readFleet, staleProject } from '../lib/fleet.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { withInstallationLock } from '../lib/install-lock.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
-import { projectEntrySettings } from '../discovery/settings.mjs';
+import { entryPolicy } from '../discovery/policy.mjs';
+import { fileURLToPath } from 'node:url';
 import { gitProject } from '../lib/project.mjs';
 
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
@@ -90,8 +90,6 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
   if (!project) throw new Error(`unknown fleet project: ${name ?? '(choose a project)'}`);
   if (identity && project.identity !== identity) throw new Error(`fleet identity changed for ${name}; refresh before opening its chat`);
   if (staleProject(project)) throw new Error(`stale fleet project ${name}: ${project.checkout}`);
-  if (excludedFleetRoot(project.checkout, fleet)) throw new Error(`fleet project ${name} is excluded`);
-  if (!projectEntrySettings({ canonical: project.checkout }).enabled) throw new Error(`project ${name} has opted out of Monitor entry`);
 
   // Chats have full Herdr access. Older receipts may carry herdr_mode from the
   // removed read/scoped modes; any value reopens as an ordinary full chat.
@@ -138,8 +136,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     // Resolve only this project's settings. Inherited worker/other-project
     // LANE_CONFIG and notice recipients must not select its launch account.
     const { config } = loadDiscoveredRoutes({ cwd: project.checkout, env: { ...env, LANE_CONFIG: undefined } });
-    const bin = env.HERDR_MONITOR_ENTRY_BIN || path.join(env.HERDR_MONITOR_HOME || path.join(os.homedir(), '.local/share/herdr-monitor'), 'entry/bin');
-    const harness = kind || env.HERDR_MONITOR_SUPERVISOR_HARNESS || (fs.existsSync(path.join(bin, 'monitor-codex')) ? 'codex' : 'claude');
+    const harness = kind || env.HERDR_MONITOR_SUPERVISOR_HARNESS || 'codex';
     const launch = resolveLaunchRoute(config, { ...(route ? { route } : { kind: harness }), args });
     if (!['codex', 'claude'].includes(launch.kind)) throw new Error('project chats require codex or claude');
     const chat = agentName(project.identity);
@@ -152,7 +149,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     const ops = to || pairs.get('MONITOR_SUPERVISOR_AGENT') || 'supervisor-herdr';
     if (!/^[a-z][a-z0-9_-]{0,31}$/u.test(ops) || ops.startsWith('chat-')) throw new Error('notice recipient must be an ops agent, never a project chat');
     // Adopt the operator's prototype without restarting it or changing its
-    // account, entry bypass or conversation. Labels alone never bind a chat.
+    // account or conversation. Labels alone never bind a chat.
     const prototypes = agents(herdr).filter(a => a.name === `chat-${name}`);
     if (prototypes.length) {
       const prototype = prototypes[0];
@@ -168,12 +165,9 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       if (focus) herdr(['tab', 'focus', receipt.tab]);
       return { ...receipt, project: name, reused: true, available: true };
     }
-    const adapter = path.join(bin, `monitor-${launch.kind}`);
-    fs.accessSync(adapter, fs.constants.X_OK);
     for (const [key, value] of Object.entries({ ORG_DIR: project.record, ORG_ACTOR: chat, HERDR_AGENT_NAME: chat,
       HERDR_MONITOR_FLEET: home, MONITOR_SUPERVISOR_AGENT: ops,
-      MONITOR_SESSION_ROLE: 'chat', MONITOR_ENTRY_BYPASS: '1', MONITOR_REQUEST_DIR: '', MONITOR_RUNTIME_DIR: '',
-      MONITOR_WORKTREE_ROOT: '', LANE_CONFIG: '', HERDR_PLUGIN_CONTEXT_JSON: '', HERDR_PLUGIN_ROOT: '' })) pairs.set(key, value);
+      MONITOR_SESSION_ROLE: 'chat', LANE_CONFIG: '' })) pairs.set(key, value);
     const environment = [...pairs].flatMap(([key, value]) => ['--env', `${key}=${value}`]);
     let created;
     if (!control) {
@@ -193,22 +187,20 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     const native = [...launch.args];
     if (launch.model) native.push('--model', launch.model);
     if (launch.effort) native.push(...(launch.kind === 'codex' ? ['-c', `model_reasoning_effort=${launch.effort}`] : ['--effort', launch.effort]));
-    const clean = ['MONITOR_REQUEST_DIR', 'MONITOR_RUNTIME_DIR', 'MONITOR_WORKTREE_ROOT', 'LANE_CONFIG', 'HERDR_PLUGIN_CONTEXT_JSON', 'HERDR_PLUGIN_ROOT'];
-    const started = `chat-started-${randomBytes(24).toString('hex')}`;
-    const command = ['/usr/bin/env', ...clean.flatMap(key => ['-u', key]),
-      adapter, '--repo', project.checkout, '--role', 'chat', '--', ...native].map(quote).join(' ');
-    herdr(['pane', 'run', receipt.pane, ['/bin/sh', '-c', `${markerCommand(started)}; exec ${command}`].map(quote).join(' ')]);
+    const root = fileURLToPath(new URL('../', import.meta.url));
+    const policy = entryPolicy({ canonical: project.checkout, org: project.record, role: 'chat' }, root);
+    native.push(...(launch.kind === 'claude' ? ['--append-system-prompt', policy] : ['-c', `developer_instructions=${JSON.stringify(policy)}`]));
+    herdr(['agent', 'start', chat, '--kind', launch.kind, '--pane', receipt.pane, '--', ...native]);
     const detectionDeadline = now() + startupMs;
-    let detected, verified = false;
+    let detected;
     do {
-      verified ||= paneText(herdr, receipt.pane, 'recent-unwrapped').split('\n').includes(started);
       detected = agents(herdr).find(a => a.pane_id === receipt.pane && a.agent === launch.kind);
-      if (detected && verified) break;
+      if (detected) break;
       sleep(100);
     } while (now() < detectionDeadline);
-    if (!detected || !verified) throw new Error(`chat startup not detected or command unverified; retained tab ${receipt.tab}, inspect before retrying`);
+    if (!detected) throw new Error(`chat startup not detected; retained tab ${receipt.tab}, inspect before retrying`);
+    if (detected.name && detected.name !== chat) throw new Error(`chat started with another name; inspect tab ${receipt.tab}`);
     if (!inCheckout(detected.cwd, project)) throw new Error(`chat started in another checkout; inspect tab ${receipt.tab}`);
-    herdr(['agent', 'rename', receipt.pane, chat]);
     if (focus) herdr(['tab', 'focus', receipt.tab]);
     return { ...receipt, project: name, reused: false, available: true };
   });

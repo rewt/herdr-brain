@@ -7,15 +7,10 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 
 // The product has no npm dependencies, so a candidate needs no package cache.
-export function releaseInputs(env = process.env) {
-  if (env.RELEASE_BCH_CLOAK && !fs.statSync(path.resolve(env.RELEASE_BCH_CLOAK), { throwIfNoEntry: false })?.isDirectory()) {
-    throw new Error('set RELEASE_BCH_CLOAK to the existing project checkout; it is read only to acceptance');
-  }
-  return { bch: env.RELEASE_BCH_CLOAK ? path.resolve(env.RELEASE_BCH_CLOAK) : null };
-}
+// Old live-project compatibility input is ignored: the gate uses only scratch fixtures.
+export function releaseInputs() { return {}; }
 
 export function candidateCommand(stage, candidate, { env = process.env, skipLive = false } = {}) {
-  const inputs = releaseInputs(env);
   if (stage === 'prepare') {
     return { command: ['bash', path.join(candidate, 'herdr/install.sh')], env: { ...env, MONITOR_INSTALL_BUILD_ONLY: '1' } };
   }
@@ -23,7 +18,7 @@ export function candidateCommand(stage, candidate, { env = process.env, skipLive
   const build = JSON.parse(fs.readFileSync(path.join(candidate, '.release-build.json'), 'utf8'));
   if (build.commit !== fs.readFileSync(path.join(candidate, '.release-commit'), 'utf8').trim()) throw new Error('build evidence does not name this candidate');
   return { command: [process.execPath, path.join(candidate, 'acceptance/run.mjs'), '--candidate', candidate,
-    ...(inputs.bch ? ['--bch-cloak', inputs.bch] : []), ...(skipLive ? ['--skip-live'] : [])], env };
+    ...(skipLive ? ['--skip-live'] : [])], env };
 }
 
 export function main(argv = process.argv.slice(2)) {
@@ -41,7 +36,6 @@ export function main(argv = process.argv.slice(2)) {
   if (stage === 'preflight') {
     const inputs = releaseInputs();
     console.log(`release preflight: ${JSON.stringify(inputs)}`);
-    if (!inputs.bch) console.log('Existing-project compatibility will be skipped: RELEASE_BCH_CLOAK is not configured');
     return;
   }
   const invocation = candidateCommand(stage, candidate, { skipLive: values['skip-live'] });

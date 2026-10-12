@@ -1,10 +1,7 @@
 #!/usr/bin/env node
-// Foreground host adapter. It inherits the supervisor's OS permissions; a
-// detached process cannot escape a worker sandbox. Check capabilities before
-// any build, and leave a refusal explaining how to launch from the host.
+// Foreground gate adapter for project pins, locks, memory and validation.
 import fs from 'node:fs';
 import path from 'node:path';
-import net from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { runTestSlotSync } from '../test-slot/run.mjs';
@@ -34,17 +31,6 @@ const updateTrain = changes => {
   for (const [key, value] of Object.entries(changes)) plan[key] ??= value;
   writeFileAtomic(receipt, JSON.stringify(plan, null, 2) + '\n', 0o600);
 };
-
-async function requireHost() {
-  try {
-    const fd = fs.openSync('/dev/ptmx', 'r+'); fs.closeSync(fd);
-    await new Promise((resolve, reject) => {
-      const server = net.createServer();
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => server.close(error => error ? reject(error) : resolve()));
-    });
-  } catch (error) { throw new Error(`PROMOTE_HOST_REQUIRED: sockets or /dev/ptmx unavailable (${error.code ?? error.message}); launch promotion from the supervisor's host shell outside the worker sandbox`); }
-}
 
 try {
   const profile = resolveGateProfile(canonical);
@@ -109,7 +95,6 @@ async function execute(profile, memoryOptions) {
   // and bounded. Never enter a slot wait while memory is already pressured.
   update({ phase: 'checking-memory' });
   waitForPromotionMemory(canonical, { ...memoryOptions, held: true });
-  await requireHost();
   checkCompetingProcesses(profile);
   update({ phase: 'waiting-test-slot' });
   const common = gitProject(canonical).identity;

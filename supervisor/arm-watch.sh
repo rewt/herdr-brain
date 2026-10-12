@@ -1,6 +1,6 @@
 #!/bin/sh
 # Arms the one worker watcher. It validates the stopped worker's report and
-# tells the long-running supervisor; SETTLE.md tells that supervisor how to
+# tells the long-running supervisor; supervisor/PROTOCOL.md tells that supervisor how to
 # open a fresh settle session as a separate action.
 # Usage: arm-watch.sh R-n [--org RECORD] [--cwd PROJECT] [--to NAME]
 #                     [--detach --log FILE | --dry-run]

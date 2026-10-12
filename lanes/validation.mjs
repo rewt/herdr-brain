@@ -5,13 +5,11 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { plainDirectory, readPlainFile, writeFileAtomic, removePlainDirectory } from '../lib/files.mjs';
-import { runTemporary } from '../discovery/temporary.mjs';
+import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs';
 import { acquireLock } from './promotion-lock.mjs';
 import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
-import { validateHostDeclarations, canonicalHostSuites, hostSuitePlan, hostSuiteCommand, assertHostSuiteSupport } from './host-suites.mjs';
 
 export const VALIDATION_TIERS = ['fast', 'promotion', 'release'];
 export const VALIDATION_FILE = '.lane.validation.json';
@@ -21,7 +19,7 @@ const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding:
 export function validateValidation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
   for (const [key, command] of Object.entries(value)) {
-    if (['host_suites', 'tier_suites'].includes(key)) { validateHostDeclarations(value); continue; }
+    if (['host_suites', 'tier_suites'].includes(key)) continue;
     if (['timeout_seconds', 'idle_timeout_seconds'].includes(key)) {
       const values = typeof command === 'object' && command !== null && !Array.isArray(command) ? Object.entries(command) : [[null, command]];
       for (const [tier, seconds] of values) {
@@ -39,7 +37,6 @@ export function validateValidation(value) {
 // Always use the canonical project's declarations, never a worker's override.
 // A separate tracked file works even when .lane.json is shared machine config.
 export function resolveValidation({ root, config = {}, source = 'lane config', sources = {}, env = process.env } = {}) {
-  if (config.validation?.host_suites || config.validation?.tier_suites) throw Error('host suites require committed canonical .lane.validation.json');
   let declared = config.validation === undefined ? {} : validateValidation(config.validation);
   const file = path.join(root, VALIDATION_FILE);
   const declarationSources = Object.fromEntries(Object.keys(declared).map(key => [key, sources.validation ?? source]));
@@ -62,9 +59,7 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
     tiers[tier] = { command, timeoutSeconds: typeof declared.timeout_seconds === 'object' ? declared.timeout_seconds[tier] : declared.timeout_seconds,
       idleTimeoutSeconds: typeof declared.idle_timeout_seconds === 'object' ? declared.idle_timeout_seconds[tier] : declared.idle_timeout_seconds, source: env.LANE_VALIDATE !== undefined ? 'env' : declarationSources[tier] ?? (config.validate !== undefined ? sources.validate ?? source : 'default') };
   }
-  const host = canonicalHostSuites(root);
-  for (const tier of VALIDATION_TIERS) tiers[tier].hostSuites = host.tier_suites[tier] ?? [];
-  return { tiers, host_suites: host.host_suites, promotion_tests: declared.promotion_tests, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
+  return { tiers, promotion_tests: declared.promotion_tests, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
 }
 
 // Ask the lane CLI for its canonical, layered configuration. This keeps host
@@ -111,17 +106,14 @@ function unchanged(cwd, before, label) {
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
 }
 
-export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, hostSuites = [], sharedPaths = [], tempRoot }) {
+export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds }) {
   env = validationEnvironment(env);
   const before = captured(cwd, label);
-  const hostPlan = hostSuites.length ? hostSuitePlan(cwd, hostSuites) : [];
-  assertHostSuiteSupport(hostPlan);
-  const usesSlot = tier === 'promotion' || hostPlan.length > 0;
-  if (hostPlan.length) command = `(${command}) && ${hostSuiteCommand(cwd, hostPlan, { sharedPaths, tempRoot })}`;
+  const usesSlot = tier === 'promotion';
   const fingerprint = environmentFingerprint({ env, prepare, environment });
   // Identical commands across tiers prove the same thing. Tier names describe
   // who runs a check; they do not force a second execution of identical inputs.
-  const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint, ...(hostPlan.length ? { host_profile: hostPlan } : {}) });
+  const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint });
   const directory = plainDirectory(path.join(common, 'lane-validation'));
   const receipt = path.join(directory, `${key}.json`);
   const release = acquireLock(path.join(directory, `${key}.lock`));
@@ -158,20 +150,15 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     const fd = fs.openSync(log, 'wx', 0o600);
     const startedAt = new Date(), started = process.hrtime.bigint();
     let run;
-    const hostTemps = {};
     try {
-      // The receipt owner survives a watchdog kill of the whole command group.
-      // It removes scratch even when the sandboxed runner cannot run finally.
-      for (const suite of hostPlan) hostTemps[suite.name] = runTemporary(tempRoot ?? '/private/tmp/herdr-host');
-      const executionEnv = hostPlan.length ? { ...env, MONITOR_HOST_RUN_TEMPS: JSON.stringify(hostTemps), MONITOR_HOST_VALIDATED_HEAD: before.head } : env;
       onStart?.({ command, started_at: startedAt.toISOString(), log, execution_receipt: executionReceipt,
         ...(usesSlot ? { slot_receipt: slotReceipt } : {}) });
       // Hold one slot for the chain; only its leaf steps may spend a retry.
       const execute = usesSlot ? runTestSlotSync : runGateSync;
-      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: usesSlot, cwd, env: executionEnv, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt,
+      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: usesSlot, cwd, env, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt,
         ...(usesSlot ? { waitReceipt: slotReceipt } : {}), retryTimeout: false, stdio: ['inherit', fd, fd] });
     }
-    finally { fs.closeSync(fd); for (const temporary of Object.values(hostTemps)) removePlainDirectory(temporary); }
+    finally { fs.closeSync(fd); }
     const output = readPlainFile(log);
     if (run.error) process.stderr.write(`${run.error.message}\n`);
     const signal = run.signal ?? null;
@@ -186,7 +173,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     if (usesSlot) {
       try { execution = JSON.parse(readPlainFile(executionReceipt)); } catch { /* A refusal has no command clocks. */ }
     }
-    const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, host_suites: hostPlan, environment_fingerprint: fingerprint,
+    const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, environment_fingerprint: fingerprint,
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
       duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
       execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits,

@@ -8,7 +8,7 @@ Allocation avoids collisions with existing items using the custom `L` role prefi
 
 The dependency-free core validates references and selects lessons without a model,
 a harness check or a filesystem search. It does not distill report learnings or
-insert lessons into entry text, briefs or cold starts; those are
+insert lessons into supervisor/chat policy text, briefs or cold starts; those are
 the next consumers of this interface.
 
 ## Write
@@ -190,7 +190,7 @@ model call. From the canonical checkout:
 
 Activation makes lessons available to the ordinary readers. Dispatch briefs and
 supervisor cold starts consume active lessons through ENG-170's integration;
-distillation does not bypass those consumers or make proposals active at entry.
+distillation does not bypass those consumers or make proposals active in supervisor context.
 The cursor and latest pending digest stay in Brain's own bounded local state,
 not the record or a committed digest archive. See [Brain's command and recovery
 notes](../../brain/README.md).

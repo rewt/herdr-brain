@@ -71,16 +71,6 @@ export function validateRoutesConfig(config, options = {}) {
     string(name, "route name");
     routeShape(route, `routes.${name}`);
   }
-  if (config.always_args !== undefined) {
-    if (!record(config.always_args)) throw new Error("always_args must be an object");
-    for (const [kind, args] of Object.entries(config.always_args)) {
-      string(kind, "always_args kind");
-      strings(args, `always_args.${kind}`);
-      if (args[0] !== undefined && !args[0].startsWith("-")) {
-        throw new Error(`always_args.${kind} must start with an option`);
-      }
-    }
-  }
   selectionPolicy({ ...config, routes: config.routes ?? {} }, options);
   return config;
 }
@@ -89,7 +79,7 @@ export function mergeRoutesConfig(configs) {
   const merged = {};
   for (const config of configs) {
     validateRoutesConfig(config, { references: false });
-    for (const key of ["schema", "authority", "dispatch", "always_args", "selection_policy"]) {
+    for (const key of ["schema", "authority", "dispatch", "selection_policy"]) {
       if (Object.hasOwn(config, key)) merged[key] = config[key];
     }
     if (Object.hasOwn(config, "routes")) merged.routes = { ...(merged.routes ?? {}), ...config.routes };
@@ -97,38 +87,11 @@ export function mergeRoutesConfig(configs) {
   return validateRoutesConfig(merged);
 }
 
-function optionGroups(args) {
-  const groups = [];
-  for (const token of args) {
-    if (token.startsWith("-") || groups.length === 0) groups.push([token]);
-    else groups.at(-1).push(token);
-  }
-  return groups;
-}
-
 function codexConfigExpression(token, value) {
   if (["-c", "--config"].includes(token)) return value;
   if (token.startsWith("--config=")) return token.slice(9);
   if (token.startsWith("-c")) return token.slice(2);
   return undefined;
-}
-
-function withAlwaysArgs(args, always, emitted = [], kind) {
-  const present = [...args, ...emitted];
-  const presentGroups = optionGroups(present);
-  const supplied = ([option, value]) => {
-    if (kind === "codex") {
-      const key = codexConfigKey(codexConfigExpression(option, value));
-      if (key !== undefined) {
-        // Codex config flags are repeatable: supplying one key does not supply
-        // all the other defaults, even when both use the same -c/--config flag.
-        return presentGroups.some(([token, expression]) =>
-          codexConfigKey(codexConfigExpression(token, expression)) === key);
-      }
-    }
-    return present.some((arg) => arg === option || arg.startsWith(`${option}=`));
-  };
-  return [...args, ...optionGroups(always).filter((group) => !supplied(group)).flat()];
 }
 
 function effortFromArgs(kind, args) {
@@ -242,15 +205,6 @@ export function resolveLaunchRoute(config, options = {}) {
     ? resolved.args
     : resolveRoute(config, { route: options.route }).args;
   resolved.effort ??= effortFromArgs(resolved.kind, inferenceArgs);
-  const emitted = [];
-  if (resolved.model !== undefined) {
-    emitted.push("--model");
-    if (resolved.kind === "codex") emitted.push("-m");
-  }
-  if (resolved.effort !== undefined) {
-    emitted.push(...(resolved.kind === "codex" ? ["-c", `model_reasoning_effort=${resolved.effort}`] : ["--effort"]));
-  }
-  resolved.args = withAlwaysArgs(resolved.args, config.always_args?.[resolved.kind] ?? [], emitted, resolved.kind);
   return resolved;
 }
 
@@ -337,7 +291,7 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   const config = mergeRoutesConfig(files.map(readRoutesConfig));
   // Lifecycle/entry preferences alone do not declare operator model routes.
   // Keep the same suggested preset as a project with no routing setup.
-  if (!["dispatch", "routes", "always_args", "selection_policy"].some((key) => Object.hasOwn(config, key))) {
+  if (!["dispatch", "routes", "selection_policy"].some((key) => Object.hasOwn(config, key))) {
     return { config: mergeRoutesConfig([ROUTE_PRESET, config]), files, suggested: true };
   }
   return { config, files };

@@ -6,11 +6,7 @@ import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { findOrgDir, initOrg, loadEvents } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
-import { createEntry } from '../discovery/runtime.mjs';
-import { nativeSessionContext } from '../discovery/native-sandbox.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { recover } from '../herdr/entry-transaction.mjs';
-import { entryPolicy } from '../discovery/policy.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
 import { gitProject } from '../lib/project.mjs';
 
@@ -19,7 +15,7 @@ const client = path.join(root, 'discovery/client.mjs');
 function fixture(t) {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'ft-'));
   const fleetHome = path.join(scratch, 'fleet'), consoleFile = path.join(scratch, 'console.json');
-  const env = { ...process.env, HERDR_MONITOR_FLEET: fleetHome, HERDR_ORG_CONSOLE_CONFIG: consoleFile, ORG_DIR: '', MONITOR_REQUEST_DIR: '' };
+  const env = { ...process.env, HERDR_MONITOR_FLEET: fleetHome, HERDR_ORG_CONSOLE_CONFIG: consoleFile, ORG_DIR: '' };
   const before = { ...process.env };
   const entries = [];
   Object.assign(process.env, env);
@@ -37,35 +33,11 @@ function fixture(t) {
   return { scratch, fleetHome, consoleFile, env, git, repo, run, join, read, keep: entry => entries.push(entry) };
 }
 
-test('first entry maps an existing record in place; a neighbouring repository gets its own record and routes', t => {
-  const f = fixture(t), a = f.repo('herdr-brain'), b = f.repo('neighbour');
-  const record = path.join(f.scratch, '.org'), parent = path.join(f.scratch, '.lane.json');
-  initOrg(record); fs.writeFileSync(parent, JSON.stringify({ routes: { engineer: { kind: 'opaque', model: 'private-route' } } }));
-  fs.writeFileSync(f.consoleFile, JSON.stringify({ projects: [{ name: 'herdr-brain', cwd: a, org: record }] }));
-  const before = fs.readFileSync(path.join(record, 'events.jsonl'));
-  const first = createEntry({ cwd: a, role: 'supervisor', runtimeDir: path.join(f.scratch, 'runtime-a') });
-  f.keep(first);
-  assert.equal(first.context().org, record);
-  assert.equal(f.read().projects['herdr-brain'].record, record);
-  assert.equal(f.read().session_limit, 6);
-  assert.deepEqual(f.read().projects['herdr-brain'].layers, [parent]);
-  assert.equal(findOrgDir({ cwd: b, env: f.env }), null);
-  assert.equal(loadDiscoveredRoutes({ cwd: b, env: f.env }).suggested, true);
-  const laneConfig = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd: b, env: f.env, encoding: 'utf8' });
-  assert.equal(laneConfig.status, 0, laneConfig.stderr); assert.doesNotMatch(laneConfig.stdout, /private-route/);
-  const second = createEntry({ cwd: b, role: 'supervisor', runtimeDir: path.join(f.scratch, 'runtime-b') });
-  f.keep(second);
-  assert.notEqual(second.context().org, record);
-  assert.equal(second.context().org, f.read().projects.neighbour.record);
-  assert.ok(fs.existsSync(path.join(second.context().org, 'events.jsonl')));
-  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), before);
-  assert.match(entryPolicy(second.context(), root), /fleet.*6.*advisory/i);
-});
 
-test('concurrent first entries publish one complete fleet with both projects', async t => {
+test('concurrent joins publish one complete fleet with both projects', async t => {
   const f = fixture(t), a = f.repo('a'), b = f.repo('b');
   const jobs = [a, b].map(cwd => waitForExit(spawnChild(t, process.execPath,
-    [path.join(root, 'discovery/adapters/codex.mjs'), '--repo', cwd, '--role', 'supervisor', '--policy-only', '--runtime-dir', path.join(f.scratch, `runtime-${path.basename(cwd)}`)],
+    [client, 'fleet', 'join'],
     { cwd, env: f.env })));
   const results = await Promise.all(jobs);
   for (const r of results) assert.equal(r.code, 0, r.stderr);
@@ -73,7 +45,7 @@ test('concurrent first entries publish one complete fleet with both projects', a
   assert.notEqual(fleet.projects.a.record, fleet.projects.b.record);
   for (const p of Object.values(fleet.projects)) {
     assert.ok(fs.existsSync(path.join(p.record, 'events.jsonl')));
-    assert.ok(path.isAbsolute(p.worktrees)); assert.ok(path.isAbsolute(p.temp));
+    assert.ok(path.isAbsolute(p.worktrees));
   }
 });
 
@@ -88,9 +60,6 @@ test('join is a byte and mtime no-op from a linked checkout; session limit chang
   const record = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Work proceeds'], { cwd: lane, env: { ...f.env, ORG_ACTOR: 'fleet-test' }, encoding: 'utf8' });
   assert.equal(record.status, 0, record.stderr);
   assert.notEqual(f.run(cwd, ['join', '--session-limit', '0']).status, 0);
-  const a = createEntry({ cwd }), b = createEntry({ cwd }); f.keep(a); f.keep(b);
-  assert.notEqual(a.context().workspace, b.context().workspace, 'advisory limit never refuses another session');
-  assert.equal(a.context().fleet.session_limit, 1);
 });
 
 test('moved checkout remains stale in fleet instead of being guessed by name', t => {
@@ -122,7 +91,7 @@ for (const change of ['moved', 're-cloned']) test(`a ${change} default-record ch
   assert.notEqual(joined.name, 'app'); assert.equal(joined.project.checkout, entered);
   assert.equal(joined.project.identity, fs.realpathSync(path.join(entered, '.git')));
   assert.equal(joined.project.record, path.join(entered, '.org'));
-  assert.notEqual(joined.project.worktrees, original.worktrees); assert.notEqual(joined.project.temp, original.temp);
+  assert.notEqual(joined.project.worktrees, original.worktrees);
   assert.deepEqual(f.read().projects.app, original, 'a name match never transfers the old mapping');
   assert.equal(Object.keys(f.read().projects).length, 2);
   assert.equal(findOrgDir({ cwd: entered, env: f.env }), joined.project.record);
@@ -131,8 +100,7 @@ for (const change of ['moved', 're-cloned']) test(`a ${change} default-record ch
   assert.equal(shown.app.stale, true); assert.equal(shown[joined.name].stale, false);
   const bytes = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
   f.join(entered); assert.deepEqual(fs.readFileSync(file), bytes); assert.equal(fs.statSync(file).mtimeMs, mtime);
-  const entry = createEntry({ cwd: entered, role: 'supervisor' }); f.keep(entry);
-  assert.equal(entry.context().org, joined.project.record);
+  assert.equal(projectFleet(entered, f.env).project.record, joined.project.record);
   assert.deepEqual(fs.readFileSync(file), bytes);
 });
 
@@ -181,71 +149,8 @@ test('a re-clone in place can explicitly replace a missing native record', t => 
   assert.notDeepEqual(fs.readFileSync(file), before);
 });
 
-test('malformed fleet fails before entry or discovery touches any record', t => {
-  const f = fixture(t), cwd = f.repo('app'), record = path.join(f.scratch, '.org'); initOrg(record);
-  const before = fs.readFileSync(path.join(record, 'events.jsonl'));
-  fs.mkdirSync(f.fleetHome);
-  for (const bad of ['{', JSON.stringify({ version: 1, session_limit: 0, projects: {} }), JSON.stringify({ version: 1, session_limit: 6, projects: { app: { checkout: cwd } } }),
-    ...[null, {}, ['relative/path']].map(excluded_roots => JSON.stringify({ version: 1, session_limit: 6, projects: {}, excluded_roots }))]) {
-    fs.writeFileSync(path.join(f.fleetHome, 'fleet.json'), bad);
-    assert.throws(() => findOrgDir({ cwd, env: f.env }), /fleet/i);
-    assert.throws(() => loadDiscoveredRoutes({ cwd, env: f.env }), /fleet/i);
-    assert.throws(() => createEntry({ cwd, role: 'supervisor' }), /fleet/i);
-    const r = f.run(cwd, ['join']); assert.notEqual(r.status, 0); assert.match(r.stderr, /fleet/i);
-    const mutation = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Must not write'], { cwd, env: { ...f.env, ORG_DIR: record }, encoding: 'utf8' });
-    assert.notEqual(mutation.status, 0); assert.match(mutation.stderr, /invalid fleet/);
-    const initialization = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'init', path.join(cwd, '.org')], { cwd, env: f.env, encoding: 'utf8' });
-    assert.notEqual(initialization.status, 0); assert.match(initialization.stderr, /invalid fleet/);
-    assert.equal(fs.readFileSync(path.join(f.fleetHome, 'fleet.json'), 'utf8'), bad);
-    assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), before);
-    assert.equal(fs.existsSync(path.join(cwd, '.org')), false); assert.equal(fs.existsSync(path.join(cwd, '.lane')), false);
-  }
-});
 
-test('installed monitor command joins without a session and removal restores its bin', t => {
-  const f = fixture(t), cwd = f.repo('app'), bin = path.join(f.scratch, 'bin'), native = path.join(f.scratch, 'native');
-  fs.writeFileSync(native, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-  const installer = path.join(root, 'discovery/install.mjs');
-  execFileSync(process.execPath, [installer, '--bin', bin, '--codex', native], { env: f.env });
-  const output = execFileSync(path.join(bin, 'monitor'), ['fleet', 'join'], { cwd, env: f.env, encoding: 'utf8' });
-  assert.equal(JSON.parse(output).name, 'app');
-  execFileSync(process.execPath, [installer, '--bin', bin, '--remove'], { env: f.env });
-  assert.equal(fs.existsSync(path.join(bin, 'monitor')), false);
-});
 
-test('stable machine installation carries monitor and recovery can restore its launcher', t => {
-  const f = fixture(t), cwd = f.repo('app'), home = path.join(f.scratch, 'home'), bin = path.join(f.scratch, 'bin'), native = path.join(f.scratch, 'native');
-  fs.mkdirSync(home); fs.writeFileSync(native, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-  // Simulate an inherited account entirely within scratch, never the operator's
-  // actual destinations. Its bytes must survive install, recovery and removal.
-  const inherited = path.join(f.scratch, 'inherited-account'), originals = new Map();
-  for (const [name, file] of [['CODEX_HOME', 'hooks.json'], ['CLAUDE_CONFIG_DIR', 'settings.json']]) {
-    const directory = path.join(inherited, name); fs.mkdirSync(directory, { recursive: true });
-    f.env[name] = directory;
-    const destination = path.join(directory, file), bytes = Buffer.from('{ "theme": "inherited", "hooks": { "Stop": [] } }\r\n');
-    fs.writeFileSync(destination, bytes, { mode: 0o640 }); originals.set(destination, bytes);
-  }
-  const env = { ...f.env, HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
-    HERDR_MONITOR_HOME: path.join(home, 'install'), HERDR_MONITOR_ENTRY_BIN: bin, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: '-' };
-  const installer = path.join(root, 'herdr/entry-install.mjs');
-  execFileSync(process.execPath, [installer, '--snapshot'], { env });
-  const preserved = () => { for (const [file, bytes] of originals) { assert.deepEqual(fs.readFileSync(file), bytes, file); assert.equal(fs.statSync(file).mode & 0o777, 0o640); } };
-  preserved();
-  assert.ok(fs.existsSync(path.join(home, '.codex/hooks.json')), 'hook belongs to the scratch account');
-  const launcher = path.join(bin, 'monitor'), bytes = fs.readFileSync(launcher);
-  const output = execFileSync(launcher, ['fleet', 'join'], { cwd, env, encoding: 'utf8' });
-  assert.equal(JSON.parse(output).name, 'app');
-  const journal = path.join(bin, '.monitor-recovery.json'), token = randomUUID();
-  fs.writeFileSync(launcher, 'changed'); fs.chmodSync(launcher, 0o755);
-  fs.writeFileSync(journal, JSON.stringify({ version: 2, token, bin, pid: process.pid, runtime: null, changes: [{
-    file: launcher, before: { content: bytes.toString('base64'), mode: 0o755 }, after: { content: Buffer.from('changed').toString('base64'), mode: 0o755 }, started: true, temporary: null,
-  }] }));
-  recover(journal, bin, path.join(home, 'install/entry/runtimes'));
-  assert.deepEqual(fs.readFileSync(launcher), bytes);
-  execFileSync(process.execPath, [installer, '--remove'], { env });
-  assert.equal(fs.existsSync(launcher), false);
-  preserved();
-});
 
 test('explicit adoption maps paths and settings; record ownership cannot be duplicated', t => {
   const f = fixture(t), cwd = f.repo('app'), other = f.repo('other'), record = path.join(f.scratch, 'old-record'); initOrg(record);
@@ -253,9 +158,7 @@ test('explicit adoption maps paths and settings; record ownership cannot be dupl
   const worktrees = path.join(f.scratch, 'old-lanes'), temp = path.join(f.scratch, 'old-temp');
   f.join(cwd, ['--record', record, '--worktrees', worktrees, '--temp', temp, '--layer', layer]);
   assert.equal(loadDiscoveredRoutes({ cwd, env: f.env }).config.routes.engineer.model, 'owned');
-  const entry = createEntry({ cwd, runtimeDir: path.join(f.scratch, 'runtime') }); f.keep(entry);
-  assert.equal(path.dirname(entry.context().workspace), worktrees);
-  const p = f.read().projects.app; assert.equal(p.temp, temp); assert.equal(p.identity, fs.realpathSync(path.join(cwd, '.git')));
+  const p = f.read().projects.app; assert.equal(p.worktrees, worktrees); assert.equal(p.temp, undefined); assert.equal(p.identity, fs.realpathSync(path.join(cwd, '.git')));
   assert.notEqual(f.run(other, ['join', '--record', record]).status, 0);
   assert.equal(Object.keys(f.read().projects).length, 1);
 });
@@ -295,9 +198,8 @@ for (const moved of [false, true]) test(`a ${moved ? 'moved' : 'unmoved'} existi
   assert.equal(afterConfig.stdout, beforeConfig.stdout);
   assert.match(afterConfig.stderr, /monitor fleet join --record/u);
   assert.ok(afterConfig.stderr.includes(record)); assert.ok(afterConfig.stderr.includes(layer));
-  assert.equal(createEntry({ cwd, role: 'supervisor' }), null, 'entry keeps native behavior until the explicit adoption');
   const bareJoin = f.run(cwd, ['join']); assert.notEqual(bareJoin.status, 0); assert.match(bareJoin.stderr, /explicit adoption/u);
-  assert.deepEqual(fs.readFileSync(fleetFile), fleetBytes, 'reads and entry do not register the existing project');
+  assert.deepEqual(fs.readFileSync(fleetFile), fleetBytes, 'reads do not register the existing project');
   assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
   assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
   const quoted = value => "'" + value.replaceAll("'", "'\\''") + "'";
@@ -316,158 +218,8 @@ for (const moved of [false, true]) test(`a ${moved ? 'moved' : 'unmoved'} existi
   assert.ok(afterConfig.stderr.includes(quoted(mapping.worktrees)));
 });
 
-test('fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility', t => {
-  const f = fixture(t), directory = path.join(f.scratch, 'excluded'); fs.mkdirSync(directory);
-  const alias = path.join(f.scratch, 'alias'); fs.symlinkSync(directory, alias);
-  const missing = path.join(alias, 'future');
-  let result = f.run(f.scratch, ['exclude', missing]); assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(f.read().excluded_roots, [path.join(directory, 'future')]);
-  const cwd = f.repo('excluded/future/app');
-  assert.equal(nativeSessionContext(cwd), null);
-  assert.equal(createEntry({ cwd }), null);
-  result = f.run(cwd, ['join']); assert.notEqual(result.status, 0); assert.match(result.stderr, /excluded/u);
-  assert.deepEqual(f.read().projects, {}); assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
-  const file = path.join(f.fleetHome, 'fleet.json'), bytes = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
-  result = f.run(f.scratch, ['exclude', missing]); assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(fs.readFileSync(file), bytes); assert.equal(fs.statSync(file).mtimeMs, mtime);
-  // Prefix siblings are eligible; inclusion removes only the named root.
-  const sibling = f.repo('excluded/future-sibling/app'); f.join(sibling);
-  f.run(f.scratch, ['exclude', directory]); f.run(f.scratch, ['include', missing]);
-  assert.equal(createEntry({ cwd }), null, 'an ancestor exclusion still applies');
-  result = f.run(f.scratch, ['include', alias]); assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(f.read().excluded_roots, []);
-  const entry = createEntry({ cwd, role: 'supervisor' }); f.keep(entry);
-  assert.ok(entry.context().fleet); assert.equal(Object.keys(f.read().projects).length, 2);
-  const mapping = projectFleet(cwd, f.env).project;
-  f.run(f.scratch, ['exclude', cwd]); assert.equal(createEntry({ cwd }), null);
-  assert.deepEqual({ ...f.read().projects[mapping.name], name: mapping.name }, mapping, 'exclusion preserves a joined mapping');
-  const linked = path.join(f.scratch, 'excluded-linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/excluded', linked]);
-  assert.equal(nativeSessionContext(linked), null, 'canonical exclusion applies to linked checkouts');
-  assert.equal(createEntry({ cwd: linked }), null);
-  f.run(f.scratch, ['include', cwd]); assert.equal(projectFleet(linked, f.env).project.record, mapping.record);
-});
 
-test('excluding a joined external-record project preserves record writes, settings and worktrees in every checkout', t => {
-  const f = fixture(t), cwd = f.repo('joined/app'), record = path.join(f.scratch, 'external-record'); initOrg(record);
-  const layer = path.join(path.dirname(cwd), '.lane.json'), worktrees = path.join(f.scratch, 'mapped-worktrees');
-  fs.writeFileSync(layer, JSON.stringify({ always_args: { codex: ['-p', 'trusted-project'] }, routes: { engineer: { model: 'owned-route' } } }));
-  f.join(cwd, ['--record', record, '--worktrees', worktrees, '--layer', layer]);
-  const linked = path.join(f.scratch, 'linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/excluded-record', linked]);
-  const routes = loadDiscoveredRoutes({ cwd, env: f.env }), mapping = projectFleet(cwd, f.env).project;
-  const laneConfig = checkout => spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd: checkout, env: f.env, encoding: 'utf8' });
-  const beforeConfig = laneConfig(cwd); assert.equal(beforeConfig.status, 0, beforeConfig.stderr);
-  for (const excluded of [cwd, linked]) {
-    const result = f.run(f.scratch, ['exclude', excluded]); assert.equal(result.status, 0, result.stderr);
-    for (const checkout of excluded === cwd ? [cwd, linked] : [linked]) {
-      const boundary = projectFleet(checkout, f.env);
-      assert.deepEqual(boundary.project, mapping);
-      assert.equal(findOrgDir({ cwd: checkout, env: f.env }), record);
-      assert.deepEqual(loadDiscoveredRoutes({ cwd: checkout, env: f.env }), routes);
-      const config = laneConfig(checkout); assert.equal(config.status, 0, config.stderr); assert.equal(config.stdout, beforeConfig.stdout);
-      assert.equal(createEntry({ cwd: checkout }), null); assert.equal(nativeSessionContext(checkout), null);
-      const add = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Work while excluded'], { cwd: checkout, env: f.env, encoding: 'utf8' });
-      assert.equal(add.status, 0, add.stderr);
-      const status = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd: checkout, env: f.env, encoding: 'utf8' });
-      assert.equal(status.status, 0, status.stderr); assert.ok(JSON.parse(status.stdout).items.some(item => item.title === 'Work while excluded'));
-      assert.equal(fs.existsSync(path.join(checkout, '.org')), false, 'excluded reads and writes never initialize a second record');
-    }
-    const bytes = fs.readFileSync(path.join(record, 'events.jsonl'));
-    const include = f.run(f.scratch, ['include', excluded]); assert.equal(include.status, 0, include.stderr);
-    assert.deepEqual(projectFleet(linked, f.env).project, mapping);
-    assert.equal(findOrgDir({ cwd: linked, env: f.env }), record);
-    assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), bytes);
-    assert.ok(nativeSessionContext(linked));
-  }
-});
 
-test('exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout', async t => {
-  const layouts = [
-    { name: 'joined checkout record', record: 'checkout', joined: true },
-    { name: 'joined external record', record: 'external', joined: true },
-    { name: 'unjoined checkout compatibility', record: 'checkout' },
-    { name: 'unjoined ancestor compatibility', record: 'ancestor' },
-    { name: 'unjoined external ORG_DIR', record: 'external', orgDir: true },
-    { name: 'stale mapping with the same Git identity', record: 'external', joined: true, stale: true },
-    { name: 'stale mapping with external ORG_DIR', record: 'external', joined: true, stale: true, orgDir: true },
-  ];
-  for (const layout of layouts) await t.test(layout.name, tc => {
-    const f = fixture(tc);
-    const cwd = f.repo('existing/app');
-    const parent = path.dirname(cwd), layer = path.join(parent, '.lane.json');
-    const record = layout.record === 'checkout' ? path.join(cwd, '.org')
-      : layout.record === 'ancestor' ? path.join(parent, '.org') : path.join(f.scratch, 'external-record');
-    initOrg(record);
-    fs.writeFileSync(layer, JSON.stringify({ worktree_root: 'existing-worktrees', validate: 'project-validator',
-      always_args: { codex: ['-p', 'trusted-project'] }, routes: { engineer: { kind: 'codex', model: 'project-model' } } }));
-    fs.writeFileSync(path.join(cwd, '.lane.json'), JSON.stringify({ routes: { reviewer: { kind: 'claude', model: 'project-review' } } }));
-    const worktrees = layout.joined ? path.join(f.scratch, 'mapped-worktrees') : path.join(parent, 'existing-worktrees', 'app');
-    const mapping = layout.joined ? f.join(cwd, ['--record', record, '--worktrees', worktrees, '--layer', layer]).project : null;
-    if (!layout.joined) f.join(f.repo('other'));
-    if (layout.stale) {
-      const fleet = f.read(); mapping.checkout = path.join(parent, 'previous-checkout');
-      fleet.projects.app.checkout = mapping.checkout;
-      fs.writeFileSync(path.join(f.fleetHome, 'fleet.json'), JSON.stringify(fleet));
-      assert.equal(gitProject(cwd).identity, mapping.identity);
-      assert.notEqual(gitProject(cwd).canonical, mapping.checkout);
-    }
-    if (layout.orgDir) { f.env.ORG_DIR = record; process.env.ORG_DIR = record; }
-    const linked = path.join(f.scratch, 'linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/invariant', linked]);
-    const capture = fn => {
-      try { return { value: fn() }; }
-      catch (error) { return { error: { name: error.name, message: error.message } }; }
-    };
-    const discover = checkout => {
-      const routes = capture(() => loadDiscoveredRoutes({ cwd: checkout, env: f.env }));
-      const config = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd: checkout, env: f.env, encoding: 'utf8' });
-      assert.ifError(config.error);
-      return {
-        record: capture(() => findOrgDir({ cwd: checkout, env: f.env })),
-        settings: routes,
-        route: capture(() => resolveLaunchRoute(loadDiscoveredRoutes({ cwd: checkout, env: f.env }).config, { route: 'engineer' })),
-        worktrees: config.status === 0 ? JSON.parse(config.stdout.split('\n').find(row => row.startsWith('worktree_root\t')).split('\t')[1]) : null,
-        laneConfig: { status: config.status, stdout: config.stdout, ...(config.status ? { error: config.stderr.trim() } : {}) },
-      };
-    };
-    const checkouts = [cwd, linked], before = checkouts.map(discover);
-    for (const values of before) {
-      if (layout.stale) {
-        if (layout.orgDir) assert.equal(values.record.value, record);
-        else assert.match(values.record.error.message, /stale fleet project/u);
-        for (const key of ['settings', 'route']) assert.match(values[key].error.message, /stale fleet project/u);
-        assert.notEqual(values.laneConfig.status, 0); assert.match(values.laneConfig.error, /stale fleet project/u);
-      } else {
-        assert.equal(values.record.value, record);
-        assert.deepEqual(values.settings.value.files, [layer, path.join(cwd, '.lane.json')]);
-        assert.equal(values.worktrees, worktrees); assert.equal(values.laneConfig.status, 0);
-        assert.equal(values.route.value.model, 'project-model'); assert.deepEqual(values.route.value.args, ['-p', 'trusted-project']);
-      }
-    }
-    const recorded = [];
-    const recordWork = (checkout, title) => {
-      const result = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', title], { cwd: checkout, env: f.env, encoding: 'utf8' });
-      assert.equal(result.status, 0, result.stderr); recorded.push(title);
-      assert.deepEqual(loadEvents(record).events.filter(e => e.type === 'item.added').map(e => e.title), recorded);
-      assert.equal(fs.existsSync(path.join(linked, '.org')), false, 'linked readers never create a second record');
-      assert.equal(fs.existsSync(path.join(cwd, '.org')), layout.record === 'checkout', 'external/ancestor records never get shadowed locally');
-    };
-    if (!layout.stale) recordWork(cwd, 'Before exclusion');
-    for (const excluded of checkouts) {
-      const result = f.run(f.scratch, ['exclude', excluded]); assert.equal(result.status, 0, result.stderr);
-      assert.deepEqual(checkouts.map(discover), before, `discovery while excluding ${excluded}`);
-      for (const checkout of excluded === cwd ? checkouts : [linked]) {
-        assert.equal(createEntry({ cwd: checkout }), null); assert.equal(nativeSessionContext(checkout), null);
-        if (!layout.stale) recordWork(checkout, `During exclusion ${excluded} from ${checkout}`);
-      }
-      const include = f.run(f.scratch, ['include', excluded]); assert.equal(include.status, 0, include.stderr);
-      assert.deepEqual(checkouts.map(discover), before, `discovery after including ${excluded}`);
-      if (!layout.stale) {
-        recordWork(linked, `After inclusion ${excluded}`);
-        const status = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd: linked, env: f.env, encoding: 'utf8' });
-        assert.equal(status.status, 0, status.stderr); assert.deepEqual(JSON.parse(status.stdout).items.map(item => item.title), recorded);
-      }
-    }
-  });
-});
 
 for (const moved of [false, true]) test(`explicit external ORG_DIR preserves the ${moved ? 'moved' : 'unmoved'} unjoined layout until adoption`, t => {
   const f = fixture(t);
@@ -487,7 +239,6 @@ for (const moved of [false, true]) test(`explicit external ORG_DIR preserves the
   assert.deepEqual(loadDiscoveredRoutes({ cwd, env: f.env }), routes);
   const afterConfig = laneConfig(); assert.equal(afterConfig.status, 0, afterConfig.stderr); assert.equal(afterConfig.stdout, beforeConfig.stdout);
   assert.match(afterConfig.stderr, /monitor fleet join --record/u); assert.ok(afterConfig.stderr.includes(record)); assert.ok(afterConfig.stderr.includes(layer));
-  assert.equal(createEntry({ cwd, role: 'supervisor' }), null);
   const bareJoin = f.run(cwd, ['join']); assert.notEqual(bareJoin.status, 0); assert.match(bareJoin.stderr, /explicit adoption/u);
   assert.deepEqual(fs.readFileSync(fleetFile), fleetBytes); assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
   assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
@@ -517,8 +268,8 @@ for (const alias of [false, true]) test(`a neighbor with its own record cannot i
   assert.equal(config.status, 0, config.stderr); assert.doesNotMatch(config.stdout, /private-route|private-memory|private-validator|private-worktrees/u);
   // Entry also joins independently, without adopting the parent's settings or worktrees.
   const automatic = f.repo('shared/automatic'); initOrg(path.join(automatic, '.org'));
-  const entry = createEntry({ cwd: automatic, role: 'supervisor' }); assert.ok(entry); f.keep(entry);
-  assert.deepEqual(f.read().projects.automatic.layers, []); assert.notEqual(entry.context().worktrees, path.join(path.dirname(layer), 'private-worktrees', 'automatic'));
+  const automaticProject = f.join(automatic).project;
+  assert.deepEqual(f.read().projects.automatic.layers, []); assert.notEqual(automaticProject.worktrees, path.join(path.dirname(layer), 'private-worktrees', 'automatic'));
   // Explicit --layer adoption is the way to share a mapped layer while keeping a distinct record.
   f.join(neighbor, ['--record', record, '--layer', layer]);
   assert.deepEqual(loadDiscoveredRoutes({ cwd: neighbor, env: f.env }).files, [selectedLayer]);
@@ -557,19 +308,6 @@ test('fleet-present unjoined discovery terminates outside GIT_WORK_TREE and igno
   assert.equal(findOrgDir({ cwd: nested, env: f.env }), record);
 });
 
-test('entry worktree roots are session overrides and never freeze the fleet mapping', t => {
-  const f = fixture(t), cwd = f.repo('app'), roots = ['first', 'second'].map(name => path.join(f.scratch, name));
-  const first = createEntry({ cwd, worktreeRoot: roots[0] }); f.keep(first);
-  assert.equal(path.dirname(first.context().workspace), roots[0]);
-  const mapped = f.read().projects.app.worktrees;
-  assert.notEqual(mapped, roots[0], 'first entry stores the project default');
-  const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
-  const second = createEntry({ cwd, worktreeRoot: roots[1] }); f.keep(second);
-  assert.equal(path.dirname(second.context().workspace), roots[1]);
-  const unselected = createEntry({ cwd }); f.keep(unselected);
-  assert.equal(path.dirname(unselected.context().workspace), mapped);
-  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.statSync(file).mtimeMs, mtime);
-});
 
 test('join adopts a legacy console.json mapping without writing its record', t => {
   const f = fixture(t), cwd = f.repo('app'), legacy = f.repo('bch-cloak'), record = path.join(f.scratch, 'legacy-record');
@@ -632,7 +370,7 @@ test('a moved checkout can explicitly replace its stale mapping while retaining 
   assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
 });
 
-for (const change of ['moved', 're-cloned']) test(`fleet repair: automatic entry suggests the stale external record for a ${change} checkout`, t => {
+for (const change of ['moved', 're-cloned']) test(`fleet repair: join suggests the stale external record for a ${change} checkout`, t => {
   const f = fixture(t), cwd = f.repo("agent's app"), record = path.join(f.scratch, "record's home"); initOrg(record);
   const original = f.join(cwd, ['--record', record]).project;
   const backup = path.join(f.scratch, 'backup'); fs.renameSync(cwd, backup);
@@ -641,9 +379,9 @@ for (const change of ['moved', 're-cloned']) test(`fleet repair: automatic entry
   else f.git(f.scratch, ['clone', '-q', backup, entered]);
   const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file), recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
   let message;
-  assert.throws(() => createEntry({ cwd: entered, role: 'supervisor' }), error => {
-    message = error.message; return /stale fleet project/.test(message);
-  });
+  const refused = f.run(entered, ['join']);
+  assert.notEqual(refused.status, 0); message = refused.stderr;
+  assert.match(message, /stale fleet project/);
   const quoted = value => "'" + value.replaceAll("'", "'\\''") + "'";
   const command = `monitor fleet join --replace ${quoted("agent's app")} --record ${quoted(record)}`;
   assert.ok(message.includes(command), message);
@@ -716,7 +454,8 @@ test('fleet repair: live same-name external mappings join separately; multiple s
   assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(entered, '.org')), false);
 });
 
-test('fleet repair: unknown names, live records, and overlapping roots remain refused before writes', t => {
+
+test('fleet repair: unknown names and live records remain refused before writes', t => {
   const f = fixture(t), cwd = f.repo('app'), record = path.join(f.scratch, 'external-record'); initOrg(record);
   f.join(cwd, ['--record', record]);
   const other = f.repo('other'), ownedRecord = f.join(other).project.record;
@@ -727,11 +466,19 @@ test('fleet repair: unknown names, live records, and overlapping roots remain re
     const result = f.run(entered, ['join', ...args]); assert.notEqual(result.status, 0, result.stdout);
     assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(entered, '.org')), false);
   }
-  const nested = f.repo('other/nested');
-  const result = f.run(nested, ['join', '--replace', 'app', '--record', record]);
-  assert.notEqual(result.status, 0); assert.match(result.stderr, /overlap/);
-  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(nested, '.org')), false);
-  const ordinaryJoin = f.run(nested, ['join']);
-  assert.notEqual(ordinaryJoin.status, 0); assert.match(ordinaryJoin.stderr, /overlap/);
-  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(nested, '.org')), false);
+});
+
+test('legacy temp and exclusion settings are inert, and nested peers keep distinct record mappings', t => {
+  const f = fixture(t), cwd = f.repo('outer');
+  const first = f.join(cwd);
+  const file = path.join(f.fleetHome, 'fleet.json');
+  const raw = f.read(); raw.excluded_roots = false; raw.projects[first.name].temp = { retired: true };
+  fs.writeFileSync(file, JSON.stringify(raw));
+  assert.equal(f.join(cwd, ['--temp', 'ignored-temp']).project.record, first.project.record);
+  assert.ok(!fs.existsSync(path.join(cwd, 'ignored-temp')));
+  const nested = f.repo('outer/nested'), second = f.join(nested);
+  assert.notEqual(first.project.identity, second.project.identity);
+  assert.notEqual(first.project.record, second.project.record);
+  assert.equal(findOrgDir({ cwd: nested, env: f.env }), second.project.record);
+  assert.equal(findOrgDir({ cwd, env: f.env }), first.project.record);
 });

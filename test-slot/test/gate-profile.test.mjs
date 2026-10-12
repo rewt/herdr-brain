@@ -413,14 +413,6 @@ test('a competing process started during a slot wait refuses before preparation'
   competitor.kill('SIGTERM'); await waitForExit(competitor);
 });
 
-test('unavailable host capabilities refuse with a host launch instruction before builds', t => {
-  const f = fixture(t), preload = path.join(f.root, 'deny-net.cjs');
-  fs.writeFileSync(preload, `require('net').Server.prototype.listen=function(){throw Object.assign(Error('denied'),{code:'EPERM'})};`);
-  f.env.NODE_OPTIONS = `--require=${preload}`;
-  const result = f.run(); assert.equal(result.status, 75, result.stderr);
-  assert.match(f.saved().reason, /PROMOTE_HOST_REQUIRED.*outside the worker sandbox/);
-  assert.equal(fs.existsSync(f.env.PROFILE_EVIDENCE), false); assert.equal(f.git(['rev-parse', 'main']), f.before);
-});
 
 test('malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence', t => {
   const f = fixture(t), profile = resolveGateProfile(f.repo, f.env);

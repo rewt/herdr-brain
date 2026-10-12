@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Real entry/record/watch/settle/review/dispatch/promotion, scripted transport.
+// Real policy/record/watch/settle/review/dispatch/promotion, scripted transport.
 import fs from 'node:fs';
 import { isMain } from '../lib/cli-help.mjs';
 import path from 'node:path';
@@ -21,23 +21,22 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     const f = fixture({ after: (fn) => cleanup.push(fn) }, { source: candidate,
       actor: 'supervisor-acceptance-worker', execute: scratchFixtureCommand(loadAwareCommand(execute, load)) });
     restoreHomes = enterScratchHomes(scratchProductHomes(f.root, f.env.HOME), [f.root]);
-    const { createEntry } = await import(pathToFileURL(path.join(candidate, 'discovery/runtime.mjs')));
-    const { entryPolicy } = await import(pathToFileURL(path.join(candidate, 'discovery/policy.mjs')));
     const command = (args) => {
       const r = f.exec(process.execPath, [path.join(candidate, 'supervisor/supervisor.mjs'), ...args]);
       assert.equal(r.status, 0, r.stderr || r.stdout); return JSON.parse(r.stdout);
     };
-    const entry = () => createEntry({ cwd: f.repo, role: 'supervisor', runtimeDir: path.join(f.root, 'entry'), worktreeRoot: path.join(f.root, 'workers') });
+    const { entryPolicy } = await import(pathToFileURL(path.join(candidate, 'discovery/policy.mjs')));
+    const policy = () => entryPolicy({ canonical: f.repo, org: f.org, role: 'supervisor' }, candidate);
     const watchNotice = (run) => f.calls().findLast((a) => a[0] === 'agent' && a[1] === 'prompt' && a[3]?.startsWith(`[org-report] run=${run} `))?.[3];
     // The shared fixture seeds a record for settle tests. Remove only this
-    // owned scratch record so supervisor entry itself must bootstrap it.
+    // owned scratch record so supervisor record CLI must initialize it.
     fs.rmSync(f.org, { recursive: true, force: true });
     assert.ok(!fs.existsSync(f.org));
-    const fresh = entry();
-    const freshPolicy = entryPolicy(fresh.context(), candidate); fresh.close();
+    f.record(['init', f.org]);
+    const freshPolicy = policy();
     assert.match(freshPolicy, /Supervisor cold start/);
     assert.match(freshPolicy, /Running \(record; no live pane inference\) \(0\)/);
-    assert.match(freshPolicy, /Waiting on operator \(1\)/);
+    assert.match(freshPolicy, /Waiting on operator \(0\)/);
     assert.equal(f.calls().length, 0, 'entry and cold start never address Herdr or a model');
     assert.ok(!fs.existsSync(path.join(f.repo, '.lane.json')));
 
@@ -45,8 +44,7 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     assert.equal(item, 'ENG-1');
     const run = f.start();
     f.record(['note', f.show(run).item, 'Finish this cycle before choosing more work.', '--decision', '--summary', 'Finish the running cycle first.']);
-    const history = entry(), context = history.context();
-    const historyPolicy = entryPolicy(context, candidate); history.close();
+    const historyPolicy = policy();
     assert.match(historyPolicy, new RegExp(`${run} .*engineer / codex`));
     assert.match(historyPolicy, /Finish the running cycle first/);
     assert.equal(f.calls().length, 0, 'history entry still makes no model/Herdr calls');
@@ -94,8 +92,7 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3]?.includes('Private record file:')).length, reviews, 'late final report launches no review');
     assert.deepEqual(command(['promote', handled.fix.run, '--role', 'supervisor', '--why', 'Duplicate notice']).queue, promoted.queue);
     assert.equal(queue().results.length, 1, 'duplicate promotion never repeats the gate');
-    const restarted = entry();
-    const finalPolicy = entryPolicy(restarted.context(), candidate); restarted.close();
+    const finalPolicy = policy();
     assert.match(finalPolicy, /Running \(record; no live pane inference\) \(0\)/);
     assert.match(finalPolicy, /Reports and settlement \(0\)/);
     f.record(['reopen', settled.item, '--note', 'Reconsider the completed work']);

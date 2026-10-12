@@ -51,11 +51,12 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   if (run.status !== 0) fail(run.stderr);
   state.screen = (state.screen || '') + '\\n' + run.stdout + '\\ncheckout % ';
   if (a[3].startsWith('printf ')) { result({}); process.exit(0); }
-  const lines = run.stdout.trim().split('\\n');
-  state.launches.push(JSON.parse(lines.at(-1)));
-  if (state.dropStartMarker) state.screen = a[3] + '\\ncheckout % ';
-  if (!state.noDetect) state.agents.push({pane_id: a[2], agent: state.detectKind || state.launches.at(-1).kind, name: null,
-    cwd: state.wrongCwd || pane.foreground_cwd, agent_status: 'blocked'});
+  result({});
+} else if (a[0] === 'agent' && a[1] === 'start') {
+  const pane = state.panes.find(p => p.pane_id === value('--pane'));
+  state.launches.push({kind: value('--kind'), args: a.slice(a.indexOf('--') + 1), env: state.env[pane.pane_id]});
+  if (!state.noDetect) state.agents.push({pane_id: pane.pane_id, agent: state.detectKind || value('--kind'),
+    name: state.unnamed ? null : a[2], cwd: state.wrongCwd || pane.foreground_cwd});
   result({});
 } else if (a[0] === 'agent' && a[1] === 'list') result({agents: state.agents});
 else if (a[0] === 'agent' && a[1] === 'rename') { state.agents.find(p => p.pane_id === a[2]).name = a[3]; result({}); }
@@ -70,11 +71,10 @@ function fixture(t) {
   const stateFile = path.join(root, 'state.json');
   fs.writeFileSync(stateFile, JSON.stringify({counter: 0, calls: [], spaces: [], tabs: [], panes: [], agents: [], env: {}, launches: [], focus: 'operator-work'}));
   fs.writeFileSync(path.join(bin, 'herdr'), fake, { mode: 0o755 });
-  for (const kind of ['codex', 'claude']) fs.writeFileSync(path.join(bin, `monitor-${kind}`), `#!${process.execPath}\nconsole.log(JSON.stringify({kind: '${kind}', args: process.argv.slice(2), env: Object.fromEntries(['ORG_DIR','ORG_ACTOR','MONITOR_SUPERVISOR_AGENT','MONITOR_REQUEST_DIR','LANE_CONFIG'].map(k => [k, process.env[k]]))}));\n`, { mode: 0o755 });
-  const env = { ...process.env, HERDR_BIN_PATH: path.join(bin, 'herdr'), HERDR_MONITOR_ENTRY_BIN: bin,
+  const env = { ...process.env, HERDR_BIN_PATH: path.join(bin, 'herdr'),
     ORG_DIR: '', HERDR_ORG_CONSOLE_CONFIG: path.join(root, 'absent-console.json'),
     HERDR_MONITOR_SUPERVISOR_HARNESS: 'codex', CHAT_FAKE_STATE: stateFile,
-    MONITOR_SUPERVISOR_AGENT: 'foreign-ops', MONITOR_REQUEST_DIR: '/foreign/requests', LANE_CONFIG: '/foreign/config',
+    MONITOR_SUPERVISOR_AGENT: 'foreign-ops', LANE_CONFIG: '/foreign/config',
     HERDR_MONITOR_CONTROL_WORKSPACE: '' };
   const projects = [0, 1].map(i => {
     const parent = path.join(root, `p${i}`); fs.mkdirSync(parent);
@@ -103,16 +103,20 @@ function fixture(t) {
   return {root, env, projects, state, change, open, snapshot};
 }
 
-test('default chat launches the installed Codex adapter with no sandbox preflight or Claude fallback', t => {
+test('default chat launches the native Codex harness with no sandbox preflight or Claude fallback', t => {
   const f = fixture(t), home = path.join(f.root, 'codex-home'); fs.mkdirSync(home);
   // A legacy native sandbox selector is the harness's business, not the launcher's.
   fs.writeFileSync(path.join(home, 'config.toml'), 'sandbox_mode = "workspace-write"\n'); f.env.CODEX_HOME = home;
-  delete f.env.HERDR_MONITOR_SUPERVISOR_HARNESS; // Installed monitor-codex is the default.
+  delete f.env.HERDR_MONITOR_SUPERVISOR_HARNESS; // Codex is the default.
   const receipt = f.open();
   assert.equal(receipt.kind, 'codex'); assert.equal(receipt.available, true);
   assert.equal(receipt.fallback, undefined); assert.equal(receipt.herdr_mode, undefined);
   assert.equal(f.state().launches[0].kind, 'codex');
-  assert.deepEqual(f.state().launches[0].args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--', '-p', 'profile-0']);
+  assert.equal(f.state().launches[0].args.length, 2);
+  assert.equal(f.state().launches[0].args[0], '-c');
+  assert.match(f.state().launches[0].args[1], /^developer_instructions=/);
+  assert.ok(f.state().calls.some(a => a[0] === 'agent' && a[1] === 'start'));
+  assert.ok(!f.state().launches[0].args.some(a => /sandbox|permission-profile|trust|socket/.test(a)));
   assert.equal(f.state().env[receipt.pane].MONITOR_SESSION_ROLE, 'chat');
   assert.equal(f.state().env[receipt.pane].MONITOR_SESSION_KIND, undefined, 'session kinds are gone');
   assert.equal(f.state().launches[0].env.MONITOR_SUPERVISOR_AGENT, 'ops-0');
@@ -124,11 +128,12 @@ test('one quiet chat per canonical fleet identity shares a control workspace, re
   assert.equal(f.state().focus, 'operator-work');
   assert.match(first.name, /^chat-[a-f0-9]{24}$/); assert.equal(first.to, 'ops-0');
   const launch = f.state().launches[0];
-  assert.deepEqual(launch.args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--', '-p', 'profile-0']);
+  assert.equal(launch.args[0], '-c');
+  assert.match(launch.args[1], /developer_instructions=.*project chat/);
   assert.equal(launch.env.ORG_DIR, f.projects[0].record); assert.equal(launch.env.ORG_ACTOR, first.name);
-  assert.equal(f.state().env[first.pane].MONITOR_SESSION_ROLE, 'chat'); assert.equal(f.state().env[first.pane].MONITOR_ENTRY_BYPASS, '1');
+  assert.equal(f.state().env[first.pane].MONITOR_SESSION_ROLE, 'chat');
   assert.equal(launch.env.MONITOR_SUPERVISOR_AGENT, 'ops-0'); assert.equal(f.state().env[first.pane].MONITOR_SESSION_KIND, undefined);
-  assert.equal(launch.env.MONITOR_REQUEST_DIR, undefined); assert.equal(launch.env.LANE_CONFIG, undefined);
+   assert.equal(launch.env.LANE_CONFIG, '');
   f.change(s => {s.tabs[0].label = 'Operator renamed this';});
   const again = f.open(); assert.equal(again.reused, true); assert.equal(again.tab, first.tab); assert.equal(f.state().focus, first.tab);
   const second = f.open(f.projects[1], {focus: false});
@@ -147,7 +152,9 @@ test('operator CLI works without entry, selects an existing control workspace, a
   assert.equal(r.status, 0, r.stderr);
   const receipt = JSON.parse(r.stdout); assert.equal(receipt.workspace, 'chosen'); assert.equal(receipt.to, 'ops-explicit');
   const launch = f.state().launches[0]; assert.equal(launch.kind, 'claude');
-  assert.deepEqual(launch.args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--', '--plugin-dir', "/space and quotes/it's-plugin", '--model', 'model-chat', '--effort', 'high']);
+  assert.deepEqual(launch.args.slice(0, 6), ['--plugin-dir', "/space and quotes/it's-plugin", '--model', 'model-chat', '--effort', 'high']);
+  assert.equal(launch.args[6], '--append-system-prompt');
+  assert.match(launch.args[7], /project chat/);
   assert.equal(launch.env.MONITOR_SUPERVISOR_AGENT, 'ops-explicit'); assert.equal(f.state().focus, 'operator-work');
   assert.equal(f.state().calls.some(a => a[0] === 'workspace' && a[1] === 'create'), false);
   assert.throws(() => f.open(f.projects[1], {workspace: 'other'}), /already use control workspace/);
@@ -168,9 +175,9 @@ test('shell readiness fails before sending input and retains a recoverable tab',
   assert.equal(f.open().reused, true); assert.equal(f.state().tabs.length, 1);
 });
 
-test('a failed rename is recovered only in the receipt pane with the same harness and checkout', t => {
-  const f = fixture(t); f.change(s => {s.fail = 'agent rename';});
-  assert.throws(() => f.open(), /injected failure/);
+test('an unnamed detected launch is recovered only in the receipt pane with the same harness and checkout', t => {
+  const f = fixture(t); f.change(s => {s.unnamed = true;});
+  f.open();
   assert.equal(f.state().agents[0].name, null);
   f.change(s => {delete s.fail; s.agents[0].agent = 'claude';});
   assert.throws(() => f.open(), /another occupant/);
@@ -179,7 +186,7 @@ test('a failed rename is recovered only in the receipt pane with the same harnes
   assert.equal(receipt.reused, true); assert.equal(receipt.available, true);
   assert.equal(f.state().agents[0].name, receipt.name);
   assert.equal(f.state().tabs.length, 1); assert.equal(f.state().launches.length, 1);
-  assert.equal(f.state().focus, 'operator-work');
+  assert.equal(f.state().focus, receipt.tab);
 });
 
 test('late detection after timeout recovers the unnamed chat without replaying launch', t => {
@@ -216,13 +223,6 @@ test('echoed probe input is not execution proof and cannot launch an agent', t =
   assert.equal(f.state().calls.filter(a => a[0] === 'pane' && a[1] === 'run').length, 1);
 });
 
-test('agent detection alone cannot accept an unverified launch command', t => {
-  const f = fixture(t); f.change(s => {s.dropStartMarker = true;});
-  assert.throws(() => f.open(), /command unverified/);
-  assert.equal(f.state().agents[0].name, null);
-  assert.equal(f.state().focus, 'operator-work');
-  assert.equal(f.state().launches.length, 1);
-});
 
 function prototype(f) {
   const p = f.projects[0];
@@ -231,20 +231,19 @@ function prototype(f) {
     s.tabs.push({tab_id: 'w2XS:prototype', workspace_id: 'w2XS', label: p.name});
     s.panes.push({pane_id: 'w2XS:chat', tab_id: 'w2XS:prototype', workspace_id: 'w2XS', foreground_cwd: p.checkout});
     s.agents.push({pane_id: 'w2XS:chat', name: `chat-${p.name}`, agent: 'claude', cwd: p.checkout});
-    s.env['w2XS:chat'] = {CLAUDE_CONFIG_DIR: '/personal/config', MONITOR_ENTRY_BYPASS: '1'};
+    s.env['w2XS:chat'] = {CLAUDE_CONFIG_DIR: '/personal/config', LEGACY_RECEIPT: 'unchanged'};
   });
 }
 
 test('the named prototype in chats is adopted unchanged and other projects join that workspace', t => {
   const f = fixture(t); prototype(f);
   // Adoption must not need the default adapter or relaunch using its account.
-  fs.rmSync(path.join(f.env.HERDR_MONITOR_ENTRY_BIN, 'monitor-codex'));
   const receipt = f.open();
   assert.equal(receipt.reused, true); assert.equal(receipt.kind, 'claude');
   assert.equal(receipt.workspace, 'w2XS'); assert.equal(receipt.pane, 'w2XS:chat');
   assert.equal(receipt.name, `chat-${f.projects[0].name}`);
   assert.equal(f.state().focus, 'w2XS:prototype');
-  assert.deepEqual(f.state().env[receipt.pane], {CLAUDE_CONFIG_DIR: '/personal/config', MONITOR_ENTRY_BYPASS: '1'});
+  assert.deepEqual(f.state().env[receipt.pane], {CLAUDE_CONFIG_DIR: '/personal/config', LEGACY_RECEIPT: 'unchanged'});
   assert.equal(f.state().calls.some(a => ['create', 'run', 'rename'].includes(a[1])), false);
   f.change(s => {s.tabs[0].label = 'My ongoing conversation';});
   assert.equal(f.open().tab, receipt.tab);
@@ -261,21 +260,6 @@ test('prototype adoption refuses a foreign checkout or a pane outside the chats 
   f.change(s => {s.agents[0].cwd = f.projects[0].checkout; s.panes[0].workspace_id = 'elsewhere';});
   assert.throws(() => f.open(), /outside the control workspace/);
   assert.equal(f.state().launches.length, 0); assert.equal(f.state().focus, 'operator-work');
-});
-
-test('unknown, stale, excluded and opted-out fleet projects fail before any Herdr mutation', t => {
-  const f = fixture(t), p = f.projects[0];
-  assert.throws(() => f.open(p, {project: 'not-joined'}), /unknown fleet/);
-  assert.throws(() => f.open(p, {identity: '/different/.git'}), /identity changed/);
-  const file = path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'), raw = JSON.parse(fs.readFileSync(file));
-  raw.excluded_roots = [p.checkout]; fs.writeFileSync(file, JSON.stringify(raw));
-  assert.throws(() => f.open(), /excluded/);
-  delete raw.excluded_roots; raw.projects[p.name].identity = '/missing/.git'; fs.writeFileSync(file, JSON.stringify(raw));
-  assert.throws(() => f.open(p, {identity: undefined}), /stale fleet/);
-  raw.projects[p.name].identity = p.identity; fs.writeFileSync(file, JSON.stringify(raw));
-  fs.writeFileSync(path.join(p.checkout, '.lane.json'), '{"entry":{"enabled":false}}');
-  assert.throws(() => f.open(), /opted out/);
-  assert.deepEqual(f.state().calls, []);
 });
 
 test('chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted', t => {
@@ -324,5 +308,19 @@ test('committed read/scoped chat settings and older receipts with any herdr_mode
     const again = f.open(); assert.equal(again.reused, true); assert.equal(again.tab, opened.tab);
   }
   assert.equal(f.state().launches.length, 1);
-  assert.ok(!fs.existsSync(path.join(f.env.HERDR_MONITOR_ENTRY_BIN, '.herdr-scoped')), 'no scoped binding is written');
+
+});
+
+test('unknown and stale fleet projects fail before Herdr mutations while retired entry settings are ignored', t => {
+  const f = fixture(t), p = f.projects[0];
+  assert.throws(() => f.open(p, { project: 'not-joined' }), /unknown fleet/);
+  assert.throws(() => f.open(p, { identity: '/different/.git' }), /identity changed/);
+  const file = path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'), raw = JSON.parse(fs.readFileSync(file));
+  raw.projects[p.name].identity = '/missing/.git'; fs.writeFileSync(file, JSON.stringify(raw));
+  assert.throws(() => f.open(p, { identity: undefined }), /stale fleet/);
+  assert.deepEqual(f.state().calls, []);
+  raw.projects[p.name].identity = p.identity; raw.excluded_roots = [p.checkout];
+  fs.writeFileSync(file, JSON.stringify(raw));
+  fs.writeFileSync(path.join(p.checkout, '.lane.json'), JSON.stringify({ entry: { enabled: false }, chat: false, always_args: 'retired' }));
+  assert.equal(f.open().available, true);
 });

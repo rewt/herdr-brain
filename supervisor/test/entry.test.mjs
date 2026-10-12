@@ -14,8 +14,6 @@ import { joinFleet } from '../../lib/fleet.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
-import { fakeControlSocket } from '../../test/helpers/fake-control-socket.mjs';
-import { sessionEnvironment, sessionHookArguments } from '../session-hooks.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const linuxBoot = '12345678-1234-4234-8234-123456789abc';
 const linuxOwner = birth => pid => pid === deadPid ? { ok: true, value: null } : lookupProcess(pid, { platform: 'linux', identityOnly: true, readFile: file => {
@@ -26,7 +24,7 @@ const linuxOwner = birth => pid => pid === deadPid ? { ok: true, value: null } :
 const deadPid = 2147483647;
 const exec = (file, args, cwd, env = {}, input) => {
   const inherited = { ...process.env };
-  for (const key of Object.keys(inherited)) if (/^MONITOR_(SESSION_ROLE|ENTRY_BYPASS|SUPERVISOR_)|^HERDR_(PANE_ID|AGENT_NAME)$/.test(key)) delete inherited[key];
+  for (const key of Object.keys(inherited)) if (/^MONITOR_(SESSION_ROLE|SUPERVISOR_)|^HERDR_(PANE_ID|AGENT_NAME)$/.test(key)) delete inherited[key];
   return spawnSync(file, args, { cwd, env: { ...inherited, ORG_ACTOR: 'entry-test', ...env }, input, encoding: 'utf8', timeout: 15000 });
 };
 const good = r => { assert.equal(r.status, 0, r.stderr || r.error?.message); return r.stdout.trim(); };
@@ -42,7 +40,7 @@ function fixture(t) {
   const record = args => good(exec(process.execPath, [path.join(root, 'bin/org.mjs'), ...args], repo, { ORG_DIR: org }));
   record(['init', org]);
   const project = { ...gitProject(repo), org };
-  const binding = { MONITOR_SESSION_ROLE: 'supervisor', MONITOR_ENTRY_BYPASS: '0', MONITOR_SUPERVISOR_REPO: repo,
+  const binding = { MONITOR_SESSION_ROLE: 'supervisor', MONITOR_SUPERVISOR_REPO: repo,
     MONITOR_SUPERVISOR_IDENTITY: project.identity, MONITOR_SUPERVISOR_ORG: org, MONITOR_SUPERVISOR_AGENT: 'supervisor-test', ORG_DIR: org };
   const start = (name, pid = deadPid) => {
     const item = record(['add', name]).split('\n')[0];
@@ -52,99 +50,15 @@ function fixture(t) {
   return { root: scratch, repo, org, project, binding, record, git, start };
 }
 const load = () => import('../entry.mjs');
-function codexLaunchHook(context) {
-  const args = sessionHookArguments('codex', context, root);
-  assert.equal(args.length, 2);
-  assert.equal(args[0], '-c');
-  assert.match(args[1], /^hooks\.SessionStart=/);
-  const command = args[1].match(/command=("(?:[^"\\]|\\.)*")/);
-  assert.ok(command, 'launch hook must supply a command');
-  return { config: args[1], command: JSON.parse(command[1]) };
-}
-
 test('repository does not track a Codex project hook that can interrupt unattended workers', () => {
   assert.equal(good(exec('git', ['ls-files', '--', '.codex/hooks.json'], root)), '',
     'Codex project hooks require interactive trust before an unattended worker receives its task');
   assert.equal(fs.existsSync(path.join(root, '.codex/hooks.json')), false);
 });
 
-test('durable supervisor pane binding survives native restore, clear and compact without adapter env', t => {
-  const f = fixture(t);
-  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  fs.symlinkSync(path.join(root, 'supervisor'), path.join(f.repo, 'supervisor'), 'dir');
-  sessionEnvironment({ role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org }, root,
-    { HERDR_PANE_ID: 'wHD:pR', HERDR_AGENT_NAME: 'project-supervisor' });
-  const hook = path.join(root, 'supervisor/session-start.mjs');
-  for (const source of ['resume', 'clear', 'compact']) {
-    for (const kind of ['claude', 'codex']) {
-      const command = kind === 'codex' ? codexLaunchHook({ role: 'supervisor', canonical: root }).command
-        : JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json'))).hooks.SessionStart
-          .flatMap(g => g.hooks).find(h => h.command.includes('session-start.mjs')).command;
-      const r = exec('/bin/sh', ['-c', command], f.repo, { HERDR_PANE_ID: 'wHD:pR', CLAUDE_PROJECT_DIR: f.repo },
-        JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source, session_id: `new-${source}` }));
-      good(r); assert.match(r.stdout, /Supervisor cold start/, `${kind} ${source}`);
-    }
-  }
-  const lane = path.join(f.root, 'lane'); f.git(['worktree', 'add', '-qb', 'lane/restore', lane]);
-  for (const [cwd, env] of [[f.repo, { HERDR_PANE_ID: 'wHD:pOther' }], [lane, { HERDR_PANE_ID: 'wHD:pR' }],
-    [f.repo, { HERDR_PANE_ID: 'wHD:pR', MONITOR_SESSION_ROLE: 'worker' }],
-    [f.repo, { HERDR_PANE_ID: 'wHD:pR', MONITOR_ENTRY_BYPASS: '1' }]]) {
-    const r = exec(process.execPath, [hook], cwd, env, JSON.stringify({ cwd, hook_event_name: 'SessionStart', source: 'resume' }));
-    good(r); assert.doesNotMatch(r.stdout, /Supervisor cold start/);
-  }
-  sessionEnvironment({ role: 'worker', canonical: f.repo, identity: f.project.identity, org: f.org }, root, { HERDR_PANE_ID: 'wHD:pR' });
-  const revoked = exec(process.execPath, [hook], f.repo, { HERDR_PANE_ID: 'wHD:pR' },
-    JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
-  good(revoked); assert.doesNotMatch(revoked.stdout, /Supervisor cold start/);
-});
 
-test('claude adapter reuses the project SessionStart entry exactly once', t => {
-  const f = fixture(t), directory = path.join(f.repo, '.claude');
-  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  fs.mkdirSync(directory);
-  const project = JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json')));
-  fs.writeFileSync(path.join(directory, 'settings.json'), JSON.stringify(project));
-  const context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
-  assert.deepEqual(sessionHookArguments('claude', context, root), [], 'project hook must not gain a second adapter hook');
-  for (const source of ['startup', 'resume', 'clear', 'compact']) {
-    const hooks = project.hooks.SessionStart.filter(g => !g.matcher || new RegExp(g.matcher).test(source))
-      .flatMap(g => g.hooks).filter(h => h.command.includes('session-start.mjs'));
-    assert.equal(hooks.length, 1);
-    const r = exec('/bin/sh', ['-c', hooks[0].command], root,
-      { ...f.binding, CLAUDE_PROJECT_DIR: root, MONITOR_SUPERVISOR_ENTRY: path.join(root, 'supervisor/session-start.mjs') },
-      JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source, session_id: 'single-entry' }));
-    // Paused housekeeping keeps this integration test entirely foreground.
-    good(r); assert.equal((r.stdout.match(/Supervisor cold start/g) ?? []).length, 1);
-    assert.doesNotMatch(r.stdout, /session may continue/);
-  }
-});
 
-test('claude supervisor adapter supplies only the SessionStart entry hook in one settings flag', t => {
-  const f = fixture(t);
-  const context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
-  const launch = sessionHookArguments('claude', context, root);
-  assert.equal(launch.length, 2); assert.equal(launch[0], '--settings');
-  const hooks = JSON.parse(launch[1]).hooks;
-  assert.deepEqual(Object.keys(hooks), ['SessionStart'], 'no question guard or permission hook');
-  assert.match(hooks.SessionStart[0].hooks[0].command, /supervisor\/session-start\.mjs/);
-  for (const role of ['worker', 'review', 'chat']) assert.deepEqual(sessionHookArguments('claude', { ...context, role }, root), []);
-});
 
-test('codex supervisor adapter injects SessionStart without a project hook', t => {
-  const f = fixture(t);
-  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  const context = { role: 'supervisor', canonical: root };
-  const hook = codexLaunchHook(context);
-  assert.deepEqual(sessionHookArguments('codex', { ...context, role: 'worker' }, root), [], 'workers receive no per-launch hooks');
-  const matcher = JSON.parse(hook.config.match(/matcher=("(?:[^"\\]|\\.)*")/)[1]);
-  for (const source of ['startup', 'resume', 'clear', 'compact']) {
-    assert.ok(new RegExp(matcher).test(source));
-    const r = exec('/bin/sh', ['-c', hook.command], f.repo, f.binding,
-      JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source, session_id: 'adapter-entry' }));
-    good(r); assert.equal((r.stdout.match(/Supervisor cold start/g) ?? []).length, 1);
-    assert.doesNotMatch(r.stdout, /session may continue/);
-  }
-});
 
 test('re-armed watcher uses its recorded dispatch recipient before the supervisor fallback', async t => {
   const f = fixture(t), run = f.start('receipt recipient'), fallback = f.start('fallback recipient');
@@ -163,58 +77,9 @@ test('re-armed watcher uses its recorded dispatch recipient before the superviso
   assert.equal(recipient(absent), 'supervisor-fallback');
 });
 
-test('adapter exports its known supervisor agent identity', t => {
-  const f = fixture(t), context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
-  assert.equal(sessionEnvironment({ ...context, agent: 'supervisor-project' }, root, {}).MONITOR_SUPERVISOR_AGENT, 'supervisor-project');
-  assert.equal(sessionEnvironment(context, root, { HERDR_AGENT_NAME: 'supervisor-project' }).MONITOR_SUPERVISOR_AGENT, 'supervisor-project');
-  assert.equal(sessionEnvironment({ ...context, role: 'worker' }, root, { MONITOR_SUPERVISOR_AGENT: 'inherited' }).MONITOR_SUPERVISOR_AGENT, '');
-});
 
-test('supervisor pane receipts record no session kind and older receipts with one still restore', t => {
-  const f = fixture(t), context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
-  const pane = 'control:pSupervisor';
-  const file = path.join(f.repo, '.lane/supervisor/panes', `${createHash('sha256').update(pane).digest('hex')}.json`);
-  sessionEnvironment(context, root, { HERDR_PANE_ID: pane, MONITOR_SUPERVISOR_AGENT: 'ops-project' });
-  const receipt = JSON.parse(fs.readFileSync(file));
-  assert.equal(receipt.session_kind, undefined); assert.equal(receipt.to, 'ops-project');
-  fs.writeFileSync(file, JSON.stringify({ ...receipt, session_kind: 'combined' }) + '\n'); // Written before session kinds were removed.
-  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  const restored = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo,
-    { HERDR_PANE_ID: pane }, JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
-  good(restored); assert.match(restored.stdout, /Supervisor cold start/); assert.doesNotMatch(restored.stdout, /session may continue/);
-});
 
-test('project chat adapter and durable restore retain ops separately from the chat name', t => {
-  const f = fixture(t), context = {role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org};
-  const env = sessionEnvironment(context, root, {HERDR_PANE_ID: 'control:pChat', HERDR_AGENT_NAME: 'chat-project', MONITOR_SUPERVISOR_AGENT: 'ops-project'});
-  assert.equal(env.HERDR_AGENT_NAME, 'chat-project'); assert.equal(env.MONITOR_SUPERVISOR_AGENT, 'ops-project');
-  const receipt = JSON.parse(fs.readFileSync(path.join(f.repo, '.lane/supervisor/panes', `${createHash('sha256').update('control:pChat').digest('hex')}.json`)));
-  assert.equal(receipt.to, 'ops-project');
-  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  const restored = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo,
-    {HERDR_PANE_ID: 'control:pChat'}, JSON.stringify({cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume'}));
-  good(restored); assert.match(restored.stdout, /Supervisor cold start/); assert.doesNotMatch(restored.stdout, /session may continue/);
-});
 
-for (const kind of ['claude', 'codex']) test(`${kind} bypassed worker gets no question guard, permission hook or supervisor entry`, t => {
-  const f = fixture(t), binary = path.join(f.root, 'native.cjs'), receipt = path.join(f.root, 'question-launch.json');
-  const temporary = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'uq-'));
-  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
-  joinFleet({ cwd: f.repo, temp: temporary });
-  fs.writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'),args=process.argv.slice(2);
-if(args.includes('--help'))console.log('--sandbox --add-dir --settings --permission-profile');
-else if(args.includes('--version'))console.log('2.1.284');
-else fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({args,settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexOf('--settings')+1])):null}));\n`, { mode: 0o755 });
-  const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--auto-entry', '--repo', f.repo, '--binary', binary,
-    '--', ...(kind === 'claude' ? ['--print', 'task'] : ['exec', 'task'])], f.repo,
-    { MONITOR_SESSION_KIND: 'chat', MONITOR_SESSION_ROLE: 'supervisor', MONITOR_ENTRY_BYPASS: '1' });
-  good(r);
-  const captured = JSON.parse(fs.readFileSync(receipt));
-  assert.doesNotMatch(JSON.stringify(captured), /unattended\.mjs|permission-hook\.mjs|PermissionRequest|AskUserQuestion|request_user_input/);
-  assert.doesNotMatch(captured.args.join(' '), /session-start.mjs/);
-  assert.ok(!fs.existsSync(path.join(f.repo, '.claude/settings.json')));
-  assert.ok(!fs.existsSync(path.join(f.repo, '.codex/hooks.json')));
-});
 function fakeCommands(f) {
   const calls = [];
   let watching = new Set();
@@ -300,32 +165,7 @@ test('failed cold start, housekeeping and watch print reasons and allow later re
   assert.match(output.join(''), /brief.*fixture failure/s); assert.match(output.join(''), /housekeeping.*fixture failure/s); assert.match(output.join(''), /watch.*fixture failure/s);
 });
 
-for (const source of ['startup', 'resume', 'clear', 'compact']) test(`Claude project hook delivers supervisor entry on ${source}`, t => {
-  const f = fixture(t); fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  const config = JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json')));
-  const hook = config.hooks.SessionStart.flatMap(g => !g.matcher || new RegExp(g.matcher).test(source) ? g.hooks : []).find(h => h.command.includes('session-start'));
-  assert.ok(hook, `no supervisor hook for ${source}`);
-  const input = JSON.stringify({ hook_event_name: 'SessionStart', cwd: f.repo, source, session_id: 'test' });
-  const env = { ...f.binding, CLAUDE_PROJECT_DIR: root, MONITOR_SUPERVISOR_ENTRY: path.join(root, 'supervisor/session-start.mjs') };
-  // Project hook command is evaluated from this repository, payload still binds the actual session checkout.
-  const r = exec('/bin/sh', ['-c', hook.command], root, env, input); good(r); assert.match(r.stdout, /Supervisor cold start/);
-});
 
-for (const variant of ['unmarked', 'worker', 'lane', 'foreign', 'bad-input', 'missing-record', 'worker-bypass']) test(`hook skips or explains ${variant} without blocking startup`, t => {
-  const f = fixture(t); let cwd = f.repo, env = { ...f.binding };
-  if (variant === 'unmarked') env = { ORG_DIR: f.org, ORG_ACTOR: 'supervisor-test', HERDR_PANE_ID: 'supervisor' };
-  if (variant === 'worker') env.MONITOR_SESSION_ROLE = 'worker';
-  if (variant === 'worker-bypass') env.MONITOR_ENTRY_BYPASS = '1';
-  if (variant === 'foreign') env.MONITOR_SUPERVISOR_IDENTITY = '/some/other/.git';
-  if (variant === 'missing-record') env.MONITOR_SUPERVISOR_ORG = path.join(f.root, 'absent');
-  if (variant === 'lane') { cwd = path.join(f.root, 'lane'); f.git(['worktree', 'add', '-qb', 'lane/test', cwd]); }
-  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
-  const r = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], cwd, env,
-    variant === 'bad-input' ? '{' : JSON.stringify({ cwd, hook_event_name: 'SessionStart', source: 'resume' }));
-  good(r); assert.doesNotMatch(r.stdout, /Supervisor cold start/);
-  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
-  assert.ok(!fs.existsSync(path.join(f.org, 'housekeeping')));
-});
 
 test('housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process', async t => {
   const f = fixture(t); configureCliFixture(f);
@@ -342,37 +182,6 @@ test('housekeeping resume recovers a confirmed dead matching owner and repeated 
   assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), before);
 });
 
-test('adapters use short fleet temp and bind worker, supervisor and chat roles with native supervisor hooks', t => {
-  for (const kind of ['claude', 'codex']) for (const role of ['supervisor', 'worker', 'chat']) {
-    const f = fixture(t), receipt = path.join(f.root, 'native.json'), fake = path.join(f.root, 'native');
-    const temporary = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'se-'));
-    t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
-    const socket = fakeControlSocket(t, temporary), config = path.join(temporary, 'config'); fs.mkdirSync(config);
-    joinFleet({ cwd: f.repo, temp: temporary });
-    fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-    fs.writeFileSync(fake, `#!${process.execPath}\nif(process.argv.includes('--help')){console.log('--sandbox --add-dir --settings --permission-profile');process.exit(0)}\nif(process.argv.includes('--version')){console.log('2.1.284');process.exit(0)}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({args:process.argv.slice(2),temp:process.env.TMPDIR,role:process.env.MONITOR_SESSION_ROLE,bypass:process.env.MONITOR_ENTRY_BYPASS,repo:process.env.MONITOR_SUPERVISOR_REPO,identity:process.env.MONITOR_SUPERVISOR_IDENTITY,org:process.env.MONITOR_SUPERVISOR_ORG,entry:process.env.MONITOR_SUPERVISOR_ENTRY,settings:process.argv.includes('--settings')?JSON.parse(require('fs').readFileSync(process.argv[process.argv.indexOf('--settings')+1])):null}));\n`, { mode: 0o755 });
-    const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--repo', f.repo, '--role', role,
-      '--binary', fake, '--validator', fake, '--runtime-dir', path.join(f.root, 'runtime'), '--worktree-root', path.join(f.root, 'worktrees'), '--', '--model', 'opaque-model'], f.repo,
-      { ...f.binding, MONITOR_SESSION_ROLE: 'worker', MONITOR_ENTRY_BYPASS: '1', HERDR_PANE_ID: 'wTest:pSupervisor', HERDR_SOCKET_PATH: socket, CODEX_HOME: config, CLAUDE_CONFIG_DIR: config });
-    good(r); const native = JSON.parse(fs.readFileSync(receipt)); assert.equal(native.role, role); assert.ok(native.args.includes('opaque-model'));
-    assert.equal(path.dirname(native.temp), temporary);
-    assert.ok(Buffer.byteLength(native.temp) <= 60);
-    assert.equal(native.bypass, role === 'supervisor' ? '0' : '1');
-    assert.doesNotMatch(JSON.stringify(native), /unattended\.mjs|permission-hook\.mjs|AskUserQuestion|request_user_input/, 'no question guard or permission hook');
-    if (role === 'supervisor') {
-      assert.equal(native.repo, f.repo); assert.equal(native.identity, f.project.identity); assert.equal(native.org, path.join(f.repo, '.org'));
-      assert.equal(native.entry, path.join(root, 'supervisor/session-start.mjs'));
-      const hook = kind === 'claude' ? native.settings.hooks.SessionStart[0] : native.args.find(a => a.startsWith('hooks.SessionStart='));
-      assert.match(JSON.stringify(hook), /startup.*resume.*clear.*compact/); assert.match(JSON.stringify(hook), /session-start.mjs/);
-      const resumed = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo, { HERDR_PANE_ID: 'wTest:pSupervisor' },
-        JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
-      good(resumed); assert.match(resumed.stdout, /Supervisor cold start/);
-    } else {
-      assert.equal(native.repo, ''); assert.equal(native.identity, ''); assert.equal(native.entry, '');
-      assert.ok(!native.args.some(a => a.includes('hooks.SessionStart='))); if (kind === 'claude') assert.equal(native.settings.hooks?.SessionStart, undefined);
-    }
-  }
-});
 
 for (const variant of ['STOP', 'invalid-config', 'invalid-pid', 'reported-during-entry']) test(`entry safely handles ${variant}`, async t => {
   const f = fixture(t), run = f.start('open'), output = [], fake = fakeCommands(f), { enterSupervisor } = await load();
@@ -473,34 +282,6 @@ test('housekeeping resume replaces a reused PID without signaling the replacemen
   assert.doesNotThrow(() => process.kill(process.pid, 0));
 });
 
-for (const [kind, args] of [['claude', ['--resume', 'session']], ['claude', ['--continue']], ['codex', ['resume', 'session']]])
-test(`${kind} interactive ${args[0]} through automatic adapter preserves supervisor entry and worker guards`, t => {
-  const f = fixture(t), native = path.join(f.root, 'resume.cjs'), hook = path.join(root, 'supervisor/session-start.mjs');
-  const tty = path.join(f.root, 'tty.cjs');
-  fs.writeFileSync(tty, 'process.stdin.isTTY=true;process.stdout.isTTY=true;');
-  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  sessionEnvironment({ role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org }, root,
-    { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
-  fs.writeFileSync(native, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');
-const r=spawnSync(process.execPath,[${JSON.stringify(hook)}],{env:process.env,
-input:JSON.stringify({cwd:process.cwd(),hook_event_name:'SessionStart',source:'resume'}),encoding:'utf8'});
-process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.status);\n`, { mode: 0o755 });
-  const adapter = [path.join(root, `discovery/adapters/${kind}.mjs`), '--auto-entry', '--repo', f.repo, '--binary', native, '--', ...args];
-  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
-  for (const extra of [{}, f.binding, { MONITOR_SESSION_ROLE: 'worker' }, { MONITOR_ENTRY_BYPASS: '1' }]) {
-    const r = exec(process.execPath, ['--require', tty, ...adapter], f.repo, { HERDR_PANE_ID: 'w:pSupervisor', ...extra });
-    good(r);
-    assert.equal(/Supervisor cold start/.test(r.stdout), extra.MONITOR_SESSION_ROLE !== 'worker' && extra.MONITOR_ENTRY_BYPASS !== '1', JSON.stringify(extra));
-  }
-  for (const headless of [false, true]) {
-    const launch = headless ? (kind === 'claude' ? [...adapter, '--print'] : [...adapter.slice(0, -args.length), 'exec', ...args]) : adapter;
-    const r = exec(process.execPath, [...(headless ? ['--require', tty] : []), ...launch], f.repo,
-      { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
-    good(r); assert.doesNotMatch(r.stdout, /Supervisor cold start/);
-  }
-  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
-  assert.ok(!fs.existsSync(path.join(f.org, 'housekeeping')));
-});
 
 test('Linux watcher recovery round-trips textual identities through record set and compares changed ticks', async t => {
   const f = fixture(t), run = f.start('Linux watcher'), fake = fakeCommands(f), output = [];
@@ -522,25 +303,4 @@ test('Linux watcher recovery round-trips textual identities through record set a
   enter(); assert.equal(output.filter(s => /re-armed/.test(s)).length, 2);
   assert.equal(stored(), ownerIdentity(process.pid, readProcess));
   assert.equal(typeof stored(), 'string');
-});
-
-for (const kind of ['claude', 'codex']) test(`${kind} nested headless launch cannot inherit supervisor recognition`, t => {
-  const f = fixture(t), native = path.join(f.root, 'headless.cjs');
-  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  sessionEnvironment({ role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org }, root,
-    { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
-  fs.writeFileSync(native, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');
-const r=spawnSync(process.execPath,[${JSON.stringify(path.join(root, 'supervisor/session-start.mjs'))}],{
-  env:process.env,input:JSON.stringify({cwd:process.cwd(),hook_event_name:'SessionStart',source:'startup'}),encoding:'utf8'});
-process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.status);\n`, { mode: 0o755 });
-  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
-  const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--auto-entry', '--repo', f.repo,
-    '--binary', native, '--', ...(kind === 'codex' ? ['exec', 'task'] : ['--print', 'task'])], f.repo,
-    { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
-  good(r); assert.equal(r.stdout, '');
-  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
-  assert.ok(!fs.existsSync(path.join(f.org, 'housekeeping')));
-  const resumed = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo,
-    { HERDR_PANE_ID: 'w:pSupervisor' }, JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
-  good(resumed); assert.match(resumed.stdout, /Supervisor cold start/, 'interactive receipt remains usable');
 });

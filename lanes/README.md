@@ -13,7 +13,7 @@ the canonical checkout's `.lane.json` overrides them:
 When `~/.herdr-monitor/fleet.json` exists, the project's fleet mapping supplies
 its worktree directory and owned parent `.lane.json` layers. Discovery never
 borrows a neighbour's settings. Without a fleet file, legacy parent discovery
-is unchanged. See [fleet entry and adoption](../discovery/README.md#fleet).
+is unchanged. See [fleet mapping and adoption](../discovery/README.md#fleet).
 
 ```json
 {
@@ -65,7 +65,7 @@ overrides commands for CLI adapters; `check --cmd` wins for that invocation.
 Workers may run `lane check` (fast); settle performs code/report review with no
 suite, and the promotion train runs the promotion tier on each integration batch.
 Workers never run the release gate; the release module
-owns that declared command. `lane config`, `record desks` and project-entry
+owns that declared command. `lane config`, `record desks` and supervisor
 policy show all three tiers. Worker copies cannot weaken
 the canonical declarations.
 
@@ -130,7 +130,7 @@ its canonical checkout path when none is open. Both paths use `--no-focus` and
 verify the resulting repository identity.
 
 If `dispatch` opens the Herdr workspace itself, it uses that invocation's initial
-tab and pane, sources the route environment and entry bypass from a private 0600
+tab and pane, sources the route environment from a private 0600
 temporary file, verifies the exported values before starting, deletes the file,
 and starts the agent through native `herdr agent start`. The workspace has one
 tab showing its agent, and operator focus stays in place. The environment nonce
@@ -203,9 +203,7 @@ definitions without saving environment values. Coordination variables (`ORG_ACTO
 bookkeeping do not invalidate proof; checks must not use them as test inputs.
 `HERDR_PANE_ID`, `HERDR_TAB_ID` and `HERDR_WORKSPACE_ID` are removed from both
 preparation and validation environments, so separate worker, settle and queue
-panes share evidence. Native entry's private tier deadline selector also does
-not change the key or reach project commands; identical tier commands can reuse
-a pass obtained within the shorter deadline.
+panes share evidence.
 Keep validation inputs tracked and dependencies reproducible; update `environment`
 when ignored dependencies, external tools or a container image changes. Preparation
 still runs before lookup and must leave tracked and untracked files clean.

@@ -48,7 +48,7 @@ function scratch({ plugin = [] } = {}) {
   // The retired Brain LaunchAgent lives here, never at the operator's real plist.
   const env = releaseEnvironment(process.env, { HOME: userHome, ZDOTDIR: userHome, CODEX_HOME: path.join(userHome, '.codex'), CLAUDE_CONFIG_DIR: path.join(userHome, '.claude'),
     ORG_DIR: '', ORG_ACTOR: path.basename(root),
-    HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist, HERDR_MONITOR_ENTRY_BIN: path.join(home, 'entry/bin'),
+    HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist,
     RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1' });
   const runWith = (extra, ...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(20000) });
   const run = (...a) => runWith({}, ...a);

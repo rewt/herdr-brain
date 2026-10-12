@@ -6,27 +6,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { commandFailure, classifyFailure, HarnessLimit, Pending, ProductBoundary, requirePrerequisite } from '../limits.mjs';
 import { retainedRoots, resultLine } from '../results.mjs';
-import { sessionEnv } from '../security.mjs';
 
-test('fake product entry passing a bypass flag is refused before launch and its case reports product FAIL', (t) => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-product-')));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const repo = path.join(root, 'project'), temp = path.join(root, 'session');
-  fs.mkdirSync(repo); fs.mkdirSync(temp); fs.mkdirSync(path.join(root, 'live-jobs'));
-  const marker = path.join(root, 'native-called'), binary = path.join(root, 'fake-native');
-  fs.writeFileSync(binary, `#!${process.execPath}\nimport fs from 'node:fs';fs.writeFileSync(${JSON.stringify(marker)},'unsafe');`, { mode: 0o755 });
-  const spec = { repo, temp, binary, runtimeHome: path.join(root, 'runtime'), path: '/usr/bin:/bin' };
-  fs.writeFileSync(path.join(root, 'live-jobs/job.json'), JSON.stringify(spec));
-  const transport = path.resolve('acceptance/native-transport.mjs');
-  const entry = path.join(root, 'fake-product-entry.mjs');
-  fs.writeFileSync(entry, `import {spawnSync} from 'node:child_process';const r=spawnSync(${JSON.stringify(process.execPath)},${JSON.stringify([transport, root, 'job', 'exec', '--yolo'])},{stdio:'inherit'});process.exit(r.status);`);
-  const child = spawnSync(process.execPath, [entry], { cwd: repo, env: sessionEnv({}, spec), encoding: 'utf8' });
-  assert.notEqual(child.status, 0); assert.ok(!fs.existsSync(marker));
-  assert.match(child.stderr, /cannot bypass the gate profile/);
-  const result = { id: '20', name: 'Real discovery', ...classifyFailure(commandFailure(child.stderr)) };
-  assert.equal(result.status, 'FAIL'); assert.equal(result.origin, 'product');
-  assert.match(resultLine(result), /FAIL.*\[SAFETY\]/); assert.doesNotMatch(resultLine(result), /HARNESS/);
-});
 
 test('candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending', () => {
   for (const message of ['acceptance_product_boundary: leaked HERDR variables', 'acceptance_product_boundary: foreign root', '{"code":"acceptance_product_boundary","message":"unowned pane"}', 'acceptance_boundary: path outside scratch']) {
@@ -50,8 +30,8 @@ test('cleanup failure without keep reports every existing discovery root on the 
 });
 
 
-test('ordinary product entry and source-attribution gaps fail without a safety or harness marker', () => {
-  for (const message of ['candidate installer did not expose its documented monitor-codex entry', 'product policy must name its installed source']) {
+test('ordinary missing capability and source-attribution gaps fail without a safety or harness marker', () => {
+  for (const message of ['candidate lacks its declared gate command', 'product policy must name its installed source']) {
     const result = { id: '20', name: 'Discovery', ...classifyFailure(commandFailure(message)) };
     assert.equal(result.status, 'FAIL'); assert.equal(result.origin, 'product');
     assert.doesNotMatch(resultLine(result), /SAFETY|HARNESS/);

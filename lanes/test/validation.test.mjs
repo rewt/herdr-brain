@@ -72,19 +72,22 @@ test('project gate limits override healthy history for promotion and release', t
   assert.equal(settings.tiers.fast.idleTimeoutSeconds, undefined);
 });
 
-test('an unborn canonical repository has no host declarations and refuses uncommitted host authority', t => {
+test('legacy host settings are ignored even in an unborn repository', t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'validation-unborn-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const init = spawnSync('git', ['init', '-qb', 'main', root], { encoding: 'utf8' });
   assert.equal(init.status, 0, init.stderr);
   const settings = resolveValidation({ root, env: {} });
-  assert.deepEqual(settings.host_suites, {});
-  assert.ok(Object.values(settings.tiers).every(tier => tier.command === 'npm test' && !tier.hostSuites.length));
+  assert.ok(Object.values(settings.tiers).every(tier => tier.command === 'npm test'));
   // Ordinary local validation settings retain their pre-existing behavior.
   fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ fast: 'true' }));
   assert.equal(resolveValidation({ root, env: {} }).tiers.fast.command, 'true');
   fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ host_suites: { local: { command: 'true', pty: true } } }));
-  assert.throws(() => resolveValidation({ root, env: {} }), /host declarations must match committed canonical content/);
+  assert.equal(resolveValidation({ root, env: {} }).tiers.fast.command, 'npm test');
+  for (const key of ['host_suites', 'tier_suites']) {
+    fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ fast: 'true', [key]: 'retired-value' }));
+    assert.equal(resolveValidation({ root, env: {} }).tiers.fast.command, 'true');
+  }
 });
 
 test('a worker check, promotion check and promotion reuse their exact commands; release never runs', { timeout: 20000 }, t => {

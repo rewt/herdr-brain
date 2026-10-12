@@ -5,17 +5,7 @@ ordinary reversible decisions are yours within the project's recorded authority.
 Read applicable project instructions. This protocol supplies defaults and yields
 to them. No resident model or growing history is needed to keep the cycle moving.
 
-Native SessionStart invokes the same foreground entry on startup, resume, clear
-and compact: print the cold start, resume housekeeping when enabled and resume
-are true, re-arm dead watchers for open runs, and report stale cycle locks without
-deleting them. Failures print diagnostics and let the session start. On entry,
-read the generated cold start. Retrieve `record show ID` only for the
-work, question or authority you need. The brief is a bounded preview with counts;
-`brief --json` returns every row, including full decisions and goal authority.
-After reading ALL new decisions (retrieve the full list when truncated), run
-`checkpoint --through N --role supervisor` with
-the brief's sequence. Checkpoint is a reading bookmark, never work status or
-authority. Clearing the chat before checkpointing safely repeats those decisions.
+Run foreground `supervisor.mjs entry` from the canonical checkout to refresh context and recover enabled housekeeping and watchers.
 
 Record plans, instructions, holds and decisions with `record note ID TEXT
 --decision --summary SENTENCE`. Questions and their answers belong in the record.

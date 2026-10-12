@@ -23,7 +23,6 @@ import { waitForFile } from '../../test/helpers/file-wait.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
-import { nativeSandboxLaunch } from '../../discovery/native-sandbox.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../review-evidence.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LANE = resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs"));
@@ -1304,8 +1303,8 @@ test("routes prints configured routes with resolved dispatch defaults", () => {
     assert.equal(run.status, 0, run.stderr);
     assert.equal(
       run.stdout,
-      "engineer\tkind=codex\tmodel=engineer-model\teffort=(none)\targs=[\"--profile\",\"implementation\",\"--sandbox\",\"workspace-write\"]\tuse=Complex implementation lanes\n" +
-        "review\tkind=reviewer\tmodel=default-model\teffort=(none)\targs=[\"--default-flag\",\"--review-extra\"]\tuse=(none)\n",
+      "engineer\tkind=codex\tmodel=engineer-model\teffort=(none)\targs=[\"--profile\",\"implementation\"]\tuse=Complex implementation lanes\n" +
+        "review\tkind=reviewer\tmodel=default-model\teffort=(none)\targs=[\"--default-flag\"]\tuse=(none)\n",
     );
     const selected = lane(fixture, ["routes", "--for", "implementation"]);
     assert.equal(selected.status, 0, selected.stderr);
@@ -1374,64 +1373,8 @@ test("named dispatch refuses copied metadata and reserved CLI arguments before a
   }
 });
 
-test("always_args sees the canonical model and effort that dispatch emits", { skip: PTY_SKIP_REASON }, () => {
-  for (const kind of ["codex", "claude"]) {
-    const effortArgs = kind === "codex" ? ["-c", "model_reasoning_effort=low"] : ["--effort", "low"];
-    const unrelatedConfig = kind === "codex" ? ["-c", "sandbox_workspace_write.network_access=true"] : [];
-    const fixture = makeFixture({
-      main: "main", validate: "true",
-      routes: { engineer: { kind, model: "route-model", effort: "high" } },
-      always_args: { [kind]: ["--model", "fallback-model", ...effortArgs, ...unrelatedConfig, "--extra", "retained"] },
-    });
-    try {
-      ignoreLaneState(fixture);
-      const path = openLane(fixture, "canonical-options");
-      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/canonical-options", initiallyOpened: true });
-      const native = join(fixture.root, 'native'), entryBin = join(fixture.root, 'entry-bin'), receipt = join(fixture.root, 'native-receipt.json');
-      writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),bypass:process.env.MONITOR_ENTRY_BYPASS,tty:process.stdin.isTTY}));`, { mode: 0o755 });
-      execFileSync(process.execPath, [resolve(HERE, '../../discovery/install.mjs'), '--bin', entryBin, '--codex', native, '--claude', native]);
-      fixture.env.FAKE_ENTRY_BIN = entryBin; fixture.env.NATIVE_RECEIPT = receipt;
-      fixture.env.TEST_PTY_SCRIPT = SCRIPT;
-      const run = lane(fixture, ["dispatch", "canonical-options", "--route", "engineer"]);
-      assert.equal(run.status, 0, run.stderr);
-      const started = fake.calls().find((args) => args[0] === "agent" && args[1] === "start");
-      const args = started.slice(started.indexOf("--") + 1);
-      assert.deepEqual(args, [...unrelatedConfig, "--extra", "retained", "--model", "route-model",
-        ...(kind === "codex" ? ["-c", "model_reasoning_effort=high"] : ["--effort", "high"])]);
-      const got = JSON.parse(readFileSync(receipt, 'utf8'));
-      assert.equal(got.cwd, path); assert.equal(got.bypass, '1'); assert.equal(got.tty, true); assert.deepEqual(got.args, args);
-      const tab = fake.calls().find((argv) => argv[0] === 'tab' && argv[1] === 'create');
-      assert.ok(tab.includes('MONITOR_ENTRY_BYPASS=1'));
-      assert.equal(git(fixture.repo, ['worktree', 'list', '--porcelain']).split('worktree ').length - 1, 2);
-    } finally {
-      fixture.cleanup();
-    }
-  }
-});
 
-test("always_args rejects a non-object value", () => {
-  const fixture = makeFixture({ always_args: ["--profile", "shared"] });
-  try {
-    const run = lane(fixture, ["config"]);
-    assert.equal(run.status, 1);
-    assert.match(run.stderr, /always_args must be an object/);
-    negativeControl("always_args object validation");
-  } finally {
-    fixture.cleanup();
-  }
-});
 
-test("always_args rejects a list whose first token is not an option", () => {
-  const fixture = makeFixture({ always_args: { codex: ["profile", "shared"] } });
-  try {
-    const run = lane(fixture, ["config"]);
-    assert.equal(run.status, 1);
-    assert.match(run.stderr, /always_args\.codex must start with an option/);
-    negativeControl("always_args leading option validation");
-  } finally {
-    fixture.cleanup();
-  }
-});
 
 test("config attributes always_args to the file that supplied it", () => {
   const alwaysArgs = { codex: ["--profile", "shared", "--sandbox", "workspace-write"] };
@@ -2121,7 +2064,6 @@ test("dispatch opens a single agent tab in the initial pane and keeps fix rounds
     assert.ok(calls[startIndex].includes("initial-model"));
     const exported = fake.state().preparedEnv;
     for (const [key, value] of Object.entries({ ...values, NORMAL: extraValue })) assert.equal(exported[key], value);
-    assert.equal(exported.MONITOR_ENTRY_BYPASS, "1");
     assert.equal(fake.state().environmentMode, 0o600);
     assert.equal(fake.state().environmentDirectoryMode, 0o700);
     assert.ok(!existsSync(fake.state().environmentFile));
@@ -2316,7 +2258,6 @@ for (const shell of ["/opt/homebrew/bin/fish", "/opt/homebrew/bin/nu"]) {
       const created = fake.calls().find(args => args[0] === "tab" && args[1] === "create");
       assert.ok(created.includes("--no-focus"));
       assert.ok(created.includes("PRIVATE_VALUE=from-route"));
-      assert.ok(created.includes("MONITOR_ENTRY_BYPASS=1"));
       assert.ok(!fake.calls().some(args => args[1] === "run" || args[1] === "rename" || args[1] === "close" || args[1] === "focus" || args.includes("--focus")));
     } finally { fixture.cleanup(); }
   });
@@ -3201,71 +3142,6 @@ function privateReviewDelivery(review) {
   return prompt.match(/^Private record file: (.+)$/mu)[1];
 }
 
-test("review delivery is writable under native worker settings while canonical reviews remain denied", () => {
-  const topic = "review-native-delivery";
-  const review = makeReviewFixture(topic, { verdict: "PASS" });
-  const nativeRoot = realpathSync(mkdtempSync(join(realpathSync('/tmp'), 'lr-')));
-  try {
-    const native = join(nativeRoot, 'native');
-    writeFileSync(native, '#!/bin/sh\nif [ "$1" = --help ] || [ "$2" = --help ]; then echo "--sandbox --add-dir --settings --permission-profile"; else echo "2.1.284"; fi\n', { mode: 0o755 });
-    const org = join(nativeRoot, 'org'), temp = join(nativeRoot, 'temp');
-    const codexHome = join(nativeRoot, 'codex'), claudeHome = join(nativeRoot, 'claude');
-    for (const directory of [org, temp, codexHome, claudeHome]) mkdirSync(directory);
-    const run = lane(review.fixture, ["review", topic, "--round", "1", "--brief", review.brief]);
-    assert.equal(run.status, 0, run.stderr);
-    const prompt = review.fake.calls().find(args => args[0] === 'agent' && args[1] === 'prompt')[3];
-    const delivery = prompt.match(/^Private record file: (.+)$/mu)[1];
-    const head = git(review.path, ['rev-parse', 'HEAD']);
-    const archive = join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r1.md`);
-    const context = { workspace: review.path, canonical: review.fixture.repo, org, tempRoot: temp,
-      worktrees: review.fixture.worktrees, role: 'worker', projects: [] };
-    const env = { ...review.fixture.env, CODEX_HOME: codexHome, CLAUDE_CONFIG_DIR: claudeHome };
-    const inside = (root, file) => file === root || file.startsWith(root + '/');
-    for (const kind of ['codex', 'claude']) {
-      const launch = nativeSandboxLaunch({ kind, binary: native, args: [], context, env,
-        warn: message => assert.fail(message) });
-      try {
-        let canWrite;
-        if (kind === 'codex') {
-          const settings = launch.args.find(arg => arg.startsWith('permissions.monitor-worker.filesystem='));
-          // Resolve the generator's literal inline TOML path rules, including
-          // the workspace-relative rules, by their most specific path.
-          const rules = [...settings.matchAll(/("(?:[^"\\]|\\.)*")="(read|write)"/gu)].map(match => {
-            const key = JSON.parse(match[1]);
-            return [key === ':root' ? '/' : key.startsWith('/') ? key : resolve(review.path, key), match[2]];
-          });
-          canWrite = file => rules.filter(([root]) => root === '/' || inside(root, file))
-            .sort(([a], [b]) => b.length - a.length)[0]?.[1] === 'write';
-        } else {
-          const settings = JSON.parse(readFileSync(launch.args[launch.args.indexOf('--settings') + 1], 'utf8'));
-          canWrite = file => [review.path, ...settings.sandbox.filesystem.allowWrite].some(root => inside(root, file)) &&
-            !settings.sandbox.filesystem.denyWrite.some(root => inside(root, file));
-          assert.ok(settings.permissions.deny.includes(`Edit(/${join(review.fixture.repo, '.lane')}/**)`));
-        }
-        assert.equal(canWrite(archive), false, `${kind}: canonical review writes must stay denied`);
-        assert.equal(canWrite(delivery), true, `${kind}: native settings deny the brief's private record path ${delivery}`);
-        if (kind === 'codex' && process.env.MONITOR_TEST_SANDBOX) {
-          const script = `const fs=require('fs'),assert=require('assert');
-assert.throws(()=>fs.writeFileSync(${JSON.stringify(archive)},'tampered'),e=>['EPERM','EACCES'].includes(e.code));
-fs.writeFileSync(${JSON.stringify(delivery)},'late native delivery');`;
-          const probe = spawnSync(process.env.MONITOR_TEST_SANDBOX, [
-            'sandbox', '--permission-profile', 'monitor-worker', '-C', review.path, ...launch.args,
-            '--', process.execPath, '-e', script,
-          ], { cwd: review.path, env: launch.env, encoding: 'utf8', timeout: loadTimeout(10000) });
-          assert.equal(probe.status, 0, probe.stdout + probe.stderr);
-          assert.equal(readFileSync(delivery, 'utf8'), 'late native delivery');
-          rmSync(delivery);
-        }
-      } finally { launch.close(); }
-    }
-    assert.equal(existsSync(delivery), false, 'validated delivery moved into the canonical archive');
-    assert.match(readFileSync(archive, 'utf8'), /## Analysis\nFixture review evidence/);
-    negativeControl('native review delivery boundary');
-  } finally {
-    review.fixture.cleanup();
-    rmSync(nativeRoot, { recursive: true, force: true });
-  }
-});
 
 test("review archival refuses an occupied destination and retains delivered evidence", () => {
   const topic = 'review-archive-collision';

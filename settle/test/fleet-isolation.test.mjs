@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import '../../test/helpers/fleet-guard.mjs';
 import { fleetPath, joinFleet } from '../../lib/fleet.mjs';
-import { createEntry } from '../../discovery/runtime.mjs';
 import { fixture } from './fixture.mjs';
 
 test('settle fixture isolates in-process entry and children without the bounded runner', async t => {
@@ -35,12 +34,8 @@ console.log(JSON.stringify({file:fleetPath(),joined:joinFleet({cwd:process.cwd()
     await t.test(inherited === undefined ? 'unset fleet' : 'operator fleet override', async t => {
       // Match the harness's command hook and in-process supervisor entry.
       const f = fixture(t, { execute: (...args) => spawnSync(...args) });
-      const entry = createEntry({ cwd: f.repo, role: 'supervisor',
-        runtimeDir: path.join(f.root, 'entry'), worktreeRoot: path.join(f.root, 'workers') });
-      const enteredFleet = entry.context().fleet.file;
-      entry.close();
       const parentFleet = fleetPath(); // Fails before any real-home read or write.
-      assert.equal(enteredFleet, parentFleet);
+      assert.equal(joinFleet({ cwd: f.repo }).file, parentFleet);
       assert.equal(fleetPath(f.env), parentFleet);
       assert.equal(joinFleet({ cwd: f.repo }).file, parentFleet);
       const args = ['--input-type=module', '-e', probe];

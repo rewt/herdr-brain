@@ -1,16 +1,14 @@
 // The complete npm test list, split into finite suites to avoid aggregate timeout
-// and isolate the copied-entry probes. Fixture/command bounds remain unchanged.
+// by module family. Fixture/command bounds remain unchanged.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isMain } from '../../lib/cli-help.mjs';
 
 export function phases(files) {
   if (!files.length || new Set(files).size !== files.length) throw new Error('supply a nonempty, unique test file list');
-  const probe = file => file === 'discovery/test/acceptance.test.mjs';
   const cycle = file => /^(settle|supervisor|release)\//.test(file);
   return [
-    ['copied-entry', files.filter(probe)],
-    ['core-and-modules', files.filter(file => !probe(file) && !cycle(file))],
+    ['core-and-modules', files.filter(file => !cycle(file))],
     ['settle-supervisor-release', files.filter(cycle)],
   ].filter(([, rows]) => rows.length);
 }

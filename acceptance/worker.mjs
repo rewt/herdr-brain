@@ -100,7 +100,8 @@ async function dispatchDefault() {
   const file = path.join(root, 'default-supervisor-job.json');
   try {
     const { spec, node, record } = defaultCycle();
-    const policy = await node('discovery/adapters/codex.mjs', ['--repo', spec.repo, '--binary', spec.binary, '--role', 'supervisor', '--policy-only']);
+    await node('discovery/client.mjs', ['fleet', 'join']);
+    const policy = await node('supervisor/supervisor.mjs', ['brief', '--repo', spec.repo, '--org', path.join(spec.repo, '.org')]);
     fs.writeFileSync(path.join(root, 'default-supervisor-policy.txt'), policy);
     const item = (await record(['add', 'Default cycle canary', '--role', 'engineer'])).match(/^(\S+)/)[1];
     const job = JSON.parse(await node('dispatch/dispatch.mjs', [item, '--lane', 'default-cycle', '--route', 'engineer', '--brief', spec.ask, '--to', name]));

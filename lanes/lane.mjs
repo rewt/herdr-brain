@@ -34,7 +34,6 @@ import { ROUTE_PRESET } from './preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment } from './validation.mjs';
-import { suiteName, hostSuitePlan } from './host-suites.mjs';
 
 import {
   loadRegistry,
@@ -262,16 +261,7 @@ function validateConfig(config, file) {
       validateDispatch(route, `routes.${name}`, file, { route: true });
     }
   }
-  if (Object.hasOwn(config, "always_args")) {
-    if (!isRecord(config.always_args)) fail(`invalid lane config ${file}: always_args must be an object`);
-    for (const kind of Object.keys(config.always_args)) {
-      requireStringArray(config.always_args, kind, "always_args", file);
-      const [first] = config.always_args[kind];
-      if (first !== undefined && !first.startsWith("-")) {
-        fail(`invalid lane config ${file}: always_args.${kind} must start with an option`);
-      }
-    }
-  }
+
 }
 
 function readConfig(file, { required = false } = {}) {
@@ -465,8 +455,6 @@ function config() {
     ],
     ["worktree_root", WORKTREE_ROOT, WORKTREE_ROOT_SOURCE],
     ...VALIDATION_TIERS.map(tier => [`validation.${tier}`, validation.tiers[tier].command, validation.tiers[tier].source]),
-    ...VALIDATION_TIERS.map(tier => [`validation.${tier}.host_suites`, validation.tiers[tier].hostSuites, 'committed canonical']),
-    ['validation.host_suites', validation.host_suites, 'committed canonical'],
     ['validation.environment', validation.environment, validation.environment_source],
     ...VALIDATION_TIERS.flatMap(tier => [
       [`validation.${tier}.timeout_seconds`, validation.tiers[tier].timeoutSeconds ?? null, 'resolved'],
@@ -1169,7 +1157,6 @@ function dispatch(topic, promptText, options = {}) {
   if (initial === undefined) {
     const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
     for (const pair of resolved.env) tabArgs.push("--env", pair);
-    tabArgs.push("--env", "MONITOR_ENTRY_BYPASS=1");
     const created = JSON.parse(execFileSync("herdr", tabArgs, {
       encoding: "utf8",
       ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
@@ -1196,7 +1183,7 @@ function dispatch(topic, promptText, options = {}) {
     // Keep credentials out of shell input, history and terminal scrollback.
     // The private source file also proves the effective exported environment
     // in a child shell; a successful pane.run alone only acknowledges input.
-    const pairs = [...resolved.env, "MONITOR_ENTRY_BYPASS=1"];
+    const pairs = [...resolved.env];
     if (pairs.some(pair => !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes("\0"))) {
       fail("initial-pane environment requires NAME=value assignments; initial tab retained, nothing started");
     }
@@ -1211,9 +1198,9 @@ function dispatch(topic, promptText, options = {}) {
     const deadline = Math.min(options.deadline ?? Infinity, Date.now() + startAttempts * 500);
     let verified = false;
     try {
-      const checks = [...effective].map(([key, value]) => `[ "\${${key}+x}" = x ] && [ "$${key}" = ${quote(value)} ]`).join(" && ");
+      const checks = [...effective].map(([key, value]) => `[ "\${${key}+x}" = x ] && [ "$${key}" = ${quote(value)} ]`).join(" && ") || "true";
       writeFileSync(verifier, `${checks} && printf '\\n%s\\n' ${quote(nonce)}\n`, { mode: 0o600, flag: "wx" });
-      writeFileSync(file, `set +x\nexport ${pairs.map(quote).join(" ")} || return\n` +
+      writeFileSync(file, `set +x\n${pairs.length ? `export ${pairs.map(quote).join(" ")} || return\n` : ""}` +
         `command /bin/sh ${quote(verifier)}\n`, { mode: 0o600, flag: "wx" });
       // Suppress source diagnostics too: an incompatible shell may print the
       // offending assignment. Only the non-secret path enters shell history.
@@ -1279,7 +1266,7 @@ function dispatch(topic, promptText, options = {}) {
     if (attempt > 0) agentName = newAgentName(topic, liveAgentNames);
     const run = spawnSync("herdr", startArgsFor(agentName), {
       encoding: "utf8",
-      env: { ...process.env, MONITOR_ENTRY_BYPASS: '1' },
+      env: process.env,
       ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
     });
     if (run.status === 0 && !`${run.stdout}${run.stderr}`.includes('"error"')) {
@@ -2322,33 +2309,23 @@ function prepareWorktree(path, { quiet = false } = {}) {
 }
 
 function check(args) {
-  if (process.env.MONITOR_REQUEST_DIR) {
-    if (args.length && (args.length !== 2 || args[0] !== '--suite' || !suiteName(args[1])))
-      fail('inside a session, lane check accepts no options or --suite NAME only');
-    const result = spawnSync(process.execPath, [fileURLToPath(new URL('../discovery/client.mjs', import.meta.url)), 'check', ...args], { stdio: 'inherit' });
-    process.exit(result.status ?? 1);
-  }
   repositoryRoot({ requiredBy: "check" });
-  let tier = 'fast', override, suite;
+  let tier = 'fast', override;
   for (let index = 0; index < args.length; index += 1) {
-    if (!["--cmd", "--tier", "--suite"].includes(args[index])) {
+    if (!["--cmd", "--tier"].includes(args[index])) {
       fail(`usage: lane check [--cmd <validate command>] (unknown option: ${args[index]})`);
     }
     if (args[index + 1] === undefined || args[index + 1] === "") {
       fail("usage: lane check [--cmd <validate command>]");
     }
     if (args[index] === '--tier') tier = args[index + 1];
-    else if (args[index] === '--suite') suite = args[index + 1];
     else override = args[index + 1];
     index += 1;
   }
   if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by the release module');
   const settings = validationSettings();
-  if (suite !== undefined && (!suiteName(suite) || args.length !== 2)) fail('check --suite requires one declared name only');
-  const hostSuites = suite === undefined ? settings.tiers[tier].hostSuites : [suite];
-  try { if (hostSuites.length) hostSuitePlan(REPO, hostSuites); } catch (error) { fail(error.message); }
-  const command = suite === undefined ? override ?? settings.tiers[tier].command : process.env.LANE_VALIDATE ?? 'true';
 
+  const command = override ?? settings.tiers[tier].command;
   requireClean(REPO, "current worktree");
   const head = git(["rev-parse", "HEAD"]);
   const branch = git(["branch", "--show-current"]);
@@ -2357,7 +2334,7 @@ function check(args) {
   prepareWorktree(REPO);
   if (git(['rev-parse', 'HEAD']) !== head || git(['branch', '--show-current']) !== branch) fail('worktree branch or lane tip changed during preparation');
   let gate;
-  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, hostSuites, sharedPaths: JSON.parse(process.env.MONITOR_HOST_SHARED_PATHS ?? '[]'), tempRoot: process.env.MONITOR_HOST_TEMP || undefined, timeoutSeconds: settings.tiers[tier].timeoutSeconds, idleTimeoutSeconds: settings.tiers[tier].idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
+  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, timeoutSeconds: settings.tiers[tier].timeoutSeconds, idleTimeoutSeconds: settings.tiers[tier].idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75); // validateTree already emitted its one coded line.
     fail(error.message);
@@ -2445,7 +2422,7 @@ function promoteLocked(topic, root, options) {
   process.stdout.write(`validating in ${path}: ${validate}\n`);
   const validatedHead = git(["rev-parse", branch]);
   let gate;
-  try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', hostSuites: settings.tiers.promotion.hostSuites, sharedPaths: JSON.parse(process.env.MONITOR_HOST_SHARED_PATHS ?? '[]'), tempRoot: process.env.MONITOR_HOST_TEMP || undefined, timeoutSeconds: settings.tiers.promotion.timeoutSeconds, idleTimeoutSeconds: settings.tiers.promotion.idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
+  try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', timeoutSeconds: settings.tiers.promotion.timeoutSeconds, idleTimeoutSeconds: settings.tiers.promotion.idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75);
     fail(error.message);
@@ -2768,10 +2745,9 @@ switch (command) {
         "                   fresh worktree carries no gitignored state, and validation\n" +
         "                   then fails for environmental reasons that look real\n" +
         `  status           list open lanes vs ${MAIN}\n` +
-        "  check [--cmd <validate command>] [--tier fast|promotion] | check --suite NAME\n" +
+        "  check [--cmd <validate command>] [--tier fast|promotion]\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
         "                   --tier fast (worker default) or promotion (integration CI); reuse exact trees\n" +
-        "                   inside a session: no options or --suite NAME only\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
         "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",

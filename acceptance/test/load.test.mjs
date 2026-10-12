@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createLoadMonitor, waitUntil, LoadTimeout } from '../load.mjs';
 import { classifyFailure, commandFailure, HarnessLimit, requireSuccessfulChecks } from '../limits.mjs';
-import { cases, cutoverChecks, runCase } from '../cases.mjs';
+import { cases, runCase } from '../cases.mjs';
 import { resultLine } from '../results.mjs';
 
 function fixture(t, averages = [28, 25, 22], cpus = 18) {
@@ -86,20 +86,5 @@ test('heavy load cannot hide incorrect candidate behaviour or safety refusals', 
   for (const error of [new Error('incorrect report'), commandFailure('acceptance_product_boundary: timed out escaping scratch', { load }),
     new LoadTimeout('acceptance_boundary: unowned pane', load)]) {
     assert.equal(classifyFailure(error, { load }).status, 'FAIL');
-  }
-});
-
-test('heavy-load canary timeout propagates through aggregate and retirement as harness pending', async (t) => {
-  const f = fixture(t), checks = [];
-  await runCase(checks, cutoverChecks.canary, () => f.wait());
-  for (const definition of [cutoverChecks.recovery, cutoverChecks.cleanup]) {
-    await runCase(checks, definition, () => assert.fail('dependent executed'));
-  }
-  const results = [{ ...cases.copy, status: 'PASS' }];
-  await runCase(results, cases.switches, () => requireSuccessfulChecks(checks));
-  await runCase(results, cases.retirement, () => assert.fail('retirement executed'));
-  for (const result of [...checks, ...results.slice(1)]) {
-    assert.equal(result.status, 'PENDING'); assert.equal(result.origin, 'harness');
-    assert.match(result.detail, /28\.00\/25\.00\/22\.00/);
   }
 });

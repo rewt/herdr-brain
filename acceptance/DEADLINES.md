@@ -12,7 +12,6 @@ an unchanged copy of `lib/deadline.mjs` beside their other runtime modules.
 | Location | Original fixed allowance | Disposition |
 | --- | --- | --- |
 | `run.mjs`: `run`, `node`, `runCopy`, Git, npm, sandbox-exec, verification and discovery calls | 60s default; explicit 10/60/90s | All pass through `loadAwareCommand`, sampled once per child; `timeoutMs` records the effective allowance. Default SIGKILL prevents a child ignoring SIGTERM from defeating the synchronous deadline. Nonzero product assertions retain precedence. |
-| `run.mjs`: `until` and every explicit report/topology/queue wait, including calls from `live.mjs` | 25s default; 15/30/60/90/200s explicit | `waitUntil` scales once from the operation's current sample, retaining operation-specific failure evidence. Case 07's promotion-notice wait is derived from the inbox owner's default poll and confirmation cadence (`notice-budget.mjs`): 60s for three notices. |
 | `run.mjs`: watcher drain | 15s | Scaled once; cleanup still refuses an unconfirmed drain. |
 | `run.mjs`: busy-refusal elapsed assertion and native `agent wait --timeout` | 10s each | Both scale; the elapsed assertion freezes its allowance before invocation. |
 | `herdr.mjs`: ownership lock | 10s | Scaled; receipt persistence and cleanup authority unchanged. |
@@ -30,10 +29,7 @@ an unchanged copy of `lib/deadline.mjs` beside their other runtime modules.
 | `test/helpers/run.mjs`, `bounded-test.mjs`, `pty.mjs`, `child.mjs`, `processes.mjs`, `inbox.mjs` | Suite 300/360s (CLI maxima 480/540s); test 60s; command 15s; PTY 15s + 3s cleanup; child 15/35s + 500ms pipe drain; lookup 2/4/8s; inbox 5s | Already load-aware defaults and caps. Child helper explicit allowances are absolute by contract, to permit deliberate watchdog tests. Ordinary acceptance fixture command overrides below now scale before being passed to these helpers. Runner `--fixed-deadlines` intentionally remains fixed for cancellation regressions. |
 | `lanes/board/herdr-client.mjs`, used by the focus monitor | 2s request/pane-read/subscription socket; 250ms–5s reconnect backoff | Response and socket allowances already scale. Backoff remains a cadence, bounded by the monitor startup allowance. |
 | `test/helpers/suite.mjs`, fixture policy and native PTY owner | No additional fixed response allowance | Pass existing runner/PTY allowances through. Retry counts and byte/row limits are structural bounds, not timeouts. |
-| `acceptance/test/verification.test.mjs` | 20s child | Converted to load-aware allowance. |
 | `acceptance/test/cleanup.test.mjs` | 15s child | Converted to load-aware allowance. |
-| `acceptance/test/security.test.mjs`, `load-round2.test.mjs` ordinary TAP fixture, `recovery.test.mjs` ordinary/generated children and active-creation wait | 10s | Converted to load-aware allowances. Security's missing-tool probe exits during preflight, before a candidate is resolved; it is not a gate pass. |
-| `acceptance/test/validation.test.mjs` | 60s test option | Already scales through `bounded-test`; retained. |
 | `acceptance/test/boundary.test.mjs` | Implicit 15s child cap | Receipt-wait scenarios now receive the enclosing test's compound allowance of scaled 45s, so a scaled 10s receipt wait can finish and report its intended error. |
 | `acceptance/test/load.test.mjs`, `load-round2.test.mjs` stalled-child watchdogs | 100ms | Intentionally fixed. These prove timeout classification/cancellation, so scaling the timer would change the stimulus and slow a deliberate failure test. |
 | `acceptance/test/deadlines.test.mjs` hung-child regression | 50ms base | Scales to 300ms at simulated load 24. Actual sandbox-exec on macOS launches a TERM-ignoring child; SIGKILL ends it within the finite allowance. |

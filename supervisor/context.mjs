@@ -22,7 +22,7 @@ const line = (value, length = 160) => sanitizeTerminal(String(value ?? '')).repl
 export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env, memory = readMemory(), readProcess } = {}) {
   const project = gitProject(cwd);
   org = org ? path.resolve(org) : findOrgDir({ cwd, env });
-  if (!org) throw new Error('no record discovered; enter through discovery first');
+  if (!org) throw new Error('no record discovered; initialize one with record init or monitor fleet join');
   org = fs.realpathSync(org);
   const { events, tornTail } = loadEvents(org), state = fold(events);
   // Lessons are record knowledge, independent of run checkout bindings and

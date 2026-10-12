@@ -50,7 +50,7 @@ test('the tracked preflight checks inputs and preparation supplies configured ac
 const args=process.argv.slice(2);const value=key=>args[args.indexOf(key)+1];
 assert.equal(value('--candidate'),${JSON.stringify(f.candidate)});
 assert.ok(!args.includes('--npm-cache'));
-assert.equal(value('--bch-cloak'),${JSON.stringify(f.bch)});
+assert.ok(!args.includes('--bch-cloak'));
 assert.ok(args.includes('--skip-live'));assert.ok(fs.existsSync('.release-build.json'));console.log('declared gate checked');process.exit(7);`);
   const gate = f.invoke([...releaseArgv(declaration.gate, values), '--skip-live']);
   assert.equal(gate.status, 7, gate.stdout + gate.stderr); assert.match(gate.stdout, /declared gate checked/);
@@ -60,9 +60,9 @@ assert.ok(args.includes('--skip-live'));assert.ok(fs.existsSync('.release-build.
 
 test('missing input setup and missing build evidence fail before invoking acceptance', t => {
   const f = fixture(t);
-  assert.equal(releaseInputs({ ...f.env, RELEASE_BCH_CLOAK: '' }).bch, null);
-  assert.throws(() => releaseInputs({ ...f.env, RELEASE_BCH_CLOAK: path.join(f.root, 'absent') }), /RELEASE_BCH_CLOAK/);
-  assert.deepEqual(releaseInputs({ ...f.env, RELEASE_NPM_CACHE: path.join(f.root, 'absent') }), { bch: f.bch }, 'an npm cache is no longer an input');
+  assert.deepEqual(releaseInputs({ ...f.env, RELEASE_BCH_CLOAK: '' }), {});
+  assert.deepEqual(releaseInputs({ ...f.env, RELEASE_BCH_CLOAK: path.join(f.root, 'absent') }), {});
+  assert.deepEqual(releaseInputs({ ...f.env, RELEASE_NPM_CACHE: path.join(f.root, 'absent') }), {}, 'an npm cache is no longer an input');
   assert.throws(() => candidateCommand('gate', f.candidate, { env: f.env }), /release-build.json/);
   fs.writeFileSync(path.join(f.candidate, '.release-build.json'), JSON.stringify({ commit: 'b'.repeat(40) }));
   assert.throws(() => candidateCommand('gate', f.candidate, { env: f.env }), /does not name this candidate/);
@@ -74,7 +74,7 @@ test('unset compatibility input is optional through the declared build and gate'
   const values = { candidate: f.candidate, repo: f.candidate };
   const preflight = f.invoke(releaseArgv(declaration.preflight, values));
   assert.equal(preflight.status, 0, preflight.stderr);
-  assert.match(preflight.stdout, /compatibility will be skipped/);
+  assert.match(preflight.stdout, /release preflight/);
   const prepare = f.invoke(releaseArgv(declaration.prepare, values));
   assert.equal(prepare.status, 0, prepare.stderr);
   fs.writeFileSync(path.join(f.candidate, 'acceptance/run.mjs'), "import assert from 'node:assert/strict';assert.ok(!process.argv.includes('--bch-cloak'));assert.ok(!process.argv.includes('--npm-cache'));console.log('optional compatibility gate');");
@@ -83,40 +83,6 @@ test('unset compatibility input is optional through the declared build and gate'
   assert.match(gate.stdout, /optional compatibility gate/);
 });
 
-test('real project preflight leaves invalid inputs uncut and retries the same commit', t => {
-  const f = fixture(t);
-  f.env.ORG_DIR = '';
-  f.env.GIT_CONFIG_GLOBAL = '/dev/null'; f.env.GIT_CONFIG_NOSYSTEM = '1';
-  const git = args => { const r = f.invoke(['git', ...args]); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
-  fs.unlinkSync(path.join(f.candidate, '.release-commit'));
-  fs.writeFileSync(path.join(f.candidate, '.release.json'), JSON.stringify(declaration));
-  fs.writeFileSync(path.join(f.candidate, 'acceptance/run.mjs'), "import assert from 'node:assert/strict';assert.ok(!process.argv.includes('--bch-cloak'));console.log('offline fixture acceptance');");
-  git(['init', '-q', '-b', 'main']); git(['config', 'user.name', 'Release inputs test']); git(['config', 'user.email', 'inputs@example.invalid']);
-  git(['add', '.']); git(['commit', '-qm', 'Declare project input preflight']);
-  const commit = git(['rev-parse', 'HEAD']);
-  const attempt = () => releaseOnce({ cwd: f.candidate, env: f.env, role: 'supervisor', tag: 'rc-inputs', measurement: { load: 0, cpus: 1 } });
-  for (const [variable, message] of [['RELEASE_BCH_CLOAK', /RELEASE_BCH_CLOAK/]]) {
-    const saved = f.env[variable]; f.env[variable] = path.join(f.root, 'absent');
-    const result = attempt();
-    assert.equal(result.result, 'setup-required'); assert.match(result.reason, message);
-    assert.equal(result.candidate, null); assert.equal(result.commit, commit);
-    assert.match(fs.readFileSync(result.log, 'utf8'), message);
-    assert.equal(git(['tag']), '');
-    f.env[variable] = saved;
-  }
-  const events = () => loadEvents(path.join(f.candidate, '.org')).events;
-  assert.equal(events().filter(e => e.type === 'release.cut').length, 0);
-  assert.equal(events().filter(e => e.type.startsWith('release.gate.')).length, 0);
-  delete f.env.RELEASE_BCH_CLOAK;
-  const result = attempt();
-  assert.equal(result.result, 'awaiting-operator', result.candidate.gate?.detail);
-  assert.equal(result.candidate.commit, commit); assert.equal(git(['rev-parse', 'rc-inputs']), commit);
-  assert.equal(events().filter(e => e.type === 'release.cut').length, 1);
-  f.env.RELEASE_BCH_CLOAK = path.join(f.root, 'absent');
-  assert.equal(attempt().candidate.id, result.candidate.id, 'an already gated candidate is reused before machine checks');
-  assert.equal(events().filter(e => e.type === 'release.gate.started').length, 1);
-  assert.equal(events().filter(e => e.type === 'release.gate.finished').length, 1);
-});
 
 test('release safety checks stop the gate on failure and precede acceptance on success', t => {
   const f = fixture(t);

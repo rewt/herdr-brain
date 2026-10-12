@@ -4,7 +4,7 @@ Herdr Monitor supplies a dependency-free foreground slot for heavy validation in
 any project. Promotion-tier lane validation takes it before executing tests;
 reused green evidence needs no slot. The release supervisor takes it before
 cutting or claiming a candidate and keeps it through preparation and the gate.
-Worker fast checks use the same watchdog without taking the slot. The installed entry runtime carries this
+Worker fast checks use the same watchdog without taking the slot. The validation module carries this
 module, and this project's `npm run test:promotion` also takes it directly.
 
 ```sh

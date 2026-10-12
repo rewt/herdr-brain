@@ -5,16 +5,11 @@ import { isolateGateHistory } from './gate-history.mjs';
 // Disposable projects must not inherit stale mappings from earlier fixtures.
 export function fixtureFleet(t, scratch) {
   const before = process.env.HERDR_MONITOR_FLEET;
-  // Default project temp adds /t/<16-byte hash>/r-XXXXXX. Keep that
-  // resolved path within the production 60-byte budget, even on macOS.
   const fleet = path.join(fs.realpathSync(scratch), 'fleet');
-  const short = Buffer.byteLength(path.join(fleet, 't', '0'.repeat(16), 'r-XXXXXX')) > 60
-    ? fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'of-')) : null;
-  process.env.HERDR_MONITOR_FLEET = short ?? fleet;
+  process.env.HERDR_MONITOR_FLEET = fleet;
   t.after(() => {
     if (before === undefined) delete process.env.HERDR_MONITOR_FLEET;
     else process.env.HERDR_MONITOR_FLEET = before;
-    if (short) fs.rmSync(short, { recursive: true, force: true });
   });
 }
 

@@ -6,10 +6,9 @@ take the safe default and continue; funds, publishing, credentials and permissio
 changes default to no. This is policy text in [PROTOCOL.md](PROTOCOL.md) and the
 worker entry policy, not a hook: Monitor registers no per-launch question guard,
 permission hook or operator-presence check, and the harnesses' own sandboxes and
-permission prompts apply. A supervisor launch only gains the SessionStart entry
-hook from [session-hooks.mjs](session-hooks.mjs), and only when the project's own
-native settings do not already register it. Older pane receipts that carry a
-`session_kind` still restore; the field is ignored.
+permission prompts apply. Launch native harnesses through Herdr with project policy
+arguments. Project chats retain canonical checkout and pane receipts; older
+receipt fields are ignored.
 
 Project chats catch up on demand from `record status`, `record log --since 2h`
 and `record show ID`; promotion and watch facts stay in `ORG/supervisor/inbox.log`.
@@ -178,60 +177,10 @@ recorded intake/settlement first. Verify a canary's record inbox, project bindin
 policy receipt and named exception delivery before retiring the backup.
 Rollback likewise requires draining the new journal and stopping its owned
 senders before restoring and re-arming the old consumer, so both paths never
-deliver together. [The scratch cutover](../acceptance/cutover.mjs) rehearses the
-wrapper and notice contract; the compatibility `contrib/settle-watch.mjs` stays
+deliver together. The compatibility `contrib/settle-watch.mjs` stays
 until bch-cloak has completed its release-gated switch.
 
-Discovery's explicit supervisor entry injects [PROTOCOL.md](PROTOCOL.md) and a
-fresh cold start before the native harness launches. It works in unconfigured
-projects and populated records, without a model or a background supervisor.
-Workers receive only the existing worker policy. The native session hook performs
-the recovery described below; policy-only entry stays read-only.
-
-Operator project conversations use `monitor chat PROJECT`
-([chat command](../discovery/README.md#fleet)). One tab per canonical
-fleet identity lives in the shared control workspace. The chat's registered
-`chat-` name is separate from `MONITOR_SUPERVISOR_AGENT`, which names ops for
-watch recovery, dispatch and cycle notices. Supply `--to OPS` for a project's
-non-default recipient. Chats never enroll as notice recipients or receive
-awaited landing messages. The launcher only reads project files and retains
-its machine receipts in the fleet home, separate from native entry receipts.
-Chats have full Herdr access; the read/scoped chat modes and the Codex chat
-sandbox preflight were removed. A receipt that still carries `herdr_mode`
-reopens as an ordinary chat whatever its value.
-
-Native `SessionStart` uses [session-start.mjs](session-start.mjs) for startup,
-resume (including Herdr restore), clear and compact. Both installed launch adapters
-bind an explicit supervisor role to the canonical checkout, Git common directory
-and record. When `HERDR_PANE_ID` is present, opening the native supervisor also
-writes that binding and its notice recipient atomically to
-`.lane/supervisor/panes/<sha256-of-pane-id>.json` in the canonical checkout.
-The hook matches this explicit launch receipt using the pane id and canonical
-Git identity, then falls back to the adapter environment. Herdr preserves pane
-ids across restore, so resume, clear and compact work after the launch variables
-are lost, even when the native chat/session id changes. Record paths are retained
-in the receipt; discovery in the restored environment cannot select another record.
-This is a launch binding, separate from display-only session metadata.
-
-This repository wires Claude's persistent hook in `.claude/settings.json` alongside
-the canary hook. The Claude adapter reuses it when it covers all four sources,
-avoiding a second entry from launch arguments. Codex receives its hook through
-the supervisor adapter's `hooks.SessionStart` launch argument; workers receive none.
-The repository must not track `.codex/hooks.json`: its interactive project-hook
-trust dialog stops unattended workers before they receive their task. Projects
-without a persistent native hook get the adapter hook for that launched process;
-a direct native restore that loses launch arguments requires manual entry.
-When a hook runs without adapter environment, it uses the durable pane receipt.
-Outside Herdr, resume without a pane id or adapter bindings cannot recognize a supervisor.
-Previously launched, unmarked panes need one explicit supervisor adapter launch
-to create the receipt. An agent name or pane label never grants the role. Worker
-roles and `MONITOR_ENTRY_BYPASS=1` take precedence over receipts; explicitly
-opening a worker in a previously bound pane revokes its supervisor receipt.
-Automatic adapters suppress entry in utility and headless passthrough children,
-including children launched from a supervisor shell; they retain the interactive
-pane's receipt for later resume.
-
-Entry prints `supervisor.mjs brief`, resumes housekeeping only when both enabled
+Foreground `supervisor.mjs entry --repo PROJECT --role supervisor` prints `supervisor.mjs brief`, resumes housekeeping only when both enabled
 and resume are true, and re-arms watchers only for open, unabandoned runs without a recorded
 report with a verified project checkout and a dead, reused or absent watcher owner.
 Housekeeping and watcher liveness compare the PID and recorded kernel start-time
@@ -242,9 +191,8 @@ recoverable. Entry uses watch's exclusive per-run lock, then records the new PID
 and `watcher_identity` through the record CLI.
 Recovered watchers use the `to` field from the run's `dispatch_journal` receipt.
 When that receipt is absent or its recipient is null, they fall back to the supervisor recipient
-and then `supervisor-herdr`. Adapters export `MONITOR_SUPERVISOR_AGENT` from their
-known agent identity, an explicit setting, or `HERDR_AGENT_NAME` when supplied;
-the durable pane receipt retains it across restore. Invalid receipts print a
+and then `supervisor-herdr`. Pass the foreground command an explicit recipient
+when a project uses another supervisor name. Invalid receipts print a
 diagnostic instead of silently rerouting a notice. Unknown/deleted checkout bindings
 and invalid PID evidence need inspection. STOP or a torn record permits reading
 and lock inspection only. There are no model calls, promotion/settle/release
@@ -258,14 +206,8 @@ share a 20-second deadline; failures print their reasons and do not reject sessi
 startup. A later entry can finish interrupted recovery. Repeating successful entry
 only refreshes the brief; it does not add record events or start duplicate owners.
 
-Codex CLI 0.160.0 supports the native equivalent for all four sources, including
-mid-turn compaction. Non-managed hooks require review through `/hooks`; new or
-changed definitions are skipped until trusted. This change does not bypass that
-trust. Older Codex builds without SessionStart, disabled/untrusted hooks, and
-cloud orchestration without local command hooks cannot automatically run this
-entry. Use the manual command below in those environments.
-See [official Codex hook documentation](https://learn.chatgpt.com/docs/hooks) for
-supported sources, project trust and surface limitations (checked 2026-10-03).
+Run foreground entry explicitly after startup, resume, clear or compact when a
+fresh brief or recovery pass is needed.
 
 ```sh
 node /path/to/monitor/supervisor/supervisor.mjs entry --repo PROJECT --org RECORD --role supervisor --to YOUR-SUPERVISOR

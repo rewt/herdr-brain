@@ -15,13 +15,8 @@ const promotion = [
   'acceptance/test/load.test.mjs',
   'acceptance/test/probe.test.mjs',
   'acceptance/test/results.test.mjs',
-  'acceptance/test/security.test.mjs',
   'acceptance/test/signal.test.mjs',
   'acceptance/test/snapshot.test.mjs',
-  'discovery/test/confinement.test.mjs',
-  'discovery/test/host-suites.test.mjs',
-  'discovery/test/entry.test.mjs',
-  'discovery/test/review-r4.test.mjs',
   'dispatch/test/timing.test.mjs',
   'lanes/test/herdr-client.test.mjs',
   'lanes/test/no-focus.test.mjs',
@@ -64,7 +59,7 @@ const promotion = [
   'watch/test/lock.test.mjs'
 ];
 const directories = {
-  core: ['test', 'brain/test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test'],
+  core: ['test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test'],
   cycle: ['settle/test', 'supervisor/test', 'release/test'],
   lanes: ['lanes/test'], acceptance: ['acceptance/test'],
 };

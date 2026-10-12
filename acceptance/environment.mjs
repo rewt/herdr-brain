@@ -8,7 +8,7 @@ export function scratchProductHomes(root, home = path.join(root, 'home')) {
     XDG_CONFIG_HOME: path.join(home, '.config'), XDG_STATE_HOME: path.join(home, '.local/state'), XDG_DATA_HOME: path.join(home, '.local/share'),
     XDG_CACHE_HOME: path.join(home, '.cache'), BRAIN_STATE: path.join(home, '.local/state/herdr-brain'),
     HERDR_MONITOR_FLEET: path.join(root, 'f'), HERDR_MONITOR_HOME: path.join(home, '.local/share/herdr-monitor'),
-    HERDR_MONITOR_BIN: path.join(home, '.local/bin'), HERDR_MONITOR_ENTRY_BIN: path.join(home, 'entry/bin'),
+    HERDR_MONITOR_BIN: path.join(home, '.local/bin'),
     HERDR_MONITOR_PLIST: path.join(home, 'Library/LaunchAgents/herdr-monitor.plist'),
     HERDR_ORG_CONSOLE_CONFIG: path.join(home, '.config/herdr-org/console.json') };
 }
@@ -80,14 +80,15 @@ export function isLaneEnvironmentCommand(command, root) {
     }
     const source = fs.readFileSync(file, 'utf8');
     const exports = new RegExp(`^set \\+x\nexport ((${token})(?: ${token})*) \\|\\| return\ncommand /bin/sh (${token})\n$`, 'u').exec(source);
-    if (!exports || decode(exports[3]) !== verifier) return false;
-    const pairs = [...exports[1].matchAll(new RegExp(token, 'gu'))].map(item => decode(item[0]));
+    const empty = new RegExp(`^set \\+x\ncommand /bin/sh (${token})\n$`, 'u').exec(source);
+    if ((!exports || decode(exports[3]) !== verifier) && (!empty || decode(empty[1]) !== verifier)) return false;
+    const pairs = [...(exports?.[1] ?? '').matchAll(new RegExp(token, 'gu'))].map(item => decode(item[0]));
     if (pairs.some(pair => !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0'))) return false;
     const effective = new Map(pairs.map(pair => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]));
     const proof = fs.readFileSync(verifier, 'utf8');
     const nonce = /'lane-env-[a-f0-9]{48}'\n$/u.exec(proof)?.[0].trim();
     if (!nonce) return false;
-    const checks = [...effective].map(([key, value]) => `[ "\${${key}+x}" = x ] && [ "$${key}" = ${quote(value)} ]`).join(' && ');
+    const checks = [...effective].map(([key, value]) => `[ "\${${key}+x}" = x ] && [ "$${key}" = ${quote(value)} ]`).join(' && ') || 'true';
     return proof === `${checks} && printf '\\n%s\\n' ${nonce}\n`;
   } catch { return false; }
 }

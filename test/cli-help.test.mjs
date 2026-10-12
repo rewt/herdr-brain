@@ -6,16 +6,26 @@ import { spawnSync } from 'node:child_process';
 
 const source = path.resolve(import.meta.dirname, '..');
 const modules = [
-  'bin/org.mjs', 'brain/bin/brain.mjs',
-  'contrib/settle-watch.mjs', 'discovery/acceptance.mjs', 'discovery/adapters/codex.mjs', 'discovery/adapters/claude.mjs',
-  'discovery/install.mjs', 'discovery/native/build.mjs', 'discovery/validate.mjs', 'discovery/git-driver.mjs',
-  'discovery/bounded.mjs', 'discovery/bubblewrap.mjs', 'discovery/client.mjs', 'dispatch/dispatch.mjs',
-  'docs/adoption/rehearse.mjs', 'herdr/entry-install.mjs', 'herdr/native-entry.mjs',
-  'herdr/prerequisites.mjs', 'herdr/release-candidate.mjs', 'housekeeping/housekeeping.mjs', 'lanes/lane.mjs',
-  'promote/host-gate.mjs', 'promote/promote.mjs', 'promote/metrics.mjs', 'release/release.mjs', 'settle/settle.mjs',
-  'supervisor/prompt-supervisor.mjs', 'supervisor/session-start.mjs',
-  'supervisor/supervisor.mjs', 'supervisor/tidy-tabs.mjs', 'test-slot/test-slot.mjs', 'watch/watch.mjs',
-  'acceptance/run.mjs',
+  "bin/org.mjs",
+  "brain/bin/brain.mjs",
+  "contrib/settle-watch.mjs",
+  "discovery/client.mjs",
+  "dispatch/dispatch.mjs",
+  "herdr/prerequisites.mjs",
+  "herdr/release-candidate.mjs",
+  "housekeeping/housekeeping.mjs",
+  "lanes/lane.mjs",
+  "promote/host-gate.mjs",
+  "promote/promote.mjs",
+  "promote/metrics.mjs",
+  "release/release.mjs",
+  "settle/settle.mjs",
+  "supervisor/prompt-supervisor.mjs",
+  "supervisor/supervisor.mjs",
+  "supervisor/tidy-tabs.mjs",
+  "test-slot/test-slot.mjs",
+  "watch/watch.mjs",
+  "acceptance/run.mjs"
 ];
 const launches = [...modules.map(module => ({ module, linked: false })),
   ...['lanes/lane.mjs', 'brain/bin/brain.mjs'].map(module => ({ module, linked: true }))];
@@ -35,7 +45,7 @@ for (const { module, linked } of launches) test(`${module}${linked ? ' via relea
   }
   const result = spawnSync(process.execPath, [launcher, '--help'], { cwd: root, env, encoding: 'utf8', input: '', timeout: 10000 });
   assert.equal(result.status, 0, result.error?.message ?? result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /usage|record: durable|monitor <context/iu);
+  assert.match(result.stdout + result.stderr, /usage|record: durable|monitor fleet/iu);
   assert.doesNotMatch(result.stdout + result.stderr, /ERR_PARSE_ARGS|unrecognized SessionStart|SyntaxError/u);
   if (linked) { fs.unlinkSync(launcher); fs.unlinkSync(path.join(root, 'current')); }
   assert.deepEqual(fs.readdirSync(root), [], 'help must leave the scratch home untouched');

@@ -6,12 +6,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { composerEmpty } from '../../supervisor/composer.mjs';
-import { harnessEnvironment, runCutoverCases, abandonWatcher } from '../run.mjs';
+import { harnessEnvironment, abandonWatcher } from '../run.mjs';
 import { pollNative } from '../poll.mjs';
 import { cleanupInboxes } from '../cleanup.mjs';
 import { acquireHostTestSlot } from '../../test-slot/test-slot.mjs';
 import { createLoadMonitor, LoadTimeout } from '../load.mjs';
-import { cases, cutoverChecks, runCase } from '../cases.mjs';
+import { cases, runCase } from '../cases.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
 function scratch(t) {
@@ -69,24 +69,6 @@ for (const late of [false, true]) test(`native polling bounds each call and reje
     deadlines.push(deadline); now += 80; return late && now >= 100;
   }, 'stand-in did not register', 100, { now: () => now, allowance: ms => ms, sleep: async ms => { now += ms; }, intervalMs: 10 }), /stand-in did not register/);
   assert.deepEqual(deadlines, [100, 100]); assert.equal(now, 170);
-});
-
-for (const heavy of [false, true]) test(`run.mjs cutover wiring propagates ${heavy ? 'loaded PENDING' : 'quiet FAIL'} into retirement`, async t => {
-  const load = createLoadMonitor({ cpus: 2, read: () => heavy ? [28, 25, 22] : [1, 1, 1] }); t.after(load.stop);
-  const results = [{ ...cases.copy, status: 'PASS' }];
-  const original = new LoadTimeout('timeout: copied continue wrapper child', load.snapshot());
-  let retired = false;
-  await runCutoverCases({ results,
-    test: (definition, fn) => runCase(results, definition, fn),
-    switches: async check => {
-      await check(cutoverChecks.routes, () => { throw original; });
-    }, retirement: () => { retired = true; }, scratchRoots: [],
-  });
-  assert.equal(retired, false);
-  for (const result of results.slice(1)) {
-    assert.equal(result.status, heavy ? 'PENDING' : 'FAIL'); assert.match(result.detail, /copied continue wrapper child/);
-    if (heavy) assert.match(result.detail, /28\.00\/25\.00\/22\.00/);
-  }
 });
 
 test('harness cleanup stops only verified inbox owners under its scratch root and retains receipts', async t => {

@@ -51,7 +51,7 @@ test('product scripts never compare a resolved argv launch path to a module path
   const files = spawnSync('git', ['ls-files', '-z'], { cwd: source, encoding: 'utf8' });
   assert.equal(files.status, 0, files.stderr);
   const product = files.stdout.split('\0').filter(file => /\.(?:mjs|cjs|js)$/u.test(file)
-    && !file.startsWith('acceptance/test/fixtures/'));
+    && !file.startsWith('acceptance/test/fixtures/') && fs.existsSync(path.join(source, file)));
   const offenders = product.filter(file => mainComparisons(fs.readFileSync(path.join(source, file), 'utf8')).unsafe);
   assert.deepEqual(offenders, [], 'use isMain from lib/cli-help.mjs');
   // ARCH-19: the candidate driver must also work in build-only partial copies.
@@ -61,9 +61,6 @@ test('product scripts never compare a resolved argv launch path to a module path
 });
 
 const scripts = [
-  ['discovery/bounded.mjs', ['--timeout-ms', '0', 'unused'], 125, /invalid validation deadline/u],
-  ['discovery/bubblewrap.mjs', [], 1, /explicit --experimental-bubblewrap/u],
-  ['discovery/lane-file-access.mjs', [], 0, /"permissionDecision":"deny"/u],
   ['herdr/release-candidate.mjs', [], 1, /usage: release-candidate/u],
   ['promote/metrics.mjs', ['--unsupported'], 1, /unknown option or missing value/u],
   ...['promote/promote.mjs', 'release/release.mjs', 'supervisor/supervisor.mjs',

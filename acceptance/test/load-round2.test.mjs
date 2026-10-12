@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createLoadMonitor, waitUntil, LoadTimeout } from '../load.mjs';
 import { commandFailure, classifyFailure, requireSuccessfulChecks } from '../limits.mjs';
-import { cases, cutoverChecks, runCase } from '../cases.mjs';
+import { cases, runCase } from '../cases.mjs';
 import { settleCase } from '../settle.mjs';
 import { supervisorCase } from '../supervisor.mjs';
 import { loadAwareCommand } from '../commands.mjs';
@@ -20,24 +20,6 @@ function monitor(t, heavy = true) {
   const load = createLoadMonitor({ cpus: 2, read: () => heavy ? [28, 25, 22] : [1, 1, 1] });
   t.after(load.stop);
   return load;
-}
-
-for (const heavy of [true, false]) {
-  test(`cutover check and aggregate preserve ${heavy ? 'heavy-load PENDING' : 'normal-load FAIL'}`, async (t) => {
-    const load = monitor(t, heavy), window = load.begin();
-    const original = new LoadTimeout('timeout: copied continue wrapper child', load.snapshot(window));
-    const checks = [];
-    await runCase(checks, cutoverChecks.routes, () => { throw original; });
-    const results = [{ ...cases.copy, status: 'PASS' }];
-    await runCase(results, cases.switches, () => requireSuccessfulChecks(checks));
-    await runCase(results, cases.retirement, () => assert.fail('retirement executed'));
-    for (const result of [...checks, ...results.slice(1)]) {
-      assert.equal(result.status, heavy ? 'PENDING' : 'FAIL');
-      assert.equal(result.origin, heavy ? 'harness' : 'product');
-      assert.match(result.detail, /copied continue wrapper child/);
-      if (heavy) assert.match(result.detail, /28\.00\/25\.00\/22\.00/);
-    }
-  });
 }
 
 test('a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure', (t) => {

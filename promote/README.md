@@ -199,15 +199,7 @@ packages while allowing missing metadata or tarballs to be fetched, whereas
 remains supported for preparation whose output stays valid whenever that path
 exists; do not use it to guard dependency installs.
 
-Start promotion from the supervisor's host shell. Detached children inherit
-their caller's sandbox; detaching does not grant host permissions. A declared
-profile probes local socket listening and `/dev/ptmx` before building, and
-refuses with `PROMOTE_HOST_REQUIRED` and a host launch instruction if either is
-unavailable. It never invokes a model or asks a worker to run the gate. Direct
-`lane promote` keeps its existing behavior; a profiled batch uses the queue's
-host adapter.
-
-The adapter first takes the optional external kernel record lock for the train
+The foreground gate adapter first takes the optional external kernel record lock for the train
 invocation, including preparation, all bisection gates, integration and scratch
 cleanup. It then takes the host test slot for that entire invocation. This order
 matches legacy promotion's lock-then-slot order. The external lock uses

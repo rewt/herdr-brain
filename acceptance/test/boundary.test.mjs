@@ -313,8 +313,8 @@ test('private lane environment preparation reaches only an owned pane with a liv
     const dir = fs.mkdtempSync(path.join(f.root, 'herdr-lane-env-'));
     const file = path.join(dir, 'prepare.sh'), verifier = path.join(dir, 'verify.sh');
     const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
-    fs.writeFileSync(file, `set +x\nexport 'MONITOR_ENTRY_BYPASS=1' || return\ncommand /bin/sh ${quote(verifier)}\n`, { mode: 0o600 });
-    fs.writeFileSync(verifier, `[ "\${MONITOR_ENTRY_BYPASS+x}" = x ] && [ "$MONITOR_ENTRY_BYPASS" = '1' ] && printf '\\n%s\\n' 'lane-env-${'a'.repeat(48)}'\n`, { mode: 0o600 });
+    fs.writeFileSync(file, `set +x\nexport 'ROUTE_TEST_FLAG=1' || return\ncommand /bin/sh ${quote(verifier)}\n`, { mode: 0o600 });
+    fs.writeFileSync(verifier, `[ "\${ROUTE_TEST_FLAG+x}" = x ] && [ "$ROUTE_TEST_FLAG" = '1' ] && printf '\\n%s\\n' 'lane-env-${'a'.repeat(48)}'\n`, { mode: 0o600 });
     const command = ` . ${quote(file)} 2>/dev/null; command rm -f -- ${quote(file)} ${quote(verifier)}`;
     const reply = f.call('pane', 'run', 'own:p1', command);
     assert.equal(reply.status, 0, reply.stderr);

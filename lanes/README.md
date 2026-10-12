@@ -11,7 +11,9 @@ Each key is optional. The nearest parent `.lane.json` supplies shared settings a
 the canonical checkout's `.lane.json` overrides them:
 
 When `~/.herdr-monitor/fleet.json` exists, the project's fleet mapping supplies
-its worktree directory and owned parent `.lane.json` layers. Discovery never
+its owned parent `.lane.json` layers, and its worktree directory unless those
+layers or the checkout's `.lane.json` set `worktree_root`: a project moves new
+lanes by committing `worktree_root`, and existing lanes keep their paths. Discovery never
 borrows a neighbour's settings. Without a fleet file, legacy parent discovery
 is unchanged. See [fleet mapping and adoption](../discovery/README.md#fleet).
 

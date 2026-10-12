@@ -347,12 +347,14 @@ const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE }
     const path = resolve(CALLER_CWD, process.env.LANE_WORKTREE_ROOT);
     return { path, base: path, source: "env" };
   }
-  if (FLEET.project && !EXPLICIT_CONFIG) return { path: FLEET.project.worktrees, base: FLEET.project.worktrees, source: FLEET.fleet.file };
+  // A project's own worktree_root wins over the machine fleet map, so a project moves its lanes by
+  // committing its settings. Existing lanes keep their registered paths.
   if (Object.hasOwn(CONFIG, "worktree_root")) {
     const source = CONFIG_SOURCES.get("worktree_root");
     const base = resolve(dirname(source), CONFIG.worktree_root);
     return { path: join(base, REPO_NAME), base, source };
   }
+  if (FLEET.project && !EXPLICIT_CONFIG) return { path: FLEET.project.worktrees, base: FLEET.project.worktrees, source: FLEET.fleet.file };
   if (!EXPLICIT_CONFIG && PARENT_CONFIG_FILE !== undefined) {
     const base = join(dirname(PARENT_CONFIG_FILE), ".worktrees");
     return {

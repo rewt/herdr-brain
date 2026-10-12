@@ -482,3 +482,21 @@ test('legacy temp and exclusion settings are inert, and nested peers keep distin
   assert.equal(findOrgDir({ cwd: nested, env: f.env }), second.project.record);
   assert.equal(findOrgDir({ cwd, env: f.env }), first.project.record);
 });
+
+test("a project's own worktree_root wins over its fleet mapping; without it the fleet mapping applies", t => {
+  const f = fixture(t), cwd = f.repo('app'), mapped = path.join(f.scratch, 'mapped-lanes');
+  f.join(cwd, ['--worktrees', mapped]);
+  const row = () => {
+    const r = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd, env: f.env, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.split('\n').find(line => line.startsWith('worktree_root\t'));
+  };
+  const fleetRow = `worktree_root\t${JSON.stringify(mapped)}\t${path.join(f.fleetHome, 'fleet.json')}`;
+  assert.equal(row(), fleetRow);
+  const config = path.join(cwd, '.lane.json');
+  fs.writeFileSync(config, JSON.stringify({ worktree_root: '../identity-lanes' }));
+  assert.equal(row(), `worktree_root\t${JSON.stringify(path.join(f.scratch, 'identity-lanes', 'app'))}\t${config}`);
+  assert.equal(f.read().projects.app.worktrees, mapped, 'reading settings never rewrites the fleet');
+  fs.rmSync(config);
+  assert.equal(row(), fleetRow);
+});

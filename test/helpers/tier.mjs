@@ -98,14 +98,21 @@ const directories = {
   cycle: ['settle/test', 'supervisor/test', 'release/test'],
   lanes: ['lanes/test'], acceptance: ['acceptance/test'],
 };
+// A module folder may be gone from the tree being planned (removed in the candidate while the
+// planner runs from the base commit), so a missing folder contributes no tests.
+function testFiles(directory, dir) {
+  const absolute = path.join(directory, dir);
+  if (!fs.existsSync(absolute)) return [];
+  return fs.readdirSync(absolute).filter(file => file.endsWith('.test.mjs')).sort().map(file => `${dir}/${file}`);
+}
 export function tierFiles(tier, directory = root) {
   if (tier === 'fast') return [...fast];
   if (tier === 'promotion') return [...promotion];
-  if (tier === 'release') return Object.values(directories).flat().flatMap(dir => fs.readdirSync(path.join(directory, dir))
-    .filter(file => file.endsWith('.test.mjs')).sort().map(file => `${dir}/${file}`)).filter(file => !promotion.includes(file));
+  if (tier === 'release') return Object.values(directories).flat().flatMap(dir => testFiles(directory, dir))
+    .filter(file => !promotion.includes(file));
   if (!directories[tier]) throw Error(`unknown test tier: ${tier}`);
-  return directories[tier].flatMap(dir => fs.readdirSync(path.join(directory, dir))
-    .filter(file => file.endsWith('.test.mjs')).sort().map(file => `${dir}/${file}`)).filter(file => promotion.includes(file));
+  return directories[tier].flatMap(dir => testFiles(directory, dir))
+    .filter(file => promotion.includes(file));
 }
 if (isMain(import.meta.url)) {
   const [tier, ...options] = process.argv.slice(2);

@@ -25,3 +25,15 @@ test('tier selection covers every current test once in promotion or release and 
   assert.ok(tierFiles('fast', root).every(file => promotion.includes(file)));
   assert.throws(() => tierFiles('unknown', root), /unknown test tier/);
 });
+
+test('a module folder removed from the planned tree contributes no tests instead of failing the plan', () => {
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'tier-missing-'));
+  try {
+    fs.mkdirSync(path.join(scratch, 'test'));
+    fs.writeFileSync(path.join(scratch, 'test', 'only.test.mjs'), '');
+    assert.deepEqual(tierFiles('release', scratch), ['test/only.test.mjs']);
+    assert.deepEqual(tierFiles('core', scratch), []);
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});

@@ -37,10 +37,15 @@ function committedFile(canonical, relative) {
   return checked(git(['show', `${commit}:${relative}`]));
 }
 
-export function resolveGateProfile(canonical, environment = process.env) {
+// `settings` is a committed .promote.json the caller already read (the queue's per-batch snapshot),
+// so one batch never reads the declaration twice.
+export function resolveGateProfile(canonical, environment = process.env, { settings } = {}) {
   const file = path.join(canonical, '.promote.json');
-  const declared = committedFile(canonical, '.promote.json');
-  const gate = declared === undefined ? undefined : JSON.parse(declared).gate;
+  let gate = settings?.gate;
+  if (settings === undefined) {
+    const declared = committedFile(canonical, '.promote.json');
+    gate = declared === undefined ? undefined : JSON.parse(declared).gate;
+  }
   if (gate === undefined) return null;
   if (!object(gate)) throw new Error('promote gate must be an object');
   const fields = ['node_version_file', 'env', 'prepare', 'external_lock', 'refuse_processes', 'wait_seconds', 'timeout_seconds', 'idle_timeout_seconds'];
@@ -103,8 +108,8 @@ export function checkCompetingProcesses(profile) {
   }
 }
 
-export function runProjectGateSync({ canonical, receipt, argv, ...options }) {
-  const profile = resolveGateProfile(canonical, options.env);
+export function runProjectGateSync({ canonical, receipt, argv, settings, ...options }) {
+  const profile = resolveGateProfile(canonical, options.env, { settings });
   if (!profile) return spawnSync(process.execPath, argv, options);
   const plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   plan.host_receipt = path.join(path.dirname(receipt), 'host-gate.json');

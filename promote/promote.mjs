@@ -197,7 +197,7 @@ function perform(job, queue) {
   }
 }
 
-function performBatch(batch, queue) {
+function performBatch(batch, queue, settings) {
   const first = batch.jobs[0], cwd = queue.project.canonical;
   const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
@@ -213,7 +213,7 @@ function performBatch(batch, queue) {
     ...(retained.host_receipt ? { host_receipt: retained.host_receipt } : {}) } }));
   const output = fs.openSync(log, 'a');
   let r;
-  try { r = runProjectGateSync({ canonical: cwd, receipt,
+  try { r = runProjectGateSync({ canonical: cwd, receipt, settings,
     argv: [first.laneCLI, 'promote-batch', receipt], cwd, env, stdio: ['ignore', output, output] }); }
   finally { fs.closeSync(output); }
   const hostFile = path.join(directory, 'host-gate.json');
@@ -348,7 +348,7 @@ export async function drain(queue) {
       const snapshot = queue.load();
       let policy;
       if (!snapshot.current && !(snapshot.interrupted ?? []).some(batch => !attempted.has(batch.id)) && snapshot.pending.length) {
-        try { policy = { maxBatch: promotionSettings(queue.project).max_batch ?? Infinity }; }
+        try { const settings = promotionSettings(queue.project); policy = { maxBatch: settings.max_batch ?? Infinity, settings }; }
         catch (error) { policy = { error }; }
       }
       const entry = queue.transaction((data) => {
@@ -421,7 +421,8 @@ export async function drain(queue) {
         attempted.add(batch.id);
         if (batch.phase === 'batching') {
           try {
-            const results = performBatch(batch, queue);
+            // A new batch reuses the settings snapshot it was formed from; a resumed one reads HEAD.
+            const results = performBatch(batch, queue, newlyDequeued ? policy?.settings : undefined);
             const completion = reconcileBatchCompletion({ project: queue.project, jobs: batch.jobs, results });
             batch = { ...batch, phase: 'batch-delivering', results: completion.results, deliveredCount: 0 };
             if (completion.pending) batch.error = completion.reason;

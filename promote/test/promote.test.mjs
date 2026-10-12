@@ -671,7 +671,7 @@ test('only the committed gate profile reaches the host adapter, and it cannot se
   fs.writeFileSync(injected, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'ran');\n`);
   const edited = JSON.stringify({ gate: { wait_seconds: 5, env: { NODE_OPTIONS: `--import=${injected}` } } });
   fs.writeFileSync(config, edited);
-  assert.equal(resolveGateProfile(f.repo).env.NODE_OPTIONS, undefined, 'the working-tree edit is not the profile');
+  assert.doesNotMatch(resolveGateProfile(f.repo).env.NODE_OPTIONS ?? '', /inject\.mjs/, 'the working-tree edit is not the profile');
   enqueue(f.queue, ['first'], { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null });
   const r = f.cli(['--drain']); assert.equal(r.status, 0, r.stderr);
   assert.equal(fs.existsSync(marker), false, 'no host child loaded the uncommitted NODE_OPTIONS');

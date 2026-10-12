@@ -338,8 +338,10 @@ test('an unknown escaped identity cannot prevent killing the owned group', async
 });
 
 test('fixture gates cannot create or modify the real repository history', t => {
-  const s = scratch(t), common = projectCommon(path.dirname(cli));
-  assert.ok(common, 'this regression exercises the actual shared Git common directory');
+  const common = projectCommon(path.dirname(cli));
+  // A release build runs this suite in a git-archive snapshot, which has no history to protect.
+  if (!common) return t.skip('no Git common directory (release snapshot)');
+  const s = scratch(t);
   const real = path.join(common, 'gate-watchdog');
   const command = [process.execPath, '-e', `console.log(${JSON.stringify(s.root)})`];
   const result = spawnSync(process.execPath, [cli, 'run', 'release adapter', '--lock-path', s.lock,

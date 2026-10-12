@@ -4963,7 +4963,7 @@ test("usage exits one with no command and with an unknown command", () => {
     assert.match(missing.stdout, /check \[--cmd <validate command>\]/);
     assert.match(
       missing.stdout,
-      /  check \[--cmd <validate command>\] \[--tier fast\|promotion\] \| check --suite NAME\n                   validate this clean worktree/,
+      /  check \[--cmd <validate command>\] \[--tier fast\|promotion\]\n                   validate this clean worktree/,
     );
     assert.doesNotMatch(missing.stdout, /lane board/u);
     assert.match(missing.stdout, /  config           print resolved configuration as key, JSON value, and source/);

@@ -36,6 +36,10 @@ build() {
   for file in bin/org.mjs lanes/lane.mjs contrib/settle-watch.mjs lib/cli-help.mjs; do
     [ -f "$dir.partial/$file" ] || die "release is missing $file"
   done
+  # Like the promotion train, queue for the shared host test slot instead of refusing while another
+  # project's gate holds it; an explicit setting (0 refuses at once) wins. Agents ship with one bare
+  # command, so they cannot set this themselves. One hour leaves the gate time within its release timeout.
+  export MONITOR_TEST_SLOT_WAIT_SECONDS=${MONITOR_TEST_SLOT_WAIT_SECONDS:-${BCH_CLOAK_TEST_SLOT_WAIT_SECONDS:-3600}}
   (cd "$dir.partial" && node --input-type=module <<'NODE'
 import fs from 'node:fs';
 import os from 'node:os';

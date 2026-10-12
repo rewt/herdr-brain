@@ -62,6 +62,16 @@ test('a failed gate retains partial evidence and never makes an activatable rele
   assert.match(f.run(['build', 't1']).stderr, /inspect the unfinished build/);
   assert.equal(fs.readFileSync(f.gateLog, 'utf8').trim().split('\n').length, 1);
 });
+test('the release gate queues for the host test slot by default; an explicit wait wins', t => {
+  const f = scratch(t), seen = path.join(f.root, 'slot-wait');
+  f.write('gate.cjs', `require('fs').appendFileSync(${JSON.stringify(seen)},String(process.env.MONITOR_TEST_SLOT_WAIT_SECONDS)+'\\n');`);
+  f.git('add', '.'); f.git('commit', '-qm', 'slot'); f.git('tag', 't3'); f.git('tag', 't4'); f.git('tag', 't5');
+  const unset = { MONITOR_TEST_SLOT_WAIT_SECONDS: undefined, BCH_CLOAK_TEST_SLOT_WAIT_SECONDS: undefined };
+  f.ok(['build', 't3'], unset);
+  f.ok(['build', 't4'], { ...unset, MONITOR_TEST_SLOT_WAIT_SECONDS: '0' });
+  f.ok(['build', 't5'], { ...unset, BCH_CLOAK_TEST_SLOT_WAIT_SECONDS: '60' });
+  assert.equal(fs.readFileSync(seen, 'utf8'), '3600\n0\n60\n');
+});
 test('build uses the tagged release declaration instead of the npm fallback or working copy', t => {
   const f = scratch(t);
   f.write('.lane.validation.json', JSON.stringify({ release: 'node gate.cjs && node declared.cjs', timeout_seconds: { release: 10 } }));

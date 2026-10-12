@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from '../../lib/cli-help.mjs';
 import { freshAccount } from './account.mjs';
 
-const { values } = parseArgs({ options: { 'native-codex': { type: 'string' }, 'native-claude': { type: 'string' }, 'fresh-account': { type: 'boolean' }, 'npm-cache': { type: 'string' }, evidence: { type: 'string' } } });
+const { values } = parseArgs({ options: { 'native-codex': { type: 'string' }, 'native-claude': { type: 'string' }, 'fresh-account': { type: 'boolean' }, evidence: { type: 'string' } } });
 if (values['native-codex'] && values['native-claude']) throw new Error('select one harness per rehearsal; installer acceptance tests cover both together');
 const kind = values['native-codex'] ? 'codex' : 'claude';
 if (!values[`native-${kind}`] || !path.isAbsolute(values[`native-${kind}`])) throw new Error('supply --native-codex or --native-claude ABSOLUTE_NATIVE_EXECUTABLE');
@@ -79,22 +79,6 @@ else throw new Error('unsupported scratch plugin command');
   const registered = () => account ? JSON.parse(run('herdr', ['plugin','list','--plugin','rewt.herdr-monitor','--json'], product)).result.plugins[0]?.plugin_root
     : fs.existsSync(pluginState) ? fs.readFileSync(pluginState, 'utf8') : undefined;
   if (account && registered()) throw new Error('fresh account already has the Monitor plugin; use a new account');
-  // Optional cached tarballs are copied by integrity from pinned lockfiles only.
-  // This reads no account/configuration files and never writes the input cache.
-  if (values['npm-cache']) {
-    const cache = path.resolve(values['npm-cache']);
-    for (const module of ['console', 'mcp']) {
-      const lock = JSON.parse(fs.readFileSync(path.join(source, module, 'package-lock.json')));
-      for (const entry of Object.values(lock.packages)) {
-        if (!entry.integrity?.startsWith('sha512-')) continue;
-        const hash = Buffer.from(entry.integrity.slice(7), 'base64').toString('hex');
-        const rel = path.join('_cacache/content-v2/sha512', hash.slice(0, 2), hash.slice(2, 4), hash.slice(4));
-        const from = path.join(cache, rel), to = path.join(env.npm_config_cache, rel);
-        if (fs.existsSync(from)) { fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(from, to); }
-      }
-    }
-    env.npm_config_offline = 'true';
-  }
   const archive = path.join(root, 'source.tar');
   sourceCommit = git(source, 'rev-parse', 'HEAD');
   git(source, 'archive', 'HEAD', '-o', archive);
@@ -159,7 +143,7 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
   release('build', 'adoption-a');
   assert.deepEqual(fs.existsSync(path.join(home, '.zshenv')) ? fs.readFileSync(path.join(home, '.zshenv')) : null, originals.get(path.join(home,'.zshenv'))?.data ?? null, 'build must not install entry');
   release('activate', 'adoption-a'); release('status');
-  assert.equal(registered(), path.join(env.HERDR_MONITOR_HOME, 'releases/adoption-a'));
+  assert.equal(registered(), undefined, 'releases ship no Herdr plugin');
   const entryBin = path.join(env.HERDR_MONITOR_HOME, 'entry/bin');
   const discovered = run('zsh', ['-ic', `command -v ${kind}; command -v monitor-${kind}`]);
   assert.equal(discovered, `${entryBin}/${kind}\n${entryBin}/monitor-${kind}`);
@@ -190,7 +174,6 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
   // topology instead of reading or starting the operator's default server.
   const emptyHerdr = path.join(root, 'empty-herdr.cjs');
   write(emptyHerdr, `#!${process.execPath}\nconst args=process.argv.slice(2); if(args[1]!=='list'){console.error('scratch Herdr permits list only');process.exit(1);} console.log(JSON.stringify({result:{workspaces:[],tabs:[],panes:[],agents:[]}}));\n`, 0o755);
-  write(path.join(evidence, 'console.txt'), run(process.execPath, [path.join(active, 'console/app.mjs'), '--modern', '--folder', project, '--print', '100x34'], project, { HERDR_BIN_PATH: emptyHerdr }));
   write(path.join(evidence, 'supervisor.txt'), run(process.execPath, [path.join(active, 'supervisor/supervisor.mjs'), 'brief']));
   run(process.execPath, [path.join(active, 'housekeeping/housekeeping.mjs'), '--once', '--dry-run', '--herdr', emptyHerdr, '--state-dir', path.join(project, '.lane/housekeeping-preview')]);
   // Separate bounded mechanical exercise for the reviewed supervisor cycle.
@@ -199,12 +182,12 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
   write(path.join(evidence, 'reviewed-cycle.txt'), run(process.execPath, [path.join(active, 'acceptance/supervisor.mjs'), active], project, {}, 240_000));
   release('build', 'adoption-b'); release('activate', 'adoption-b');
   assert.equal(fs.realpathSync(path.join(env.HERDR_MONITOR_HOME, 'current')), path.join(env.HERDR_MONITOR_HOME, 'releases/adoption-b'));
-  assert.equal(registered(), path.join(env.HERDR_MONITOR_HOME, 'releases/adoption-b'));
+  assert.equal(registered(), undefined);
   release('rollback');
   assert.equal(fs.realpathSync(path.join(env.HERDR_MONITOR_HOME, 'current')), active);
-  assert.equal(registered(), active);
+  assert.equal(registered(), undefined);
   release('restore');
-  assert.equal(registered(), undefined, 'restore must discover and unlink the release plugin');
+  assert.equal(registered(), undefined, 'restore leaves no plugin registration');
   for (const [file, original] of originals) {
     if (original) { assert.deepEqual(fs.readFileSync(file), original.data); assert.equal(fs.statSync(file).mode & 0o777,original.mode); }
     else assert.equal(fs.existsSync(file),false,file);
@@ -218,8 +201,8 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
 write(path.join(evidence, 'summary.json'), JSON.stringify({ outcome, failure, root, product, project, head, run: context?.run,
   mode: account ? 'fresh-macos-account' : 'scratch-home', account, harness: kind,
   source_commit: sourceCommit,
-  coverage: `${account ? 'real macOS account install and live Herdr plugin registration' : 'scratch HOME install and fixture plugin registration'}, bundled owner/Python prerequisite checks, pinned dependencies, repeated activation, fresh shell auto-entry, scripted task, actual native sandbox check and local promotion, record ingestion, console, supervisor cold start, dry-run housekeeping, scripted reviewed cycle, upgrade, rollback, shell and native hook restoration`,
-  excluded: ['model judgment', ...(account ? ['live agent panes (only plugin registration is live)'] : ['live Herdr transport']), 'GitHub distribution', 'launchd', 'Linux and desktop/remote transport'],
+  coverage: `${account ? 'real macOS account install with no Herdr plugin registration' : 'scratch HOME install with no fixture plugin registration'}, bundled owner/Python prerequisite checks, repeated activation, fresh shell auto-entry, scripted task, actual native sandbox check and local promotion, record ingestion, supervisor cold start, dry-run housekeeping, scripted reviewed cycle, upgrade, rollback, shell and native hook restoration`,
+  excluded: ['model judgment', ...(account ? ['live agent panes'] : ['live Herdr transport']), 'GitHub distribution', 'launchd', 'Linux and desktop/remote transport'],
 }, null, 2) + '\n');
 console.log(`${outcome.toUpperCase()}: ${path.join(evidence, 'summary.json')}`);
 if (failure) { console.error(failure); process.exitCode = 1; }

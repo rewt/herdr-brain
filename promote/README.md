@@ -1,10 +1,5 @@
 # Promote
 
-The [Markdown workflow prototype](../workflow/README.md) can run the same guarded
-train with per-step receipts: add `--workflow` to an enqueue, or set
-`PROMOTE_WORKFLOW_ENGINE=1`. The current train remains the default. The queue saves
-the flag per request; engine and default requests form separate batches.
-
 The supervisor or settle enqueues lanes with one command from any checkout of
 any project. No project configuration, record initialization, service installation
 or model call is needed:

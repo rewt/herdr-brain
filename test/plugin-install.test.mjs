@@ -444,7 +444,7 @@ test('release carries entry, pins final versions, rolls back and restores exact 
   assert.notEqual(worker.cwd, project); assert.ok(fs.existsSync(path.join(project, '.org/events.jsonl')));
   assert.match(worker.args.join('\n'), /Herdr Monitor installed project-entry policy/u);
   assert.match(worker.args.join('\n'), /Never start project housekeeping/u);
-  f.ok('bash', [path.join(marker().product, 'herdr/supervisor.sh'), '--model', 'literal'], project);
+  f.ok(path.join(f.bin, 'monitor-codex'), ['--repo', project, '--role', 'supervisor', '--', '--model', 'literal'], project);
   const supervisor = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(supervisor.cwd, project);
   assertNativeSupervisorEntry(supervisor, marker().product);
@@ -461,26 +461,7 @@ test('release carries entry, pins final versions, rolls back and restores exact 
   assert.equal(f.ok('zsh', ['-ic', 'command -v codex']).trim(), f.native);
 });
 
-test('build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM', { timeout: 30000 }, (t) => {
-  const f = fixture(t), calls = path.join(f.root, 'npm-calls.jsonl');
-  copyProduct(source, f.repo, { includeApps: true });
-  const npm = path.join(path.dirname(f.native), 'npm');
-  fs.writeFileSync(npm, `#!${process.execPath}\nconst fs=require('fs'),path=require('path'),args=process.argv.slice(2);if(args[0]==='--version')console.log('10.0.0');else{fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');fs.mkdirSync(path.join(args[1],'node_modules'),{recursive:true});}\n`, { mode: 0o755 });
-  const build = ['bash', [path.join(f.repo, 'herdr/install.sh')], f.repo];
-  f.ok(...build, { RELEASE_NO_NPM: '', MONITOR_INSTALL_BUILD_ONLY: '1' });
-  const expected = ['console', 'mcp'].map((module) => ['--prefix', path.join(f.repo, module), 'ci', '--no-audit', '--no-fund', '--prefer-offline']);
-  assert.deepEqual(fs.readFileSync(calls, 'utf8').trim().split('\n').map((line) => JSON.parse(line)), expected);
-  fs.unlinkSync(calls);
-  f.ok(...build, { RELEASE_NO_NPM: '1', MONITOR_INSTALL_BUILD_ONLY: '1' });
-  assert.equal(fs.existsSync(calls), false);
-  assert.equal(fs.existsSync(f.bin), false);
-  // Dependency failure must happen before any entry changes.
-  fs.writeFileSync(npm, '#!/bin/sh\nexit 19\n', { mode: 0o755 });
-  assert.notEqual(f.run(...build, { RELEASE_NO_NPM: '', MONITOR_INSTALL_BUILD_ONLY: '' }).status, 0);
-  assert.equal(fs.existsSync(f.bin), false); assert.equal(fs.existsSync(path.join(f.home, '.zshenv')), false);
-});
-
-test('manifest build installs entry even when npm is skipped; restores preserve surrounding user edits', { timeout: 30000 }, (t) => {
+test('the install build installs entry; restores preserve surrounding user edits', { timeout: 30000 }, (t) => {
   const f = fixture(t);
   f.ok('bash', [path.join(f.repo, 'herdr/install.sh')]);
   const rc = path.join(f.home, '.zshrc'); fs.appendFileSync(rc, '# Later user edit\n');
@@ -489,7 +470,7 @@ test('manifest build installs entry even when npm is skipped; restores preserve 
   assert.equal(fs.existsSync(path.join(f.home, '.zshenv')), false);
 });
 
-test('plugin build discovers native CLIs and installs default machine paths without entry overrides', { timeout: 30000 }, (t) => {
+test('the install build discovers native CLIs and installs default machine paths without entry overrides', { timeout: 30000 }, (t) => {
   const f = fixture(t);
   const defaults = { HERDR_MONITOR_HOME: undefined, HERDR_MONITOR_ENTRY_BIN: undefined, HERDR_MONITOR_CODEX: undefined, HERDR_MONITOR_CLAUDE: undefined };
   f.ok('bash', [path.join(f.repo, 'herdr/install.sh')], f.repo, defaults);
@@ -536,25 +517,6 @@ require('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,'unexpected handover'
   assert.equal(refused.status, 1, refused.stdout + refused.stderr);
   assert.match(refused.stderr, /codex has no supported native sandbox options for a coordinating launch/u);
   assert.equal(fs.existsSync(f.receipt), false, 'unsupported native must not receive the session');
-});
-
-test('supervisor resolves the selected workspace to canonical Git instead of its plugin cwd', { timeout: 30000 }, (t) => {
-  const f = fixture(t); f.ok('bash', [path.join(f.repo, 'herdr/install.sh')]);
-  const project = path.join(f.root, 'project'), linked = path.join(f.root, 'linked'); fs.mkdirSync(project);
-  for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'Plugin Test'], ['config', 'user.email', 'plugin@example.invalid']]) f.ok('git', args, project);
-  fs.writeFileSync(path.join(project, 'seed'), 'project'); f.ok('git', ['add', '.'], project); f.ok('git', ['commit', '-qm', 'Project'], project);
-  f.ok('git', ['worktree', 'add', '-qb', 'selected-lane', linked], project);
-  const context = { HERDR_PLUGIN_ROOT: f.repo, HERDR_PLUGIN_CONTEXT_JSON: JSON.stringify({ workspace_id: 'owned-workspace', workspace_cwd: linked, focused_pane_cwd: linked }), HERDR_WORKSPACE_ID: 'owned-workspace' };
-  f.ok('bash', [path.join(f.repo, 'herdr/supervisor.sh'), '--model', 'literal'], f.repo, context);
-  const native = JSON.parse(fs.readFileSync(f.receipt));
-  assert.equal(native.cwd, project);
-  const runtime = JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-entry.json'))).product;
-  assertNativeSupervisorEntry(native, runtime);
-  assert.equal(fs.existsSync(path.join(f.repo, '.org')), false);
-  assert.notEqual(f.run('bash', [path.join(f.repo, 'herdr/supervisor.sh')], f.repo, { ...context, HERDR_PLUGIN_CONTEXT_JSON: '{}', HERDR_WORKSPACE_ID: '' }).status, 0);
-  assert.notEqual(f.run('bash', [path.join(f.repo, 'herdr/supervisor.sh')], f.repo, { ...context, HERDR_PLUGIN_CONTEXT_JSON: JSON.stringify({ workspace_id: 'owned-workspace' }) }).status, 0);
-  assert.notEqual(f.run('bash', [path.join(f.repo, 'herdr/supervisor.sh')], f.repo, { ...context, HERDR_WORKSPACE_ID: 'another-workspace' }).status, 0);
-  assert.equal(fs.existsSync(path.join(f.repo, '.org')), false);
 });
 
 const olderReleases = '/Users/rewt/.local/share/herdr-monitor/releases';

@@ -8,15 +8,15 @@ import { readRoutesConfig, resolveLaunchRoute, resolveRoute, selectRoute, valida
 import { ROUTE_PRESET } from "../preset.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const KIT = resolve(HERE, "../../kit/bch-cloak-20261001/lane/routing.json");
+const BCH_ROUTING = resolve(HERE, "fixtures/bch-cloak-routing.json");
 
 test("planning and Codex review default to Sol xhigh", () => {
   assert.deepEqual(["unblock", "review-codex"].map((route) => { const { model, effort } = resolveLaunchRoute(ROUTE_PRESET, { route }); return [model, effort]; }), [["gpt-6.1-sol", "xhigh"], ["gpt-6.1-sol", "xhigh"]]);
 });
 
 test("the bch-cloak route table loads without losing project fields", () => {
-  const raw = JSON.parse(readFileSync(KIT, "utf8"));
-  const loaded = readRoutesConfig(KIT);
+  const raw = JSON.parse(readFileSync(BCH_ROUTING, "utf8"));
+  const loaded = readRoutesConfig(BCH_ROUTING);
   assert.deepEqual(loaded, raw);
   assert.equal(Object.keys(loaded.routes).length, 23);
   assert.deepEqual(Object.keys(loaded), [
@@ -25,7 +25,7 @@ test("the bch-cloak route table loads without losing project fields", () => {
 });
 
 test("one resolution supplies launch plumbing and opaque run metadata", () => {
-  const config = readRoutesConfig(KIT);
+  const config = readRoutesConfig(BCH_ROUTING);
   const resolved = resolveLaunchRoute(config, { route: "engineer" });
   assert.deepEqual(
     { route: resolved.route, kind: resolved.kind, model: resolved.model, effort: resolved.effort },
@@ -45,7 +45,7 @@ test("one resolution supplies launch plumbing and opaque run metadata", () => {
 });
 
 test("selection policy uses opaque pool names and only names configured routes", () => {
-  const config = readRoutesConfig(KIT);
+  const config = readRoutesConfig(BCH_ROUTING);
   assert.equal(selectRoute(config, "implementation-narrow"), "engineer-opus");
   assert.equal(selectRoute(config, "implementation-narrow", "codex"), "engineer");
 

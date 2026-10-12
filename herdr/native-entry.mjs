@@ -8,7 +8,6 @@ import { gitProject } from '../lib/project.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { supervisorBinding } from '../supervisor/session-binding.mjs';
 import { enterSupervisor } from '../supervisor/entry.mjs';
-import { openProjectControls } from './project-entry.mjs';
 import { quote } from '../lib/shell.mjs';
 import { projectEntrySettings } from '../discovery/settings.mjs';
 
@@ -27,11 +26,10 @@ try {
       const binding = supervisorBinding(project, env.HERDR_PANE_ID);
       if (binding) enterSupervisor({ cwd: project.canonical, org: binding.org, role: 'supervisor', to: binding.to || 'supervisor-herdr' });
       else {
-        openProjectControls({ project });
         const bin = values.bin ?? env.HERDR_MONITOR_ENTRY_BIN ?? path.join(env.HERDR_MONITOR_HOME ?? path.join(env.HOME, '.local/share/herdr-monitor'), 'entry/bin');
         const adapters = ['codex','claude'].map(kind => path.join(bin, `monitor-${kind}`)).filter(file => fs.existsSync(file)).map(quote).join(' or ');
         console.log(sanitizeTerminal(`Herdr Monitor: project ${fleet.name} joined ${fleet.file}; record ${fleet.project.record}; session limit ${fleet.session_limit} (advisory).
-Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through ${adapters} --repo ${quote(project.canonical)}. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.\n`));
+Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through ${adapters} --repo ${quote(project.canonical)}. Those adapters supply the bounded worker workflow and promotion checks. Use the project supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.\n`));
       }
     }
   }

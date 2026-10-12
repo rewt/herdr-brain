@@ -149,6 +149,32 @@ test('reopening still clears completion and unknown events are ignored by curren
   assert.equal(itemStatus(fold(newestAfterReopen), 'ENG-1'), 'needs_human');
 });
 
+// Operator priorities (P-n, --serves) were retired. Records that used them must
+// keep loading: the fold ignores their events and views show only the type name.
+test('a record with retired priority events and run alignment still loads in every view', () => {
+  const t = setup();
+  const id = t.ok(['add', 'Keep working']).trim();
+  t.ok(['start', id, '--harness', 'h', '--model', 'm', '--effort', 'e', '--meta', 'serves=P-1']);
+  const file = path.join(t.dir, 'events.jsonl');
+  const seq = fs.readFileSync(file, 'utf8').trim().split('\n').length;
+  fs.appendFileSync(file, [
+    { seq: seq + 1, at: T0, by: 'human', type: 'priority.added', id: 'P-1', title: 'Old outcome', why: 'History' },
+    { seq: seq + 2, at: T0, by: 'human', type: 'priorities.ranked', order: ['P-1'], previous: [], why: 'History' },
+  ].map(e => JSON.stringify(e) + '\n').join(''));
+  const status = JSON.parse(t.ok(['status', '--json']));
+  assert.equal(status.events, seq + 2); assert.equal(Object.hasOwn(status, 'priorities'), false);
+  assert.equal(status.runs[0].meta.serves, 'P-1', 'alignment stays opaque run metadata');
+  assert.match(t.ok(['log']), /priority\.added[\s\S]*priorities\.ranked/);
+  for (const view of [['status'], ['show', id], ['show', 'R-1', '--json'], ['today', '--json'], ['snapshot'], ['brief', 'R-1']]) {
+    assert.doesNotMatch(t.ok(view), /operator priorit/i, view.join(' '));
+  }
+  for (const retired of [['priorities'], ['recap'], ['digest'], ['console']]) {
+    const r = t.org(retired); assert.equal(r.code, 1); assert.match(r.err, /unknown command/);
+  }
+  const start = t.org(['start', id, '--serves', 'P-1']); assert.equal(start.code, 1);
+  t.ok(['note', id, 'Still writable']);
+});
+
 test('ingesting an older report after a correction records it as late without displacing the correction', () => {
   const { dir, ok } = setup();
   ok(['add', 'Correct the implementation', '--role', 'engineer']);

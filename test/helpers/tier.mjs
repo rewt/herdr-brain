@@ -5,7 +5,7 @@ import { isMain } from '../../lib/cli-help.mjs';
 import { main as suite } from './suite.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const fast = ['test/main-module.test.mjs', 'test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'brain/test/capture.test.mjs', 'console/test/model.test.mjs', 'console/test/modern.test.mjs', 'console/test/frame.test.mjs', 'console/test/paint.test.mjs', 'console/test/names.test.mjs', 'console/test/waiting.test.mjs', 'console/test/terminal.test.mjs', 'console/proto/prototype.test.mjs', 'lanes/test/routes.test.mjs'];
+const fast = ['test/main-module.test.mjs', 'test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'brain/test/capture.test.mjs', 'lanes/test/routes.test.mjs'];
 // Whole-file promotion coverage stays explicit; future files default to release.
 // Mixed files also supply selected fast cases through the promotion scripts.
 const promotion = [
@@ -22,25 +22,6 @@ const promotion = [
   'brain/test/capture.test.mjs',
   'brain/test/projects.test.mjs',
   'brain/test/steward.test.mjs',
-  'console/proto/autonomy.test.mjs',
-  'console/proto/prototype.test.mjs',
-  'console/proto/workflows.test.mjs',
-  'console/test/board.test.mjs',
-  'console/test/brain.test.mjs',
-  'console/test/control-plane.test.mjs',
-  'console/test/control.test.mjs',
-  'console/test/controller.test.mjs',
-  'console/test/desks.test.mjs',
-  'console/test/frame.test.mjs',
-  'console/test/housekeeping.test.mjs',
-  'console/test/model.test.mjs',
-  'console/test/modern.test.mjs',
-  'console/test/names.test.mjs',
-  'console/test/paint.test.mjs',
-  'console/test/session-input.test.mjs',
-  'console/test/sources.test.mjs',
-  'console/test/terminal.test.mjs',
-  'console/test/waiting.test.mjs',
   'discovery/test/confinement.test.mjs',
   'discovery/test/host-suites.test.mjs',
   'discovery/test/entry.test.mjs',
@@ -52,7 +33,6 @@ const promotion = [
   'lanes/test/validation.test.mjs',
   'promote/test/promote.test.mjs',
   'promote/test/train.test.mjs',
-  'promote/test/workflow-engine.test.mjs',
   'promote/test/workflow-train.test.mjs',
   'release/test/candidate.test.mjs',
   'settle/test/rebase-paths.test.mjs',
@@ -68,10 +48,8 @@ const promotion = [
   'supervisor/test/unattended.test.mjs',
   'test/approvals.test.mjs',
   'test/discernment.test.mjs',
-  'test/digest.test.mjs',
   'test/file-wait.test.mjs',
   'test/flow.test.mjs',
-  'test/focus.test.mjs',
   'test/git-seed.test.mjs',
   'test/inbox.test.mjs',
   'test/lessons.test.mjs',
@@ -81,9 +59,7 @@ const promotion = [
   'test/no-setuid-processes.test.mjs',
   'test/offline-herdr.test.mjs',
   'test/one-watcher.test.mjs',
-  'test/priorities.test.mjs',
   'test/processes.test.mjs',
-  'test/recap.test.mjs',
   'test/report.test.mjs',
   'test/sanitization.test.mjs',
   'test/suite.test.mjs',
@@ -94,7 +70,7 @@ const promotion = [
   'watch/test/lock.test.mjs'
 ];
 const directories = {
-  core: ['test', 'brain/test', 'console/test', 'console/proto', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test'],
+  core: ['test', 'brain/test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test'],
   cycle: ['settle/test', 'supervisor/test', 'release/test'],
   lanes: ['lanes/test'], acceptance: ['acceptance/test'],
 };

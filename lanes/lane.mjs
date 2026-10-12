@@ -2690,7 +2690,7 @@ switch (command) {
     break;
   }
   case "promote-batch": {
-    if (!topic || (rest.length && (rest.length !== 1 || rest[0] !== '--workflow'))) fail('usage: lane promote-batch RECEIPT [--workflow]');
+    if (!topic || rest.length) fail('usage: lane promote-batch RECEIPT');
     const root = repositoryRoot({ requiredBy: 'promote' });
     try {
       const profile = resolveGateProfile(root);
@@ -2714,8 +2714,7 @@ switch (command) {
         try { waitForPromotionMemory(root, { held: true }); }
         catch (error) { if (refuse(error)) return; }
         return runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
-          main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings(),
-          workflow: rest.includes('--workflow') || process.env.PROMOTE_WORKFLOW_ENGINE === '1' });
+          main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings() });
       });
     } catch (error) { fail(error.message); }
     break;

@@ -7,7 +7,6 @@ import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, readConfig, now } from '../lib/store.mjs';
 import { fold, itemStatus, openRuns, isResolved, attention } from '../lib/state.mjs';
 import { lessonsJson } from '../lib/lessons.mjs';
-import { prioritiesJson, itemServes } from '../lib/priorities.mjs';
 import { describeEvent, approxTokens, renderLessonClaim } from '../lib/render.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { candidateRows } from '../lib/release-record.mjs';
@@ -81,7 +80,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
     effort: r.meta.effort ?? null, agent: r.meta.agent ?? null, pane: r.meta.pane ?? null,
     watcher_pid: r.meta.watcher_pid ?? null, watcher_identity: r.meta.watcher_identity ?? null, watcher_log: r.meta.watcher_log ?? null,
     lane: r.meta.lane ?? null, workspace: r.workspace, report: r.report_path,
-    serves: r.meta.serves ?? null, started: r.started.at,
+    started: r.started.at,
     checkout_missing: missing.has(r.id), repository_binding: unknown.has(r.id) ? 'unknown' : r.workspace ? project.identity : 'record_only' });
   const running = runs.filter((r) => openRuns(state, r.item).includes(r)).map((r) => ({ ...facts(r),
     report_file_present: Boolean(r.report_path && fs.existsSync(r.report_path)) }));
@@ -104,16 +103,13 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
     why: i.notes.find((n) => n.kind === 'why')?.text ?? i.created.why, memo: i.meta.memo ?? null }));
   const unsettled = new Set(reports.map((r) => r.item));
   const ready = items.filter((i) => i.kind !== 'goal' && i.role !== 'human' && itemStatus(state, i.id) === 'ready' && !unsettled.has(i.id))
-    .map((i) => ({ id: i.id, title: i.title, serves: itemServes(state, i.id), priority: i.priority }));
-  const priorities = prioritiesJson(state).priorities.map((p) => ({ id: p.id, rank: p.rank, title: p.title }));
-  const rank = (i) => priorities.find((p) => p.id === i.serves)?.rank ?? Infinity;
-  ready.sort((a, b) => rank(a) - rank(b) || (b.priority ?? -Infinity) - (a.priority ?? -Infinity));
+    .map((i) => ({ id: i.id, title: i.title, priority: i.priority }));
+  ready.sort((a, b) => (b.priority ?? -Infinity) - (a.priority ?? -Infinity));
   const held = items.filter((i) => i.role !== 'human' && ['blocked', 'needs_human'].includes(itemStatus(state, i.id)))
     .map((i) => ({ id: i.id, title: i.title, status: itemStatus(state, i.id), outcome: i.outcome }));
   const scopedRuns = new Map(runs.map((r) => [r.id, r]));
   const decisions = events.filter((e) => e.seq > after).flatMap((e) => {
-    if ((e.type === 'note.added' && e.decision && (ids.has(e.id) || scopedRuns.has(e.id)))
-      || ['priority.added', 'priorities.ranked'].includes(e.type)) {
+    if (e.type === 'note.added' && e.decision && (ids.has(e.id) || scopedRuns.has(e.id))) {
       return [{ seq: e.seq, at: e.at, by: e.by, id: e.id ?? null, text: e.text ?? describeEvent(e), summary: e.summary ?? null }];
     }
     const run = e.type === 'report.ingested' ? scopedRuns.get(e.run) : null;
@@ -148,7 +144,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   }
   const pendingCandidates = candidates.filter(c => ['awaiting-operator', 'inspect-interrupted', 'pending-gate'].includes(c.status));
   for (const c of pendingCandidates) next.push({ action: c.status === 'awaiting-operator' ? 'await_release_operator' : 'inspect_release', item: c.question ?? c.id, evidence: c.gate?.log ?? c.snapshot });
-  for (const i of ready) next.push({ action: 'consider_dispatch', item: i.id, serves: i.serves });
+  for (const i of ready) next.push({ action: 'consider_dispatch', item: i.id });
   if (!next.length) next.push({ action: running.length ? 'leave_in_flight' : waiting.length ? 'await_operator' : 'record_next_work' });
   if (!pendingCandidates.length) next.push({ action: 'consider_release_at_quiet_point' });
   let housekeeping = null;
@@ -157,7 +153,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const config = readConfig(org), clock = now(env);
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));
   return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
-    lessons, priorities, goals, running, reports, waiting, held, ready, decisions, next, recovery,
+    lessons, goals, running, reports, waiting, held, ready, decisions, next, recovery,
     approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release, housekeeping,
     footprint: projectFootprint(project, org),
     host: { memory, reason: memoryReason(memory), processes } };
@@ -193,7 +189,6 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
     out.push(`  ${doc.lessons.proposed} proposed lessons awaiting activation; record lessons --state proposed.`);
   }
 
-  section('Operator priorities', doc.priorities, (p) => `${p.rank}. ${p.id} ${line(p.title, 80)}`);
   section('Running (record; no live pane inference)', doc.running, (r) => `${r.run} ${r.item} ${line(r.title, 65)} · ${r.route ?? '?'} / ${r.harness ?? '?'} / ${r.model ?? '?'} / ${r.effort ?? '?'} · lane ${r.lane ?? '?'} · ${r.agent ?? '?'}${r.pane ? ` @${r.pane}` : ''}${r.checkout_missing ? ' · checkout missing; inspect record' : r.report_file_present ? ' · file awaits final watch notice' : ''}${r.repository_binding === 'unknown' ? ' · repository binding unknown' : ''}`);
   section('Reports and settlement', doc.reports.slice().reverse(), (r) => `${r.run} ${r.item} · ${r.outcome ?? 'file; stop unconfirmed'} · ${r.promotion ? `promotion ${r.promotion.phase}` : r.settlement?.result ?? (r.recorded ? 'no settle receipt' : 'awaits final watch notice')}${r.checkout_missing ? ' · checkout missing; inspect disposition' : ''} · ${line(r.headline ?? r.settlement?.reason ?? r.title, 100)}${r.settlement?.handoff ? ` · ${r.settlement.handoff}` : ''}`);
   section('Waiting on operator', doc.waiting, (q) => `${q.id} ${line(q.title, 100)} · ${q.category ?? '?'} · recommend ${q.recommend ?? '?'}`);
@@ -205,7 +200,7 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
   section('Next', doc.next, (n) => `${n.action} ${n.run ?? n.item ?? ''}${n.evidence ? ` · ${n.evidence}` : ''}`);
   section('Recovery evidence', doc.recovery, (r) => `${r.file}: ${line(r.reason)}`);
   section('Advisory signals (never work refusals)', doc.advisory, (a) => `${a.id} ${a.kind}: ${line(a.text)}`);
-  out.push('Retrieve depth: record show ID; brief --json. Record plans/authority with record note ID --decision; operator alone ranks priorities.',
+  out.push('Retrieve depth: record show ID; brief --json. Record plans/authority with record note ID --decision.',
     `After reading ALL new decisions (use --json when truncated): checkpoint --through ${doc.project.through}. Reading a brief never advances the checkpoint.`);
   return sanitizeTerminal(out.join('\n') + '\n');
 }

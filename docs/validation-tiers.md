@@ -6,8 +6,8 @@ and merge correctness files, and a selected lane lifecycle subset through the
 existing bounded runner. Fast remains the worker smoke command.
 
 `npm run test:release` retains the complete former promotion chain: slot, core,
-cycle, lanes, offline acceptance and the release-only tier inventory. The release candidate prepare step installs
-the pinned offline dependencies, runs this full suite under the release-owned
+cycle, lanes, offline acceptance and the release-only tier inventory. The release candidate prepare step runs
+its build step, runs this full suite under the release-owned
 slot, and writes build evidence only after success. Preparation failure stops
 the release lifecycle before live acceptance. The live harness still runs once
 per release candidate; lanes never run it. No behavioral assertion was deleted.
@@ -58,13 +58,11 @@ remain in release:
 | `settle/test/validation-tiers.test.mjs` | Worker, settle and queue panes reuse validated trees only while head, command and environment match. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
 | `supervisor/test/supervisor.test.mjs` | Foreground supervisor enforces review/correction caps, STOP, bound promotion, durable context and conditional record completion. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `test/brain-start.test.mjs` | Brain launcher records the acting session through a fake Herdr transport. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
-| `test/console-launch.test.mjs` | Console CLI explains missing dependencies and launches/configures the optional console correctly. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `test/fleet.test.mjs` | first entry maps an existing record in place; a neighbouring repository gets its own record and routes; concurrent first entries publish one complete fleet with both projects; join is a byte and mtime no-op from a linked checkout; session limit changes only through join | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
-| `test/mcp.test.mjs` | Core wrapper invokes optional offline MCP suite when dependencies exist and names its missing-dependency skip. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `test/open-session.test.mjs` | Legacy session launcher records actor/run identity, resolves routes and refuses duplicate supervisor/settle sessions. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `test/plugin-install.test.mjs` | Install/upgrade/rollback/recovery preserve exact shell bytes/modes and foreign runtime state across real CLI and PTY boundaries. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `test/pty.test.mjs` | Real PTYs retain arguments/status/TTY and independent native cleanup through timeouts, refusal and outer-runner death. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
-| `test/release.test.mjs` | Legacy immutable tagged release switches/rollback/restore preserve launchers, Brain service and plugin links. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/release.test.mjs` | Legacy immutable tagged release switches/rollback/restore preserve launchers, Brain service and legacy plugin links. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `test/settle-watch.test.mjs` | Retained settle-watch compatibility launcher keeps its flags, route arguments and acting-session record. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `test/startup-deadlines.test.mjs` | Module startup handshakes receive measured-load allowances without starting real project background services. | Real elapsed response, watchdog or descendant-cleanup integration. |
 | `test/test-hangs.test.mjs` | Native watchdog/ownership cleanup survives blocked event loops, cancellation, nested runners and detached descendants without touching replacements. | Real elapsed response, watchdog or descendant-cleanup integration. |
@@ -124,7 +122,6 @@ for exact retained titles and the audit of every whole-file deferral.
 
 | Partial file | Kept in promotion | Moved behavior and cost |
 | --- | --- | --- |
-| `console/test/session.test.mjs` | Answer argument safety and configuration defaults/refusals. | Real record CLI setup/answers, Herdr transport and session interaction. |
 | `acceptance/test/load-round2.test.mjs` | Both injected-load cutover aggregation classifications. | Real TAP children, delegated fixtures and elapsed receipt/queue deadlines. |
 | `acceptance/test/cleanup.test.mjs` | Receipt ownership, failed inventory, unreceipted refusal, lost-reply recovery and malformed journals (six cases). | Native adapter reply/layout processes and signal cleanup children. |
 | `acceptance/test/cutover.test.mjs` | Byte/mode rollback, eleven edit premises and transitive caller/backup retirement (seven cases). | Executing copied cleanup and tidy scripts against CLI transports. |

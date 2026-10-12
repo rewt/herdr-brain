@@ -10,7 +10,7 @@ const ORG = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const COMMANDS = [
   'init', 'add', 'block', 'unblock', 'note', 'ask', 'answer', 'set', 'close', 'reopen',
   'start', 'check', 'ingest', 'sync', 'abandon', 'brief', 'status', 'snapshot', 'show',
-  'log', 'today', 'recap', 'console',
+  'log', 'today',
 ];
 
 function run(bin, argv, cwd, env = {}) {

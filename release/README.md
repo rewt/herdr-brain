@@ -59,25 +59,22 @@ fixtures. `parent` may name an existing record item for the operator question.
 `--repo`, `--org` and `--tag` select the project, record and tag explicitly.
 
 This repository declares `herdr/release-candidate.mjs` as its project wrapper.
-Preparation copies npm cache indexes and just the console/MCP lockfile tarballs
-into the candidate's private `.release-npm-cache`, then runs `herdr/install.sh`
-with real `npm ci` in offline, build-only mode. It then runs `npm run test:release`
+Preparation runs `herdr/install.sh` in build-only mode (the product has no npm
+dependencies, so nothing is installed), then `npm run test:release`
 (the complete offline suite formerly in promotion) before writing build evidence.
 A failing offline suite stops preparation before live acceptance. It never installs machine entry.
-The retained `.release-build.json` names the candidate commit, both lockfile
-hashes, installed package counts and build command before acceptance starts.
+The retained `.release-build.json` names the candidate commit and build command
+before acceptance starts.
 The gate requires successful preparation evidence before starting acceptance.
 Copied-product workflows and deliberate long-response regressions must pass
 before live acceptance starts; a failure stops the gate.
-The gate passes `--npm-cache` (that private copy) and, when configured, `--bch-cloak` to
-`acceptance/run.mjs`. `herdr/release.sh build` remains the operator's ship step;
+The gate passes `--bch-cloak`, when configured, to `acceptance/run.mjs`. `herdr/release.sh build` remains the operator's ship step;
 activation remains a separate operator action. The live harness belongs only
 to the canonical supervisor's release cycle, never a lane's validation.
 
-Set these machine inputs in the invoking supervisor environment:
+Set this optional machine input in the invoking supervisor environment:
 
 ```sh
-export RELEASE_NPM_CACHE=/absolute/path/to/npm-cache
 # Optional existing-project compatibility checks:
 export RELEASE_BCH_CLOAK=/absolute/path/to/existing/bch-cloak
 ```
@@ -86,13 +83,9 @@ export RELEASE_BCH_CLOAK=/absolute/path/to/existing/bch-cloak
 compatibility cases report SKIP with a visible reason and the remaining cases
 decide the gate. When configured, the path must exist and all compatibility
 requirements remain in force; the harness reads that project only to create
-its scratch compatibility copies. The cache defaults to `npm_config_cache`, then
-`~/.npm`; the shared source is never written by preparation or acceptance.
-Populate it with the pinned dependencies before the release cycle, for example
-by running `npm --prefix console ci --cache "$RELEASE_NPM_CACHE"` and
-`npm --prefix mcp ci --cache "$RELEASE_NPM_CACHE"` in a development checkout.
-This project's declared preflight checks the cache index, readable pinned
-tarballs and configured compatibility path without copying or building anything.
+its scratch compatibility copies. `RELEASE_NPM_CACHE` is no longer read.
+This project's declared preflight checks the configured compatibility path
+without copying or building anything.
 Missing inputs return setup instructions without cutting a candidate or consuming
 a gate attempt.
 
@@ -105,8 +98,8 @@ normalized, and any following explanation is retained as the note. Other replies
 are rejected without writing events or closing the question. A yes records
 approval; it executes nothing. The operator executes the displayed ship argv from
 the project checkout and controls any activation separately. A no retains the
-candidate and evidence. The console's **Control → Releases** (`L`) shows candidates,
-gate results, logs and links to those questions.
+candidate and evidence. `record releases` shows candidates, gate results, logs
+and links to those questions.
 
 Repeated calls on an already gated commit return the existing result without
 another gate or question. A red build/gate retains evidence and asks no shipping
@@ -130,8 +123,8 @@ node release/release.mjs --dry-run --skip-live
 
 This clones the selected checkout into an owned temporary Git project, commits
 the preview declaration there, builds its tagged archive and runs the same gate
-with `--skip-live`. Its record, tags and installed dependencies stay in scratch;
-preparation uses the same real offline build and retains `.release-build.json`.
+with `--skip-live`. Its record and tags stay in scratch;
+preparation uses the same build step and retains `.release-build.json`.
 It neither ships nor activates. The retained scratch path and
 source commit are returned. Preview results are distinct from production release
 evidence. The production CLI refuses `--skip-live` without `--dry-run`.
@@ -139,7 +132,7 @@ evidence. The production CLI refuses `--skip-live` without `--dry-run`.
 the returned evidence names it. It never overrides the production declaration.
 
 `npm run test:release` includes the complete bounded offline inventory with
-explicit actors: record, console, lane promotion, settle/recovery, supervisor,
+explicit actors: record, lane promotion, settle/recovery, supervisor,
 queue, discovery, native ownership and offline acceptance coverage. The tier
 helper partitions files across core, cycle, lanes, acceptance and release-only
 steps so each file runs once; copied-entry probes stay isolated. Fixture, file

@@ -24,31 +24,31 @@ function fixture(t) {
   return root;
 }
 
-test('immutable release copy supports console build and contrib retirement without changing source', (t) => {
+test('immutable release copy supports a scratch dependency build and contrib retirement without changing source', (t) => {
   const root = fixture(t), source = path.join(root, 'release'), scratch = path.join(root, 'scratch');
-  fs.mkdirSync(scratch); fs.mkdirSync(path.join(source, 'console'), { recursive: true });
+  fs.mkdirSync(scratch); fs.mkdirSync(path.join(source, 'app'), { recursive: true });
   fs.mkdirSync(path.join(source, 'contrib'));
   const compat = 'contrib/settle-watch.mjs';
   fs.writeFileSync(path.join(source, compat), '#!/usr/bin/env node\n');
-  fs.writeFileSync(path.join(source, 'console/package.json'), '{}');
+  fs.writeFileSync(path.join(source, 'app/package.json'), '{}');
   fs.chmodSync(path.join(source, compat), 0o555);
-  fs.chmodSync(path.join(source, 'console/package.json'), 0o444);
-  for (const file of ['console', 'contrib', '']) fs.chmodSync(path.join(source, file), 0o555);
-  const before = ['console', 'contrib', '', compat, 'console/package.json'].map((file) => fs.statSync(path.join(source, file)).mode);
+  fs.chmodSync(path.join(source, 'app/package.json'), 0o444);
+  for (const file of ['app', 'contrib', '']) fs.chmodSync(path.join(source, file), 0o555);
+  const before = ['app', 'contrib', '', compat, 'app/package.json'].map((file) => fs.statSync(path.join(source, file)).mode);
   const candidate = path.join(scratch, 'candidate');
   fs.cpSync(source, candidate, { recursive: true, dereference: true });
-  assert.equal(fs.statSync(path.join(candidate, 'console')).mode & 0o777, 0o555);
+  assert.equal(fs.statSync(path.join(candidate, 'app')).mode & 0o777, 0o555);
   makeSnapshotWritable(candidate, scratch);
-  fs.mkdirSync(path.join(candidate, 'console/node_modules'));
-  fs.writeFileSync(path.join(candidate, 'console/package.json'), '{"scratch":true}');
+  fs.mkdirSync(path.join(candidate, 'app/node_modules'));
+  fs.writeFileSync(path.join(candidate, 'app/package.json'), '{"scratch":true}');
   const saved = fs.readFileSync(path.join(candidate, compat));
   fs.unlinkSync(path.join(candidate, compat)); fs.writeFileSync(path.join(candidate, compat), saved);
-  assert.equal(fs.statSync(path.join(candidate, 'console')).mode & 0o777, 0o755);
-  assert.equal(fs.statSync(path.join(candidate, 'console/package.json')).mode & 0o777, 0o644);
-  assert.deepEqual(['console', 'contrib', '', compat, 'console/package.json'].map((file) => fs.statSync(path.join(source, file)).mode), before);
-  assert.equal(fs.readFileSync(path.join(source, 'console/package.json'), 'utf8'), '{}');
+  assert.equal(fs.statSync(path.join(candidate, 'app')).mode & 0o777, 0o755);
+  assert.equal(fs.statSync(path.join(candidate, 'app/package.json')).mode & 0o777, 0o644);
+  assert.deepEqual(['app', 'contrib', '', compat, 'app/package.json'].map((file) => fs.statSync(path.join(source, file)).mode), before);
+  assert.equal(fs.readFileSync(path.join(source, 'app/package.json'), 'utf8'), '{}');
   assert.deepEqual(fs.readFileSync(path.join(source, compat)), saved);
-  assert.ok(!fs.existsSync(path.join(source, 'console/node_modules')));
+  assert.ok(!fs.existsSync(path.join(source, 'app/node_modules')));
   assert.throws(() => makeSnapshotWritable(source, scratch), /inside scratch/);
   assert.throws(() => makeSnapshotWritable(scratch, scratch), /inside scratch/);
 });
@@ -88,7 +88,7 @@ test('actual scratch permission failures and npm stderr become HARNESS through c
     assert.equal(result.status, 'PENDING'); assert.equal(result.origin, 'harness');
     assert.match(resultLine(result), /HARNESS/);
   }
-  const npm = `npm error code EACCES\nnpm error path ${scratch}/candidate/console/node_modules\nnpm error EACCES: permission denied, mkdir '${scratch}/candidate/console/node_modules'`;
+  const npm = `npm error code EACCES\nnpm error path ${scratch}/candidate/app/node_modules\nnpm error EACCES: permission denied, mkdir '${scratch}/candidate/app/node_modules'`;
   assert.equal(classifyFailure(commandFailure(npm, { scratchRoot: scratch })).origin, 'harness');
   const checks = [];
   await runCase(checks, cutoverChecks.canary, () => { throw commandFailure(npm); }, { scratchRoot: scratch });
@@ -121,7 +121,7 @@ test('foreign symlink followed by a parent segment stays FAIL for real EACCES an
   try { fs.writeFileSync(file, 'bad'); } catch (caught) { error = caught; }
   assert.equal(error?.code, 'EACCES');
   const results = [];
-  await runCase(results, cases.console, () => { throw error; }, { scratchRoots: [scratch] });
+  await runCase(results, cases.release, () => { throw error; }, { scratchRoots: [scratch] });
   assert.equal(results[0].status, 'FAIL'); assert.equal(results[0].origin, 'product');
   assert.equal(classifyFailure(commandFailure(`EPERM: open '${file}'`, { scratchRoots: [scratch] })).status, 'FAIL');
   assert.equal(fs.readFileSync(denied, 'utf8'), 'foreign');

@@ -121,7 +121,6 @@ function settings(project, opt) {
     org, expectedHead, run,
     superseded: opt['superseded-runs'] === undefined ? [] : JSON.parse(opt['superseded-runs']),
     requiredTests: opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']),
-    workflow: opt.workflow ?? process.env.PROMOTE_WORKFLOW_ENGINE === '1',
     validate,
     laneConfig: process.env.LANE_CONFIG ? path.resolve(process.env.LANE_CONFIG) : null };
 }
@@ -200,8 +199,7 @@ function perform(job, queue) {
 
 function performBatch(batch, queue) {
   const first = batch.jobs[0], cwd = queue.project.canonical;
-  const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined,
-    PROMOTE_WORKFLOW_ENGINE: first.workflow === undefined ? process.env.PROMOTE_WORKFLOW_ENGINE : first.workflow ? '1' : '0' };
+  const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
   const directory = path.join(queue.directory, 'batches', batch.id);
   fs.mkdirSync(directory, { recursive: true });
@@ -216,7 +214,7 @@ function performBatch(batch, queue) {
   const output = fs.openSync(log, 'a');
   let r;
   try { r = runProjectGateSync({ canonical: cwd, receipt,
-    argv: [first.laneCLI, 'promote-batch', receipt, ...(first.workflow ? ['--workflow'] : [])], cwd, env, stdio: ['ignore', output, output] }); }
+    argv: [first.laneCLI, 'promote-batch', receipt], cwd, env, stdio: ['ignore', output, output] }); }
   finally { fs.closeSync(output); }
   const hostFile = path.join(directory, 'host-gate.json');
   if (r.status !== 0 && fs.existsSync(hostFile)) {
@@ -389,7 +387,8 @@ export async function drain(queue) {
         if (next.laneCLI === LANE) {
           // Snapshot whatever is available now. No accumulation timer/window.
           // Different command/config inputs retain their independent gates.
-          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, job.workflow ?? false, Boolean(job.run)]);
+          // Older jobs still carry "workflow": false; the retired engine flag is ignored.
+          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, Boolean(job.run)]);
           const jobs = [next];
           while (jobs.length < policy.maxBatch && data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
           const job = { id: randomUUID(), phase: 'batching', jobs };
@@ -482,7 +481,7 @@ export async function drain(queue) {
 async function start(queue) {
   const output = fs.openSync(path.join(queue.directory, 'worker.log'), 'a');
   const env = { ...process.env };
-  for (const key of ['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID', 'LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR', 'PROMOTE_WORKFLOW_ENGINE']) delete env[key];
+  for (const key of ['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID', 'LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR']) delete env[key];
   const child = spawn(process.execPath, [SELF, '--drain', '--repo', queue.project.canonical], {
     cwd: queue.project.canonical, detached: true, stdio: ['ignore', output, output, 'ipc'], env,
   });
@@ -509,7 +508,7 @@ async function main() {
     validate: { type: 'string' }, herdr: { type: 'string' }, 'lane-cli': { type: 'string' },
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },
     'superseded-runs': { type: 'string' }, 'required-tests': { type: 'string' }, 'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
-    resume: { type: 'boolean' }, drain: { type: 'boolean' }, status: { type: 'boolean' }, workflow: { type: 'boolean' },
+    resume: { type: 'boolean' }, drain: { type: 'boolean' }, status: { type: 'boolean' },
   } });
   const queue = queueFor(opt.repo);
   if (opt.status) { process.stdout.write(JSON.stringify({ queue: queue.file, ...queue.load() }, null, 2) + '\n'); return; }

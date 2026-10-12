@@ -66,10 +66,11 @@ bash herdr/release.sh activate TAG
 bash herdr/release.sh status
 ```
 
-Build archives the tag, installs console and MCP dependencies with pinned
-`npm ci`, then makes the release read-only. It does not install entry. Activate
-installs entry from the final release, creates `record`, `org` and `lane`
-launchers, switches `current`, and links the plugin. If an existing Brain
+Build archives the tag and makes the release read-only; the product has no npm
+dependencies. It does not install entry. Activate installs entry from the final
+release, creates `record`, `org` and `lane` launchers and switches `current`. The
+Herdr plugin was removed on 2026-10-12; activation unlinks an older plugin
+registration. If an existing Brain
 LaunchAgent is present, activation moves and reloads it; it creates no new one.
 No project scheduler starts during installation.
 
@@ -110,12 +111,9 @@ launcher or symlink for overrides so upgrades work without reinstalling entry.
 `monitor-codex --binary` and `monitor-claude --binary` select that invocation
 directly. Explicit validation providers retain their selection.
 
-For a future published GitHub plugin, Herdr's `plugin install` runs the manifest
-build automatically, installs pinned dependencies and snapshots entry to a stable
-machine runtime before relocating its temporary checkout. It is that build which
-makes installation the setup. `herdr plugin link /path` skips builds: for a local
-non-release checkout first run `bash herdr/install.sh`, then link it. A local
-mutable checkout is for development; normal projects should use a release.
+For a local non-release checkout, `bash herdr/install.sh` installs entry from a
+stable snapshot of that checkout. A local mutable checkout is for development;
+normal projects should use a release.
 
 ## Enter any project
 
@@ -190,12 +188,8 @@ scripts into a cloud execution environment.
 Linux uses native Codex validation; the bubblewrap alternative is experimental,
 disabled by default, and documented for scratch only in [Discovery](../discovery/README.md).
 
-The first entry in a Herdr project workspace opens the console and the supervisor
-with `--no-focus`. Subsequent entries reuse the panes identified by their launch
-receipts. Outside Herdr, entry still joins the fleet; open the project in Herdr
-to use the plugin controls. The supervisor uses Codex when installed, otherwise
-Claude; `HERDR_MONITOR_SUPERVISOR_HARNESS=claude` selects Claude when both exist.
-Its native supervisor entry starts default housekeeping. Workers never start it.
+Entry opens no panes. Start the supervisor yourself (see below); its native
+supervisor entry starts default housekeeping. Workers never start it.
 
 ## Project overrides
 
@@ -245,9 +239,8 @@ Example record policy (merge into the discovered config; leave other fields):
 Existing category defaults are merged, so unspecified categories still ask.
 An agent uses `record ask` for substantive decisions and records structured
 `decisions`, `questions` and `challenges` in reports; category is determined by
-the action being authorized. Operator priorities are separate durable ranked
-outcomes: agents propose changes with `record priorities propose`, never rank
-on the operator's behalf. Budgets and Unaligned work are advisory.
+the action being authorized. Agents ask before changing the operator's
+priorities (`record ask --category priorities`). Budgets are advisory.
 
 The record CLI honors explicit `ORG_DIR`, then discovers a local/canonical or
 ancestor record. Fresh entry does not let inherited `ORG_DIR` silently redirect a
@@ -258,20 +251,14 @@ its report in its workspace with `record start ITEM --report PATH`.
 ## Supervisor and the reviewed cycle
 
 Herdr must be running for live dispatch, watch, housekeeping and session views.
-Open the plugin's supervisor pane from the project workspace, preserving focus:
-
-```sh
-herdr plugin pane open --plugin rewt.herdr-monitor --entrypoint supervisor --no-focus
-```
-
-Or from the canonical checkout, use `monitor-codex --role supervisor --` (or
-`monitor-claude --role supervisor --`). Supervisor role is explicit; a fresh native
+From the canonical checkout, start the supervisor with
+`monitor-codex --role supervisor --` (or `monitor-claude --role supervisor --`). Supervisor role is explicit; a fresh native
 Herdr agent start is a worker. Installed supervisor policy supplies the generic
 protocol and a compact read-only cold start. Only that canonical supervisor starts
 `node /path/to/release/housekeeping/housekeeping.mjs --start`. Repeated starts reuse
 the schedule. Workers never start it. Installation itself starts no loop.
 
-The supervisor reads record priorities and standing authority, checkpoints new
+The supervisor reads standing authority from the record, checkpoints new
 decisions after reading their full content, and coordinates this sequence:
 
 1. **Dispatch:** `node /path/to/release/dispatch/dispatch.mjs ITEM --lane TOPIC
@@ -304,12 +291,12 @@ decisions after reading their full content, and coordinates this sequence:
    a passing result asks the operator to ship or activate. Workers never run the
    release gate. The default gate is `npm test`; tracked `.release.json` declares
    a project gate, optional build preparation and an operator ship command.
-   `record releases` and Control → Releases (`L`) show the gate and decision.
+   `record releases` shows the gate and decision.
    Publish auto-category settings cannot approve it. See [Release](../release/README.md)
    for configuration and recovery; approval executes no shipping command.
 
-Lane tab/workspace/pane creation uses `--no-focus`. Explicit operator navigation
-in the console can focus a selected session. Session metadata is display-only.
+Lane tab/workspace/pane creation uses `--no-focus`. Navigate sessions in Herdr
+itself. Session metadata is display-only.
 No worker calls supervisor cycle mutations, no core command starts inference,
 and the queue exits when drained. The supervisor chat can be cleared: record
 history, briefs and mechanical receipts preserve continuity.
@@ -320,7 +307,7 @@ start another uncertain review or remove a live lock. The canonical
 `.lane/supervisor/STOP` refuses cycle mutations; it does not terminate workers
 already running. Clearing it permits explicit retry of retained evidence.
 
-Housekeeping can be paused with the console or `record housekeeping pause`.
+Housekeeping can be paused with `record housekeeping pause`.
 It closes only identity-verified finished worker tabs, leaves operator chats and
 unrecognized panes, and recovers interruptions through guarded requests. For a
 read-only preview, including from a lane:
@@ -372,39 +359,16 @@ command to remove the merged lane. Keep blocked, needs-human, unsettled, dirty
 or unmerged work for judgment; lane closure retains the CLI's archive recovery
 and lifecycle checks. This is an inspection procedure, not an automated sweep.
 
-## Observe and steer with the console
+## Observe
 
-```sh
-herdr plugin pane open --plugin rewt.herdr-monitor --entrypoint console --no-focus
-# Standalone, from the project:
-node /path/to/release/bin/org.mjs console --modern --folder "$PWD"
-```
+`record status`, `record today` and `node /path/to/release/supervisor/supervisor.mjs status`
+show the work, the questions waiting on you and each lane's stage. Navigate the
+sessions themselves in Herdr. The terminal console was removed on 2026-10-12; it is
+archived at tag `archive/console-20261012`.
 
-The plugin opens the modern console. It discovers the calling workspace's project
-or accepts a folder; no console catalog edit or record initialization is required
-to inspect a project. `record console` without `--modern` opens the older interface
-which requires a catalog; it is not the new-adopter default.
-
-`g`/`t`/`a`/`s`/`!` open Goals/Tasks/Activity/Sessions/Waiting on you;
-`c`/`d`/`f`/`u`/`P`/`H` open Control/Decided/Asked/Routes/Priorities/Housekeeping.
-Enter opens evidence; Esc goes back. Route and housekeeping edits, question
-answers and priority changes show a draft/review before saving through record
-commands. Route and housekeeping overrides become project files to commit;
-saving housekeeping config does not start a stopped schedule. `i` types into a
-selected session; Ctrl+] returns control to the console. `o` explicitly opens
-the native terminal. `q` exits. [Console reference](../console/modern/README.md)
-has the complete key map and limitations.
-
-For a bounded read-only screenshot/frame:
-
-```sh
-node /path/to/release/console/app.mjs --modern --folder "$PWD" --print 100x34
-```
-
-The older optional Brain capture/digest service is separate from the project
-cycle; it can call models and has legacy machine integration. New adoption does
-not need to install it or edit launchd. MCP is an optional foreground stdio
-adapter, using the record CLI for writes; see [MCP](../mcp/README.md).
+The older optional Brain capture service is separate from the project cycle; it can
+call models and has legacy machine integration. New adoption does not need to install
+it or edit launchd.
 
 ## Upgrade, rollback and uninstall
 
@@ -424,25 +388,24 @@ bash /path/to/monitor/herdr/release.sh rollback
 bash /path/to/monitor/herdr/release.sh restore
 ```
 
-Rollback selects `previous`, reinstalls that release's entry and re-links the
-plugin. It requires a previous activation. Rolling back to a pre-discovery release
+Rollback selects `previous` and reinstalls that release's entry (and re-links its
+plugin if that older release has one). It requires a previous activation. Rolling back to a pre-discovery release
 removes entry. Restore returns managed launchers and any pre-existing Brain
 service to their saved pre-activation state, removes unchanged entry adapters and
 PATH snippets, and unlinks the release plugin. It keeps immutable releases and
 project records. It does not stop existing agents or project schedules. Pause
 housekeeping and let the supervisor manage running sessions before uninstalling.
-Do not delete `.org` to uninstall the machine plugin.
+Do not delete `.org` to uninstall the machine installation.
 
-For a GitHub-plugin build or manual `herdr/install.sh` installation, invoke its
-**restore-entry** action, or run:
+For a manual `herdr/install.sh` installation, run:
 
 ```sh
-node /path/to/installed-plugin/herdr/entry-install.mjs --remove
-herdr plugin uninstall rewt.herdr-monitor
+node /path/to/installed-checkout/herdr/entry-install.mjs --remove
 ```
 
-For a local link, use `herdr plugin unlink rewt.herdr-monitor` after restoration.
-Herdr has no manifest uninstall callback; unregistering alone leaves the shell
+An older installation from the removed Herdr plugin can use that plugin's
+**restore-entry** action, then `herdr plugin uninstall rewt.herdr-monitor`
+(or `herdr plugin unlink` for a local link); unregistering alone leaves the shell
 snippets/adapters. Removal refuses edited managed snippets, adapters and symlinked
 shell files before overwriting them. Resolve the printed ownership conflict,
 then retry. An interrupted transaction is recovered by
@@ -456,7 +419,7 @@ The reproducible [scratch walkthrough](adoption/WALKTHROUGH.md) supplies only th
 guide's commands, a new unrelated project, a fresh home and a scripted coding
 worker. It runs actual install/build/activation, shell discovery, record start,
 commit, native sandboxed validation, local fast-forward, report ingestion,
-console rendering, supervisor cold start, dry-run housekeeping with a scripted
+supervisor cold start, dry-run housekeeping with a scripted
 empty Herdr topology, upgrade,
 rollback and restoration. It uses no model, credentials, live panes or launchd;
 its scripted worker proves mechanics rather than model judgment.
@@ -469,19 +432,8 @@ ORG_ACTOR=adoption-rehearsal node docs/adoption/rehearse.mjs \
 ```
 
 Each subprocess is bounded and evidence is retained in scratch. The final JSON
-names the clean integrated commit and confirms restored shell bytes. Native UI,
-actual Herdr install/build/move and supervisor-pane transport can be proved
-separately on macOS from an authorized Herdr pane, with no prompt or inference:
-
-```sh
-ORG_ACTOR=adoption-native-canary node acceptance/plugin-entry.mjs \
-  --candidate /path/to/candidate-copy --native-codex /absolute/path/to/native/codex
-```
-
-That canary uses its own named server and home, closes only its own workspaces,
-and restores/uninstalls only its scratch installation. Its transport replaces
-GitHub fetching with a local repository and omits dependency downloads. Neither
-proof claims GitHub distribution, Linux/desktop/remote coverage, live review
+names the clean integrated commit and confirms restored shell bytes. The proof
+does not claim GitHub distribution, Linux/desktop/remote coverage, live review
 quality or automatic release readiness. [Walkthrough evidence](adoption/WALKTHROUGH.md)
 records the actual result and remaining limits.
 
@@ -497,13 +449,13 @@ node docs/adoption/rehearse.mjs --fresh-account \
 
 Use `--native-codex` instead for Codex. This mode verifies the actual OS account
 identity, refuses a substituted HOME or existing Monitor installation, installs
-into that account's real home, and registers/unregisters the plugin through its
-real Herdr server. It checks a scripted task with native OS validation, repeated
+into that account's real home, and confirms no Herdr plugin is registered.
+It checks a scripted task with native OS validation, repeated
 activation and exact restoration of shell and native hook files. The summary
 records account, UID, source commit and harness. It retains releases, the joined
 fleet, project and record for inspection. For the UI observation, activate the
 retained `adoption-a` candidate again with your real native harness on PATH (the
 product path is in the summary), then enter the retained project in Herdr to
-observe the console, supervisor and housekeeping. Model
+observe the supervisor and housekeeping. Model
 judgment and live agent panes remain the operator's UI check. This lane does not
 run that account rehearsal or the live release harness.

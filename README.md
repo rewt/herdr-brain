@@ -1,16 +1,16 @@
 # Herdr Monitor
 
-Herdr Monitor gives coding agents a durable record and isolated Git lanes, with a
-console where you can see the work and steer it. A fresh session recovers tasks,
-reports, decisions and priorities from the record instead of a long chat history.
+Herdr Monitor gives coding agents a durable record and isolated Git lanes. A fresh
+session recovers tasks, reports and decisions from the record instead of a long
+chat history.
 
-Install the plugin once on the machine. Enter an existing Git project through a
+Install a release once on the machine. Enter an existing Git project through a
 fresh Codex or Claude shell session: Monitor supplies the workflow, creates a
 worker lane and records the actual task as the agent works. There is no project
 `init`, required instruction-file edit or required user configuration.
 
 **Start with [the adoption guide](docs/ADOPTING.md).** It covers installation,
-uninstall, project overrides, the agent cycle, the console and release rollback.
+uninstall, project overrides, the agent cycle and release rollback.
 This repository is still a local development candidate; no public repository or
 marketplace installation is promised. The [publication audit](docs/PUBLISHING-AUDIT.md)
 lists the work required before any publication.
@@ -23,8 +23,6 @@ lists the work required before any publication.
   reports through independent review, and authorizes queued local promotion.
 - Housekeeping handles finished worker tabs and interrupted sessions. Only the
   canonical project supervisor starts its schedule.
-- The console shows tasks, sessions, questions, decisions, priorities, routes,
-  housekeeping and recent activity. Your choices go through validating commands.
 
 Coordination is deterministic. The dependency-free record core runs in the
 foreground and never calls a model. Workers and reviews use your native harnesses;
@@ -41,8 +39,8 @@ note per unresolved item or current run marked `Plan:` or `## Plan`, with number
 or bulleted steps; completed `[x]` steps do not count. Older plan notes and ordinary
 prose mentions do not count.
 
-Questions older than seven elapsed days collapse into one count in the text view
-and console. `record today --parked` lists them; add `--json` for structured output.
+Questions older than seven elapsed days collapse into one count in the text view.
+`record today --parked` lists them; add `--json` for structured output.
 The default `record today --json` keeps every open question in impact order and
 adds `blocked_count`, `blocked_work` (`items`, `runs`, `plan_steps`), and `parked`
 for consumers. Parking is a read-time presentation choice and changes no events
@@ -67,14 +65,13 @@ sessions and custom shells need their own entry transport; see the guide.
 
 | Module | Reference |
 | --- | --- |
-| Record | `node bin/org.mjs help` (`org` is the permanent `record` alias); [Chat digest](supervisor/README.md), [Lessons](docs/reference/lessons.md), [MCP adapter](mcp/README.md) |
+| Record | `node bin/org.mjs help` (`org` is the permanent `record` alias); [Lessons](docs/reference/lessons.md) |
 | Entry and project settings | [Discovery](discovery/README.md) |
 | Machine installation | [Herdr](herdr/README.md) |
 | Lanes and routes | [Lanes](lanes/README.md) |
 | Dispatch / watch | [Dispatch](dispatch/README.md), [Watch](watch/README.md) |
 | Review and integration | [Settle](settle/README.md), [Promote](promote/README.md) |
 | Supervisor / housekeeping | [Supervisor](supervisor/README.md), [Housekeeping](housekeeping/README.md) |
-| Console | [Modern console](console/modern/README.md) |
 | Host test slot | [Test slot](test-slot/README.md) |
 | Release batching and validation | [Release](release/README.md), [Acceptance](acceptance/README.md) |
 | Intent | [North star](docs/north-star.md), [Roadmap](docs/roadmap.md) |
@@ -87,7 +84,8 @@ run no suite. `npm run test:fast` gives checks that finish in seconds.
 The release prepare step runs the complete offline `npm run test:release` once
 per candidate before live acceptance. See [test tiers](docs/reference/test-tiers.md)
 for file selection, fixture ownership and prerequisite skips.
-Console and MCP have pinned dependencies; the core, lanes and cycle modules have none.
+The product has no npm dependencies. The console was removed on 2026-10-12 and is archived at tag
+`archive/console-20261012`; restore it with `git checkout archive/console-20261012 -- console`.
 
 Tests stay offline and call no model. The dependency-free runner bounds tests,
 files and suites; each fixture has owned cleanup. Standalone hang regressions use

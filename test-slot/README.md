@@ -8,8 +8,8 @@ Worker fast checks use the same watchdog without taking the slot. The installed 
 module, and this project's `npm run test:promotion` also takes it directly.
 
 ```sh
-node "$HERDR_PLUGIN_ROOT/test-slot/test-slot.mjs" run promotion --wait 600 -- npm test
-node "$HERDR_PLUGIN_ROOT/test-slot/test-slot.mjs" status
+node /path/to/herdr-monitor/test-slot/test-slot.mjs run promotion --wait 600 -- npm test
+node /path/to/herdr-monitor/test-slot/test-slot.mjs status
 ```
 
 The default lock is `/private/tmp/bch-cloak-test-slot.lock` on macOS and

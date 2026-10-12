@@ -342,18 +342,6 @@ test('an existing named control workspace is reused and ambient recipients never
   assert.equal(f.state().spaces.length, 1); assert.equal(f.state().focus, 'operator-work');
 });
 
-test('console --print refuses project chat keys for every profile without creating tabs or launching agents', t => {
-  const f = fixture(t), p = f.projects[0], config = path.join(f.root, 'console.json');
-  fs.writeFileSync(config, JSON.stringify({projects: [{name: p.name, cwd: p.checkout, org: p.record}], explain: false}));
-  const app = new URL('../../console/app.mjs', import.meta.url).pathname;
-  for (const profile of [[], ['--modern'], ['--minimal']]) {
-    const r = spawnSync(process.execPath, [app, ...profile, '--config', config, '--project', p.name, '--print', '100x30', '--keys', 'C'], {env: f.env, encoding: 'utf8'});
-    assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /--print does not open project chats/);
-  }
-  assert.equal(f.state().tabs.length, 0); assert.equal(f.state().launches.length, 0); assert.equal(f.state().focus, 'operator-work');
-});
-
-
 test('read-mode chats select Claude before tab creation and refuse explicit Codex, stale full chats and prototypes', t => {
   const f=fixture(t), p=f.projects[0], bin=f.env.HERDR_MONITOR_ENTRY_BIN;
   const wrapper=path.join(bin,'herdr-read');fs.writeFileSync(wrapper,'#!/bin/sh\nexit 1\n',{mode:0o755});

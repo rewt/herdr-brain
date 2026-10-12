@@ -1,11 +1,13 @@
 # Machine installation and releases
 
 The release is independent of development: `release.sh build TAG` archives a Git
-tag, installs console and MCP dependencies in the archive, renames it to its final path
-and makes it read-only. Building never installs entry adapters from `.partial`.
+tag, renames it to its final path and makes it read-only. The product has no npm
+dependencies. Building never installs entry adapters from `.partial`.
 `release.sh activate TAG` installs entry from the final release, manages the
-record/org/lane launchers, switches `current`, reloads an existing Brain service
-and re-links the Herdr plugin. Development merges do not change that release.
+record/org/lane launchers, switches `current` and reloads an existing Brain service.
+The Herdr plugin was removed on 2026-10-12: activating a release without
+`herdr-plugin.toml` unlinks an older plugin registration, and rolling back to an
+older release links its plugin again. Development merges do not change that release.
 
 ```sh
 bash herdr/release.sh build TAG
@@ -34,23 +36,19 @@ runner also clears inherited Herdr IDs and pins an absent scratch socket; neithe
 `npm test` nor `npm run test:lanes` contacts the operator's server. Tests run with
 their own actor and bounded fixture commands. They set their
 own scratch `HOME`, `ZDOTDIR`, release home and bin; they skip plugin registration
-and launchd. `RELEASE_NO_NPM=1` skips dependency installation only. It does not
-skip entry. `MONITOR_INSTALL_BUILD_ONLY=1` is the archive build's internal
-dependency-only step. The manifest's normal `herdr/install.sh` build installs
-console/MCP dependencies and entry. Both use their pinned lockfile via
-`npm ci --no-audit --no-fund --prefer-offline`.
+and launchd. `RELEASE_NO_NPM=1` skips the npm prerequisite check only. It does not
+skip entry. `MONITOR_INSTALL_BUILD_ONLY=1` makes `herdr/install.sh` the archive
+build's no-op step. A direct `herdr/install.sh` run installs entry.
 
-Herdr installs GitHub plugins through a temporary checkout that it moves after
-the build. That build copies entry's dependency-free runtime into a stable,
+A direct install copies entry's dependency-free runtime into a stable,
 content-addressed directory under `$HERDR_MONITOR_HOME/entry/runtimes` before
-installing adapters. The runtime remains usable when Herdr relocates or removes
-the checkout. Release activation instead pins the final immutable release.
+installing adapters. The runtime remains usable when the source checkout moves
+or disappears. Release activation instead pins the final immutable release.
 
 Install native Codex, Claude, or both. On macOS, Claude-only worker validation
 uses the existing OS provider; Linux validation currently requires Codex.
-The installer checks Node/npm, Git, Python and Herdr before changing entry or
-installing pinned dependencies. Repeating the same build reuses dependencies
-with matching lockfile, Node ABI and platform receipts. Entry resolves discovered
+The installer checks Node/npm, Git, Python and Herdr before changing entry.
+Entry resolves discovered
 native executables from PATH at launch, excluding managed entry directories;
 the install receipt retains their launchers as fallback. Receipts also preserve
 whether each native was explicitly selected. `HERDR_MONITOR_CODEX`,
@@ -136,28 +134,17 @@ cannot establish safe recovery with this format. Stable runtimes include an
 explicit asset allowlist, including `lanes/docs/REVIEW_TEMPLATE.md`, and remain
 after successful removal, alongside retained releases.
 
-For a Herdr GitHub installation, use the manifest's **restore-entry** action,
-or `node /installed/plugin/herdr/entry-install.mjs --remove`, before uninstalling
-the plugin. Monitor's restore command is separate from Herdr's
-[unlink/uninstall commands](https://herdr.dev/docs/cli-reference/). The documented
-[manifest](https://herdr.dev/docs/socket-api/) has no uninstall callback; an
-unregister operation alone cannot reverse shell changes. Local `plugin link`
-skips builds, so use release activation or run `herdr/install.sh` explicitly.
+To remove entry, run `node /installed/release/herdr/entry-install.mjs --remove`
+(release `restore` does this too). An older installation from the removed Herdr
+plugin can still use that plugin's **restore-entry** action before uninstalling it.
 
-The explicit **supervisor** pane resolves the selected Herdr workspace through
-the invocation context and verifies its canonical Git checkout before entry.
-The pane's default working directory can be the plugin checkout; it never
-selects that directory as the project when plugin context is present.
-Its installed policy directs that supervisor to start default housekeeping;
-ordinary fresh native Herdr starts are workers, whose policy forbids the loop.
-Installation and shell startup never start a project scheduler. Running sessions
-and schedules retain their own lifetime when entry is restored or rolled back.
-The first entered project in an existing Herdr workspace opens the console and
-supervisor without focus. Launch receipts compare pane and terminal IDs for reuse;
-they supply no worker or supervisor authority. Workspace Git identity must match
-the entered project before opening controls. A Claude-only installation opens a
-Claude supervisor with the same existing SessionStart recovery transport.
+The project supervisor enters through the installed adapter
+(`monitor-codex --repo PROJECT --role supervisor`), which verifies the canonical
+Git checkout. Its installed policy directs that supervisor to start default
+housekeeping; ordinary fresh native Herdr starts are workers, whose policy forbids
+the loop. Installation and shell startup never start a project scheduler, and
+project entry opens no panes. Running sessions and schedules retain their own
+lifetime when entry is restored or rolled back.
 
 See [project entry](../discovery/README.md) for project overrides and launch
-coverage, and [the native canary](../acceptance/README.md) for the bounded scratch
-test. No release is pushed or published by these commands.
+coverage. No release is pushed or published by these commands.

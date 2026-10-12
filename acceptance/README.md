@@ -31,39 +31,16 @@ cleanup. Evidence is
 `lessons-planted.json`, `lessons-{codex,claude}.entry.json` and corresponding
 `.screen.txt` files. Missing native tools or `--skip-live` keep the gate pending.
 
-The installed native entry canary is also runnable independently:
-
-```sh
-ORG_ACTOR=plugin-entry-canary node acceptance/plugin-entry.mjs \
-  --candidate /path/to/candidate-copy --native-codex /absolute/native/codex
-```
-
-It starts an isolated named Herdr server with a scratch user home and installs
-the plugin through Herdr's actual temporary-checkout build and move. Git fetch
-uses a local scratch repository in place of GitHub network transport. It opens
-a fresh Herdr shell in an unrelated pristine Git project and starts the actual native Codex UI with
-`herdr agent start`, and witnesses policy delivery at the native executable
-boundary. A second UI opens the manifest supervisor pane without a cwd override
-and witnesses canonical project selection and the housekeeping start instruction.
-Both retain the installed stable runtime's exact policy path after relocation.
-The test sends no prompt, calls no model and starts no housekeeping loop;
-the native UIs run under macOS sandbox-exec with network denied and writes
-restricted to scratch and terminal devices. It uses a dummy API credential,
-never the operator's credentials. All calls and waits have time limits.
-
-It closes only its created workspaces, restores the scratch adapters and shell
-startup bytes, uninstalls its plugin and stops its own named server, retaining
-command receipts, policies, screens and summary under the printed evidence path.
-It excludes GitHub network access, npm downloads and launchd. Offline tests in
-`test/plugin-install.test.mjs` cover pinned console/MCP build arguments, real
-v0.1.3/v0.1.4 scratch releases, namespaced rollback, read-only shell files and
-durable recovery after failed/terminated writes. Absolute native paths,
-desktop/remote entry and other shells need their own entry transports; see
-[installation coverage](../herdr/README.md).
+Offline tests in `test/plugin-install.test.mjs` cover real v0.1.3/v0.1.4 scratch
+releases, namespaced rollback, read-only shell files and durable recovery after
+failed/terminated writes. Absolute native paths, desktop/remote entry and other
+shells need their own entry transports; see
+[installation coverage](../herdr/README.md). The Herdr plugin and its
+installed-entry canary were removed on 2026-10-12.
 
 ```sh
 node acceptance/run.mjs --candidate main \
-  --bch-cloak /path/to/live/bch-cloak --npm-cache /path/to/npm-cache
+  --bch-cloak /path/to/live/bch-cloak
 ```
 
 `--candidate` accepts a Git tag/ref or an existing release directory. `--source`
@@ -330,10 +307,8 @@ child dispatch, so nested validation runs inside the gate's existing host slot.
 Release mechanics build immutable copies with the candidate release script in a
 scratch repository/home/bin, then activate, reactivate, roll back and restore.
 They include a `before/` directory that predates the `record` launcher.
-Plugin linking and launchd are excluded by the brief's boundary. The console's
-actual `npm ci --offline` runs separately using copies of the supplied cache's
-indexes and lockfile tarballs. Missing cache content fails; omitting
-`--npm-cache` leaves the full dependency build pending.
+Plugin linking and launchd are excluded by the brief's boundary. The product has
+no npm dependencies, so no dependency build runs.
 
 The thirteen ENG-64 switches (including cleanup, retirement of the legacy notify section
 of the mixed se-test, and the event-service comment correction) are applied to the audited live-script copies and executed,

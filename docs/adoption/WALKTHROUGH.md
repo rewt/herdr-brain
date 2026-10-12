@@ -54,16 +54,16 @@ product's readiness descriptor to the actual native Codex provider.
 | Step | Commands/behaviour from the guide | Required receipt |
 | --- | --- | --- |
 | 1. New project | Initial Git commit, an ordinary package `test` script and a real assertion for Hello | No `.org`, `.lane.json`, `AGENTS.md` or `CLAUDE.md` before entry; no parent workflow config |
-| 2. Build | `bash herdr/release.sh build adoption-a` | Pinned console/MCP installs, immutable final archive; no shell entry installed by build |
-| 3. Activate | `bash herdr/release.sh activate adoption-a`; `status` | Scratch launchers, reversible shell snippets and Python-discovered registration in a local fixture; launchd skipped |
+| 2. Build | `bash herdr/release.sh build adoption-a` | Immutable final archive (no npm dependencies); no shell entry installed by build |
+| 3. Activate | `bash herdr/release.sh activate adoption-a`; `status` | Scratch launchers and reversible shell snippets; no plugin registration in the local fixture; launchd skipped |
 | 4. Fresh entry | New zsh shell, `command -v codex`, `command -v monitor-codex`, then `codex` in an actual PTY | Adapter found automatically; real injected worker policy names a separate lane/shared record and forbids housekeeping |
 | 5. Actual task | Policy client `start 'Change the greeting to Bonjour and validate it'`; read returned brief | A task/run/report binding from actual record; no invented IDs |
 | 6. Complete | Edit greeting/assertion, write/check report; `commit`, `check`, `promote`, `finish` | Native sandboxed `npm test`, clean same HEAD on main/lane, actual fast-forward, immutable ingested done report; routing question remains unanswered |
-| 7. Observe | `console/app.mjs --modern --folder PROJECT --print 100x34`; `supervisor/supervisor.mjs brief` | Rendered console and read-only supervisor cold start from the newly populated record |
+| 7. Observe | `supervisor/supervisor.mjs brief` | Read-only supervisor cold start from the newly populated record |
 | 8. Housekeeping | `housekeeping/housekeeping.mjs --once --dry-run --state-dir PROJECT/.lane/housekeeping-preview` | Scratch preview with an empty read-only Herdr fixture; no project loop or live pane mutation |
 | 9. Reviewed cycle | `node acceptance/supervisor.mjs CANDIDATE` as documented in the supervisor/acceptance references | Actual record/watch/settle/fix/review/queue/close mechanics, including stale notices and duplicate receipts; Herdr/model work is scripted |
-| 10. Upgrade | Build/activate `adoption-b`; `rollback` | Exact `current` and fixture plugin paths change to B, then return to A; no active machine release touched |
-| 11. Restore | `bash herdr/release.sh restore` | Fixture registration unlinked through Python-backed discovery; original scratch `.zshrc` bytes and mode restored; originally absent shell files/adapters/launchers gone; committed project and record preserved |
+| 10. Upgrade | Build/activate `adoption-b`; `rollback` | Exact `current` changes to B, then returns to A; no plugin is registered; no active machine release touched |
+| 11. Restore | `bash herdr/release.sh restore` | No plugin registration remains; original scratch `.zshrc` bytes and mode restored; originally absent shell files/adapters/launchers gone; committed project and record preserved |
 
 Automatic fresh entry requires terminal stdin/stdout. `zsh -ic codex` with piped
 stdio deliberately passes through; use an actual pane or the runner's PTY. This
@@ -107,15 +107,8 @@ you have finished inspecting them. The JSON result names those exact roots.
 
 ## Native Herdr transport proof
 
-The separate command in the guide runs `acceptance/plugin-entry.mjs` from an
-authorized Herdr pane. It starts an isolated named server with a scratch home,
-uses Herdr's actual plugin-install/build/move path, starts the actual native
-Codex UI with no prompt/network, witnesses the worker policy, then opens the
-manifest's supervisor pane from the unrelated project workspace without a cwd
-override. It verifies the stable relocated runtime and canonical project policy.
-It restores shell bytes, removes entry, uninstalls its plugin, closes only its
-created workspaces and stops only its own named server. It starts no housekeeping
-loop. This complements the scripted task's integration proof.
+The installed-plugin canary (`acceptance/plugin-entry.mjs`) was removed with the
+Herdr plugin on 2026-10-12. The evidence below predates that removal.
 
 ## Recorded evidence, 2026-10-02
 

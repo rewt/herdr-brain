@@ -30,7 +30,7 @@ test('cold start Lessons includes bounded active claims and counts proposals awa
   const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env });
   assert.equal(doc.lessons.active.length, 8);
   assert.equal(doc.lessons.proposed, 2);
-  const section = renderColdStart(doc).split('Lessons (8):\n')[1]?.split('\nOperator priorities')[0] ?? '';
+  const section = renderColdStart(doc).split('Lessons (8):\n')[1]?.split('\nRunning (record')[0] ?? '';
   assert.equal(section.match(/^  L-\d+ /gm)?.length, 6);
   assert.match(section, /\+2 more.*brief --json/);
   assert.match(section, /2 proposed lessons awaiting activation/);
@@ -348,11 +348,9 @@ test('supervisor entry and final notices carry the unconfigured cycle through ac
   assert.match(proof.detail, /guarded record completion/);
 });
 
-test('cold start includes routes, priorities, history across midnight and a durable explicit reading cursor', { timeout: 15000 }, (t) => {
+test('cold start includes routes, history across midnight and a durable explicit reading cursor', { timeout: 15000 }, (t) => {
   const f = fixture(t, { actor: 'supervisor-cursor-test' }), run = f.start();
-  const p = f.exec(process.execPath, [path.join(root, 'bin/org.mjs'), 'priorities', 'add', 'Keep continuity cheap', '--why', 'Operator direction'], f.repo, { ORG_DIR: f.org, ORG_ACTOR: 'human' });
-  assert.equal(p.status, 0, p.stderr);
-  f.record(['set', run, 'serves=P-1', 'model=opaque-model', 'effort=opaque-effort']);
+  f.record(['set', run, 'model=opaque-model', 'effort=opaque-effort']);
   const record = (text, when) => {
     const r = f.exec(process.execPath, [path.join(root, 'bin/org.mjs'), 'note', f.show(run).item, text, '--decision'], f.repo, { ORG_DIR: f.org, ORG_NOW: when });
     assert.equal(r.status, 0, r.stderr);
@@ -360,9 +358,7 @@ test('cold start includes routes, priorities, history across midnight and a dura
   record('Yesterday remains available', '2026-10-01T23:50:00Z');
   const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
   const doc = result(invoke(f, ['brief', '--json']));
-  assert.equal(doc.priorities[0].title, 'Keep continuity cheap');
   assert.equal(doc.running[0].model, 'opaque-model');
-  assert.equal(doc.running[0].serves, 'P-1');
   assert.ok(doc.decisions.some((d) => d.text === 'Yesterday remains available'));
   result(invoke(f, ['brief', '--json']));
   assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);

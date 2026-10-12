@@ -17,7 +17,6 @@ import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { coldStart, renderColdStart } from '../../supervisor/context.mjs';
 import { entryPolicy } from '../../discovery/policy.mjs';
 import { fold as oldFold } from '../../test/fixtures/state-v0.mjs';
-import { createModernSession } from '../../console/modern/session.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 process.env.ORG_ACTOR = 'release-tests';
@@ -327,7 +326,7 @@ const r=cp.spawnSync('/usr/bin/tar',args,{stdio:['ignore','inherit','inherit']})
   assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
 });
 
-test('supervisor, discovery and console recover gate evidence and the operator decision from the record', async t => {
+test('supervisor, discovery and record views recover gate evidence and the operator decision from the record', t => {
   const f = fixture(t, { gate: ['node', 'gate.cjs'], max_load_per_cpu: 100 });
   const c = f.attempt().candidate;
   const doc = coldStart({ cwd: f.repo, env: f.env });
@@ -337,16 +336,9 @@ test('supervisor, discovery and console recover gate evidence and the operator d
   assert.match(policy, /workers use.*never run the release gate/);
   const delegated = JSON.parse(f.ok(process.execPath, [path.join(ROOT, 'supervisor/supervisor.mjs'), 'release', '--repo', f.repo, '--role', 'supervisor']));
   assert.equal(delegated.candidate.id, c.id);
-  const session = createModernSession({ config: { projects: [{ name: 'Release project', cwd: f.repo, org: path.join(f.repo, '.org') }] }, env: {}, deps: {
-    identity: cwd => ({ key: f.project.identity, root: f.repo, cwd, name: 'Release project', git: true }),
-    herdrList: async () => [], herdrAgents: async () => ({ ok: true, agents: [] }), brainQueue: async () => ({ rows: [], off: true }),
-    orgToday: async () => f.record(['today', '--json']), orgStatus: async () => f.record(['status', '--json']), orgLog: async () => [],
-    orgRoutes: async () => null, orgHousekeeping: async () => null, orgDesks: async () => null,
-  } });
-  t.after(() => session.stop()); await session.refresh(); await session.key('L');
-  const text = session.frame(130, 42).lines.map(l => l.spans.map(s => s.text).join('')).join('\n');
-  assert.match(text, /Release candidates/); assert.match(text, /Gate: passed/); assert.match(text, /Waiting on you/);
-  await session.activate(`item:${c.question}`); assert.equal(session.ui.detail, c.question);
+  const [listed] = f.record(['releases', '--json']).candidates;
+  assert.equal(listed.id, c.id); assert.equal(listed.gate.result, 'passed'); assert.equal(listed.question, c.question);
+  assert.ok(f.record(['today', '--json']).waiting.some(row => row.id === c.question));
 });
 
 test('a running gate excludes a second release and a direct promotion with the shared lock', t => {

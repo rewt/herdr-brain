@@ -6,11 +6,6 @@ import { categoryFlag, reportCategoryFlags, CATEGORY_CHECKLIST } from '../lib/di
 import { reportTemplate } from '../lib/report.mjs';
 import { fold as oldFold, itemStatus as oldStatus } from './fixtures/state-v0.mjs';
 import { setupOrg } from './helpers.mjs';
-import { buildBoard } from '../console/lib/model.mjs';
-import { initialState } from '../console/lib/controller.mjs';
-import { renderFrame, lineText } from '../console/lib/frame.mjs';
-import { projectView } from '../console/modern/model.mjs';
-import { projectRows } from '../console/modern/project.mjs';
 
 const config = { approvals: { default: 'ask', categories: { design: 'auto', tooling: 'auto', custom: null,
   security: 'ask', 'funds-and-chain': 'ask', publish: 'ask', 'delete-data': 'ask' } } };
@@ -107,20 +102,4 @@ test('guidance is shared in report templates and CLI question help', t => {
   assert.ok(template.indexOf('artifacts:') < template.indexOf('decisions:'));
   assert.ok(template.indexOf('decisions:') < template.indexOf('questions:'));
   assert.ok(template.indexOf('questions:') < template.indexOf('challenges:'));
-});
-
-test('both console projections show category flags even with no waiting work or live sessions', () => {
-  const flag = { id: 'ENG-1', kind: 'category', text: 'Category review: tooling is auto but R-1 questions[0] mentions deletion; check operator authority' };
-  const today = { attention: [flag], waiting: [], running: [], decided: [], finished: [] };
-  const board = buildBoard({ today, herdr: { ok: true, agents: [] }, repoOf: () => null });
-  const classic = renderFrame({ board, state: initialState(), header: {}, glyphs: 'plain' }, 100, 30).lines.map(lineText).join('\n');
-  assert.match(classic, /CATEGORY REVIEW/); assert.match(classic, /mentions deletion/);
-  const identity = () => ({ key: '/project/.git', root: '/project' });
-  const model = projectView({ repoKey: '/project/.git', cwd: '/project', org: '/project/.org' },
-    { today, status: { items: [], runs: [], attention: [flag] }, events: [], workspaces: [], agents: [], tabs: [] }, identity);
-  assert.equal(model.categoryFlags.length, 1);
-  for (const width of [80, 100, 140]) {
-    const modern = projectRows({ model, state: { errors: {} }, project: { org: '/project/.org' }, width, height: 30 }).flat().map(c => c.text).join('\n');
-    assert.match(modern, /Category review/); assert.match(modern, /mentions\s+deletion/);
-  }
 });

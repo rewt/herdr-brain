@@ -22,9 +22,7 @@ steps, plus the native slot suite. New files default to release until explicitly
 assigned to promotion. See [validation tiers](../validation-tiers.md) for the
 behavior inventory and measured promotion timing. The
 native test-slot suite has its own runner because it intentionally exercises
-real detached groups. `test/mcp.test.mjs` runs the optional MCP tests when their
-dependencies are installed and otherwise names the skip. Console startup and
-provider/kernel checks likewise report their prerequisite skips.
+real detached groups. Provider/kernel checks report their prerequisite skips.
 
 The project release wrapper executes the offline release tier against the
 prepared candidate before writing build evidence and starting acceptance. A failed check prevents that

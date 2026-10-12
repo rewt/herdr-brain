@@ -10,7 +10,7 @@ import { spawnChild, waitForExit } from './helpers/child.mjs';
 
 process.env.ORG_ACTOR = 'suite-tests';
 test('npm phases preserve every file once and isolate copied-entry probes', () => {
-  const files = ['test/a.mjs', 'discovery/test/acceptance.test.mjs', 'console/test/b.mjs', 'settle/test/c.mjs', 'supervisor/test/d.mjs', 'release/test/e.mjs'];
+  const files = ['test/a.mjs', 'discovery/test/acceptance.test.mjs', 'watch/test/b.mjs', 'settle/test/c.mjs', 'supervisor/test/d.mjs', 'release/test/e.mjs'];
   const groups = phases(files);
   assert.deepEqual(groups[0], ['copied-entry', ['discovery/test/acceptance.test.mjs']]);
   assert.deepEqual(groups.flatMap(([, rows]) => rows).sort(), [...files].sort());
@@ -64,7 +64,7 @@ test('release keeps the complete offline suite and promotion covers the fast tie
   for (const tier of ['fast', 'core', 'cycle', 'lanes', 'acceptance']) assert.ok(scripts[`test:${tier}`].includes(`test/helpers/tier.mjs ${tier}`));
   const root = fileURLToPath(new URL('../', import.meta.url));
   const releaseFiles = ['core', 'cycle', 'lanes', 'acceptance', 'release'].flatMap(tier => tierFiles(tier, root));
-  const expected = ['test', 'brain/test', 'console/test', 'console/proto', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'settle/test', 'supervisor/test', 'release/test', 'lanes/test', 'acceptance/test'].flatMap(dir => fs.readdirSync(path.join(root, dir)).filter(name => name.endsWith('.test.mjs')).map(name => `${dir}/${name}`));
+  const expected = ['test', 'brain/test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'settle/test', 'supervisor/test', 'release/test', 'lanes/test', 'acceptance/test'].flatMap(dir => fs.readdirSync(path.join(root, dir)).filter(name => name.endsWith('.test.mjs')).map(name => `${dir}/${name}`));
   assert.equal(new Set(releaseFiles).size, releaseFiles.length, 'each release file runs once');
   assert.deepEqual([...releaseFiles].sort(), expected.sort());
   assert.match(scripts['test:slot'], /node --test test-slot\/test\/\*\.test\.mjs/);

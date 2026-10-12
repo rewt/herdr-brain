@@ -11,9 +11,20 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
 
 const SCRIPT = path.resolve(import.meta.dirname, '..', 'herdr', 'release.sh');
-const MANIFEST = path.resolve(import.meta.dirname, '..', 'herdr-plugin.toml');
+// Releases before the plugin's removal shipped this manifest; current releases ship none.
+const LEGACY_MANIFEST = `id = "rewt.herdr-monitor"
+name = "Herdr Monitor"
 
-function scratch() {
+[[panes]]
+id = "console"
+command = ["sh", "-c", "exec \\"$HERDR_PLUGIN_ROOT/herdr/console.sh\\""]
+
+[[actions]]
+id = "open"
+command = ["sh", "-c", "exec \\"\${HERDR_BIN_PATH:-herdr}\\" plugin pane open --plugin rewt.herdr-monitor --entrypoint console --no-focus"]
+`;
+
+function scratch({ plugin = [] } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-test-'));
   const repo = path.join(root, 'repo');
   const git = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'pipe', timeout: loadTimeout(5000) });
@@ -26,7 +37,8 @@ function scratch() {
     write('bin/org.mjs', `console.log('org ${v}');\n`);
     write('lanes/lane.mjs', `console.log('lane ${v}');\n`);
     write('brain/bin/brain.mjs', '');
-    write('herdr-plugin.toml', fs.readFileSync(MANIFEST, 'utf8'));
+    if (plugin.includes(v)) write('herdr-plugin.toml', LEGACY_MANIFEST);
+    else fs.rmSync(path.join(repo, 'herdr-plugin.toml'), { force: true });
     git('add', '-A'); git('commit', '-qm', v); git('tag', v);
   };
   version('t1'); version('t2');
@@ -143,10 +155,13 @@ test('a launcher that is a real file is never replaced', { timeout: 30000 }, () 
   } finally { s.cleanup(); }
 });
 
-test('the dev plugin is a second id pointed at a worktree', { timeout: 30000 }, () => {
+test('the dev plugin is a second id pointed at an older worktree; current main has no manifest', { timeout: 30000 }, () => {
   const s = scratch();
   try {
-    const wt = path.resolve(import.meta.dirname, '..');
+    const refused = s.run('dev', path.resolve(import.meta.dirname, '..'));
+    assert.notEqual(refused.status, 0); assert.match(refused.stderr, /has no herdr-plugin\.toml/);
+    const wt = path.join(s.root, 'older-worktree'); fs.mkdirSync(wt);
+    fs.writeFileSync(path.join(wt, 'herdr-plugin.toml'), LEGACY_MANIFEST);
     assert.equal(s.run('dev', wt).status, 0);
     const m = fs.readFileSync(path.join(s.home, 'dev/herdr-plugin.toml'), 'utf8');
     assert.match(m, /^id = "rewt\.herdr-monitor-dev"$/m);
@@ -169,8 +184,8 @@ test('activating the active release again (after a failed step) keeps its real p
   } finally { s.cleanup(); }
 });
 
-test('the plugin is linked to the active release itself and re-linked on every switch; restore unlinks it', { timeout: 30000 }, () => {
-  const s = scratch();
+test('an older release with a plugin is linked to itself; a release without one unlinks it; restore unlinks it', { timeout: 30000 }, () => {
+  const s = scratch({ plugin: ['t1'] });
   try {
     // A fake herdr that resolves the linked path, as the real one does.
     const fake = path.join(s.root, 'herdr'), state = path.join(s.root, 'plugin-root');
@@ -186,7 +201,9 @@ esac
     const real = t => fs.realpathSync(path.join(s.home, 'releases', t));
     run('build', 't1'); run('build', 't2');
     assert.equal(run('activate', 't1').status, 0); assert.equal(root(), real('t1'));
-    run('activate', 't2'); assert.equal(root(), real('t2'));
+    const current = run('activate', 't2'); assert.equal(current.status, 0, current.stderr); assert.equal(root(), '');
+    assert.match(current.stdout, /unlinked Herdr plugin rewt\.herdr-monitor \(this release has none\)/);
+    assert.equal(run('activate', 't2').status, 0); assert.equal(root(), '');
     run('rollback'); assert.equal(root(), real('t1'));
     run('restore'); assert.equal(root(), '');
   } finally { s.cleanup(); }

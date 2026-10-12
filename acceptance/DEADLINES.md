@@ -25,7 +25,6 @@ an unchanged copy of `lib/deadline.mjs` beside their other runtime modules.
 | `focus.mjs`: destination creation receipt and subscription-ready waits | 3s each | Converted to load-aware allowances. |
 | `probe.mjs`: generated direct-socket denial proof | 2s | Generated immediately before native execution with a sampled load-aware allowance. Permission failures remain product failures. |
 | `producers.mjs`, via `cleanup.mjs` and `run.mjs`: producer drain | 120s default, optional test override | Scaled once even when explicitly overridden; cleanup still refuses live producers. |
-| `plugin-entry.mjs`: child commands, native readiness and `agent start --timeout` | 20s default/25s Herdr, 10s poll, 15s native start | All scale. The interactive UI and named server persist intentionally until their owned workspace/server is closed. |
 | `settle.mjs`, `supervisor.mjs`: delegated child commands and report/queue waits | Fixture commands 15s; waits 8/10s | Commands scale through `loadAwareCommand`; waits scale through `waitUntil`. |
 | `settle/test/fixture.mjs`: watcher cleanup | 2s | Converted to load-aware allowance. Its 15s command base is scaled by the acceptance wrapper exactly once. The fixture's explicit 0.02/2s input-confirmation/poll/wait settings script the transport protocol; they are fixture behavior, not a release response deadline. |
 | `test/helpers/run.mjs`, `bounded-test.mjs`, `pty.mjs`, `child.mjs`, `processes.mjs`, `inbox.mjs` | Suite 300/360s (CLI maxima 480/540s); test 60s; command 15s; PTY 15s + 3s cleanup; child 15/35s + 500ms pipe drain; lookup 2/4/8s; inbox 5s | Already load-aware defaults and caps. Child helper explicit allowances are absolute by contract, to permit deliberate watchdog tests. Ordinary acceptance fixture command overrides below now scale before being passed to these helpers. Runner `--fixed-deadlines` intentionally remains fixed for cancellation regressions. |
@@ -51,7 +50,7 @@ a signal deliberately construct races or observable state transitions. Retain
 them: expanding observation cadence would reduce detection fidelity. Test
 assertion/replay counts, cutover's 900s idle grace and explicit zero startup grace
 are semantic behaviors under test, not responsiveness allowances. Copied legacy
-scripts and `kit/` retain their original protocol timers as compatibility input;
+scripts retain their original protocol timers as compatibility input;
 the release gate bounds their command and report windows, rather than rewriting
 historic/live consumers. Short shell polling sleeps in the test helpers also
 remain fixed. Files not listed above introduce no timers/deadlines; their child

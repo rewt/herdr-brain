@@ -20,7 +20,6 @@ export const cases = Object.freeze({
   grace: spec('watch-grace', 'Watch cutover: idle grace and exclusive watcher', ['herdr-fixture']),
   housekeeping: spec('housekeeping', 'Housekeeping closes only eligible finished workers', ['herdr-fixture']),
   release: spec('scratch-release', 'Scratch release build/activate/rollback/restore'),
-  console: spec('console-build', 'Full console dependency build (offline)'),
   copy: spec('existing-copy', 'Existing project: copy live calls and inventory drift', ['herdr-fixture'], compatibility),
   wrappers: spec('existing-wrappers', 'Existing project: routing and both wrapper dry runs', ['existing-copy'], compatibility),
   path: spec('org-path', 'Existing project: org PATH consumers', ['existing-copy'], compatibility),

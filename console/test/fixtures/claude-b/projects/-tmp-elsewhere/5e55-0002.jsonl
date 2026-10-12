@@ -1,2 +1,0 @@
-{"type":"user","message":{"role":"user","content":"hi"},"timestamp":"2026-09-16T17:50:00.000Z"}
-{"type":"assistant","message":{"role":"assistant","model":"claude-sonnet-5","content":[{"type":"text","text":"Hello."}]},"timestamp":"2026-09-16T17:50:05.000Z"}

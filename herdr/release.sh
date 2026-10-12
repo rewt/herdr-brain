@@ -5,14 +5,14 @@
 #   release.sh build TAG       copy TAG into $HOME_DIR/releases/TAG and run its build step
 #   release.sh activate TAG    point $HOME_DIR/current at it; manage the record, org and lane
 #                              launchers, remembering each the first time it is managed; move
-#                              the Brain service onto current; link the Herdr plugin to the
-#                              release (Herdr resolves links, so the plugin is re-linked whenever
-#                              the release changes)
+#                              the Brain service onto current; link the Herdr plugin to a
+#                              release that still ships one, or unlink it (Herdr resolves links,
+#                              so the plugin is re-linked whenever the release changes)
 #   release.sh rollback        point current back at the release before it
 #   release.sh restore         put each launcher back where it was before it was first managed
 #                              and the Brain service back where it was before the first activation
 #                              (the dev checkout); unlink the plugin
-#   release.sh dev WORKTREE    link a second plugin, rewt.herdr-monitor-dev, to a worktree
+#   release.sh dev WORKTREE    link a second plugin, rewt.herdr-monitor-dev, to an older worktree
 #   release.sh status          what is active and where the launchers point
 #
 # Environment: HERDR_MONITOR_HOME (default ~/.local/share/herdr-monitor), HERDR_MONITOR_BIN
@@ -139,6 +139,11 @@ link_plugin() {
   local target root
   target=$(cd "$HOME_DIR/current" && pwd -P)
   root=$(plugin_root)
+  # Releases after the plugin's removal ship no manifest: retire any older link.
+  if [ ! -f "$target/herdr-plugin.toml" ]; then
+    [ -n "$root" ] && "$(herdr_bin)" plugin unlink "$PLUGIN" >/dev/null && say "unlinked Herdr plugin $PLUGIN (this release has none)"
+    return 0
+  fi
   [ "$root" = "$target" ] && return 0
   [ -n "$root" ] && "$(herdr_bin)" plugin unlink "$PLUGIN" >/dev/null
   "$(herdr_bin)" plugin link "$target" >/dev/null

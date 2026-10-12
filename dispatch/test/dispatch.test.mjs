@@ -451,25 +451,6 @@ for (const stage of ['open', 'worker']) {
     assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'open').length, 1);
   });
 }
-test('dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work', t => {
-  const f = fixture(t);
-  f.rec(['priorities', 'add', 'Adoption', '--why=Useful to people'], { ORG_ACTOR: 'human' });
-  let r = f.start(['--serves=P-404']);
-  assert.equal(r.status, 1); assert.match(r.stderr, /unknown priority/);
-  assert.equal(f.git(['worktree', 'list', '--porcelain']).includes('lane/topic'), false);
-  f.fail('watch'); r = f.start(['--serves=P-1']); assert.equal(r.status, 1);
-  const job = JSON.parse(fs.readFileSync(f.jobs()[0], 'utf8'));
-  assert.equal(job.serves, 'P-1'); assert.equal(f.show(job.run).meta.serves, 'P-1');
-  assert.equal(f.show(job.run).started.by, 'dispatch-test-agent');
-  assert.equal(JSON.parse(f.rec(['priorities', '--json'])).priorities[0].created.by, 'human');
-  assert.match(fs.readFileSync(f.show(job.run).brief_path, 'utf8'), /P-1\*\* Adoption/);
-  fs.unlinkSync(path.join(f.root, 'fail'));
-  r = f.dispatch(['--retry', job.run, '--serves=P-1']); assert.equal(r.status, 1);
-  r = f.dispatch(['--retry', job.run]); assert.equal(r.status, 0, r.stderr);
-  assert.equal(f.show(job.run).meta.serves, 'P-1');
-  const other = fixture(t); r = other.start(); assert.equal(r.status, 0, r.stderr);
-  assert.equal(other.show(JSON.parse(r.stdout).run).meta.serves ?? null, null);
-});
 test('one command records exact route/worker fields, arms watch before prompt, and preserves briefs',t=>{
   const f=fixture(t), before=fs.readFileSync(f.brief,'utf8');
   const r=f.start(['--report','docs/reports/round.md','--extra','Fix round: inspect the review.']);assert.equal(r.status,0,r.stderr);

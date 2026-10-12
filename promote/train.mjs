@@ -20,7 +20,7 @@ import { canonicalTestPlan } from '../settle/test-plan.mjs';
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
 export { verifyTrainResult } from './evidence.mjs';
-export async function runTrain({ file, canonical, identity, main, prepare, validation, workflow = process.env.PROMOTE_WORKFLOW_ENGINE === '1' }) {
+export async function runTrain({ file, canonical, identity, main, prepare, validation }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   const save = () => writeFileAtomic(file, JSON.stringify(plan, null, 2) + '\n', 0o600);
@@ -99,23 +99,6 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       plan.groups = []; save(); return false;
     }
   };
-  // Default trains and unrelated lane commands must not load the opt-in engine.
-  // A saved workflow still selects it on recovery, even without the flag.
-  const { loadWorkflow, runWorkflow } = (workflow || plan.workflow) ? await import('../workflow/engine.mjs') : {};
-  const definition = (workflow || plan.workflow) ? loadWorkflow(fileURLToPath(new URL('../.herdr/workflows/train.md', import.meta.url))) : null;
-  if (definition) {
-    // v1 is a migration seam, not a way to remove/reorder lifecycle guards.
-    const expected = ['prepare', 'validate', 'integrate', 'close'];
-    if (JSON.stringify(definition.steps.map(s => [s.id, s.command, s.permission])) !==
-        JSON.stringify(expected.map(id => [id, ['train', id], 'train'])) ||
-        JSON.stringify(definition.gates) !== '["validate"]') throw new Error('unsupported train workflow stages or gates');
-    if (plan.workflow && plan.workflow.hash !== definition.hash) throw new Error('train workflow changed during batch; inspect saved receipt');
-    plan.workflow = { file: definition.file, hash: definition.hash }; save();
-  }
-  const workflowOptions = {
-    directory: path.join(path.dirname(file), 'workflow'), inputs: { batch: plan.id }, grants: ['train'], cwd: canonical, env,
-    onStart: ({ manifest }) => { plan.workflow_runs ??= []; plan.workflow_runs.push(manifest); save(); },
-  };
   // A persisted integrated checkpoint never gates or fast-forwards twice.
   const finishIntegrated = attempt => {
     if (!['integrated', 'complete'].includes(attempt.phase)) throw new Error('train bookkeeping requires an integrated checkpoint');
@@ -152,15 +135,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         attempt.phase = 'integrated'; attempt.integrated_at ??= new Date().toISOString(); save();
       }
     }
-    if (attempt.phase === 'integrated') {
-      if (!definition) finishIntegrated(attempt);
-      else {
-        const execution = runWorkflow({ ...definition, steps: definition.steps.filter(step => step.id === 'close'), gates: [] }, {
-          ...workflowOptions, runCommand: () => { finishIntegrated(attempt); return { status: 0, stdout: 'recovered integration bookkeeping complete\n' }; },
-        });
-        if (execution.error) throw execution.error;
-      }
-    }
+    if (attempt.phase === 'integrated') finishIntegrated(attempt);
   }
   const prepareAttempt = ids => {
     phase('preparing');
@@ -345,32 +320,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   while (plan.groups.length) {
     const ids = plan.groups[0].filter(id => !plan.results[id]);
     if (!ids.length) { plan.groups.shift(); save(); continue; }
-    if (!definition) {
-      const attempt = prepareAttempt(ids);
-      if (!attempt || !validateAttempt(attempt) || !integrateAttempt(attempt)) continue;
-      finishIntegrated(attempt);
-      continue;
-    }
-    let attempt;
-    const execution = runWorkflow(definition, {
-      ...workflowOptions,
-      runCommand: ([host, verb]) => {
-        if (host !== 'train') throw new Error('unknown train workflow command');
-        if (verb === 'prepare') { attempt = prepareAttempt(ids); return { status: attempt ? 0 : 1, stdout: attempt ? `prepared ${attempt.tip}\n` : 'group refused or requires replanning\n' }; }
-        if (!attempt) throw new Error('train step requires a prepared attempt');
-        if (verb === 'validate') {
-          const green = validateAttempt(attempt);
-          return { status: green ? 0 : attempt.gate?.exit_code > 0 ? attempt.gate.exit_code : 1,
-            signal: attempt.gate?.signal ?? null, stdout: JSON.stringify({ gate: attempt.gate, error: attempt.error }) + '\n', output_path: attempt.gate?.log };
-        }
-        if (verb === 'integrate') { const integrated = integrateAttempt(attempt); return { status: integrated ? 0 : 1, stdout: integrated ? `integrated ${attempt.tip}\n` : 'integration refused or requires replanning\n' }; }
-        if (verb === 'close') { finishIntegrated(attempt); return { status: 0, stdout: 'integration bookkeeping complete\n' }; }
-        throw new Error('unknown train workflow verb');
-      },
-    });
-    // An exception is an interrupted batch, as on the legacy path. Domain red
-    // gates/refusals have already changed groups/results and may continue.
-    if (execution.error) throw execution.error;
+    const attempt = prepareAttempt(ids);
+    if (!attempt || !validateAttempt(attempt) || !integrateAttempt(attempt)) continue;
+    finishIntegrated(attempt);
   }
   plan.phase = 'complete'; save();
   for (const attempt of plan.attempts) {

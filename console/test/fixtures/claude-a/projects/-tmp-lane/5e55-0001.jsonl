@@ -1,5 +1,0 @@
-{"type":"permission-mode","permissionMode":"auto","sessionId":"5e55-0001"}
-{"type":"user","message":{"role":"user","content":"Build it"},"timestamp":"2026-09-16T19:30:00.000Z"}
-{"type":"assistant","message":{"role":"assistant","model":"claude-opus-5","content":[{"type":"text","text":"Reading the brief."}]},"timestamp":"2026-09-16T19:30:10.000Z"}
-{"type":"assistant","message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"API error."}]},"timestamp":"2026-09-16T19:31:00.000Z"}
-{"type":"assistant","message":{"role":"assistant","model":"claude-fable-5-1","content":[{"type":"text","text":"## Done\n\nThe screen is **built**."}]},"timestamp":"2026-09-16T20:49:00.000Z"}

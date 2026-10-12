@@ -65,13 +65,12 @@ overrides commands for CLI adapters; `check --cmd` wins for that invocation.
 Workers may run `lane check` (fast); settle performs code/report review with no
 suite, and the promotion train runs the promotion tier on each integration batch.
 Workers never run the release gate; the release module
-owns that declared command. `lane config`, `record desks`, the console's Desks
-screen and project-entry policy show all three tiers. Worker copies cannot weaken
+owns that declared command. `lane config`, `record desks` and project-entry
+policy show all three tiers. Worker copies cannot weaken
 the canonical declarations.
 
-The modern console Routes screen (`u`) edits routes, adds a model as a new named
-route, switches the primary pool, changes task selections and edits dispatch or
-always arguments. These controls save through validating record commands:
+Route edits (a new named route for a model, the primary pool, task selections,
+dispatch or always arguments) save through validating record commands:
 
 ```sh
 record routes add --value '{"name":"specialist","route":{"kind":"opaque","model":"project-model"}}'
@@ -80,8 +79,8 @@ record routes defaults --value '{"kind":"opaque","args":["--option","value with 
 record routes arguments --value '{"opaque":["--option","value with spaces"]}'
 ```
 
-Policy/defaults/arguments values replace their whole routing field; the console
-preserves other entries when editing one selection or harness. Every write keeps
+Policy/defaults/arguments values replace their whole routing field; include the
+other entries when editing one selection or harness. Every write keeps
 lifecycle and desk settings and validates effective references. All project
 config controls share an atomic writer and lock, with `--expect REV` for reviewed
 edits. Names stay opaque; no model/provider catalog or machine settings are needed.

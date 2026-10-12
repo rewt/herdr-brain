@@ -82,7 +82,6 @@ const SOURCE = path.dirname(HERE);
 const { values: opt } = parseArgs({ options: {
   candidate: { type: 'string' }, source: { type: 'string', default: SOURCE },
   'bch-cloak': { type: 'string' }, keep: { type: 'boolean', default: false },
-  'npm-cache': { type: 'string' },
   'claude-profile': { type: 'string' },
   'skip-live': { type: 'boolean', default: false },
   'discovery-model': { type: 'string', default: 'gpt-5.6-luna' },
@@ -639,25 +638,6 @@ try {
       assert.ok(!fs.existsSync(path.join(userHome, '.zshenv')));
     }
     return 'candidate code archived into immutable scratch releases; launcher migration and reversible entry install checked in an isolated user home; npm/plugin/launchd excluded';
-  });
-  await test(cases.console, () => {
-    requireCandidate('console/package-lock.json');
-    if (!opt['npm-cache']) pending('supply --npm-cache DIRECTORY to copy an existing cache into scratch for npm ci --offline');
-    const cache = path.resolve(opt['npm-cache']);
-    const store = path.join(cache, '_cacache');
-    const scratchStore = path.join(root, 'npm-cache/_cacache');
-    // Copy cache indexes and only lockfile tarballs, never write the source
-    // cache or copy gigabytes of unrelated dependency content.
-    fs.cpSync(path.join(store, 'index-v5'), path.join(scratchStore, 'index-v5'), { recursive: true });
-    const lockfile = JSON.parse(read(path.join(candidate, 'console/package-lock.json')));
-    for (const pkg of Object.values(lockfile.packages ?? {})) {
-      if (!pkg.integrity?.startsWith('sha512-')) continue;
-      const digest = Buffer.from(pkg.integrity.slice(7), 'base64').toString('hex');
-      const rel = path.join('content-v2/sha512', digest.slice(0, 2), digest.slice(2, 4), digest.slice(4));
-      const src = path.join(store, rel);
-      if (fs.existsSync(src)) write(path.join(scratchStore, rel), fs.readFileSync(src));
-    }
-    run('npm', ['--prefix', path.join(candidate, 'console'), 'ci', '--offline', '--no-audit', '--no-fund'], { ok: true, timeout: 60_000 });
   });
   // Existing-project compatibility and proposed switches are one section of the
   // gate. Every file comes from a fresh read-only copy, never the inventory kit.

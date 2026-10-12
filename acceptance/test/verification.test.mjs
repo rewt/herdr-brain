@@ -55,10 +55,8 @@ test('installed product contains every relative module import, including fleet d
   plan.prepare();
   const runtime = checkInstalledImports(plan.directory);
   assert.equal(runtime.status, 0, runtime.stderr || runtime.error?.message);
-  const plugin = path.join(root, 'plugin');
-  copyProduct(path.resolve(import.meta.dirname, '../..'), plugin, { includeApps: true });
-  const apps = checkInstalledImports(plugin);
-  assert.equal(apps.status, 0, apps.stderr || apps.error?.message);
+  const archived = path.join(root, 'archived');
+  copyProduct(path.resolve(import.meta.dirname, '../..'), archived);
   // These formerly maintained partial product lists independently.
   const transport = copyNativeTransport(path.join(root, 'native'));
   const native = checkInstalledImports(path.resolve(path.dirname(transport), '..'));
@@ -68,7 +66,7 @@ test('installed product contains every relative module import, including fleet d
   assert.equal(schedule.status, 0, schedule.stderr || schedule.error?.message);
   // Release builders archive every tracked file without a path allowlist.
   const git = (args) => {
-    const result = spawnSync('git', ['-C', plugin, ...args], { encoding: undefined, maxBuffer: 16 * 1024 * 1024,
+    const result = spawnSync('git', ['-C', archived, ...args], { encoding: undefined, maxBuffer: 16 * 1024 * 1024,
       env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
     assert.equal(result.status, 0, String(result.stderr)); return result.stdout;
   };

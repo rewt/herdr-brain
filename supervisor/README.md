@@ -47,37 +47,9 @@ supervisor escalates to the steward journal and a local operator alert, because
 it cannot consume its own inbox. Aged pending notices and legacy parked outboxes
 use the same alert channel. This observer starts no project schedule or model.
 
-Project chats pull catch-up on demand with `record digest --since 2h` (default:
-the last day), or `record digest --since 09:00 --width 48`. The view combines the
-selected record's reports and decisions with durable promotion/watch facts from
-`ORG/supervisor/inbox.log`. It never starts a model, reads a live pane, sends a
-notice, initializes a record, or writes state. A done report alone does not mean
-the lane landed. Missing journal evidence is stated; report checks without a
-matching watch notice are `unknown`. Checks mean report validation, not review
-or promotion validation. Journal promotion facts retain their reason and evidence
-paths in JSON; they describe recorded producer outcomes, not a fresh Git check.
-
-For a chat's next conversation, read `record digest --json`, keep its opaque
-`cursor` in that chat's own state, then call `record digest --after CURSOR --json`.
-Save the new cursor only after reading the result. Offsets include late and
-same-timestamp appends in both logs. A cursor belongs to the canonical record
-path, and rotated/truncated sources require a fresh `--since` read. Time windows
-are inclusive and accept the same forms as `record log`; cursor windows begin
-after the previous snapshots. Open operator questions and currently unresolved
-blocked sessions appear regardless of window, until record/watch evidence
-resolves or supersedes them. They are recorded evidence, not live session status.
-
-Text defaults to 72 columns and eight entries per section, with explicit omitted
-counts and bounded headlines. Decisions show their explicit summary or first
-sentence; routine autopilot settlement and promotion authorization notes are
-counted by action, leaving individual judgments visible. JSON retains full
-decision text and any explicit summary. Record-sourced blocked sessions require
-a current blocked or needs-human report, rather than dependency-only item status.
-Watch prompt blocks show the recorded notice time in UTC, not a live claim.
-`--width` accepts 32–240 columns and `--limit`
-changes the text section cap. JSON always includes all facts and the next cursor;
-read it before advancing past a truncated text view. The cursor is never written
-to the record and grants no authority to act.
+Project chats catch up on demand from `record status`, `record log --since 2h`
+and `record show ID`; promotion and watch facts stay in `ORG/supervisor/inbox.log`.
+(`record digest` was removed on 2026-10-12.)
 
 All automatic supervisor notices use `prompt-supervisor.mjs`, including watch's
 intermediate/final notices, promotion outcomes, and settle/dispatch's correction
@@ -252,8 +224,8 @@ projects and populated records, without a model or a background supervisor.
 Workers receive only the existing worker policy. The native session hook performs
 the recovery described below; policy-only entry stays read-only.
 
-Operator project conversations use `monitor chat PROJECT` or the console's
-**C** key ([chat command](../discovery/README.md#fleet)). One tab per canonical
+Operator project conversations use `monitor chat PROJECT`
+([chat command](../discovery/README.md#fleet)). One tab per canonical
 fleet identity lives in the shared control workspace. The chat's registered
 `chat-` name is separate from `MONITOR_SUPERVISOR_AGENT`, which names ops for
 watch recovery, dispatch and cycle notices. Supply `--to OPS` for a project's
@@ -335,8 +307,7 @@ node /path/to/monitor/supervisor/supervisor.mjs entry --repo PROJECT --org RECOR
 `status` renders active lanes and the ten most recent landed lanes with run, item,
 lane, stage (engineering, review, fix, train, landed), provider/model, start time
 and elapsed time, followed by the last ten policy receipts and their actions.
-[status.mjs](status.mjs) exports the same read-only JSON projection for a future
-minimal console profile. Stage comes from the event fold, verified settle receipts
+[status.mjs](status.mjs) exports the same read-only JSON projection. Stage comes from the event fold, verified settle receipts
 and promotion queue; Herdr's agent list and optional lane session receipts supply
 display fields only. Provider/model metadata never authorizes work. A correction's
 own settlement overrides the earlier fix ancestry; review displays the active
@@ -363,7 +334,7 @@ node /path/to/monitor/supervisor/supervisor.mjs handle --notice 'COMPLETE PROMOT
 
 `brief` is read-only, including its reading checkpoint. It folds the same record
 events as the CLI and adds pointers to settle and promotion receipts. It shows
-operator priorities, runs and opaque routes/models/efforts, landed report files,
+runs and opaque routes/models/efforts, landed report files,
 recorded reports awaiting settlement, fix rounds, promotion readiness and queue
 acknowledgements, operator questions, held work, goals, decisions since the
 checkpoint and suggested next actions. A file written by a running worker awaits

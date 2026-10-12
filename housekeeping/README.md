@@ -6,15 +6,15 @@ on. A project needs no housekeeping configuration: the record supplies the runs,
 Git supplies repository and lane identity, and Herdr supplies live workers.
 
 The project supervisor starts its schedule from the canonical project checkout,
-using that checkout's code or an installed plugin/release copy:
+using that checkout's code or an installed release copy:
 
 ```sh
 node /path/to/herdr-monitor/housekeeping/housekeeping.mjs --start
 ```
 
-Release activation and the plugin build deliver this startup instruction through
-the [installed supervisor entry policy](../discovery/README.md), including the
-plugin's explicit supervisor pane. It needs no project AGENTS.md edit. Native
+Release activation delivers this startup instruction through
+the [installed supervisor entry policy](../discovery/README.md). It needs no
+project AGENTS.md edit. Native
 fresh Herdr starts receive worker policy and never start a schedule. Installation
 itself starts no project loop; the canonical supervisor performs the start.
 
@@ -31,7 +31,7 @@ Lane workers never start the project-wide loop. Every live mode (`--once`,
 `--start`, `--loop`) refuses when the script or record CLI lives in a linked Git
 worktree, or when the target checkout is linked. This prevents unreviewed,
 removable lane code from acting on live panes. Workers can run `--once --dry-run`
-with an isolated state directory. Installed plugin/release copies outside Git
+with an isolated state directory. Installed release copies outside Git
 remain supported.
 
 The detached process is a timer, not an agent: tidy finished tabs and resume every
@@ -109,8 +109,9 @@ with `idle` in `agent list`. The synthetic interruption fixture in
 `default_known_agent_idle_fallback`. Thus idle/done alone cannot distinguish an
 interrupted turn from a finished one; the visible banner and composer supply the
 extra evidence. We did not interrupt a real worker to obtain a specimen.
-The original mouse-wheel incident is documented in the tracked
-`kit/bch-cloak-20261001/supervisor/WORK-PATTERN.md`.
+The original mouse-wheel incident is documented in bch-cloak's
+`.lane/supervisor/WORK-PATTERN.md` (the retired `kit/bch-cloak-20261001/` copy
+remains in Git history).
 
 ## Optional overrides and stopping
 
@@ -138,14 +139,11 @@ and replace the file atomically. `--expect REV` rejects a stale revision from
 `record housekeeping --json`. The optional config belongs in Git; add and commit it
 as a project choice. Reads create neither config nor record nor schedule.
 
-The modern console's Control page links to `H Housekeeping`, which shows process
-state, the last live scan, recent actions with reasons and previews separately.
-Its pause and override editor reviews then uses the validating record CLI. Enabling
-permits work but never starts a stopped schedule; only the project supervisor
-starts the default schedule from the canonical checkout. A custom-config schedule
-or mismatched lock identity is displayed as unknown and prevents default-file edits.
-A restricted PID probe displays unknown without preventing config edits when the
-lock identity matches. Stale locks remain visible and are never removed by the editor.
+`record housekeeping` shows process state, the last live scan and recent actions
+with reasons; `record housekeeping pause` and `set` edit through the validating
+record CLI. Enabling permits work but never starts a stopped schedule; only the
+project supervisor starts the default schedule from the canonical checkout. Stale
+locks remain visible and are never removed by these commands.
 
 Set `enabled` to `false` to stop at the next tick, or send SIGTERM/SIGINT to the
 PID in the reported state directory's `lock/owner.json`. Setting `resume` to `false` keeps
@@ -153,7 +151,7 @@ cleanup and disables input recovery. Invalid configuration stops the loop. A
 missing configuration uses defaults; removing an override does not disable it.
 
 Actions, failures, scan counts and dry-run plans go to
-`ORG/housekeeping/REPOSITORY_KEY/actions.jsonl`, readable by the supervisor and the console. Live cleanup passes include per-tab
+`ORG/housekeeping/REPOSITORY_KEY/actions.jsonl`, readable by the supervisor. Live cleanup passes include per-tab
 keep reasons; scan entries distinguish cleanup due from recovery-only ticks. The key hashes the canonical Git common directory, separating
 projects that share a record. `--start` prints the state directory. This avoids
 creating untracked files in a project that has configured no ignore rules.

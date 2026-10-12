@@ -17,7 +17,7 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
   const verifiers = new Map();
   const git = (repo, args) => verifiers.has(repo) ? verifiers.get(repo).git(args) : trustedGit(repo, args);
   const installation = path.join(root, 'installed-product');
-  copyProduct(candidate, installation, { includeApps: true });
+  copyProduct(candidate, installation);
   const bin = path.join(installation, 'entrypoints'); fs.mkdirSync(bin);
   for (const [name, target] of [['record', 'bin/org.mjs'], ['org', 'bin/org.mjs'], ['lane', 'lanes/lane.mjs']]) {
     if (!fs.existsSync(path.join(installation, target))) continue;

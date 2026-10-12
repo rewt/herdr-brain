@@ -88,9 +88,7 @@ the operator.
 
 - `git -C "$WT" log --oneline main..HEAD`, `git -C "$WT" status --short`
   (must be clean), and the full diff against main.
-- In the worktree, run `npm test` and, if the console has its own tests,
-  `npm --prefix console test`. Install console dependencies first with
-  `npm --prefix console ci` when a lockfile exists.
+- In the worktree, run `npm test`.
 - Check each acceptance item against the code and tests. Do not take the
   report's word for anything.
 - Confirm the core `bin/` and `lib/` gained no dependency, and that nothing
@@ -170,7 +168,7 @@ and correction rounds with the send-back cap you just read from `org show
     yes/no question under `$GOAL`, with the review record, your recommendation,
     and each failed condition in its note. A diff touching `supervisor/`,
     `.claude/`, or `.lane.json` fails the rules-path condition and therefore
-    always takes this branch. File the question in this form so the console can
+    always takes this branch. File the question in this form so the operator can
     act on it and a later continue session knows exactly what each answer means:
 
     ```sh
@@ -194,7 +192,7 @@ and correction rounds with the send-back cap you just read from `org show
 3. **Start the next work.** Take ready items in priority order and skip an item
    whose run is already open. At most two engineering lanes may be open at
    once. Never run lanes that edit the same files at the same time; `lib/`,
-   `bin/`, `console/`, and `test/` overlap often, so when in doubt run those
+   `bin/` and `test/` overlap often, so when in doubt run those
    lanes one after another. Give each item a new lane with `lane open <topic> --git-only`
    and put its brief at `$WT/.lane/BRIEF-<topic>.md`, starting with one plain
    sentence. Then use `org start` with `--meta route=engineer`, `lane dispatch

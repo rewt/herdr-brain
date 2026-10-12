@@ -20,8 +20,8 @@ authority. Clearing the chat before checkpointing safely repeats those decisions
 Record plans, instructions, holds and decisions with `record note ID TEXT
 --decision --summary SENTENCE`. Questions and their answers belong in the record.
 Use `record ask` with the action's category, recommendation, rationale and exact
-yes/no consequences when the operator's authority is required. Operator priority
-ranks are theirs alone; propose changes with `record priorities propose`.
+yes/no consequences when the operator's authority is required. Changes to the
+operator's priorities are theirs alone; ask with `record ask --category priorities`.
 
 Use dispatch/dispatch.mjs for a selected item, lane, named route and ask, with
 `--to YOUR-SUPERVISOR`. It records the run and arms watch before sending work.
@@ -142,7 +142,7 @@ tag, builds a snapshot and runs the declared release gate once. Workers run fast
 lane validation and never the release gate. A deferred result leaves the cycle
 for a quieter point; a failed or interrupted gate needs evidence inspection.
 Repeated release requests reuse candidate results and never replay a started gate.
-`brief --json`, `record releases` and the console's Releases view retain candidates,
+`brief --json` and `record releases` retain candidates,
 gate results and the pending decision. A passing gate creates a publish question
 that always waits for the operator, regardless of auto-category policy. Never
 answer it for them or automatically execute its ship command. The operator ships

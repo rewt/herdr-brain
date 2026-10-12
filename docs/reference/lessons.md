@@ -8,7 +8,7 @@ Allocation avoids collisions with existing items using the custom `L` role prefi
 
 The dependency-free core validates references and selects lessons without a model,
 a harness check or a filesystem search. It does not distill report learnings or
-insert lessons into entry text, briefs, cold starts or MCP responses; those are
+insert lessons into entry text, briefs or cold starts; those are
 the next consumers of this interface.
 
 ## Write

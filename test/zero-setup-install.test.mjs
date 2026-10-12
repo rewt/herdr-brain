@@ -7,7 +7,6 @@ import { spawnSync } from 'node:child_process';
 import { copyProduct } from '../lib/product-files.mjs';
 import { freshAccount } from '../docs/adoption/account.mjs';
 import { fixtureFleet } from './helpers/offline-herdr.mjs';
-import { fakeControlSocket } from './helpers/fake-control-socket.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 function fixture(t, kinds = ['codex', 'claude']) {
@@ -132,7 +131,7 @@ for (const missing of ['npm', 'git', 'python3', 'herdr']) test(`missing ${missin
   assert.deepEqual(fs.readdirSync(f.home), []);
 });
 
-test('native hooks survive relocation, join an unconfigured project and open two panes once without focus', t => {
+test('native hooks survive relocation and join an unconfigured project without opening panes', t => {
   const f = fixture(t, ['claude']); f.ok(f.driver());
   const settings = JSON.parse(fs.readFileSync(path.join(f.env.CLAUDE_CONFIG_DIR, 'settings.json')));
   const hook = settings.hooks.SessionStart[0].hooks[0].command;
@@ -149,10 +148,10 @@ test('native hooks survive relocation, join an unconfigured project and open two
   assert.equal(fleet.session_limit, 6); assert.equal(Object.values(fleet.projects)[0].checkout, project);
   assert.ok(fs.existsSync(path.join(project, '.org/events.jsonl')));
   for (const name of ['AGENTS.md','.lane.json','.codex/hooks.json','.claude/settings.json']) assert.equal(fs.existsSync(path.join(project,name)),false);
-  const calls = fs.readFileSync(f.calls,'utf8').trim().split('\n').map(JSON.parse), opens = calls.filter(args => args.includes('open'));
-  assert.equal(opens.length,2); for (const args of opens) assert.ok(args.includes('--no-focus'));
+  const calls = () => fs.existsSync(f.calls) ? fs.readFileSync(f.calls,'utf8').trim().split('\n').map(JSON.parse) : [];
+  assert.ok(!calls().some(args => args[0] === 'plugin'), 'entry never opens plugin panes');
   f.ok(invoke({MONITOR_ENTRY_BYPASS:'1', MONITOR_SESSION_ROLE:'worker'}));
-  assert.equal(fs.readFileSync(f.calls,'utf8').trim().split('\n').length,calls.length);
+  assert.ok(!calls().some(args => args[0] === 'plugin'));
 });
 
 for (const kind of ['codex', 'claude']) for (const source of ['startup', 'resume']) test(`${kind} native ${source} honors canonical project opt-out without state or panes`, t => {
@@ -192,24 +191,6 @@ test('uninstall preserves unrelated harness edits and refuses a changed managed 
   assert.deepEqual(fs.readFileSync(file),before); assert.ok(fs.existsSync(path.join(f.bin,'monitor-claude')));
 });
 
-test('Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry', t => {
-  const f = fixture(t,['claude']); f.ok(f.driver());
-  // The coordinating preflight needs a reachable socket. Keep its path short
-  // even when this fixture inherits the worker's long per-run TMPDIR.
-  const sockets = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'zs-'));
-  t.after(() => fs.rmSync(sockets, { recursive: true, force: true }));
-  f.env.HERDR_SOCKET_PATH = fakeControlSocket(t, sockets);
-  f.ok(f.run('git',['init','-qb','main'])); f.ok(f.run('git',['config','user.name','Install test'])); f.ok(f.run('git',['config','user.email','test@example.invalid']));
-  f.ok(f.run('git',['add','.'])); f.ok(f.run('git',['commit','-qm','Initial']));
-  f.ok(f.run(process.execPath,[path.join(source,'herdr/supervisor.mjs')]));
-  const native=JSON.parse(fs.readFileSync(f.env.ENTRY_TEST_RECEIPT)); assert.equal(native.kind,'claude');
-  assert.ok(native.args.includes('--append-system-prompt'));
-  const runtime=JSON.parse(fs.readFileSync(path.join(f.bin,'.monitor-entry.json'))).product;
-  const hook=native.settings.hooks.SessionStart[0];
-  for(const source of ['startup','resume','clear','compact']) assert.ok(new RegExp(hook.matcher).test(source));
-  assert.ok(hook.hooks[0].command.includes(path.join(runtime,'supervisor/session-start.mjs')));
-});
-
 test('account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state', () => {
   const input={platform:'darwin',user:{uid:502,username:'adopter',homedir:'/Users/adopter'},env:{HOME:'/Users/adopter'},exists:()=>false};
   assert.deepEqual(freshAccount(input),{home:'/Users/adopter',username:'adopter',uid:502,platform:'darwin'});
@@ -231,22 +212,11 @@ test('native configuration writes roll back with the rest of an interrupted inst
   assert.equal(fs.existsSync(path.join(f.bin,'monitor-claude')),false);
 });
 
-test('the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm', t => {
+test('the install build checks harnesses before any write and repeats', t => {
   const f=fixture(t,['claude']);
-  copyProduct(source,f.product,{includeApps:true});
-  // Node 20.0-20.10 has import.meta.url but no dirname. Exercise that shape
-  // through the actual build, including dependency receipts and repeat reuse.
-  const dependencies = path.join(f.product, 'herdr/dependencies.mjs');
-  f.write(dependencies, fs.readFileSync(dependencies, 'utf8').replace(/^(#![^\n]*\n)/u, '$1delete import.meta.dirname;\n'));
-  const calls=path.join(f.root,'npm.jsonl');
-  f.write(path.join(f.tools,'npm'),`#!${process.execPath}
-const fs=require('fs'),path=require('path'),args=process.argv.slice(2);
-if(args[0]==='--version')console.log('10.0.0');
-else {fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');fs.mkdirSync(path.join(args[1],'node_modules'),{recursive:true});}
-`,0o755);
-  const install=extra=>f.run('/bin/bash',[path.join(f.product,'herdr/install.sh')],{RELEASE_NO_NPM:'',...extra});
+  const install=extra=>f.run('/bin/bash',[path.join(f.product,'herdr/install.sh')],extra);
   const missing=install({HERDR_MONITOR_CLAUDE:'-'}); assert.notEqual(missing.status,0); assert.match(missing.stderr,/install native Codex.*Claude/);
-  assert.equal(fs.existsSync(calls),false,'failure must precede npm ci');
-  f.ok(install()); const first=fs.readFileSync(calls); assert.equal(first.toString().trim().split('\n').length,2);
-  f.ok(install()); assert.deepEqual(fs.readFileSync(calls),first,'second build must not run npm ci');
+  assert.equal(fs.existsSync(f.bin),false,'failure must precede entry writes');
+  f.ok(install()); assert.ok(fs.existsSync(path.join(f.bin,'monitor-claude')));
+  f.ok(install()); assert.ok(fs.existsSync(path.join(f.bin,'monitor-claude')));
 });

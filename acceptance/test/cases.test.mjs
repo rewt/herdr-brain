@@ -20,11 +20,11 @@ async function execute(definitions, faults = {}, options = {}) {
 const outcomes = (results) => results.filter((v) => !v.key.startsWith('inserted-')).map(({ key, status, origin, detail }) => ({ key, status, origin, detail }));
 
 test('inserting a case anywhere leaves every production dependency and outcome unchanged', async () => {
-  assert.ok(order.indexOf(cases.queue) < order.indexOf(cases.console));
-  assert.ok(order.indexOf(cases.console) < order.indexOf(cases.copy));
+  assert.ok(order.indexOf(cases.queue) < order.indexOf(cases.release));
+  assert.ok(order.indexOf(cases.release) < order.indexOf(cases.copy));
   assert.ok(order.indexOf(cases.path) < order.indexOf(cases.switches));
   const scenarios = [
-    { [cases.console.key]: new Pending('optional npm cache omitted') },
+    { [cases.release.key]: new Pending('scratch release unavailable') },
     { [cases.copy.key]: new Pending('optional existing-project copy omitted') },
     { [cases.switches.key]: new Error('switch canary is incorrect') },
     { [cases.fixture.key]: new HarnessLimit('native fixture unavailable') },
@@ -50,9 +50,9 @@ test('inserting a case anywhere leaves every production dependency and outcome u
   }
 });
 
-test('optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement', async () => {
-  const cache = await execute(order, { [cases.console.key]: new Pending('no npm cache') });
-  for (const definition of [cases.copy, cases.switches, cases.retirement]) assert.ok(cache.executed.includes(definition.key));
+test('an unrelated pending case never gates cutover, omitted copy stays pending, and failed switches prevent retirement', async () => {
+  const release = await execute(order, { [cases.release.key]: new Pending('scratch release unavailable') });
+  for (const definition of [cases.copy, cases.switches, cases.retirement]) assert.ok(release.executed.includes(definition.key));
   const copy = await execute(order, { [cases.copy.key]: new Pending('no existing project') });
   for (const definition of [cases.wrappers, cases.path, cases.switches, cases.retirement]) {
     assert.ok(!copy.executed.includes(definition.key));

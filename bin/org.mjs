@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,16 +18,12 @@ import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
-import { blockJson, renderBlock } from '../lib/block.mjs';
-import { digestJson, readDigestJournal } from '../lib/digest.mjs';
 import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { completeBatchCommand } from '../lib/completion.mjs';
 import { releaseRecordCommand } from '../lib/release-record.mjs';
-import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
-  renderSnapshot, renderStatus, statusJson, truncate, renderPriorities, renderLessons,
-  renderDigest,
+  renderSnapshot, renderStatus, statusJson, truncate, renderLessons,
 } from '../lib/render.mjs';
 
 const BIN = fileURLToPath(import.meta.url);
@@ -52,10 +47,6 @@ Questions for the operator
                                           a role=human item; --wait always requires an operator answer
   record answer <ID> yes|no|"<text>" [--note WHY] [--overrule]
                                           a "no" keeps the work it blocks blocked
-  record priorities [--json]             operator outcomes, ranks, work and who/why
-  record priorities add TITLE --why TEXT  operator adds an outcome at the end
-  record priorities rank P-n --rank N --why TEXT [--expect REV]
-  record priorities propose QUESTION --parent ID --recommend yes --why TEXT
   record set <ID> key=value...            edit an item (title role capability priority parent
                                           budget.<key> meta.<key>) or record run metadata
                                           (e.g. record set R-3 tokens_in=48210 tokens_out=5120)
@@ -91,12 +82,7 @@ Views (zero inference)
   record snapshot                         markdown state for a fresh session of any harness
   record show <ID> [--json]               an item or run with its reports and history
   record log [--since 2h|09:00|DATE] [--limit N] [--json]
-  record digest [--since 2h|09:00|DATE | --after CURSOR] [--limit N] [--width N] [--json]
-                                          chat catch-up; read-only, cursor belongs to the chat
   record today [--json] [--parked]        what waits on the operator; --parked lists questions older than 7 days
-  record recap [--back N] [--json]        the latest work block top down: threads, what they spawned,
-                                          asked and were told, what is pending (--back 1: the one before)
-  record console [--project NAME] [--modern] the Herdr Monitor console (needs: npm --prefix console ci)
   record housekeeping [--json]            schedule status, last scan and recent activity
   record releases [--json] [--identity DIR] candidates, gate evidence and operator decisions
   record release cut --file JSON | start RC-n | result RC-n --file JSON
@@ -114,9 +100,6 @@ Views (zero inference)
 
 The record is found from $ORG_DIR, the canonical Git project's .org/, or a legacy ancestor .org/.
 In a Git project with no record, record commands initialize the canonical .org/ automatically.
-Runs name alignment with start --serves P-n (or --meta serves=P-n). Item meta.serves
-inherits through parents; --serves= starts explicitly unaligned. Alignment is advisory.
-Priority changes require ORG_ACTOR=human; named agents propose waiting questions.
 The org command is a permanent alias; .org/, ORG_DIR and ORG_ACTOR remain supported.
 
 ${CATEGORY_CHECKLIST}
@@ -313,7 +296,6 @@ function add(argv) {
   if (values.priority != null && !Number.isFinite(priority)) throw new UserError('--priority must be a number');
   const kind = values.goal ? 'goal' : 'work';
   const { result } = mutate(openOrg(), (s) => {
-    validateServes(s, parsePairs(values.meta, '--meta').serves);
     if (values.parent) requireItem(s, values.parent);
     const blockers = [...new Set(values['blocked-by'] ?? [])];
     blockers.forEach((b) => requireItem(s, b));
@@ -423,7 +405,7 @@ function ask(argv) {
   if (values.memo) {
     memo = path.resolve(values.memo);
     if (!fs.existsSync(memo)) throw new UserError(`memo ${memo} does not exist`);
-    // The console opens the memo; a directory, app bundle or device is not a document.
+    // A memo is a document to open; a directory, app bundle or device is not.
     if (!fs.statSync(memo).isFile()) throw new UserError(`memo ${memo} is not a regular file`);
   }
   const ctx = openOrg();
@@ -528,7 +510,6 @@ function set(argv) {
     const parsed = parsePairs(pairs, 'record set');
     if (s.runs.has(id)) {
       const meta = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k.replace(/^meta\./, ''), v]));
-      validateServes(s, meta.serves);
       return { add: [{ type: 'run.updated', id, meta }] };
     }
     const target = requireItem(s, id);
@@ -539,7 +520,6 @@ function set(argv) {
         checkBudget(key.slice(7), value);
         fields.budget = { ...fields.budget, [key.slice(7)]: value };
       } else if (key.startsWith('meta.')) {
-        if (key === 'meta.serves') validateServes(s, value);
         fields.meta = { ...fields.meta, [key.slice(5)]: value };
       } else if (key === 'parent') {
         if (value !== null) {
@@ -628,13 +608,11 @@ function start(argv) {
     workspace: { type: 'string' },
     report: { type: 'string' },
     escalation: { type: 'boolean' },
-    serves: { type: 'string' },
     'if-current-run': { type: 'string' },
     meta: { type: 'string', multiple: true },
   }, { min: 1, max: 1, usage: 'record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [options]' });
   const id = positionals[0];
   const meta = parsePairs(values.meta, '--meta');
-  if (values.serves !== undefined) meta.serves = values.serves || null;
   if (values['route-config'] !== undefined && values.route === undefined) {
     throw new UserError('--route-config requires --route');
   }
@@ -664,11 +642,6 @@ function start(argv) {
       if (item.closed) throw new UserError(`${id} is closed; conditional start needs supervisor judgment`);
       if (item.outcome && item.outcome.run !== values['if-current-run']) throw new UserError(`${id} outcome does not belong to ${values['if-current-run']}`);
     }
-    if (!Object.hasOwn(meta, 'serves')) {
-      const inherited = itemServes(s, id);
-      if (inherited != null) meta.serves = inherited;
-    }
-    validateServes(s, meta.serves);
     const runId = nextRunId(s);
     const runDir = path.join(ctx.dir, 'runs', runId);
     const events = [];
@@ -697,7 +670,6 @@ function start(argv) {
   safeOut(`  brief   ${run.brief_path}  (${brief.length} chars ≈ ${approxTokens(brief)} tokens)\n`);
   safeOut(`  report  ${run.report_path}\n`);
   safeOut(`  prompt  Read ${run.brief_path} and follow it.\n`);
-  safeOut(meta.serves ? `  serves  ${meta.serves}\n` : '  alignment: Unaligned · no operator priority named (advisory)\n');
   if (result.parallel.length) safeOut(`note: ${id} already has open runs: ${result.parallel.join(', ')}\n`);
   for (const a of attention(after.state, after.config, after.now).filter((a) => a.id === id && a.kind === 'budget')) {
     safeOut(`note: ${id} ${a.text}\n`);
@@ -769,9 +741,6 @@ function ingestFile(ctx, file, runHint, currentRun) {
     if (run.abandoned) {
       return { add: [], result: { skipped: true, runId, item: run.item } };
     }
-    // Validate the complete proposal batch under the lock before writing its
-    // immutable report copy or appending any of the report's events.
-    for (const proposal of parsed.report.proposals) validateServes(s, proposal.extra?.serves);
     const stored = path.join('reports', `${runId}.md`);
     writeFileAtomic(path.join(ctx.dir, stored), text, 0o444);
     const report = { ...parsed.report, run: runId };
@@ -963,49 +932,6 @@ function today(argv) {
   return 0;
 }
 
-function digest(argv) {
-  const { values } = args(argv, { since: { type: 'string' }, after: { type: 'string' },
-    limit: { type: 'string' }, width: { type: 'string' }, json: { type: 'boolean' } },
-  { max: 0, usage: 'record digest [--since TIME | --after CURSOR] [--limit N] [--width N] [--json]' });
-  if (values.since !== undefined && values.after !== undefined) throw new UserError('choose --since or --after, not both');
-  const limit = values.limit === undefined ? 8 : Number(values.limit);
-  const width = values.width === undefined ? 72 : Number(values.width);
-  if (!Number.isSafeInteger(limit) || limit < 1) throw new UserError('--limit expects a positive whole number');
-  if (!Number.isSafeInteger(width) || width < 32 || width > 240) throw new UserError('--width expects a whole number from 32 to 240');
-  const ctx = openOrg({ readOnly: true });
-  const { journal, warnings } = readDigestJournal(ctx.dir);
-  const doc = digestJson(ctx.state, ctx.events, journal, { orgDir: ctx.dir, now: ctx.now,
-    since: values.after === undefined ? parseSince(values.since ?? '1d', ctx.now) : null,
-    after: values.after, warnings: [...warnings, ...(ctx.tornTail ? ['Incomplete record tail ignored.'] : [])] });
-  out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderDigest(doc, { limit, width }));
-  return 0;
-}
-
-function recap(argv) {
-  const { values } = args(argv, { json: { type: 'boolean' }, back: { type: 'string' } }, { max: 0, usage: 'record recap [--back N] [--json]' });
-  const back = values.back == null ? 0 : Number(values.back);
-  if (!Number.isInteger(back) || back < 0) throw new UserError('--back expects a whole number of blocks (0 is the latest)');
-  const ctx = openOrg();
-  const doc = blockJson(ctx.state, ctx.events, { orgDir: ctx.dir, now: ctx.now, back });
-  out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderBlock(doc));
-  return 0;
-}
-
-// The console is an isolated package with its own dependencies; the core only launches it.
-function consoleApp(argv) {
-  const { values } = args(argv, { project: { type: 'string' }, modern: { type: 'boolean' }, folder: { type: 'string' }, help: { type: 'boolean' } }, { max: 0, usage: 'record console [--project NAME] [--modern] [--folder PATH] [--help]' });
-  const dir = path.resolve(process.env.HERDR_ORG_CONSOLE_DIR || path.join(path.dirname(BIN), '..', 'console'));
-  if (!fs.existsSync(path.join(dir, 'node_modules', 'ink', 'package.json'))) {
-    throw new UserError(`the console's dependencies are not installed; run: npm --prefix ${shq(dir)} ci`);
-  }
-  const r = spawnSync(process.execPath, [path.join(dir, 'app.mjs'), ...(values.project ? ['--project', values.project] : []), ...(values.modern ? ['--modern'] : []), ...(values.folder ? ['--folder', values.folder] : []), ...(values.help ? ['--help'] : [])], {
-    stdio: 'inherit',
-    env: { ...process.env, HERDR_ORG_BIN: BIN },
-  });
-  if (r.error) throw r.error;
-  return r.status ?? 1;
-}
-
 export function parseSince(text, now) {
   const relative = /^(\d+)\s*([mhd])$/.exec(text);
   if (relative) return new Date(now.getTime() - Number(relative[1]) * { m: 60000, h: 3600000, d: 86400000 }[relative[2]]);
@@ -1035,42 +961,6 @@ function log(argv) {
   return 0;
 }
 
-function priorities(argv) {
-  const [command, ...rest] = argv;
-  if (command === 'propose') return ask([...rest, '--category=priorities', '--wait']);
-  if (!command || command === '--json') {
-    args(argv, { json: { type: 'boolean' } }, { max: 0, usage: 'record priorities [--json]' });
-    const doc = prioritiesJson(openOrg().state);
-    out(command === '--json' ? JSON.stringify(doc, null, 2) + '\n' : renderPriorities(doc));
-    return 0;
-  }
-  if (!['add', 'rank'].includes(command)) throw new UserError('usage: record priorities [--json] | add TITLE --why TEXT | rank P-n --rank N --why TEXT [--expect REV] | propose QUESTION --parent ID --recommend yes --why TEXT');
-  if (writer().actor !== 'human') throw new UserError('only the operator changes priorities; propose with record priorities propose QUESTION --parent ID --recommend yes --why TEXT');
-  const { values, positionals } = args(rest, { why: { type: 'string' }, rank: { type: 'string' }, expect: { type: 'string' } },
-    { min: 1, ...(command === 'rank' ? { max: 1 } : {}), usage: `record priorities ${command} ${command === 'rank' ? 'P-n --rank N' : 'TITLE'} --why TEXT [--expect REV]` });
-  const why = values.why?.trim();
-  if (!why) throw new UserError('--why is required to change priorities');
-  const { result } = mutate(openOrg(), s => {
-    if (values.expect !== undefined && String(s.priorityRevision) !== values.expect) throw new UserError('priorities changed since you opened the editor; refresh and review again');
-    if (command === 'add') {
-      const title = positionals.join(' ').trim();
-      if (!title) throw new UserError('a priority title is required');
-      const number = Math.max(0, ...[...s.priorities.keys()].map(id => Number(id.slice(2)))) + 1;
-      const id = `P-${number}`;
-      return { add: [{ type: 'priority.added', id, title, why }], result: id };
-    }
-    const id = positionals[0], rank = Number(values.rank);
-    if (!s.priorities.has(id)) throw new UserError(`unknown priority ${id}`);
-    if (!Number.isInteger(rank) || rank < 1 || rank > s.priorityOrder.length) throw new UserError(`--rank must be from 1 to ${s.priorityOrder.length}`);
-    if (s.priorityOrder.indexOf(id) === rank - 1) return { add: [], result: `${id} already ranks ${rank}; nothing written` };
-    const order = s.priorityOrder.filter(p => p !== id);
-    order.splice(rank - 1, 0, id);
-    return { add: [{ type: 'priorities.ranked', order, previous: s.priorityOrder, why }], result: `${id} ranks ${rank}` };
-  });
-  out(result + '\n');
-  return 0;
-}
-
 const lazy = (file, name) => async (argv) => (await import(file))[name](argv);
 
 const COMMANDS = {
@@ -1079,7 +969,7 @@ const COMMANDS = {
   release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
   releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, digest, recap, priorities, console: consoleApp,
+  start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.
   desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
   routes: lazy('../lanes/routes-command.mjs', 'routesCommand'),

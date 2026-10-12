@@ -75,82 +75,6 @@
       "duration_ms": 92,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
-    "console/proto/autonomy.test.mjs": {
-      "duration_ms": 58,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/proto/prototype.test.mjs": {
-      "duration_ms": 58,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/proto/workflows.test.mjs": {
-      "duration_ms": 66,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/board.test.mjs": {
-      "duration_ms": 28,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/brain.test.mjs": {
-      "duration_ms": 41,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/control-plane.test.mjs": {
-      "duration_ms": 24570,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/control.test.mjs": {
-      "duration_ms": 21,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/controller.test.mjs": {
-      "duration_ms": 27,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/desks.test.mjs": {
-      "duration_ms": 15873,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/frame.test.mjs": {
-      "duration_ms": 66,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/housekeeping.test.mjs": {
-      "duration_ms": 9226,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/model.test.mjs": {
-      "duration_ms": 54,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/modern.test.mjs": {
-      "duration_ms": 264,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/names.test.mjs": {
-      "duration_ms": 17,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/paint.test.mjs": {
-      "duration_ms": 12,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/session.test.mjs": {
-      "duration_ms": 4206,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/sources.test.mjs": {
-      "duration_ms": 20,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/terminal.test.mjs": {
-      "duration_ms": 44,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "console/test/waiting.test.mjs": {
-      "duration_ms": 212,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
     "discovery/test/acceptance.test.mjs": {
       "duration_ms": 14824,
       "measured_at": "2026-10-03T21:03:59.469Z"
@@ -315,10 +239,6 @@
       "duration_ms": 3420,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
-    "test/console-launch.test.mjs": {
-      "duration_ms": 76,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
     "test/deadline-boundaries.test.mjs": {
       "duration_ms": 31051,
       "measured_at": "2026-10-03T21:03:59.469Z"
@@ -335,10 +255,6 @@
       "duration_ms": 3026,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
-    "test/focus.test.mjs": {
-      "duration_ms": 198,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
     "test/git-seed.test.mjs": {
       "duration_ms": 142,
       "measured_at": "2026-10-03T20:51:44.971Z"
@@ -349,10 +265,6 @@
     },
     "test/load-deadlines.test.mjs": {
       "duration_ms": 783,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "test/mcp.test.mjs": {
-      "duration_ms": 11,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
     "test/name-alias.test.mjs": {
@@ -375,10 +287,6 @@
       "duration_ms": 66591,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
-    "test/priorities.test.mjs": {
-      "duration_ms": 2651,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
     "test/processes.test.mjs": {
       "duration_ms": 22,
       "measured_at": "2026-10-03T20:51:44.971Z"
@@ -389,10 +297,6 @@
     },
     "test/pty.test.mjs": {
       "duration_ms": 11548,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "test/recap.test.mjs": {
-      "duration_ms": 1284,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
     "test/release.test.mjs": {

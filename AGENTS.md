@@ -2,16 +2,8 @@
 
 - `bin/org.mjs` is the CLI. `lib/store.mjs` owns the event log and lock, `lib/state.mjs` the fold and
   derived status, `lib/report.mjs` report parsing, `lib/render.mjs` every view and brief. No dependencies.
-- `console/` may depend on Ink, React and a markdown renderer. The core stays dependency-free. The console
-  writes only through the `org` CLI (child process, argument arrays) and never appends to `events.jsonl`
-  itself.
-- `mcp/` is an optional foreground stdio adapter with its own dependencies. It calls the record CLI
-  with argument arrays for every record operation and never appends to `events.jsonl` itself.
-  Run `npm --prefix mcp ci` and `npm --prefix mcp test` when changing it; tests stay offline.
-  Generated Codex worker/review permission profiles disable network for sandboxed commands.
-  Run dependency installs such as `npm --prefix mcp ci` outside that sandbox (through the
-  harness's approved command escalation) or on a Claude route; do not enable network or
-  grant Herdr's control socket to a worker to install dependencies.
+- The product has no npm dependencies. The console and MCP adapter were removed (archived at tag
+  `archive/console-20261012` and in Git history); do not reintroduce a dependency-bearing module.
 - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
   and never writes `events.jsonl`. `supervisor/` supplies the read-only cold start and generic protocol,
   foreground notice/queue glue, and legacy settle launchers. Workers never invoke its cycle mutations.

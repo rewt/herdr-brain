@@ -319,7 +319,7 @@ for (const [screenName, screen, count] of [
 ]) for (const profile of [undefined, 'claude-mem-bastian']) test(`Codex ${screenName} blocks the brief visibly in ${profile ?? 'the default profile'} and ordinary retry delivers once`, t => {
   const f = fixture(t);
   if (profile) fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({
-    always_args: { codex: ['--profile', profile] }, routes: { engineer: { kind: 'codex', model: 'model-a', effort: 'high' } },
+    routes: { engineer: { kind: 'codex', model: 'model-a', effort: 'high', args: ['--profile', profile] } },
   }));
   fs.writeFileSync(path.join(f.root, 'screen'), screen);
   const first = f.start(); assert.equal(first.status, 1, first.stderr);

@@ -6,7 +6,12 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { canonicalTestPlan } from '../test-plan.mjs';
 
-test('the real canonical planner loads its transitive base imports while selecting tests from the lane', () => {
+// The canonical planner reads the product tree's Git history; a release build's git-archive snapshot has none.
+const gitTree = spawnSync('git', ['-C', fs.realpathSync(new URL('../../', import.meta.url)), 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' }).stdout.trim() === 'true';
+const SNAPSHOT = 'no Git work tree (release snapshot)';
+
+test('the real canonical planner loads its transitive base imports while selecting tests from the lane', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
   const repo = fs.realpathSync(new URL('../../', import.meta.url));
   const base = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   const plan = canonicalTestPlan({ repo, base, cwd: repo, planner: 'test/helpers/affected-tests.mjs',
@@ -22,6 +27,7 @@ test('the real canonical planner loads its transitive base imports while selecti
 });
 
 test('the real canonical planner works with TMPDIR set to a symlinked directory and removes its snapshot', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'canonical-plan-tmp-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const temporary = path.join(scratch, 'real'), linked = path.join(scratch, 'linked');

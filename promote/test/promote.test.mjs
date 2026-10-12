@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { queueFor, enqueue } from '../promote.mjs';
+import { queueFor, enqueue, drain } from '../promote.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
@@ -637,4 +637,19 @@ test('conditional close rechecks the promoted tip and base before any removal', 
   f.git(['merge', '--ff-only', 'lane/first']);
   const safe = close(f.git(['rev-parse', 'lane/first'])); assert.equal(safe.status, 0, safe.stderr);
   assert.equal(fs.existsSync(wt), false);
+});
+
+test('a drain owner this caller may not signal still counts as running', async (t) => {
+  const f = fixture(t), lock = path.join(f.queue.directory, 'worker.lock');
+  fs.mkdirSync(lock, { recursive: true });
+  const owner = JSON.stringify({ pid: process.pid, at: new Date().toISOString(), argv: [process.execPath, CLI] });
+  fs.writeFileSync(path.join(lock, 'owner.json'), owner);
+  const kill = process.kill;
+  process.kill = (pid, signal) => {
+    if (signal === 0) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    return kill.call(process, pid, signal);
+  };
+  try { await drain(f.queue); } finally { process.kill = kill; }
+  assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner, 'the live owner keeps its lock');
+  fs.rmSync(lock, { recursive: true });
 });

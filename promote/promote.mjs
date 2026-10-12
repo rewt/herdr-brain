@@ -334,7 +334,8 @@ export async function drain(queue) {
       const ownerFile = path.join(queue.directory, 'worker.lock', 'owner.json');
       const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
       if (!Number.isInteger(owner.pid) || owner.pid < 1 || owner.argv?.[1] !== SELF) throw error;
-      try { process.kill(owner.pid, 0); } catch { throw error; }
+      // EPERM means the owner exists but this caller (another user or a sandbox) may not signal it.
+      try { process.kill(owner.pid, 0); } catch (signal) { if (signal.code !== 'EPERM') throw error; }
     }
   });
   if (!release) { process.send?.({ ready: true, already_running: true }); return; }

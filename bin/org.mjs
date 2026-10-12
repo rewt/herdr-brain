@@ -20,7 +20,7 @@ import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
 import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { completeBatchCommand } from '../lib/completion.mjs';
-import { releaseRecordCommand } from '../lib/release-record.mjs';
+import { releasesCommand } from '../lib/release-record.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
   renderSnapshot, renderStatus, statusJson, truncate, renderLessons,
@@ -85,8 +85,6 @@ Views (zero inference)
   record today [--json] [--parked]        what waits on the operator; --parked lists questions older than 7 days
   record housekeeping [--json]            schedule status, last scan and recent activity
   record releases [--json] [--identity DIR] candidates, gate evidence and operator decisions
-  record release cut --file JSON | start RC-n | result RC-n --file JSON
-                                          release-module receipts (never executes a gate or ship)
   record housekeeping pause [--expect REV] save enabled=false for the next tick
   record housekeeping set --resume false [--unset KEY] [--expect REV]
                                           validate project .housekeeping.json overrides
@@ -966,8 +964,7 @@ const lazy = (file, name) => async (argv) => (await import(file))[name](argv);
 const COMMANDS = {
   lesson, lessons,
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
-  release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
-  releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
+  releases: argv => releasesCommand(argv, { openOrg, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
   start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.

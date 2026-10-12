@@ -6,10 +6,10 @@ import { isMain } from '../../lib/cli-help.mjs';
 
 export function phases(files) {
   if (!files.length || new Set(files).size !== files.length) throw new Error('supply a nonempty, unique test file list');
-  const cycle = file => /^(settle|supervisor|release)\//.test(file);
+  const cycle = file => /^(settle|supervisor)\//.test(file);
   return [
     ['core-and-modules', files.filter(file => !cycle(file))],
-    ['settle-supervisor-release', files.filter(cycle)],
+    ['settle-supervisor', files.filter(cycle)],
   ].filter(([, rows]) => rows.length);
 }
 

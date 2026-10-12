@@ -18,7 +18,7 @@ export const cases = Object.freeze({
   fix: spec('fix-round', 'Fix round: same worker, fresh durable run', ['herdr-fixture']),
   grace: spec('watch-grace', 'Watch cutover: idle grace and exclusive watcher', ['herdr-fixture']),
   housekeeping: spec('housekeeping', 'Housekeeping closes only eligible finished workers', ['herdr-fixture']),
-  release: spec('scratch-release', 'Scratch release build/activate/rollback/restore'),
+  release: spec('scratch-release', 'Scratch release build/activate/rollback'),
   defaultCycle: spec('default-cycle', 'New project: default supervisor dispatch/watch/ingest cycle', ['herdr-fixture']),
   settle: spec('settle-cycle', 'New project: report/settle/fix/settle/promotable without config'),
   supervisor: spec('supervisor-cycle', 'New project: fresh/history supervisor, notices, fix, promotion and record completion'),

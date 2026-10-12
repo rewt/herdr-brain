@@ -79,14 +79,6 @@
       "duration_ms": 33423,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
-    "release/test/candidate.test.mjs": {
-      "duration_ms": 2587,
-      "measured_at": "2026-10-03T20:54:00.824Z"
-    },
-    "release/test/release.test.mjs": {
-      "duration_ms": 26805,
-      "measured_at": "2026-10-03T20:54:00.824Z"
-    },
     "settle/test/config.test.mjs": {
       "duration_ms": 27958,
       "measured_at": "2026-10-03T20:54:00.824Z"

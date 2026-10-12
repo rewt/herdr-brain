@@ -1,35 +1,38 @@
-# Machine release tools
+# Machine releases
 
-The product has no npm dependencies. `install.sh` checks Node.js 20+ during an
-archive build. `release.sh build TAG` creates an immutable tagged copy; activation
-manages the `record`, `org` and `lane` launchers. `rollback` selects the previous
-release; `restore` restores the remembered launcher destinations.
+The product has no npm dependencies. Node.js 20+, Git, Bash, tar and npm are
+needed to build a release; npm runs the offline test scripts without installing
+packages. Herdr and native Codex or Claude supply agent panes when used.
 
-Set `HERDR_MONITOR_HOME`, `HERDR_MONITOR_BIN` and `HERDR_MONITOR_REPO` for isolated
-release tests. Keep installed releases separate from development: a commit does
-not activate a release. Existing regular launcher files are never overwritten.
-The operator controls activation and publishing.
+```sh
+bash herdr/release.sh build TAG
+bash herdr/release.sh build TAG --live
+bash herdr/release.sh activate TAG
+bash herdr/release.sh rollback
+bash herdr/release.sh status
+```
 
-Native Codex and Claude launches use their own configuration. Project chats use
-the [fleet command](../discovery/README.md). Release tools install no harness
-wrappers, shell PATH snippets or native SessionStart hooks. The non-setuid process
-reader under `lib/native` remains bundled for process birth identity checks.
+Build copies exactly `git archive TAG` into `releases/TAG.partial`, runs
+`npm run test:release` inside that snapshot, then renames it and makes it
+read-only. A failed or interrupted build retains its partial directory for
+inspection and cannot be activated or rebuilt in place. `--live` adds the live
+acceptance harness after the offline gate; it is optional and never run in lanes.
+Every release retains `contrib/settle-watch.mjs` and `lib/cli-help.mjs`.
 
-Machines that activated an entry-installing release need one-time cleanup;
-activation and restore no longer remove its entry installation. Remove the
-managed wrappers in `~/.local/share/herdr-monitor/entry/bin` (or the former
-`HERDR_MONITOR_ENTRY_BIN` under a custom `HERDR_MONITOR_HOME`). Remove the block
-between `# >>> Herdr Monitor entry >>>` and `# <<< Herdr Monitor entry <<<` from
-`.zshenv` and `.zshrc` under `${ZDOTDIR:-$HOME}`, and from `~/.bashrc` and the
-selected `~/.bash_profile`, `~/.bash_login` or `~/.profile`. Remove only Monitor's
-`SessionStart` hook groups that invoke `herdr/native-entry.mjs` from
-`${CODEX_HOME:-~/.codex}/hooks.json` and
-`${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`, preserving other hooks and settings.
-The old bin's `.monitor-shell.json` and `.monitor-native-hooks.json` receipts name
-the exact destinations if they changed. Keep those receipts until cleanup is
-complete, then open a fresh shell and confirm `codex` and `claude` resolve to the
-native launchers.
+Activation updates `previous` and `current` and links `~/.local/bin/{org,record}`
+to `current/bin/org.mjs` and `lane` to `current/lanes/lane.mjs`. Existing regular
+files are refused before switching. Repeating activation preserves the previous
+release. Rollback selects it. The operator controls activation and publishing.
+The retired `rewt.herdr-monitor` plugin is unlinked if still registered; a failure
+warns. Activation refuses while the old Brain LaunchAgent plist exists: the
+operator must stop and remove that retired job first.
 
-Run focused offline tests in lanes. Promotion runs merge checks once, and release
-preparation runs the offline release suites once per candidate. The release
-acceptance harness belongs to release preparation, never a worker lane.
+Set `HERDR_MONITOR_HOME`, `HERDR_MONITOR_BIN` and `HERDR_MONITOR_REPO` to choose
+release, launcher and source locations. `HERDR_MONITOR_PLIST` selects the retired
+plist check, and `HERDR_BIN_PATH` selects the Herdr CLI. Tests always supply scratch
+homes and fake Herdr commands. No release command installs dependencies, native
+hooks, harness wrappers or machine permissions.
+
+Older installations may still contain `before/`, entry wrappers and shell PATH
+blocks. Their cleanup is an operator task; current releases keep no restoration
+receipts. Preserve existing records, lane worktrees and native harness settings.

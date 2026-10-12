@@ -1,7 +1,8 @@
 # Release acceptance
 
 `node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--keep]`
-is the local candidate gate. Run it once per release candidate from the operator's
+is the optional live candidate gate (`release.sh build TAG --live`). Run it at most
+once per release candidate from the operator's
 release context. Lane workers run focused offline tests and never run the live gate.
 Tests never call a model.
 
@@ -11,7 +12,7 @@ The gate snapshots candidate code into owned scratch storage and exercises:
 - Scripted workers and supervisor in real Herdr panes, dispatch, watch, final report
   ingestion, fix rounds, and lane validation, promotion and closure.
 - Promotion queue order, refusal, notices and housekeeping cleanup.
-- Immutable scratch release build, activation, rollback and launcher restoration.
+- Immutable scratch release build, activation, rollback and three launcher links.
 - Offline settle and supervisor cycles using real product modules and scripted transport.
 - Owned process, inbox and workspace cleanup, plus operator focus preservation.
 

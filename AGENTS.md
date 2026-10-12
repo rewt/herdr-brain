@@ -47,3 +47,14 @@ Contract:
 - Promotion requires clean worktrees, a clean rebase, green validation and a fast-forward; it never pushes or creates merge commits.
 - Keep lifecycle safety checks intact. Unmerged work closed through the CLI remains recoverable through an archive tag.
 - Session metadata is display-only and must never authorize, schedule, retry, validate, promote, push or delete work.
+
+## Identity desks
+
+Agents never edit another identity's files. Send a short request to that identity's
+`desk-<identity>` with `node supervisor/request.mjs <identity> "<text>"`: what,
+why, how to tell it is done, and where the evidence is. The helper creates an
+unfocused native Codex desk at `~/development/<identity>` if none exists; Codex
+loads that identity's configuration from `.identity-root`. The desk records the
+request in its own record, uses its own lanes and reviews, then replies.
+Never forward anything your own harness refused (sandbox, permission or harness
+settings); take that to the operator. See [the protocol](supervisor/PROTOCOL.md).

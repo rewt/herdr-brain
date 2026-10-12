@@ -1,204 +1,91 @@
 #!/usr/bin/env bash
-# Releases of Herdr Monitor, kept apart from development so a merge to main never
-# changes what a running project uses. A release is an immutable copy of a tag:
-#
-#   release.sh build TAG       copy TAG into $HOME_DIR/releases/TAG and run its build step
-#   release.sh activate TAG    point $HOME_DIR/current at it; manage the record, org and lane
-#                              launchers, remembering each the first time it is managed; link
-#                              the Herdr plugin to a release that still ships one, or unlink it
-#                              (Herdr resolves links, so the plugin is re-linked whenever the
-#                              release changes). Refuses while the retired Brain LaunchAgent
-#                              plist exists: releases no longer ship `brain watch`
-#   release.sh rollback        point current back at the release before it
-#   release.sh restore         put each launcher back where it was before it was first managed
-#                              (the dev checkout); unlink the plugin
-#   release.sh dev WORKTREE    link a second plugin, rewt.herdr-monitor-dev, to an older worktree
-#   release.sh status          what is active and where the launchers point
-#
-# Environment: HERDR_MONITOR_HOME (default ~/.local/share/herdr-monitor), HERDR_MONITOR_BIN
-# (default ~/.local/bin), HERDR_MONITOR_REPO (default this script's repository),
-# HERDR_MONITOR_PLIST (the retired Brain plist activation checks for; default
-# ~/Library/LaunchAgents/com.rewt.herdr-brain.plist). RELEASE_NO_HERDR=1 skips the plugin
-# step, RELEASE_NO_LAUNCHD=1 the retired-plist check and RELEASE_NO_NPM=1 the npm check.
+# Immutable local releases. The operator controls activation and distribution.
+# Usage: release.sh build TAG [--live] | activate TAG | rollback | status
+# HERDR_MONITOR_HOME, HERDR_MONITOR_BIN and HERDR_MONITOR_REPO select destinations.
+# HERDR_MONITOR_PLIST selects the retired Brain LaunchAgent to check.
 set -euo pipefail
-
 HOME_DIR=${HERDR_MONITOR_HOME:-$HOME/.local/share/herdr-monitor}
 BIN_DIR=${HERDR_MONITOR_BIN:-$HOME/.local/bin}
-REPO=${HERDR_MONITOR_REPO:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}
+REPO=${HERDR_MONITOR_REPO:-}
 LEGACY_PLIST=${HERDR_MONITOR_PLIST:-$HOME/Library/LaunchAgents/com.rewt.herdr-brain.plist}
-PLUGIN=rewt.herdr-monitor
-LAUNCHERS="record:bin/org.mjs org:bin/org.mjs lane:lanes/lane.mjs"
-
+LAUNCHERS="org:bin/org.mjs record:bin/org.mjs lane:lanes/lane.mjs"
 die() { echo "release: $*" >&2; exit 1; }
 say() { echo "release: $*"; }
-warn() { echo "release: warning: $*" >&2; }
-herdr_bin() { echo "${HERDR_BIN_PATH:-herdr}"; }
-
+valid_tag() {
+  [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]] && git check-ref-format "refs/tags/$1" >/dev/null || die "invalid release identifier: $1"
+}
+absent_or_link() {
+  [ ! -e "$1" ] || [ -L "$1" ] || die "$1 is not a link; refusing to replace it"
+}
 build() {
-  local tag=$1 dir="$HOME_DIR/releases/$1"
-  git -C "$REPO" rev-parse -q --verify "refs/tags/$tag" >/dev/null || die "no tag $tag in $REPO"
-  [ -e "$dir" ] && die "$dir already exists; a release is never rebuilt in place"
-  mkdir -p "$HOME_DIR/releases" "$dir.partial"
-  git -C "$REPO" archive "$tag" | tar -x -C "$dir.partial"
-  git -C "$REPO" rev-parse "$tag^{commit}" > "$dir.partial/.release-commit"
-  [ -x "$dir.partial/herdr/install.sh" ] && MONITOR_INSTALL_BUILD_ONLY=1 "$dir.partial/herdr/install.sh"
+  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-}
+  valid_tag "$tag"
+  [ -n "$REPO" ] || REPO=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+  git -C "$REPO" rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null || die "no tag $tag in $REPO"
+  [ ! -e "$dir" ] && [ ! -L "$dir" ] || die "$dir already exists; a release is never rebuilt in place"
+  mkdir -p "$HOME_DIR/releases"
+  mkdir "$dir.partial" || die "$dir.partial already exists; inspect the unfinished build"
+  git -C "$REPO" archive "refs/tags/$tag" | tar -x -C "$dir.partial"
+  git -C "$REPO" rev-parse "refs/tags/$tag^{commit}" > "$dir.partial/.release-commit"
+  for file in bin/org.mjs lanes/lane.mjs contrib/settle-watch.mjs lib/cli-help.mjs; do
+    [ -f "$dir.partial/$file" ] || die "release is missing $file"
+  done
+  (cd "$dir.partial" && npm run test:release)
+  if [ "$live" = --live ]; then
+    (cd "$dir.partial" && node acceptance/run.mjs --candidate "$dir.partial")
+  fi
   mv "$dir.partial" "$dir"
   chmod -R a-w "$dir"
   say "built $tag at $dir ($(cut -c1-8 "$dir/.release-commit"))"
 }
-
-# Remember each launcher's original state once, including launchers introduced after
-# the first activation, so `restore` can put the set back exactly.
-remember() {
-  local before="$HOME_DIR/before"
-  mkdir -p "$before"
-  for l in $LAUNCHERS; do
-    local name=${l%%:*}
-    if [ ! -f "$before/$name" ] && [ ! -f "$before/$name.missing" ]; then
-      if [ -L "$BIN_DIR/$name" ]; then
-        readlink "$BIN_DIR/$name" > "$before/$name"
-      elif [ ! -e "$BIN_DIR/$name" ]; then
-        : > "$before/$name.missing"
-      fi
-    fi
-  done
-  return 0
-}
-
-launchers() {
-  mkdir -p "$BIN_DIR"
-  for l in $LAUNCHERS; do
-    local name=${l%%:*} rel=${l#*:}
-    [ -e "$BIN_DIR/$name" ] && [ ! -L "$BIN_DIR/$name" ] && die "$BIN_DIR/$name is not a link; refusing to replace it"
-    ln -sfn "$HOME_DIR/current/$rel" "$BIN_DIR/$name"
-  done
-}
-
-managed_launcher() {
-  local target
-  [ -L "$1" ] || return 1
-  target=$(readlink "$1")
-  case "$target" in
-    "$HOME_DIR/current/"*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-# Brain watch is gone. A leftover LaunchAgent starts current/brain/bin/brain.mjs
-# watch, which would exit and restart forever once current has no `watch`.
-# Releases no longer touch launchd; the operator removes the job once.
-retired_brain_service() {
-  [ "${RELEASE_NO_LAUNCHD:-}" = 1 ] && return 0
-  [ -e "$LEGACY_PLIST" ] || return 0
-  die "$LEGACY_PLIST still starts Brain watch, which releases no longer ship; stop and remove it first: launchctl bootout gui/$(id -u)/com.rewt.herdr-brain; rm $LEGACY_PLIST"
-}
-
-# Herdr resolves the path it is given, so the plugin is bound to one release
-# directory, not to `current`: re-link it whenever the active release changes.
-plugin_root() {
-  "$(herdr_bin)" plugin list --plugin "$PLUGIN" --json 2>/dev/null \
-    | python3 -c 'import json,sys; p=json.load(sys.stdin)["result"]["plugins"]; print(p[0]["plugin_root"] if p else "")' 2>/dev/null || true
-}
-
-link_plugin() {
-  [ "${RELEASE_NO_HERDR:-}" = 1 ] && return 0
-  local target root
-  target=$(cd "$HOME_DIR/current" && pwd -P)
-  root=$(plugin_root)
-  # Releases after the plugin's removal ship no manifest: retire any older link.
-  if [ ! -f "$target/herdr-plugin.toml" ]; then
-    [ -n "$root" ] && "$(herdr_bin)" plugin unlink "$PLUGIN" >/dev/null && say "unlinked Herdr plugin $PLUGIN (this release has none)"
-    return 0
+retire_plugin() {
+  local plugins
+  if ! plugins=$("${HERDR_BIN_PATH:-herdr}" plugin list --plugin rewt.herdr-monitor --json 2>/dev/null); then
+    echo "release: warning: could not inspect the retired Herdr plugin" >&2; return
   fi
-  [ "$root" = "$target" ] && return 0
-  [ -n "$root" ] && "$(herdr_bin)" plugin unlink "$PLUGIN" >/dev/null
-  "$(herdr_bin)" plugin link "$target" >/dev/null
-  say "linked Herdr plugin $PLUGIN to $target"
+  local code=0
+  printf '%s' "$plugins" | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{try {const p=JSON.parse(s).result.plugins;if(!Array.isArray(p))process.exit(2);process.exit(p.length?0:1)}catch{process.exit(2)}})' || code=$?
+  if [ "$code" != 0 ]; then
+    # Empty lists need no mutation; malformed replies should remain visible.
+    [ "$code" = 1 ] || echo "release: warning: could not parse Herdr plugin inventory" >&2
+    return
+  fi
+  "${HERDR_BIN_PATH:-herdr}" plugin unlink rewt.herdr-monitor >/dev/null || echo "release: warning: could not unlink retired Herdr plugin" >&2
 }
-
-unlink_plugin() {
-  [ "${RELEASE_NO_HERDR:-}" = 1 ] && return 0
-  [ -n "$(plugin_root)" ] && "$(herdr_bin)" plugin unlink "$PLUGIN" >/dev/null && say "unlinked Herdr plugin $PLUGIN"
-  return 0
-}
-
 activate() {
   local tag=$1 dir="$HOME_DIR/releases/$1"
-  git check-ref-format "refs/tags/$tag" >/dev/null || die "invalid release identifier: $tag"
-  [ -d "$dir" ] || die "no release $tag; run: release.sh build $tag"
-  # Check every launcher destination before switching current.
-  for l in $LAUNCHERS; do
-    local name=${l%%:*}
-    [ -e "$BIN_DIR/$name" ] && [ ! -L "$BIN_DIR/$name" ] && die "$BIN_DIR/$name is not a link; refusing to replace it"
-  done
-  retired_brain_service
-  remember
-  # Re-activating the active release (after a failed step) must not make it its own previous.
+  valid_tag "$tag"
+  [ -d "$dir" ] && [ ! -L "$dir" ] && [ -f "$dir/.release-commit" ] || die "no built release $tag; run: release.sh build $tag"
+  for l in $LAUNCHERS; do absent_or_link "$BIN_DIR/${l%%:*}"; [ -f "$dir/${l#*:}" ] || die "release is missing ${l#*:}"; done
+  absent_or_link "$HOME_DIR/current"; absent_or_link "$HOME_DIR/previous"
+  [ ! -e "$LEGACY_PLIST" ] && [ ! -L "$LEGACY_PLIST" ] || die "$LEGACY_PLIST still starts Brain watch; stop and remove it first: launchctl bootout gui/$(id -u)/com.rewt.herdr-brain; rm $LEGACY_PLIST"
+  mkdir -p "$BIN_DIR"
   if [ -L "$HOME_DIR/current" ] && [ "$(readlink "$HOME_DIR/current")" != "$dir" ]; then
     ln -sfn "$(readlink "$HOME_DIR/current")" "$HOME_DIR/previous"
   fi
   ln -sfn "$dir" "$HOME_DIR/current"
-  launchers
-  link_plugin
+  for l in $LAUNCHERS; do ln -sfn "$HOME_DIR/current/${l#*:}" "$BIN_DIR/${l%%:*}"; done
+  retire_plugin
   say "active: $tag"
 }
-
 rollback() {
-  [ -L "$HOME_DIR/previous" ] || die "no previous release to roll back to (restore returns to the dev checkout)"
+  [ -L "$HOME_DIR/previous" ] || die "no previous release to roll back to"
   local prev; prev=$(readlink "$HOME_DIR/previous")
   case "$prev" in
     "$HOME_DIR/releases/"*) activate "${prev#"$HOME_DIR/releases/"}" ;;
     *) die "previous is outside the releases directory: $prev" ;;
   esac
 }
-
-restore() {
-  local before="$HOME_DIR/before"
-  [ -d "$before" ] || die "nothing to restore: no activation was recorded"
-  for l in $LAUNCHERS; do
-    local name=${l%%:*}
-    if [ -f "$before/$name" ]; then
-      ln -sfn "$(cat "$before/$name")" "$BIN_DIR/$name"
-    elif [ -f "$before/$name.missing" ]; then
-      if [ ! -e "$BIN_DIR/$name" ] && [ ! -L "$BIN_DIR/$name" ]; then
-        :
-      elif managed_launcher "$BIN_DIR/$name"; then
-        rm -f "$BIN_DIR/$name"
-      else
-        warn "$BIN_DIR/$name changed since activation; leaving it alone"
-      fi
-    fi
-  done
-  unlink_plugin
-  say "launchers are back where they were before release management, and the plugin is unlinked"
-}
-
-dev() {
-  local wt; wt=$(cd "$1" && pwd)
-  [ -f "$wt/herdr-plugin.toml" ] || die "$wt has no herdr-plugin.toml"
-  mkdir -p "$HOME_DIR/dev"
-  sed -e "s/^id = \"$PLUGIN\"/id = \"$PLUGIN-dev\"/" -e 's/^name = "\(.*\)"/name = "\1 (dev)"/' \
-      -e "s#\\\$HERDR_PLUGIN_ROOT#$wt#g" -e "s/--plugin $PLUGIN /--plugin $PLUGIN-dev /" \
-      "$wt/herdr-plugin.toml" > "$HOME_DIR/dev/herdr-plugin.toml"
-  [ "${RELEASE_NO_HERDR:-}" = 1 ] && { say "dev manifest written for $wt"; return 0; }
-  "$(herdr_bin)" plugin unlink "$PLUGIN-dev" >/dev/null 2>&1 || true
-  "$(herdr_bin)" plugin link "$HOME_DIR/dev" >/dev/null
-  say "linked $PLUGIN-dev to $wt"
-}
-
 status() {
   echo "current:  $(readlink "$HOME_DIR/current" 2>/dev/null || echo none)"
   echo "previous: $(readlink "$HOME_DIR/previous" 2>/dev/null || echo none)"
-  for l in $LAUNCHERS; do local name=${l%%:*}; echo "$name -> $(readlink "$BIN_DIR/$name" 2>/dev/null || echo missing)"; done
-  ls "$HOME_DIR/releases" 2>/dev/null | sed 's/^/release:  /'
+  for l in $LAUNCHERS; do echo "${l%%:*} -> $(readlink "$BIN_DIR/${l%%:*}" 2>/dev/null || echo missing)"; done
+  if [ -d "$HOME_DIR/releases" ]; then ls "$HOME_DIR/releases" | sed 's/^/release:  /'; fi
 }
-
 case "${1:-}" in
-  build) [ $# -eq 2 ] || die "usage: release.sh build TAG"; build "$2" ;;
+  build) [ $# -eq 2 ] || { [ $# -eq 3 ] && [ "$3" = --live ]; } || die "usage: release.sh build TAG [--live]"; build "$2" "${3:-}" ;;
   activate) [ $# -eq 2 ] || die "usage: release.sh activate TAG"; activate "$2" ;;
-  rollback) rollback ;;
-  restore) restore ;;
-  dev) [ $# -eq 2 ] || die "usage: release.sh dev WORKTREE"; dev "$2" ;;
-  status) status ;;
-  *) sed -n '2,24p' "$0"; exit 2 ;;
+  rollback) [ $# -eq 1 ] || die "usage: release.sh rollback"; rollback ;;
+  status) [ $# -eq 1 ] || die "usage: release.sh status"; status ;;
+  *) die "usage: release.sh build TAG [--live] | activate TAG | rollback | status" ;;
 esac

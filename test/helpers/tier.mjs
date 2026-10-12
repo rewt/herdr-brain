@@ -18,6 +18,7 @@ const promotion = [
   'acceptance/test/signal.test.mjs',
   'acceptance/test/snapshot.test.mjs',
   'dispatch/test/timing.test.mjs',
+  'dispatch/test/retired-flags.test.mjs',
   'lanes/test/herdr-client.test.mjs',
   'lanes/test/no-focus.test.mjs',
   'lanes/test/routes.test.mjs',
@@ -25,7 +26,8 @@ const promotion = [
   'promote/test/promote.test.mjs',
   'promote/test/train.test.mjs',
   'promote/test/workflow-train.test.mjs',
-  'release/test/candidate.test.mjs',
+  'test/bch-cloak-contract.test.mjs',
+  'supervisor/test/request.test.mjs',
   'settle/test/rebase-paths.test.mjs',
   'settle/test/rebase-review.test.mjs',
   'settle/test/rebase-safety.test.mjs',
@@ -60,7 +62,7 @@ const promotion = [
 ];
 const directories = {
   core: ['test', 'brain/test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test'],
-  cycle: ['settle/test', 'supervisor/test', 'release/test'],
+  cycle: ['settle/test', 'supervisor/test'],
   lanes: ['lanes/test'], acceptance: ['acceptance/test'],
 };
 // A module folder may be gone from the tree being planned (removed in the candidate while the

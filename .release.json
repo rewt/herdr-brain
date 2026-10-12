@@ -1,7 +1,0 @@
-{
-  "gate": ["node", "herdr/release-candidate.mjs", "gate", "--candidate", "{candidate}"],
-  "preflight": ["node", "herdr/release-candidate.mjs", "preflight", "--candidate", "{repo}"],
-  "prepare": ["node", "herdr/release-candidate.mjs", "prepare", "--candidate", "{candidate}"],
-  "prepare_env": { "MONITOR_INSTALL_BUILD_ONLY": "1" },
-  "ship": ["bash", "herdr/release.sh", "build", "{tag}"]
-}

@@ -51,8 +51,6 @@ function fixture(t) {
 }
 const load = () => import('../entry.mjs');
 test('repository does not track a Codex project hook that can interrupt unattended workers', () => {
-  assert.equal(good(exec('git', ['ls-files', '--', '.codex/hooks.json'], root)), '',
-    'Codex project hooks require interactive trust before an unattended worker receives its task');
   assert.equal(fs.existsSync(path.join(root, '.codex/hooks.json')), false);
 });
 

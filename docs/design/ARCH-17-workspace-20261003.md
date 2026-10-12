@@ -128,7 +128,7 @@ Settings by tier (✓ owns, ↓ may only narrow, · not here):
 | Sandbox denies and grants | generator | ✓ | ↓ may deny more |
 
 I am not proposing a new project settings file. The existing files (`.lane.json`,
-`.lane.validation.json`, `.release.json`, `.promote.json`, `.housekeeping.json`, the record's
+`.lane.validation.json`, `.promote.json`, `.housekeeping.json`, the record's
 `config.json`) are the project tier already. The cheap fix for the scatter is one view, like
 `lane config` today, that prints every effective value with its tier and source file.
 

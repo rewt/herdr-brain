@@ -20,11 +20,10 @@ logic and lane commands. The complete release command runs each current file onc
 through core, cycle, lanes, acceptance and release-only steps, plus the native slot
 suite. New files default to release until explicitly assigned to promotion.
 
-The project release wrapper executes the offline release tier against the
-prepared candidate before writing build evidence and starting acceptance. A failed check prevents that
-candidate's live gate. This is part of the once-per-candidate gate; workers run
-only the offline command when it is relevant. Acceptance source and its timeout
-policy remain independently maintained.
+`herdr/release.sh build TAG` runs the offline release tier inside the archived
+partial snapshot before making it immutable. A failed check leaves that partial
+snapshot for inspection. The optional `--live` pass follows a green offline gate;
+workers run focused offline files and never the live harness.
 
 Lane and settle fixtures copy an immutable initial Git repository, including its own
 objects, index, refs and common directory. Changes still use real Git; fixture

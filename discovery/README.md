@@ -25,8 +25,9 @@ checkout, pane and identity bindings agree. Uncertain startup retains its receip
 and tab, so reopening never repeats a launch.
 
 The launcher starts the native harness with `herdr agent start NAME --kind KIND
---pane PANE -- POLICY_ARGS`. Claude receives `--append-system-prompt`; Codex receives
-`-c developer_instructions=…`. The harness owns its permission and sandbox settings.
+--pane PANE --timeout STARTUP_MS -- POLICY_ARGS`. Claude receives `--append-system-prompt`; Codex receives
+`-c developer_instructions=…`. The harness owns its permission and sandbox settings. Agent start runs with the
+launcher environment overlaid by the resolved route and chat environment pairs.
 The policy points the agent at the project instruction files and includes the
 record command and active lessons.
 

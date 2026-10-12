@@ -1,7 +1,3 @@
-import { loadTimeout } from '../lib/deadline.mjs';
-// herdr/release.sh: releases are immutable copies of tags, switched by one link, and the
-// launchers can always go back to the dev checkout. Offline: a scratch repository, no
-// Herdr, no npm and no launchd.
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,208 +5,111 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
+import { productFiles } from '../lib/product-files.mjs';
 
-const SCRIPT = path.resolve(import.meta.dirname, '..', 'herdr', 'release.sh');
-// Releases before the plugin's removal shipped this manifest; current releases ship none.
-const LEGACY_MANIFEST = `id = "rewt.herdr-monitor"
-name = "Herdr Monitor"
-
-[[panes]]
-id = "console"
-command = ["sh", "-c", "exec \\"$HERDR_PLUGIN_ROOT/herdr/console.sh\\""]
-
-[[actions]]
-id = "open"
-command = ["sh", "-c", "exec \\"\${HERDR_BIN_PATH:-herdr}\\" plugin pane open --plugin rewt.herdr-monitor --entrypoint console --no-focus"]
-`;
-
-function scratch({ plugin = [] } = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-test-'));
-  const repo = path.join(root, 'repo');
-  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'pipe', timeout: loadTimeout(5000) });
+const SCRIPT = path.resolve(import.meta.dirname, '../herdr/release.sh');
+function scratch(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bare-release-')));
+  t.after(() => { execFileSync('chmod', ['-R', 'u+w', root]); fs.rmSync(root, { recursive: true, force: true }); });
+  const repo = path.join(root, 'repo'), home = path.join(root, 'releases-home'), bin = path.join(root, 'bin');
+  fs.mkdirSync(repo); fs.mkdirSync(bin);
+  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', timeout: 10000 });
+  git('init', '-qb', 'main'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid');
   const write = (rel, text) => { fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true }); fs.writeFileSync(path.join(repo, rel), text); };
-  fs.mkdirSync(repo);
-  git('init', '-q');
-  git('config', 'user.email', 't@example.com');
-  git('config', 'user.name', 'T');
-  const version = v => {
-    write('bin/org.mjs', `console.log('org ${v}');\n`);
-    write('lanes/lane.mjs', `console.log('lane ${v}');\n`);
-    if (plugin.includes(v)) write('herdr-plugin.toml', LEGACY_MANIFEST);
-    else fs.rmSync(path.join(repo, 'herdr-plugin.toml'), { force: true });
-    git('add', '-A'); git('commit', '-qm', v); git('tag', v);
-  };
-  version('t1'); version('t2');
-  const bin = path.join(root, 'bin'), home = path.join(root, 'home'), plist = path.join(root, 'brain.plist');
-  const userHome = path.join(root, 'user'); fs.mkdirSync(userHome);
-  fs.mkdirSync(bin);
-  fs.symlinkSync('/dev/checkout/bin/org.mjs', path.join(bin, 'org'));
-  // The retired Brain LaunchAgent lives here, never at the operator's real plist.
-  const env = releaseEnvironment(process.env, { HOME: userHome, ZDOTDIR: userHome, CODEX_HOME: path.join(userHome, '.codex'), CLAUDE_CONFIG_DIR: path.join(userHome, '.claude'),
-    ORG_DIR: '', ORG_ACTOR: path.basename(root),
-    HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist,
-    RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1' });
-  const runWith = (extra, ...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(20000) });
-  const run = (...a) => runWith({}, ...a);
-  const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8', env, timeout: loadTimeout(5000) }).trim();
-  const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8', env, timeout: loadTimeout(5000) }).trim();
-  const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root], { timeout: loadTimeout(5000) }); fs.rmSync(root, { recursive: true, force: true }); };
-  return { root, home, bin, plist, run, runWith, org, record, cleanup };
-}
-
-test('a release is a read-only copy of a tag, never rebuilt in place, and only from a tag', { timeout: 30000 }, () => {
-  const s = scratch();
-  try {
-    assert.equal(s.run('build', 't1').status, 0);
-    const dir = path.join(s.home, 'releases', 't1');
-    assert.equal(fs.readFileSync(path.join(dir, 'bin/org.mjs'), 'utf8'), "console.log('org t1');\n");
-    assert.match(fs.readFileSync(path.join(dir, '.release-commit'), 'utf8'), /^[0-9a-f]{40}\n$/);
-    assert.throws(() => fs.writeFileSync(path.join(dir, 'bin/org.mjs'), 'x'), /EACCES/);
-    assert.match(s.run('build', 't1').stderr, /already exists/);
-    assert.match(s.run('build', 'nope').stderr, /no tag nope/);
-  } finally { s.cleanup(); }
-});
-
-test('activate moves the launchers onto current; rollback and restore undo it', { timeout: 30000 }, () => {
-  const s = scratch();
-  try {
-    s.run('build', 't1'); s.run('build', 't2');
-    assert.equal(s.run('activate', 't1').status, 0);
-    assert.equal(fs.readlinkSync(path.join(s.bin, 'record')), path.join(s.home, 'current/bin/org.mjs'));
-    assert.equal(fs.readlinkSync(path.join(s.bin, 'org')), path.join(s.home, 'current/bin/org.mjs'));
-    assert.equal(s.record(), 'org t1');
-    assert.equal(s.org(), 'org t1');
-    s.run('activate', 't2');
-    assert.equal(s.org(), 'org t2');
-    assert.equal(s.run('rollback').status, 0);
-    assert.equal(s.org(), 'org t1');
-    assert.equal(s.run('restore').status, 0);
-    assert.equal(fs.existsSync(path.join(s.bin, 'record')), false, 'a new launcher is removed on restore');
-    assert.equal(fs.readlinkSync(path.join(s.bin, 'org')), '/dev/checkout/bin/org.mjs', 'back to the dev checkout');
-  } finally { s.cleanup(); }
-});
-
-test('activation refuses while the retired Brain LaunchAgent exists and never rewrites or restores it', { timeout: 30000 }, () => {
-  const s = scratch();
-  try {
-    s.run('build', 't1');
-    const plist = '<plist><dict><key>ProgramArguments</key><array><string>/node</string><string>/x/current/brain/bin/brain.mjs</string><string>watch</string></array></dict></plist>\n';
-    fs.writeFileSync(s.plist, plist);
-    const refused = s.run('activate', 't1');
-    assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /still starts Brain watch.*launchctl bootout gui\/\d+\/com\.rewt\.herdr-brain; rm /);
-    assert.equal(fs.existsSync(path.join(s.home, 'current')), false, 'nothing switched');
-    assert.equal(fs.existsSync(path.join(s.home, 'before')), false, 'nothing remembered');
-    assert.equal(s.runWith({ RELEASE_NO_LAUNCHD: '1' }, 'activate', 't1').status, 0, 'scratch installs may skip the check');
-    assert.equal(fs.readFileSync(s.plist, 'utf8'), plist, 'activation never rewrites the plist');
-    fs.rmSync(s.plist);
-    fs.writeFileSync(path.join(s.home, 'before/plist'), plist); // Saved by an older release.sh.
-    assert.equal(s.run('activate', 't1').status, 0);
-    assert.equal(s.run('restore').status, 0);
-    assert.equal(fs.existsSync(s.plist), false, 'restore never brings the Brain service back');
-  } finally { s.cleanup(); }
-});
-
-test('an existing before directory learns that the new record launcher was absent', { timeout: 30000 }, () => {
-  const s = scratch();
-  try {
-    const before = path.join(s.home, 'before');
-    fs.mkdirSync(before, { recursive: true });
-    fs.writeFileSync(path.join(before, 'org'), '/dev/checkout/bin/org.mjs\n');
-    fs.writeFileSync(path.join(before, 'lane'), '/dev/checkout/lanes/lane.mjs\n');
-    fs.symlinkSync('/dev/checkout/lanes/lane.mjs', path.join(s.bin, 'lane'));
-    fs.writeFileSync(path.join(before, 'plist'), 'legacy Brain plist, now inert\n');
-    s.run('build', 't1');
-    assert.equal(s.run('activate', 't1').status, 0);
-    assert.equal(fs.existsSync(path.join(before, 'record.missing')), true);
-    assert.equal(s.run('restore').status, 0);
-    assert.equal(fs.existsSync(path.join(s.bin, 'record')), false);
-    assert.equal(fs.readlinkSync(path.join(s.bin, 'org')), '/dev/checkout/bin/org.mjs');
-  } finally { s.cleanup(); }
-});
-
-test('restore preserves a replacement at a launcher that was originally missing', { timeout: 30000 }, () => {
-  const s = scratch();
-  try {
-    s.run('build', 't1');
-    assert.equal(s.run('activate', 't1').status, 0);
-
-    const record = path.join(s.bin, 'record');
-    fs.unlinkSync(record);
-    fs.writeFileSync(record, '#!/bin/sh\necho user record\n');
-    const fileRestore = s.run('restore');
-    assert.equal(fileRestore.status, 0);
-    assert.match(fileRestore.stderr, /record changed since activation; leaving it alone/);
-    assert.equal(fs.readFileSync(record, 'utf8'), '#!/bin/sh\necho user record\n');
-
-    fs.unlinkSync(record);
-    fs.symlinkSync('/user/bin/record', record);
-    const linkRestore = s.run('restore');
-    assert.equal(linkRestore.status, 0);
-    assert.match(linkRestore.stderr, /record changed since activation; leaving it alone/);
-    assert.equal(fs.readlinkSync(record), '/user/bin/record');
-  } finally { s.cleanup(); }
-});
-
-test('a launcher that is a real file is never replaced', { timeout: 30000 }, () => {
-  const s = scratch();
-  try {
-    s.run('build', 't1');
-    fs.writeFileSync(path.join(s.bin, 'lane'), '#!/bin/sh\n');
-    assert.match(s.run('activate', 't1').stderr, /not a link; refusing/);
-  } finally { s.cleanup(); }
-});
-
-test('the dev plugin is a second id pointed at an older worktree; current main has no manifest', { timeout: 30000 }, () => {
-  const s = scratch();
-  try {
-    const refused = s.run('dev', path.resolve(import.meta.dirname, '..'));
-    assert.notEqual(refused.status, 0); assert.match(refused.stderr, /has no herdr-plugin\.toml/);
-    const wt = path.join(s.root, 'older-worktree'); fs.mkdirSync(wt);
-    fs.writeFileSync(path.join(wt, 'herdr-plugin.toml'), LEGACY_MANIFEST);
-    assert.equal(s.run('dev', wt).status, 0);
-    const m = fs.readFileSync(path.join(s.home, 'dev/herdr-plugin.toml'), 'utf8');
-    assert.match(m, /^id = "rewt\.herdr-monitor-dev"$/m);
-    assert.match(m, /^name = "Herdr Monitor \(dev\)"$/m);
-    assert.match(m, new RegExp(`exec \\\\"${wt}/herdr/console.sh\\\\"`));
-    assert.match(m, /--plugin rewt\.herdr-monitor-dev --entrypoint console/);
-    assert.doesNotMatch(m, /HERDR_PLUGIN_ROOT/);
-  } finally { s.cleanup(); }
-});
-
-test('activating the active release again (after a failed step) keeps its real previous release', { timeout: 30000 }, () => {
-  const s = scratch();
-  try {
-    s.run('build', 't1'); s.run('build', 't2');
-    s.run('activate', 't1'); s.run('activate', 't2');
-    assert.equal(s.run('activate', 't2').status, 0);
-    assert.equal(fs.readlinkSync(path.join(s.home, 'previous')), path.join(s.home, 'releases/t1'));
-    s.run('rollback');
-    assert.equal(s.org(), 'org t1');
-  } finally { s.cleanup(); }
-});
-
-test('an older release with a plugin is linked to itself; a release without one unlinks it; restore unlinks it', { timeout: 30000 }, () => {
-  const s = scratch({ plugin: ['t1'] });
-  try {
-    // A fake herdr that resolves the linked path, as the real one does.
-    const fake = path.join(s.root, 'herdr'), state = path.join(s.root, 'plugin-root');
-    fs.writeFileSync(fake, `#!/bin/sh
-case "$2" in
-  list) r=$(cat ${state} 2>/dev/null); if [ -n "$r" ]; then echo "{\\"result\\":{\\"plugins\\":[{\\"plugin_id\\":\\"rewt.herdr-monitor\\",\\"plugin_root\\":\\"$r\\"}]}}"; else echo '{"result":{"plugins":[]}}'; fi ;;
-  link) (cd "$3" && pwd -P) > ${state} ;;
-  unlink) : > ${state} ;;
-esac
+  const gateLog = path.join(root, 'gates');
+  write('herdr/release.sh', fs.readFileSync(SCRIPT, 'utf8'));
+  write('package.json', JSON.stringify({ scripts: { 'test:release': `node gate.cjs` } }));
+  write('gate.cjs', `const fs=require('fs');fs.appendFileSync(${JSON.stringify(gateLog)},process.cwd()+'\\n');if(process.env.FIXTURE_GATE_FAIL)process.exit(7);`);
+  write('contrib/settle-watch.mjs', '// compatibility'); write('lib/cli-help.mjs', '// help');
+  write('acceptance/run.mjs', `import fs from 'node:fs';fs.appendFileSync(${JSON.stringify(gateLog)},'live:'+process.cwd()+'\\n');if(process.env.FIXTURE_LIVE_FAIL)process.exit(8);`);
+  for (const tag of ['t1', 't2']) {
+    write('bin/org.mjs', `console.log('${tag}');`); write('lanes/lane.mjs', `console.log('lane ${tag}');`);
+    git('add', '.'); git('commit', '-qm', tag); git('tag', tag);
+  }
+  const herdr = path.join(bin, 'herdr'), pluginState = path.join(root, 'plugin'), calls = path.join(root, 'herdr-calls');
+  fs.writeFileSync(pluginState, 'linked');
+  fs.writeFileSync(herdr, `#!${process.execPath}
+const fs=require('fs'),a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},a.join(' ')+'\\n');
+if(a[1]==='list')console.log(JSON.stringify({result:{plugins:fs.readFileSync(${JSON.stringify(pluginState)},'utf8')==='linked'?[{plugin_root:'/old'}]:[]}}));
+else if(a[1]==='unlink'){if(process.env.FIXTURE_UNLINK_FAIL)process.exit(9);fs.writeFileSync(${JSON.stringify(pluginState)},'unlinked');}
 `, { mode: 0o755 });
-    const run = (...a) => s.runWith({ RELEASE_NO_HERDR: '', RELEASE_NO_LAUNCHD: '1', HERDR_BIN_PATH: fake }, ...a);
-    const root = () => fs.readFileSync(state, 'utf8').trim();
-    const real = t => fs.realpathSync(path.join(s.home, 'releases', t));
-    run('build', 't1'); run('build', 't2');
-    assert.equal(run('activate', 't1').status, 0); assert.equal(root(), real('t1'));
-    const current = run('activate', 't2'); assert.equal(current.status, 0, current.stderr); assert.equal(root(), '');
-    assert.match(current.stdout, /unlinked Herdr plugin rewt\.herdr-monitor \(this release has none\)/);
-    assert.equal(run('activate', 't2').status, 0); assert.equal(root(), '');
-    run('rollback'); assert.equal(root(), real('t1'));
-    run('restore'); assert.equal(root(), '');
-  } finally { s.cleanup(); }
+  // Use a .cjs extension for the fake Node CLI under any parent package type.
+  fs.renameSync(herdr, `${herdr}.cjs`);
+  const plist = path.join(root, 'old.plist');
+  const env = releaseEnvironment(process.env, { HOME: root, HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home,
+    HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist, HERDR_BIN_PATH: `${herdr}.cjs` });
+  const run = (a, extra = {}) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 30000 });
+  const ok = (a, extra) => { const r = run(a, extra); assert.equal(r.status, 0, r.stdout + r.stderr); return r; };
+  const release = tag => path.join(home, 'releases', tag);
+  return { root, repo, home, bin, plist, run, ok, release, gateLog, calls, git, write };
+}
+test('build gates the tagged partial snapshot once, then publishes a read-only immutable copy', t => {
+  const f = scratch(t); f.write('bin/org.mjs', "console.log('uncommitted');");
+  f.ok(['build', 't1']);
+  assert.equal(fs.readFileSync(path.join(f.release('t1'), 'bin/org.mjs'), 'utf8'), "console.log('t1');");
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('t1')}.partial\n`);
+  assert.equal(fs.statSync(path.join(f.release('t1'), 'bin/org.mjs')).mode & 0o222, 0);
+  assert.match(fs.readFileSync(path.join(f.release('t1'), '.release-commit'), 'utf8'), /^[a-f0-9]{40}\n$/);
+  assert.match(f.run(['build', 't1']).stderr, /already exists/);
+  assert.match(f.run(['build', 'main']).stderr, /no tag/);
+  assert.match(f.run(['build', '../escape']).stderr, /invalid release/);
+});
+test('a failed gate retains partial evidence and never makes an activatable release or reruns it', t => {
+  const f = scratch(t), r = f.run(['build', 't1'], { FIXTURE_GATE_FAIL: '1' });
+  assert.notEqual(r.status, 0); assert.equal(fs.existsSync(f.release('t1')), false);
+  assert.equal(fs.existsSync(`${f.release('t1')}.partial`), true);
+  assert.notEqual(f.run(['activate', 't1']).status, 0);
+  assert.match(f.run(['build', 't1']).stderr, /inspect the unfinished build/);
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8').trim().split('\n').length, 1);
+});
+test('--live is explicit, follows the offline gate, and a live failure prevents completion', t => {
+  const f = scratch(t); f.ok(['build', 't1', '--live']);
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('t1')}.partial\nlive:${f.release('t1')}.partial\n`);
+  assert.notEqual(f.run(['build', 't2', '--live'], { FIXTURE_LIVE_FAIL: '1' }).status, 0);
+  assert.equal(fs.existsSync(f.release('t2')), false);
+});
+test('activation switches three launchers, retires the old plugin once, and rollback preserves previous on repeat', t => {
+  const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']);
+  f.ok(['activate', 't1']);
+  for (const [name, file] of [['org', 'bin/org.mjs'], ['record', 'bin/org.mjs'], ['lane', 'lanes/lane.mjs']])
+    assert.equal(fs.readlinkSync(path.join(f.bin, name)), path.join(f.home, 'current', file));
+  f.ok(['activate', 't2']); f.ok(['activate', 't2']);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'previous')), f.release('t1'));
+  f.ok(['rollback']); assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t1'));
+  assert.equal((fs.readFileSync(f.calls, 'utf8').match(/plugin unlink/g) ?? []).length, 1);
+  assert.doesNotMatch(f.ok(['status']).stderr, /warning/);
+  assert.equal(fs.existsSync(path.join(f.home, 'before')), false);
+  for (const action of ['restore', 'dev']) assert.notEqual(f.run([action]).status, 0);
+});
+test('a regular launcher or retired Brain plist refuses activation before any links switch', t => {
+  const f = scratch(t); f.ok(['build', 't1']);
+  fs.writeFileSync(path.join(f.bin, 'lane'), 'mine');
+  assert.match(f.run(['activate', 't1']).stderr, /not a link; refusing/);
+  fs.unlinkSync(path.join(f.bin, 'lane')); fs.writeFileSync(f.plist, 'legacy plist');
+  assert.match(f.run(['activate', 't1']).stderr, /still starts Brain watch.*launchctl bootout/);
+  assert.equal(fs.existsSync(path.join(f.home, 'current')), false);
+  assert.equal(fs.readFileSync(f.plist, 'utf8'), 'legacy plist');
+});
+test('failed plugin unlink warns and leaves the launchers usable', t => {
+  const f = scratch(t); f.ok(['build', 't1']);
+  const r = f.ok(['activate', 't1'], { FIXTURE_UNLINK_FAIL: '1' });
+  assert.match(r.stderr, /warning: could not unlink/);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t1'));
+});
+test('distribution inventory retains bch-cloak launch dependencies', () => {
+  const files = productFiles(path.resolve(import.meta.dirname, '..'));
+  for (const file of ['contrib/settle-watch.mjs', 'lib/cli-help.mjs', 'supervisor/reconcile.mjs', 'supervisor/request.mjs']) assert.ok(files.includes(file));
+  assert.ok(!files.some(file => file.startsWith('release/')));
+});
+
+test('installed release commands can inspect and switch launchers without Git metadata', t => {
+  const f = scratch(t); f.ok(['build', 't1']);
+  const script = path.join(f.release('t1'), 'herdr/release.sh');
+  const r = spawnSync('bash', [script, 'status'], { cwd: f.root, env: { ...process.env, HOME: f.root, HERDR_MONITOR_REPO: '', HERDR_MONITOR_HOME: f.home, HERDR_MONITOR_BIN: f.bin }, encoding: 'utf8', timeout: 5000 });
+  assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /current:.*none/);
+});
+test('build refuses a tag missing the installed settle-watch dependency before spending a gate', t => {
+  const f = scratch(t); f.git('rm', 'contrib/settle-watch.mjs'); f.git('commit', '-qm', 'Incomplete distribution'); f.git('tag', 'missing');
+  assert.match(f.run(['build', 'missing']).stderr, /release is missing contrib\/settle-watch.mjs/);
+  assert.equal(fs.existsSync(f.gateLog), false); assert.equal(fs.existsSync(f.release('missing')), false);
 });

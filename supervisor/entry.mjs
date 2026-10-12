@@ -28,7 +28,7 @@ export function inspectEntryLocks(project, report) {
   const owner = directory => {
     if (fs.existsSync(directory)) inspect(directory, () => JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'), 'utf8')).pid);
   };
-  owner(path.join(project.identity, 'lane-promote.lock')); // Both promotion and release.
+  owner(path.join(project.identity, 'lane-promote.lock')); // Promotion ownership.
   for (const name of ['queue.lock', 'worker.lock']) owner(path.join(project.identity, 'promote', name));
   const directory = receiptDirectory(project.org, project.identity);
   if (fs.existsSync(directory)) for (const name of fs.readdirSync(directory)) if (/^(R-\d+|cursor)\.lock$/.test(name)) owner(path.join(directory, name));

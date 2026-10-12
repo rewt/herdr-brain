@@ -121,7 +121,7 @@ nothing and requires inspection; it never blindly enqueues again.
 Only an explicitly entered supervisor in the canonical checkout may mutate this
 cycle or start the default housekeeping schedule with housekeeping/housekeeping.mjs
 --start. Entry resumes only the existing housekeeping schedule and open-run watchers;
-it never dispatches, settles, promotes or releases work. Workers receive their
+it never dispatches, settles or promotes work. Workers receive their
 own bounded policy and never supervisor actions. The canonical
 `.lane/supervisor/STOP` prevents cycle mutations. Lanes, models, accounts, desks
 and validation come from their modules/configuration, never this protocol.
@@ -130,20 +130,23 @@ STOP appearing during review prevents correction dispatch and returns a resumabl
 and correction evidence are retained. Pending or uncertain promotions still need
 inspection rather than a retry.
 
-Promotions batch into releases. At a quiet point (low load, no [memory pressure](../docs/reference/memory-gate.md), no current/pending
-promotion), run `release --role supervisor`. The release module reads the tracked
-project declaration or defaults, pins a clean integration commit with a candidate
-tag, builds a snapshot and runs the declared release gate once. Workers run fast
-lane validation and never the release gate. A deferred result leaves the cycle
-for a quieter point; a failed or interrupted gate needs evidence inspection.
-Repeated release requests reuse candidate results and never replay a started gate.
-`brief --json` and `record releases` retain candidates,
-gate results and the pending decision. A passing gate creates a publish question
-that always waits for the operator, regardless of auto-category policy. Never
-answer it for them or automatically execute its ship command. The operator ships
-or activates; approval itself executes nothing. See release/README.md for project
-overrides, preview and crash recovery. Gates run once per candidate after accumulated
-promotions; they are not per-item acceptance checks.
+At a release boundary, the operator builds a tag with `bash herdr/release.sh build TAG`.
+The tagged snapshot runs the complete offline gate once before it becomes an
+immutable release. `--live` additionally runs the live acceptance harness.
+Activation and distribution remain operator controlled; workers never run the
+release gate. Historical candidates remain readable with `record releases`.
+
+## Identity desks
+
+Agents never edit another identity's files. Send its desk a short request with
+what is needed, why, how to tell it is done, and where the evidence lives:
+`node supervisor/request.mjs IDENTITY "REQUEST"`. The helper reuses `desk-IDENTITY`
+or creates an unfocused workspace at `~/development/IDENTITY`, starts native
+Codex there (which loads that identity's configuration from `.identity-root`),
+waits for readiness and prompts the desk. The desk records the request in its own
+record, works through its own lanes and reviews, then replies to the requester.
+Never forward anything your own harness refused, including sandbox, permission
+or harness settings refusals. Take those to the operator.
 
 Before clearing the chat, record anything needed next. Durable decisions replace
 conversation history; don't copy transcripts into the record. Leave watched runs

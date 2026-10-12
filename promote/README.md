@@ -10,9 +10,9 @@ node /path/to/herdr-monitor/promote/promote.mjs first-lane second-lane
 
 The command durably enqueues the topics, acknowledges a detached worker after
 its first queue checkpoint and exits.
-Promoted commits accumulate on the integration branch. At a quiet point the
-canonical supervisor uses the [release module](../release/README.md) to tag and
-gate a batch once, then request the operator's ship or activation decision.
+Promoted commits accumulate on the integration branch. At a release boundary the
+operator builds a tag with the [machine release tool](../herdr/README.md), which
+gates the archived snapshot once before activation.
 The worker snapshots ready pending requests in FIFO order, then exits when empty. It never waits to accumulate a batch or uses a timer/window. Repeated enqueues of a current or
 pending topic reuse its request. Independent enqueues serialize their writes;
 exactly one worker owns the drain. A project is its canonical Git common directory,

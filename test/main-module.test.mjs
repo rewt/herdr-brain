@@ -48,22 +48,27 @@ test('main comparison guard catches both operand orders and inequality early ret
 });
 
 test('product scripts never compare a resolved argv launch path to a module path', () => {
-  const files = spawnSync('git', ['ls-files', '-z'], { cwd: source, encoding: 'utf8' });
-  assert.equal(files.status, 0, files.stderr);
-  const product = files.stdout.split('\0').filter(file => /\.(?:mjs|cjs|js)$/u.test(file)
-    && !file.startsWith('acceptance/test/fixtures/'));
+  // An archived release has no Git metadata. Inspect the shipped files directly.
+  const product = [];
+  function visit(directory) {
+    for (const entry of fs.readdirSync(path.join(source, directory), { withFileTypes: true })) {
+      if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'docs') continue;
+      const file = path.join(directory, entry.name);
+      if (file.startsWith('acceptance/test/fixtures/')) continue;
+      if (entry.isDirectory()) visit(file);
+      else if (entry.isFile() && /\.(?:mjs|cjs|js)$/u.test(file)) product.push(file);
+    }
+  }
+  visit('');
   const offenders = product.filter(file => mainComparisons(fs.readFileSync(path.join(source, file), 'utf8')).unsafe);
   assert.deepEqual(offenders, [], 'use isMain from lib/cli-help.mjs');
-  // ARCH-19: the candidate driver must also work in build-only partial copies.
-  const standalone = 'herdr/release-candidate.mjs';
-  assert.deepEqual(product.filter(file => file !== 'lib/cli-help.mjs' && file !== standalone
+  assert.deepEqual(product.filter(file => file !== 'lib/cli-help.mjs'
     && mainComparisons(fs.readFileSync(path.join(source, file), 'utf8')).duplicate), [], 'share the realpath check instead of duplicating it');
 });
 
 const scripts = [
-  ['herdr/release-candidate.mjs', [], 1, /usage: release-candidate/u],
   ['promote/metrics.mjs', ['--unsupported'], 1, /unknown option or missing value/u],
-  ...['promote/promote.mjs', 'release/release.mjs', 'supervisor/supervisor.mjs',
+  ...['promote/promote.mjs', 'supervisor/request.mjs', 'supervisor/supervisor.mjs',
     'supervisor/prompt-supervisor.mjs', 'supervisor/tidy-tabs.mjs', 'acceptance/run.mjs']
     .map(file => [file, ['--unsupported'], 1, /Unknown option/u]),
   ...['acceptance/settle.mjs', 'acceptance/supervisor.mjs']

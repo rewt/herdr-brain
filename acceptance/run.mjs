@@ -540,6 +540,12 @@ try {
   await test(cases.release, () => {
     const script = requireCandidate('herdr/release.sh');
     const repo = path.join(root, 'release-source'); fs.cpSync(candidate, repo, { recursive: true });
+    // The enclosing candidate already passed its full offline gate. These tagged
+    // switch fixtures run a small gate rather than replaying that whole suite.
+    const packageFile = path.join(repo, 'package.json');
+    const packageDoc = JSON.parse(read(packageFile));
+    packageDoc.scripts['test:release'] = 'node bin/org.mjs --help';
+    write(packageFile, JSON.stringify(packageDoc));
     git(repo, ['init', '-q', '-b', 'main']); git(repo, ['config', 'user.email', 'acceptance@example.invalid']); git(repo, ['config', 'user.name', 'Acceptance']);
     git(repo, ['add', '-A']); git(repo, ['commit', '-qm', 'Candidate snapshot']); git(repo, ['tag', 'candidate']);
     write(path.join(repo, 'acceptance-release-marker'), 'rollback fixture'); git(repo, ['add', '-A']); git(repo, ['commit', '-qm', 'Second scratch release']); git(repo, ['tag', 'second']);
@@ -550,24 +556,19 @@ try {
     write(path.join(bin, 'nohup'), `#!/bin/sh\nprintf '%s\\n' "$$" >> ${quote(path.join(root, 'legacy-watcher-pids'))}\nexec /usr/bin/nohup "$@"\n`);
     fs.chmodSync(path.join(bin, 'nohup'), 0o755);
     fs.symlinkSync(path.join(candidate, 'lanes/lane.mjs'), path.join(bin, 'lane'));
-    write(path.join(home, 'before/org'), path.join(candidate, 'bin/org.mjs') + '\n');
-    write(path.join(home, 'before/lane'), path.join(candidate, 'lanes/lane.mjs') + '\n');
     const userHome = path.join(root, 'release-user-home'); fs.mkdirSync(userHome);
     const native = run('which', ['true']).stdout.trim();
     const extra = { HOME: userHome, ZDOTDIR: userHome, CODEX_HOME: path.join(userHome, '.codex'), CLAUDE_CONFIG_DIR: path.join(userHome, '.claude'),
       ORG_ACTOR: 'acceptance-release-install', HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: '-',
       HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
-      RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', RELEASE_NO_NPM: '1' };
+      HERDR_BIN_PATH: path.join(root, 'absent-herdr') };
     const release = (...a) => run('bash', [script, ...a], { extra });
     release('build', 'candidate'); release('build', 'second'); release('activate', 'candidate');
-    assert.ok(fs.existsSync(path.join(home, 'before/record.missing')), 'record introduced after first activation must be remembered');
     node(path.join(bin, 'record'), ['--help']); node(path.join(bin, 'org'), ['--help']);
     release('activate', 'second'); release('activate', 'second'); release('rollback');
     assert.equal(fs.readlinkSync(path.join(home, 'current')), path.join(home, 'releases/candidate'));
-    release('restore'); assert.ok(!fs.existsSync(path.join(bin, 'record')));
-    assert.equal(fs.readlinkSync(path.join(bin, 'org')), path.join(candidate, 'bin/org.mjs'));
     assert.ok(!fs.existsSync(path.join(userHome, '.zshenv')));
-    return 'immutable scratch releases and launcher activation, rollback and restore checked in an isolated home';
+    return 'immutable scratch releases and launcher activation and rollback checked in an isolated home';
   });
   await test(cases.defaultCycle, async () => {
     for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);

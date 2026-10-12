@@ -303,3 +303,12 @@ test('questions park only after seven elapsed days and remain available through 
   assert.match(later, /2 questions older than 7 days parked · record today --parked/);
   assert.deepEqual(t.events(), before, 'ranking, aging, and listing are read-only');
 });
+
+test('record today text works without a console and leaves record events unchanged', t => {
+  const f = setupOrg(); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  f.ok(['add', 'Foreground summary', '--role', 'engineer', '--priority', '10']);
+  f.ok(['start', 'ENG-1', '--meta', 'agent=worker']);
+  const before = f.events(), text = f.ok(['today']);
+  assert.match(text, /RUNNING \(1\)/); assert.match(text, /Foreground summary.*worker.*R-1/);
+  assert.deepEqual(f.events(), before);
+});

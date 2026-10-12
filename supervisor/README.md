@@ -34,7 +34,7 @@ workers recover pending policy through the same durable action receipts.
 | Verified notice for an abandoned run | Journal and drop without waking or mutating the record |
 | Anything else | Wake with a bounded one-line reason and the action receipt path |
 
-FAIL, Major findings at the review cap, refusals, train failures, release gate
+FAIL, Major findings at the review cap, refusals, train failures, unknown release
 notices, non-done/no-report workers, questions, uncertain or interrupted results,
 and unknown notices/results wake unless bound to an abandoned run. Settle retains responsibility for review
 and correction dispatch: a FAIL or capped Major can already have dispatched a fix

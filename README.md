@@ -47,7 +47,7 @@ or item status.
 
 Node.js 20+, Git 2.38+ and native Codex or Claude are needed for agent work.
 Herdr supplies panes and agent launches. Bash manages local releases; the
-promotion kernel-lock bridge uses zsh, and release plugin discovery uses Python 3.
+promotion kernel-lock bridge uses zsh, and the release gate uses npm (bundled with Node.js).
 The product has no npm dependencies. Native harness configurations own permissions
 and sandboxing. The bundled non-setuid process reader supports process identity
 checks inside harness sandboxes.
@@ -64,7 +64,7 @@ checks inside harness sandboxes.
 | Review and integration | [Settle](settle/README.md), [Promote](promote/README.md) |
 | Supervisor / housekeeping | [Supervisor](supervisor/README.md), [Housekeeping](housekeeping/README.md) |
 | Host test slot | [Test slot](test-slot/README.md) |
-| Release batching and validation | [Release](release/README.md), [Acceptance](acceptance/README.md) |
+| Release batching and validation | [Machine releases](herdr/README.md), [Acceptance](acceptance/README.md) |
 | Intent | [North star](docs/north-star.md), [Roadmap](docs/roadmap.md) |
 
 ## Development
@@ -72,8 +72,8 @@ checks inside harness sandboxes.
 Ship the tests for a lane change and run its relevant files as needed. The
 promotion batch runs `npm run test:promotion` once before merging; settle reviews
 run no suite. `npm run test:fast` gives checks that finish in seconds.
-The release prepare step runs the complete offline `npm run test:release` once
-per candidate before live acceptance. See [test tiers](docs/reference/test-tiers.md)
+A tagged release build runs the complete offline `npm run test:release` once
+per candidate; `build TAG --live` adds optional live acceptance. See [test tiers](docs/reference/test-tiers.md)
 for file selection, fixture ownership and prerequisite skips.
 The product has no npm dependencies. The console was removed on 2026-10-12 and is archived at tag
 `archive/console-20261012`; restore it with `git checkout archive/console-20261012 -- console`.

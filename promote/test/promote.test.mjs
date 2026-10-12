@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
+import { resolveGateProfile } from '../gate-profile.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
@@ -659,4 +660,25 @@ test('conditional close rechecks the promoted tip and base before any removal', 
   f.git(['merge', '--ff-only', 'lane/first']);
   const safe = close(f.git(['rev-parse', 'lane/first'])); assert.equal(safe.status, 0, safe.stderr);
   assert.equal(fs.existsSync(wt), false);
+});
+
+test('only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS', async (t) => {
+  const f = fixture(t); f.lane('first');
+  const config = path.join(f.repo, '.promote.json');
+  fs.writeFileSync(config, JSON.stringify({ gate: { wait_seconds: 5 } }));
+  f.git(['add', '.']); f.git(['commit', '-qm', 'committed gate profile']);
+  const marker = path.join(f.root, 'host-import-ran'), injected = path.join(f.root, 'inject.mjs');
+  fs.writeFileSync(injected, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'ran');\n`);
+  const edited = JSON.stringify({ gate: { wait_seconds: 5, env: { NODE_OPTIONS: `--import=${injected}` } } });
+  fs.writeFileSync(config, edited);
+  assert.equal(resolveGateProfile(f.repo).env.NODE_OPTIONS, undefined, 'the working-tree edit is not the profile');
+  enqueue(f.queue, ['first'], { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null });
+  const r = f.cli(['--drain']); assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(marker), false, 'no host child loaded the uncommitted NODE_OPTIONS');
+  assert.equal(f.results()[0].outcome, 'refused'); assert.match(f.results()[0].reason, /not clean/);
+  f.git(['add', '.']); f.git(['commit', '-qm', 'committed NODE_OPTIONS']);
+  assert.throws(() => resolveGateProfile(f.repo), /NODE_OPTIONS are host-owned/);
+  f.git(['rm', '-q', '.promote.json']); f.git(['commit', '-qm', 'no profile']);
+  fs.writeFileSync(config, JSON.stringify({ gate: { wait_seconds: 5 } }));
+  assert.equal(resolveGateProfile(f.repo), null, 'an untracked profile is not a profile');
 });

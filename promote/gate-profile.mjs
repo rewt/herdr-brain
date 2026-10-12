@@ -15,9 +15,25 @@ const HOST = fileURLToPath(new URL('./host-gate.mjs', import.meta.url));
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 
+// Only the canonical checkout's committed files configure the host: an edited or untracked
+// working copy must never reach a child process before the train's clean-tree refusal.
+function committedFile(canonical, relative) {
+  const git = args => spawnSync('git', ['-C', canonical, ...args], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  const checked = result => {
+    if (result.error || result.status !== 0) throw new Error(`cannot read committed ${relative}: ${result.stderr || result.error?.message || `exit ${result.status}`}`);
+    return result.stdout;
+  };
+  const head = git(['rev-parse', '--verify', '--quiet', 'HEAD']);
+  if (!head.error && head.status === 1 && !head.stdout && !head.stderr) return undefined;
+  const commit = checked(head).trim();
+  if (!checked(git(['ls-tree', '--name-only', commit, '--', relative])).trim()) return undefined;
+  return checked(git(['show', `${commit}:${relative}`]));
+}
+
 export function resolveGateProfile(canonical, environment = process.env) {
   const file = path.join(canonical, '.promote.json');
-  const gate = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).gate : undefined;
+  const declared = committedFile(canonical, '.promote.json');
+  const gate = declared === undefined ? undefined : JSON.parse(declared).gate;
   if (gate === undefined) return null;
   if (!object(gate)) throw new Error('promote gate must be an object');
   const fields = ['node_version_file', 'env', 'prepare', 'external_lock', 'refuse_processes', 'wait_seconds', 'timeout_seconds', 'idle_timeout_seconds'];
@@ -28,8 +44,9 @@ export function resolveGateProfile(canonical, environment = process.env) {
   if (!Number.isSafeInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 9999999) throw new Error('gate.wait_seconds must be a bounded whole number of seconds');
   if (gate.env !== undefined && (!object(gate.env) || Object.entries(gate.env).some(([key, value]) =>
     !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof value !== 'string' || value.includes('\0') ||
-    /^(?:MONITOR_PROMOTION_|MONITOR_TEST_SLOT_(?:PATH|COMPAT_PATH|TOKEN)|BCH_CLOAK_TEST_SLOT_TOKEN|HERDR_(?:PANE|TAB|WORKSPACE)_ID)/.test(key)))) {
-    throw new Error('gate.env must map environment names to strings; slot paths/tokens and session transport are host-owned');
+    /^(?:MONITOR_PROMOTION_|MONITOR_TEST_SLOT_(?:PATH|COMPAT_PATH|TOKEN)|BCH_CLOAK_TEST_SLOT_TOKEN|HERDR_(?:PANE|TAB|WORKSPACE)_ID|NODE_OPTIONS$)/.test(key)))) {
+    // NODE_OPTIONS would load project code into the host adapter itself; gate commands can still set it.
+    throw new Error('gate.env must map environment names to strings; slot paths/tokens, session transport and NODE_OPTIONS are host-owned');
   }
   const prepare = gate.prepare ?? [];
   if (!Array.isArray(prepare) || prepare.some(step => !object(step) || typeof step.run !== 'string' || !step.run.trim() ||
@@ -48,7 +65,9 @@ export function resolveGateProfile(canonical, environment = process.env) {
   if (gate.node_version_file !== undefined) {
     const relative = gate.node_version_file;
     if (typeof relative !== 'string' || !relative || path.isAbsolute(relative) || relative.split(/[\\/]/).includes('..')) throw new Error('gate.node_version_file must be a project-relative file');
-    const pin = fs.readFileSync(path.join(canonical, relative), 'utf8').trim().replace(/^v/, '');
+    const pinned = committedFile(canonical, relative);
+    if (pinned === undefined) throw new Error('gate.node_version_file must be committed');
+    const pin = pinned.trim().replace(/^v/, '');
     if (!/^\d+\.\d+\.\d+$/.test(pin)) throw new Error('gate Node pin must be an exact version');
     if (!env.HOME || !path.isAbsolute(env.HOME)) throw new Error('gate Node pin needs an absolute HOME');
     const bin = path.join(env.HOME, '.nvm/versions/node', `v${pin}`, 'bin');

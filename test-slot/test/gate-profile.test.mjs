@@ -416,14 +416,19 @@ test('a competing process started during a slot wait refuses before preparation'
 
 test('malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence', t => {
   const f = fixture(t), profile = resolveGateProfile(f.repo, f.env);
+  // Only committed declarations count: commit each change before resolving it.
+  const commit = (file, text) => { fs.writeFileSync(path.join(f.repo, file), text); f.git(['add', file]); f.git(['commit', '-qm', `Change ${file}`]); };
   assert.equal(profile.env.PATH.split(path.delimiter)[0], f.bin);
-  fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ gate: { ...f.gate, env: { PROFILE_VALUE: 'new' } } }));
+  const changed = JSON.stringify({ gate: { ...f.gate, env: { PROFILE_VALUE: 'new' } } });
+  fs.writeFileSync(path.join(f.repo, '.promote.json'), changed);
+  assert.equal(resolveGateProfile(f.repo, f.env).fingerprint, profile.fingerprint, 'an uncommitted edit is not the profile');
+  commit('.promote.json', changed);
   assert.notEqual(resolveGateProfile(f.repo, f.env).fingerprint, profile.fingerprint);
-  for (const gate of [{ surprise: true }, { wait_seconds: -1 }, { node_version_file: '../pin' }, { env: { MONITOR_TEST_SLOT_PATH: '/tmp/foreign' } }, { refuse_processes: ['['] }]) {
-    fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ gate })); assert.throws(() => resolveGateProfile(f.repo, f.env));
+  for (const gate of [{ surprise: true }, { wait_seconds: -1 }, { node_version_file: '../pin' }, { env: { MONITOR_TEST_SLOT_PATH: '/tmp/foreign' } }, { env: { NODE_OPTIONS: '--import=x' } }, { refuse_processes: ['['] }]) {
+    commit('.promote.json', JSON.stringify({ gate })); assert.throws(() => resolveGateProfile(f.repo, f.env));
   }
-  fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ gate: f.gate }));
-  fs.writeFileSync(path.join(f.repo, '.nvmrc'), '0.0.0'); assert.throws(() => resolveGateProfile(f.repo, f.env));
+  commit('.promote.json', JSON.stringify({ gate: f.gate }));
+  commit('.nvmrc', '0.0.0'); assert.throws(() => resolveGateProfile(f.repo, f.env));
 });
 
 test('inner idle timeout uses canonical lane-only limits without timing out the completed host envelope', t => {

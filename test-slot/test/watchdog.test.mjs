@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveGateLimits, recordHealthyGate, healthyHistory, historyFile, gateHistoryKey, HISTORY_FILES, WALL_DEFAULT_SECONDS, projectCommon, sampleFloorSeconds, wallFloorSeconds } from '../limits.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
@@ -53,7 +53,10 @@ test('config, recent healthy clocks and conservative default resolve independent
   for (const value of [{ timeout_seconds: -1 }, { idle_timeout_seconds: false }, { timeout_seconds: { unknown: 10 } }]) assert.throws(() => validateValidation(value));
   fs.writeFileSync(path.join(s.root, '.lane.validation.json'), JSON.stringify({ timeout_seconds: { promotion: 700 }, idle_timeout_seconds: 0 }));
   assert.equal(resolveValidation({ root: s.root, env: {} }).tiers.promotion.timeoutSeconds, 700);
+  // Gate profiles come only from the committed canonical declaration.
   fs.writeFileSync(path.join(s.root, '.promote.json'), JSON.stringify({ gate: { timeout_seconds: 800, idle_timeout_seconds: 0 } }));
+  const git = args => execFileSync('git', ['-C', s.root, '-c', 'user.name=Watchdog', '-c', 'user.email=watchdog@example.invalid', ...args]);
+  git(['init', '-q', '-b', 'main']); git(['add', '.promote.json']); git(['commit', '-qm', 'Profile']);
   assert.equal(resolveGateProfile(s.root, s.env).timeoutSeconds, 800);
 });
 

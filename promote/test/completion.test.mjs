@@ -515,3 +515,28 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
   for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
   if (failTelemetry) assert.ok(f.queue.load().results.slice(-2).every(r => r.warnings.some(w => w.includes('velocity record'))));
 });
+
+for (const mode of ['pass-review', 'fail-review', 'open-question']) test(`a ${mode} recorded after enqueue is checked by the native worker`, t => {
+  const f = fixture(t), m = f.lane(mode), base = f.git(['rev-parse', 'main']);
+  if (mode === 'open-question') f.record(['ask', 'Allow this change?', '--parent', m.item, '--category', 'security', '--recommend', 'no', '--why', 'Raised after enqueue', '--wait']);
+  else {
+    const rev = f.record(['add', 'Review', '--role', 'reviewer', '--parent', m.item]).match(/^REV-\d+/)[0];
+    f.record(['block', m.item, '--by', rev]);
+    for (const verdict of mode === 'pass-review' ? ['PASS'] : ['PASS', 'FAIL']) {
+      const report = path.join(f.root, `review-${verdict}.md`);
+      const run = f.record(['start', rev, '--workspace', f.root, '--report', report]).match(/^R-\d+/)[0];
+      fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nverdict: ${verdict}\nsummary: Review ${verdict}\nheadline: Review ${verdict}\n---\n`);
+      f.record(['ingest', report]);
+    }
+  }
+  f.drain();
+  const result = f.queue.load().results[0];
+  if (mode === 'pass-review') {
+    assert.equal(result.outcome, 'promoted', result.reason); assert.equal(f.show(m.item).closed.as, 'done');
+    return;
+  }
+  assert.equal(result.outcome, 'refused');
+  assert.match(result.reason, mode === 'fail-review' ? /record readiness changed/ : /open operator question HUM-\d+/);
+  assert.equal(f.gates(), 0); assert.equal(f.git(['rev-parse', 'main']), base);
+  assert.equal(f.show(m.item).closed, null); assert.ok(fs.existsSync(m.workspace));
+});

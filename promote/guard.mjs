@@ -31,6 +31,9 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     const common = execFileSync('git', ['-C', current.workspace, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
     if (fs.realpathSync(common) !== identity) throw new Error(`${run} Git identity changed; nothing merged`);
     if (item.outcome && item.outcome.run !== run) throw new Error(`current outcome does not belong to ${run}; nothing merged`);
+    // An open operator question on this work waits for its answer, linked as a blocker or not.
+    const question = [...state.items.values()].find(q => q.parent === item.id && q.role === 'human' && !q.closed);
+    if (question) throw new Error(`${run} has an open operator question ${question.id}; nothing merged`);
     const blocked = blockersOf(state, item.id).some((id) => !releases(state, id, itemStatus(state, id)));
     const overlapping = [...state.runs.values()].some((r) => {
       if (r.id === run || superseded.includes(r.id) || r.report || r.abandoned || !r.workspace) return false;

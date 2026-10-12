@@ -12,7 +12,7 @@ an unchanged copy of `lib/deadline.mjs` beside their other runtime modules.
 | Location | Original fixed allowance | Disposition |
 | --- | --- | --- |
 | `run.mjs`: `run`, `node`, `runCopy`, Git, npm, sandbox-exec, verification and discovery calls | 60s default; explicit 10/60/90s | All pass through `loadAwareCommand`, sampled once per child; `timeoutMs` records the effective allowance. Default SIGKILL prevents a child ignoring SIGTERM from defeating the synchronous deadline. Nonzero product assertions retain precedence. |
-| `run.mjs`: `until` and every explicit report/topology/queue wait, including calls from `live.mjs` | 25s default; 15/30/60/90/200s explicit | `waitUntil` scales once from the operation's current sample, retaining operation-specific failure evidence. |
+| `run.mjs`: `until` and every explicit report/topology/queue wait, including calls from `live.mjs` | 25s default; 15/30/60/90/200s explicit | `waitUntil` scales once from the operation's current sample, retaining operation-specific failure evidence. Case 07's promotion-notice wait is derived from the inbox owner's default poll and confirmation cadence (`notice-budget.mjs`): 60s for three notices. |
 | `run.mjs`: watcher drain | 15s | Scaled once; cleanup still refuses an unconfirmed drain. |
 | `run.mjs`: busy-refusal elapsed assertion and native `agent wait --timeout` | 10s each | Both scale; the elapsed assertion freezes its allowance before invocation. |
 | `herdr.mjs`: ownership lock | 10s | Scaled; receipt persistence and cleanup authority unchanged. |

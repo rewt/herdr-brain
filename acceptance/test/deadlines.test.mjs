@@ -10,6 +10,7 @@ import { loadAwareCommand } from '../commands.mjs';
 import { classifyFailure } from '../limits.mjs';
 import { cases, runCase } from '../cases.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { noticeCadence, noticeDeliveryBudgetMs } from '../notice-budget.mjs';
 
 function monitor(t, value = 24, cpus = 18) {
   const load = createLoadMonitor({ read: () => [value, value, value], cpus });
@@ -114,4 +115,27 @@ test('each command samples current load, preserves zero, and supplies a bounded 
   command('child', [], { timeout: 10 }); value = 0;
   command('child', [], { timeout: 10 }); command('child', [], { timeout: 0 }); command('child', []);
   assert.deepEqual(seen, [60, 10, 0, 60_000]);
+});
+
+// ENG-319: RC-21 case 07 used the runner's 25 s default while the inbox owner
+// needed about 30 s for three notices. Read the deliverer's actual defaults and
+// the limit case 07 passes, so neither can drift below the other.
+test('case 07 waits for its promotion notices at least as long as the default delivery cadence', () => {
+  const read = file => fs.readFileSync(path.resolve(import.meta.dirname, '../..', file), 'utf8');
+  const deliverer = read('supervisor/prompt-supervisor.mjs');
+  const fallback = name => {
+    const values = new Set([...deliverer.matchAll(new RegExp(`${name}, ([\\d.]+),`, 'g'))].map(match => Number(match[1])));
+    assert.equal(values.size, 1, `one ${name} default`);
+    return [...values][0];
+  };
+  const cadence = { pollSeconds: fallback('SUPERVISOR_INPUT_POLL_SECONDS'), confirmSeconds: fallback('SUPERVISOR_INPUT_CONFIRM_SECONDS') };
+  assert.deepEqual(noticeCadence, cadence);
+  const runner = read('acceptance/run.mjs');
+  const notices = 3; // queue-first, queue-second, queue-refusal
+  const call = /'every promotion notice reached supervisor PTY'(?:,\s*([^;]*?))?\);/.exec(runner);
+  assert.ok(call, 'case 07 notice wait');
+  const limit = call[1] === undefined ? Number(/async function until\(fn, label, ms = ([\d_]+)\)/.exec(runner)[1].replaceAll('_', ''))
+    : call[1] === 'noticeDeliveryBudgetMs(state.results.length)' ? noticeDeliveryBudgetMs(notices) : assert.fail(`unrecognized limit: ${call[1]}`);
+  const needed = notices * (cadence.pollSeconds + cadence.confirmSeconds) * 1000;
+  assert.ok(limit >= needed, `case 07 waits ${limit} ms for ${notices} notices; default delivery needs at least ${needed} ms`);
 });

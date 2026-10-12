@@ -34,6 +34,7 @@ import { loadAwareCommand } from './commands.mjs';
 import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
 import { startLegacyConsumer } from './legacy-consumer.mjs';
 import { copyExistingProject } from './existing-project.mjs';
+import { noticeDeliveryBudgetMs } from './notice-budget.mjs';
 import { matchingRun } from '../supervisor/tidy-tabs.mjs';
 
 export function harnessEnvironment(input, root) {
@@ -511,7 +512,9 @@ try {
       assert.equal(typeof result.delivered, 'boolean');
       assert.equal(result.queued, !result.delivered);
     }
-    await until(() => state.results.every((r) => inbox().includes(`[promote-queue] id=${r.id} `)), 'every promotion notice reached supervisor PTY');
+    // The owner delivers at production cadence: about 30 s for three notices.
+    await until(() => state.results.every((r) => inbox().includes(`[promote-queue] id=${r.id} `)), 'every promotion notice reached supervisor PTY',
+      noticeDeliveryBudgetMs(state.results.length));
     const messages = inbox().split('\n').filter(Boolean).map(JSON.parse).map((entry) => entry.line)
       .filter((line) => line.includes('[promote-queue]'));
     assert.deepEqual(messages.map((line) => /lane=(\S+)/.exec(line)[1]), ['queue-first', 'queue-second', 'queue-refusal']);

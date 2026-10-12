@@ -251,3 +251,22 @@ test('an older fold treats a "no" as resolved and releases the dependents', () =
   assert.equal(statusV0(s, 'ENG-1'), 'ready');
   assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'blocked');
 });
+
+test('a review that finishes without PASS keeps holding its work, named with its verdict', () => {
+  const t = setupOrg();
+  t.ok(['add', 'Implement the change', '--role', 'engineer']);
+  t.ok(['add', 'Review the change', '--parent', 'ENG-1', '--role', 'reviewer']);
+  t.ok(['block', 'ENG-1', '--by', 'REV-1']);
+  const review = (run, verdict) => {
+    t.ok(['start', 'REV-1']);
+    fs.writeFileSync(path.join(t.dir, `runs/${run}/report.md`), report(`run: ${run}\noutcome: done\nverdict: ${verdict}\nsummary: Review ${verdict}.\nheadline: Review ${verdict}`));
+    t.ok(['sync']);
+  };
+  review('R-1', 'NEEDS-WORK');
+  assert.equal(t.json(['show', 'REV-1', '--json']).status, 'done');
+  assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'blocked');
+  assert.match(t.ok(['show', 'ENG-1']), /blocked by: REV-1 \(done, verdict NEEDS-WORK\)/);
+  assert.match(t.ok(['status']), /ENG-1 .*REV-1 done, verdict NEEDS-WORK/);
+  review('R-2', 'PASS');
+  assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'ready');
+});

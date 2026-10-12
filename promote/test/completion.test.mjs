@@ -540,3 +540,16 @@ for (const mode of ['pass-review', 'fail-review', 'open-question']) test(`a ${mo
   assert.equal(f.gates(), 0); assert.equal(f.git(['rev-parse', 'main']), base);
   assert.equal(f.show(m.item).closed, null); assert.ok(fs.existsSync(m.workspace));
 });
+
+test('an operator question raised after the fast-forward holds batch completion until it is answered', t => {
+  const f = fixture(t), m = f.lane('asked'), other = f.lane('other');
+  fs.writeFileSync(f.fault, 'refuse'); f.drain();
+  assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
+  const question = f.record(['ask', 'Hold this?', '--parent', m.item, '--category', 'security', '--recommend', 'no', '--why', 'Raised after the fast-forward', '--wait']).match(/^HUM-\d+/)[0];
+  fs.unlinkSync(f.fault); f.drain();
+  assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
+  for (const x of [m, other]) { assert.equal(f.show(x.item).closed, null); assert.ok(fs.existsSync(x.workspace)); }
+  f.record(['answer', question, 'yes']); f.drain();
+  assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  for (const x of [m, other]) assert.equal(f.show(x.item).closed.as, 'done');
+});

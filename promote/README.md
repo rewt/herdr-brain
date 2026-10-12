@@ -79,7 +79,11 @@ Pending requests with different head/run bindings cannot deduplicate each other.
 `--if-current-run` requires `--expected-head` and a record. Before promotion and
 again after validation, the lane checks that this run has a recorded done report,
 belongs to this Git lane, is not superseded and has no changed outcome, closure,
-unresolved/declined blocker or overlapping work. The final check holds the record
+unresolved/declined blocker or overlapping work. A done review blocker whose latest
+report carries a verdict other than PASS still holds the work, and an open operator
+question under the item (role human, linked or not) refuses promotion; dropping or
+unlinking the review, or answering the question, releases it. Batch completion
+rechecks both. The final check holds the record
 lock across the fast-forward, inside the promotion lock. It never writes events
 or trusts session metadata. Canonical supervisor STOP also refuses integration.
 

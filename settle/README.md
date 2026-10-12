@@ -145,7 +145,8 @@ the matching dispatch journal before these checks. Dispatch then adopts that run
 under its own journal lock; settle neither starts a replacement nor edits dispatch's
 journal. Multiple linked runs remain uncertain and require inspection. It checks unresolved
 blocker links and waiting report outcomes independently of derived active status;
-a declined question still blocks, while resolved blockers permit recovery.
+a declined question still blocks, and so does a done review whose latest verdict is
+not PASS, while resolved blockers permit recovery.
 A completed dispatch receipt
 can still be adopted without launching work. A fresh worker is the default. `--reuse`
 requests dispatch's existing identity-checked stopped-worker reuse; older runs

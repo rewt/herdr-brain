@@ -8,7 +8,11 @@ import { affectedTests, boundAffectedTests, DEFAULT_BUDGET_MS, DEFAULT_MAX_FILES
 import { releasePhases } from '../../test/helpers/release-suites.mjs';
 import { plannedCommand, promotionTestPlan } from '../test-plan.mjs';
 const root = fs.realpathSync(new URL('../../', import.meta.url));
-test('the three-argument planner output keeps the field set accepted by the main validator', () => {
+// The planner reads git ls-files of the product tree; a release build's git-archive snapshot has none.
+const gitTree = spawnSync('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' }).stdout.trim() === 'true';
+const SNAPSHOT = 'no Git work tree (release snapshot)';
+test('the three-argument planner output keeps the field set accepted by the main validator', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
   const result = spawnSync(process.execPath, ['test/helpers/affected-tests.mjs', '--plan',
     JSON.stringify(['lib/deadline.mjs']), JSON.stringify('npm run test:promotion')],
   { cwd: root, encoding: 'utf8' });
@@ -35,7 +39,8 @@ test('one-hop selection includes changed tests and direct literals without follo
   assert.throws(() => affectedTests({ root: scratch, files: Array(10001).fill('module.mjs'), tests, changed: [] }), /10000/);
   assert.ok(releasePhases(tests).every(([, rows]) => rows.length <= 4));
 });
-test('a core-module change selects bounded one-hop extras and defers the expensive lane file', () => {
+test('a core-module change selects bounded one-hop extras and defers the expensive lane file', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
   const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs', changed: ['lanes/lane.mjs', 'dispatch/dispatch.mjs'], baseCommand: 'npm run test:promotion' });
   assert.ok(!plan.files.includes('lanes/test/lane.test.mjs'));
   assert.ok(plan.deferred.some(row => row.file === 'lanes/test/lane.test.mjs' && row.reason === 'time-budget'));
@@ -60,6 +65,7 @@ test('a core-module change selects bounded one-hop extras and defers the expensi
 });
 
 test('the planner CLI launched through a symlinked directory emits the same plan', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'affected-linked-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const linked = path.join(scratch, 'project'); fs.symlinkSync(root, linked, 'dir');
@@ -115,7 +121,8 @@ test('time and file caps defer extras to release while bound requirements always
   assert.throws(() => boundAffectedTests({ ...options, budgetMs: 0 }), /invalid affected-test budget/);
 });
 
-test('the real planner forces required evidence beyond both caps and refuses missing required files', () => {
+test('the real planner forces required evidence beyond both caps and refuses missing required files', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
   const options = { cwd: root, planner: 'test/helpers/affected-tests.mjs', changed: ['lib/state.mjs'], baseCommand: 'npm run test:promotion',
     env: { ...process.env, MONITOR_PROMOTION_EXTRA_BUDGET_MS: '1', MONITOR_PROMOTION_EXTRA_MAX_FILES: '1' },
     required: ['lanes/test/lane.test.mjs', 'settle/test/test-evidence.test.mjs', 'promote/test/train.test.mjs'] };

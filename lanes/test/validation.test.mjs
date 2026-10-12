@@ -53,7 +53,7 @@ test('defaults, legacy commands, partial tracked overrides and invalid declarati
   for (const value of [null, [], { fast: '' }, { promotion: 1 }, { typo: 'true' }, { environment: false }]) assert.throws(() => validateValidation(value));
   const explained = f.good(f.lane(['config']));
   for (const tier of ['fast', 'promotion', 'release']) assert.match(explained, new RegExp(`validation\\.${tier}\\t`));
-  assert.match(f.lane(['check', '--tier', 'release']).stderr, /release gates are run by the release module/);
+  assert.match(f.lane(['check', '--tier', 'release']).stderr, /release gates are run by bash herdr\/release\.sh build TAG/);
 });
 
 test('project gate limits override healthy history for promotion and release', t => {

@@ -13,7 +13,10 @@ bash herdr/release.sh status
 ```
 
 Build copies exactly `git archive TAG` into `releases/TAG.partial`, runs
-`npm run test:release` inside that snapshot, then renames it and makes it
+the `release` command and its `timeout_seconds` (and optional
+`idle_timeout_seconds`) from the snapshot's `.lane.validation.json`, falling back
+to `npm run test:release` when no release command is declared. The foreground
+gate bounds the command and its children. Build then renames the snapshot and makes it
 read-only. A failed or interrupted build retains its partial directory for
 inspection and cannot be activated or rebuilt in place. `--live` adds the live
 acceptance harness after the offline gate; it is optional and never run in lanes.
@@ -34,5 +37,20 @@ homes and fake Herdr commands. No release command installs dependencies, native
 hooks, harness wrappers or machine permissions.
 
 Older installations may still contain `before/`, entry wrappers and shell PATH
-blocks. Their cleanup is an operator task; current releases keep no restoration
-receipts. Preserve existing records, lane worktrees and native harness settings.
+blocks. Machines that activated an entry-installing release need this one-time
+operator cleanup; current releases keep no restoration receipts:
+
+1. Remove the managed wrappers in `~/.local/share/herdr-monitor/entry/bin` (or the
+   former `HERDR_MONITOR_ENTRY_BIN` under a custom `HERDR_MONITOR_HOME`).
+2. Remove the block between `# >>> Herdr Monitor entry >>>` and
+   `# <<< Herdr Monitor entry <<<` from `.zshenv` and `.zshrc` under
+   `${ZDOTDIR:-$HOME}`, and from `~/.bashrc` and the selected `~/.bash_profile`,
+   `~/.bash_login` or `~/.profile`.
+3. Remove only Monitor's `SessionStart` hook groups that invoke
+   `herdr/native-entry.mjs` from `${CODEX_HOME:-~/.codex}/hooks.json` and
+   `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`, preserving other hooks and settings.
+
+The old bin's `.monitor-shell.json` and `.monitor-native-hooks.json` receipts name
+the exact destinations if they changed. Keep those receipts until cleanup is
+complete, then open a fresh shell and confirm `codex` and `claude` resolve to the
+native launchers. Preserve existing records and lane worktrees.

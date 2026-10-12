@@ -64,8 +64,9 @@ The tracked file overrides individual tiers from lane config. `LANE_VALIDATE`
 overrides commands for CLI adapters; `check --cmd` wins for that invocation.
 Workers may run `lane check` (fast); settle performs code/report review with no
 suite, and the promotion train runs the promotion tier on each integration batch.
-Workers never run the release gate; the release module
-owns that declared command. `lane config`, `record desks` and supervisor
+Workers never run the release gate; `bash herdr/release.sh build TAG`
+runs the declared release command and timeout inside the tagged snapshot.
+`lane config`, `record desks` and supervisor
 policy show all three tiers. Worker copies cannot weaken
 the canonical declarations.
 

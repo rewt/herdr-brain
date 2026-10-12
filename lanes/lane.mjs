@@ -2322,7 +2322,7 @@ function check(args) {
     else override = args[index + 1];
     index += 1;
   }
-  if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by the release module');
+  if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by bash herdr/release.sh build TAG');
   const settings = validationSettings();
 
   const command = override ?? settings.tiers[tier].command;

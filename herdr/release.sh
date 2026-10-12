@@ -30,7 +30,24 @@ build() {
   for file in bin/org.mjs lanes/lane.mjs contrib/settle-watch.mjs lib/cli-help.mjs; do
     [ -f "$dir.partial/$file" ] || die "release is missing $file"
   done
-  (cd "$dir.partial" && npm run test:release)
+  (cd "$dir.partial" && node --input-type=module <<'NODE'
+import fs from 'node:fs';
+import os from 'node:os';
+import { validateValidation } from './lanes/validation.mjs';
+import { runGateSync } from './test-slot/run.mjs';
+const declared = fs.existsSync('.lane.validation.json')
+  ? validateValidation(JSON.parse(fs.readFileSync('.lane.validation.json', 'utf8'))) : {};
+const timeoutSeconds = typeof declared.timeout_seconds === 'object'
+  ? declared.timeout_seconds.release : declared.timeout_seconds;
+const idleTimeoutSeconds = typeof declared.idle_timeout_seconds === 'object'
+  ? declared.idle_timeout_seconds.release : declared.idle_timeout_seconds;
+const run = runGateSync('release snapshot', ['/bin/sh', '-c', declared.release ?? 'npm run test:release'], {
+  tier: 'release', timeoutSeconds, idleTimeoutSeconds, retryTimeout: false, stdio: 'inherit',
+});
+if (run.error) console.error(run.error.message);
+process.exitCode = run.status ?? (run.signal ? 128 + (os.constants.signals[run.signal] ?? 0) : 1);
+NODE
+  )
   if [ "$live" = --live ]; then
     (cd "$dir.partial" && node acceptance/run.mjs --candidate "$dir.partial")
   fi

@@ -80,6 +80,13 @@ esac
   assert.equal(events.find(e => e.type === 'run.started').by, 'bch-contract');
   const started = events.find(e => e.type === 'run.started');
   for (const field of ['id', 'item', 'workspace', 'report_path', 'brief_path', 'meta']) assert.ok(Object.hasOwn(started, field));
+  assert.deepEqual(started.meta, {
+    route: 'engineer', lane: 'control', agent: 'control-worker', pane: 'p1',
+    dispatch_token: 'token', start_head: 'a'.repeat(40), start_branch: 'lane/control',
+    harness: 'codex', model: 'M', effort: 'E',
+  });
+  assert.equal(events.find(e => e.type === 'item.added' && e.id === item).title, 'Implement control');
+  assert.equal(events.find(e => e.type === 'note.added' && e.id === item).text, 'Review evidence is ready');
 });
 
 test('old release events still fold and list, while release mutations are unavailable', t => {

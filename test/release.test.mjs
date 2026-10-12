@@ -5,14 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
-import { productFiles } from '../lib/product-files.mjs';
+import { copyProduct, productFiles } from '../lib/product-files.mjs';
 
 const SCRIPT = path.resolve(import.meta.dirname, '../herdr/release.sh');
 function scratch(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bare-release-')));
   t.after(() => { execFileSync('chmod', ['-R', 'u+w', root]); fs.rmSync(root, { recursive: true, force: true }); });
   const repo = path.join(root, 'repo'), home = path.join(root, 'releases-home'), bin = path.join(root, 'bin');
-  fs.mkdirSync(repo); fs.mkdirSync(bin);
+  copyProduct(path.resolve(import.meta.dirname, '..'), repo); fs.mkdirSync(bin);
   const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', timeout: 10000 });
   git('init', '-qb', 'main'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid');
   const write = (rel, text) => { fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true }); fs.writeFileSync(path.join(repo, rel), text); };
@@ -20,7 +20,7 @@ function scratch(t) {
   write('herdr/release.sh', fs.readFileSync(SCRIPT, 'utf8'));
   write('package.json', JSON.stringify({ scripts: { 'test:release': `node gate.cjs` } }));
   write('gate.cjs', `const fs=require('fs');fs.appendFileSync(${JSON.stringify(gateLog)},process.cwd()+'\\n');if(process.env.FIXTURE_GATE_FAIL)process.exit(7);`);
-  write('contrib/settle-watch.mjs', '// compatibility'); write('lib/cli-help.mjs', '// help');
+  write('contrib/settle-watch.mjs', '// compatibility');
   write('acceptance/run.mjs', `import fs from 'node:fs';fs.appendFileSync(${JSON.stringify(gateLog)},'live:'+process.cwd()+'\\n');if(process.env.FIXTURE_LIVE_FAIL)process.exit(8);`);
   for (const tag of ['t1', 't2']) {
     write('bin/org.mjs', `console.log('${tag}');`); write('lanes/lane.mjs', `console.log('lane ${tag}');`);
@@ -41,7 +41,7 @@ else if(a[1]==='unlink'){if(process.env.FIXTURE_UNLINK_FAIL)process.exit(9);fs.w
   const run = (a, extra = {}) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 30000 });
   const ok = (a, extra) => { const r = run(a, extra); assert.equal(r.status, 0, r.stdout + r.stderr); return r; };
   const release = tag => path.join(home, 'releases', tag);
-  return { root, repo, home, bin, plist, run, ok, release, gateLog, calls, git, write };
+  return { root, repo, home, bin, plist, env, run, ok, release, gateLog, calls, git, write };
 }
 test('build gates the tagged partial snapshot once, then publishes a read-only immutable copy', t => {
   const f = scratch(t); f.write('bin/org.mjs', "console.log('uncommitted');");
@@ -61,6 +61,36 @@ test('a failed gate retains partial evidence and never makes an activatable rele
   assert.notEqual(f.run(['activate', 't1']).status, 0);
   assert.match(f.run(['build', 't1']).stderr, /inspect the unfinished build/);
   assert.equal(fs.readFileSync(f.gateLog, 'utf8').trim().split('\n').length, 1);
+});
+test('build uses the tagged release declaration instead of the npm fallback or working copy', t => {
+  const f = scratch(t);
+  f.write('.lane.validation.json', JSON.stringify({ release: 'node gate.cjs && node declared.cjs', timeout_seconds: { release: 10 } }));
+  f.write('declared.cjs', `require('fs').appendFileSync(${JSON.stringify(f.gateLog)},'declared\\n');`);
+  f.git('add', '.'); f.git('commit', '-qm', 'Declared release gate'); f.git('tag', 'declared');
+  f.write('.lane.validation.json', JSON.stringify({ release: 'exit 9' }));
+  f.ok(['build', 'declared'], { LANE_VALIDATE: 'exit 9' });
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('declared')}.partial\ndeclared\n`);
+});
+test('declared scalar and release-specific timeouts stop the gate once and retain the partial copy', t => {
+  const f = scratch(t);
+  f.write('slow.cjs', `require('fs').appendFileSync(${JSON.stringify(f.gateLog)},process.cwd()+'\\n');setInterval(()=>{},1000);`);
+  for (const [tag, timeout] of [['scalar', 0.5], ['tier', { release: 0.5 }]]) {
+    f.write('.lane.validation.json', JSON.stringify({ release: 'node slow.cjs', timeout_seconds: timeout }));
+    f.git('add', '.'); f.git('commit', '-qm', tag); f.git('tag', tag);
+    const r = f.run(['build', tag]);
+    assert.equal(r.status, 124, r.stdout + r.stderr);
+    assert.match(r.stderr, /GATE_TIMEOUT: wall limit 0.5s exceeded/);
+    assert.equal(fs.existsSync(f.release(tag)), false);
+    assert.equal(fs.existsSync(`${f.release(tag)}.partial`), true);
+  }
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('scalar')}.partial\n${f.release('tier')}.partial\n`);
+});
+test('an invalid release declaration refuses before running a gate', t => {
+  const f = scratch(t);
+  f.write('.lane.validation.json', JSON.stringify({ release: 'node gate.cjs', timeout_seconds: { release: 0 } }));
+  f.git('add', '.'); f.git('commit', '-qm', 'Invalid gate'); f.git('tag', 'invalid');
+  assert.match(f.run(['build', 'invalid']).stderr, /positive.*number of seconds/);
+  assert.equal(fs.existsSync(f.gateLog), false);
 });
 test('--live is explicit, follows the offline gate, and a live failure prevents completion', t => {
   const f = scratch(t); f.ok(['build', 't1', '--live']);
@@ -103,10 +133,21 @@ test('distribution inventory retains bch-cloak launch dependencies', () => {
 });
 
 test('installed release commands can inspect and switch launchers without Git metadata', t => {
-  const f = scratch(t); f.ok(['build', 't1']);
+  const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']);
   const script = path.join(f.release('t1'), 'herdr/release.sh');
-  const r = spawnSync('bash', [script, 'status'], { cwd: f.root, env: { ...process.env, HOME: f.root, HERDR_MONITOR_REPO: '', HERDR_MONITOR_HOME: f.home, HERDR_MONITOR_BIN: f.bin }, encoding: 'utf8', timeout: 5000 });
-  assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /current:.*none/);
+  const installed = args => {
+    const r = spawnSync('bash', [script, ...args], { cwd: f.release('t1'), env: { ...f.env, HERDR_MONITOR_REPO: '' }, encoding: 'utf8', timeout: 5000 });
+    assert.equal(r.status, 0, r.stdout + r.stderr); return r;
+  };
+  assert.equal(fs.existsSync(path.join(f.release('t1'), '.git')), false);
+  assert.match(installed(['status']).stdout, /current:.*none/);
+  installed(['activate', 't1']); installed(['activate', 't2']);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t2'));
+  installed(['rollback']);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t1'));
+  assert.equal(fs.readlinkSync(path.join(f.home, 'previous')), f.release('t2'));
+  for (const [name, file] of [['org', 'bin/org.mjs'], ['record', 'bin/org.mjs'], ['lane', 'lanes/lane.mjs']])
+    assert.equal(fs.readlinkSync(path.join(f.bin, name)), path.join(f.home, 'current', file));
 });
 test('build refuses a tag missing the installed settle-watch dependency before spending a gate', t => {
   const f = scratch(t); f.git('rm', 'contrib/settle-watch.mjs'); f.git('commit', '-qm', 'Incomplete distribution'); f.git('tag', 'missing');

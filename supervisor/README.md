@@ -4,7 +4,7 @@ Supervisors and workers do not open blocking questions. They record each one
 with `record ask` (an action category, a safe recommendation and a reason),
 take the safe default and continue; funds, publishing, credentials and permission
 changes default to no. This is policy text in [PROTOCOL.md](PROTOCOL.md) and the
-worker entry policy, not a hook: Monitor registers no per-launch question guard,
+project instructions, not a hook: Monitor registers no per-launch question guard,
 permission hook or operator-presence check, and the harnesses' own sandboxes and
 permission prompts apply. Launch native harnesses through Herdr with project policy
 arguments. Project chats retain canonical checkout and pane receipts; older
@@ -180,7 +180,9 @@ senders before restoring and re-arming the old consumer, so both paths never
 deliver together. The compatibility `contrib/settle-watch.mjs` stays
 until bch-cloak has completed its release-gated switch.
 
-Foreground `supervisor.mjs entry --repo PROJECT --role supervisor` prints `supervisor.mjs brief`, resumes housekeeping only when both enabled
+Foreground `supervisor.mjs entry --repo PROJECT --role supervisor` prints a pointer
+to this installation's [PROTOCOL.md](PROTOCOL.md) for the native supervisor session
+to read, then prints `supervisor.mjs brief`, resumes housekeeping only when both enabled
 and resume are true, and re-arms watchers only for open, unabandoned runs without a recorded
 report with a verified project checkout and a dead, reused or absent watcher owner.
 Housekeeping and watcher liveness compare the PID and recorded kernel start-time

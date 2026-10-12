@@ -68,26 +68,10 @@ before acceptance starts.
 The gate requires successful preparation evidence before starting acceptance.
 Copied-product workflows and deliberate long-response regressions must pass
 before live acceptance starts; a failure stops the gate.
-The gate passes `--bch-cloak`, when configured, to `acceptance/run.mjs`. `herdr/release.sh build` remains the operator's ship step;
+The gate uses scratch fixtures only. An offline bch-cloak contract check arrives
+with lane C. `herdr/release.sh build` remains the operator's ship step;
 activation remains a separate operator action. The live harness belongs only
 to the canonical supervisor's release cycle, never a lane's validation.
-
-Set this optional machine input in the invoking supervisor environment:
-
-```sh
-# Optional existing-project compatibility checks:
-export RELEASE_BCH_CLOAK=/absolute/path/to/existing/bch-cloak
-```
-
-`RELEASE_BCH_CLOAK` is optional. When unset or empty, the five existing-project
-compatibility cases report SKIP with a visible reason and the remaining cases
-decide the gate. When configured, the path must exist and all compatibility
-requirements remain in force; the harness reads that project only to create
-its scratch compatibility copies. `RELEASE_NPM_CACHE` is no longer read.
-This project's declared preflight checks the configured compatibility path
-without copying or building anything.
-Missing inputs return setup instructions without cutting a candidate or consuming
-a gate attempt.
 
 The record stores candidate, gate-start and gate-result events through the record
 CLI. On a passing result it atomically creates one `publish` question, reserved for

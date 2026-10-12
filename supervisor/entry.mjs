@@ -49,6 +49,7 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
     if (role !== 'supervisor') return;
     const project = gitProject(cwd);
     if (project.checkout !== project.canonical) { report('Supervisor entry skipped: a lane checkout is never a project supervisor.\n'); return; }
+    report(`Read the supervisor protocol: ${local('./PROTOCOL.md')}\n`);
     const deadline = Date.now() + 20000;
     const readOwner = readProcess ?? (pid => lookupProcess(pid, { identityOnly: true,
       allowance: ms => Math.min(ms, 2000), pause: () => {},

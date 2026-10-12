@@ -6,6 +6,9 @@ Read applicable project instructions. This protocol supplies defaults and yields
 to them. No resident model or growing history is needed to keep the cycle moving.
 
 Run foreground `supervisor.mjs entry` from the canonical checkout to refresh context and recover enabled housekeeping and watchers.
+Retrieve `record show ID` only as needed; use `supervisor.mjs brief --json` when
+the preview truncates. `supervisor.mjs checkpoint --through N --role supervisor`
+is a reading bookmark, never work status or authority.
 
 Record plans, instructions, holds and decisions with `record note ID TEXT
 --decision --summary SENTENCE`. Questions and their answers belong in the record.

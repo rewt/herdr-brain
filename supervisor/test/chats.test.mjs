@@ -53,8 +53,12 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   if (a[3].startsWith('printf ')) { result({}); process.exit(0); }
   result({});
 } else if (a[0] === 'agent' && a[1] === 'start') {
+  if (state.startDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, state.startDelayMs);
   const pane = state.panes.find(p => p.pane_id === value('--pane'));
-  state.launches.push({kind: value('--kind'), args: a.slice(a.indexOf('--') + 1), env: state.env[pane.pane_id]});
+  const callerEnv = Object.fromEntries(['ORG_DIR', 'ORG_ACTOR', 'HERDR_AGENT_NAME', 'HERDR_MONITOR_FLEET',
+    'MONITOR_SUPERVISOR_AGENT', 'MONITOR_SESSION_ROLE', 'LANE_CONFIG', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR',
+    'CHAT_LAUNCHER_ONLY'].map(key => [key, process.env[key]]));
+  state.launches.push({kind: value('--kind'), args: a.slice(a.indexOf('--') + 1), env: state.env[pane.pane_id], callerEnv});
   if (!state.noDetect) state.agents.push({pane_id: pane.pane_id, agent: state.detectKind || value('--kind'),
     name: state.unnamed ? null : a[2], cwd: state.wrongCwd || pane.foreground_cwd});
   result({});
@@ -166,6 +170,40 @@ test('failed or uncertain startup retains one tab and never launches again on re
   const receipt = f.open(); assert.equal(receipt.reused, true); assert.equal(receipt.available, false);
   assert.equal(f.state().tabs.length, 1); assert.equal(f.state().launches.length, 1);
   assert.equal(f.state().focus, receipt.tab);
+});
+
+test('agent start can wait beyond ten seconds within the requested startup window', t => {
+  const f = fixture(t); f.change(s => {s.startDelayMs = 10500;});
+  const receipt = f.open(undefined, {startupMs: 12000});
+  assert.equal(receipt.available, true);
+  const start = f.state().calls.find(a => a[0] === 'agent' && a[1] === 'start');
+  assert.equal(start[start.indexOf('--timeout') + 1], '12000');
+  assert.equal(f.state().launches.length, 1);
+});
+
+test('agent start failure explains the retained tab and reopening never repeats the launch', t => {
+  const f = fixture(t); f.change(s => {s.fail = 'agent start';});
+  assert.throws(() => f.open(), /chat startup not detected; retained tab .*inspect before retrying: Herdr agent start: injected failure/);
+  const receipt = f.open(); assert.equal(receipt.reused, true); assert.equal(receipt.available, false);
+  assert.equal(f.state().tabs.length, 1);
+  assert.equal(f.state().calls.filter(a => a[0] === 'agent' && a[1] === 'start').length, 1);
+});
+
+for (const kind of ['codex', 'claude']) test(`${kind} agent start caller receives the resolved chat environment over the launcher environment`, t => {
+  const f = fixture(t), p = f.projects[0];
+  const config = JSON.parse(fs.readFileSync(p.layers[0]));
+  config.routes.account = {kind, env: ['CODEX_HOME=/route/codex', 'CLAUDE_CONFIG_DIR=/route/claude']};
+  fs.writeFileSync(p.layers[0], JSON.stringify(config));
+  Object.assign(f.env, {ORG_DIR: '/foreign/record', ORG_ACTOR: 'foreign-actor', HERDR_AGENT_NAME: 'foreign-agent',
+    CODEX_HOME: '/foreign/codex', CLAUDE_CONFIG_DIR: '/foreign/claude', CHAT_LAUNCHER_ONLY: 'inherited'});
+  const receipt = f.open(p, {route: 'account', to: 'ops-explicit'});
+  const launch = f.state().launches[0];
+  const expected = {ORG_DIR: p.record, ORG_ACTOR: receipt.name, HERDR_AGENT_NAME: receipt.name,
+    HERDR_MONITOR_FLEET: f.env.HERDR_MONITOR_FLEET, MONITOR_SUPERVISOR_AGENT: 'ops-explicit',
+    MONITOR_SESSION_ROLE: 'chat', LANE_CONFIG: '', CODEX_HOME: '/route/codex', CLAUDE_CONFIG_DIR: '/route/claude'};
+  assert.deepEqual(launch.env, expected);
+  assert.deepEqual(launch.callerEnv, {...expected, CHAT_LAUNCHER_ONLY: 'inherited'});
+  assert.equal(f.env.ORG_ACTOR, 'foreign-actor'); assert.equal(f.env.CLAUDE_CONFIG_DIR, '/foreign/claude');
 });
 
 test('shell readiness fails before sending input and retains a recoverable tab', t => {

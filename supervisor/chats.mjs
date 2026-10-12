@@ -73,8 +73,8 @@ function waitForShell(herdr, receipt, project, { now, sleep, startupMs }) {
 }
 
 export function herdrCommand(env = process.env) {
-  return args => {
-    const reply = spawnSync(env.HERDR_BIN_PATH || 'herdr', args, { env, encoding: 'utf8', timeout: 10000, maxBuffer: 8 * 1024 * 1024 });
+  return (args, { env: callerEnv = env, timeout = 10000 } = {}) => {
+    const reply = spawnSync(callerEnv.HERDR_BIN_PATH || 'herdr', args, { env: callerEnv, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024 });
     if (reply.error || reply.status !== 0) throw new Error(`Herdr ${args.slice(0, 2).join(' ')}: ${(reply.stderr || reply.stdout || reply.error?.message).trim()}`);
     if (args[0] === 'pane' && args[1] === 'read' && args.includes('text')) return { text: reply.stdout };
     const body = JSON.parse(reply.stdout);
@@ -190,7 +190,14 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     const root = fileURLToPath(new URL('../', import.meta.url));
     const policy = entryPolicy({ canonical: project.checkout, org: project.record, role: 'chat' }, root);
     native.push(...(launch.kind === 'claude' ? ['--append-system-prompt', policy] : ['-c', `developer_instructions=${JSON.stringify(policy)}`]));
-    herdr(['agent', 'start', chat, '--kind', launch.kind, '--pane', receipt.pane, '--', ...native]);
+    try {
+      // Agent start waits for harness readiness and reads account selectors from
+      // its caller, so it needs both the chat environment and a longer deadline.
+      herdr(['agent', 'start', chat, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs), '--', ...native],
+        { env: { ...env, ...Object.fromEntries(pairs) }, timeout: startupMs + 10000 });
+    } catch (error) {
+      throw new Error(`chat startup not detected; retained tab ${receipt.tab}, inspect before retrying: ${error.message}`, { cause: error });
+    }
     const detectionDeadline = now() + startupMs;
     let detected;
     do {

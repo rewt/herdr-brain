@@ -243,7 +243,6 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       attempt.gate = { command, started_at: new Date().toISOString() };
       phase('validating');
       attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command, historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', validation.tiers.promotion.command]),
-        hostSuites: validation.tiers.promotion.hostSuites ?? [],
         prepare, timeoutSeconds: profile?.timeoutSeconds ?? validation.tiers.promotion.timeoutSeconds,
         idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? validation.tiers.promotion.idleTimeoutSeconds, environment: validation.environment, env, label: 'train scratch',
         onStart: gate => { attempt.gate = gate; save(); } });

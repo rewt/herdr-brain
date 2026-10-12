@@ -27,7 +27,8 @@ and tab, so reopening never repeats a launch.
 The launcher starts the native harness with `herdr agent start NAME --kind KIND
 --pane PANE -- POLICY_ARGS`. Claude receives `--append-system-prompt`; Codex receives
 `-c developer_instructions=…`. The harness owns its permission and sandbox settings.
-The policy includes project instructions, the record command and active lessons.
+The policy points the agent at the project instruction files and includes the
+record command and active lessons.
 
 Legacy `.lane.json` fields `chat`, `entry` and `always_args`, validation fields
 `host_suites` and `tier_suites`, and fleet fields `temp` and `excluded_roots` remain

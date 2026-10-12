@@ -103,6 +103,7 @@ test('entry CLI is non-blocking and prints the cold start with paused housekeepi
   const f = fixture(t); fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
   const r = exec(process.execPath, [path.join(root, 'supervisor/supervisor.mjs'), 'entry', '--repo', f.repo, '--org', f.org, '--role', 'supervisor'], f.repo);
   good(r); assert.match(r.stdout, /Supervisor cold start/); assert.match(r.stdout, /housekeeping.*disabled/i);
+  assert.ok(r.stdout.includes(`Read the supervisor protocol: ${path.join(root, 'supervisor/PROTOCOL.md')}`));
 });
 
 test('entry twice restarts stopped housekeeping and dead open watchers only once', async t => {

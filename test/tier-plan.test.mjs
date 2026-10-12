@@ -7,7 +7,7 @@ import { tierFiles } from './helpers/tier.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 test('tier selection covers every current test once in promotion or release and excludes support modules', () => {
-  const directories = ['test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'settle/test', 'supervisor/test', 'release/test', 'lanes/test', 'acceptance/test'];
+  const directories = ['test', 'brain/test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'settle/test', 'supervisor/test', 'release/test', 'lanes/test', 'acceptance/test'];
   const expected = directories.flatMap(dir => fs.readdirSync(path.join(root, dir)).filter(file => file.endsWith('.test.mjs')).map(file => `${dir}/${file}`));
   const promotion = tierFiles('promotion', root);
   const fullFileSteps = ['core', 'cycle', 'lanes', 'acceptance'].flatMap(tier => tierFiles(tier, root));

@@ -74,7 +74,7 @@ async function offlineNative(root, repo) {
 
 test('real default-cycle dispatch admits its owned fleet worktree and cwd while foreign roots remain refused', async t => {
   const root = fs.realpathSync(fs.mkdtempSync('/tmp/ac-')), roots = [root], cleanup = [];
-  const receipts = createReceiptTracker({ suitePid: process.pid });
+  const receipts = createReceiptTracker({ suitePid: Number(process.env.HERDR_TEST_SUITE_PID) || process.pid });
   let supervisor;
   const repo = path.join(root, 'default-cycle'), org = path.join(repo, '.org');
   t.after(async () => {

@@ -51,7 +51,7 @@ test('product scripts never compare a resolved argv launch path to a module path
   const files = spawnSync('git', ['ls-files', '-z'], { cwd: source, encoding: 'utf8' });
   assert.equal(files.status, 0, files.stderr);
   const product = files.stdout.split('\0').filter(file => /\.(?:mjs|cjs|js)$/u.test(file)
-    && !file.startsWith('acceptance/test/fixtures/') && fs.existsSync(path.join(source, file)));
+    && !file.startsWith('acceptance/test/fixtures/'));
   const offenders = product.filter(file => mainComparisons(fs.readFileSync(path.join(source, file), 'utf8')).unsafe);
   assert.deepEqual(offenders, [], 'use isMain from lib/cli-help.mjs');
   // ARCH-19: the candidate driver must also work in build-only partial copies.

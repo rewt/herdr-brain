@@ -59,7 +59,7 @@ const promotion = [
   'watch/test/lock.test.mjs'
 ];
 const directories = {
-  core: ['test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test'],
+  core: ['test', 'brain/test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test'],
   cycle: ['settle/test', 'supervisor/test', 'release/test'],
   lanes: ['lanes/test'], acceptance: ['acceptance/test'],
 };

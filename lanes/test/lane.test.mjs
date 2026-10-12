@@ -2206,7 +2206,7 @@ test("dispatch retains initial tabs on environment and agent cwd failures", () =
       if (failure === 'wrong') fixture.env.FAKE_HERDR_EXPORT_WRONG = "1";
       if (failure === 'start') fixture.env.FAKE_HERDR_START_FAIL = "1";
       if (failure === 'prompt') fixture.env.FAKE_HERDR_PROMPT_FAIL = "1";
-      const run = lane(fixture, ["dispatch", "initial-failure", "do not send"]);
+      const run = lane(fixture, ["dispatch", "initial-failure", "--env", "CHECK_ENV=expected", "do not send"]);
       assert.equal(run.status, 1);
       assert.match(run.stderr, /initial tab retained|prompt command failed/u);
       assert.equal(fake.state().initialLabel, undefined, 'a failed dispatch must keep the initial shell label');

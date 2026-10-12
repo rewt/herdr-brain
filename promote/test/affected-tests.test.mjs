@@ -36,7 +36,7 @@ test('one-hop selection includes changed tests and direct literals without follo
   assert.ok(releasePhases(tests).every(([, rows]) => rows.length <= 4));
 });
 test('a core-module change selects bounded one-hop extras and defers the expensive lane file', () => {
-  const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs', changed: ['supervisor/chats.mjs', 'dispatch/dispatch.mjs'], baseCommand: 'npm run test:promotion' });
+  const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs', changed: ['lanes/lane.mjs', 'dispatch/dispatch.mjs'], baseCommand: 'npm run test:promotion' });
   assert.ok(!plan.files.includes('lanes/test/lane.test.mjs'));
   assert.ok(plan.deferred.some(row => row.file === 'lanes/test/lane.test.mjs' && row.reason === 'time-budget'));
   assert.ok(plan.files.length <= DEFAULT_MAX_FILES);

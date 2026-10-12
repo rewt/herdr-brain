@@ -24,7 +24,14 @@ function committedFile(canonical, relative) {
     return result.stdout;
   };
   const head = git(['rev-parse', '--verify', '--quiet', 'HEAD']);
-  if (!head.error && head.status === 1 && !head.stdout && !head.stderr) return undefined;
+  if (!head.error && head.status === 1 && !head.stdout && !head.stderr) {
+    // Only a confirmed unborn branch has no profile; any other Git failure refuses.
+    const branch = checked(git(['symbolic-ref', '--quiet', 'HEAD'])).trim();
+    const ref = git(['show-ref', '--verify', '--quiet', branch]);
+    if (!ref.error && ref.status === 1 && !ref.stdout && !ref.stderr) return undefined;
+    checked(ref);
+    throw new Error(`cannot read committed ${relative}: HEAD does not resolve`);
+  }
   const commit = checked(head).trim();
   if (!checked(git(['ls-tree', '--name-only', commit, '--', relative])).trim()) return undefined;
   return checked(git(['show', `${commit}:${relative}`]));

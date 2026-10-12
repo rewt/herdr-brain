@@ -162,8 +162,9 @@ after startup sends one queue notice through the first pending request's saved
 supervisor recipient and records its delivery receipt alongside the refusal.
 
 Declare the gate command in `.lane.validation.json`, for example
-`{"promotion":"pnpm validate:all-safe"}`. A canonical `.promote.json` can also
-declare a `gate` profile. This example matches bch-cloak's existing gate; the
+`{"promotion":"pnpm validate:all-safe"}`. The `.promote.json` committed at the
+canonical checkout's HEAD can also declare a `gate` profile; working-tree edits
+and untracked copies are ignored, so nothing uncommitted reaches the host. This example matches bch-cloak's existing gate; the
 train has no project names or package filters built into it:
 
 ```json
@@ -187,11 +188,12 @@ train has no project names or package filters built into it:
 }
 ```
 
-The Node file must contain an exact installed version. The adapter prefixes
+The Node file must be committed and contain an exact installed version. The adapter prefixes
 `$HOME/.nvm/versions/node/v<VERSION>/bin` to PATH for preparation and the gate,
 and verifies that executable's version. Missing pins refuse before building.
-`env` supplies literal strings; it cannot redirect host slot paths or supply
-slot tokens. Profile preparation follows existing lane preparation in each
+`env` supplies literal strings; it cannot redirect host slot paths, supply
+slot tokens or set `NODE_OPTIONS`, which would load project code into the host
+adapter (gate commands may still set it themselves). Profile preparation follows existing lane preparation in each
 scratch candidate, under the slot. Both preparations and the effective profile
 fingerprint salt green evidence; environment values are not written to receipts.
 

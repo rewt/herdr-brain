@@ -682,3 +682,11 @@ test('only the committed gate profile reaches the host adapter, and it cannot se
   fs.writeFileSync(config, JSON.stringify({ gate: { wait_seconds: 5 } }));
   assert.equal(resolveGateProfile(f.repo), null, 'an untracked profile is not a profile');
 });
+
+test('an unborn canonical branch has no gate profile, whatever its working tree holds', (t) => {
+  const repo = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'pt-unborn-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+  assert.equal(spawnSync('git', ['-C', repo, 'init', '-q', '-b', 'main']).status, 0);
+  fs.writeFileSync(path.join(repo, '.promote.json'), JSON.stringify({ gate: { env: { NODE_OPTIONS: '--import=x' } } }));
+  assert.equal(resolveGateProfile(repo), null);
+});

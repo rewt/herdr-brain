@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# Immutable local releases. The operator controls activation and distribution.
+# Immutable local releases. The project supervisor ships them (see supervisor/PROTOCOL.md).
 # Usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status
 # ship = build (release gate in the archive) + activate + check the installed launchers; it rolls
-# back to the previous release if that check fails. Agents run it as one bare command.
+# back to the previous release if that check fails. Agents run it as one bare command. A built tag is
+# never rebuilt: after a failed ship cut a new tag; if a build succeeded but activation never ran,
+# run activate TAG.
 # HERDR_MONITOR_HOME, HERDR_MONITOR_BIN and HERDR_MONITOR_REPO select destinations.
 # HERDR_MONITOR_PLIST selects the retired Brain LaunchAgent to check.
 set -euo pipefail
 HOME_DIR=${HERDR_MONITOR_HOME:-$HOME/.local/share/herdr-monitor}
 BIN_DIR=${HERDR_MONITOR_BIN:-$HOME/.local/bin}
 REPO=${HERDR_MONITOR_REPO:-}
-LEGACY_PLIST=${HERDR_MONITOR_PLIST:-$HOME/Library/LaunchAgents/com.rewt.herdr-brain.plist}
+LEGACY_PLIST=${HERDR_MONITOR_PLIST-$HOME/Library/LaunchAgents/com.rewt.herdr-brain.plist}
+# launchctl acts on the real login session whatever HOME says, so only the account's own plist may stop it.
+REAL_PLIST="$(eval echo "~$(id -un)")/Library/LaunchAgents/com.rewt.herdr-brain.plist"
 LAUNCHERS="org:bin/org.mjs record:bin/org.mjs lane:lanes/lane.mjs"
 die() { echo "release: $*" >&2; exit 1; }
 say() { echo "release: $*"; }
@@ -73,9 +77,10 @@ retire_plugin() {
 }
 retire_brain_service() {
   # The retired Brain watch LaunchAgent would restart a command releases no longer ship: stop it and move it aside.
+  [ -n "$LEGACY_PLIST" ] || return 0
   [ -e "$LEGACY_PLIST" ] || [ -L "$LEGACY_PLIST" ] || return 0
-  # Only the real default plist belongs to the loaded service; a test's HERDR_MONITOR_PLIST never stops it.
-  if [ -z "${HERDR_MONITOR_PLIST:-}" ] && [ "${RELEASE_NO_LAUNCHD:-}" != 1 ]; then
+  # Only the account's real plist belongs to the loaded service; scratch HOMEs and test plists never stop it.
+  if [ "$LEGACY_PLIST" = "$REAL_PLIST" ] && [ "${RELEASE_NO_LAUNCHD:-}" != 1 ]; then
     launchctl bootout "gui/$(id -u)/com.rewt.herdr-brain" 2>/dev/null || true
   fi
   local aside="$LEGACY_PLIST.retired-$(date +%Y%m%d%H%M%S)"
@@ -84,20 +89,25 @@ retire_brain_service() {
 }
 verify_installed() {
   # The launchers projects call must run from the new current release.
-  node "$BIN_DIR/org" help >/dev/null 2>&1 || { echo "release: installed org failed to start" >&2; return 1; }
-  node "$BIN_DIR/lane" --help >/dev/null 2>&1 || { echo "release: installed lane failed to start" >&2; return 1; }
-  node --check "$HOME_DIR/current/contrib/settle-watch.mjs" 2>/dev/null || { echo "release: installed settle-watch does not load" >&2; return 1; }
+  local out
+  out=$(node "$BIN_DIR/org" help 2>&1) || { echo "release: installed org failed to start: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
+  out=$(node "$BIN_DIR/lane" --help 2>&1) || { echo "release: installed lane failed to start: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
+  out=$(node --check "$HOME_DIR/current/contrib/settle-watch.mjs" 2>&1) || { echo "release: installed settle-watch does not load: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
 }
 ship() {
-  local tag=$1
+  local tag=$1 earlier
   build "$tag"
+  earlier=$(readlink "$HOME_DIR/previous" 2>/dev/null || true)
   activate "$tag"
   if verify_installed; then say "shipped $tag"; return 0; fi
   if [ -L "$HOME_DIR/previous" ]; then
     echo "release: rolling back after the failed post-activation check" >&2
     rollback
+    # rollback made the broken tag "previous"; point previous back at the last good release.
+    if [ -n "$earlier" ]; then ln -sfn "$earlier" "$HOME_DIR/previous"; else rm -f "$HOME_DIR/previous"; fi
+    die "ship $tag failed its post-activation check; rolled back to $(basename "$(readlink "$HOME_DIR/current")")"
   fi
-  die "ship $tag failed its post-activation check"
+  die "ship $tag failed its post-activation check and there is no previous release; $tag stays active: activate a good tag"
 }
 activate() {
   local tag=$1 dir="$HOME_DIR/releases/$1"

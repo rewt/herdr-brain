@@ -142,7 +142,34 @@ test('ship rolls back to the previous release when the installed launchers fail 
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /installed org failed to start/);
   assert.match(r.stderr, /rolling back/);
+  assert.match(r.stderr, /rolled back to t1/);
   assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t1'));
+  assert.equal(fs.existsSync(path.join(f.home, 'previous')), false, 'the broken tag never becomes previous');
+  f.ok(['ship', 't2']);
+  f.write('bin/org.mjs', 'process.exit(4);'); f.git('add', '.'); f.git('commit', '-qm', 't4'); f.git('tag', 't4');
+  assert.notEqual(f.run(['ship', 't4']).status, 0);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t2'));
+  assert.equal(fs.readlinkSync(path.join(f.home, 'previous')), f.release('t1'), 'previous still names the last good release');
+});
+test('a failed first ship with no previous release says the tag stays active', t => {
+  const f = scratch(t);
+  f.write('bin/org.mjs', 'process.exit(5);'); f.git('add', '.'); f.git('commit', '-qm', 't5'); f.git('tag', 't5');
+  const r = f.run(['ship', 't5']);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /no previous release; t5 stays active/);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t5'));
+});
+test('a scratch HOME or an empty plist setting never reaches launchctl', t => {
+  const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']);
+  const stub = path.join(f.root, 'stub'), calls = path.join(f.root, 'launchctl-calls');
+  fs.mkdirSync(stub); fs.writeFileSync(path.join(stub, 'launchctl'), `#!/bin/sh\necho "$@" >> ${JSON.stringify(calls)}\n`, { mode: 0o755 });
+  const agents = path.join(f.root, 'Library', 'LaunchAgents'); fs.mkdirSync(agents, { recursive: true });
+  const scratchPlist = path.join(agents, 'com.rewt.herdr-brain.plist'); fs.writeFileSync(scratchPlist, 'scratch plist');
+  const PATH = `${stub}:${process.env.PATH}`;
+  f.ok(['activate', 't1'], { HERDR_MONITOR_PLIST: undefined, PATH });
+  assert.equal(fs.existsSync(scratchPlist), false, 'the scratch HOME plist is moved aside');
+  f.ok(['activate', 't2'], { HERDR_MONITOR_PLIST: '', PATH });
+  assert.equal(fs.existsSync(calls), false, 'launchctl only ever acts on the real account plist');
 });
 test('failed plugin unlink warns and leaves the launchers usable', t => {
   const f = scratch(t); f.ok(['build', 't1']);

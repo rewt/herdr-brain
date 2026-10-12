@@ -136,7 +136,10 @@ have landed, tag `main` as `rc-<UTC yyyymmddThhmmss000Z>-<10-char sha>` and run
 gate runs once in the git-archive snapshot), activates it, checks that the installed
 `org`, `lane` and `settle-watch` start, and rolls back to the previous release if they
 don't. Record the result on the goal. A failed gate leaves the current release
-untouched: fix it in a lane and cut a new tag. Workers never run the release gate.
+untouched: fix it in a lane and cut a new tag. A built tag is never rebuilt, so after a
+rolled-back ship cut a new tag; if a build succeeded but activation never ran, run
+`bash herdr/release.sh activate TAG`. Workers never run the release gate. The live acceptance
+harness is optional (`build TAG --live`); the default gate is the offline release tier.
 Historical candidates remain readable with `record releases`.
 
 ## Identity desks

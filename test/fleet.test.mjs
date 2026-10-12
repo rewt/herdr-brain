@@ -486,8 +486,9 @@ test('legacy temp and exclusion settings are inert, and nested peers keep distin
 test("a project's own worktree_root wins over its fleet mapping; without it the fleet mapping applies", t => {
   const f = fixture(t), cwd = f.repo('app'), mapped = path.join(f.scratch, 'mapped-lanes');
   f.join(cwd, ['--worktrees', mapped]);
+  const env = { ...f.env }; delete env.LANE_CONFIG; delete env.LANE_WORKTREE_ROOT;
   const row = () => {
-    const r = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd, env: f.env, encoding: 'utf8' });
+    const r = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd, env, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     return r.stdout.split('\n').find(line => line.startsWith('worktree_root\t'));
   };

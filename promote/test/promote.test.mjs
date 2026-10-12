@@ -6,11 +6,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { queueFor, enqueue, drain } from '../promote.mjs';
+import { queueFor, enqueue } from '../promote.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { drain } from '../promote.mjs';
 
 const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
 const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
@@ -382,6 +383,27 @@ test('project override selects supervisor and duplicate pending lanes do not rep
   assert.equal(f.results().length, 1); assert.equal(f.messages()[0][2], 'project-supervisor');
 });
 
+test('a drain owner this caller may not signal still counts as running', async (t) => {
+  const f = fixture(t), lock = path.join(f.queue.directory, 'worker.lock');
+  fs.mkdirSync(lock, { recursive: true });
+  const owner = JSON.stringify({ pid: process.pid, at: new Date().toISOString(), argv: [process.execPath, CLI] });
+  fs.writeFileSync(path.join(lock, 'owner.json'), owner);
+  f.lane('waiting');
+  enqueue(f.queue, ['waiting'], { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null });
+  const kill = process.kill, send = process.send, sent = [];
+  process.kill = (pid, signal) => {
+    if (signal === 0) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    return kill.call(process, pid, signal);
+  };
+  process.send = message => { sent.push(message); return true; };
+  try { await drain(f.queue); } finally { process.kill = kill; process.send = send; }
+  assert.deepEqual(sent, [{ ready: true, already_running: true }]);
+  assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner, 'the live owner keeps its lock');
+  const queued = f.queue.load();
+  assert.equal(queued.current, null); assert.deepEqual(queued.pending.map(j => j.topic), ['waiting'], 'the job waits for the live drain');
+  fs.rmSync(lock, { recursive: true });
+});
+
 test('two concurrent enqueue commands share one drain; direct promote is excluded during its gate', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second');
   const marker = path.join(f.root, 'gate');
@@ -637,25 +659,4 @@ test('conditional close rechecks the promoted tip and base before any removal', 
   f.git(['merge', '--ff-only', 'lane/first']);
   const safe = close(f.git(['rev-parse', 'lane/first'])); assert.equal(safe.status, 0, safe.stderr);
   assert.equal(fs.existsSync(wt), false);
-});
-
-test('a drain owner this caller may not signal still counts as running', async (t) => {
-  const f = fixture(t), lock = path.join(f.queue.directory, 'worker.lock');
-  fs.mkdirSync(lock, { recursive: true });
-  const owner = JSON.stringify({ pid: process.pid, at: new Date().toISOString(), argv: [process.execPath, CLI] });
-  fs.writeFileSync(path.join(lock, 'owner.json'), owner);
-  f.lane('waiting');
-  enqueue(f.queue, ['waiting'], { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null });
-  const kill = process.kill, send = process.send, sent = [];
-  process.kill = (pid, signal) => {
-    if (signal === 0) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
-    return kill.call(process, pid, signal);
-  };
-  process.send = message => { sent.push(message); return true; };
-  try { await drain(f.queue); } finally { process.kill = kill; process.send = send; }
-  assert.deepEqual(sent, [{ ready: true, already_running: true }]);
-  assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner, 'the live owner keeps its lock');
-  const queued = f.queue.load();
-  assert.equal(queued.current, null); assert.deepEqual(queued.pending.map(j => j.topic), ['waiting'], 'the job waits for the live drain');
-  fs.rmSync(lock, { recursive: true });
 });

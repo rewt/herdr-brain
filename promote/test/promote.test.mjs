@@ -644,12 +644,18 @@ test('a drain owner this caller may not signal still counts as running', async (
   fs.mkdirSync(lock, { recursive: true });
   const owner = JSON.stringify({ pid: process.pid, at: new Date().toISOString(), argv: [process.execPath, CLI] });
   fs.writeFileSync(path.join(lock, 'owner.json'), owner);
-  const kill = process.kill;
+  f.lane('waiting');
+  enqueue(f.queue, ['waiting'], { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null });
+  const kill = process.kill, send = process.send, sent = [];
   process.kill = (pid, signal) => {
     if (signal === 0) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
     return kill.call(process, pid, signal);
   };
-  try { await drain(f.queue); } finally { process.kill = kill; }
+  process.send = message => { sent.push(message); return true; };
+  try { await drain(f.queue); } finally { process.kill = kill; process.send = send; }
+  assert.deepEqual(sent, [{ ready: true, already_running: true }]);
   assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner, 'the live owner keeps its lock');
+  const queued = f.queue.load();
+  assert.equal(queued.current, null); assert.deepEqual(queued.pending.map(j => j.topic), ['waiting'], 'the job waits for the live drain');
   fs.rmSync(lock, { recursive: true });
 });

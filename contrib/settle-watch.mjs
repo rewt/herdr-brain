@@ -214,12 +214,16 @@ if (opt.spawn && !opt.open) {
   process.exit(0);
 }
 
+// A lock holder exists while signal 0 reaches it or is refused with EPERM (another user or a
+// sandboxed caller); only a missing process makes a lock stale.
+const holderExists = (pid) => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
+
 // One watcher per run.
 const lock = path.join(os.tmpdir(), `settle-watch-${crypto.createHash('sha256').update(path.resolve(opt.org)).digest('hex').slice(0, 12)}-${runId}.lock`);
 if (!dry && !opt.open) {
   try {
     const pid = Number(fs.readFileSync(lock, 'utf8'));
-    try { process.kill(pid, 0); die(`another watcher (pid ${pid}) already owns ${runId}`); } catch { /* stale */ }
+    if (holderExists(pid)) die(`another watcher (pid ${pid}) already owns ${runId}`);
   } catch { /* no lock */ }
   fs.writeFileSync(lock, String(process.pid));
   process.on('exit', () => { try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {} });
@@ -290,9 +294,7 @@ function takeTurn() {
     } catch {
       let holder = NaN;
       try { holder = Number(fs.readFileSync(path.join(openLock, 'pid'), 'utf8')); } catch {}
-      let alive = false;
-      try { process.kill(holder, 0); alive = true; } catch {}
-      if (!alive) { try { fs.rmSync(openLock, { recursive: true }); } catch {} continue; }
+      if (!holderExists(holder)) { try { fs.rmSync(openLock, { recursive: true }); } catch {} continue; }
       log(`another watcher (pid ${holder}) is opening a session; waiting`);
       sleep(10_000);
       continue;

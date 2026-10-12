@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const WATCH = fileURLToPath(new URL('../contrib/settle-watch.mjs', import.meta.url));
 
@@ -110,4 +111,22 @@ esac`);
   assert.match(start, /--kind codex .* -- -m gpt-x -c model_reasoning_effort=high -c model_reasoning_effort=xhigh -p prof$/,
     'route args follow the effort; always_args are added only for options the route did not set');
   assert.doesNotMatch(start, /--permission-mode|--add-dir|--effort/);
+});
+
+test('a run lock held by a watcher this caller may not signal is not treated as stale', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'settle-watch-lock-'));
+  const tmp = path.join(root, 'tmp'), bin = path.join(root, 'bin'), org = path.join(root, '.org');
+  for (const d of [tmp, bin]) fs.mkdirSync(d);
+  script(path.join(bin, 'herdr'), 'echo \'{"result":{}}\'');
+  const lock = path.join(tmp, `settle-watch-${createHash('sha256').update(path.resolve(org)).digest('hex').slice(0, 12)}-R-1.lock`);
+  // pid 1 always exists and belongs to root, so an ordinary or sandboxed caller gets EPERM for signal 0.
+  fs.writeFileSync(lock, '1');
+  const r = spawnSync(process.execPath, [WATCH, 'R-1', '--org', org, '--cwd', root, '--lane-config', path.join(root, 'lane.json'),
+    '--checklist', path.join(root, 'SETTLE.md')], {
+    encoding: 'utf8', timeout: loadTimeout(10000), env: { ...process.env, TMPDIR: tmp, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /another watcher \(pid 1\) already owns R-1/);
+  assert.equal(fs.readFileSync(lock, 'utf8'), '1');
+  fs.rmSync(root, { recursive: true, force: true });
 });

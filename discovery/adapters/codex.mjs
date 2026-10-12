@@ -10,7 +10,6 @@ import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { freshInteractive, interactiveResume } from '../launch.mjs';
 import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
-import { unattendedHookArguments } from '../../supervisor/unattended.mjs';
 import { spawnNative } from '../session.mjs';
 import { FleetError } from '../../lib/fleet.mjs';
 import { nativeSandboxLaunch, nativeSessionContext, nativeSession } from '../native-sandbox.mjs';
@@ -47,7 +46,7 @@ function passthrough() {
       if (context) {
         context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
         launch = nativeSandboxLaunch({ entryBin: values['entry-bin'], kind: 'codex', binary: values.binary,
-          args: [...native, ...unattendedHookArguments('codex', context, root, launch.env)], context,
+          args: native, context,
           env: { ...launch.env, ORG_DIR: context.org } });
       }
       else console.error('monitor: not a fleet project; starting native Codex without a project sandbox');
@@ -74,7 +73,7 @@ try {
     // -C belongs to entry because changing checkout changes the capability.
     if (native.some((arg) => arg.startsWith('-C') || ['--cd', '--worktree'].includes(arg) || arg.startsWith('--cd='))) throw new Error('select project with adapter --repo; native checkout overrides are not allowed');
     const environment = { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests };
-    const nativeArgs = ['--no-daemon', ...native, ...sessionHookArguments('codex', context, root, environment), '-C', context.workspace, '-c', `developer_instructions=${JSON.stringify(policy)}`];
+    const nativeArgs = ['--no-daemon', ...native, ...sessionHookArguments('codex', context, root), '-C', context.workspace, '-c', `developer_instructions=${JSON.stringify(policy)}`];
     const launch = nativeSandboxLaunch({ entryBin: values['entry-bin'], kind: 'codex', binary: values.binary, args: nativeArgs, context,
       env: environment });
     let child;

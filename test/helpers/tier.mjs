@@ -5,23 +5,19 @@ import { isMain } from '../../lib/cli-help.mjs';
 import { main as suite } from './suite.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const fast = ['test/main-module.test.mjs', 'test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'brain/test/capture.test.mjs', 'lanes/test/routes.test.mjs'];
+const fast = ['test/main-module.test.mjs', 'test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'lanes/test/routes.test.mjs'];
 // Whole-file promotion coverage stays explicit; future files default to release.
 // Mixed files also supply selected fast cases through the promotion scripts.
 const promotion = [
   'acceptance/test/cases.test.mjs',
   'acceptance/test/deadlines.test.mjs',
   'acceptance/test/environment.test.mjs',
-  'acceptance/test/launch.test.mjs',
   'acceptance/test/load.test.mjs',
   'acceptance/test/probe.test.mjs',
   'acceptance/test/results.test.mjs',
   'acceptance/test/security.test.mjs',
   'acceptance/test/signal.test.mjs',
   'acceptance/test/snapshot.test.mjs',
-  'brain/test/capture.test.mjs',
-  'brain/test/projects.test.mjs',
-  'brain/test/steward.test.mjs',
   'discovery/test/confinement.test.mjs',
   'discovery/test/host-suites.test.mjs',
   'discovery/test/entry.test.mjs',
@@ -45,7 +41,6 @@ const promotion = [
   'supervisor/test/autopilot.test.mjs',
   'supervisor/test/chats.test.mjs',
   'supervisor/test/reconcile.test.mjs',
-  'supervisor/test/unattended.test.mjs',
   'test/approvals.test.mjs',
   'test/discernment.test.mjs',
   'test/file-wait.test.mjs',
@@ -66,7 +61,6 @@ const promotion = [
   'test/tidy-tabs.test.mjs',
   'test/tier-plan.test.mjs',
   'test/today.test.mjs',
-  'test/workspace.test.mjs',
   'watch/test/lock.test.mjs'
 ];
 const directories = {

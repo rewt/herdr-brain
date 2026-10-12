@@ -10,6 +10,10 @@ import { waitUntil } from '../load.mjs';
 import { fixture, inventory } from './cutover-fixture.mjs';
 import { switches, capture, restore, callers, retireContrib, switchedFiles, callerFiles, callerInventory, assertNoticeContract } from '../cutover.mjs';
 
+// ENG-64 keeps contrib/settle-watch.mjs: no switch rewrites the supervisor launcher.
+const onlyLauncherCallsContrib = copy => assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs').map(v => path.relative(copy, v.file)),
+  ['scripts/lane/launch-supervisor.mjs']);
+
 test('rollback restores every file byte and executable mode', (t) => {
   const root = fixture(t), original = capture(root);
   for (const [, file] of switches) { fs.writeFileSync(path.join(root, file), 'switched'); fs.chmodSync(path.join(root, file), 0o600); }
@@ -32,14 +36,15 @@ test('contrib cannot retire with an extra executable caller, and scans refuse sy
 
 test('all current edits apply to relocated inventory scripts and refuse premise drift', (t) => {
   const { copy, spec, edits } = inventory(t);
-  assert.equal(Object.keys(edits).length, 13);
+  assert.equal(Object.keys(edits).length, 11);
+  assert.equal(edits.launcher, undefined); assert.equal(edits.continue, undefined);
   assert.ok(edits.dispatch.includes('arm-watch.sh $RUN'));
   assert.ok(edits.arm.includes(path.join(spec.candidate, 'supervisor/arm-watch.sh')));
   assert.ok(edits.arm.includes(`--org '${path.join(path.dirname(copy), '.org')}'`));
   assert.ok(edits.arm.includes(`--to '${spec.target}'`));
   assert.ok(!edits.dispatch.includes('notify-watch.sh'));
   for (const [key, file] of switches) fs.writeFileSync(path.join(copy, file), edits[key]);
-  assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs'), []);
+  onlyLauncherCallsContrib(copy);
   assert.deepEqual(callers(copy, 'notify-watch.sh'), []);
   assert.throws(() => switchedFiles(spec), /premise drift/);
 });
@@ -55,7 +60,7 @@ test('current background and exact disown cutover preserves all switches and rol
   const originals = capture(copy);
   assert.deepEqual(switchedFiles(spec), edits, 'both supported clauses produce the same complete cutover');
   for (const [key, rel] of switches) fs.writeFileSync(path.join(copy, rel), edits[key]);
-  assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs'), []);
+  onlyLauncherCallsContrib(copy);
   assert.deepEqual(callers(copy, 'notify-watch.sh'), []);
   restore(copy, originals);
   assert.deepEqual(capture(copy), originals, 'modern background/disown bytes and executable modes restore exactly');
@@ -144,7 +149,6 @@ test('independently switched exact clauses preserve the same cutover end state',
   // Apply one complete line/block from the proposed output, leaving the rest
   // of each input legacy. This models individual edits by the adopting project.
   const lines = [
-    ['launcher', 'contrib/settle-watch.mjs', 'supervisor/open-session.mjs'],
     ['dispatch', 'env -u HERDR_PANE_ID nohup', 'env -u HERDR_PANE_ID -u HERDR_TAB_ID'],
     ['dispatch', "sed -n 's/.*notify-watch", "sed -n 's/.*watch"],
     ['dispatch', 'org set $RUN agent=$AG', 'dispatch/record-worker.mjs'],
@@ -193,7 +197,7 @@ test('current live checkout accepts every cutover premise and restores its snaps
   assert.equal(Object.keys(edits).length, switches.length);
   assertNoticeContract(edits.protocol, edits.notices);
   for (const [key, file] of switches) fs.writeFileSync(path.join(copy, file), edits[key]);
-  assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs'), []);
+  onlyLauncherCallsContrib(copy);
   assert.deepEqual(callers(copy, 'notify-watch.sh'), []);
   restore(copy, originals);
   assert.deepEqual(capture(copy), originals);
@@ -392,7 +396,7 @@ test('production notice contract accepts rewritten current documents and rejects
     assert.ok(grammar.includes(clause));
     assert.throws(() => assertNoticeContract(protocol, grammar.replaceAll(clause, 'Janitor')), { code: 'ERR_ASSERTION' }, clause);
   }
-  for (const clause of ['Retain the original [org-report]', 'retry the same settle.sh']) {
+  for (const clause of ['arm-watch delivers only', 'launch-supervisor still opens settle and executive sessions through contrib/settle-watch.mjs']) {
     assert.ok(protocol.includes(clause));
     assert.throws(() => assertNoticeContract(protocol.replaceAll(clause, ''), grammar), { code: 'ERR_ASSERTION' }, clause);
   }

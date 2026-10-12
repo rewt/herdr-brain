@@ -52,7 +52,8 @@ for (const definition of [cases.switches, cases.retirement]) {
     }, load);
     const results = definition.prerequisites.map(key => ({ key, status: 'PASS' }));
     await runCase(results, definition, () => {
-      assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs'), []);
+      // ENG-64 keeps the launcher on contrib/settle-watch.mjs; no switch rewrites it.
+      assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs').map(v => path.relative(copy, v.file)), ['scripts/lane/launch-supervisor.mjs']);
       const invoke = (file, args = []) => command('/usr/bin/sandbox-exec', ['-p', '(version 1) (allow default)', '/bin/zsh', '-f', path.join(copy, file), ...args], {
         cwd: copy, env: { ...process.env, ORG_DIR: org, PATH: `${bin}:${process.env.PATH}`, HERDR_PANE_ID: `${spec.workspace}:p1` },
         timeout: 60_000, encoding: 'utf8',
@@ -65,13 +66,11 @@ for (const definition of [cases.switches, cases.retirement]) {
         assert.equal(tidy.stdout.split('new-log').length - 1, 2);
         restore(copy, originals); assert.deepEqual(capture(copy), originals);
       } else {
-        const trap = path.join(copy, 'scripts/lane/trap.py'); fs.writeFileSync(trap, 'node contrib/settle-watch.mjs\n');
-        assert.throws(() => retireContrib(copy, compat), /retirement refused/); fs.unlinkSync(trap);
         const saved = fs.readFileSync(compat), mode = fs.statSync(compat).mode & 0o777;
         try {
-          retireContrib(copy, compat); assert.ok(!fs.existsSync(compat));
+          assert.throws(() => retireContrib(copy, compat), /retirement refused/);
           const tidy = invoke('.lane/supervisor/tidy-tabs.sh', ['--dry-run']); assert.equal(tidy.status, 0, tidy.stderr);
-        } finally { fs.writeFileSync(compat, saved, { mode }); restore(copy, originals); }
+        } finally { restore(copy, originals); }
         assert.deepEqual(fs.readFileSync(compat), saved); assert.equal(fs.statSync(compat).mode & 0o777, mode);
         assert.ok(callers(copy, 'contrib/settle-watch.mjs').length);
       }

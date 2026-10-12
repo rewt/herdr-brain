@@ -45,14 +45,6 @@ export function relocate(text, { live, home, scratchHome, copy, candidate, root,
   return text.replace(pattern, value => replacements.get(value) ?? root);
 }
 
-// ENG-64's supervisor entry switch, exercised only on audited scratch copies.
-// Keep relocation separate: the first invocation still tests the live caller.
-export function workspaceIdentityCutover(text, candidate) {
-  const before = JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs'));
-  if (text.split(before).length !== 2) throw new Error('required supervisor entry cutover did not match exactly once');
-  return text.replace(before, JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs')));
-}
-
 // Re-run before *every* execution, including transitive imports/shell callers.
 // Unknown path spellings fail closed. The OS write boundary is independent of
 // this textual check, so a dynamically derived ORG_DIR cannot write live state.

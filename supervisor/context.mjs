@@ -12,29 +12,21 @@ import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { candidateRows } from '../lib/release-record.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
 import { releaseSettings } from '../release/config.mjs';
-import { readMemory, memoryReason, processUsage } from '../lib/memory.mjs';
+import { readMemory, memoryReason } from '../lib/memory.mjs';
 import { queueJobs } from '../promote/promote.mjs';
-import { projectFootprint, formatBytes } from './footprint.mjs';
 
 export const receiptDirectory = (org, identity) => path.join(org, 'supervisor', createHash('sha256').update(identity).digest('hex').slice(0, 20));
 const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const line = (value, length = 160) => sanitizeTerminal(String(value ?? '')).replace(/\s+/g, ' ').trim().slice(0, length);
 
-export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env, memory = readMemory(), processes = processUsage(), readProcess } = {}) {
-  // Only process names and resource figures enter model context or brief JSON.
-  // Project explicitly, so extra diagnostic fields such as argv stay out.
-  const processRows = rows => rows.map(p => ({ pid: p.pid, ppid: p.ppid,
-    rss_bytes: p.rss_bytes, cpu_percent: p.cpu_percent,
-    command: path.basename(String(p.command ?? '')) }));
-  processes = { by_memory: processRows(processes.by_memory), by_cpu: processRows(processes.by_cpu),
-    ...(processes.warning ? { warning: processes.warning } : {}) };
+export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env, memory = readMemory(), readProcess } = {}) {
   const project = gitProject(cwd);
   org = org ? path.resolve(org) : findOrgDir({ cwd, env });
   if (!org) throw new Error('no record discovered; enter through discovery first');
   org = fs.realpathSync(org);
   const { events, tornTail } = loadEvents(org), state = fold(events);
   // Lessons are record knowledge, independent of run checkout bindings and
-  // mechanical receipts. Keep this section separate from resource/footprint data.
+  // mechanical receipts. Keep this section separate from host memory data.
   const lessons = { active: lessonsJson(state), proposed: lessonsJson(state, { state: 'proposed' }).length };
   const through = events.at(-1)?.seq ?? 0;
   const directory = receiptDirectory(org, project.identity);
@@ -155,8 +147,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
     lessons, goals, running, reports, waiting, held, ready, decisions, next, recovery,
     approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release, housekeeping,
-    footprint: projectFootprint(project, org),
-    host: { memory, reason: memoryReason(memory), processes } };
+    host: { memory, reason: memoryReason(memory) } };
 }
 
 export function renderColdStart(doc, { limit = 6 } = {}) {
@@ -164,7 +155,6 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
   if (doc.housekeeping) out.push(`Housekeeping: ${doc.housekeeping.process}${doc.housekeeping.pid ? ` (pid ${doc.housekeeping.pid})` : ''}; enabled=${doc.housekeeping.config?.enabled ?? '?'} resume=${doc.housekeeping.config?.resume ?? '?'}${doc.housekeeping.configError ? `; ${line(doc.housekeeping.configError)}` : ''}${doc.housekeeping.warnings.length ? `; ${line(doc.housekeeping.warnings.join('; '))}` : ''}`);
   if (doc.project.stopped) out.push('STOP exists: inspect only; do not dispatch, settle or promote.');
   if (doc.project.torn_tail) out.push('Record has an incomplete final event; inspect before writes.');
-  for (const area of doc.footprint ?? []) out.push(`Storage advisory: ${area.area} ${formatBytes(area.bytes)} on disk (${formatBytes(area.apparent_bytes)} apparent)${area.warning ? `; ${line(area.warning)}` : ''}.`);
   const section = (name, rows, format) => {
     out.push(`${name} (${rows.length}):`);
     if (!rows.length) out.push('  none');
@@ -174,15 +164,11 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
     }
   };
   if (doc.host) {
-    const { memory, reason, processes } = doc.host;
+    const { memory, reason } = doc.host;
     const mib = value => value == null ? 'unknown' : `${Math.floor(value / 1024 ** 2)} MiB`;
     out.push(`Host memory: available ${mib(memory.available)} / ${mib(memory.total)}; swap ${mib(memory.swap_used)}; ${reason ?? 'no measured pressure'}.`);
     if (reason) out.push('Wait before dispatch, review, promotion or release; recheck when memory clears.');
     if (memory.warning) out.push(`Memory probe advisory: ${line(memory.warning)}`);
-    if (processes.warning) out.push(`Process probe advisory: ${line(processes.warning)}`);
-    const processLine = p => `PID ${p.pid} parent ${p.ppid} · RSS ${mib(p.rss_bytes)} · CPU ${p.cpu_percent}% · ${line(p.command, 180)}`;
-    section('Largest memory consumers (read-only host evidence)', processes.by_memory, processLine);
-    section('Largest CPU consumers (read-only host evidence)', processes.by_cpu, processLine);
   }
   if (doc.lessons) {
     section('Lessons', doc.lessons.active, l => `${l.id} [${l.scope}] ${renderLessonClaim(l.text)} · evidence ${line(l.evidence.map(e => e.kind === 'event' ? `event:${e.seq}` : e.id).join(', '), 100)}`);

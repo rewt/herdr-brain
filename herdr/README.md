@@ -4,7 +4,10 @@ The release is independent of development: `release.sh build TAG` archives a Git
 tag, renames it to its final path and makes it read-only. The product has no npm
 dependencies. Building never installs entry adapters from `.partial`.
 `release.sh activate TAG` installs entry from the final release, manages the
-record/org/lane launchers, switches `current` and reloads an existing Brain service.
+record/org/lane launchers and switches `current`. Releases no longer manage the
+Brain LaunchAgent (Brain `watch` was removed on 2026-10-12): activation refuses
+while `~/Library/LaunchAgents/com.rewt.herdr-brain.plist` exists, naming the
+`launchctl bootout` and `rm` to run once, and `restore` never reinstalls it.
 The Herdr plugin was removed on 2026-10-12: activating a release without
 `herdr-plugin.toml` unlinks an older plugin registration, and rolling back to an
 older release links its plugin again. Development merges do not change that release.

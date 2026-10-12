@@ -10,8 +10,8 @@ import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
 import { lessonsEntryCase } from './lessons.mjs';
-import { auditCopies, relocate, within, copiedSandbox, workspaceIdentityCutover } from './security.mjs';
-import { HarnessLimit, Pending, commandFailure, withCommandContext, requirePrerequisite, requireSuccessfulChecks } from './limits.mjs';
+import { auditCopies, relocate, within, copiedSandbox } from './security.mjs';
+import { HarnessLimit, Pending, commandFailure, requirePrerequisite, requireSuccessfulChecks } from './limits.mjs';
 import { installSignalCleanup, removeCredentials, credentialResidue } from './signal-cleanup.mjs';
 import { stopProducers, awaitProducers } from './producers.mjs';
 import { safeGitArgs } from './verify.mjs';
@@ -20,7 +20,6 @@ import { liveSocket } from './probe.mjs';
 import { cases, cutoverChecks, runCase } from './cases.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
 import { createOwnedTempRoot, createLiveSessionTemp } from './temp.mjs';
-import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './launch.mjs';
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory, assertNoticeContract } from './cutover.mjs';
 import { settleCase } from './settle.mjs';
 import { supervisorCase } from './supervisor.mjs';
@@ -647,7 +646,8 @@ try {
   await test(cases.copy, () => {
     requirePrerequisite(results, cases.fixture.key);
     const inventory = copyExistingProject({ live, copy, backup });
-    for (const rel of [...switches.map(([, file]) => file), '.lane/supervisor/apply-settle.sh'])
+    for (const rel of [...switches.map(([, file]) => file), '.lane/supervisor/apply-settle.sh',
+      'scripts/lane/launch-supervisor.mjs', '.lane/supervisor/continue.sh'])
       assert.ok(inventory.files.some(file => file.file === rel), `required cutover file missing: ${rel}`);
     write(path.join(evidence, 'live-copy-manifest.json'), JSON.stringify(inventory.files, null, 2));
     write(path.join(evidence, 'historical-callers.json'), JSON.stringify(inventory.historical, null, 2));
@@ -667,7 +667,6 @@ try {
     return 'live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)';
   });
   const existingReady = () => { requirePrerequisite(results, cases.copy.key); requirePrerequisite(results, cases.fixture.key); };
-  let existingWorkspace;
   await test(cases.wrappers, async () => {
     existingReady(); requireCandidate('contrib/settle-watch.mjs');
     initRepo(copy);
@@ -677,7 +676,6 @@ try {
     const output = node(path.join(candidate, 'bin/org.mjs'), ['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low', '--workspace', copy, '--report', report], { extra: { ORG_DIR: org } }).stdout;
     const id = output.match(/^(R-\d+)/)[1]; node(path.join(candidate, 'bin/org.mjs'), ['set', id, `agent=${supervisor.name}`], { extra: { ORG_DIR: org } });
     const existingWs = h('workspace', 'create', '--cwd', copy, '--label', 'acceptance-existing-project', '--no-focus');
-    existingWorkspace = existingWs.workspace.workspace_id;
     const cwdProbes = [], cwdStart = Date.now();
     try {
       await until(() => {
@@ -728,36 +726,11 @@ try {
       for (const r of [executive, settle]) assert.equal(r.status, 0, r.stdout + r.stderr);
     }
     assert.equal(routing.status, 0, routing.stdout + routing.stderr);
-    requireCandidate('supervisor/open-session.mjs');
-    const launcher = path.join(copy, 'scripts/lane/launch-supervisor.mjs');
-    const before = fs.readFileSync(launcher), mode = fs.statSync(launcher).mode & 0o777;
-    const switched = workspaceIdentityCutover(before.toString(), candidate);
-    const checks = { metadataReady, legacy: { executive: executive.status, settle: settle.status },
-      beforeSha256: crypto.createHash('sha256').update(before).digest('hex'),
-      switchedSha256: crypto.createHash('sha256').update(switched).digest('hex'),
-      switch: 'only supervisor entry target: contrib/settle-watch.mjs -> supervisor/open-session.mjs' };
-    try {
-      write(launcher, switched); fs.chmodSync(launcher, mode);
-      // Rebuild route invocations after the real target switch. Flags and route
-      // declarations remain the copied live bytes, and every call is audited.
-      runCopy(process.execPath, [probe], { extra: { ORG_DIR: org } });
-      for (const [name, args] of [['continue', [path.join(copy, '.lane/supervisor/continue.sh'), ...isolation]],
-        ['arm-watch', [path.join(copy, '.lane/supervisor/arm-watch.sh'), id, ...isolation]]]) {
-        const r = runCopy('/bin/sh', args, { cwd: copy, extra: { ORG_DIR: org }, ok: false });
-        checks[name] = r.status;
-        if (r.status !== 0) throw commandFailure(`${name}: ${r.stdout + r.stderr}`);
-        assert.ok(r.stdout.includes(`--workspace ${existingWs.workspace.workspace_id} --cwd ${copy}`), 'native lookup selected the created background workspace');
-      }
-      const switchedRouting = runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
-      checks.routing = switchedRouting.status;
-      if (switchedRouting.status !== 0) throw commandFailure(switchedRouting.stdout + switchedRouting.stderr);
-    } finally {
-      fs.writeFileSync(launcher, before); fs.chmodSync(launcher, mode);
-      assert.deepEqual(fs.readFileSync(launcher), before); assert.equal(fs.statSync(launcher).mode & 0o777, mode);
-      checks.restored = true;
-      write(path.join(evidence, 'workspace-identity-cutover.json'), JSON.stringify(checks, null, 2));
-    }
-    return 'background identity resolved by native Git lookup; both copied wrappers and routing tests pass after the scratch-only supervisor entry switch; original bytes/mode restored';
+    write(path.join(evidence, 'existing-wrappers.json'), JSON.stringify({ metadataReady,
+      legacy: { executive: executive.status, settle: settle.status }, routing: routing.status }, null, 2));
+    // The launcher keeps contrib/settle-watch.mjs (ENG-64); its split replacement was removed.
+    return metadataReady ? 'routing suite and both copied wrappers pass through contrib/settle-watch.mjs'
+      : 'routing suite passes; frozen contrib wrappers expose the background identity gap';
   });
   await test(cases.path, () => {
     existingReady();
@@ -782,7 +755,7 @@ try {
   let cutover, cutoverCanary;
   const switchCase = async (check, checks) => {
     existingReady();
-    for (const file of ['watch/watch.mjs', 'supervisor/open-session.mjs']) assert.ok(present(file), `cutover candidate lacks ${file}`);
+    for (const file of ['watch/watch.mjs', 'supervisor/arm-watch.sh', 'dispatch/record-worker.mjs']) assert.ok(present(file), `cutover candidate lacks ${file}`);
     const originals = capture(copy);
     const target = `cutover-${process.pid}`;
     // Stable name is scratch-local; never seize a live supervisor-opus name.
@@ -818,46 +791,6 @@ try {
       runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org } });
       execute('.lane/supervisor/continue.sh', isolation);
       return 'actual copied routing suite and executive wrapper dry run';
-    });
-    await check(cutoverChecks.retry, () => {
-      const busy = `exec-busy-${process.pid}`;
-      h('agent', 'rename', pane, busy);
-      h('agent', 'prompt', busy, 'acceptance-state working');
-      const native = h('worktree', 'list', '--cwd', copy);
-      const destinations = native.worktrees.filter((v) => v.path === copy && v.is_linked_worktree === false);
-      assert.equal(destinations.length, 1, 'launcher must resolve one canonical destination');
-      const workspace = destinations[0].open_workspace_id;
-      assert.equal(workspace, existingWorkspace, 'launcher destination must match existing-project creation receipt');
-      assert.notEqual(workspace, supervisor.workspace, 'existing and configured fixtures must be distinct');
-      const rows = (file) => fs.existsSync(file) ? read(file).trim().split('\n').filter(Boolean).map(JSON.parse) : [];
-      const snapshot = () => ({ workspace,
-        tabs: h('tab', 'list', '--workspace', workspace).tabs,
-        panes: h('pane', 'list', '--workspace', workspace).panes,
-        agents: h('agent', 'list').agents,
-        creations: launchCreations(rows(path.join(root, 'herdr.jsonl'))),
-        prompts: rows(path.join(root, 'worker-input.jsonl')),
-      });
-      const receipt = { nativeDestination: native, configuredWorkspace: supervisor.workspace };
-      try {
-        receipt.before = snapshot();
-        const refusalAllowance = responseAllowance(10_000, load);
-        const began = Date.now();
-        const options = ['--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
-        receipt.refused = execute('.lane/supervisor/continue.sh', options, { ok: false, timeout: 10_000 });
-        assert.notEqual(receipt.refused.status, 0); assert.ok(Date.now() - began < refusalAllowance);
-        assert.ok(receipt.refused.stdout.includes(busy)); assert.match(receipt.refused.stdout, /retry.*stops/);
-        receipt.afterRefusal = snapshot();
-        assertLaunchRefused(receipt.before, receipt.afterRefusal);
-        h('agent', 'prompt', busy, 'acceptance-state idle');
-        h('agent', 'wait', busy, '--until', 'idle', '--until', 'done', '--timeout', String(responseAllowance(10_000, load)));
-        h('agent', 'rename', pane, target);
-        receipt.beforeRetry = snapshot();
-        receipt.retried = withCommandContext('busy refusal passed; same-request retry failed',
-          () => execute('.lane/supervisor/continue.sh', options, { timeout: 90_000 }));
-        receipt.afterRetry = snapshot();
-        receipt.session = assertLaunchPrompted(receipt.beforeRetry, receipt.afterRetry);
-      } finally { write(path.join(evidence, 'cutover-busy-retry.json'), JSON.stringify(receipt, null, 2)); }
-      return 'actual destination unchanged on refusal with zero creation/prompt receipts; retry created exactly one registered, prompted executive session';
     });
     async function legacyCanary(stage, mode = stage === 'switched' ? 'held' : 'done') {
       const topic = `cutover-${stage}`;
@@ -1027,7 +960,7 @@ try {
       runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org } });
       execute('.lane/supervisor/continue.sh', isolation);
       if (cutoverCanary) execute('.lane/supervisor/arm-watch.sh', [cutoverCanary.run, ...isolation]);
-      return 'all thirteen exact scratch baselines restored; actual legacy suite and both wrappers executed';
+      return `all ${switches.length} exact scratch baselines restored; actual legacy suite and both wrappers executed`;
     });
     await check(cutoverChecks.legacy, async () => {
       const legacy = await legacyCanary('legacy');
@@ -1038,27 +971,26 @@ try {
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
     return `${switches.length} switches applied, executed and restored; detailed receipts in cutover-switches.json; process-based session cap not exercised (offline fixture coverage only)`;
   };
+  // ENG-64 keeps contrib/settle-watch.mjs while bch-cloak's launcher calls it:
+  // the switched callers, plus an omitted non-executable backup, refuse removal.
   const retirementCase = () => {
     assert.ok(cutover, 'passed switch case has no fixture receipt');
     const compat = path.join(candidate, 'contrib/settle-watch.mjs');
-    assert.ok(fs.existsSync(compat), 'candidate compatibility entry missing before retirement');
+    assert.ok(fs.existsSync(compat), 'candidate compatibility entry missing');
     const saved = fs.readFileSync(compat), mode = fs.statSync(compat).mode & 0o777;
-    // Prove a live copied caller prevents removal, including an omitted caller.
-    const trap = path.join(copy, '.lane/supervisor/nested/retirement-probe.py.bak-20261001-copy');
-    const wrapper = path.join(copy, '.lane/supervisor/nested/retirement-probe.sh');
-    write(trap, `import subprocess\nsubprocess.run(['node', ${JSON.stringify(compat)}, '--open'])\n`); fs.chmodSync(trap, 0o644);
-    write(wrapper, `#!/bin/sh\npython3 ${quote(trap)}\n`); fs.chmodSync(wrapper, 0o755);
-    assert.ok(callerInventory(copy).active.includes(trap), 'referenced non-executable backup must stay active');
-    assert.throws(() => retireContrib(copy, compat), /retirement refused/);
-    assert.deepEqual(fs.readFileSync(compat), saved); fs.unlinkSync(wrapper); fs.unlinkSync(trap);
-    assert.ok(cutoverCanary, 'final retirement requires a delivered switched canary');
     try {
-      retireContrib(copy, compat); assert.ok(!fs.existsSync(compat));
+      assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs').map(v => path.relative(copy, v.file)), ['scripts/lane/launch-supervisor.mjs']);
+      assert.throws(() => retireContrib(copy, compat), /retirement refused/);
+      const trap = path.join(copy, '.lane/supervisor/nested/retirement-probe.py.bak-20261001-copy');
+      write(trap, `import subprocess\nsubprocess.run(['node', ${JSON.stringify(compat)}, '--open'])\n`); fs.chmodSync(trap, 0o644);
+      const wrapper = path.join(copy, '.lane/supervisor/nested/retirement-probe.sh');
+      write(wrapper, `#!/bin/sh\npython3 ${quote(trap)}\n`); fs.chmodSync(wrapper, 0o755);
+      assert.ok(callerInventory(copy).active.includes(trap), 'referenced non-executable backup must stay active');
+      assert.throws(() => retireContrib(copy, compat), /retirement refused/);
       runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: cutover.org } });
-    } finally { write(compat, saved); fs.chmodSync(compat, mode); restore(copy, cutover.originals); }
+    } finally { fs.rmSync(path.join(copy, '.lane/supervisor/nested'), { recursive: true, force: true }); restore(copy, cutover.originals); }
     assert.deepEqual(fs.readFileSync(compat), saved); assert.equal(fs.statSync(compat).mode & 0o777, mode);
-    assert.ok(callers(copy, 'contrib/settle-watch.mjs').length, 'rollback must restore the old caller after the blob');
-    return 'negative caller probe refused; zero-caller retirement executed; split launcher tests ran without contrib; blob restored before all legacy callers';
+    return 'retirement refused while the copied launcher calls contrib/settle-watch.mjs, including an omitted backup caller; blob and baselines unchanged';
   };
   await runCutoverCases({ results, test, switches: switchCase, retirement: retirementCase, scratchRoots });
   await test(cases.lessons, () => lessonsEntryCase({ opt, root, scratchRoots, discoveryRoots, candidate, evidence, run, node, initRepo, h, until, write, read }));

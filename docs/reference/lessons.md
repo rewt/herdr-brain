@@ -193,4 +193,4 @@ supervisor cold starts consume active lessons through ENG-170's integration;
 distillation does not bypass those consumers or make proposals active at entry.
 The cursor and latest pending digest stay in Brain's own bounded local state,
 not the record or a committed digest archive. See [Brain's command and recovery
-notes](../../brain/README.md#record-signal-digest-and-lesson-distillation).
+notes](../../brain/README.md).

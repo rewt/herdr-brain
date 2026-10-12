@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import { quote } from '../lib/shell.mjs';
 import { rememberSupervisor } from './session-binding.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
-import { unattendedHookArguments, supervisorSessionKind } from './unattended.mjs';
 // A native utility/headless invocation can inherit a supervisor's shell and
 // pane. Suppress entry for that child without revoking the interactive receipt.
 export function passthroughEnvironment(env = process.env, { interactiveResume = false } = {}) {
@@ -21,30 +20,25 @@ export function sessionEnvironment(context, root, env = process.env) {
     MONITOR_SUPERVISOR_ORG: context.role === 'supervisor' ? context.org : '',
     MONITOR_SUPERVISOR_AGENT: context.role === 'supervisor' ? (context.agent || env.MONITOR_SUPERVISOR_AGENT || env.HERDR_AGENT_NAME || '') : context.role === 'chat' ? (env.MONITOR_SUPERVISOR_AGENT || '') : '',
     MONITOR_SUPERVISOR_ENTRY: context.role === 'supervisor' ? path.join(root, 'supervisor/session-start.mjs') : '' };
-  result.MONITOR_SESSION_KIND = supervisorSessionKind(context, result);
   try { rememberSupervisor(context, result); }
   catch (e) { process.stderr.write(sanitizeTerminal(`Supervisor entry binding: ${e.message}; session may continue.\n`)); }
   return result;
 }
-export function sessionHookArguments(kind, context, root, env = process.env) {
-  const unattended = unattendedHookArguments(kind, context, root, env);
-  if (context.role !== 'supervisor') return unattended;
+// Only a supervisor gets the SessionStart entry hook, and only when the
+// project's own native settings do not already register it.
+export function sessionHookArguments(kind, context, root) {
+  if (context.role !== 'supervisor') return [];
   const settings = path.join(context.canonical, kind === 'claude' ? '.claude/settings.json' : '.codex/hooks.json');
   try {
     const groups = JSON.parse(fs.readFileSync(settings, 'utf8')).hooks?.SessionStart ?? [];
     if (['startup', 'resume', 'clear', 'compact'].every(source => groups.some(group =>
       (!group.matcher || new RegExp(group.matcher).test(source)) && group.hooks?.some(hook =>
-        hook.type === 'command' && hook.command?.includes('supervisor/session-start.mjs'))))) return unattended;
+        hook.type === 'command' && hook.command?.includes('supervisor/session-start.mjs'))))) return [];
   } catch (e) {
     if (e.code !== 'ENOENT') process.stderr.write(sanitizeTerminal(`Supervisor entry project hooks: ${e.message}; using adapter hook.\n`));
   }
   const command = `${quote(process.execPath)} ${quote(path.join(root, 'supervisor/session-start.mjs'))}`;
   const matcher = '^(startup|resume|clear|compact)$';
-  if (kind === 'claude') {
-    // Compose every adapter event here so even native fallback receives one flag.
-    const hooks = { ...JSON.parse(unattended[1]).hooks,
-      SessionStart: [{ matcher, hooks: [{ type: 'command', command, timeout: 30 }] }] };
-    return ['--settings', JSON.stringify({ hooks })];
-  }
-  return ['-c', `hooks.SessionStart=[{matcher=${JSON.stringify(matcher)},hooks=[{type="command",command=${JSON.stringify(command)},timeout=30}]}]`, ...unattended];
+  if (kind === 'claude') return ['--settings', JSON.stringify({ hooks: { SessionStart: [{ matcher, hooks: [{ type: 'command', command, timeout: 30 }] }] } })];
+  return ['-c', `hooks.SessionStart=[{matcher=${JSON.stringify(matcher)},hooks=[{type="command",command=${JSON.stringify(command)},timeout=30}]}]`];
 }

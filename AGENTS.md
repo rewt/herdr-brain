@@ -4,9 +4,9 @@
   derived status, `lib/report.mjs` report parsing, `lib/render.mjs` every view and brief. No dependencies.
 - The product has no npm dependencies. The console and MCP adapter were removed (archived at tag
   `archive/console-20261012` and in Git history); do not reintroduce a dependency-bearing module.
-- `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
-  and never writes `events.jsonl`. `supervisor/` supplies the read-only cold start and generic protocol,
-  foreground notice/queue glue, and legacy settle launchers. Workers never invoke its cycle mutations.
+- `brain/` is the foreground, model-free record signal digest for lesson distillation; it has no
+  dependencies, keeps its own state and never writes `events.jsonl`. `supervisor/` supplies the read-only
+  cold start and generic protocol and foreground notice/queue glue. Workers never invoke its cycle mutations.
 - Tests run once, before code merges into main: the promotion batch runs the merge checks, like CI on a
   pull request. Release preparation runs the full offline suites once per candidate. In a lane, ship
   the change with the tests that prove it and run them

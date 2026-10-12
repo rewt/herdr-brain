@@ -1,7 +1,7 @@
 import { loadTimeout } from '../lib/deadline.mjs';
 // herdr/release.sh: releases are immutable copies of tags, switched by one link, and the
-// launchers and Brain service can always go back to the dev checkout. Offline: a scratch
-// repository, no Herdr, no npm, and launchctl replaced by `true`.
+// launchers can always go back to the dev checkout. Offline: a scratch repository, no
+// Herdr, no npm and no launchd.
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -36,7 +36,6 @@ function scratch({ plugin = [] } = {}) {
   const version = v => {
     write('bin/org.mjs', `console.log('org ${v}');\n`);
     write('lanes/lane.mjs', `console.log('lane ${v}');\n`);
-    write('brain/bin/brain.mjs', '');
     if (plugin.includes(v)) write('herdr-plugin.toml', LEGACY_MANIFEST);
     else fs.rmSync(path.join(repo, 'herdr-plugin.toml'), { force: true });
     git('add', '-A'); git('commit', '-qm', v); git('tag', v);
@@ -46,26 +45,17 @@ function scratch({ plugin = [] } = {}) {
   const userHome = path.join(root, 'user'); fs.mkdirSync(userHome);
   fs.mkdirSync(bin);
   fs.symlinkSync('/dev/checkout/bin/org.mjs', path.join(bin, 'org'));
-  fs.writeFileSync(plist, `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>Label</key><string>com.rewt.herdr-brain</string>
-<key>ProgramArguments</key><array><string>/node</string><string>/dev/checkout/brain/bin/brain.mjs</string><string>watch</string></array>
-<key>WorkingDirectory</key><string>/dev/checkout/brain</string></dict></plist>\n`);
-  // A fake launchctl: nothing is ever loaded (print fails), and the first bootstrap
-  // fails the way launchd does when the old service is still unloading.
-  const launchctl = path.join(root, 'launchctl'), calls = path.join(root, 'launchctl.calls');
-  fs.writeFileSync(launchctl, `#!/bin/sh\necho "$*" >> ${calls}\n[ "$1" = print ] && exit 1\nif [ "$1" = bootstrap ] && [ ! -e ${root}/loaded-once ]; then touch ${root}/loaded-once; echo "Bootstrap failed: 5: Input/output error" >&2; exit 5; fi\nexit 0\n`, { mode: 0o755 });
+  // The retired Brain LaunchAgent lives here, never at the operator's real plist.
   const env = releaseEnvironment(process.env, { HOME: userHome, ZDOTDIR: userHome, CODEX_HOME: path.join(userHome, '.codex'), CLAUDE_CONFIG_DIR: path.join(userHome, '.claude'),
     ORG_DIR: '', ORG_ACTOR: path.basename(root),
     HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist, HERDR_MONITOR_ENTRY_BIN: path.join(home, 'entry/bin'),
-    RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1', RELEASE_LAUNCHCTL: launchctl });
+    RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1' });
   const runWith = (extra, ...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(20000) });
   const run = (...a) => runWith({}, ...a);
   const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8', env, timeout: loadTimeout(5000) }).trim();
   const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8', env, timeout: loadTimeout(5000) }).trim();
   const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root], { timeout: loadTimeout(5000) }); fs.rmSync(root, { recursive: true, force: true }); };
-  const launchctlCalls = () => fs.readFileSync(calls, 'utf8').trim().split('\n');
-  return { root, home, bin, plist, run, runWith, org, record, cleanup, launchctlCalls };
+  return { root, home, bin, plist, run, runWith, org, record, cleanup };
 }
 
 test('a release is a read-only copy of a tag, never rebuilt in place, and only from a tag', { timeout: 30000 }, () => {
@@ -81,7 +71,7 @@ test('a release is a read-only copy of a tag, never rebuilt in place, and only f
   } finally { s.cleanup(); }
 });
 
-test('activate moves the launchers and the Brain service onto current; rollback and restore undo it', { timeout: 30000 }, () => {
+test('activate moves the launchers onto current; rollback and restore undo it', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     s.run('build', 't1'); s.run('build', 't2');
@@ -90,10 +80,6 @@ test('activate moves the launchers and the Brain service onto current; rollback 
     assert.equal(fs.readlinkSync(path.join(s.bin, 'org')), path.join(s.home, 'current/bin/org.mjs'));
     assert.equal(s.record(), 'org t1');
     assert.equal(s.org(), 'org t1');
-    const plist = fs.readFileSync(s.plist, 'utf8');
-    assert.match(plist, new RegExp(`${s.home}/current/brain/bin/brain.mjs`));
-    assert.match(plist, /<string>\/node<\/string>/, 'the node path and arguments are kept');
-    assert.deepEqual(s.launchctlCalls().map(c => c.split(' ')[0]), ['bootout', 'print', 'bootstrap', 'bootstrap'], 'a failed load is retried');
     s.run('activate', 't2');
     assert.equal(s.org(), 'org t2');
     assert.equal(s.run('rollback').status, 0);
@@ -101,7 +87,27 @@ test('activate moves the launchers and the Brain service onto current; rollback 
     assert.equal(s.run('restore').status, 0);
     assert.equal(fs.existsSync(path.join(s.bin, 'record')), false, 'a new launcher is removed on restore');
     assert.equal(fs.readlinkSync(path.join(s.bin, 'org')), '/dev/checkout/bin/org.mjs', 'back to the dev checkout');
-    assert.match(fs.readFileSync(s.plist, 'utf8'), /\/dev\/checkout\/brain\/bin\/brain.mjs/);
+  } finally { s.cleanup(); }
+});
+
+test('activation refuses while the retired Brain LaunchAgent exists and never rewrites or restores it', { timeout: 30000 }, () => {
+  const s = scratch();
+  try {
+    s.run('build', 't1');
+    const plist = '<plist><dict><key>ProgramArguments</key><array><string>/node</string><string>/x/current/brain/bin/brain.mjs</string><string>watch</string></array></dict></plist>\n';
+    fs.writeFileSync(s.plist, plist);
+    const refused = s.run('activate', 't1');
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /still starts Brain watch.*launchctl bootout gui\/\d+\/com\.rewt\.herdr-brain; rm /);
+    assert.equal(fs.existsSync(path.join(s.home, 'current')), false, 'nothing switched');
+    assert.equal(fs.existsSync(path.join(s.home, 'before')), false, 'nothing remembered');
+    assert.equal(s.runWith({ RELEASE_NO_LAUNCHD: '1' }, 'activate', 't1').status, 0, 'scratch installs may skip the check');
+    assert.equal(fs.readFileSync(s.plist, 'utf8'), plist, 'activation never rewrites the plist');
+    fs.rmSync(s.plist);
+    fs.writeFileSync(path.join(s.home, 'before/plist'), plist); // Saved by an older release.sh.
+    assert.equal(s.run('activate', 't1').status, 0);
+    assert.equal(s.run('restore').status, 0);
+    assert.equal(fs.existsSync(s.plist), false, 'restore never brings the Brain service back');
   } finally { s.cleanup(); }
 });
 
@@ -113,7 +119,7 @@ test('an existing before directory learns that the new record launcher was absen
     fs.writeFileSync(path.join(before, 'org'), '/dev/checkout/bin/org.mjs\n');
     fs.writeFileSync(path.join(before, 'lane'), '/dev/checkout/lanes/lane.mjs\n');
     fs.symlinkSync('/dev/checkout/lanes/lane.mjs', path.join(s.bin, 'lane'));
-    fs.copyFileSync(s.plist, path.join(before, 'plist'));
+    fs.writeFileSync(path.join(before, 'plist'), 'legacy Brain plist, now inert\n');
     s.run('build', 't1');
     assert.equal(s.run('activate', 't1').status, 0);
     assert.equal(fs.existsSync(path.join(before, 'record.missing')), true);

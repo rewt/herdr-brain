@@ -24,7 +24,7 @@ export const cases = Object.freeze({
   wrappers: spec('existing-wrappers', 'Existing project: routing and both wrapper dry runs', ['existing-copy'], compatibility),
   path: spec('org-path', 'Existing project: org PATH consumers', ['existing-copy'], compatibility),
   switches: spec('cutover-switches', 'ENG-64: every file switch and rollback', ['existing-copy'], compatibility),
-  retirement: spec('contrib-retirement', 'ENG-64: final contrib removal and restoration', ['cutover-switches'], compatibility),
+  retirement: spec('contrib-retirement', 'ENG-64: contrib retirement refused while the launcher calls it', ['cutover-switches'], compatibility),
   discovery: spec('discovery-concurrent', 'Real discovery: concurrent lanes and promotion'),
   routingQuestion: spec('discovery-routing', 'Real discovery: routing question waits and answer applies'),
   lessons: spec('lessons-entry', 'Active lesson reaches fresh Codex and Claude at installed entry', ['herdr-fixture']),
@@ -36,14 +36,13 @@ export const cases = Object.freeze({
 });
 export const cutoverChecks = Object.freeze({
   name: spec('stable-name', 'stable name: startup and missing-target refusal'),
-  routes: spec('routed-wrappers', 'launcher, continue and routed wrapper tests'),
-  retry: spec('busy-retry', 'continue: busy refusal and same-request retry'),
+  routes: spec('routed-wrappers', 'routing suite and continue wrapper with the switched arm wrapper'),
   canary: spec('switched-canary', 'dispatch and arm: real canary'),
   recovery: spec('tidy-recovery', 'tidy recovery across multiple run logs', ['switched-canary']),
   cleanup: spec('copied-cleanup', 'copied cleanup: close done, preserve blocked and needs_human', ['switched-canary']),
   notices: spec('notice-contract', 'SETTLE and WORK-PATTERN consumer contract'),
   retirement: spec('notify-retirement', 'notify retirement has zero callers'),
-  rollback: spec('exact-rollback', 'rollback: all eleven bytes/modes and restored legacy routes/wrappers'),
+  rollback: spec('exact-rollback', 'rollback: all switched bytes/modes and restored legacy routes/wrappers'),
   legacy: spec('legacy-canary', 'rollback: real restored notify canary'),
 });
 

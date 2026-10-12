@@ -1,51 +1,15 @@
 # Supervisor
 
-Monitor launches register [unattended.mjs](unattended.mjs) as a native
-`PreToolUse` command hook. Operations supervisors and dispatched/headless workers
-always deny blocking questions. Claude matches `AskUserQuestion`; Codex matches
-the local function tool `request_user_input`. The denial tells the session to
-`record ask` with an action category, a safe recommendation and a reason, without
-`--wait`, take the safe default and continue independent work. Funds/chain,
-publishing, credentials and permission expansion always default to **no**.
-Recommendations grant no operator authority and do not answer pending questions.
-If no safe default is proven, defer that action and continue other work. If the
-record is unavailable, retain the question in the report. The hook itself never
-writes the record or supplies an invented user answer.
-
-ENG-248 project chats use the explicit launch kind `MONITOR_SESSION_KIND=chat`,
-separate from their supervisor workflow role and ops notice recipient. A
-supervisor that still combines the operator conversation with operations selects
-`MONITOR_SESSION_KIND=combined` in its launch environment. These conversations
-ask normally while the operator is present. At each question, read-only native
-macOS `ioreg` queries check HID idle time and the logged-in console user's screen
-lock. Fifteen minutes of idle time, a locked screen, an unreadable/ambiguous
-console session or a non-macOS host switches to record-and-default behaviour.
-There is no away/back command or cached presence; the next question can ask
-normally again when presence returns. The existing canonical pane launch receipt
-retains this kind for restore without environment variables. Worker/bypass guards
-override inherited chat kinds; missing/old receipts default to operations.
-Display session names and metadata never select the policy.
-
-Hooks are generated per launch through [session-hooks.mjs](session-hooks.mjs),
-including native bypass/resume launches, and merge with Claude's other CLI hooks
-and lane guards. Persistent settings and trust records are not edited. Existing
-native sessions need a launch with the updated adapter; this does not retrofit
-or dismiss an already-open dialog. bch-cloak's legacy launcher stays unchanged;
-its combined conversation needs the explicit combined launch kind when it adopts
-this release. Native hook disabling, managed restrictions and Codex hook trust
-review retain their native behaviour. Offline tests prove generated launch
-settings and command-hook denial, not a live harness/model interaction. Codex's
-async question tool remains nonblocking and is not denied by this matcher.
-See [Claude question-tool decision control](https://code.claude.com/docs/en/hooks#pretooluse-decision-control)
-and [Codex local function tool hooks](https://learn.chatgpt.com/docs/hooks#tool-coverage);
-the Codex registration follows the documented local-function contract, which
-also notes that specialized tool paths may opt out.
-
-The [Brain steward](../brain/README.md#model-free-steward-routing) routes fleet-wide
-blocked worker captures through this same inbox and input gate. A blocked
-supervisor escalates to the steward journal and a local operator alert, because
-it cannot consume its own inbox. Aged pending notices and legacy parked outboxes
-use the same alert channel. This observer starts no project schedule or model.
+Supervisors and workers do not open blocking questions. They record each one
+with `record ask` (an action category, a safe recommendation and a reason),
+take the safe default and continue; funds, publishing, credentials and permission
+changes default to no. This is policy text in [PROTOCOL.md](PROTOCOL.md) and the
+worker entry policy, not a hook: Monitor registers no per-launch question guard,
+permission hook or operator-presence check, and the harnesses' own sandboxes and
+permission prompts apply. A supervisor launch only gains the SessionStart entry
+hook from [session-hooks.mjs](session-hooks.mjs), and only when the project's own
+native settings do not already register it. Older pane receipts that carry a
+`session_kind` still restore; the field is ignored.
 
 Project chats catch up on demand from `record status`, `record log --since 2h`
 and `record show ID`; promotion and watch facts stay in `ORG/supervisor/inbox.log`.
@@ -232,6 +196,9 @@ watch recovery, dispatch and cycle notices. Supply `--to OPS` for a project's
 non-default recipient. Chats never enroll as notice recipients or receive
 awaited landing messages. The launcher only reads project files and retains
 its machine receipts in the fleet home, separate from native entry receipts.
+Chats have full Herdr access; the read/scoped chat modes and the Codex chat
+sandbox preflight were removed. A receipt that still carries `herdr_mode`
+reopens as an ordinary chat whatever its value.
 
 Native `SessionStart` uses [session-start.mjs](session-start.mjs) for startup,
 resume (including Herdr restore), clear and compact. Both installed launch adapters
@@ -465,26 +432,21 @@ fresh-chat continuity remains a canary observation.
 
 The generic protocol replaces this project's old handwritten kickoff. Its short
 [KICKOFF.md](KICKOFF.md) retains project-specific purpose and workspace/release
-boundaries. The old model-session launchers and [SETTLE.md](SETTLE.md) remain legacy
-compatibility surfaces. `contrib/settle-watch.mjs` and bch-cloak's kit stay unchanged
-until the release-gated switch. After that switch, the installed supervisor entry,
-this protocol, settle and housekeeping cover the old session-start/SETTLE/work
-pattern responsibilities; project authority/history belongs in record decisions,
-validation in project config, machine paths/accounts in machine installation.
+boundaries. The old model-session launchers (`open-session.mjs`, `settle.sh`,
+`continue.sh`, `workspace.mjs`) and `SETTLE.md` were removed: native `handle` and
+settle replaced them. `contrib/settle-watch.mjs`, `arm-watch.sh`,
+`dispatch/record-worker.mjs` and `reconcile.mjs` stay unchanged for bch-cloak
+(ENG-64). The installed supervisor entry, this protocol, settle and housekeeping
+cover the old session-start/SETTLE/work pattern responsibilities; project
+authority/history belongs in record decisions, validation in project config,
+machine paths/accounts in machine installation.
 
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
 
-Cold-start briefs show [host memory pressure and process usage](../docs/reference/memory-gate.md),
-including the largest memory and CPU consumers, as read-only diagnostic evidence.
-
-The cold-start brief also prints four storage advisory lines: the record,
-release candidates/evidence, lane validation, and promote batches. Paths use the
-project's canonical Git common directory, including when read from a lane.
-`brief --json` exposes allocated and apparent bytes and measurement warnings.
-Measurements deduplicate hardlinks, exclude symlink targets, and stop at 100,000
-entries or one second per area; incomplete measurements are labeled as lower
-bounds. Storage size never refuses work or changes record status.
+Cold-start briefs show one [host memory pressure](../docs/reference/memory-gate.md)
+line, read-only, so the supervisor waits before expensive cycle steps. They no
+longer list process consumers or storage advisories.
 
 A PASS review containing only scoped `Test evidence not re-executed` entries can
 use the normal bound promotion path when the promotion test plan covers every

@@ -124,19 +124,14 @@ test('a coordinating Codex launch fails before handover when its native profile 
   assert.deepEqual(fs.readdirSync(f.context.tempRoot), []);
 });
 
-test('chat session bindings carry their role and omit supervisor lifecycle hooks', t => {
+test('chat session bindings carry their role and receive no per-launch hooks', t => {
   const f = fixture(t), context = { ...f.context, role: 'chat' };
   const env = sessionEnvironment(context, f.root, { ...f.env, MONITOR_SUPERVISOR_AGENT: 'ops' });
   assert.equal(env.MONITOR_SUPERVISOR_AGENT, 'ops');
   assert.equal(env.MONITOR_SESSION_ROLE, 'chat'); assert.equal(env.MONITOR_ENTRY_BYPASS, '1');
   assert.equal(env.MONITOR_SUPERVISOR_ENTRY, ''); assert.equal(env.MONITOR_SUPERVISOR_IDENTITY, '');
-  assert.equal(env.MONITOR_SESSION_KIND, 'chat');
-  for (const kind of ['claude', 'codex']) {
-    const hooks = sessionHookArguments(kind, context, f.root, env);
-    assert.match(hooks.join(' '), /unattended.mjs/);
-    assert.match(hooks.join(' '), /'conversation'/);
-    assert.doesNotMatch(hooks.join(' '), /SessionStart|session-start.mjs/);
-  }
+  assert.equal(env.MONITOR_SESSION_KIND, undefined);
+  for (const kind of ['claude', 'codex']) assert.deepEqual(sessionHookArguments(kind, context, f.root), [], 'chats get no per-launch hooks');
 });
 
 for (const kind of ['claude', 'codex']) test(`${kind} native sandbox connects to the fake control socket only for supervisor and chat`, {

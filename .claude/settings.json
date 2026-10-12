@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "$comment": "The lane promote allowance is governed by the five-condition promotion policy in the G-2 decision note; supervisor/SETTLE.md requires checking it first.",
+  "$comment": "The lane promote allowance is governed by the five-condition promotion policy in the G-2 decision note.",
   "permissions": {
     "allow": [
       "Bash(lane promote *)"

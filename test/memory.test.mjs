@@ -1,6 +1,6 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
-import { linuxMemory, macMemory, readMemory, memoryReason, waitForMemory, processUsage } from '../lib/memory.mjs';
+import { linuxMemory, macMemory, readMemory, memoryReason, waitForMemory } from '../lib/memory.mjs';
 
 const GiB = 1024 ** 3;
 const healthy = { total: 16 * GiB, available: 8 * GiB, swap_used: 0 };
@@ -85,16 +85,6 @@ test('probe advisories are visible and caller cancellation is checked on each sa
   let stopped = false;
   assert.throws(() => waitForMemory({ read: () => { stopped = true; return healthy; }, notify: () => {},
     check: () => { if (stopped) throw Error('STOP during probe'); } }), /STOP during probe/);
-});
-
-test('process diagnostics rank memory and CPU separately and retain PID, parent and command basename', () => {
-  const usage = processUsage({ run: () => ' 11 1 100 99.0 /usr/bin/node\n 12 11 2048 0.5 /Applications/Worker App\ninvalid\n', limit: 1 });
-  assert.equal(usage.by_memory[0].pid, 12); assert.equal(usage.by_memory[0].rss_bytes, 2048 * 1024);
-  assert.equal(usage.by_cpu[0].pid, 11); assert.equal(usage.by_cpu[0].ppid, 1);
-  assert.equal(usage.by_cpu[0].command, 'node');
-  assert.equal(usage.by_memory[0].command, 'Worker App');
-  assert.match(processUsage({ run: () => { throw Error('ps unavailable'); } }).warning, /ps unavailable/);
-  assert.match(processUsage({ run: () => 'invalid output' }).warning, /no process rows/);
 });
 
 test('bounded memory waits use the remaining allowance, clear at the boundary, and retain STOP precedence', () => {

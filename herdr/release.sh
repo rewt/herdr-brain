@@ -4,22 +4,22 @@
 #
 #   release.sh build TAG       copy TAG into $HOME_DIR/releases/TAG and run its build step
 #   release.sh activate TAG    point $HOME_DIR/current at it; manage the record, org and lane
-#                              launchers, remembering each the first time it is managed; move
-#                              the Brain service onto current; link the Herdr plugin to a
-#                              release that still ships one, or unlink it (Herdr resolves links,
-#                              so the plugin is re-linked whenever the release changes)
+#                              launchers, remembering each the first time it is managed; link
+#                              the Herdr plugin to a release that still ships one, or unlink it
+#                              (Herdr resolves links, so the plugin is re-linked whenever the
+#                              release changes). Refuses while the retired Brain LaunchAgent
+#                              plist exists: releases no longer ship `brain watch`
 #   release.sh rollback        point current back at the release before it
 #   release.sh restore         put each launcher back where it was before it was first managed
-#                              and the Brain service back where it was before the first activation
 #                              (the dev checkout); unlink the plugin
 #   release.sh dev WORKTREE    link a second plugin, rewt.herdr-monitor-dev, to an older worktree
 #   release.sh status          what is active and where the launchers point
 #
 # Environment: HERDR_MONITOR_HOME (default ~/.local/share/herdr-monitor), HERDR_MONITOR_BIN
 # (default ~/.local/bin), HERDR_MONITOR_REPO (default this script's repository),
-# HERDR_MONITOR_PLIST (default ~/Library/LaunchAgents/com.rewt.herdr-brain.plist).
-# RELEASE_NO_HERDR=1, RELEASE_NO_LAUNCHD=1 and RELEASE_NO_NPM=1 skip those steps, and
-# RELEASE_LAUNCHCTL replaces launchctl (tests).
+# HERDR_MONITOR_PLIST (the retired Brain plist activation checks for; default
+# ~/Library/LaunchAgents/com.rewt.herdr-brain.plist). RELEASE_NO_HERDR=1 skips the plugin
+# step, RELEASE_NO_LAUNCHD=1 the retired-plist check and RELEASE_NO_NPM=1 the npm check.
 # HERDR_MONITOR_ENTRY_BIN defaults to $HOME_DIR/entry/bin. HERDR_MONITOR_CODEX
 # and HERDR_MONITOR_CLAUDE override native executable discovery; '-' skips Claude.
 # Activation installs reversible PATH snippets for fresh zsh/bash shells.
@@ -28,9 +28,7 @@ set -euo pipefail
 HOME_DIR=${HERDR_MONITOR_HOME:-$HOME/.local/share/herdr-monitor}
 BIN_DIR=${HERDR_MONITOR_BIN:-$HOME/.local/bin}
 REPO=${HERDR_MONITOR_REPO:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}
-PLIST=${HERDR_MONITOR_PLIST:-$HOME/Library/LaunchAgents/com.rewt.herdr-brain.plist}
-LABEL=com.rewt.herdr-brain
-LAUNCHCTL=${RELEASE_LAUNCHCTL:-launchctl}
+LEGACY_PLIST=${HERDR_MONITOR_PLIST:-$HOME/Library/LaunchAgents/com.rewt.herdr-brain.plist}
 PLUGIN=rewt.herdr-monitor
 LAUNCHERS="record:bin/org.mjs org:bin/org.mjs lane:lanes/lane.mjs"
 ENTRY_DRIVER="$(cd "$(dirname "$0")" && pwd)/entry-install.mjs"
@@ -68,7 +66,6 @@ remember() {
       fi
     fi
   done
-  if [ ! -f "$before/plist" ] && [ -f "$PLIST" ]; then cp "$PLIST" "$before/plist"; fi
   return 0
 }
 
@@ -91,40 +88,13 @@ managed_launcher() {
   esac
 }
 
-# Reload the Brain service. launchd unloads asynchronously, so bootstrap right after
-# bootout can fail with "5: Input/output error"; wait for the old one to go, then retry.
-reload_service() {
-  local domain="gui/$(id -u)" i
-  "$LAUNCHCTL" bootout "$domain/$LABEL" 2>/dev/null || true
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    "$LAUNCHCTL" print "$domain/$LABEL" >/dev/null 2>&1 || break
-    sleep 1
-  done
-  for i in 1 2 3 4 5; do
-    "$LAUNCHCTL" bootstrap "$domain" "$PLIST" 2>/dev/null && return 0
-    sleep 2
-  done
-  "$LAUNCHCTL" bootstrap "$domain" "$PLIST" || die "the Brain service did not load; try: launchctl bootstrap $domain $PLIST"
-}
-
-# Point the Brain service's program at a tree (keeping its node, arguments and
-# environment) and restart it. No plist, no service: nothing is created unasked.
-brain_service() {
-  local tree=$1
+# Brain watch is gone. A leftover LaunchAgent starts current/brain/bin/brain.mjs
+# watch, which would exit and restart forever once current has no `watch`.
+# Releases no longer touch launchd; the operator removes the job once.
+retired_brain_service() {
   [ "${RELEASE_NO_LAUNCHD:-}" = 1 ] && return 0
-  [ -f "$PLIST" ] || { say "no $PLIST; the Brain service is left alone"; return 0; }
-  python3 - "$PLIST" "$tree" <<'PY'
-import plistlib, sys
-path, tree = sys.argv[1], sys.argv[2]
-with open(path, 'rb') as f: p = plistlib.load(f)
-args = p['ProgramArguments']
-i = next(n for n, a in enumerate(args) if a.endswith('brain/bin/brain.mjs'))
-args[i] = f'{tree}/brain/bin/brain.mjs'
-p['WorkingDirectory'] = f'{tree}/brain'
-with open(path, 'wb') as f: plistlib.dump(p, f)
-PY
-  reload_service
-  say "Brain service now runs $tree/brain/bin/brain.mjs"
+  [ -e "$LEGACY_PLIST" ] || return 0
+  die "$LEGACY_PLIST still starts Brain watch, which releases no longer ship; stop and remove it first: launchctl bootout gui/$(id -u)/com.rewt.herdr-brain; rm $LEGACY_PLIST"
 }
 
 # Herdr resolves the path it is given, so the plugin is bound to one release
@@ -166,6 +136,7 @@ activate() {
     local name=${l%%:*}
     [ -e "$BIN_DIR/$name" ] && [ ! -L "$BIN_DIR/$name" ] && die "$BIN_DIR/$name is not a link; refusing to replace it"
   done
+  retired_brain_service
   entry "$dir" --check
   remember
   entry "$dir"
@@ -175,7 +146,6 @@ activate() {
   fi
   ln -sfn "$dir" "$HOME_DIR/current"
   launchers
-  brain_service "$HOME_DIR/current"
   link_plugin
   say "active: $tag"
 }
@@ -219,12 +189,8 @@ restore() {
       fi
     fi
   done
-  if [ -f "$before/plist" ] && [ "${RELEASE_NO_LAUNCHD:-}" != 1 ]; then
-    cp "$before/plist" "$PLIST"
-    reload_service
-  fi
   unlink_plugin
-  say "launchers and the Brain service are back where they were before release management, and the plugin is unlinked"
+  say "launchers are back where they were before release management, and the plugin is unlinked"
 }
 
 dev() {

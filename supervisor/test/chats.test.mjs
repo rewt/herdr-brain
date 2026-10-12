@@ -6,8 +6,6 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { joinFleet } from '../../lib/fleet.mjs';
-import { ownerProcess } from '../../lib/process-owner.mjs';
-import { fakeControlSocket } from '../../test/helpers/fake-control-socket.mjs';
 import { openProjectChat } from '../chats.mjs';
 
 const client = new URL('../../discovery/client.mjs', import.meta.url).pathname;
@@ -72,13 +70,8 @@ function fixture(t) {
   const stateFile = path.join(root, 'state.json');
   fs.writeFileSync(stateFile, JSON.stringify({counter: 0, calls: [], spaces: [], tabs: [], panes: [], agents: [], env: {}, launches: [], focus: 'operator-work'}));
   fs.writeFileSync(path.join(bin, 'herdr'), fake, { mode: 0o755 });
-  const codexHome = path.join(root, 'codex-home'); fs.mkdirSync(codexHome);
-  const native = path.join(root, 'native-codex');
-  fs.writeFileSync(native, '#!/bin/sh\nif [ "$1" = --help ]; then echo "--sandbox --add-dir"; elif [ "$1" = sandbox ] && [ "$2" = --help ] && [ "$CHAT_FAKE_CODEX_PROFILES" != 0 ]; then echo "--permission-profile"; fi\n', { mode: 0o755 });
-  fs.writeFileSync(path.join(bin, '.monitor-entry.json'), JSON.stringify({ native, nativeExplicit: true }));
-  for (const kind of ['codex', 'claude']) fs.writeFileSync(path.join(bin, `monitor-${kind}`), `#!${process.execPath}\nconsole.log(JSON.stringify({kind: '${kind}', args: process.argv.slice(2), env: Object.fromEntries(['ORG_DIR','ORG_ACTOR','MONITOR_SUPERVISOR_AGENT','MONITOR_SESSION_KIND','MONITOR_REQUEST_DIR','LANE_CONFIG'].map(k => [k, process.env[k]]))}));\n`, { mode: 0o755 });
+  for (const kind of ['codex', 'claude']) fs.writeFileSync(path.join(bin, `monitor-${kind}`), `#!${process.execPath}\nconsole.log(JSON.stringify({kind: '${kind}', args: process.argv.slice(2), env: Object.fromEntries(['ORG_DIR','ORG_ACTOR','MONITOR_SUPERVISOR_AGENT','MONITOR_REQUEST_DIR','LANE_CONFIG'].map(k => [k, process.env[k]]))}));\n`, { mode: 0o755 });
   const env = { ...process.env, HERDR_BIN_PATH: path.join(bin, 'herdr'), HERDR_MONITOR_ENTRY_BIN: bin,
-    CODEX_HOME: codexHome, CHAT_FAKE_CODEX_PROFILES: '1',
     ORG_DIR: '', HERDR_ORG_CONSOLE_CONFIG: path.join(root, 'absent-console.json'),
     HERDR_MONITOR_SUPERVISOR_HARNESS: 'codex', CHAT_FAKE_STATE: stateFile,
     MONITOR_SUPERVISOR_AGENT: 'foreign-ops', MONITOR_REQUEST_DIR: '/foreign/requests', LANE_CONFIG: '/foreign/config',
@@ -110,43 +103,19 @@ function fixture(t) {
   return {root, env, projects, state, change, open, snapshot};
 }
 
-test('default chat falls back to Claude with the inherited sandbox selector reason before creating a tab', t => {
-  const f = fixture(t), warnings = [], file = path.join(f.env.CODEX_HOME, 'config.toml');
-  const settings = 'sandbox_mode = "workspace-write"\n'; fs.writeFileSync(file, settings);
+test('default chat launches the installed Codex adapter with no sandbox preflight or Claude fallback', t => {
+  const f = fixture(t), home = path.join(f.root, 'codex-home'); fs.mkdirSync(home);
+  // A legacy native sandbox selector is the harness's business, not the launcher's.
+  fs.writeFileSync(path.join(home, 'config.toml'), 'sandbox_mode = "workspace-write"\n'); f.env.CODEX_HOME = home;
   delete f.env.HERDR_MONITOR_SUPERVISOR_HARNESS; // Installed monitor-codex is the default.
-  const receipt = f.open(undefined, { warn: message => {
-    assert.equal(f.state().tabs.length, 0);
-    warnings.push(message);
-  } });
-  assert.equal(receipt.kind, 'claude'); assert.equal(receipt.available, true);
-  assert.match(receipt.fallback, /sandbox_mode="workspace-write"/);
-  assert.ok(receipt.fallback.includes(file)); assert.match(receipt.fallback, /using Claude/);
-  assert.ok(warnings[0].includes(receipt.fallback));
-  assert.equal(f.state().launches[0].kind, 'claude');
-  assert.deepEqual(f.state().launches[0].args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--']);
+  const receipt = f.open();
+  assert.equal(receipt.kind, 'codex'); assert.equal(receipt.available, true);
+  assert.equal(receipt.fallback, undefined); assert.equal(receipt.herdr_mode, undefined);
+  assert.equal(f.state().launches[0].kind, 'codex');
+  assert.deepEqual(f.state().launches[0].args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--', '-p', 'profile-0']);
   assert.equal(f.state().env[receipt.pane].MONITOR_SESSION_ROLE, 'chat');
+  assert.equal(f.state().env[receipt.pane].MONITOR_SESSION_KIND, undefined, 'session kinds are gone');
   assert.equal(f.state().launches[0].env.MONITOR_SUPERVISOR_AGENT, 'ops-0');
-  assert.equal(fs.readFileSync(file, 'utf8'), settings);
-  assert.equal(f.open().fallback, receipt.fallback);
-  assert.equal(f.state().launches.length, 1);
-});
-
-test('unsupported Codex profiles fall back only for default chats and explicit Codex choices refuse before tab creation', t => {
-  for (const failure of ['selector', 'profiles']) {
-    const f = fixture(t), warnings = [];
-    const config = JSON.parse(fs.readFileSync(f.projects[0].layers[0]));
-    config.routes.codexChat = { kind: 'codex' };
-    fs.writeFileSync(f.projects[0].layers[0], JSON.stringify(config));
-    if (failure === 'selector') fs.writeFileSync(path.join(f.env.CODEX_HOME, 'config.toml'), 'sandbox_mode="workspace-write"\n');
-    else f.env.CHAT_FAKE_CODEX_PROFILES = '0';
-    const reason = failure === 'selector' ? /legacy sandbox selectors/ : /require native permission-profile support/;
-    for (const selection of [{ kind: 'codex' }, { route: 'codexChat' }]) assert.throws(() => f.open(undefined, selection), reason);
-    assert.equal(f.state().tabs.length, 0); assert.equal(f.state().spaces.length, 0);
-    assert.equal(f.state().launches.length, 0);
-    const receipt = f.open(undefined, { warn: message => warnings.push(message) });
-    assert.equal(receipt.kind, 'claude'); assert.match(receipt.fallback, reason);
-    assert.equal(warnings.length, 1);
-  }
 });
 
 test('one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files', t => {
@@ -158,7 +127,7 @@ test('one quiet chat per canonical fleet identity shares a control workspace, re
   assert.deepEqual(launch.args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--', '-p', 'profile-0']);
   assert.equal(launch.env.ORG_DIR, f.projects[0].record); assert.equal(launch.env.ORG_ACTOR, first.name);
   assert.equal(f.state().env[first.pane].MONITOR_SESSION_ROLE, 'chat'); assert.equal(f.state().env[first.pane].MONITOR_ENTRY_BYPASS, '1');
-  assert.equal(launch.env.MONITOR_SUPERVISOR_AGENT, 'ops-0'); assert.equal(launch.env.MONITOR_SESSION_KIND, 'chat');
+  assert.equal(launch.env.MONITOR_SUPERVISOR_AGENT, 'ops-0'); assert.equal(f.state().env[first.pane].MONITOR_SESSION_KIND, undefined);
   assert.equal(launch.env.MONITOR_REQUEST_DIR, undefined); assert.equal(launch.env.LANE_CONFIG, undefined);
   f.change(s => {s.tabs[0].label = 'Operator renamed this';});
   const again = f.open(); assert.equal(again.reused, true); assert.equal(again.tab, first.tab); assert.equal(f.state().focus, first.tab);
@@ -342,59 +311,18 @@ test('an existing named control workspace is reused and ambient recipients never
   assert.equal(f.state().spaces.length, 1); assert.equal(f.state().focus, 'operator-work');
 });
 
-test('read-mode chats select Claude before tab creation and refuse explicit Codex, stale full chats and prototypes', t => {
-  const f=fixture(t), p=f.projects[0], bin=f.env.HERDR_MONITOR_ENTRY_BIN;
-  const wrapper=path.join(bin,'herdr-read');fs.writeFileSync(wrapper,'#!/bin/sh\nexit 1\n',{mode:0o755});
-  const receipt=JSON.parse(fs.readFileSync(path.join(bin,'.monitor-entry.json')));
-  Object.assign(receipt,{product:new URL('../../',import.meta.url).pathname,herdrNative:f.env.HERDR_BIN_PATH,
-    files:{'herdr-read':fs.readFileSync(wrapper,'utf8')}});
-  fs.writeFileSync(path.join(bin,'.monitor-entry.json'),JSON.stringify(receipt));
-  fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'read'}}));
-  p.git(['add','.lane.json']);p.git(['commit','-qm','Read chats']);
-  assert.throws(()=>f.open(undefined,{kind:'codex'}),/read-mode chats require Claude/);
-  assert.equal(f.state().tabs.length,0);
-  const warnings=[],opened=f.open(undefined,{warn:s=>warnings.push(s)});
-  assert.equal(opened.kind,'claude');assert.equal(opened.herdr_mode,'read');
-  assert.match(warnings[0],/read-mode chats require Claude/);
-  assert.equal(f.open().reused,true);
-  fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'full'}}));
-  assert.throws(()=>f.open(),/differs from committed HEAD/);
-  assert.equal(f.state().launches.length,1);
-  p.git(['add','.lane.json']);p.git(['commit','-qm','Operator enables full chats']);
-  assert.throws(()=>f.open(),/chat Herdr mode changed/);
-  assert.equal(f.state().launches.length,1);
-  // An old receipt with no mode represents the historical full launch.
-  fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'read'}}));
-  p.git(['add','.lane.json']);p.git(['commit','-qm','Operator enables read chats']);
-  const file=path.join(f.env.HERDR_MONITOR_FLEET,'chats.json'),state=JSON.parse(fs.readFileSync(file));
-  delete state.projects[p.identity].herdr_mode;fs.writeFileSync(file,JSON.stringify(state));
-  assert.throws(()=>f.open(),/chat Herdr mode changed/);
-  delete state.projects[p.identity];fs.writeFileSync(file,JSON.stringify(state));
-  f.change(s=>{s.agents[0].name=`chat-${p.name}`});
-  assert.throws(()=>f.open(),/cannot adopt an unverified prototype/);
-});
-
-
-test('scoped chat launcher records kernel shell identity and exact tab outside chat write roots', t => {
-  const f=fixture(t), p=f.projects[0], bin=f.env.HERDR_MONITOR_ENTRY_BIN;
-  f.env.HERDR_SOCKET_PATH=fakeControlSocket(t,f.root);
-  f.change(s=>{s.shellPid=process.pid;});
-  const wrapper=path.join(bin,'herdr-scoped');fs.writeFileSync(wrapper,'#!/bin/sh\nexit 1\n',{mode:0o755});
-  const installed=JSON.parse(fs.readFileSync(path.join(bin,'.monitor-entry.json')));
-  Object.assign(installed,{product:new URL('../../',import.meta.url).pathname,herdrNative:f.env.HERDR_BIN_PATH,
-    files:{'herdr-scoped':fs.readFileSync(wrapper,'utf8')}});
-  fs.writeFileSync(path.join(bin,'.monitor-entry.json'),JSON.stringify(installed));
-  fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'scoped',presets:{wallet:{command:'fixed-command',cwd:p.checkout}}}}));
-  p.git(['add','.lane.json']);p.git(['commit','-qm','Scoped chat']);
-  assert.throws(()=>f.open(undefined,{kind:'codex'}),/scoped-mode chats require Claude/);
-  assert.equal(f.state().tabs.length,0);
-  const opened=f.open(undefined,{warn:()=>{}});
-  assert.equal(opened.herdr_mode,'scoped');assert.equal(opened.kind,'claude');
-  const scopeRoot=path.join(bin,'.herdr-scoped'),files=fs.readdirSync(scopeRoot);
-  assert.equal(files.length,1);
-  const binding=JSON.parse(fs.readFileSync(path.join(scopeRoot,files[0])));
-  assert.equal(binding.shell.pid,process.pid);assert.equal(binding.shell.identity,ownerProcess(process.pid).identity);
-  assert.equal(binding.pane,opened.pane);assert.equal(binding.tab,opened.tab);assert.equal(binding.workspace,opened.workspace);
-  assert.equal(binding.socket,f.env.HERDR_SOCKET_PATH);assert.equal(binding.owner,undefined);
-  assert.equal(f.open().reused,true);assert.equal(f.state().launches.length,1);
+test('committed read/scoped chat settings and older receipts with any herdr_mode open full chats', t => {
+  const f = fixture(t), p = f.projects[0];
+  fs.writeFileSync(path.join(p.checkout, '.lane.json'), JSON.stringify({ chat: { herdr_mode: 'scoped', presets: { wallet: { command: 'fixed-command', cwd: p.checkout } } } }));
+  p.git(['add', '.lane.json']); p.git(['commit', '-qm', 'Scoped chat']);
+  const opened = f.open(undefined, { kind: 'codex' });
+  assert.equal(opened.kind, 'codex'); assert.equal(opened.herdr_mode, undefined);
+  const file = path.join(f.env.HERDR_MONITOR_FLEET, 'chats.json');
+  for (const mode of ['read', 'scoped', 'full', 'retired-mode']) {
+    const state = JSON.parse(fs.readFileSync(file)); state.projects[p.identity].herdr_mode = mode;
+    fs.writeFileSync(file, JSON.stringify(state));
+    const again = f.open(); assert.equal(again.reused, true); assert.equal(again.tab, opened.tab);
+  }
+  assert.equal(f.state().launches.length, 1);
+  assert.ok(!fs.existsSync(path.join(f.env.HERDR_MONITOR_ENTRY_BIN, '.herdr-scoped')), 'no scoped binding is written');
 });

@@ -287,14 +287,11 @@ unproven. A background workspace omitted from `workspace list` metadata is a
 failure only after a bounded 15-second metadata poll. The shell cwd must first equal the copied project, just as in the configured
 fixture; each metadata sample includes the fixture comparison. Every sample is
 raw evidence. `existing-wrappers` executes the frozen contrib wrappers to retain their
-identity refusal when metadata is absent, then changes only the audited scratch
-launcher's entry target to `supervisor/open-session.mjs` (the ENG-64 switch).
-Both wrapper dry runs and routing tests must pass through the candidate's native
-`worktree list --cwd` identity lookup and select the created background workspace.
-The launcher bytes and mode are restored before later cases, and the switch,
-legacy results and restoration receipt are retained in
-`workspace-identity-cutover.json`. This proves the supervisor entry switch's
-background lookup; the remaining ENG-64 switch canaries stay independently gated.
+identity refusal when metadata is absent, or their success once it appears, and the
+copied routing suite; results are retained in `existing-wrappers.json`. The
+supervisor launcher keeps `contrib/settle-watch.mjs` (ENG-64): the split
+`supervisor/open-session.mjs` it would have switched to was removed, so no switch
+rewrites it.
 
 The promotion queue case uses a fresh project without lane/promotion configuration or
 a record, runs two default npm gates in FIFO order, keeps a dirty refused lane, and
@@ -310,7 +307,7 @@ They include a `before/` directory that predates the `record` launcher.
 Plugin linking and launchd are excluded by the brief's boundary. The product has
 no npm dependencies, so no dependency build runs.
 
-The thirteen ENG-64 switches (including cleanup, retirement of the legacy notify section
+The eleven ENG-64 switches (including cleanup, retirement of the legacy notify section
 of the mixed se-test, and the event-service comment correction) are applied to the audited live-script copies and executed,
 then rolled back byte-for-byte with their original executable modes. Raw live
 bytes/checksums remain in a separate backup; executed baselines are relocated.
@@ -320,7 +317,7 @@ neither switched nor restored scripts can target a live supervisor. The native
 socket endpoint is pinned in the ownership ledger before changing HOME.
 
 `cutover-switches` executes naming/restart and missing-target refusal, routed launcher tests,
-executive dry run, real busy-session refusal and same-request retry, real copied
+executive dry run, real copied
 dispatch through the new arm wrapper, watch-log recovery through tidy across multiple run logs, one mutating copied
 tidy/close-finished-agents cycle with recorded done, blocked and needs-human workers (all idle), released
 notice constructors, zero-caller notify retirement, exact rollback, legacy wrapper
@@ -329,28 +326,18 @@ outside this watcher switch: its trusted empty lane is prebuilt before legacy
 dispatch, which still uses the actual copied lane/routing/dispatch code. Every
 subcheck has a stable key and is retained in `cutover-switches.json`. Recovery and
 copied cleanup require `switched-canary`; a pending canary preserves its cause and
-classification through both dependents and final retirement. An independent product
-failure takes precedence over a separate harness limitation. The final notice must actually arrive before
-a canary qualifies for retirement. Documentation contract assertions supplement
+classification through both dependents and the retirement check. An independent product
+failure takes precedence over a separate harness limitation. Documentation contract assertions supplement
 the executed consumers; they do not establish an agent's interpretation of prose.
 
-`contrib-retirement` first plants an extra caller and proves contrib removal refuses, then
-removes it, scans both caller trees, retires the snapshot's compatibility blob only
-after zero callers and a delivered switched canary, executes the split routing
-suite without contrib, and restores the exact blob/mode before restoring legacy
-callers. The checkout's contrib file is untouched. Missing split modules in older
-candidates are product FAIL in these three cases, rather than permanent pending
-coverage. Notifications are captured as scratch evidence without showing host UI.
-The busy-retry check resolves the copied launcher's actual existing-project
-workspace from its native canonical lookup and checks it against the creation
-receipt. Refusal must leave its tabs/panes unchanged, with no successful creation
-or received prompt anywhere in the owned fixture. Retry must produce exactly one
-new destination tab/pane, one registered executive and one matching scripted PTY
-prompt receipt. Exit status alone cannot establish a retry. Both stages retain
-native topology, creation and input receipts in `cutover-busy-retry.json`. Offline
-controls reject a leaking refusal (even when the configured workspace stays
-unchanged), a leak closed before the final topology read, an exit-zero no-op retry,
-and missing or misdirected session/prompt receipts.
+`contrib-retirement` proves the compatibility blob cannot retire: after the switches
+the copied launcher is its only caller, removal refuses, and a planted wrapper
+invoking a mode-0644 Python backup refuses as well. The copied routing suite still
+passes, and the exact blob/mode and baselines are unchanged afterwards. The
+checkout's contrib file is untouched. Missing candidate modules (`watch/watch.mjs`,
+`supervisor/arm-watch.sh`, `dispatch/record-worker.mjs`) are product FAIL in these
+cases, rather than permanent pending coverage. Notifications are captured as
+scratch evidence without showing host UI.
 
 Legacy detached watcher PIDs come from a scratch nohup adapter's creation receipt;
 cleanup does not discover processes by names or global scans.

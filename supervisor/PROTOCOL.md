@@ -22,6 +22,8 @@ Record plans, instructions, holds and decisions with `record note ID TEXT
 Use `record ask` with the action's category, recommendation, rationale and exact
 yes/no consequences when the operator's authority is required. Changes to the
 operator's priorities are theirs alone; ask with `record ask --category priorities`.
+Don't open blocking questions; use `record ask` with a safe default and continue.
+Funds, publishing, credentials and permission changes default to no.
 
 Use dispatch/dispatch.mjs for a selected item, lane, named route and ask, with
 `--to YOUR-SUPERVISOR`. It records the run and arms watch before sending work.

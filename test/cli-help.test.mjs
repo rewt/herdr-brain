@@ -13,7 +13,7 @@ const modules = [
   'docs/adoption/rehearse.mjs', 'herdr/entry-install.mjs', 'herdr/native-entry.mjs',
   'herdr/prerequisites.mjs', 'herdr/release-candidate.mjs', 'housekeeping/housekeeping.mjs', 'lanes/lane.mjs',
   'promote/host-gate.mjs', 'promote/promote.mjs', 'promote/metrics.mjs', 'release/release.mjs', 'settle/settle.mjs',
-  'supervisor/open-session.mjs', 'supervisor/prompt-supervisor.mjs', 'supervisor/session-start.mjs',
+  'supervisor/prompt-supervisor.mjs', 'supervisor/session-start.mjs',
   'supervisor/supervisor.mjs', 'supervisor/tidy-tabs.mjs', 'test-slot/test-slot.mjs', 'watch/watch.mjs',
   'acceptance/run.mjs',
 ];

@@ -6,17 +6,12 @@ import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { stripVTControlCharacters } from 'node:util';
 import { spawnSync } from 'node:child_process';
-import { readFleet, fleetPath, staleProject, excludedFleetRoot } from '../lib/fleet.mjs';
+import { readFleet, staleProject, excludedFleetRoot } from '../lib/fleet.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { withInstallationLock } from '../lib/install-lock.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { projectEntrySettings } from '../discovery/settings.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { chatHerdrMode, installedHerdrRead, chatHerdrPresets } from '../discovery/chat-herdr.mjs';
-import { createScopedBinding } from '../discovery/herdr-scoped.mjs';
-import { ownerProcess } from '../lib/process-owner.mjs';
-import { herdrControlSocket } from '../discovery/control-socket.mjs';
-import { codexCoordinatingPreflight } from '../discovery/native-sandbox.mjs';
 
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -47,11 +42,6 @@ function readChatState(file) {
   catch (e) { if (e.code !== 'ENOENT') throw new Error(`invalid chat receipts ${file}: ${e.message}`); }
   if (state?.version !== 1 || !state.projects || typeof state.projects !== 'object' || Array.isArray(state.projects)) throw new Error(`invalid chat receipts ${file}`);
   return state;
-}
-
-export function hasProjectChat(identity, env = process.env) {
-  const state = readChatState(path.join(path.dirname(fleetPath(env)), 'chats.json'));
-  return Object.hasOwn(state.projects, identity);
 }
 
 function waitForShell(herdr, receipt, project, { now, sleep, startupMs }) {
@@ -94,7 +84,7 @@ export function herdrCommand(env = process.env) {
 }
 
 export function openProjectChat({ project: name, identity, workspace, kind, route, to, args = [], focus = true,
-  env = process.env, herdr = herdrCommand(env), warn = console.error, now = Date.now, sleep = pause, startupMs = 30000 } = {}) {
+  env = process.env, herdr = herdrCommand(env), now = Date.now, sleep = pause, startupMs = 30000 } = {}) {
   const fleet = readFleet(env);
   const project = fleet && Object.hasOwn(fleet.projects, name ?? '') ? fleet.projects[name] : null;
   if (!project) throw new Error(`unknown fleet project: ${name ?? '(choose a project)'}`);
@@ -103,7 +93,8 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
   if (excludedFleetRoot(project.checkout, fleet)) throw new Error(`fleet project ${name} is excluded`);
   if (!projectEntrySettings({ canonical: project.checkout }).enabled) throw new Error(`project ${name} has opted out of Monitor entry`);
 
-  const herdrMode = chatHerdrMode({ canonical: project.checkout });
+  // Chats have full Herdr access. Older receipts may carry herdr_mode from the
+  // removed read/scoped modes; any value reopens as an ordinary full chat.
   const home = path.dirname(fleet.file), file = path.join(home, 'chats.json');
   return withInstallationLock(path.join(home, 'chats.lock'), () => {
     const state = readChatState(file);
@@ -127,7 +118,6 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       if (!Array.isArray(tabs)) throw new Error('Herdr returned no tab list');
       const tab = tabs.find(t => t.tab_id === saved.tab);
       if (tab) {
-        if ((saved.herdr_mode ?? 'full') !== herdrMode) throw new Error('chat Herdr mode changed; close the existing chat tab and reopen to apply its new launch policy');
         if (saved.checkout !== project.checkout || saved.record !== project.record ||
           ![agentName(project.identity), `chat-${name}`].includes(saved.name)) throw new Error('chat binding changed; inspect the existing tab');
         const pane = herdr(['pane', 'get', saved.pane]).pane;
@@ -150,7 +140,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     const { config } = loadDiscoveredRoutes({ cwd: project.checkout, env: { ...env, LANE_CONFIG: undefined } });
     const bin = env.HERDR_MONITOR_ENTRY_BIN || path.join(env.HERDR_MONITOR_HOME || path.join(os.homedir(), '.local/share/herdr-monitor'), 'entry/bin');
     const harness = kind || env.HERDR_MONITOR_SUPERVISOR_HARNESS || (fs.existsSync(path.join(bin, 'monitor-codex')) ? 'codex' : 'claude');
-    let launch = resolveLaunchRoute(config, { ...(route ? { route } : { kind: harness }), args });
+    const launch = resolveLaunchRoute(config, { ...(route ? { route } : { kind: harness }), args });
     if (!['codex', 'claude'].includes(launch.kind)) throw new Error('project chats require codex or claude');
     const chat = agentName(project.identity);
     if (agents(herdr).some(a => a.name === chat)) throw new Error('project chat exists outside its recorded tab; inspect before opening another');
@@ -158,14 +148,13 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0')) throw new Error('invalid chat launch environment');
       const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
     }));
-    let pairs = environmentPairs(launch);
+    const pairs = environmentPairs(launch);
     const ops = to || pairs.get('MONITOR_SUPERVISOR_AGENT') || 'supervisor-herdr';
     if (!/^[a-z][a-z0-9_-]{0,31}$/u.test(ops) || ops.startsWith('chat-')) throw new Error('notice recipient must be an ops agent, never a project chat');
     // Adopt the operator's prototype without restarting it or changing its
     // account, entry bypass or conversation. Labels alone never bind a chat.
     const prototypes = agents(herdr).filter(a => a.name === `chat-${name}`);
     if (prototypes.length) {
-      if (herdrMode !== 'full') throw new Error(`${herdrMode}-mode chats cannot adopt an unverified prototype; close it and open a fresh chat`);
       const prototype = prototypes[0];
       if (prototypes.length !== 1 || !control || !['claude', 'codex'].includes(prototype.agent) || !inCheckout(prototype.cwd, project)) throw new Error('prototype chat binding differs; inspect before adopting');
       const pane = herdr(['pane', 'get', prototype.pane_id]).pane;
@@ -179,27 +168,10 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       if (focus) herdr(['tab', 'focus', receipt.tab]);
       return { ...receipt, project: name, reused: true, available: true };
     }
-    let fallback;
-    const reader = herdrMode !== 'full' ? installedHerdrRead(bin, herdrMode) : null;
-    const scopedSocket = herdrMode === 'scoped' ? herdrControlSocket(env) : null;
-    if (herdrMode === 'scoped') chatHerdrPresets({ canonical: project.checkout });
-    if (launch.kind === 'codex') {
-      try {
-        if (herdrMode !== 'full') throw new Error(`${herdrMode}-mode chats require Claude command-level sandbox exclusions; select --kind claude`);
-        codexCoordinatingPreflight({ entryBin: bin, args: launch.args,
-          context: { workspace: project.checkout }, env: { ...env, ...Object.fromEntries(pairs) } });
-      } catch (error) {
-        if (kind || route) throw error;
-        fallback = `default Codex chat preflight refused: ${error.message}; using Claude`;
-        launch = resolveLaunchRoute(config, { kind: 'claude', args });
-        pairs = environmentPairs(launch);
-        warn(`monitor chat: ${fallback}`);
-      }
-    }
     const adapter = path.join(bin, `monitor-${launch.kind}`);
     fs.accessSync(adapter, fs.constants.X_OK);
     for (const [key, value] of Object.entries({ ORG_DIR: project.record, ORG_ACTOR: chat, HERDR_AGENT_NAME: chat,
-      HERDR_MONITOR_FLEET: home, MONITOR_SUPERVISOR_AGENT: ops, MONITOR_SESSION_KIND: 'chat',
+      HERDR_MONITOR_FLEET: home, MONITOR_SUPERVISOR_AGENT: ops,
       MONITOR_SESSION_ROLE: 'chat', MONITOR_ENTRY_BYPASS: '1', MONITOR_REQUEST_DIR: '', MONITOR_RUNTIME_DIR: '',
       MONITOR_WORKTREE_ROOT: '', LANE_CONFIG: '', HERDR_PLUGIN_CONTEXT_JSON: '', HERDR_PLUGIN_ROOT: '' })) pairs.set(key, value);
     const environment = [...pairs].flatMap(([key, value]) => ['--env', `${key}=${value}`]);
@@ -211,19 +183,13 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       herdr(['tab', 'rename', id(created.tab?.tab_id, 'tab id'), name]);
     } else created = herdr(['tab', 'create', '--workspace', control.workspace_id, '--cwd', project.checkout, '--label', name, '--no-focus', ...environment]);
     const receipt = { workspace: control.workspace_id, tab: id(created.tab?.tab_id, 'tab id'), pane: id(created.root_pane?.pane_id, 'pane id'),
-      name: chat, checkout: project.checkout, record: project.record, kind: launch.kind, herdr_mode: herdrMode, to: ops, ...(fallback ? { fallback } : {}) };
+      name: chat, checkout: project.checkout, record: project.record, kind: launch.kind, to: ops };
     state.workspace = receipt.workspace;
     state.projects[project.identity] = receipt;
     // Retain the tab even if startup fails or its reply is lost. Reopening
     // never types a second launch into an uncertain pane or creates a duplicate.
     writeFileAtomic(file, JSON.stringify(state, null, 2) + '\n', 0o600);
     waitForShell(herdr, receipt, project, { now, sleep, startupMs });
-    if (herdrMode === 'scoped') {
-      const info = herdr(['pane', 'process-info', '--pane', receipt.pane]).process_info;
-      const shell = ownerProcess(info?.shell_pid);
-      if (!shell) throw Error('scoped chat shell identity unavailable; retained tab, nothing launched');
-      createScopedBinding({ root: reader.scopeRoot, receipt, canonical: project.checkout, shell, socket: scopedSocket });
-    }
     const native = [...launch.args];
     if (launch.model) native.push('--model', launch.model);
     if (launch.effort) native.push(...(launch.kind === 'codex' ? ['-c', `model_reasoning_effort=${launch.effort}`] : ['--effort', launch.effort]));

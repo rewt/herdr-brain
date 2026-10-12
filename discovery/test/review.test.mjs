@@ -96,7 +96,7 @@ test('atomic writer pins its directory when an attacker replaces the directory p
   assert.throws(() => writeFileAtomic(path.join(assigned, 'another.json'), 'no'), /ELOOP|ENOTDIR|redirect/u);
 });
 
-for (const launcher of ['supervisor/open-session.mjs', 'contrib/settle-watch.mjs']) {
+for (const launcher of ['contrib/settle-watch.mjs']) {
   test(`${launcher} sends a bypass that preserves its interactive native session`, { skip: PTY_SKIP_REASON }, (t) => {
     const f = fixture(t), installed = install(f), config = path.join(f.scratch, 'routes.json'), checklist = path.join(f.scratch, 'checklist.md');
     fs.writeFileSync(config, '{}'); fs.writeFileSync(checklist, '# Settle\n');
@@ -155,22 +155,7 @@ test('only fresh interactive shims adopt a lane; utilities, batch, resume and ex
     if (tty) interactive(path.join(installed.bin, kind), args, cwd, installed.env);
     else command(path.join(installed.bin, kind), args, cwd, installed.env);
     const receipt = JSON.parse(fs.readFileSync(installed.receipt));
-    assert.deepEqual(receipt.args.slice(0, args.length), args); assert.equal(receipt.cwd, cwd);
-    const guard = receipt.args.slice(args.length);
-    assert.equal(guard.length, 2);
-    if (kind === 'codex') {
-      assert.equal(guard[0], '-c');
-      assert.match(guard[1], /^hooks\.PreToolUse=\[\{matcher="\^\(request_user_input\)\$"/u);
-      assert.match(guard[1], /unattended\.mjs' 'ops'/u);
-      assert.ok(guard[1].includes(path.join(product, 'supervisor/unattended.mjs')));
-      assert.ok(guard[1].includes(assigned.context().org));
-    } else {
-      assert.equal(guard[0], '--settings');
-      const groups = JSON.parse(guard[1]).hooks.PreToolUse;
-      assert.equal(groups.length, 1); assert.equal(groups[0].matcher, '^(AskUserQuestion)$');
-      assert.match(groups[0].hooks[0].command, /unattended\.mjs' 'ops'/u);
-      assert.ok(groups[0].hooks[0].command.includes(assigned.context().org));
-    }
+    assert.deepEqual(receipt.args, args, 'existing lanes pass through with no question guard'); assert.equal(receipt.cwd, cwd);
     assert.equal(command('git', ['worktree', 'list', '--porcelain'], f.repo), lanesBefore);
   };
   for (const kind of ['codex', 'claude']) {

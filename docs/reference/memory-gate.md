@@ -63,12 +63,10 @@ resumed plan with an earlier attempt, the host adapter keeps the memory waits
 and leaves STOP to the train's guards: integrated members are reconciled and
 unfinished members are refused, preserving the recovery checkpoint.
 
-Supervisor `brief` and `brief --json` show the current memory measurement, reason,
-probe advisories, and the largest memory and CPU consumers. Process rows carry
-PID, parent PID, resident bytes, CPU percentage and command basename only, so a
-consumer can be identified without exposing process arguments or their secrets.
-This is read-only, machine-wide
-diagnostic evidence; it never authorizes signalling or infers work status.
+Supervisor `brief` and `brief --json` show the current memory measurement, reason
+and probe advisories. This is read-only, machine-wide diagnostic evidence; it
+never authorizes signalling or infers work status. Briefs no longer list the
+largest memory and CPU consumers.
 
 Offline fixture policy supplies healthy native memory readings, and pressure
 regressions replace those readings until an owned fixture file changes. Tests do

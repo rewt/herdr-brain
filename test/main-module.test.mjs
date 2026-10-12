@@ -131,4 +131,12 @@ test('record loads settle, lanes and housekeeping views only when their command 
     assert.ok(!statics.includes(view), `${view} must load lazily`);
     assert.ok(org.includes(`lazy('${view}'`), `${view} must stay reachable`);
   }
+  // A lazy import fails only when its command runs, so a deleted view must fail here.
+  const lazyViews = [...org.matchAll(/\blazy\('([^']+)', '(\w+)'\)/gu)];
+  assert.ok(lazyViews.length >= 3, 'lazy view table must stay parseable');
+  for (const [, view, name] of lazyViews) {
+    const file = path.resolve(source, 'bin', view);
+    assert.ok(fs.existsSync(file), `${view} must exist on disk`);
+    assert.match(fs.readFileSync(file, 'utf8'), new RegExp(`export (?:async )?function ${name}\\b`, 'u'), `${view} must export ${name}`);
+  }
 });

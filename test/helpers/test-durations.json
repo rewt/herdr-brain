@@ -23,10 +23,6 @@
       "duration_ms": 17208,
       "measured_at": "2026-10-03T21:09:09.469Z"
     },
-    "acceptance/test/launch.test.mjs": {
-      "duration_ms": 15,
-      "measured_at": "2026-10-03T21:09:09.469Z"
-    },
     "acceptance/test/load-round2.test.mjs": {
       "duration_ms": 55183,
       "measured_at": "2026-10-03T21:09:09.469Z"
@@ -66,14 +62,6 @@
     "acceptance/test/verification.test.mjs": {
       "duration_ms": 838,
       "measured_at": "2026-10-03T21:09:09.469Z"
-    },
-    "brain/test/capture.test.mjs": {
-      "duration_ms": 13,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "brain/test/projects.test.mjs": {
-      "duration_ms": 92,
-      "measured_at": "2026-10-03T20:51:44.971Z"
     },
     "discovery/test/acceptance.test.mjs": {
       "duration_ms": 14824,
@@ -235,10 +223,6 @@
       "duration_ms": 7049,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
-    "test/brain-start.test.mjs": {
-      "duration_ms": 3420,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
     "test/deadline-boundaries.test.mjs": {
       "duration_ms": 31051,
       "measured_at": "2026-10-03T21:03:59.469Z"
@@ -277,10 +261,6 @@
     },
     "test/one-watcher.test.mjs": {
       "duration_ms": 13,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "test/open-session.test.mjs": {
-      "duration_ms": 1341,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
     "test/plugin-install.test.mjs": {
@@ -337,10 +317,6 @@
     },
     "test/today.test.mjs": {
       "duration_ms": 4240,
-      "measured_at": "2026-10-03T20:51:44.971Z"
-    },
-    "test/workspace.test.mjs": {
-      "duration_ms": 719,
       "measured_at": "2026-10-03T20:51:44.971Z"
     },
     "watch/test/watch.test.mjs": {

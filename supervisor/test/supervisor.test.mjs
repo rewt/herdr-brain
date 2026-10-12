@@ -8,7 +8,6 @@ import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { entryPolicy } from '../../discovery/policy.mjs';
 import { supervisorCase } from '../../acceptance/supervisor.mjs';
 import { queueFor } from '../../promote/promote.mjs';
-import { processUsage } from '../../lib/memory.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 process.env.ORG_ACTOR = 'supervisor-test-reader';
 const invoke = (f, args, cwd = f.repo) => f.exec(process.execPath, [path.join(root, 'supervisor/supervisor.mjs'), ...args], cwd, { ORG_DIR: f.org });
@@ -58,34 +57,18 @@ test('cold start Lessons handles empty records and terminal controls in claims',
   assert.ok(renderColdStart(doc).includes('😀'.repeat(400)), 'keep valid Unicode claims in full');
 });
 
-test('cold start surfaces host pressure and memory/CPU process evidence without changing record status', t => {
+test('cold start surfaces host memory pressure without process rows, storage advisories or record changes', t => {
   const f = fixture(t), before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
-  const row = { pid: 321, ppid: 123, rss_bytes: 1024 ** 3, cpu_percent: 99, command: 'node' };
   const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env,
-    memory: { total: 16 * 1024 ** 3, available: 2 * 1024 ** 3, swap_used: 1024 ** 3, warning: 'probe detail' },
-    processes: { by_memory: [row], by_cpu: [row] } });
+    memory: { total: 16 * 1024 ** 3, available: 2 * 1024 ** 3, swap_used: 1024 ** 3, warning: 'probe detail' } });
   assert.match(doc.host.reason, /swap in use/);
+  assert.deepEqual(Object.keys(doc.host), ['memory', 'reason']); assert.equal(doc.footprint, undefined);
   const text = renderColdStart(doc);
+  assert.match(text, /Host memory: available 2048 MiB/);
   assert.match(text, /Wait before dispatch, review, promotion or release/);
-  assert.match(text, /PID 321 parent 123.*RSS 1024 MiB.*CPU 99%.*node/);
   assert.match(text, /Memory probe advisory: probe detail/);
+  assert.doesNotMatch(text, /Largest (?:memory|CPU) consumers|Storage advisory|PID \d+ parent/);
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
-});
-
-test('cold start and entry policy expose command basenames and resource figures without process argv', t => {
-  const f = fixture(t), secret = 'private-token-password-123';
-  const processes = processUsage({ run: (cmd, args) => {
-    assert.equal(cmd, 'ps');
-    assert.deepEqual(args, ['-axo', 'pid=,ppid=,rss=,%cpu=,comm=']);
-    // Simulate ps: requesting args would expose credentials from another process.
-    return `321 123 1024 99 /usr/local/bin/node${args.join().includes('args=') ? ` --token ${secret}` : ''}\n`;
-  } });
-  processes.by_memory[0].argv = ['--password', secret];
-  const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env, processes });
-  assert.deepEqual(doc.host.processes.by_memory[0], { pid: 321, ppid: 123, rss_bytes: 1024 ** 2, cpu_percent: 99, command: 'node' });
-  for (const text of [JSON.stringify(doc), renderColdStart(doc), entryPolicy({ role: 'supervisor', workspace: f.repo, canonical: f.repo, identity: path.join(f.repo, '.git'), org: f.org }, root)]) {
-    assert.ok(!text.includes(secret)); assert.ok(!text.includes('/usr/local/bin/node'));
-  }
 });
 
 for (const stage of ['review', 'correction']) {

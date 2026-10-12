@@ -32,7 +32,7 @@ and removes only its unchanged managed files with `--bin ... --remove`.
 Batch/print, resume and sessions inside an existing linked worktree retain their
 checkout and workflow. Joined-project sessions still receive native sandbox
 settings and a new private temp; utilities pass directly through. Lane
-dispatch, supervisor/open-session and contrib/settle-watch set
+dispatch and contrib/settle-watch set
 `MONITOR_ENTRY_BYPASS=1` in the tab and launch environment, preserving their
 assigned checkout, role, report path and run. A fresh native `herdr agent start`
 receives worker entry just like a fresh interactive shell launch. A display-only
@@ -125,14 +125,16 @@ Harness selection follows the plugin supervisor default; `--kind` or a project
 `--route NAME` overrides it. Project routing layers supply launch arguments and
 accounts; repeat `--arg` to supply native options. The launcher's receipt lives
 in the fleet home at `chats.json`; it does not edit another project's files.
-Before creating a new tab, a Codex chat checks native permission selectors and
-permission-profile support using the same preflight as coordinating adapters.
-If the default Codex choice refuses (including an inherited `sandbox_mode`),
-the chat uses the installed Claude adapter and shows the reason in a warning
-and its receipt's `fallback` field. No user configuration change is needed.
-An explicit `--kind codex` or Codex route refuses with the reason instead.
+Chats have full Herdr access. The launcher runs no Codex sandbox preflight and
+never falls back to Claude; native sandbox selectors are the harness's own.
 
-### Chat Herdr access
+### Chat Herdr access (retired)
+
+`monitor chat` no longer reads `chat.herdr_mode` or writes scoped bindings, and a
+receipt carrying `herdr_mode` reopens as an ordinary chat. The read/scoped launch
+support described below still exists in the discovery adapters until they are
+removed; do not declare a new `chat.herdr_mode`. A committed `scoped` mode can no
+longer launch a new chat, because nothing writes the shell binding it claims.
 
 Commit the chat mode in the project's **canonical `.lane.json`** (not a lane,
 parent routing layer, native settings file or environment variable):
@@ -497,15 +499,11 @@ policy. No persistent Codex trust record or Claude settings file is rewritten.
 Unknown/unsupported builds retain the existing visible warning. Version evidence
 and proof limits are in [worktree access](docs/worktree-access.md).
 
-The same per-launch path installs the supervisor's [unattended question guard](../supervisor/README.md).
-Ops and bypassed worker launches deny Claude `AskUserQuestion` and Codex
-`request_user_input`, directing the session to record a question, choose a safe
-default and continue. Project chats carry `MONITOR_SESSION_KIND=chat`; combined
-chat/ops supervisors can select `combined` in their launch environment. Those
-conversations ask normally until macOS idle reaches fifteen minutes, the screen
-locks or presence is unknown. A worker cannot inherit conversation policy from
-its parent's chat environment. No operator settings or native hook trust records
-are changed; enabled/trusted native hooks are still required.
+Launches add no question guard or permission hook. Worker and supervisor policy
+text asks sessions not to open blocking questions: `record ask` with a safe
+default and continue ([supervisor protocol](../supervisor/README.md)). Only a
+supervisor launch gains the SessionStart entry hook, and only when its project
+does not register one natively.
 
 Workers and reviewers respect inherited or CLI Codex permission selectors,
 including `sandbox_mode`, configuration profiles and `--yolo`; one warning names
@@ -965,14 +963,6 @@ only when live Claude execution is required. All setup is covered by cleanup;
 setup failure removes the installed snapshot and copied project roots, preserving
 only an available evidence summary.
 
-
-Joined-project launches also register the deterministic steward permission hook
-for both worker and supervisor roles. Claude runs a per-request command hook
-that answers independently of the adapter process. Codex's command hook requires native
-operator trust; its definition stays stable while launch environment carries the
-private run-temp/project binding. Permission hooks share the settings merge with
-lifecycle and question hooks, and never write persistent native settings/trust.
-See [steward policy, audit and operator alert setup](../brain/README.md#permission-decisions).
 
 ### Declared host suites
 

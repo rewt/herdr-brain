@@ -38,7 +38,7 @@ unsupported for validation. Maintainers can verify and rebuild bundles using the
 [native helper guide](../discovery/native/README.md).
 
 Python 3 is required by release plugin
-discovery/unlinking and existing Brain LaunchAgent restoration. Install it through
+discovery/unlinking. Install it through
 your OS package manager or Python installer and ensure `python3` is on PATH.
 
 Before building or activating, verify these dependencies in the installation
@@ -70,8 +70,8 @@ Build archives the tag and makes the release read-only; the product has no npm
 dependencies. It does not install entry. Activate installs entry from the final
 release, creates `record`, `org` and `lane` launchers and switches `current`. The
 Herdr plugin was removed on 2026-10-12; activation unlinks an older plugin
-registration. If an existing Brain
-LaunchAgent is present, activation moves and reloads it; it creates no new one.
+registration. Activation never touches launchd; it refuses while the retired
+Brain LaunchAgent plist is still installed and names the commands that remove it.
 No project scheduler starts during installation.
 
 Defaults are `$HOME/.local/share/herdr-monitor` for machine state/releases,
@@ -366,9 +366,9 @@ show the work, the questions waiting on you and each lane's stage. Navigate the
 sessions themselves in Herdr. The terminal console was removed on 2026-10-12; it is
 archived at tag `archive/console-20261012`.
 
-The older optional Brain capture service is separate from the project cycle; it can
-call models and has legacy machine integration. New adoption does not need to install
-it or edit launchd.
+The Brain capture service, its steward and permission hooks were removed on
+2026-10-12. `brain digest` remains a foreground, model-free record digest for
+[lesson distillation](reference/lessons.md#distillation).
 
 ## Upgrade, rollback and uninstall
 
@@ -390,8 +390,7 @@ bash /path/to/monitor/herdr/release.sh restore
 
 Rollback selects `previous` and reinstalls that release's entry (and re-links its
 plugin if that older release has one). It requires a previous activation. Rolling back to a pre-discovery release
-removes entry. Restore returns managed launchers and any pre-existing Brain
-service to their saved pre-activation state, removes unchanged entry adapters and
+removes entry. Restore returns managed launchers to their saved pre-activation state, removes unchanged entry adapters and
 PATH snippets, and unlinks the release plugin. It keeps immutable releases and
 project records. It does not stop existing agents or project schedules. Pause
 housekeeping and let the supervisor manage running sessions before uninstalling.

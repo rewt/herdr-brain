@@ -12,7 +12,6 @@ import { cleanupInboxes } from '../cleanup.mjs';
 import { acquireHostTestSlot } from '../../test-slot/test-slot.mjs';
 import { createLoadMonitor, LoadTimeout } from '../load.mjs';
 import { cases, cutoverChecks, runCase } from '../cases.mjs';
-import { withCommandContext } from '../limits.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
 function scratch(t) {
@@ -75,17 +74,17 @@ for (const late of [false, true]) test(`native polling bounds each call and reje
 for (const heavy of [false, true]) test(`run.mjs cutover wiring propagates ${heavy ? 'loaded PENDING' : 'quiet FAIL'} into retirement`, async t => {
   const load = createLoadMonitor({ cpus: 2, read: () => heavy ? [28, 25, 22] : [1, 1, 1] }); t.after(load.stop);
   const results = [{ ...cases.copy, status: 'PASS' }];
-  const original = new LoadTimeout('timeout: same-request child', load.snapshot());
+  const original = new LoadTimeout('timeout: copied continue wrapper child', load.snapshot());
   let retired = false;
   await runCutoverCases({ results,
     test: (definition, fn) => runCase(results, definition, fn),
     switches: async check => {
-      await check(cutoverChecks.retry, () => withCommandContext('busy refusal passed; same-request retry failed', () => { throw original; }));
+      await check(cutoverChecks.routes, () => { throw original; });
     }, retirement: () => { retired = true; }, scratchRoots: [],
   });
   assert.equal(retired, false);
   for (const result of results.slice(1)) {
-    assert.equal(result.status, heavy ? 'PENDING' : 'FAIL'); assert.match(result.detail, /same-request retry failed/);
+    assert.equal(result.status, heavy ? 'PENDING' : 'FAIL'); assert.match(result.detail, /copied continue wrapper child/);
     if (heavy) assert.match(result.detail, /28\.00\/25\.00\/22\.00/);
   }
 });

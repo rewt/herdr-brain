@@ -63,7 +63,7 @@ test('dependent cutover/default-cycle cases preserve prerequisite causes and ori
     {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new Pending('pass --bch-cloak LIVE_REPO'))},
     {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new HarnessLimit('stand-in acknowledgement unavailable'))},
     {key:'herdr-fixture',name:'Supervisor fixture',...classifyFailure(new HarnessLimit('native socket unavailable'))},
-    {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new Error('cutover candidate lacks supervisor/open-session.mjs'))},
+    {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new Error('cutover candidate lacks supervisor/arm-watch.sh'))},
     {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new ProductBoundary('acceptance_product_boundary: foreign target'))},
   ];
   for (const prerequisite of scenarios) {

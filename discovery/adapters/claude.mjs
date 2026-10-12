@@ -7,7 +7,6 @@ import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { freshInteractive, interactiveResume } from '../launch.mjs';
 import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
-import { unattendedHookArguments } from '../../supervisor/unattended.mjs';
 import { spawnNative } from '../session.mjs';
 import { FleetError } from '../../lib/fleet.mjs';
 import { nativeSandboxLaunch, nativeSessionContext, nativeSession } from '../native-sandbox.mjs';
@@ -38,7 +37,7 @@ function passthrough() {
       if (context) {
         context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
         launch = nativeSandboxLaunch({ entryBin: values['entry-bin'], kind: 'claude', binary: values.binary,
-          args: [...native, ...unattendedHookArguments('claude', context, root, launch.env)], context,
+          args: native, context,
           env: { ...launch.env, ORG_DIR: context.org } });
       }
       else console.error('monitor: not a fleet project; starting native Claude without a project sandbox');
@@ -68,7 +67,7 @@ try {
   else {
     const environment = { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests };
     const launch = nativeSandboxLaunch({ entryBin: values['entry-bin'], kind: 'claude', binary: values.binary,
-      args: [...native, ...sessionHookArguments('claude', context, root, environment), '--append-system-prompt', policy], context,
+      args: [...native, ...sessionHookArguments('claude', context, root), '--append-system-prompt', policy], context,
       env: environment });
     let child;
     try { child = spawnNative(entry, launch.binary, launch.args, { cwd: context.workspace, env: launch.env }); }

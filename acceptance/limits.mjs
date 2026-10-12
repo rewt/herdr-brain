@@ -63,15 +63,6 @@ export function commandFailure(message, { scratchRoot, scratchRoots = scratchRoo
     ? new LoadTimeout(message, load) : new Error(message);
 }
 
-export function withCommandContext(context, command) {
-  try { return command(); }
-  catch (error) {
-    // Retain the original type, operation samples, code and stack. Rebuilding
-    // from its message would discard evidence that this deadline was measured.
-    error.message = `${context}: ${error.message}`;
-    throw error;
-  }
-}
 export function classifyFailure(error, { cleanup = false, scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [], load } = {}) {
   if (error instanceof ProductBoundary || isProductBoundary(error.message)) return { status: 'FAIL', origin: 'product', detail: error.message };
   if (error.code === 'ERR_ASSERTION') return { status: 'FAIL', origin: 'product', detail: error.message };

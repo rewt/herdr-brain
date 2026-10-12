@@ -97,15 +97,10 @@ require inspection; an absent legacy PID can be recovered.
 This module replaces bch-cloak's `notify-watch.sh` after that project switches
 over. It takes the proven blocking-wait and direct-prompt mechanics from
 `contrib/settle-watch.mjs`, but does not open a model session. That old entrypoint
-is kept unchanged only because bch-cloak still calls its path in this repository's
-canonical checkout; it is removed last, after bch-cloak's release-gated switch. The
-supervisor may explicitly open one with `supervisor/settle.sh`; that launcher
-does not observe worker lifecycle. Brain `watch` remains separate: it captures
-all stopped session screens into the operator queue rather than delivering a
-recorded run to a supervisor. Brain's model-free steward now consumes blocked
-captures using fleet identity, routes workers through the supervisor inbox, and
-escalates blocked supervisors or aged deliveries to a configurable local operator
-alert. See [Brain routing and bounds](../brain/README.md#model-free-steward-routing).
+is kept unchanged only because bch-cloak still calls its path through the installed
+release; it is removed last, after bch-cloak's release-gated switch. This watcher is
+the only run-lifecycle observer: the Brain capture service and steward were removed,
+and a supervisor settles a reported run with `supervisor.mjs handle`.
 
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

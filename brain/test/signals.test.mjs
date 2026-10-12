@@ -183,6 +183,12 @@ test('foreground CLI is model-free, read-only on the record, and persists only B
   assert.equal(cli(['--org', f.orgDir, '--ack', digest.pass]).status, 0);
   assert.match(cli(['--org', f.orgDir]).stdout, /Record signal digest/);
   assert.notEqual(cli(['--org', f.orgDir, '--limt', '2']).status, 0);
+  assert.match(cli(['--org', f.orgDir, 'R-1']).stderr, /no positional arguments/);
+  // The capture service and its queue verbs are gone; digest is the only command.
+  for (const retired of [['watch'], ['queue'], []]) {
+    const r = spawnSync(process.execPath, [BIN, ...retired], { env, encoding: 'utf8' });
+    assert.equal(r.status, 2); assert.match(r.stderr, /Usage: brain digest --org DIR/);
+  }
   assert.equal(fs.readFileSync(path.join(f.orgDir, 'events.jsonl'), 'utf8'), before);
   assert.deepEqual(fs.readdirSync(f.orgDir), ['events.jsonl']);
 });

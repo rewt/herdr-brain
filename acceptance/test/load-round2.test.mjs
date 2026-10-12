@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createLoadMonitor, waitUntil, LoadTimeout } from '../load.mjs';
-import { commandFailure, classifyFailure, withCommandContext, requireSuccessfulChecks } from '../limits.mjs';
+import { commandFailure, classifyFailure, requireSuccessfulChecks } from '../limits.mjs';
 import { cases, cutoverChecks, runCase } from '../cases.mjs';
 import { settleCase } from '../settle.mjs';
 import { supervisorCase } from '../supervisor.mjs';
@@ -23,20 +23,18 @@ function monitor(t, heavy = true) {
 }
 
 for (const heavy of [true, false]) {
-  test(`retry context and cutover aggregate preserve ${heavy ? 'heavy-load PENDING' : 'normal-load FAIL'}`, async (t) => {
+  test(`cutover check and aggregate preserve ${heavy ? 'heavy-load PENDING' : 'normal-load FAIL'}`, async (t) => {
     const load = monitor(t, heavy), window = load.begin();
-    const original = new LoadTimeout('timeout: same-request child', load.snapshot(window));
-    assert.throws(() => withCommandContext('busy refusal passed; same-request retry failed', () => { throw original; }),
-      (error) => error === original && error.load === original.load && /retry failed/.test(error.message));
+    const original = new LoadTimeout('timeout: copied continue wrapper child', load.snapshot(window));
     const checks = [];
-    await runCase(checks, cutoverChecks.retry, () => withCommandContext('busy refusal passed; same-request retry failed', () => { throw original; }));
+    await runCase(checks, cutoverChecks.routes, () => { throw original; });
     const results = [{ ...cases.copy, status: 'PASS' }];
     await runCase(results, cases.switches, () => requireSuccessfulChecks(checks));
     await runCase(results, cases.retirement, () => assert.fail('retirement executed'));
     for (const result of [...checks, ...results.slice(1)]) {
       assert.equal(result.status, heavy ? 'PENDING' : 'FAIL');
       assert.equal(result.origin, heavy ? 'harness' : 'product');
-      assert.match(result.detail, /same-request retry failed/);
+      assert.match(result.detail, /copied continue wrapper child/);
       if (heavy) assert.match(result.detail, /28\.00\/25\.00\/22\.00/);
     }
   });

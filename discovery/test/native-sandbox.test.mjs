@@ -11,7 +11,6 @@ import { runTemporary, temporaryEnvironment } from '../temporary.mjs';
 import { nativeSandboxLaunch, nativeSession } from '../native-sandbox.mjs';
 import { toml } from '../confinement.mjs';
 import { fakeControlSocket } from '../../test/helpers/fake-control-socket.mjs';
-import { unattendedHookArguments } from '../../supervisor/unattended.mjs';
 import { sessionHookArguments } from '../../supervisor/session-hooks.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -64,35 +63,29 @@ function fixture(t, fallbackState = 'owned') {
   return { root, own, other, context, binary, socket, fallback, fallbackInspections: () => fallbackInspections };
 }
 
-test('native question guard merges with supplied Claude hooks and lane guards and keeps Codex settings per launch', t => {
-  const f = fixture(t), root = fileURLToPath(new URL('../../', import.meta.url));
+test('supplied Claude hooks merge with lane guards and launches add no question guard or permission hook', t => {
+  const f = fixture(t);
   const settings = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'existing-command' }] }],
     SessionStart: [{ hooks: [{ type: 'command', command: 'existing-start' }] }] } };
   const file = path.join(f.root, 'operator-settings.json'); fs.writeFileSync(file, JSON.stringify(settings));
   for (const kind of ['claude', 'codex']) {
-    const guard = unattendedHookArguments(kind, { ...f.context, role: 'supervisor' }, root, { MONITOR_SESSION_KIND: 'chat' });
-    const launch = nativeSandboxLaunch({ kind, binary: f.binary, args: [...(kind === 'claude' ? ['--settings', file] : []), ...guard], context: f.context });
+    const launch = nativeSandboxLaunch({ kind, binary: f.binary, args: kind === 'claude' ? ['--settings', file] : [], context: f.context });
     t.after(launch.close);
     if (kind === 'claude') {
       assert.equal(launch.args.filter(arg => arg === '--settings').length, 1);
       const merged = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
       assert.deepEqual(merged.hooks.PreToolUse[0], settings.hooks.PreToolUse[0]);
       assert.deepEqual(merged.hooks.SessionStart, settings.hooks.SessionStart);
-      assert.equal(merged.hooks.PreToolUse.filter(g => g.matcher.includes('AskUserQuestion')).length, 1);
       assert.ok(merged.hooks.PreToolUse.some(g => g.matcher.includes('NotebookEdit')));
-      assert.match(merged.hooks.PreToolUse[1].hooks[0].command, /'conversation'/);
-      assert.match(merged.hooks.PermissionRequest[0].hooks[0].command, /permission-hook\.mjs/);
-    } else {
-      assert.ok(launch.args.includes(guard[1]));
-      assert.match(guard[1], /request_user_input/);
-      assert.ok(launch.args.some(arg => arg.startsWith('hooks.PermissionRequest=')));
-    }
+      assert.ok(!merged.hooks.PreToolUse.some(g => g.matcher.includes('AskUserQuestion')));
+      assert.equal(merged.hooks.PermissionRequest, undefined);
+    } else assert.ok(!launch.args.some(arg => /^hooks\.(?:PreToolUse|PermissionRequest)=/u.test(arg)));
   }
   assert.deepEqual(JSON.parse(fs.readFileSync(file)), settings);
   for (const directory of ['.claude', '.codex']) assert.ok(!fs.existsSync(path.join(f.own.checkout, directory)), 'no persistent settings created');
 });
 
-for (const projectHook of [false, true]) test(`main launches compose question and permission hooks with ${projectHook ? 'project' : 'adapter'} entry hooks`, t => {
+for (const projectHook of [false, true]) test(`main launches carry only the ${projectHook ? 'project' : 'adapter'} entry hook`, t => {
   const f = fixture(t), root = fileURLToPath(new URL('../../', import.meta.url));
   const context = { ...f.context, role: 'supervisor' };
   for (const kind of ['claude', 'codex']) {
@@ -103,18 +96,16 @@ for (const projectHook of [false, true]) test(`main launches compose question an
         SessionStart: [{ hooks: [{ type: 'command', command: 'node supervisor/session-start.mjs' }] }],
       } }));
     }
-    const args = sessionHookArguments(kind, context, root, { MONITOR_SESSION_KIND: 'combined' });
+    const args = sessionHookArguments(kind, context, root);
     const launch = nativeSandboxLaunch({ kind, binary: f.binary, args, context });
     t.after(launch.close);
     if (kind === 'claude') {
       assert.equal(launch.args.filter(arg => arg === '--settings').length, 1);
-      const hooks = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1])).hooks;
-      assert.match(hooks.PreToolUse[0].hooks[0].command, /unattended\.mjs/);
-      assert.match(hooks.PermissionRequest[0].hooks[0].command, /permission-hook\.mjs/);
+      const hooks = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1])).hooks ?? {};
+      assert.equal(hooks.PreToolUse, undefined); assert.equal(hooks.PermissionRequest, undefined);
       assert.equal(Boolean(hooks.SessionStart), !projectHook, 'project hook stays in its native settings scope');
     } else {
-      assert.equal(launch.args.filter(arg => arg.startsWith('hooks.PreToolUse=')).length, 1);
-      assert.equal(launch.args.filter(arg => arg.startsWith('hooks.PermissionRequest=')).length, 1);
+      assert.ok(!launch.args.some(arg => /^hooks\.(?:PreToolUse|PermissionRequest)=/u.test(arg)));
       assert.equal(launch.args.some(arg => arg.startsWith('hooks.SessionStart=')), !projectHook);
     }
   }
@@ -127,7 +118,7 @@ test('headless tasks and resumes get a sandbox even when prompt text names a uti
   assert.equal(nativeSession('claude', ['--print', 'auth']), true);
 });
 
-for (const kind of ['claude', 'codex']) test(`${kind} interactive resume composes question and permission hooks with inherited supervisor role`, t => {
+for (const kind of ['claude', 'codex']) test(`${kind} interactive resume with an inherited supervisor role adds no question, permission or entry hook`, t => {
   const f = fixture(t); fixtureFleet(t, f.root);
   command('git', ['init', '-qb', 'main'], f.own.checkout);
   command('git', ['config', 'user.name', 'Resume test'], f.own.checkout);
@@ -146,19 +137,16 @@ settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexO
   const args = kind === 'claude' ? ['--resume', 'fixture-session'] : ['resume', 'fixture-session'];
   const result = spawnSync(process.execPath, ['--require', tty, new URL(`../adapters/${kind}.mjs`, import.meta.url).pathname,
     '--auto-entry', '--repo', f.own.checkout, '--binary', f.binary, '--', ...args], {
-    cwd: f.own.checkout, env: { ...process.env, MONITOR_SESSION_ROLE: 'supervisor', MONITOR_ENTRY_BYPASS: '0', MONITOR_SESSION_KIND: 'combined' }, encoding: 'utf8',
+    cwd: f.own.checkout, env: { ...process.env, MONITOR_SESSION_ROLE: 'supervisor', MONITOR_ENTRY_BYPASS: '0' }, encoding: 'utf8',
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const got = JSON.parse(fs.readFileSync(receipt));
-  const guard = kind === 'claude' ? got.settings.hooks.PreToolUse.find(group => group.matcher.includes('AskUserQuestion')).hooks[0].command
-    : got.args.find(arg => arg.startsWith('hooks.PreToolUse='));
-  assert.match(guard, /unattended\.mjs/); assert.match(guard, /'conversation'/);
+  assert.doesNotMatch(JSON.stringify(got), /unattended\.mjs|permission-hook\.mjs|PermissionRequest|AskUserQuestion|request_user_input/);
   assert.doesNotMatch(got.args.join(' '), /session-start\.mjs|SessionStart/);
   if (kind === 'claude') {
     assert.equal(got.args.filter(arg => arg === '--settings').length, 1);
-    assert.equal(got.settings.hooks.SessionStart, undefined);
-    assert.match(got.settings.hooks.PermissionRequest[0].hooks[0].command, /permission-hook\.mjs/);
-  } else assert.ok(got.args.some(arg => arg.startsWith('hooks.PermissionRequest=')));
+    assert.equal(got.settings.hooks?.SessionStart, undefined);
+  }
 });
 
 test('each run gets short private fleet temp and all three temp variables', t => {
@@ -439,8 +427,7 @@ test('Codex respects inherited and CLI sandbox choices with one source-naming wa
     const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: choice.args, context: f.context, warn: s => warnings.push(s) });
     t.after(launch.close);
     assert.deepEqual(launch.args.slice(0, choice.args.length), choice.args, 'the operator sandbox choice remains untouched');
-    assert.deepEqual(launch.args.slice(-2), ['-c', projectTrust([f.own.checkout])]);
-    assert.ok(launch.args.slice(choice.args.length).some(arg => arg.startsWith('hooks.PermissionRequest=')), 'per-launch denial hook accompanies native sandbox choice');
+    assert.deepEqual(launch.args.slice(choice.args.length), ['-c', projectTrust([f.own.checkout])], 'only launch trust accompanies the native sandbox choice');
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /WARNING.*sandbox_mode.*danger-full-access/u);
     assert.ok(warnings[0].includes(choice.source), warnings[0]);
@@ -602,8 +589,6 @@ test('native Codex config reader accepts dotted and quoted launch trust without 
   for (const directory of [f.own.checkout, workspace]) assert.equal(loaded.projects[directory].trust_level, 'trusted');
   assert.equal(loaded.projects[f.other.checkout].trust_level, 'untrusted');
   assert.equal(loaded.developer_instructions, 'offline project trust marker', 'native loader enables the trusted worktree project layer');
-  assert.match(loaded.hooks.PermissionRequest[0].hooks[0].command, /supervisor\/permission-hook\.mjs/,
-    'native config reader accepts the per-launch permission hook');
   assert.equal(fs.readFileSync(configFile, 'utf8'), config);
 });
 
@@ -799,15 +784,13 @@ fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({args,cwd:process.cwd
     assert.equal(got.cwd, repo); assert.equal(path.dirname(got.temp), fleet.project.temp);
     assert.equal(got.temp, got.tmp); assert.equal(got.tmp, got.temp2); assert.equal(got.socket, '/fake/herdr.sock');
     assert.ok(!fs.existsSync(got.temp), 'finished run temp is removed');
+    assert.doesNotMatch(JSON.stringify(got), /unattended\.mjs|permission-hook\.mjs|PermissionRequest|AskUserQuestion|request_user_input/);
     if (kind === 'codex') {
-      assert.ok(got.args.some(arg => arg.startsWith('hooks.PreToolUse=')));
-      assert.ok(got.args.some(arg => arg.startsWith('hooks.PermissionRequest=')));
+      assert.ok(!got.args.some(arg => /^hooks\.(?:PreToolUse|PermissionRequest)=/u.test(arg)));
       assert.deepEqual(got.args.filter(arg => arg.startsWith('projects=')), [projectTrust([f.own.checkout, repo])]);
       assert.ok(!got.args.includes('default_permissions="monitor-worker"'));
     } else {
       assert.equal(got.args.filter(arg => arg === '--settings').length, 1);
-      assert.match(got.settings.hooks.PreToolUse.find(group => group.matcher.includes('AskUserQuestion')).hooks[0].command, /unattended\.mjs/);
-      assert.match(got.settings.hooks.PermissionRequest[0].hooks[0].command, /permission-hook\.mjs/);
       assert.equal(got.settings.sandbox.enabled, true);
       const expected = [fleet.project.worktrees, fleet.project.record, got.temp];
       assert.deepEqual(got.args.filter((_, i) => got.args[i - 1] === '--add-dir'), [got.temp]);

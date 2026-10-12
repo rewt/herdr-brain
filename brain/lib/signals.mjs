@@ -1,11 +1,14 @@
 // Foreground, model-free distillation input. Record reads only; cursor and
 // pending pass receipts belong to Brain, never to events.jsonl.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { loadEvents, writeFileAtomic } from '../../lib/store.mjs';
 import { fold, lessonState } from '../../lib/state.mjs';
-import { HOME } from './queue.mjs';
+
+// Brain's own state directory; never the record.
+const STATE = process.env.BRAIN_STATE ?? path.join(os.homedir(), '.local', 'state', 'herdr-brain');
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const clean = value => String(value ?? '').replace(/[\x00-\x1f\x7f-\x9f]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -170,7 +173,7 @@ function reviewEvidence(events, orgDir) {
   return reviews;
 }
 
-export function recordDigest({ orgDir, stateDir = HOME, limit, maxChars, ack } = {}) {
+export function recordDigest({ orgDir, stateDir = STATE, limit, maxChars, ack } = {}) {
   if (!orgDir) throw new Error('usage: brain digest --org DIR [--limit N] [--max-chars N] [--json] [--ack PASS]');
   const record = fs.realpathSync(orgDir);
   const dir = path.join(stateDir, 'distill', hash(record));

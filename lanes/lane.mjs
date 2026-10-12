@@ -196,9 +196,8 @@ const FLEET = (() => { try { return projectFleet(REPO_ROOT); } catch (error) { f
 //             "use": "when to select it"}} — named dispatch defaults;
 //             kind/model/effort/args override dispatch, while env is appended.
 //             A selected route owns kind/model/effort; use is descriptive only.
-//   always_args {"<kind>": ["--option", "value", ...]} — agent options appended
-//             to every dispatch of that kind after route and --arg replacement.
-//             An option already present in the arguments is not repeated.
+//   always_args accepted and ignored (left with the entry layer); put options in
+//             a route's args instead.
 //   registry  JSON session-metadata path for dispatched agents (default
 //             ".lane/sessions.json", relative to the repository root)
 //   seams_doc path of a topic map for kept unfinished work, shown by `seams`

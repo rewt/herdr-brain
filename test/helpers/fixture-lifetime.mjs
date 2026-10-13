@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import cp, { ChildProcess } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +15,36 @@ const nativeSync = cp.spawnSync;
 const nativeSpawn = ChildProcess.prototype.spawn;
 let lifetime;
 
+function nativeGuard(root) {
+  const digest = createHash('sha256').update(fs.readFileSync(source)).digest('hex');
+  const cache = path.join(root, 'fixture-lifetime-cache');
+  fs.mkdirSync(cache, { recursive: true });
+  const executable = path.join(cache, digest), lock = `${executable}.lock`;
+  const deadline = Date.now() + loadTimeout(15000);
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  // Test files start concurrently. Publish only a complete binary and let one
+  // compiler own each digest; a killed builder must not leave a usable partial.
+  while (!fs.existsSync(executable)) {
+    try { fs.mkdirSync(lock); }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      if (Date.now() >= deadline) throw Error('fixture lifetime compiler lock timed out');
+      Atomics.wait(sleeper, 0, 0, 20);
+      continue;
+    }
+    const temporary = path.join(lock, 'guard');
+    try {
+      if (!fs.existsSync(executable)) {
+        const built = nativeSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', temporary, source],
+          { env: { PATH: '/usr/bin:/bin', TMPDIR: cache }, encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL' });
+        if (built.error || built.status) throw Error(built.error?.message ?? built.stderr);
+        fs.renameSync(temporary, executable);
+      }
+    } finally { fs.rmSync(lock, { recursive: true, force: true }); }
+  }
+  return executable;
+}
+
 // Called once by bounded-test, after offline isolation. Children that only load
 // this preload inherit the test file's writer; they never acquire another one.
 export function ownFixtureLifetime() {
@@ -22,11 +53,9 @@ export function ownFixtureLifetime() {
   const root = standalone ? fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'fixture-lifetime-')) :
     path.join(process.env.HERDR_TEST_OFFLINE_ROOT, `lifetime-${process.pid}`);
   fs.mkdirSync(root, { recursive: true });
-  const executable = path.join(root, 'fixture-lifetime'), fifo = path.join(root, 'alive');
+  const executable = nativeGuard(standalone ? root : process.env.HERDR_TEST_OFFLINE_ROOT);
+  const fifo = path.join(root, 'alive');
   const env = { PATH: '/usr/bin:/bin', TMPDIR: root };
-  const built = nativeSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', executable, source],
-    { env, encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL' });
-  if (built.error || built.status) throw Error(built.error?.message ?? built.stderr);
   const made = nativeSync('/usr/bin/mkfifo', [fifo], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
   if (made.error || made.status) throw Error(made.error?.message ?? made.stderr);
   // O_RDWR avoids a blocking open. The descriptor is deliberately retained
@@ -108,7 +137,7 @@ ChildProcess.prototype.spawn = function (options) {
 if ((process.env.HERDR_FIXTURE_GATE_LIFETIME === '1' || process.argv.includes('--owner-worker')) &&
     process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE) {
   const guard = cp.spawn(process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
-    ['--watch', process.env.HERDR_FIXTURE_LIFETIME_FIFO, process.env.HERDR_FIXTURE_LIFETIME_SECONDS],
+    ['--watch', process.env.HERDR_FIXTURE_LIFETIME_FIFO, process.env.HERDR_FIXTURE_LIFETIME_SECONDS, String(process.pid)],
     { stdio: 'ignore' });
   guard.unref();
 }

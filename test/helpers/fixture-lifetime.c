@@ -36,7 +36,15 @@ int main(int argc, char **argv) {
   if (argc < 4) return 125;
   int seconds = atoi(argv[3]);
   if (seconds < 1) return 125;
-  if (!strcmp(argv[1], "--watch")) guard(argv[2], seconds, getppid());
+  if (!strcmp(argv[1], "--watch")) {
+    if (argc < 5) return 125;
+    char *end;
+    long pid = strtol(argv[4], &end, 10);
+    if (end == argv[4] || *end || pid <= 1 || (long)(pid_t)pid != pid) return 125;
+    pid_t owner = (pid_t)pid;
+    if (getppid() != owner) return 0;
+    guard(argv[2], seconds, owner);
+  }
   if (strcmp(argv[1], "--exec") || argc < 5) return 125;
   pid_t owner = getpid(), child = fork();
   if (child < 0) return 125;

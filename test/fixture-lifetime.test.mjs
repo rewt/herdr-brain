@@ -8,6 +8,7 @@ import { spawnScenarioChild, spawnChild, waitForExit } from './helpers/child.mjs
 import { createProcessTracker } from './helpers/processes.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const local = file => fileURLToPath(new URL(file, import.meta.url));
 const tracker = createProcessTracker();
@@ -28,6 +29,90 @@ const alive = entries => {
     return row && !/^Z/.test(row.state) && row.identity === entry.identity && row.command === entry.command;
   });
 };
+
+test('concurrent lifetime owners reuse one source-digest cached guard and keep separate writers', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-lifetime-cache-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const script = `import fs from 'node:fs';
+import {ownFixtureLifetime} from ${JSON.stringify(local('./helpers/fixture-lifetime.mjs'))};
+ownFixtureLifetime();
+const executable=process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE;
+const stat=fs.statSync(executable,{bigint:true});
+console.log(JSON.stringify({executable,fifo:process.env.HERDR_FIXTURE_LIFETIME_FIFO,ino:String(stat.ino),mtime:String(stat.mtimeNs)}));`;
+  const run = async () => {
+    const child = spawnChild(t, process.execPath, ['--input-type=module', '-e', script],
+      { env: { ...process.env, HERDR_TEST_OFFLINE_ROOT: root } });
+    const result = await waitForExit(child);
+    assert.equal(result.code, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const owners = await Promise.all([run(), run(), run()]);
+  owners.push(await run());
+  const digest = createHash('sha256').update(fs.readFileSync(local('./helpers/fixture-lifetime.c'))).digest('hex');
+  const cache = path.join(root, 'fixture-lifetime-cache');
+  for (const owner of owners) {
+    assert.equal(owner.executable, path.join(cache, digest));
+    assert.equal(owner.ino, owners[0].ino, 'cache was replaced by another compilation');
+    assert.equal(owner.mtime, owners[0].mtime, 'cache was rebuilt');
+  }
+  assert.equal(new Set(owners.map(owner => owner.fifo)).size, owners.length);
+  assert.deepEqual(fs.readdirSync(cache), [digest], 'only the published binary remains');
+});
+
+test('watch guard whose spawning parent exits immediately never adopts or signals the reaper', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-lifetime-reparent-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const source = path.join(root, 'reparent.c'), executable = path.join(root, 'reparent');
+  const receipt = path.join(root, 'result'), fifo = path.join(root, 'alive');
+  // Delay entry until the spawning parent is gone. Intercept kill in the real
+  // guard source so a regression records the attempt and never signals a reaper.
+  fs.writeFileSync(source, `#include <stdio.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
+static const char *receipt;
+static int capture_signal(pid_t pid, int signal) {
+  FILE *file = fopen(receipt, "w");
+  if (!file) _exit(126);
+  fprintf(file, "signal %ld %d", (long)pid, signal);
+  fclose(file);
+  return 0;
+}
+#define kill capture_signal
+#define main lifetime_main
+#include ${JSON.stringify(local('./helpers/fixture-lifetime.c'))}
+#undef main
+#undef kill
+int main(int argc, char **argv) {
+  if (argc != 6) return 125;
+  receipt = argv[5];
+  pid_t owner = (pid_t)atoi(argv[4]);
+  for (int i = 0; getppid() == owner; i++) {
+    if (i == 10000) return 124;
+    usleep(1000);
+  }
+  int result = lifetime_main(argc, argv);
+  FILE *file = fopen(receipt, "w");
+  if (!file) return 126;
+  fprintf(file, "exit %d", result);
+  fclose(file);
+  return result;
+}`);
+  const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', executable, source]);
+  assert.equal(built.status, 0, built.stderr?.toString());
+  assert.equal(spawnSync('/usr/bin/mkfifo', [fifo]).status, 0);
+  // No FIFO writer remains: the old implementation would signal the adopted
+  // owner as soon as it entered guard(), which the interceptor records safely.
+  const parent = spawnChild(t, process.execPath, ['-e', `
+require('child_process').spawn(${JSON.stringify(executable)},
+  ['--watch',${JSON.stringify(fifo)},'1',String(process.pid),${JSON.stringify(receipt)}],
+  {stdio:'ignore'}).unref();`]);
+  const result = await waitForExit(parent);
+  assert.equal(result.code, 0, result.stderr);
+  await until(() => fs.existsSync(receipt) && fs.readFileSync(receipt, 'utf8').length,
+    'reparented guard did not report its outcome');
+  assert.equal(fs.readFileSync(receipt, 'utf8'), 'exit 0');
+});
 
 test('native lifetime guard observes EOF and its finite deadline with the caller still alive', async t => {
   for (const eof of [true, false]) {
@@ -90,8 +175,8 @@ test('live fixture victim',async t=>{
   fs.renameSync(temporary,${JSON.stringify(receipt)});
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
 });`);
-    // No containment preload for the direct case: this exercises exactly the
-    // node --test entry used by test:slot and previously leaking lane commands.
+    // The outer lifetime patch restores its containment preload. The direct
+    // node --test victim acquires its own writer when fixtureFleet runs.
     const env = { ...process.env }; delete env.NODE_OPTIONS; delete env.NODE_TEST_CONTEXT;
     const args = cancellation === 'SIGKILL' ? ['--test', file] :
       [local('./helpers/run.mjs'), '--fixed-deadlines', '--suite-timeout=8000', file];

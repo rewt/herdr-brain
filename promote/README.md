@@ -84,8 +84,9 @@ unresolved/declined blocker or overlapping work. Promotion also needs an explici
 verdict refuses here, although status views still release it, and a verdict other than
 PASS holds the work everywhere. An open operator question under the item (role human,
 linked or not) refuses promotion. Dropping or unlinking the review, or answering the
-question, releases it. Batch completion
-rechecks both. The final check holds the record
+question, releases it. Batch completion rechecks blockers and open questions
+directly; a review recorded after preparation refuses there through the
+changed-since-preparation fingerprint. The final check holds the record
 lock across the fast-forward, inside the promotion lock. It never writes events
 or trusts session metadata. Canonical supervisor STOP also refuses integration.
 

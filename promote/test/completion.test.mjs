@@ -520,7 +520,8 @@ for (const mode of ['pass-review', 'fail-review', 'no-verdict-review', 'open-que
   const f = fixture(t), m = f.lane(mode), base = f.git(['rev-parse', 'main']);
   if (mode === 'open-question') f.record(['ask', 'Allow this change?', '--parent', m.item, '--category', 'security', '--recommend', 'no', '--why', 'Raised after enqueue', '--wait']);
   else {
-    const rev = f.record(['add', 'Review', '--role', 'reviewer', '--parent', m.item]).match(/^REV-\d+/)[0];
+    // The no-verdict case uses a role alias: every spelling of the reviewer role counts.
+    const rev = f.record(['add', 'Review', '--role', mode === 'no-verdict-review' ? 'Review' : 'reviewer', '--parent', m.item]).match(/^REV-\d+/)[0];
     f.record(['block', m.item, '--by', rev]);
     for (const verdict of { 'pass-review': ['PASS'], 'fail-review': ['PASS', 'FAIL'], 'no-verdict-review': [null] }[mode]) {
       const report = path.join(f.root, `review-${verdict}.md`);

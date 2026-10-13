@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isolateGateHistory } from './gate-history.mjs';
+import { ownFixtureLifetime } from './fixture-lifetime.mjs';
 
 // Disposable projects must not inherit stale mappings from earlier fixtures.
 export function fixtureFleet(t, scratch) {
+  ownFixtureLifetime();
   const before = process.env.HERDR_MONITOR_FLEET;
   const fleet = path.join(fs.realpathSync(scratch), 'fleet');
   process.env.HERDR_MONITOR_FLEET = fleet;

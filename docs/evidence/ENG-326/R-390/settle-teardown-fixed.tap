@@ -1,0 +1,31 @@
+TAP version 13
+# Subtest: teardown stops a persistently busy inbox owner before deleting the record
+ok 1 - teardown stops a persistently busy inbox owner before deleting the record
+  ---
+  duration_ms: 8056.466292
+  ...
+# Subtest: teardown stops a slow transport and its inbox owner before deleting the record
+ok 2 - teardown stops a slow transport and its inbox owner before deleting the record
+  ---
+  duration_ms: 480.297792
+  ...
+# Subtest: a real detached owner stays alive through test end and stops in the after-hook
+ok 3 - a real detached owner stays alive through test end and stops in the after-hook
+  ---
+  duration_ms: 689.418208
+  ...
+# Subtest: teardown treats a lock pointing at an unrelated command as gone without signalling it
+ok 4 - teardown treats a lock pointing at an unrelated command as gone without signalling it
+  ---
+  duration_ms: 135.107459
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9463.596417

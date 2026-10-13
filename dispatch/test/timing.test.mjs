@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { appendTiming, readTiming, timingEvent, timingJournal, timingMetadata, timedMemoryWait, observeProcessEnd } from '../../lib/run-timing.mjs';
 import { runMetrics, collectRunMetrics, renderRunMetrics } from '../metrics.mjs';
+import { ownFixtureLifetime } from '../../test/helpers/fixture-lifetime.mjs';
 
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -14,6 +15,7 @@ const at = second => `2026-10-08T12:00:${String(second).padStart(2, '0')}.000Z`;
 const identity = { run: 'R-1', item: 'ENG-1', lane: 'timing' };
 const event = (second, kind, outcome) => ({ ...identity, at: at(second), kind, outcome });
 function fixture(t) {
+  ownFixtureLifetime();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'run-timing-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const org = path.join(root, 'org'), journal = path.join(root, 'request.json');

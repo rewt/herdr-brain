@@ -6,8 +6,10 @@ import { syncBuiltinESMExports } from 'node:module';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { offlineHerdr } from './offline-herdr.mjs';
 import { commandAllowance } from './command-allowance.mjs';
+import { ownFixtureLifetime } from './fixture-lifetime.mjs';
 
 offlineHerdr();
+ownFixtureLifetime();
 // Fixture promotions/releases never contend with the machine's real slot or
 // another test file. Every descendant inherits this test file's temporary slot.
 process.env.MONITOR_TEST_SLOT_PATH = `${process.env.HERDR_TEST_OFFLINE_ROOT}/test-slot-${process.pid}.lock`;

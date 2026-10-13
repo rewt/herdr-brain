@@ -1,0 +1,38 @@
+TAP version 13
+# Subtest: native lifetime guard observes EOF and its finite deadline with the caller still alive
+ok 1 - native lifetime guard observes EOF and its finite deadline with the caller still alive # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.591291
+  ...
+# Subtest: SIGKILL of an enclosing suite leaves no settle inbox or gate-profile fixture
+not ok 2 - SIGKILL of an enclosing suite leaves no settle inbox or gate-profile fixture
+  ---
+  duration_ms: 15711.55975
+  location: '/private/tmp/eng-326-negative-s0gmiy12/repo/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'fixtures survived SIGKILL: [{"pid":68727,"identity":"1791902590:935349","command":"/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/tmp/eng-326-negative-s0gmiy12/repo/supervisor/prompt-supervisor.mjs --inbox /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-8U0I3v/project/.org/supervisor/inbox.log.nested --owner-worker --settings {\\"waitSeconds\\":1,\\"confirmSeconds\\":0.02,\\"pollSeconds\\":0.02}","group":false},{"pid":68959,"identity":"1791902590:987646","command":"/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/tmp/eng-326-negative-s0gmiy12/repo/promote/host-gate.mjs /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git/promote/batches/profile/train.json /private/tmp/eng-326-negative-s0gmiy12/repo/lanes/lane.mjs promote-batch /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git/promote/batches/profile/train.json","group":false},{"pid":68523,"identity":"1791902590:859414","command":"/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/tmp/eng-326-negative-s0gmiy12/repo/supervisor/prompt-supervisor.mjs --inbox /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-8U0I3v/project/.org/supervisor/inbox.log --owner-worker --settings {\\"waitSeconds\\":1,\\"confirmSeconds\\":0.02,\\"pollSeconds\\":0.02}","group":false},{"pid":69971,"identity":"1791902591:155488","command":"/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/tmp/eng-326-negative-s0gmiy12/repo/test-slot/test-slot.mjs run train /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo --result-path /var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-test-slot-result-41Vo7N/result.json --caller {\\"pid\\":68959,\\"start\\":\\"ps-utc-c:Tue Oct 13 14:43:10 2026\\",\\"birth\\":\\"darwin:1791902590:987646\\"} --project-common /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git --tier promotion-host --timeout-seconds 5160 --idle-timeout-seconds 0 --wait 1 --wait-receipt-path /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git/promote/batches/profile/test-slot-wait.json -- /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/tmp/eng-326-negative-s0gmiy12/repo/promote/host-gate.mjs --execute /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git/promote/batches/profile/train.json /private/tmp/eng-326-negative-s0gmiy12/repo/lanes/lane.mjs promote-batch /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git/promote/batches/profile/train.json","group":false},{"pid":70072,"identity":"1791902591:185853","command":"/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/tmp/eng-326-negative-s0gmiy12/repo/promote/host-gate.mjs --execute /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git/promote/batches/profile/train.json /private/tmp/eng-326-negative-s0gmiy12/repo/lanes/lane.mjs promote-batch /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git/promote/batches/profile/train.json","group":false},{"pid":70447,"identity":"1791902591:264844","command":"/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/tmp/eng-326-negative-s0gmiy12/repo/lanes/lane.mjs promote-batch /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-aGF2ln/repo/.git/promote/batches/profile/train.json","group":false},{"pid":72766,"identity":"1791902591:596830","command":"node -e require(\\"fs\\").writeFileSync(\\"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/fixture-lifetime-regression-iH6ZyF/gate.json\\",JSON.stringify({pid:process.pid}));setInterval(()=>{},1000)","group":false}]'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    until (file:///private/tmp/eng-326-negative-s0gmiy12/repo/test/fixture-lifetime.test.mjs:17:26)
+    async file:///private/tmp/eng-326-negative-s0gmiy12/repo/test/fixture-lifetime.test.mjs:131:5
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: suite timeout of an enclosing suite leaves no settle inbox or gate-profile fixture
+ok 3 - suite timeout of an enclosing suite leaves no settle inbox or gate-profile fixture # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.326917
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 15755.772625

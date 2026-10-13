@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadEvents, withLock } from '../lib/store.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
-import { fold, laterRuns, openRuns, blockersOf, releases, itemStatus } from '../lib/state.mjs';
+import { fold, laterRuns, openRuns, blockersOf, releases, itemStatus, reviewsWithoutPass } from '../lib/state.mjs';
 
 export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, completionExpected, superseded = [] }, operation = () => {}, recordLocked = false) {
   const checkGit = () => {
@@ -34,6 +34,9 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     // An open operator question on this work waits for its answer, linked as a blocker or not.
     const question = [...state.items.values()].find(q => q.parent === item.id && q.role === 'human' && !q.closed);
     if (question) throw new Error(`${run} has an open operator question ${question.id}; nothing merged`);
+    // Batch completion relies on this: its fingerprint already covers every blocker item.
+    const unpassed = reviewsWithoutPass(state, item.id);
+    if (unpassed.length) throw new Error(`${run} review ${unpassed.join(', ')} has no recorded PASS verdict; record one, or drop or unlink the review; nothing merged`);
     const blocked = blockersOf(state, item.id).some((id) => !releases(state, id, itemStatus(state, id)));
     const overlapping = [...state.runs.values()].some((r) => {
       if (r.id === run || superseded.includes(r.id) || r.report || r.abandoned || !r.workspace) return false;

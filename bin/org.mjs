@@ -48,8 +48,8 @@ Questions for the operator
   record answer <ID> yes|no|"<text>" [--note WHY] [--overrule]
                                           a "no" keeps the work it blocks blocked
   record set <ID> key=value...            edit an item (title role capability priority parent
-                                          budget.<key> meta.<key>) or record run metadata
-                                          (e.g. record set R-3 tokens_in=48210 tokens_out=5120)
+                                          budget.<key> meta.<key>) or add run metadata; start
+                                          facts are fixed (e.g. record set R-3 tokens_in=48210)
   record close <ID> [--dropped] [--note T] [--if-current-run R-n]
   record complete-batch --file JSON       supervisor-attested batch reconciliation (all members)
   record reopen <ID> [--note T] [--if-current-run R-n]
@@ -504,10 +504,14 @@ const ITEM_FIELDS = ['title', 'role', 'capability', 'priority', 'parent'];
 function set(argv) {
   const { positionals } = args(argv, {}, { min: 2, usage: 'record set <ID> key=value...' });
   const [id, ...pairs] = positionals;
-  const { added } = mutate(openOrg(), (s) => {
+  const { added } = mutate(openOrg(), (s, events) => {
     const parsed = parsePairs(pairs, 'record set');
     if (s.runs.has(id)) {
       const meta = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k.replace(/^meta\./, ''), v]));
+      // Start facts never change: a different value would make the record inconsistent.
+      const started = events.find((e) => e.type === 'run.started' && e.id === id)?.meta ?? {};
+      const changed = Object.keys(meta).filter((k) => Object.hasOwn(started, k) && JSON.stringify(started[k]) !== JSON.stringify(meta[k]));
+      if (changed.length) throw new UserError(`${id} was started with ${changed.join(', ')}; start facts cannot change`);
       return { add: [{ type: 'run.updated', id, meta }] };
     }
     const target = requireItem(s, id);

@@ -418,6 +418,21 @@ test('only record consistency is refused', () => {
   assert.match(ok(['status']), /READY\n\s+ENG-2/);
 });
 
+test('record set refuses to change a run start fact but may add keys or repeat one', () => {
+  const { dir, ok, org } = setup();
+  ok(['add', 'A', '--role', 'engineer']);
+  ok(['start', 'ENG-1', '--harness', 'h', '--model', 'm', '--effort', 'e', '--meta', 'receipt=none', '--meta', 'lane=topic']);
+  for (const pair of ['receipt=full', 'meta.receipt=full', 'model=other', 'lane=']) {
+    const r = org(['set', 'R-1', pair]);
+    assert.equal(r.code, 1, pair);
+    assert.match(r.err, /R-1 was started with (receipt|model|lane); start facts cannot change/);
+  }
+  ok(['set', 'R-1', 'receipt=none', 'lane=topic', 'agent=w1', 'tokens_in=12']);
+  ok(['set', 'R-1', 'agent=w2']);
+  const meta = fold(fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line))).runs.get('R-1').meta;
+  assert.deepEqual(meta, { receipt: 'none', lane: 'topic', harness: 'h', model: 'm', effort: 'e', agent: 'w2', tokens_in: 12 });
+});
+
 test('dropping a blocker unblocks the work it was blocking', () => {
   const { ok } = setup();
   ok(['add', 'Ship it', '--role', 'engineer']);

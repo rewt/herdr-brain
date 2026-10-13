@@ -510,9 +510,12 @@ function set(argv) {
       const meta = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k.replace(/^meta\./, ''), v]));
       // Start facts never change: a different value would make the record inconsistent.
       const started = events.find((e) => e.type === 'run.started' && e.id === id)?.meta ?? {};
-      const changed = Object.keys(meta).filter((k) => Object.hasOwn(started, k) && JSON.stringify(started[k]) !== JSON.stringify(meta[k]));
+      // --harness/--model/--effort and routes store raw strings; set values are coerced.
+      const same = (k) => [started[k], typeof started[k] === 'string' ? coerce(started[k]) : started[k]].some((v) => JSON.stringify(v) === JSON.stringify(meta[k]));
+      const changed = Object.keys(meta).filter((k) => Object.hasOwn(started, k) && !same(k));
       if (changed.length) throw new UserError(`${id} was started with ${changed.join(', ')}; start facts cannot change`);
-      return { add: [{ type: 'run.updated', id, meta }] };
+      const added = Object.fromEntries(Object.entries(meta).filter(([k]) => !Object.hasOwn(started, k)));
+      return { add: Object.keys(added).length ? [{ type: 'run.updated', id, meta: added }] : [] };
     }
     const target = requireItem(s, id);
     if (target.meta.operator_reserved && Object.keys(parsed).some(key => ['role', 'meta.operator_reserved', 'meta.category', 'meta.release', 'meta.answer', 'meta.answered_by'].includes(key))) throw new UserError('release decision fields are immutable; use record answer as the operator');
@@ -543,7 +546,7 @@ function set(argv) {
     }
     return { add: [{ type: 'item.updated', id, fields }] };
   });
-  out(describeEvent(added[0]) + '\n');
+  out(added.length ? describeEvent(added[0]) + '\n' : `${id} unchanged\n`);
   return 0;
 }
 

@@ -498,7 +498,7 @@ test('a fix round can reuse a stopped worker or start fresh; changed route is re
   const workerFile=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(workerFile));workers[first.agent].agent_status='idle';fs.writeFileSync(workerFile,JSON.stringify(workers));
   r=f.start(['--reuse',first.run]);assert.equal(r.status,0,r.stderr);const second=JSON.parse(r.stdout);assert.notEqual(second.run,first.run);assert.equal(second.agent,first.agent);
   r=f.start();assert.equal(r.status,0,r.stderr);assert.notEqual(JSON.parse(r.stdout).agent,first.agent);
-  f.rec(['set',first.run,'model=wrong']);r=f.start(['--reuse',first.run]);assert.equal(r.status,1);assert.match(r.stderr,/declared harness/);
+  fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex',model:'changed',effort:'high'}}}));r=f.start(['--reuse',first.run]);assert.equal(r.status,1);assert.match(r.stderr,/declared harness/);
 });
 test('retry pins routes across config edits and detects a replaced occupant',t=>{
   const f=fixture(t);f.fail('watch');assert.equal(f.start().status,1);const job=JSON.parse(fs.readFileSync(f.jobs()[0]));

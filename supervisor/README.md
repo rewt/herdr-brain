@@ -330,7 +330,7 @@ integrated tip, then closes the item with `record close --if-current-run RUN`.
 The record checks that precondition under its lock, including current done report,
 newer runs, unresolved/declined blockers (including a done review whose latest verdict
 is not PASS), open work and changed outcomes; the queue also refuses while an operator
-question under the item is open. Conditional
+question under the item or its blocking review is open. Conditional
 completion also refuses an item explicitly reopened after this report's prior
 closure. It binds that closure to the report-ingestion sequence in the event log,
 under the same record lock, including for older receipts. Duplicate queue and

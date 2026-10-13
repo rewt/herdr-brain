@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadEvents, withLock } from '../lib/store.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
-import { fold, laterRuns, openRuns, blockersOf, releases, itemStatus, reviewsWithoutPass } from '../lib/state.mjs';
+import { fold, laterRuns, openRuns, blockersOf, releases, itemStatus, reviewsWithoutPass, openQuestionsFor } from '../lib/state.mjs';
 
 export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, completionExpected, superseded = [] }, operation = () => {}, recordLocked = false) {
   const checkGit = () => {
@@ -31,8 +31,8 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     const common = execFileSync('git', ['-C', current.workspace, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
     if (fs.realpathSync(common) !== identity) throw new Error(`${run} Git identity changed; nothing merged`);
     if (item.outcome && item.outcome.run !== run) throw new Error(`current outcome does not belong to ${run}; nothing merged`);
-    // An open operator question on this work waits for its answer, linked as a blocker or not.
-    const question = [...state.items.values()].find(q => q.parent === item.id && q.role === 'human' && !q.closed);
+    // An open operator question on this work or its blocking review waits for its answer.
+    const [question] = openQuestionsFor(state, item.id);
     if (question) throw new Error(`${run} has an open operator question ${question.id}; nothing merged`);
     // Batch completion relies on this: its fingerprint already covers every blocker item.
     const unpassed = reviewsWithoutPass(state, item.id);

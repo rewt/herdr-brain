@@ -82,8 +82,8 @@ belongs to this Git lane, is not superseded and has no changed outcome, closure,
 unresolved/declined blocker or overlapping work. Promotion also needs an explicit
 `verdict: PASS` in the latest report of every done reviewer-role blocker: a missing
 verdict refuses here, although status views still release it, and a verdict other than
-PASS holds the work everywhere. An open operator question under the item (role human,
-linked or not) refuses promotion. Dropping or unlinking the review, or answering the
+PASS holds the work everywhere. An open operator question (role human, linked or not)
+under the item or under a reviewer-role item that blocks it refuses promotion. Dropping or unlinking the review, or answering the
 question, releases it. Batch completion rechecks blockers and open questions
 directly; a review recorded after preparation refuses there through the
 changed-since-preparation fingerprint. The final check holds the record

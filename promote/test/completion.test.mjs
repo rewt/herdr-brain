@@ -516,14 +516,14 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
   if (failTelemetry) assert.ok(f.queue.load().results.slice(-2).every(r => r.warnings.some(w => w.includes('velocity record'))));
 });
 
-for (const mode of ['pass-review', 'fail-review', 'no-verdict-review', 'open-question']) test(`a ${mode} recorded after enqueue is checked by the native worker`, t => {
+for (const mode of ['pass-review', 'fail-review', 'no-verdict-review', 'open-question', 'review-question']) test(`a ${mode} recorded after enqueue is checked by the native worker`, t => {
   const f = fixture(t), m = f.lane(mode), base = f.git(['rev-parse', 'main']);
   if (mode === 'open-question') f.record(['ask', 'Allow this change?', '--parent', m.item, '--category', 'security', '--recommend', 'no', '--why', 'Raised after enqueue', '--wait']);
   else {
     // The no-verdict case uses a role alias: every spelling of the reviewer role counts.
     const rev = f.record(['add', 'Review', '--role', mode === 'no-verdict-review' ? 'Review' : 'reviewer', '--parent', m.item]).match(/^REV-\d+/)[0];
     f.record(['block', m.item, '--by', rev]);
-    for (const verdict of { 'pass-review': ['PASS'], 'fail-review': ['PASS', 'FAIL'], 'no-verdict-review': [null] }[mode]) {
+    for (const verdict of { 'pass-review': ['PASS'], 'fail-review': ['PASS', 'FAIL'], 'no-verdict-review': [null], 'review-question': ['PASS'] }[mode]) {
       const report = path.join(f.root, `review-${verdict}.md`);
       const run = f.record(['start', rev, '--workspace', f.root, '--report', report]).match(/^R-\d+/)[0];
       fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\n${verdict ? `verdict: ${verdict}\n` : ''}summary: Review ${verdict}\nheadline: Review ${verdict}\n---\n`);
@@ -531,6 +531,8 @@ for (const mode of ['pass-review', 'fail-review', 'no-verdict-review', 'open-que
     }
     // Views still release a review without a verdict; only promotion asks for an explicit PASS.
     if (mode === 'no-verdict-review') assert.equal(f.show(m.item).status, 'done');
+    // A question filed under the blocking review, not the work, after its PASS.
+    if (mode === 'review-question') f.record(['ask', 'Ship despite this?', '--parent', rev, '--category', 'security', '--recommend', 'no', '--why', 'Raised under the review', '--wait']);
   }
   f.drain();
   const result = f.queue.load().results[0];
@@ -539,16 +541,24 @@ for (const mode of ['pass-review', 'fail-review', 'no-verdict-review', 'open-que
     return;
   }
   assert.equal(result.outcome, 'refused');
-  assert.match(result.reason, { 'fail-review': /review REV-\d+ has no recorded PASS verdict/, 'no-verdict-review': /review REV-\d+ has no recorded PASS verdict/, 'open-question': /open operator question HUM-\d+/ }[mode]);
+  assert.match(result.reason, { 'fail-review': /review REV-\d+ has no recorded PASS verdict/, 'no-verdict-review': /review REV-\d+ has no recorded PASS verdict/, 'open-question': /open operator question HUM-\d+/, 'review-question': /open operator question HUM-\d+/ }[mode]);
   assert.equal(f.gates(), 0); assert.equal(f.git(['rev-parse', 'main']), base);
   assert.equal(f.show(m.item).closed, null); assert.ok(fs.existsSync(m.workspace));
 });
 
-test('an operator question raised after the fast-forward holds batch completion until it is answered', t => {
+for (const under of ['work', 'review']) test(`an operator question raised under the ${under} after the fast-forward holds batch completion until it is answered`, t => {
   const f = fixture(t), m = f.lane('asked'), other = f.lane('other');
+  let parent = m.item;
+  if (under === 'review') {
+    parent = f.record(['add', 'Review', '--role', 'reviewer', '--parent', m.item]).match(/^REV-\d+/)[0];
+    f.record(['block', m.item, '--by', parent]);
+    const report = path.join(f.root, 'review.md'), run = f.record(['start', parent, '--workspace', f.root, '--report', report]).match(/^R-\d+/)[0];
+    fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nverdict: PASS\nsummary: Review PASS\nheadline: Review PASS\n---\n`);
+    f.record(['ingest', report]);
+  }
   fs.writeFileSync(f.fault, 'refuse'); f.drain();
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
-  const question = f.record(['ask', 'Hold this?', '--parent', m.item, '--category', 'security', '--recommend', 'no', '--why', 'Raised after the fast-forward', '--wait']).match(/^HUM-\d+/)[0];
+  const question = f.record(['ask', 'Hold this?', '--parent', parent, '--category', 'security', '--recommend', 'no', '--why', 'Raised after the fast-forward', '--wait']).match(/^HUM-\d+/)[0];
   fs.unlinkSync(f.fault); f.drain();
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
   for (const x of [m, other]) { assert.equal(f.show(x.item).closed, null); assert.ok(fs.existsSync(x.workspace)); }

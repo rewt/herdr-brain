@@ -245,6 +245,9 @@ firing('tickets publish complete v1 bytes by link with a private directory', asy
 
 firing('status lists all classifications head-first, and readers prune only eligible stale files', async t => {
   const f = fixture(t), now = Date.now();
+  const noExpiry = writeTicket(f, { arrivedMs: now - 9500, token: 'b'.repeat(32), expiresAt: 'whenever' });
+  const noPid = writeTicket(f, { arrivedMs: now - 9400, token: 'c'.repeat(32) });
+  fs.writeFileSync(path.join(`${f.lock}.queue`, noPid.name), JSON.stringify({ ...noPid.ticket, pid: 0 }) + '\n');
   const gone = writeTicket(f, { arrivedMs: now - 9000, processStart: 'ps-utc-c:another start' });
   const expired = writeTicket(f, { arrivedMs: now - 8000, expiresAt: new Date(now - 1).toISOString() });
   const live = writeTicket(f, { arrivedMs: now - 7000 });
@@ -263,10 +266,11 @@ firing('status lists all classifications head-first, and readers prune only elig
   assert.deepEqual(Object.fromEntries(queue.map(row => [row.name, row.state])), {
     [live.name]: 'live', [gone.name]: 'gone', [expired.name]: 'expired', [unknown.name]: 'unknown',
     [birth.name]: 'gone', [recentBad]: 'unreadable', [oldBad]: 'unreadable',
+    [noExpiry.name]: 'unreadable', [noPid.name]: 'unreadable',
   });
-  assert.equal(f.queue().length, 7, 'status is read-only');
+  assert.equal(f.queue().length, 9, 'status is read-only');
   assert.equal(readTestSlotQueue(f.lock, { prune: true }).head.name, live.name);
-  assert.deepEqual(f.queue(), [live.name, unknown.name, recentBad].sort());
+  assert.deepEqual(f.queue(), [noExpiry.name, noPid.name, live.name, unknown.name, recentBad].sort());
 });
 
 firing('two-path acquisition queues on the second path only after taking the first', async t => {

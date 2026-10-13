@@ -5,14 +5,14 @@ import { processState } from './lock-support.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Tickets use both interoperable start times and exact births, when present. */
+/** A malformed ticket is unreadable: it must never stay head without a finite expiry.
+ * One identity read per ticket: an exact birth, when present, identifies the process. */
 function ticketState(ticket, now) {
-  if (now >= Date.parse(ticket.expiresAt)) return { state: 'expired' };
-  if (!Number.isSafeInteger(ticket.pid) || ticket.pid < 1)
-    return { state: 'unknown', why: 'ticket does not name a positive pid' };
-  const state = processState(ticket.pid, ticket.processStart);
-  return state.state === 'live' && ticket.processBirth != null
-    ? processState(ticket.pid, ticket.processStart, ticket.processBirth) : state;
+  const expires = Date.parse(ticket.expiresAt);
+  if (!Number.isFinite(expires)) throw Error('ticket expiresAt is not a time');
+  if (!Number.isSafeInteger(ticket.pid) || ticket.pid < 1) throw Error('ticket does not name a positive pid');
+  if (now >= expires) return { state: 'expired' };
+  return processState(ticket.pid, ticket.processStart, ticket.processBirth ?? undefined);
 }
 
 /** Name order is the wire protocol's arrival order. Status reads without pruning. */

@@ -19,28 +19,19 @@ function nativeGuard(root) {
   const digest = createHash('sha256').update(fs.readFileSync(source)).digest('hex');
   const cache = path.join(root, 'fixture-lifetime-cache');
   fs.mkdirSync(cache, { recursive: true });
-  const executable = path.join(cache, digest), lock = `${executable}.lock`;
-  const deadline = Date.now() + loadTimeout(15000);
-  const sleeper = new Int32Array(new SharedArrayBuffer(4));
-  // Test files start concurrently. Publish only a complete binary and let one
-  // compiler own each digest; a killed builder must not leave a usable partial.
-  while (!fs.existsSync(executable)) {
-    try { fs.mkdirSync(lock); }
-    catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      if (Date.now() >= deadline) throw Error('fixture lifetime compiler lock timed out');
-      Atomics.wait(sleeper, 0, 0, 20);
-      continue;
-    }
-    const temporary = path.join(lock, 'guard');
+  const executable = path.join(cache, digest);
+  // Test files start concurrently. Each builder compiles to its own name and
+  // publishes by atomic link: the first complete binary wins and is never
+  // replaced, and a killed builder leaves only an unused partial, never a lock.
+  if (!fs.existsSync(executable)) {
+    const temporary = `${executable}.${process.pid}.tmp`;
     try {
-      if (!fs.existsSync(executable)) {
-        const built = nativeSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', temporary, source],
-          { env: { PATH: '/usr/bin:/bin', TMPDIR: cache }, encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL' });
-        if (built.error || built.status) throw Error(built.error?.message ?? built.stderr);
-        fs.renameSync(temporary, executable);
-      }
-    } finally { fs.rmSync(lock, { recursive: true, force: true }); }
+      const built = nativeSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', temporary, source],
+        { env: { PATH: '/usr/bin:/bin', TMPDIR: cache }, encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL' });
+      if (built.error || built.status) throw Error(built.error?.message ?? built.stderr);
+      try { fs.linkSync(temporary, executable); }
+      catch (error) { if (error.code !== 'EEXIST') throw error; }
+    } finally { fs.rmSync(temporary, { force: true }); }
   }
   return executable;
 }

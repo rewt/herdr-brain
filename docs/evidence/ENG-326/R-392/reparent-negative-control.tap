@@ -13,7 +13,7 @@ not ok 2 - watch guard whose spawning parent exits immediately never adopts or s
   error: |-
     Expected values to be strictly equal:
     + actual - expected
-    
+
     + 'signal 1 9'
     - 'exit 0'
   code: 'ERR_ASSERTION'

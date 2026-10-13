@@ -39,7 +39,20 @@ the updates have finished.
 `MONITOR_TEST_SLOT_WAIT_SECONDS` (or `--wait SECONDS`) queues for a bounded number
 of whole seconds; the default is immediate refusal. The legacy
 `BCH_CLOAK_TEST_SLOT_WAIT_SECONDS` is accepted when the Monitor variable is unset.
-Waiters poll for release; this is mutual exclusion, not a FIFO queue.
+Waiters publish protocol v1 tickets in a private sibling directory named
+`<lockPath>.queue` and take each path in filename arrival order. The queue reader
+follows v1.1: a gone PID (ESRCH) or changed start/birth stops blocking immediately;
+an unknown PID is honored until its ticket's `expiresAt`, with no shorter cap.
+Tickets expire at their wait allowance even if their process is still live.
+Nested commands and zero-wait takers publish no tickets. Deleting a queue directory
+lets live waiters republish their original names and arrival times on the next poll.
+Old pollers still interoperate through the unchanged lock record and may take a
+free slot ahead of queued waiters; full arrival order requires both copies to queue.
+The compatibility path is acquired first, then the workspace path with its own
+queue; equal paths use one queue. Status lists each path's queue head first,
+including live, gone, unknown, expired and unreadable classifications. Unreadable
+tickets do not block and may be pruned only after their filename arrival is over
+24 hours old. Hidden publication files are ignored.
 
 `run ... --wait-receipt-path PATH -- COMMAND` atomically writes one
 `test-slot-wait/v1` grant receipt after acquisition, including `state: acquired`,
@@ -51,7 +64,7 @@ slot across its pre-gate build and entire train invocation. The legacy bridge
 and configured workspace slot share one deadline, so acquiring the bridge does
 not grant a fresh wait allowance for the second lock.
 
-A refusal exits **75**, with one coded line: `TEST_SLOT_HELD` for a live holder,
+A refusal exits **75**, with one coded line: `TEST_SLOT_HELD` for a live holder or earlier waiter,
 or `TEST_SLOT_HOLDER_UNKNOWN` when liveness cannot be established. Neither is a
 test failure. Lane checks preserve exit 75 and write no failed gate receipt;
 release returns a deferred result without cutting or claiming a candidate (its

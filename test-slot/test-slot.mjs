@@ -2,6 +2,7 @@
 // Host-wide heavy-validation slot, ported from bch-cloak ENG-725 (ENG-118).
 // Promotion and release commands share the existing bch-cloak lock by default.
 // Workspace configuration selects one path for every participating project.
+// Waiting takers publish protocol v1 tickets and acquire each path in arrival order.
 //
 //   node test-slot/test-slot.mjs run <label> [--wait <seconds>] -- <command> [args...]
 //   node test-slot/test-slot.mjs status
@@ -31,8 +32,10 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
+import { setTimeout as pollSleep } from 'node:timers/promises';
 
 import { probe, processStartRecord, processState, removeStaleLock } from "./lock-support.mjs";
+import { readTestSlotQueue, testSlotTicket } from './ticket-queue.mjs';
 import { lookupProcess } from "../lib/processes.mjs";
 import { writeFileAtomic } from "../lib/files.mjs";
 import { cliHelp, isMain } from '../lib/cli-help.mjs';
@@ -54,6 +57,8 @@ export const LEFTOVER_EXIT = 123;
 const slotError = (code, message) => Object.assign(new Error(`${code}: ${message}`), { code });
 const reasonOf = (error) => (error instanceof Error ? (error.code ?? error.message) : String(error));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const waitingTickets = new Set();
+const removeWaitingTickets = () => { for (const ticket of waitingTickets) ticket.remove(); };
 
 /**
  * The command's process group, once the holder process is gone. A pid is never issued while a process group of that
@@ -125,7 +130,7 @@ export function waitSecondsOf(env = process.env) {
  * established. Resolves to { nested, token, holder, release(), setGroup(pgid, groupStart) }.
  */
 export async function acquireTestSlot(label, { env = process.env, lockPath = slotPathOf(env), waitSeconds = waitSecondsOf(env), pollMs = 2_000,
-  token = randomBytes(16).toString("hex"), onWait = () => {}, deadline = Date.now() + waitSeconds * 1000 } = {}) {
+  token = randomBytes(16).toString("hex"), onWait = () => {}, deadline = Date.now() + waitSeconds * 1000, signal } = {}) {
   if (!Number.isSafeInteger(waitSeconds) || waitSeconds < 0 || !Number.isSafeInteger(pollMs) || pollMs < 1) throw new Error("invalid test slot wait/poll allowance");
   let ownStart;
   try { ownStart = processStartRecord(process.pid); }
@@ -133,54 +138,97 @@ export async function acquireTestSlot(label, { env = process.env, lockPath = slo
   const started = Date.now();
   let takeovers = 0;
   let reported;
-  for (;;) {
-    const mine = { pid: process.pid, processStart: ownStart.start, processBirth: ownStart.birth, pgid: null, groupStart: null, groupBirth: null, token, label, cwd: process.cwd(), host: os.hostname(), acquiredAt: new Date().toISOString() };
-    try {
-      fs.writeFileSync(lockPath, `${JSON.stringify(mine)}\n`, { flag: "wx", mode: 0o644 });
-      return held(lockPath, mine);
-    } catch (error) {
-      if (error?.code !== "EEXIST") throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot create ${lockPath}: ${reasonOf(error)}.`);
+  let ticket;
+  const publish = () => {
+    if (!ticket) {
+      ticket = testSlotTicket(lockPath, { token, label, identity: ownStart, waitSeconds });
+      waitingTickets.add(ticket);
+      if (waitingTickets.size === 1) process.on('exit', removeWaitingTickets);
     }
-    let text;
-    try { text = readText(lockPath); } catch (error) { throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot read ${lockPath}: ${reasonOf(error)}. The lock is left in place.`); }
-    if (text === null) continue;
-    let holder = null;
-    try { holder = JSON.parse(text); } catch { holder = null; }
-    const inherited = env[TOKEN_ENV] ?? env[LEGACY_TOKEN_ENV];
-    const { state, why } = holderState(holder);
-    if (state === "live" && typeof inherited === "string" && inherited === holder.token) return nested(holder, lockPath);
-    if (state === "gone") {
-      // Serialize stale removers, then recheck the record under the takeover guard.
-      if (++takeovers > 5) throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: the stale lock at ${lockPath} kept reappearing`);
-      try { removeStaleLock(lockPath, text); } catch (error) {
-        throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot safely remove the stale lock at ${lockPath}: ${reasonOf(error)}. Check its .takeover guard only after confirming the remover has exited.`);
+    try { ticket.publish(); }
+    catch (error) { throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot publish a ticket for ${lockPath}: ${reasonOf(error)}.`); }
+  };
+  const queueOf = () => {
+    try { return readTestSlotQueue(lockPath, { prune: true }); }
+    catch (error) { throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot read the queue for ${lockPath}: ${reasonOf(error)}.`); }
+  };
+  try {
+    for (;;) {
+      signal?.throwIfAborted();
+      let text;
+      try { text = readText(lockPath); } catch (error) { throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot read ${lockPath}: ${reasonOf(error)}. The lock is left in place.`); }
+      let holder = null;
+      try { holder = JSON.parse(text); } catch { holder = null; }
+      const inherited = env[TOKEN_ENV] ?? env[LEGACY_TOKEN_ENV];
+      const { state, why } = text === null ? { state: 'free' } : holderState(holder);
+      if (state === "live" && typeof inherited === "string" && inherited === holder.token) return nested(holder, lockPath);
+      if (state === 'live') {
+        let inside;
+        try { inside = insideHolder(holder); } catch (error) {
+          throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot tell whether this process runs inside the live holder ${describeHolder(holder)}: ${reasonOf(error)}. The lock is left in place.`);
+        }
+        if (inside) return nested(holder, lockPath);
       }
-      continue;
+      // Nested checks precede publication, including republishing a deleted ticket.
+      if (ticket) publish();
+      if (state === "gone") {
+        // Serialize stale removers, then recheck the record under the takeover guard.
+        if (++takeovers > 5) throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: the stale lock at ${lockPath} kept reappearing`);
+        try { removeStaleLock(lockPath, text); } catch (error) {
+          throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot safely remove the stale lock at ${lockPath}: ${reasonOf(error)}. Check its .takeover guard only after confirming the remover has exited.`);
+        }
+        continue;
+      }
+      if (state !== "live" && state !== 'free') {
+        throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot tell whether the holder of ${lockPath}, ${describeHolder(holder)}, still runs: ${String(why)}. The lock is left in place; remove it only after confirming that holder and its process group have exited.`);
+      }
+      let queue = queueOf();
+      if (!ticket && waitSeconds > 0 && (state === 'live' || queue.head)) {
+        publish();
+        queue = queueOf();
+      }
+      const first = ticket ? queue.head?.name === ticket.name : queue.head === null;
+      if (state === 'free' && first && (!ticket || Date.now() < deadline)) {
+        const mine = { pid: process.pid, processStart: ownStart.start, processBirth: ownStart.birth, pgid: null, groupStart: null, groupBirth: null, token, label, cwd: process.cwd(), host: os.hostname(), acquiredAt: new Date().toISOString() };
+        try {
+          fs.writeFileSync(lockPath, `${JSON.stringify(mine)}\n`, { flag: "wx", mode: 0o644 });
+          // The finally block removes the ticket only after the lock is published.
+          return held(lockPath, mine);
+        } catch (error) {
+          if (error?.code !== "EEXIST") throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot create ${lockPath}: ${reasonOf(error)}.`);
+          // A competing creator may be our holder; recheck nesting before queuing.
+          continue;
+        }
+      }
+      const waited = Date.now() - started;
+      if (Date.now() >= deadline) {
+        const blocker = state === 'live' ? `${describeHolder(holder)} has held the test slot ${lockPath} since ${String(holder.acquiredAt)}`
+          : `an earlier waiter ${String(queue.head?.ticket?.label ?? '')} is queued for the test slot ${lockPath}`;
+        throw slotError(HELD_CODE, `${label} refused: ${blocker}${waitSeconds > 0 ? ` (waited ${String(Math.round(waited / 1_000))} s)` : ""}. Heavy validation commands share one host slot; wait for it to finish, or set ${WAIT_ENV} to queue.`);
+      }
+      const blocker = state === 'live' ? holder : queue.head?.ticket;
+      if (reported !== blocker?.token) {
+        reported = blocker?.token;
+        onWait({ lock_path: lockPath, label, holder: state === 'live' ? describeHolder(holder) : `queued waiter ${String(blocker?.label)}`,
+          acquired_at: blocker?.acquiredAt ?? blocker?.arrivedAt, wait_seconds: waitSeconds });
+      }
+      await pollSleep(Math.min(first ? Math.min(pollMs, 500) : pollMs, Math.max(0, deadline - Date.now())), undefined, { signal });
     }
-    if (state !== "live") {
-      throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot tell whether the holder of ${lockPath}, ${describeHolder(holder)}, still runs: ${String(why)}. The lock is left in place; remove it only after confirming that holder and its process group have exited.`);
+  } finally {
+    if (ticket) {
+      try { ticket.remove(); }
+      finally {
+        waitingTickets.delete(ticket);
+        if (waitingTickets.size === 0) process.off('exit', removeWaitingTickets);
+      }
     }
-    let inside;
-    try { inside = insideHolder(holder); } catch (error) {
-      throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot tell whether this process runs inside the live holder ${describeHolder(holder)}: ${reasonOf(error)}. The lock is left in place.`);
-    }
-    if (inside) return nested(holder, lockPath);
-    const waited = Date.now() - started;
-    if (Date.now() >= deadline) {
-      throw slotError(HELD_CODE, `${label} refused: ${describeHolder(holder)} has held the test slot ${lockPath} since ${String(holder.acquiredAt)}${waitSeconds > 0 ? ` (waited ${String(Math.round(waited / 1_000))} s)` : ""}. Heavy validation commands share one host slot; wait for it to finish, or set ${WAIT_ENV} to queue.`);
-    }
-    if (reported !== holder.token) {
-      reported = holder.token;
-      onWait({ lock_path: lockPath, label, holder: describeHolder(holder), acquired_at: holder.acquiredAt, wait_seconds: waitSeconds });
-    }
-    await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())));
   }
 }
 
 /** Workspace slot plus the legacy bridge, acquired in a fixed order. Taking
  * both locks closes the race with bch-cloak while workspace paths migrate. */
 export async function acquireHostTestSlot(label, { env = process.env, lockPath = slotPathOf(env), compatPath = env[COMPAT_PATH_ENV] ?? TEST_SLOT_PATH,
-  waitSeconds = waitSecondsOf(env), pollMs = 100, onWait = () => {} } = {}) {
+  waitSeconds = waitSecondsOf(env), pollMs = 100, onWait = () => {}, signal } = {}) {
   const started = Date.now();
   const deadline = started + waitSeconds * 1000;
   const slots = [];
@@ -189,7 +237,7 @@ export async function acquireHostTestSlot(label, { env = process.env, lockPath =
   try {
     for (const file of paths) {
       const remaining = Math.max(0, waitSeconds - Math.floor((Date.now() - started) / 1000));
-      slots.push(await acquireTestSlot(label, { env, lockPath: file, waitSeconds: remaining, pollMs, deadline, onWait,
+      slots.push(await acquireTestSlot(label, { env, lockPath: file, waitSeconds: remaining, pollMs, deadline, onWait, signal,
         ...(slots.length ? { token: slots[0].token } : {}) }));
     }
     return { nested: slots[0].nested, token: slots[0].token, holder: slots[0].holder,
@@ -328,10 +376,13 @@ async function run({ positional, options, child }) {
   const limits = resolveGateLimits({ ...options, common, tier, historyKey, command: child });
   const historyPath = historyFile(common, tier, child, historyKey);
   let slot;
+  const waiting = new AbortController();
+  const cancelWait = signal => { waiting.abort(signal); removeWaitingTickets(); };
+  for (const signal of SIGNALS) process.on(signal, cancelWait);
   const wait = { schema: 'test-slot-wait/v1', state: 'waiting', started_at: new Date().toISOString(),
     wait_seconds: options.waitSeconds ?? waitSecondsOf(), waits: [] };
   try {
-    slot = options.noSlot ? { nested: false, token: null, setGroup: () => {}, release: () => {} } : await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs,
+    slot = options.noSlot ? { nested: false, token: null, setGroup: () => {}, release: () => {} } : await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs, signal: waiting.signal,
       onWait: entry => {
         wait.waits.push({ ...entry, at: new Date().toISOString() });
         if (options.waitReceipt) process.stderr.write(`TEST_SLOT_WAIT: ${entry.holder}; ${entry.lock_path}; capped at ${wait.wait_seconds}s\n`);
@@ -341,11 +392,14 @@ async function run({ positional, options, child }) {
     // This sidecar proves a grant. Queue/log evidence records refusals instead.
     if (options.waitReceipt) writeFileAtomic(options.waitReceipt, JSON.stringify(wait, null, 2) + '\n', 0o600);
   } catch (error) {
+    if (waiting.signal.aborted) return exitOf(null, waiting.signal.reason);
     if (error?.code === HELD_CODE || error?.code === HOLDER_UNKNOWN_CODE) {
       process.stderr.write(`${error.message}\n`);
       return REFUSED_EXIT;
     }
     throw error;
+  } finally {
+    for (const signal of SIGNALS) process.off(signal, cancelWait);
   }
   let received = null;
   let execution = {};
@@ -508,11 +562,14 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
 
 function status({ options }) {
   const locks = [...new Set([options.compatPath, options.lockPath])].map(lockPath => {
+    const { tickets, head } = readTestSlotQueue(lockPath);
+    const queue = (head ? [head, ...tickets.filter(row => row !== head)] : tickets)
+      .map(row => ({ ...row, head: row === head }));
     const text = readText(lockPath);
-    if (text === null) return { state: "free", lockPath };
+    if (text === null) return { state: "free", lockPath, queue };
     let holder = null;
     try { holder = JSON.parse(text); } catch { /* unknown records stay in place */ }
-    return { ...holderState(holder), lockPath, holder };
+    return { ...holderState(holder), lockPath, holder, queue };
   });
   const state = locks.find(row => row.state === "unknown") ?? locks.find(row => row.state === "live") ?? locks[locks.length - 1];
   process.stdout.write(`${JSON.stringify(locks.length === 1 ? state : { ...state, locks })}\n`);

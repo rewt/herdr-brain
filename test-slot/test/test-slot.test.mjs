@@ -197,6 +197,7 @@ describe("two concurrent holders are refused", () => {
     assert.equal(second.code, REFUSED_EXIT);
     assert.match(second.stderr, new RegExp(`^${HELD_CODE}: second refused: first \\(pid ${String(first.child.pid)}, group ${String(first.commandPid)}, `, "u"));
     assert.equal(fs.existsSync(marker), false, "the refused run's command never started");
+    assert.equal(fs.existsSync(`${s.lockPath}.queue`), false, "a zero-wait refusal creates no ticket");
     // The same refusal in-process, from the library a sim test file uses.
     await assert.rejects(acquireTestSlot("in-process", { lockPath: s.lockPath, env: ENV, waitSeconds: 0 }), (e) => e.code === HELD_CODE);
     assert.equal(fs.readFileSync(s.lockPath, "utf8"), before, "a refusal leaves the holder's lock as it was");
@@ -488,12 +489,15 @@ describe("signals and release", () => {
     const s = scratch();
     const free = await cli(["status", "--lock-path", s.lockPath]).done;
     assert.deepEqual([free.code, JSON.parse(free.stdout).state], [0, "free"]);
+    assert.deepEqual(JSON.parse(free.stdout).queue, []);
     const first = await holder(s);
     const held = await cli(["status", "--lock-path", s.lockPath]).done;
     assert.deepEqual([held.code, JSON.parse(held.stdout).state, JSON.parse(held.stdout).holder.pid], [1, "live", first.child.pid]);
+    assert.deepEqual(JSON.parse(held.stdout).queue, []);
     fs.writeFileSync(s.lockPath, "{");
     const unknown = await cli(["status", "--lock-path", s.lockPath]).done;
     assert.deepEqual([unknown.code, JSON.parse(unknown.stdout).state], [2, "unknown"]);
+    assert.deepEqual(JSON.parse(unknown.stdout).queue, []);
     assert.equal(fs.readFileSync(s.lockPath, "utf8"), "{");
   });
 

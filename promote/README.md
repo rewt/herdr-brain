@@ -83,8 +83,9 @@ unresolved/declined blocker or overlapping work. Promotion also needs an explici
 `verdict: PASS` in the latest report of every done reviewer-role blocker: a missing
 verdict refuses here, although status views still release it, and a verdict other than
 PASS holds the work everywhere. An open operator question (role human, linked or not)
-under the item or under a reviewer-role item that blocks it refuses promotion. Dropping or unlinking the review, or answering the
-question, releases it. Batch completion rechecks blockers and open questions
+under the item or under a reviewer-role item that blocks it refuses promotion.
+Dropping or unlinking a review releases its verdict hold; a question holds until it
+is answered or its review is unlinked, even if that review was dropped. Batch completion rechecks blockers and open questions
 directly; a review recorded after preparation refuses there through the
 changed-since-preparation fingerprint. The final check holds the record
 lock across the fast-forward, inside the promotion lock. It never writes events

@@ -183,8 +183,12 @@ open attempts explicitly; omitted attempts refuse admission and remain intact.
    recover that boundary from matching fingerprints in the retained history.
    If no matching history remains, refresh refuses rather than inventing evidence.
 
-   When the delta contains only plain notes on members, runs or blockers, inspect
-   those notes, then explicitly accept the exact shown digest:
+   Each member is judged by its net effect. It is refreshable when its signature,
+   with the plain notes added after preparation removed, equals its signature at the
+   preparation boundary. Reverted events (for example a question asked and answered,
+   or a link added and removed) stay listed and marked for inspection. When every
+   changed member is refreshable, inspect the listed events, then explicitly accept
+   the exact shown digest:
 
    ```sh
    ORG_ACTOR=supervisor-name node /path/to/herdr-brain/supervisor/reconcile.mjs refresh \
@@ -206,7 +210,8 @@ open attempts explicitly; omitted attempts refuse admission and remain intact.
    acceptance instructions as decision notes, as required by the supervisor
    protocol. Decision or structured notes, dependency evidence, a newer run,
    report, link, open question (including under a blocking review), or close/reopen
-   cannot be accepted through this plain-note refresh. They remain pending for
+   that still has a net effect after the plain notes are removed cannot be accepted
+   through this refresh. They remain pending for
    inspection and resolved, reviewed completion evidence. Notes are never omitted
    from fingerprints, and no change is silently accepted.
 

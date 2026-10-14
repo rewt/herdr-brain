@@ -101,7 +101,8 @@ seconds), and bounded slot wait (`--wait`, default 86400 seconds). Caps cover
 prepare plus command, starting after slot grant. Jobs never retry automatically.
 An outer host hold leaves 60 seconds beyond those caps for cleanup; a nested
 job watchdog enforces the requested caps. The coordinator keeps that hold until
-observed escaped processes are confirmed gone, including after a job timeout.
+every captured process, escaped or still in the phase runner's group, is confirmed gone,
+including after a job timeout.
 
 `--expect exit=N` defaults to zero; repeatable `--expect-tap` and
 `--expect-vitest` accept `pass`, `fail`, `skip` with `=`, `>=`, `<=` comparisons.
@@ -126,8 +127,9 @@ Environment values are fingerprinted and are never stored. One plain item note
 attaches the receipt path/hash; one durable supervisor notice goes to `--to`,
 defaulting to `MONITOR_SUPERVISOR_AGENT` then `supervisor-herdr`.
 
-When the job watchdog wins the cleanup race, escaped process entries record
-their observed birth identities and confirmed disappearance with `signal: null`;
+When the job watchdog wins the cleanup race, every captured process without an
+individual signal entry, whether escaped or in the shared phase group, is recorded
+with its birth identity, `signal: null`, `source: job-watchdog` and `confirmed_gone: true`;
 the unchanged slot protocol does not identify which individual signal won.
 
 The existing process-tree snapshot and watchdog reap observed descendants,

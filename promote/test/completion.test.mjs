@@ -530,8 +530,8 @@ for (const relation of mode === 'open-question' ? ['linked'] : ['linked', 'child
       fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\n${verdict ? `verdict: ${verdict}\n` : ''}summary: Review ${verdict}\nheadline: Review ${verdict}\n---\n`);
       f.record(['ingest', report]);
     }
-    // A reviewer child without an explicit PASS holds both status and promotion.
-    if (mode === 'no-verdict-review') assert.equal(f.show(m.item).status, 'blocked');
+    // A done review without a verdict releases status; promotion still requires explicit PASS.
+    if (mode === 'no-verdict-review') assert.equal(f.show(m.item).status, 'done');
     // A question filed under the blocking review, not the work, after its PASS.
     if (mode === 'review-question') f.record(['ask', 'Ship despite this?', '--parent', rev, '--category', 'security', '--recommend', 'no', '--why', 'Raised under the review', '--wait']);
   }

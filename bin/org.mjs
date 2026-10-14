@@ -10,7 +10,7 @@ import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
 import {
-  BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
+  BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns, prefixFor,
   wouldCycleBlock, wouldCycleParent, releases, nextLessonId, lessonState, wouldCycleLesson,
 } from '../lib/state.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
@@ -765,7 +765,8 @@ function ingestFile(ctx, file, runHint, currentRun) {
       });
       const blocking = p.blocking ?? report.outcome === 'blocked';
       if (blocking) events.push({ type: 'link.added', blocker: id, blocked: run.item, from_run: runId });
-      created.push({ id, title: p.title, role: p.role, blocking });
+      const reviewHold = s.items.get(run.item)?.kind === 'work' && prefixFor('work', p.role) === 'REV';
+      created.push({ id, title: p.title, role: p.role, blocking, reviewHold });
     }
     return {
       add: events,
@@ -797,7 +798,7 @@ function printIngest(res) {
   }
   safeOut(`${res.runId} → ${res.outcome} on ${res.item}${res.late ? ' (late: a newer run already has a report)' : ''}: ${truncate(res.summary, 100)}\n`);
   for (const c of res.created) {
-    safeOut(`  + ${c.id} "${truncate(c.title, 60)}"${c.role ? ` (${c.role})` : ''}${c.blocking ? ` blocks ${res.item}` : ''}\n`);
+    safeOut(`  + ${c.id} "${truncate(c.title, 60)}"${c.role ? ` (${c.role})` : ''}${c.blocking || c.reviewHold ? ` blocks ${res.item}` : ''}\n`);
   }
   for (const w of res.warnings) safeOut(`  warning: ${w}\n`);
   for (const flag of res.categoryFlags ?? []) safeOut(`  warning: ${categoryFlagText({ ...flag, run: res.runId })}\n`);

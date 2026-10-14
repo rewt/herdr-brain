@@ -252,8 +252,10 @@ outcome: done
 summary: Rate-limit state persisted in SQLite and survives restart.
 proposals:
   - role: reviewer
-    title: Independent review of ENG-1`));
-  ok(['sync'], { now: '2026-09-15T12:00:00Z' });
+    title: Independent review of ENG-1
+    blocking: false`));
+  const reviewIngest = ok(['sync'], { now: '2026-09-15T12:00:00Z' });
+  assert.match(reviewIngest, /\+ REV-1 "Independent review of ENG-1" \(reviewer\) blocks ENG-1/);
 
   const status = ok(['status'], { now: '2026-09-15T12:05:00Z' });
   assert.match(status, /G-1\s+Rate limiting shipped\s+1 done · 1 blocked · 1 ready/);

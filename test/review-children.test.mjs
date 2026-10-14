@@ -40,17 +40,22 @@ test('bch regression: a parent done report cannot release its dependent while it
   assert.deepEqual(waitingImpact(s, review), { items: 2, runs: 0, plan_steps: 0 });
 });
 
-test('review children hold while open, active, or done without an explicit PASS', () => {
+test('review children use linked-blocker status while promotion still requires explicit PASS', () => {
   held(state(), 'ready');
   held(state(start('R-1927', review)), 'active');
-  for (const verdict of [undefined, '', 'FAIL', 'NEEDS-WORK']) {
+  held(state(start('R-1927', review), { type: 'report.ingested', run: 'R-1927', report: { outcome: 'blocked' } }), 'blocked');
+  for (const verdict of ['', 'FAIL', 'NEEDS-WORK']) {
     const s = state(start('R-1927', review), done('R-1927', verdict));
     held(s, 'done');
     assert.equal(releases(s, review, 'done'), false);
     assert.deepEqual(reviewsWithoutPass(s, parent), [review]);
   }
-  assert.deepEqual(blockReason(state(start('R-1927', review), done('R-1927')), parent),
-    [`${review} done, no PASS verdict`]);
+  const s = state(start('R-1927', review), done('R-1927'));
+  assert.equal(itemStatus(s, parent), 'done');
+  assert.equal(itemStatus(s, dependent), 'ready');
+  assert.equal(releases(s, review, 'done'), true);
+  assert.deepEqual(blockReason(s, parent), []);
+  assert.deepEqual(reviewsWithoutPass(s, parent), [review]);
 });
 
 test('PASS releases the parent and dependent; reopening or a newer failed verdict holds them again', () => {
@@ -80,11 +85,17 @@ test('a child also linked as a blocker counts once and linked-only behavior is p
   held(s, 'done');
   assert.deepEqual(reviewsWithoutPass(s, parent), [review]);
   assert.deepEqual(waitingImpact(s, review), { items: 2, runs: 0, plan_steps: 0 });
-  for (const verdict of [undefined, 'PASS', 'FAIL']) {
+  for (const verdict of [undefined, '', 'PASS', 'FAIL', 'NEEDS-WORK']) {
+    const expected = verdict === undefined || verdict === 'PASS' ? 'done' : 'blocked';
+    const childOnly = state(start('R-1927', review), done('R-1927', verdict));
+    const childLinked = state({ type: 'link.added', blocker: review, blocked: parent },
+      start('R-1927', review), done('R-1927', verdict));
     const linked = state({ type: 'item.updated', id: review, fields: { parent: null } },
       { type: 'link.added', blocker: review, blocked: parent }, start('R-1927', review), done('R-1927', verdict));
-    assert.equal(itemStatus(linked, parent), verdict === 'FAIL' ? 'blocked' : 'done');
-    assert.deepEqual(reviewsWithoutPass(linked, parent), verdict === 'PASS' ? [] : [review]);
+    for (const variant of [childOnly, childLinked, linked]) {
+      assert.equal(itemStatus(variant, parent), expected);
+      assert.deepEqual(reviewsWithoutPass(variant, parent), verdict === 'PASS' ? [] : [review]);
+    }
   }
 });
 
@@ -128,7 +139,50 @@ test('explicit work closure and active runs keep their existing precedence; drop
   assert.equal(itemStatus(s, parent), 'done');
   assert.equal(itemStatus(s, dependent), 'ready');
   assert.deepEqual(reviewsWithoutPass(s, parent), []);
-  held(state({ type: 'item.closed', id: review, as: 'done' }), 'done');
+  assert.equal(itemStatus(state({ type: 'item.closed', id: review, as: 'done' }), parent), 'done');
+});
+
+test('an unlinked blocked report stays blocked after a child review releases', () => {
+  for (const resolution of [
+    [start('R-1927', review), done('R-1927', 'PASS')],
+    [{ type: 'item.closed', id: review, as: 'dropped' }],
+  ]) {
+    const s = state(start('R-1928', parent),
+      { type: 'report.ingested', run: 'R-1928', report: { outcome: 'blocked' } }, ...resolution);
+    assert.equal(s.links.some(l => l.blocked === parent), false);
+    assert.equal(itemStatus(s, parent), 'blocked');
+    assert.equal(itemStatus(s, dependent), 'blocked');
+    // A recorded review blocker still gives the linked report its original ready behavior.
+    extendFold(s, events([{ type: 'link.added', blocker: review, blocked: parent }]));
+    assert.equal(itemStatus(s, parent), 'ready');
+  }
+});
+
+test('transitive review prerequisites progress regardless of whether links or parentage were created first', () => {
+  const intermediate = 'ENG-1350';
+  for (const childFirst of [true, false]) {
+    const entries = base().slice(0, 4).map(e => e.id === review && !childFirst ? { ...e, parent: null } : e);
+    entries.push({ type: 'item.added', id: intermediate, role: 'engineer' });
+    entries.push({ type: 'link.added', blocker: parent, blocked: intermediate },
+      { type: 'link.added', blocker: intermediate, blocked: review });
+    if (!childFirst) entries.push({ type: 'item.updated', id: review, fields: { parent } });
+    let s = fold(events(entries));
+    assert.equal(itemStatus(s, intermediate), 'blocked');
+    entries.push(start('R-1926', parent), done('R-1926'));
+    s = fold(events(entries));
+    assert.equal(itemStatus(s, intermediate), 'ready', 'intermediate work can be dispatched');
+    assert.deepEqual(blockReason(s, intermediate), []);
+    assert.equal(itemStatus(s, review), 'blocked', 'the intermediate still needs its own done report');
+    entries.push(start('R-1928', intermediate), done('R-1928'));
+    s = fold(events(entries));
+    held(s, 'ready');
+    assert.equal(itemStatus(s, intermediate), 'done');
+    assert.deepEqual(blockReason(s, review), []);
+    entries.push(start('R-1927', review), done('R-1927', 'PASS'));
+    s = fold(events(entries));
+    assert.equal(itemStatus(s, parent), 'done');
+    assert.equal(itemStatus(s, dependent), 'ready');
+  }
 });
 
 test('open questions under child reviews hold promotion without a review blocker link', () => {
@@ -150,6 +204,9 @@ test('batch completion and its fingerprint include child reviews without adding 
     const plan = completion(s), original = completionFingerprint(s, parent);
     if (verdict === 'PASS') {
       assert.deepEqual(completionEvents(s, entries, plan, '/record').result.items, [parent]);
+    } else if (verdict === undefined) {
+      assert.equal(itemStatus(s, parent), 'done');
+      assert.throws(() => completionEvents(s, entries, plan, '/record'), /review REV-785 has no recorded PASS verdict/);
     } else {
       assert.throws(() => completionEvents(s, entries, plan, '/record'), /unresolved or declined blockers.*REV-785/);
     }
@@ -160,7 +217,7 @@ test('batch completion and its fingerprint include child reviews without adding 
   }
 });
 
-test('CLI views and briefs name an unlinked child review and its missing or failing verdict', t => {
+test('CLI views release missing verdicts and name unlinked child reviews with failing verdicts', t => {
   const f = setupOrg(); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
   f.ok(['add', 'Implement the change', '--role', 'engineer']);
   f.ok(['start', 'ENG-1']);
@@ -170,16 +227,33 @@ test('CLI views and briefs name an unlinked child review and its missing or fail
   f.ok(['start', 'REV-1']);
   fs.writeFileSync(path.join(f.dir, 'runs/R-2/report.md'), report('run: R-2\noutcome: done\nsummary: Review completed.\nheadline: Review completed'));
   f.ok(['sync']);
-  assert.equal(f.json(['show', 'ENG-1', '--json']).status, 'blocked');
-  assert.match(f.ok(['status']), /ENG-1 .*REV-1 done, no PASS verdict/);
-  assert.match(f.ok(['show', 'ENG-1']), /blocked by: REV-1 \(done, no PASS verdict\)/);
+  assert.equal(f.json(['show', 'ENG-1', '--json']).status, 'done');
+  assert.deepEqual(f.json(['show', 'ENG-1', '--json']).blocked_reason, undefined);
+  assert.match(f.ok(['show', 'ENG-1']), /blocked by: REV-1 \(done\)/);
   // Existing briefs are immutable context; a missing brief is rendered from current events.
   fs.rmSync(path.join(f.dir, 'runs/R-1/brief.md'));
-  assert.match(f.ok(['brief', 'R-1']), /\*\*REV-1\*\* Review the change — done, no PASS verdict/);
+  assert.match(f.ok(['brief', 'R-1']), /\*\*REV-1\*\* Review the change — done: Review completed/);
   f.ok(['start', 'REV-1']);
   fs.writeFileSync(path.join(f.dir, 'runs/R-3/report.md'), report('run: R-3\noutcome: done\nverdict: NEEDS-WORK\nsummary: Needs correction.\nheadline: Needs correction'));
   f.ok(['sync']);
   assert.match(f.ok(['snapshot']), /\*\*ENG-1\*\* .*REV-1 done, verdict NEEDS-WORK/);
+});
+
+test('reviewer proposals explicitly marked nonblocking still announce and derive the child hold', t => {
+  const f = setupOrg(); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  f.ok(['add', 'Implement the change', '--role', 'engineer']);
+  f.ok(['start', 'ENG-1']);
+  fs.writeFileSync(path.join(f.dir, 'runs/R-1/report.md'), report(`run: R-1
+outcome: done
+summary: Implemented.
+headline: Implemented
+proposals:
+  - role: Review
+    title: Review compatibility
+    blocking: false`));
+  assert.match(f.ok(['sync']), /\+ REV-1 "Review compatibility" \(review\) blocks ENG-1/);
+  assert.equal(f.events().some(e => e.type === 'link.added' && e.blocker === 'REV-1'), false);
+  assert.equal(f.json(['show', 'ENG-1', '--json']).status, 'blocked');
 });
 
 test('conditional close can finish a PASS review waiting on its parent while another child still holds the work', t => {

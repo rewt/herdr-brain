@@ -27,11 +27,14 @@ routes and budgets remain visible, and exceeding an advisory budget does not
 refuse work. Promotion requires clean trees, a clean rebase, green validation and
 a local fast-forward. Background pane creation preserves Herdr focus.
 
-A reviewer-role child holds its parent work item and its dependents until the
-review records a done report with an explicit PASS verdict, or is dropped.
-Reopening the review holds the work again. A separate blocker link is optional;
-adding one counts the review once. A review linked to wait for its parent becomes
-ready after the parent's work report, while other dependents wait for the review.
+A reviewer-role child holds its parent work item and its dependents while
+unresolved or done with a non-PASS verdict, just like a linked review blocker.
+Done reviews with PASS or no verdict, and dropped reviews, release derived status;
+promotion still requires explicit PASS from every done review. Reopening a review
+holds the work again. Reviewer proposals hold their parent regardless of `blocking`;
+that flag controls the recorded link, which is optional and counts the review once.
+A review linked to wait for its parent, directly or through other work, can proceed
+after its prerequisites' work reports while other dependents wait for the review.
 Explicit work closure and active runs keep their existing status precedence.
 
 `record today` ranks open operator questions by the work they block, then by

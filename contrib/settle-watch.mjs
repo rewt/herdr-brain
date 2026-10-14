@@ -423,9 +423,9 @@ for (;;) {
     continue;
   }
   if (reportReady(r.report_path)) {
-    const ingested = run('org', ['ingest', r.report_path, '--run', runId], { env: orgEnv, quiet: true });
-    if (ingested.status !== 0) die(`report ingestion failed; worker retained: ${(ingested.stderr || ingested.stdout).trim()}`);
-    openSession({ mode: 'settle', r: orgRun() });
+    // Preserve the legacy settle handoff (including legacy report formats).
+    // The shared planner independently requires ingestion before any close.
+    openSession({ mode: 'settle', r });
     closeWorkerTab(agent);
     finish();
   }

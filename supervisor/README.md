@@ -27,6 +27,7 @@ workers recover pending policy through the same durable action receipts.
 | --- | --- |
 | Run-bound `[org-report]` done | Preflight the immutable report or worker file, then `supervisor handle RUN` for conditional intake and the project's review route |
 | `promotable`, independent PASS | `promote RUN --why 'notice-autopilot/v1: PASS promotes …'` |
+| `promotable`, committed scoped-review evidence | Recheck the saved run/head/policy binding and current canonical scope, then promote without a reviewer PASS |
 | `fix_round` | Leave the dispatched, watched correction in flight |
 | Exact settle "base branch moved" escalation | One `handle RUN --retry` using the saved request, without `--to`; a second escalation wakes |
 | Capped `promotable_with_findings`, parsed Moderate/Minor only | One engineer follow-up containing all findings, then `promote --accept-findings` with the follow-up and policy in its reason |
@@ -42,7 +43,10 @@ when its result arrives; autopilot wakes with that evidence and does not promote
 Only fixed notice prefixes route actions. Headline and report narrative are never
 commands. CLIs receive argument arrays; all record writes go through the record
 CLI. Autopilot starts no project schedule and calls no supervisor model. The
-independent reviewer still runs through the project's configured review route.
+independent reviewer, when required, runs through the project's configured review route.
+Projects may opt specific paths into [scoped review](../settle/README.md#opt-in-scoped-review).
+That readiness records no independent review, retains the promotion gate, and
+cannot override an explicit reviewer blocker or operator question.
 
 STOP, paused housekeeping (`enabled: false`), malformed configuration, and record
 damage disable automatic actions. The project kill switch is a canonical

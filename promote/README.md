@@ -91,6 +91,12 @@ changed-since-preparation fingerprint. The final check holds the record
 lock across the fast-forward, inside the promotion lock. It never writes events
 or trusts session metadata. Canonical supervisor STOP also refuses integration.
 
+For settlement under committed scoped-review policy, this same guard also checks
+the saved run/report/head binding and re-evaluates the current canonical policy
+against the candidate's actual diff. Revoking the scope while a request waits
+prevents integration. No reviewer PASS is fabricated, and explicit reviewer
+blockers retain the rules above. The combined-tree validation gate still runs.
+
 On success the worker runs one cleanup pass limited to the promoted lane, with
 resume disabled. It discovers the record and uses housekeeping's existing live
 occupant, record, Git and topology checks to close eligible finished worker tabs.

@@ -13,6 +13,7 @@ import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { receiptDirectory } from './context.mjs';
 import { noticeLock } from './notice-lock.mjs';
 import { queueJobs } from '../promote/promote.mjs';
+import { assertScopedSettlement } from '../settle/review-scope.mjs';
 
 export const POLICY = 'notice-autopilot/v1';
 const local = name => fileURLToPath(new URL(name, import.meta.url));
@@ -250,17 +251,22 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     if (result.result === 'recorded_promotion') return landed(result);
     const accepted = result.result === 'promotable_with_findings';
     if (result.result !== 'promotable' && !accepted) return finish('wake', `${result.result ?? 'unknown result'}: ${result.reason ?? 'inspect evidence'}`);
-    if (!accepted && result.review?.verdict !== 'PASS') return finish('wake', 'promotable result lacks PASS');
+    let scoped = false;
+    if (!accepted && result.review?.verdict !== 'PASS') {
+      if (result.independent_review?.required !== false) return finish('wake', 'promotable result lacks PASS or scoped-review evidence');
+      assertScopedSettlement({ ...project, run: runId, settled, result });
+      scoped = true;
+    }
     if (accepted && (result.review?.verdict !== 'NEEDS-WORK' || !findings(result.findings) || !(policy?.cap > 0 && policy.round >= policy.cap))) return finish('wake', 'capped findings are not proved Moderate/Minor');
     if (accepted) {
       receipt.follow_up = command('file findings follow-up', local('../bin/org.mjs'), ['add', `Review follow-up for ${runId}`, '--parent', report[2],
         '--role', 'engineer', '--capability', 'tooling', '--meta', `autopilot_key=${key}`, `--accept=${result.findings}`], { json: false });
       if (!/^ENG-\d+$/.test(receipt.follow_up)) throw Error('follow-up response is uncertain');
     }
-    const why = `${POLICY}: ${accepted ? `accept capped Moderate/Minor findings; follow-up ${receipt.follow_up}` : 'PASS promotes'}; project tooling authority is auto; settle and queue recheck readiness`;
+    const why = `${POLICY}: ${accepted ? `accept capped Moderate/Minor findings; follow-up ${receipt.follow_up}` : scoped ? 'committed scoped-review policy permits promotion without independent review' : 'PASS promotes'}; project tooling authority is auto; settle and queue recheck readiness`;
     const promoted = command('enqueue promotion', supervisor, ['promote', runId, ...(accepted ? ['--accept-findings'] : []), '--why', why, ...args]);
     if (promoted.phase !== 'acknowledged') return finish('wake', promoted.reason ?? promoted.result ?? 'promotion enqueue not acknowledged');
-    return finish('handled', accepted ? `findings filed in ${receipt.follow_up}; promotion queued` : 'PASS promotion queued');
+    return finish('handled', accepted ? `findings filed in ${receipt.follow_up}; promotion queued` : scoped ? 'scoped-policy promotion queued' : 'PASS promotion queued');
   } catch (error) {
     // A contending/live owner must retain its receipt untouched.
     if (!release) return retained(error.message);

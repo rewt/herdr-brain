@@ -15,6 +15,7 @@ import { laterRuns, releases } from '../lib/state.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, readRoutesConfig, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../lanes/review-evidence.mjs';
 import { validateDeskSettings } from './config.mjs';
+import { inspectReviewScope, assertScopedReview } from './review-scope.mjs';
 import { acquire } from './lock.mjs';
 import { changedPaths } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from './test-plan.mjs';
@@ -187,12 +188,13 @@ function finish(result, reason, extra = {}) {
     reviewed_commit: job.review ? job.head : null, head: job.finalHead ?? job.head,
     report: job.report, report_ingest: job.reportIngest, validation: job.validation,
     review: job.review ? { verdict: job.review.verdict, path: job.review.path, route: job.review.route, sha256: job.review.sha256 } : null,
+    ...(job.independentReview ? { independent_review: job.independentReview } : {}),
     journal, rounds: show(job.item).runs.length, budget: show(job.item).budget ?? {},
     ...(job.testEvidence ? { test_evidence: job.testEvidence } : {}),
     review_policy: job.reviewPolicy ?? { cap: 0, source: 'legacy' },
     ...(job.rebase ? { rebase: job.rebase } : {}), ...extra };
   const policy = job.result.review_policy;
-  job.settleDecision = `Settle: ${result}. ${reason}. Review round cap: ${policy.cap} (${policy.source}); round: ${policy.round ?? 'unknown'}. Reviewed ${job.result.reviewed_commit}; head ${job.result.head}. Evidence: ${journal}`;
+  job.settleDecision = `Settle: ${result}. ${reason}. ${job.independentReview?.required === false ? `Scoped-review policy: ${job.independentReview.policy_hash}; independent review not performed` : `Review round cap: ${policy.cap} (${policy.source}); round: ${policy.round ?? 'unknown'}. Reviewed ${job.result.reviewed_commit}`}; head ${job.result.head}. Evidence: ${journal}`;
   job.stage = 'complete'; save();
   recordSettlementDecision();
   print();
@@ -299,7 +301,7 @@ function recaptureMain() {
   if (job.stage === 'record') return;
   // A completed review stays bound to its original diff. Commit its evidence
   // first, then the usual preservation proof replays it onto the new base.
-  if (job.review) {
+  if (job.review || job.independentReview?.required === false) {
     if (job.stage === 'complete') job.stage = 'rebase';
     else if (['ready', 'rebase'].includes(job.stage)) job.stage = 'rebase';
     save(); return;
@@ -314,7 +316,7 @@ function completeRecapture() {
   job.recaptures.push(job.recapture);
   job.mainHead = job.recapture.onto;
   delete job.recapture;
-  if (!job.review) {
+  if (!job.review && job.independentReview?.required !== false) {
     // Publish the unreviewed source and its new base together. A crash between
     // replay and the next reviewer must not leave a stale source/diff receipt.
     job.head = job.finalHead; delete job.finalHead;
@@ -588,6 +590,7 @@ function main() {
         const stale = superseded(state);
         if (stale) return escalate(stale);
         unchanged({ movingMain: opt['fix-findings'] }); cleanCanonical();
+        if (job.independentReview?.required === false) assertScopedReview(job.repo, job.finalHead ?? job.head, job.independentReview);
         if (activeWork().length || ['blocked', 'needs_human', 'active', 'dropped'].includes(show(job.item).status)) throw new Error('record readiness changed; inspect current work and blockers');
         unchanged({ movingMain: opt['fix-findings'] }); cleanCanonical();
         const after = recordState(), invalidAfter = recordedReportProblem(after), staleAfter = superseded(after);
@@ -636,6 +639,7 @@ function main() {
       stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
       blockers: parsed.report.blockers, proposals: parsed.report.proposals, questions: parsed.report.extra?.questions ?? [],
       outcome: parsed.report.outcome, round: 1, reviewPolicy: policy };
+    job.independentReview = inspectReviewScope(repo, job.head);
     // Only routing fields enter this snapshot. Lifecycle settings keep their
     // original source files, including relative worktree-root provenance.
     job.routeConfig = routesSnapshot(config); save();
@@ -670,7 +674,7 @@ function main() {
     if (stale) return escalate(stale);
     if (job.outcome === 'done') {
       // Ownership and latest-run checks are atomic with this record mutation.
-      try { record(['reopen', job.item, '--if-current-run', id, '--note', 'Report recorded; independent settle review pending']); }
+      try { record(['reopen', job.item, '--if-current-run', id, '--note', job.independentReview?.required === false ? 'Report recorded; scoped settlement checks pending' : 'Report recorded; independent settle review pending']); }
       catch (error) { return escalate(`Conditional reopen refused: ${error.message}`); }
     }
     job.stage = 'validate'; save();
@@ -685,7 +689,14 @@ function main() {
     const blocker = correctionBlocker();
     if (blocker) return escalate(blocker);
     inheritedEvidence();
-    unchanged(); job.stage = 'review'; save();
+    unchanged();
+    if (job.independentReview?.required === false) {
+      checkLaunchStop();
+      assertScopedReview(job.repo, job.head, job.independentReview);
+      job.finalHead = job.head;
+      job.stage = 'rebase';
+    } else job.stage = 'review';
+    save();
   }
   if (job.stage === 'reviewing') {
     if (!opt['review-again']) throw new Error('review outcome is uncertain; inspect reviewer and retained evidence, then --retry --review-again after it stops');
@@ -791,8 +802,9 @@ function main() {
   }
   if (job.stage === 'ready') {
     unchanged();
-    const policy = job.reviewPolicy, findings = reviewFindings();
-    const withFindings = job.review.verdict === 'NEEDS-WORK';
+    const policy = job.reviewPolicy, findings = job.review ? reviewFindings() : null;
+    const withFindings = job.review?.verdict === 'NEEDS-WORK';
+    if (!job.review) assertScopedReview(job.repo, job.finalHead, job.independentReview);
     if (git(['merge-base', job.mainHead, job.finalHead], workspace) !== job.mainHead) return escalate('The reviewed lane does not contain the captured integration branch');
     cleanCanonical();
     const state = recordState(), item = state.items.get(job.item);
@@ -804,7 +816,9 @@ function main() {
       const handoff = evidence('handoff.md', `# Capped review for ${id}\n\n${reason}\n\nReviewed commit: ${job.head}\nHead including review record: ${job.finalHead}\nReview: ${job.review.path}\nValidation: ${job.validation.log}\nPolicy: ${JSON.stringify(policy)}\n\n## Findings\n${findings.text}\n\nAccept findings under project authority with supervisor promote --accept-findings --why REASON, or request another correction with handle ${id} --retry --fix-findings --role supervisor.\n`);
       finish('promotable_with_findings', reason, { findings: findings.text, handoff,
         options: ['accept findings and promote under project authority', 'request another correction'] });
-    } else finish('promotable', 'Report recorded, claims independently reviewed and clean lane; the promotion queue validates the integration batch before main moves');
+    } else finish('promotable', job.review
+      ? 'Report recorded, claims independently reviewed and clean lane; the promotion queue validates the integration batch before main moves'
+      : 'Report recorded and clean lane; independent review not performed under committed scoped policy; the promotion queue validates the integration batch before main moves');
     return;
   }
   if (['fix', 'dispatching'].includes(job.stage)) fix();

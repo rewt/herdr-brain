@@ -13,6 +13,7 @@ import { queueJobs } from '../promote/promote.mjs';
 import { verifyTrainResult } from '../promote/train.mjs';
 import { recordedBatchCompletion } from '../promote/completion.mjs';
 import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
+import { assertScopedSettlement } from '../settle/review-scope.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
 
 const local = (name) => fileURLToPath(new URL(name, import.meta.url));
@@ -193,14 +194,17 @@ export function main(argv = process.argv.slice(2)) {
     if (testEscalation) settleArgs.push('--retry', '--resolve-tests');
     const result = JSON.parse(call(settle, settleArgs));
     if (!['promotable', 'promotable_with_findings'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
+    if (result.independent_review?.required === false) assertScopedSettlement({ repo: project.canonical,
+      identity: project.identity, org: project.org, run: id, settled: JSON.parse(fs.readFileSync(settledFile, 'utf8')), result });
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
     const saved = { identity: project.identity, org: project.org, run: id, lane: result.lane,
       reviewed_commit: result.reviewed_commit, head: result.head,
+      ...(result.independent_review ? { independent_review: result.independent_review } : {}),
       ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',
       ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),
       ...(prior ? { prior_attempts: prior } : {}) };
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n');
-    call(local('../bin/org.mjs'), ['note', id, `Queue promotion of ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion authorized: ${saved.why}`]);
+    call(local('../bin/org.mjs'), ['note', id, `Queue promotion of ${result.lane} at ${result.head}: ${saved.why}. ${result.independent_review?.required === false ? 'Independent review not performed under committed scoped policy' : `Reviewed ${result.reviewed_commit}`}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion authorized: ${saved.why}`]);
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
     saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
       '--expected-head', result.head, '--if-current-run', id,

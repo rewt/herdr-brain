@@ -7,10 +7,51 @@ node /path/to/herdr-monitor/settle/settle.mjs R-123
 ```
 
 The foreground command discovers the canonical Git project and its record. It
-records the worker report, gets an independent `lane review` without running a suite,
+records the worker report, gets an independent `lane review` by default without running a suite,
 and returns one JSON result: `promotable`, `promotable_with_findings`, `fix_round`,
 or `escalate`.
 It has no dependencies and all record writes use the record CLI.
+
+## Opt-in scoped review
+
+A project can let specified changes proceed to the promotion gate without an
+independent reviewer. Commit this setting in the canonical repository's `.lane.json`:
+
+```json
+{
+  "settle": {
+    "review": {
+      "mode": "scoped",
+      "paths": ["docs/development-cycle/"]
+    }
+  }
+}
+```
+
+Paths are literal repository-relative files or directory prefixes ending in `/`,
+not globs. Every changed path must be covered, including deleted paths and both
+sides of a rename. Empty changes, out-of-scope edits, agent instruction files and
+delivery-policy files still require independent review. Start with a small scope
+whose behavior is covered by the project's promotion checks; a path match alone
+does not establish correctness. Omit the setting or use `{"mode":"required"}`
+for the existing behavior. No project is opted in by installing this feature.
+
+Only canonical committed HEAD grants this exception. Parent configuration,
+`LANE_CONFIG`, lane copies and uncommitted changes cannot grant it. Each new
+settlement captures the policy hash, canonical commit and actual changed paths.
+Retries retain that choice; a completed or pending legacy review is not skipped
+because a newer policy allows it. Before reusing unreviewed readiness and before
+integration, the current policy and actual diff are checked again. A changed
+policy invalidates that unreviewed candidate; settle a new run under current
+policy. Existing explicit reviewer blockers, operator questions, STOP, report
+ownership and clean-worktree requirements continue to apply.
+
+An eligible result is `promotable` with `review: null`, `reviewed_commit: null`
+and `independent_review.required: false`. It never fabricates a PASS or commits a
+review document. Autopilot recognizes the bound policy evidence and queues the
+same guarded promotion path. Validation is still deferred to the actual combined
+integration tree; a red gate does not move main. This is readiness for validation,
+not a claim that an independent agent verified the worker's report.
 
 No project config is required. Routes come from the portable preset when none
 is configured. The review route follows the routes module's review selection
@@ -87,7 +128,7 @@ the promotion test plan or recorded full-file re-execution covers every file.
 The independent review remains unchanged in the public record; the settlement
 receipt carries `report_ingest` separately from deferred test evidence.
 
-Settle commits only the validated public review record, after checking the exact
+When independent review is required, settle commits only the validated public review record, after checking the exact
 reviewed HEAD and only that dirty path. `promotable` requires PASS, no remaining
 unverified claims, clean worktrees and the captured main as an ancestor. The
 promotion queue obtains green validation at the stacked integration tree.

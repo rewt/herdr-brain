@@ -1,5 +1,6 @@
 // Project desk settings; runtime flags and item overrides are applied at intake.
 import { resolveLaunchRoute } from '../lanes/routes.mjs';
+import { validateReviewScope } from './review-scope.mjs';
 export const DESK_FIELDS = ['review_route', 'fix_route', 'review_round_cap', 'timeout', 'reuse', 'to'];
 export const DESK_DEFAULTS = { review_round_cap: 0, timeout: 1800, reuse: false, to: 'supervisor-herdr' };
 export function deskFallback(key, config) {
@@ -12,6 +13,7 @@ export function deskFallback(key, config) {
 }
 export function validateDeskSettings(settings, routes) {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('settle config must be an object');
+  if (settings.review !== undefined) validateReviewScope(settings.review);
   for (const key of ['review_route', 'fix_route', 'to']) {
     if (settings[key] !== undefined && (typeof settings[key] !== 'string' || !settings[key].trim())) throw new Error(`settle.${key} must be a nonempty string`);
   }

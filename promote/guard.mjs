@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadEvents, withLock } from '../lib/store.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
+import { assertScopedSettlement } from '../settle/review-scope.mjs';
 import { fold, laterRuns, openRuns, blockersOf, releases, itemStatus, reviewsWithoutPass, openQuestionsFor } from '../lib/state.mjs';
 
 export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, completionExpected, superseded = [] }, operation = () => {}, recordLocked = false) {
@@ -26,6 +27,15 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (completionExpected !== undefined && completionFingerprint(state, item.id) !== completionExpected) throw new Error(`${run} changed since batch preparation; nothing merged`);
     if (superseded.some(id => { const old = state.runs.get(id); return !old || old.item !== item.id || old.started.seq >= current.started.seq || old.report || old.abandoned; })) throw new Error('invalid superseded runs; nothing merged');
     if (current.abandoned || current.report?.outcome !== 'done') throw new Error(`${run} requires a recorded done report; nothing merged`);
+    const settledFile = path.join(org, 'settle', `${run}.json`);
+    if (fs.existsSync(settledFile)) {
+      const settled = JSON.parse(fs.readFileSync(settledFile, 'utf8'));
+      if (settled.independentReview?.required === false) {
+        if (settled.reportHash !== current.report.sha256 || (settled.finalHead ?? settled.head) !== expectedHead)
+          throw Error('scoped promotion report or head binding changed; nothing merged');
+        assertScopedSettlement({ repo: canonical, identity, org, run, settled, result: settled.result });
+      }
+    }
     if (laterRuns(state, run).length) throw new Error(`${run} is superseded; nothing merged`);
     if (!current.workspace || fs.realpathSync(current.workspace) !== fs.realpathSync(workspace) || (current.meta.lane && current.meta.lane !== topic)) throw new Error(`${run} does not belong to this lane workspace; nothing merged`);
     const common = execFileSync('git', ['-C', current.workspace, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();

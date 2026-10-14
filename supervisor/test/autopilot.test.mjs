@@ -108,6 +108,14 @@ for (const [name, value] of Object.entries({
   assert.ok(result.summary.includes(result.receipt));
   assert.equal(f.calls.length, 1);
 });
+test('unbound scoped readiness cannot authorize promotion and retains the original notice', t => {
+  const f = setup(t, [{ result: 'promotable', review: null, reviewed_commit: null, independent_review: { required: false } }]);
+  const result = f.apply();
+  assert.equal(result.disposition, 'wake'); assert.equal(result.summary, f.entry.message);
+  assert.equal(f.calls.length, 1);
+  assert.match(JSON.parse(fs.readFileSync(result.receipt)).error, /lacks bound settlement evidence/);
+});
+
 for (const kind of ['STOP', 'paused', 'kill', 'invalidConfig', 'nullConfig', 'nullPolicy', 'reserved', 'category', 'questions', 'blocked', 'foreign', 'torn', 'superseded', 'incomplete'])
   test(`${kind} disables automatic mutations and wakes`, t => {
     const f = setup(t);

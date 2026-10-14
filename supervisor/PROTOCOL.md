@@ -34,7 +34,7 @@ and closes the item, then sends one short landing line so you can resume the pla
 
 The inbox applies `notice-autopilot/v1` before automatic delivery. Under the
 project's auto tooling authority it handles recorded done reports, promotes
-independent PASS, leaves watched fixes in flight, retries the exact base-moved
+independent PASS or committed scoped-review readiness, leaves watched fixes in flight, retries the exact base-moved
 escalation once, and files one follow-up before accepting capped Moderate/Minor
 findings. A promoted queue notice closes its bound item. These routine notices
 do not reach chat unless the item is marked awaited. Notices bound to abandoned
@@ -58,9 +58,13 @@ handling, the supervisor follows these steps:
 1. Run `handle --notice 'THE COMPLETE NOTICE' --role supervisor`, optionally
    `--to YOUR-SUPERVISOR` and `--brief FILE` for a manual run. This invokes settle
    once: immutable intake, mechanical validation, independent review on the
-   project's review route, and an automatic correction when settle permits it.
+   project's review route when required, and an automatic correction when settle permits it.
    The review is the model judgment step. The command never evaluates report
    commands, launches an executive model, or promotes by assuming authority.
+   A committed `settle.review` scope may permit readiness without that model
+   step. Its result explicitly records no independent review; autopilot and the
+   integration guard recheck the policy and changed paths. The promotion gate
+   and explicit record blockers still apply. See [scoped review](../settle/README.md#opt-in-scoped-review).
 2. A `fix_round` is already dispatched and watched. Leave it in flight; its final
    notice returns to step 1. An `escalate` or interrupted result names compact
    handoff evidence. Decide scope, blockers, recovery or operator escalation from

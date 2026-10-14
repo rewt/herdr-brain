@@ -11,7 +11,7 @@ import { findOrgDir } from '../lib/store.mjs';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
 import { readReport } from '../lib/report.mjs';
 import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
-import { laterRuns, releases } from '../lib/state.mjs';
+import { itemStatus, laterRuns, releases } from '../lib/state.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, readRoutesConfig, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../lanes/review-evidence.mjs';
 import { validateDeskSettings } from './config.mjs';
@@ -90,7 +90,9 @@ const head = () => git(['rev-parse', 'HEAD'], job.workspace);
 const dirty = () => git(['status', '--porcelain=v1', '--untracked-files=all'], job.workspace);
 function recordState() {
   const snapshot = JSON.parse(record(['status', '--json']));
-  return { items: new Map(snapshot.items.map((i) => [i.id, i])), runs: new Map(snapshot.runs.map((r) => [r.id, r])) };
+  return { items: new Map(snapshot.items.map((i) => [i.id, i])), runs: new Map(snapshot.runs.map((r) => [r.id, r])),
+    // The snapshot's derived dependencies include review holds as well as links.
+    links: snapshot.items.flatMap(i => i.blocked_by.map(blocker => ({ blocker, blocked: i.id }))) };
 }
 function recordedReportProblem(state) {
   const run = state.runs.get(id);
@@ -132,7 +134,7 @@ function correctionBlocker(except = [], state = recordState()) {
   const item = state.items.get(job.item);
   const stale = superseded(state, except);
   if (stale) return stale;
-  const blockers = item.blocked_by.filter((id) => !releases(state, id, state.items.get(id).status));
+  const blockers = item.blocked_by.filter((id) => !releases(state, id, itemStatus(state, id, new Set(), item.id)));
   const waitingOutcome = item.outcome?.value === 'needs_human' || (item.outcome?.value === 'blocked' && item.blocked_by.length === 0);
   if (item.closed || blockers.length || waitingOutcome) return `Correction needs supervisor judgment: the item is ${item.status}; resolve its closure or blockers${blockers.length ? ` (${blockers.join(', ')})` : ''}${waitingOutcome ? `; reported outcome ${item.outcome.value}` : ''}`;
   const open = activeWork(except, state);

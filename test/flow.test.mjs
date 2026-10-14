@@ -256,9 +256,9 @@ proposals:
   ok(['sync'], { now: '2026-09-15T12:00:00Z' });
 
   const status = ok(['status'], { now: '2026-09-15T12:05:00Z' });
-  assert.match(status, /G-1\s+Rate limiting shipped\s+2 done · 1 ready/);
+  assert.match(status, /G-1\s+Rate limiting shipped\s+1 done · 1 blocked · 1 ready/);
   assert.match(status, /READY\n\s+REV-1\s+Independent review of ENG-1/);
-  assert.match(status, /RECENTLY DONE[\s\S]*ENG-1/);
+  assert.match(status, /BLOCKED\n\s+ENG-1 .*← REV-1 ready/);
 
   const snap = ok(['snapshot'], { now: '2026-09-15T12:05:00Z' });
   assert.match(snap, /## Decisions\n- ARCH-1 .*SQLite for rate-limit state/);

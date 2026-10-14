@@ -53,6 +53,7 @@ const promotion = [
   'test/one-watcher.test.mjs',
   'test/processes.test.mjs',
   'test/report.test.mjs',
+  'test/review-children.test.mjs',
   'test/sanitization.test.mjs',
   'test/suite.test.mjs',
   'test/tidy-tabs.test.mjs',

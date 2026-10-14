@@ -10,7 +10,7 @@ import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
 import {
-  BUDGET_KEYS, attention, blockedBy, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
+  BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
   wouldCycleBlock, wouldCycleParent, releases, nextLessonId, lessonState, wouldCycleLesson,
 } from '../lib/state.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
@@ -565,7 +565,7 @@ function close(argv) {
       const run = s.runs.get(runId);
       if (run.abandoned || run.report?.outcome !== 'done') throw new UserError('conditional close requires a recorded done report');
       if (item.outcome && item.outcome.run !== runId) throw new UserError(`${id} outcome does not belong to ${runId}`);
-      const blocked = s.links.some((l) => l.blocked === id && !releases(s, l.blocker, itemStatus(s, l.blocker)));
+      const blocked = blockersOf(s, id).some((b) => !releases(s, b, itemStatus(s, b, new Set(), id)));
       if (openRuns(s, id).length || blocked || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(s, id))) throw new UserError('conditional close needs supervisor judgment: work, blockers or outcome changed');
       // A done report may survive explicit reopening. Its ingestion revision
       // binds completion to the first subsequent closure, even for old receipts.

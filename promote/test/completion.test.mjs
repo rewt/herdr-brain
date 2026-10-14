@@ -516,21 +516,22 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
   if (failTelemetry) assert.ok(f.queue.load().results.slice(-2).every(r => r.warnings.some(w => w.includes('velocity record'))));
 });
 
-for (const mode of ['pass-review', 'fail-review', 'no-verdict-review', 'open-question', 'review-question']) test(`a ${mode} recorded after enqueue is checked by the native worker`, t => {
+for (const mode of ['pass-review', 'fail-review', 'no-verdict-review', 'open-question', 'review-question'])
+for (const relation of mode === 'open-question' ? ['linked'] : ['linked', 'child-only']) test(`a ${relation} ${mode} recorded after enqueue is checked by the native worker`, t => {
   const f = fixture(t), m = f.lane(mode), base = f.git(['rev-parse', 'main']);
   if (mode === 'open-question') f.record(['ask', 'Allow this change?', '--parent', m.item, '--category', 'security', '--recommend', 'no', '--why', 'Raised after enqueue', '--wait']);
   else {
     // The no-verdict case uses a role alias: every spelling of the reviewer role counts.
     const rev = f.record(['add', 'Review', '--role', mode === 'no-verdict-review' ? 'Review' : 'reviewer', '--parent', m.item]).match(/^REV-\d+/)[0];
-    f.record(['block', m.item, '--by', rev]);
+    if (relation === 'linked') f.record(['block', m.item, '--by', rev]);
     for (const verdict of { 'pass-review': ['PASS'], 'fail-review': ['PASS', 'FAIL'], 'no-verdict-review': [null], 'review-question': ['PASS'] }[mode]) {
       const report = path.join(f.root, `review-${verdict}.md`);
       const run = f.record(['start', rev, '--workspace', f.root, '--report', report]).match(/^R-\d+/)[0];
       fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\n${verdict ? `verdict: ${verdict}\n` : ''}summary: Review ${verdict}\nheadline: Review ${verdict}\n---\n`);
       f.record(['ingest', report]);
     }
-    // Views still release a review without a verdict; only promotion asks for an explicit PASS.
-    if (mode === 'no-verdict-review') assert.equal(f.show(m.item).status, 'done');
+    // A reviewer child without an explicit PASS holds both status and promotion.
+    if (mode === 'no-verdict-review') assert.equal(f.show(m.item).status, 'blocked');
     // A question filed under the blocking review, not the work, after its PASS.
     if (mode === 'review-question') f.record(['ask', 'Ship despite this?', '--parent', rev, '--category', 'security', '--recommend', 'no', '--why', 'Raised under the review', '--wait']);
   }

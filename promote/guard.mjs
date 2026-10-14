@@ -36,8 +36,8 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (question) throw new Error(`${run} has an open operator question ${question.id}; nothing merged`);
     // Batch completion relies on this: its fingerprint already covers every blocker item.
     const unpassed = reviewsWithoutPass(state, item.id);
-    if (unpassed.length) throw new Error(`${run} review ${unpassed.join(', ')} has no recorded PASS verdict; record one, or drop or unlink the review; nothing merged`);
-    const blocked = blockersOf(state, item.id).some((id) => !releases(state, id, itemStatus(state, id)));
+    if (unpassed.length) throw new Error(`${run} review ${unpassed.join(', ')} has no recorded PASS verdict; record one or drop the review; nothing merged`);
+    const blocked = blockersOf(state, item.id).some((id) => !releases(state, id, itemStatus(state, id, new Set(), item.id)));
     const overlapping = [...state.runs.values()].some((r) => {
       if (r.id === run || superseded.includes(r.id) || r.report || r.abandoned || !r.workspace) return false;
       try { return fs.realpathSync(r.workspace) === fs.realpathSync(workspace); } catch { return r.workspace === current.workspace; }

@@ -46,6 +46,14 @@ export function queueFor(repo = process.cwd(), stateDir) {
 
 // The only scheduling policy: submission order among admitted, unfinished jobs.
 export function orderedJobs(data) { return data.jobs.filter(job => job.admission && !job.completed_at); }
+// Runtime bookkeeping is deliberately excluded. Everything supplied at submit,
+// including delivery executables and destinations, belongs to the admission.
+export function jobDigest(job) {
+  const fields = ['id', 'repo', 'identity', 'org', 'item', 'submitter', 'submitted_at', 'sha', 'tree', 'group',
+    'desk', 'desk_name', 'argv', 'prepare', 'expectations', 'timeout_seconds', 'idle_timeout_seconds',
+    'wait_seconds', 'label', 'to', 'herdr'];
+  return sha256(JSON.stringify(Object.fromEntries(fields.map(key => [key, job[key]]))));
+}
 export function receiptPath(queue, job) { return path.join(queue.directory, 'jobs', job.id, 'receipt.json'); }
 export function writeReceipt(file, receipt) {
   const bytes = JSON.stringify(receipt, null, 2) + '\n';
@@ -94,19 +102,24 @@ export function submit(queue, opt, argv, prepare = null) {
 // overlapping admission rather than guessing from harness/provider metadata.
 export function admit(queue, ids) {
   if (!ids.length || new Set(ids).size !== ids.length) throw Error('admit requires unique job IDs');
-  const token = randomUUID(), at = stamp();
-  queue.transaction(data => {
-    if (data.runner) throw Error('a verification admission is active; inspect status and admit after it finishes (never remove a live worker lock)');
+  const admission = { token: randomUUID(), admitted_at: stamp(), admitted_by: process.env.ORG_ACTOR ?? 'human', jobs: {} };
+  return queue.transaction(data => {
+    if (data.runner) throw Error('a verification admission is active; inspect status, then recover if the worker stopped (never remove a live worker lock)');
     if (fs.existsSync(path.join(queue.directory, 'worker.lock'))) throw Error('worker lock remains; inspect its owner and surviving processes before recovery');
     for (const id of ids) {
-      const job = data.jobs.find(job => job.id === id);
+      const matches = data.jobs.filter(job => job.id === id), job = matches[0];
+      if (matches.length > 1) throw Error(`duplicate job ${id}`);
       if (!job || job.completed_at || fs.existsSync(receiptPath(queue, job))) throw Error(`job ${id} is unknown or already has a receipt`);
-      if (job.started_at) throw Error(`job ${id} was interrupted; inspect it and retry as a new job`);
+      if (job.started_at || job.retry_required_at) throw Error(`job ${id} was interrupted; inspect it and retry as a new job`);
     }
-    for (const job of data.jobs.filter(job => ids.includes(job.id))) job.admission = { token, admitted_at: at, admitted_by: process.env.ORG_ACTOR ?? 'human' };
-    data.runner = { token, admitted_at: at, admitted_by: process.env.ORG_ACTOR ?? 'human', jobs: ids };
+    for (const job of data.jobs.filter(job => ids.includes(job.id))) {
+      const digest = jobDigest(job);
+      admission.jobs[job.id] = digest;
+      job.admission = { token: admission.token, admitted_at: admission.admitted_at, admitted_by: admission.admitted_by, spec_sha256: digest };
+    }
+    data.runner = admission;
+    return admission;
   });
-  return token;
 }
 function clean(desk) {
   if (git(desk, 'status', '--porcelain', '--untracked-files=all')) throw Error(`desk is dirty: ${desk}`);
@@ -134,7 +147,7 @@ async function runSlot(queue, job, directory, log) {
   const args = [SLOT, 'run', job.label, '--wait', String(job.wait_seconds),
     '--wait-receipt-path', path.join(directory, 'slot-wait.json'), '--result-path', path.join(directory, 'slot-result.json'),
     '--timeout-seconds', String(job.timeout_seconds + 60), '--idle-timeout-seconds', String(job.idle_timeout_seconds + 60),
-    '--project-common', job.identity, '--tier', 'verify', '--', process.execPath, EXECUTE, '--hold', path.join(directory, 'spec.json'), directory];
+    '--project-common', job.identity, '--tier', 'verify', '--', process.execPath, EXECUTE, '--hold', JSON.stringify(job), directory];
   // Never inherit a stale slot token into an admitted job as nesting authority.
   const env = validationEnvironment(process.env);
   delete env.MONITOR_TEST_SLOT_TOKEN; delete env.BCH_CLOAK_TEST_SLOT_TOKEN;
@@ -154,6 +167,7 @@ export async function perform(queue, job) {
     desk: job.desk, desk_previous_sha: null, argv: job.argv, prepare: job.prepare ? { argv: job.prepare, exit: null, duration_s: null } : 'none',
     environment_fingerprint: environmentFingerprint({ env: validationEnvironment(process.env), prepare: job.prepare ?? [] }),
     submitted_at: job.submitted_at, admitted_at: job.admission.admitted_at, admitted_by: job.admission.admitted_by,
+    admitted_spec_sha256: job.admission.spec_sha256,
     slot_wait_started_at: null, granted_at: null, slot_waits: [], started_at: null, finished_at: null,
     exit: null, signal: null, outcome: 'error', timeout: null, reaped_processes: [] };
   let previous, checkedOut = false, halted = false, safeToRestore = true;
@@ -217,7 +231,33 @@ export async function deliver(queue, job, completed, notify = promptSupervisor) 
   await notify(job.to, text, { org: job.org, cwd: job.repo, inbox: inboxPath({ org: job.org }),
     id: `verify:${job.id}`, herdr: job.herdr, waitSeconds: 0, pollSeconds: 1 });
 }
-export async function drain(queue, token, { notify } = {}) {
+function resetAdmissions(data, token, { unstartedOnly = false } = {}) {
+  for (const job of data.jobs.filter(job => !job.completed_at && job.admission?.token === token && (!unstartedOnly || !job.started_at))) {
+    job.previous_admissions = [...(job.previous_admissions ?? []), job.admission];
+    delete job.admission;
+  }
+}
+function runnerError(queue, token, error) {
+  queue.transaction(data => {
+    if (data.runner?.token !== token) return;
+    data.runner.error = error.message;
+    data.runner.failed_at = stamp();
+    resetAdmissions(data, token, { unstartedOnly: true });
+  });
+}
+function published(queue, job) {
+  const receipt = receiptPath(queue, job), bytes = fs.readFileSync(receipt), result = JSON.parse(bytes);
+  if (result.schema !== 'verify-receipt/v1' || result.job !== job.id || result.admitted_spec_sha256 !== jobDigest(job)) throw Error(`receipt does not match admitted spec for job ${job.id}`);
+  return { receipt, sha256: sha256(bytes), outcome: result.outcome, halted: result.halted };
+}
+export async function drain(queue, admitted, { notify } = {}) {
+  // The allowlist comes from the admitting process through argv, never queue.json.
+  const { token, admitted_at, admitted_by } = admitted ?? {};
+  const digests = new Map(Object.entries(admitted?.jobs ?? {}));
+  if (typeof token !== 'string' || !digests.size || [...digests].some(([id, digest]) => !safeID(id) || !/^[a-f0-9]{64}$/.test(digest))) throw Error('worker requires the exact admitted job digests');
+  const check = job => {
+    if (jobDigest(job) !== digests.get(job.id)) throw Error(`admitted spec digest differs for job ${job.id}; a new explicit admission is required`);
+  };
   const release = acquireLock(path.join(queue.directory, 'worker.lock'));
   try {
     queue.transaction(data => {
@@ -226,18 +266,21 @@ export async function drain(queue, token, { notify } = {}) {
     });
     process.send?.({ ready: true });
     for (;;) {
-      const job = orderedJobs(queue.load()).find(job => job.admission.token === token);
+      const data = queue.load();
+      for (const id of digests.keys()) if (data.jobs.filter(job => job.id === id).length > 1) throw Error(`duplicate admitted job ${id}`);
+      const job = orderedJobs(data).find(job => digests.has(job.id) && job.admission.token === token);
       if (!job) break;
+      check(job);
+      job.admission = { token, admitted_at, admitted_by, spec_sha256: digests.get(job.id) };
       // A crash may have happened after executing or after exclusive publication.
       // Never replay. Published receipts can finish note/notice delivery safely.
       let completed;
       const file = receiptPath(queue, job);
       if (fs.existsSync(file)) {
-        const result = read(file);
-        completed = { receipt: file, sha256: sha256(fs.readFileSync(file)), outcome: result.outcome, halted: result.halted };
+        completed = published(queue, job);
       } else {
         if (job.started_at) throw Error(`interrupted job ${job.id}; inspect execution and descendants before recovery; retry is a new job`);
-        queue.transaction(data => { data.jobs.find(row => row.id === job.id).started_at = stamp(); });
+        queue.transaction(data => { const row = data.jobs.find(row => row.id === job.id); check(row); row.started_at = stamp(); });
         completed = await perform(queue, job);
       }
       await deliver(queue, job, completed, notify);
@@ -250,18 +293,50 @@ export async function drain(queue, token, { notify } = {}) {
     queue.transaction(data => {
       // A halted batch cannot leave jobs apparently runnable by a worker whose
       // permission context no longer exists. They require a new explicit admit.
-      for (const job of data.jobs.filter(job => !job.completed_at && job.admission?.token === token)) {
-        job.previous_admissions = [...(job.previous_admissions ?? []), job.admission];
-        delete job.admission;
-      }
-      data.runner = null;
+      resetAdmissions(data, token);
+      if (data.runner?.token === token) data.runner = null;
     });
+  } catch (error) {
+    runnerError(queue, token, error);
+    throw error;
   } finally { release(); }
 }
-export async function startWorker(queue, token) {
+export async function recover(queue, { notify } = {}) {
+  // Acquiring, rather than deleting, this lock excludes both live workers and
+  // concurrent recovery. Crash locks still require inspection by the operator.
+  const release = acquireLock(path.join(queue.directory, 'worker.lock'));
+  let token;
+  try {
+    token = queue.load().runner?.token;
+    const recovered = { delivered: [], needs_retry: [], pending_admission: [] };
+    for (const job of queue.load().jobs) {
+      if (!safeID(job.id)) throw Error('invalid job ID during recovery');
+      if (fs.existsSync(receiptPath(queue, job))) {
+        const completed = published(queue, job);
+        await deliver(queue, job, completed, notify);
+        queue.transaction(data => { Object.assign(data.jobs.find(row => row.id === job.id), completed, { completed_at: job.completed_at ?? stamp() }); });
+        recovered.delivered.push(job.id);
+      } else if (job.started_at) {
+        queue.transaction(data => { const row = data.jobs.find(row => row.id === job.id); row.retry_required_at ??= stamp(); });
+        recovered.needs_retry.push(job.id);
+      } else if (!job.completed_at) recovered.pending_admission.push(job.id);
+    }
+    queue.transaction(data => {
+      const tokens = new Set(data.jobs.filter(job => !job.completed_at && job.admission).map(job => job.admission.token));
+      for (const token of tokens) resetAdmissions(data, token);
+      if (data.runner) data.last_runner = { ...data.runner, recovered_at: stamp() };
+      data.runner = null;
+    });
+    return recovered;
+  } catch (error) {
+    if (token) runnerError(queue, token, error);
+    throw error;
+  } finally { release(); }
+}
+export async function startWorker(queue, admission) {
   const output = fs.openSync(path.join(queue.directory, 'worker.log'), 'a', 0o600);
   let child;
-  try { child = spawn(process.execPath, [SELF, '--worker', token, '--repo', queue.project.canonical, '--state-dir', queue.directory], {
+  try { child = spawn(process.execPath, [SELF, '--worker', JSON.stringify(admission), '--repo', queue.project.canonical, '--state-dir', queue.directory], {
     cwd: queue.project.canonical, env: validationEnvironment(process.env), detached: true, stdio: ['ignore', output, output, 'ipc'],
   }); } finally { fs.closeSync(output); }
   return await new Promise((resolve, reject) => {
@@ -274,8 +349,8 @@ export async function startWorker(queue, token) {
 export function status(queue, { id, group } = {}) {
   const data = queue.load();
   const jobs = data.jobs.filter(job => (!id || job.id === id) && (!group || job.group === group)).map(job => ({ ...job,
-    receipt: receiptPath(queue, job), state: job.completed_at ? job.outcome : job.started_at ? 'running-or-interrupted' : job.admission ? 'admitted' : 'pending-admission' }));
-  return { identity: data.identity, runner: data.runner, halted: data.halted ?? null, jobs };
+    receipt: receiptPath(queue, job), state: job.completed_at ? job.outcome : job.retry_required_at ? 'needs-retry' : job.started_at ? 'running-or-interrupted' : job.admission ? 'admitted' : 'pending-admission' }));
+  return { identity: data.identity, runner: data.runner, last_runner: data.last_runner ?? null, halted: data.halted ?? null, jobs };
 }
 export async function main(args = process.argv.slice(2)) {
   const separator = args.indexOf('--');
@@ -286,20 +361,21 @@ export async function main(args = process.argv.slice(2)) {
     ...Object.fromEntries(['repo', 'org', 'item', 'sha', 'label', 'to', 'desk', 'group', 'state-dir', 'timeout-seconds', 'idle-timeout-seconds', 'wait', 'worker', 'herdr'].map(name => [name, { type: 'string' }])),
     ...Object.fromEntries(['expect', 'expect-tap', 'expect-vitest', 'expect-test', 'expect-file', 'expect-json'].map(name => [name, { type: 'string', multiple: true }])),
     admit: { type: 'boolean' },
-  }, usage: 'verify.mjs submit OPTIONS [--prepare CMD ARGS...] -- CMD ARGS... | admit JOB... | status [JOB] [--group ID]' });
+  }, usage: 'verify.mjs submit OPTIONS [--prepare CMD ARGS...] -- CMD ARGS... | admit JOB... | status [JOB] [--group ID] | recover' });
   const queue = queueFor(opt.repo, opt['state-dir']);
-  if (opt.worker) return await drain(queue, opt.worker);
+  if (opt.worker) return await drain(queue, JSON.parse(opt.worker));
   const [action, ...ids] = positionals;
   if (action === 'submit') {
     if (ids.length) throw Error('unexpected submit argument');
     const submitted = submit(queue, opt, separator < 0 ? [] : args.slice(separator + 1), prepare);
     console.log(JSON.stringify(submitted));
-    if (opt.admit) { const token = admit(queue, [submitted.job]); await startWorker(queue, token); }
+    if (opt.admit) { const admission = admit(queue, [submitted.job]); await startWorker(queue, admission); }
     return;
   }
-  if (action === 'admit') { const token = admit(queue, ids); await startWorker(queue, token); console.log(JSON.stringify({ admitted: ids })); return; }
+  if (action === 'admit') { const admission = admit(queue, ids); await startWorker(queue, admission); console.log(JSON.stringify({ admitted: ids })); return; }
   if (action === 'status' && ids.length <= 1) { console.log(JSON.stringify(status(queue, { id: ids[0], group: opt.group }))); return; }
-  throw Error('usage: verify.mjs submit|admit|status; see --help');
+  if (action === 'recover' && !ids.length) { console.log(JSON.stringify(await recover(queue))); return; }
+  throw Error('usage: verify.mjs submit|admit|status|recover; see --help');
 }
 if (isMain(import.meta.url)) {
   try { await main(); }

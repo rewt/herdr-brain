@@ -17,6 +17,7 @@ node verify/verify.mjs submit --repo /project --org /project/.org --item ENG-1 \
 node verify/verify.mjs admit JOB_ID OTHER_JOB_ID
 node verify/verify.mjs status [JOB_ID]
 node verify/verify.mjs status --group regression-1
+node verify/verify.mjs recover
 ```
 
 Submit prints `{"job":"…","receipt":"/absolute/path/receipt.json"}`. Jobs stay
@@ -27,6 +28,13 @@ worker cannot inherit a later admitting process's native permissions. Admit a ba
 together, or admit the next batch after it finishes. Unadmitted jobs do not hold
 up admitted work; admitted jobs run in submission order, regardless of the order
 of IDs passed to `admit`. There are no priorities, classes or group verdicts.
+Admission captures each job's immutable specification as a SHA256 digest and
+passes the exact ID/digest allowlist to the worker through argv. Queue edits
+cannot expand that allowlist; a changed specification halts the batch before
+execution. The receipt records `admitted_spec_sha256`. All submit fields,
+including prepare, expectations, bounds and delivery settings, are bound. The
+admitted snapshot also travels through argv to both slot phase processes;
+`jobs/JOB/spec.json` retains an evidence copy.
 
 The default state directory is `GIT_COMMON_DIR/verify`; `--state-dir ABS_PATH`
 selects another. `--repo` selects the repository on every command. `--desk` is
@@ -81,11 +89,19 @@ the unchanged slot protocol does not identify which individual signal won.
 The existing process-tree snapshot and watchdog reap observed descendants,
 including separate sessions/groups. A process double-forked and reparented before
 observation remains outside the parent-walk boundary, as with the host watchdog.
-Unknown identity fails closed. Interrupted workers are never replayed: retain
-state and logs, inspect locks and surviving owned processes, then retry as a new
-job after operator recovery. Published receipts and note/notice IDs support
-idempotent delivery recovery without executing a job again. Never remove a live
-worker or host-slot lock to restart a queue.
+Unknown identity fails closed. On a worker exception, `status` exposes
+`runner.error` and unstarted jobs return to `pending-admission`. Run `recover`
+from the supervisor's intended permission context after inspecting the failure.
+It requires no existing `worker.lock` (including a stale crash lock), acquires
+that lock to exclude other workers, and re-delivers published receipts' plain
+notes and notices with the same IDs. Delivery is idempotent; recovery executes
+no job and never rewrites a receipt. A receipt must match the job's admitted
+specification. An interrupted job without a receipt becomes `needs-retry` and
+cannot be admitted again: inspect its desk and surviving owned processes and
+submit a new job. Recovery returns unstarted jobs to `pending-admission`, saves
+the old runner as `last_runner`, and clears the active admission. If delivery
+fails again, the admission remains for another recovery attempt. Retain state
+and logs. Never remove a live worker or host-slot lock to restart a queue.
 
 Offline fixtures: `node --test verify/test/verify.test.mjs` (private temporary
 slots only; no models, live Herdr sessions or project gates).

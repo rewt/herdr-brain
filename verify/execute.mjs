@@ -24,7 +24,9 @@ const stopTracked = (tracked, reaped, save = () => {}) => stopGateGroup(21474836
   signal: (pid, signal) => { process.kill(pid, signal); reaped.push({ pid, signal, identity: tracked.get(pid)?.identity }); save(); } });
 
 async function hold(spec, directory) {
-  const job = read(spec), resultPath = path.join(directory, 'job-result.json');
+  // Carry the admitted snapshot through argv at both process boundaries. The
+  // recorded spec.json is evidence, never a mutable source of execution authority.
+  const job = JSON.parse(spec), resultPath = path.join(directory, 'job-result.json');
   const git = (...args) => execFileSync('git', ['-C', job.desk, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000 }).trim();
   try {
     // Slot waits may be long. A checkout inspected before the wait is not
@@ -150,6 +152,6 @@ if (isMain(import.meta.url)) {
     const args = process.argv.slice(2), coordinator = args[0] === '--hold';
     const [spec, directory] = coordinator ? args.slice(1) : args;
     if (coordinator) await hold(spec, directory);
-    else await execute(read(spec), directory);
+    else await execute(JSON.parse(spec), directory);
   } catch (error) { console.error(`verify execute: ${error.message}`); process.exitCode = 1; }
 }

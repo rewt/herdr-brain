@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { queueFor, submit, admit, drain, status, deliver, writeReceipt } from '../verify.mjs';
+import { queueFor, submit, admit, drain, recover, status, deliver, writeReceipt, jobDigest } from '../verify.mjs';
 import { parseExpectations, evaluate, sha256 } from '../expectations.mjs';
 import { initOrg, transact, loadEvents } from '../../lib/store.mjs';
 import { enqueueSupervisor, readInbox as snapshot } from '../../supervisor/prompt-supervisor.mjs';
@@ -15,6 +15,7 @@ import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { productFiles } from '../../lib/product-files.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { acquireLock } from '../../lanes/promotion-lock.mjs';
 
 const CLI = fileURLToPath(new URL('../verify.mjs', import.meta.url));
 const inboxCLI = fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url));
@@ -30,6 +31,7 @@ function fixture(t, { defaultState = false } = {}) {
   fs.mkdirSync(repo);
   const before = { ...process.env };
   process.env.MONITOR_TEST_SLOT_PATH = process.env.MONITOR_TEST_SLOT_COMPAT_PATH = path.join(root, 'slot');
+  process.env.HERDR_MONITOR_FLEET = path.join(root, 'fleet');
   process.env.ORG_ACTOR = 'fixture-submitter';
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
   git('init', '-qb', 'main'); git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'verify@example.invalid');
@@ -101,6 +103,7 @@ test('one detached admitted worker returns before grant, drains FIFO and records
   assert.equal(fs.readFileSync(order, 'utf8'), 'AB');
   const receipt = read(a.receipt);
   assert.equal(receipt.schema, 'verify-receipt/v1'); assert.equal(receipt.sha, f.sha1);
+  assert.equal(receipt.admitted_spec_sha256, jobDigest(f.queue.load().jobs[0]));
   assert.equal(receipt.tree, f.git('rev-parse', `${f.sha1}^{tree}`));
   assert.match(receipt.environment_fingerprint, /^[a-f0-9]{64}$/);
   assert.ok(receipt.slot_waits.some(wait => wait.holder.includes('fixture holder')));
@@ -116,6 +119,139 @@ test('one detached admitted worker returns before grant, drains FIFO and records
   await deliver(f.queue, saved, saved, f.notify);
   assert.equal(loadEvents(f.org).events.filter(event => event.type === 'note.added').length, 2);
   assert.equal(snapshot(path.join(f.org, 'supervisor/inbox.log')).length, 2);
+});
+
+test('detached admission refuses edited specs even with forged queue digests; recorded spec files cannot change execution', async t => {
+  const f = fixture(t), marker = path.join(f.root, 'must-not-run'), order = path.join(f.root, 'order');
+  const holder = await acquireTestSlot('admission mutation fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
+  t.after(() => holder.release());
+  const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`)), b = f.add();
+  await f.cli(['admit', a.job, b.job]);
+  const directory = path.join(f.queue.directory, 'jobs', a.job), log = path.join(directory, 'execution.log');
+  await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('TEST_SLOT_WAIT'), 'worker did not wait before mutation');
+  const spec = read(path.join(directory, 'spec.json'));
+  const malicious = node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`);
+  fs.writeFileSync(path.join(directory, 'spec.json'), JSON.stringify({ ...spec, argv: malicious }));
+  f.queue.transaction(data => {
+    const edited = data.jobs.find(job => job.id === b.job);
+    edited.argv = malicious;
+    edited.prepare = malicious;
+    edited.admission.spec_sha256 = data.runner.jobs[b.job] = jobDigest(edited);
+  });
+  holder.release();
+  await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')), 'refused worker did not stop');
+  assert.match(f.queue.load().runner.error, /admitted spec digest differs/);
+  assert.equal(read(a.receipt).outcome, 'pass');
+  assert.equal(fs.readFileSync(order, 'utf8'), 'A');
+  assert.equal(fs.existsSync(b.receipt), false); assert.equal(fs.existsSync(marker), false);
+  assert.equal(status(f.queue, { id: b.job }).jobs[0].state, 'pending-admission');
+  await f.cli(['recover']);
+  assert.equal(f.queue.load().runner, null);
+});
+
+test('a detached worker ignores jobs injected with its active token and forged allowlist entries', async t => {
+  const f = fixture(t), marker = path.join(f.root, 'injected'), order = path.join(f.root, 'order');
+  const holder = await acquireTestSlot('injection fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
+  t.after(() => holder.release());
+  const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`));
+  const b = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'B')`));
+  await f.cli(['admit', a.job, b.job]);
+  const log = path.join(f.queue.directory, 'jobs', a.job, 'execution.log');
+  await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('TEST_SLOT_WAIT'), 'worker did not wait before injection');
+  f.queue.transaction(data => {
+    const injected = { ...data.jobs[1], id: 'injected-job', argv: node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`) };
+    injected.admission = { ...injected.admission, spec_sha256: jobDigest(injected) };
+    data.runner.jobs[injected.id] = injected.admission.spec_sha256;
+    data.jobs.push(injected);
+  });
+  holder.release();
+  await until(() => f.queue.load().runner === null, 'worker did not finish after injection');
+  assert.equal(fs.readFileSync(order, 'utf8'), 'AB');
+  assert.equal(fs.existsSync(marker), false);
+  const injected = status(f.queue, { id: 'injected-job' }).jobs[0];
+  assert.equal(injected.state, 'pending-admission'); assert.equal(fs.existsSync(injected.receipt), false);
+});
+
+test('every immutable submit field is bound before a worker can create its execution directory', async t => {
+  const f = fixture(t), a = f.add(), original = f.queue.load().jobs[0];
+  const changes = { repo: f.root, identity: f.root, org: f.root, item: 'ENG-2', submitter: 'other', submitted_at: 'other',
+    sha: f.sha2, tree: '0'.repeat(40), group: 'other', desk: f.root, desk_name: 'other', argv: node('process.exit(1)'),
+    prepare: node('process.exit(1)'), expectations: [], timeout_seconds: 1, idle_timeout_seconds: 1,
+    wait_seconds: 1, label: 'other', to: 'other', herdr: '/other' };
+  for (const [field, value] of Object.entries(changes)) {
+    const admission = admit(f.queue, [a.job]);
+    f.queue.transaction(data => { data.jobs[0][field] = value; });
+    await assert.rejects(drain(f.queue, admission, { notify: f.notify }), /admitted spec digest differs/, field);
+    assert.equal(fs.existsSync(path.join(f.queue.directory, 'jobs', a.job)), false, field);
+    f.queue.transaction(data => { data.jobs[0][field] = original[field]; });
+    await recover(f.queue, { notify: f.notify });
+  }
+});
+
+for (const boundary of ['record', 'notice']) test(`${boundary} delivery failure preserves its receipt, returns unstarted jobs and recovers without execution`, async t => {
+  const f = fixture(t), count = path.join(f.root, 'executions'), events = path.join(f.org, 'events.jsonl'), saved = path.join(f.org, 'saved-events');
+  const script = `const fs=require('fs');fs.appendFileSync(${JSON.stringify(count)},'1');` +
+    (boundary === 'record' ? `fs.renameSync(${JSON.stringify(events)},${JSON.stringify(saved)});` : '');
+  const a = f.add({}, node(script)), b = f.add(), c = f.add();
+  const admission = admit(f.queue, [a.job, b.job, c.job]);
+  await assert.rejects(drain(f.queue, admission, { notify: async (...args) => { await f.notify(...args); throw Error('lost notice acknowledgement'); } }),
+    boundary === 'record' ? /ENOENT/ : /lost notice acknowledgement/);
+  assert.ok(f.queue.load().runner.error);
+  assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false);
+  for (const job of [b, c]) assert.equal(status(f.queue, { id: job.job }).jobs[0].state, 'pending-admission');
+  const bytes = fs.readFileSync(a.receipt);
+  if (boundary === 'record') fs.renameSync(saved, events);
+  await assert.rejects(recover(f.queue, { notify: async () => { throw Error('still unavailable'); } }), /still unavailable/);
+  assert.match(f.queue.load().runner.error, /still unavailable/);
+  const recovered = await f.cli(['recover']);
+  assert.deepEqual(recovered.delivered, [a.job]);
+  assert.deepEqual(recovered.pending_admission, [b.job, c.job]);
+  assert.deepEqual(recovered.needs_retry, []);
+  assert.equal(f.queue.load().runner, null); assert.match(f.queue.load().last_runner.error, /still unavailable/);
+  await f.cli(['recover']);
+  assert.equal(fs.readFileSync(count, 'utf8'), '1'); assert.deepEqual(fs.readFileSync(a.receipt), bytes);
+  assert.equal(loadEvents(f.org).events.filter(event => event.type === 'note.added').length, 1);
+  assert.equal(snapshot(path.join(f.org, 'supervisor/inbox.log')).length, 1);
+  assert.throws(() => admit(f.queue, [a.job]), /already has a receipt/);
+  await f.run(b, c);
+});
+
+test('recovery refuses an existing worker lock and marks an interrupted job for a new retry job', async t => {
+  const f = fixture(t), marker = path.join(f.root, 'must-not-replay');
+  const a = f.add({}, node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`)), b = f.add(), c = f.add();
+  const admission = admit(f.queue, [a.job, b.job, c.job]);
+  f.queue.transaction(data => { data.jobs[0].started_at = new Date().toISOString(); });
+  const release = acquireLock(path.join(f.queue.directory, 'worker.lock'));
+  try {
+    const before = f.queue.load();
+    await assert.rejects(recover(f.queue, { notify: f.notify }), /locked:/);
+    assert.deepEqual(f.queue.load(), before);
+  } finally { release(); }
+  await assert.rejects(drain(f.queue, admission, { notify: f.notify }), /interrupted job/);
+  assert.match(f.queue.load().runner.error, /interrupted job/);
+  const recovered = await f.cli(['recover']);
+  assert.deepEqual(recovered.needs_retry, [a.job]);
+  assert.deepEqual(recovered.pending_admission, [b.job, c.job]);
+  assert.equal(status(f.queue, { id: a.job }).jobs[0].state, 'needs-retry');
+  assert.throws(() => admit(f.queue, [a.job]), /retry as a new job/);
+  assert.equal(fs.existsSync(a.receipt), false); assert.equal(fs.existsSync(marker), false);
+  const retry = f.add(); await f.run(retry, b, c);
+  assert.equal(read(retry.receipt).outcome, 'pass');
+});
+
+test('a log hashing error is recoverable bookkeeping but an executed job never replays without a receipt', async t => {
+  const f = fixture(t), count = path.join(f.root, 'executions');
+  const a = f.add(), b = f.add();
+  const log = path.join(f.queue.directory, 'jobs', a.job, 'execution.log');
+  f.queue.transaction(data => { data.jobs[0].argv = node(`const fs=require('fs');fs.appendFileSync(${JSON.stringify(count)},'1');fs.unlinkSync(${JSON.stringify(log)});fs.mkdirSync(${JSON.stringify(log)});`); });
+  await assert.rejects(f.run(a, b), /EISDIR/);
+  assert.match(f.queue.load().runner.error, /EISDIR/);
+  assert.equal(status(f.queue, { id: b.job }).jobs[0].state, 'pending-admission');
+  const recovered = await f.cli(['recover']);
+  assert.deepEqual(recovered.needs_retry, [a.job]);
+  assert.equal(f.queue.load().runner, null); assert.equal(fs.readFileSync(count, 'utf8'), '1');
+  assert.throws(() => admit(f.queue, [a.job]), /retry as a new job/);
+  assert.equal(fs.existsSync(a.receipt), false);
 });
 
 test('a desk edited during a busy slot wait is refused at grant and its edits are preserved', async t => {

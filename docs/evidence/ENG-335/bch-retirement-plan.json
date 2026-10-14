@@ -1,0 +1,1032 @@
+{
+  "close": [],
+  "keep": [
+    {
+      "tab_id": "wFN:tGM",
+      "workspace_id": "wFN",
+      "label": "cafe",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "97e1828db5bf43218c3f8380f266953b4729486cbd3fc184e83743617dc7ae77"
+    },
+    {
+      "tab_id": "wFN:tY5",
+      "workspace_id": "wFN",
+      "label": "supervisor",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "87f160e7289103f70277960c8cfff36af000e3a5b2203f45431b65fcc4c5e1a9"
+    },
+    {
+      "tab_id": "wFN:tY6",
+      "workspace_id": "wFN",
+      "label": "cli",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "b5c029cfdc64896f501aecb8e3259e67be628e223c5026834d3d8ef89ebaa7ff"
+    },
+    {
+      "tab_id": "wFN:tYS",
+      "workspace_id": "wFN",
+      "label": "promotion-gate",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "de5ea569666831d01e025569d79200ff3c45a668d99b20c910ed07752e0c1eaf"
+    },
+    {
+      "tab_id": "wFN:tYT",
+      "workspace_id": "wFN",
+      "label": "outside-validate",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "1f8de980dd9f0f90583d0f11b1ecc69b68390fc61a3a14e647d6954c0d6baed1"
+    },
+    {
+      "tab_id": "wFN:tYV",
+      "workspace_id": "wFN",
+      "label": "outside-validate-2",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "b30aab1c518b786e2ae1b66b02733f0f363e3a8a4d00269aa3acd5947a3bdf4c"
+    },
+    {
+      "tab_id": "wFN:tYW",
+      "workspace_id": "wFN",
+      "label": "w3-timers",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "91e786a9168df928f804fc98be6cfda85c3cdaab6940494fb109898c59f52805"
+    },
+    {
+      "tab_id": "wFN:tYX",
+      "workspace_id": "wFN",
+      "label": "cafe-night",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "91813316effa9fae98cc70befa576e1e3de386f9989c241d9106912ded95da34"
+    },
+    {
+      "tab_id": "wFN:tYY",
+      "workspace_id": "wFN",
+      "label": "review-checks",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "a39c4ad8d823994506aefa9eece760ba74711af1e4fcfd82b0a35a79fe0127a8"
+    },
+    {
+      "tab_id": "w372:t1",
+      "workspace_id": "w372",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0ea22de8eeb74be5bb31416e7ddda4934efedc0402cffb38b98c56867d8755f3"
+    },
+    {
+      "tab_id": "w374:t1",
+      "workspace_id": "w374",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "ded06955f651e8aa029938a616c42c865c3c44b85109a700410e389af15a9168"
+    },
+    {
+      "tab_id": "w375:t1",
+      "workspace_id": "w375",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "189cc447b13d285085e4bd92f7385dd3df13d3452f2038e08dbf058fcdcb03b9"
+    },
+    {
+      "tab_id": "w37F:t1",
+      "workspace_id": "w37F",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "5bffcf04f3607fb31179103bcd52ef06d08c0e7f25512690dbf4cbeccfda279a"
+    },
+    {
+      "tab_id": "w37H:t1",
+      "workspace_id": "w37H",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "d1fbe07d26d928eaa28d51fed45a2a3813a84395bd96a164aa97537cc7993dab"
+    },
+    {
+      "tab_id": "w37J:t1",
+      "workspace_id": "w37J",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "67c37d37d2bb1d6349d77904324af67fee8bb23084e8526d22abc3b09c4da817"
+    },
+    {
+      "tab_id": "w37J:tF",
+      "workspace_id": "w37J",
+      "label": "agent:review-desk-5",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "b7e5ce90c21f5e3f91e1833e51f0961689593c620b9e62dc7126e86dd0dd1b32"
+    },
+    {
+      "tab_id": "w37Y:t1",
+      "workspace_id": "w37Y",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "fe39fa3f6fc717a515b4e09cf6f3894210a42748fe8448177cffe97251fc6b1a"
+    },
+    {
+      "tab_id": "w37Y:tQ",
+      "workspace_id": "w37Y",
+      "label": "agent:review-desk-6",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "476b0bbf1341a250b17a1f2bf21edb35d7cd0a77e6a68cc6b915347105da87de"
+    },
+    {
+      "tab_id": "w37Y:tR",
+      "workspace_id": "w37Y",
+      "label": "agent:review-desk-6",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "b0f359360be46c887a0b71eb0bbd688d3ee9934ce1f10915416f083ddfaa643f"
+    },
+    {
+      "tab_id": "w370:t1",
+      "workspace_id": "w370",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "608d16832ba2739019522ff02153a13d6c75fef8e25b0056c615a40067b9804c"
+    },
+    {
+      "tab_id": "w38C:t1",
+      "workspace_id": "w38C",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "7c7a04427d803ecef20141d3ccdaf654cb315d5a372d56735ccb76cbe29f3824"
+    },
+    {
+      "tab_id": "w38F:t1",
+      "workspace_id": "w38F",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "dce2bc4a4b24db3436be0cc120b558800fb8eb0bf01c148aa5ee61145997e0b6"
+    },
+    {
+      "tab_id": "w38J:t1",
+      "workspace_id": "w38J",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "e4c22f081a3c9c7817f3a81392311072d8fb8b8039d9a1f9d3b0bcf4ae46cdb2"
+    },
+    {
+      "tab_id": "w38K:t1",
+      "workspace_id": "w38K",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0bd977ba3fbc0f0215acf74c3bdc43fd52f81cd9661988c832150a34d257488b"
+    },
+    {
+      "tab_id": "w38X:t1",
+      "workspace_id": "w38X",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "9f492902e9649c43360b6845ebb040c1e8f840b982265ae6f13ccb830c82cb47"
+    },
+    {
+      "tab_id": "w38Y:t1",
+      "workspace_id": "w38Y",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0bd1e3c971380da6df4767e358fd7a4444b48ccd4b78f8bd83a3360310e2aebe"
+    },
+    {
+      "tab_id": "w393:t1",
+      "workspace_id": "w393",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "00b6263f78734b46645ac1877eaefe22ff70eef142a092b0402c49e6e1ee1b71"
+    },
+    {
+      "tab_id": "w396:t1",
+      "workspace_id": "w396",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "38e5d262c53e1a8a7f39bac1a58b6e50ad05e005674ae2ad5b979b3fb346693b"
+    },
+    {
+      "tab_id": "w39A:t1",
+      "workspace_id": "w39A",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "91c981a601b8647c992d5f4bdfc80bdd619f93b9fc4760792f543767380822fc"
+    },
+    {
+      "tab_id": "w39A:t9",
+      "workspace_id": "w39A",
+      "label": "agent:mig01-pg",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "b51a3ed5d492d990adde50d6a7259446624ff79440c6b42441e3ff4e20f8542f"
+    },
+    {
+      "tab_id": "w39B:t1",
+      "workspace_id": "w39B",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "bca4d5eadff18cb5b36c3deb321383e7948fc4375a93925132dc4199e001c147"
+    },
+    {
+      "tab_id": "w39B:t4",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "cd91c0cbfc59206f1087aeedd299d611a1fdfecf12d43b035b0203fe2b58a370"
+    },
+    {
+      "tab_id": "w39B:t5",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "3fbf380e360f4aadf8ca36dcdb4843f37ab717b416ca6ad604b9bdc8fb6b3bdd"
+    },
+    {
+      "tab_id": "w39B:t6",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "7b906ff9dc96c71c6503da77ff539fc1f79499b8b0a7e54ba4d20de9134d5b89"
+    },
+    {
+      "tab_id": "w39B:t7",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "56fd5719f5acf9e264939eec5f1a8309b0634677170641b26e9ceb3c2262b569"
+    },
+    {
+      "tab_id": "w39B:t8",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "989e6a5845f79e51c0f6fbf406dc560607a4b8a40e965f46961dc970f362c3d0"
+    },
+    {
+      "tab_id": "w39B:t9",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "5f91a4830d471983d7d58694c5c07da152a1581c3d47a857c53fd5bd230cd4c6"
+    },
+    {
+      "tab_id": "w39D:t1",
+      "workspace_id": "w39D",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "f173cc7261022aa3319c0d2d8a1d12332e9732e13d131bb96a1555dc3f95514e"
+    },
+    {
+      "tab_id": "w39G:t1",
+      "workspace_id": "w39G",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "653cc874702312140f9e4c9a055e7ac7e2d6cac4d07de9b2bf574e07cf72cdc6"
+    },
+    {
+      "tab_id": "w39H:t1",
+      "workspace_id": "w39H",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "3fef1fda68bffa4f75a9961658035889a7ffc677e701e0b6d903360141b8e344"
+    },
+    {
+      "tab_id": "w39J:t1",
+      "workspace_id": "w39J",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "5265dabbb23e9b54496b495070b917316950fc982a858b5fa4367f4aaff560b5"
+    },
+    {
+      "tab_id": "w39N:t1",
+      "workspace_id": "w39N",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "ff282f3b3f7a9ef5e488c106cc08b65edfd5b4cd2f3c7fdb5013487ecdc0c335"
+    },
+    {
+      "tab_id": "w39Q:t1",
+      "workspace_id": "w39Q",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "30113a7583fe54e8bfb0150250579fbacce9fa2be50fa1efa688a0ac2598628d"
+    },
+    {
+      "tab_id": "w39Q:t2",
+      "workspace_id": "w39Q",
+      "label": "agent:ink-shell-s01",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "1baba24cdca0f19bd140e88e08a5fcc0be6f19c20ac98589e3ac14c2d689c53d"
+    },
+    {
+      "tab_id": "w39Q:t3",
+      "workspace_id": "w39Q",
+      "label": "agent:ink-shell-s01",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "20ae1448a2b765b47d31c5e56d9c41e18356246cfd2e4b5276abd7b1365bddda"
+    },
+    {
+      "tab_id": "w39Q:t4",
+      "workspace_id": "w39Q",
+      "label": "agent:ink-shell-s01",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "8cf148c8c2f3cff813e3ffd411d38c7d2fd92c4e23d326a8fda26ea4b8027e30"
+    },
+    {
+      "tab_id": "w39V:t1",
+      "workspace_id": "w39V",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "6ec5a82e48c6006a51b48363315caaf7cd7fe48189e5f9402214f62a3b1417ba"
+    },
+    {
+      "tab_id": "w39V:t2",
+      "workspace_id": "w39V",
+      "label": "agent:host-check-loop",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "1d3b1e0f3dc7262f9dd82d65ac745552766ead0a643344efedc4655e9ead3cc2"
+    }
+  ],
+  "panes": [
+    {
+      "tab_id": "wFN:tGM",
+      "workspace_id": "wFN",
+      "label": "cafe",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "97e1828db5bf43218c3f8380f266953b4729486cbd3fc184e83743617dc7ae77",
+      "pane_id": "wFN:pGN"
+    },
+    {
+      "tab_id": "wFN:tY5",
+      "workspace_id": "wFN",
+      "label": "supervisor",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "87f160e7289103f70277960c8cfff36af000e3a5b2203f45431b65fcc4c5e1a9",
+      "pane_id": "wFN:pY6"
+    },
+    {
+      "tab_id": "wFN:tY6",
+      "workspace_id": "wFN",
+      "label": "cli",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "b5c029cfdc64896f501aecb8e3259e67be628e223c5026834d3d8ef89ebaa7ff",
+      "pane_id": "wFN:pY7"
+    },
+    {
+      "tab_id": "wFN:tYS",
+      "workspace_id": "wFN",
+      "label": "promotion-gate",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "de5ea569666831d01e025569d79200ff3c45a668d99b20c910ed07752e0c1eaf",
+      "pane_id": "wFN:pYV"
+    },
+    {
+      "tab_id": "wFN:tYT",
+      "workspace_id": "wFN",
+      "label": "outside-validate",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "1f8de980dd9f0f90583d0f11b1ecc69b68390fc61a3a14e647d6954c0d6baed1",
+      "pane_id": "wFN:pYW"
+    },
+    {
+      "tab_id": "wFN:tYV",
+      "workspace_id": "wFN",
+      "label": "outside-validate-2",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "b30aab1c518b786e2ae1b66b02733f0f363e3a8a4d00269aa3acd5947a3bdf4c",
+      "pane_id": "wFN:pYX"
+    },
+    {
+      "tab_id": "wFN:tYW",
+      "workspace_id": "wFN",
+      "label": "w3-timers",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "91e786a9168df928f804fc98be6cfda85c3cdaab6940494fb109898c59f52805",
+      "pane_id": "wFN:pYY"
+    },
+    {
+      "tab_id": "wFN:tYX",
+      "workspace_id": "wFN",
+      "label": "cafe-night",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "91813316effa9fae98cc70befa576e1e3de386f9989c241d9106912ded95da34",
+      "pane_id": "wFN:pYZ"
+    },
+    {
+      "tab_id": "wFN:tYY",
+      "workspace_id": "wFN",
+      "label": "review-checks",
+      "decision": "keep",
+      "why": "persistent, operator or lab workspace",
+      "token": "a39c4ad8d823994506aefa9eece760ba74711af1e4fcfd82b0a35a79fe0127a8",
+      "pane_id": "wFN:pY0"
+    },
+    {
+      "tab_id": "w372:t1",
+      "workspace_id": "w372",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0ea22de8eeb74be5bb31416e7ddda4934efedc0402cffb38b98c56867d8755f3",
+      "pane_id": "w372:p1"
+    },
+    {
+      "tab_id": "w372:t1",
+      "workspace_id": "w372",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0ea22de8eeb74be5bb31416e7ddda4934efedc0402cffb38b98c56867d8755f3",
+      "pane_id": "w372:p3"
+    },
+    {
+      "tab_id": "w374:t1",
+      "workspace_id": "w374",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "ded06955f651e8aa029938a616c42c865c3c44b85109a700410e389af15a9168",
+      "pane_id": "w374:p1"
+    },
+    {
+      "tab_id": "w374:t1",
+      "workspace_id": "w374",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "ded06955f651e8aa029938a616c42c865c3c44b85109a700410e389af15a9168",
+      "pane_id": "w374:p3"
+    },
+    {
+      "tab_id": "w375:t1",
+      "workspace_id": "w375",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "189cc447b13d285085e4bd92f7385dd3df13d3452f2038e08dbf058fcdcb03b9",
+      "pane_id": "w375:p1"
+    },
+    {
+      "tab_id": "w375:t1",
+      "workspace_id": "w375",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "189cc447b13d285085e4bd92f7385dd3df13d3452f2038e08dbf058fcdcb03b9",
+      "pane_id": "w375:p3"
+    },
+    {
+      "tab_id": "w37F:t1",
+      "workspace_id": "w37F",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "5bffcf04f3607fb31179103bcd52ef06d08c0e7f25512690dbf4cbeccfda279a",
+      "pane_id": "w37F:p1"
+    },
+    {
+      "tab_id": "w37F:t1",
+      "workspace_id": "w37F",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "5bffcf04f3607fb31179103bcd52ef06d08c0e7f25512690dbf4cbeccfda279a",
+      "pane_id": "w37F:p3"
+    },
+    {
+      "tab_id": "w37H:t1",
+      "workspace_id": "w37H",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "d1fbe07d26d928eaa28d51fed45a2a3813a84395bd96a164aa97537cc7993dab",
+      "pane_id": "w37H:p1"
+    },
+    {
+      "tab_id": "w37H:t1",
+      "workspace_id": "w37H",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "d1fbe07d26d928eaa28d51fed45a2a3813a84395bd96a164aa97537cc7993dab",
+      "pane_id": "w37H:p3"
+    },
+    {
+      "tab_id": "w37J:t1",
+      "workspace_id": "w37J",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "67c37d37d2bb1d6349d77904324af67fee8bb23084e8526d22abc3b09c4da817",
+      "pane_id": "w37J:p1"
+    },
+    {
+      "tab_id": "w37J:tF",
+      "workspace_id": "w37J",
+      "label": "agent:review-desk-5",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "b7e5ce90c21f5e3f91e1833e51f0961689593c620b9e62dc7126e86dd0dd1b32",
+      "pane_id": "w37J:pF"
+    },
+    {
+      "tab_id": "w37Y:t1",
+      "workspace_id": "w37Y",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "fe39fa3f6fc717a515b4e09cf6f3894210a42748fe8448177cffe97251fc6b1a",
+      "pane_id": "w37Y:p1"
+    },
+    {
+      "tab_id": "w37Y:t1",
+      "workspace_id": "w37Y",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "fe39fa3f6fc717a515b4e09cf6f3894210a42748fe8448177cffe97251fc6b1a",
+      "pane_id": "w37Y:p2"
+    },
+    {
+      "tab_id": "w37Y:tQ",
+      "workspace_id": "w37Y",
+      "label": "agent:review-desk-6",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "476b0bbf1341a250b17a1f2bf21edb35d7cd0a77e6a68cc6b915347105da87de",
+      "pane_id": "w37Y:pR"
+    },
+    {
+      "tab_id": "w37Y:tR",
+      "workspace_id": "w37Y",
+      "label": "agent:review-desk-6",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "b0f359360be46c887a0b71eb0bbd688d3ee9934ce1f10915416f083ddfaa643f",
+      "pane_id": "w37Y:pS"
+    },
+    {
+      "tab_id": "w370:t1",
+      "workspace_id": "w370",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "608d16832ba2739019522ff02153a13d6c75fef8e25b0056c615a40067b9804c",
+      "pane_id": "w370:p1"
+    },
+    {
+      "tab_id": "w370:t1",
+      "workspace_id": "w370",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "608d16832ba2739019522ff02153a13d6c75fef8e25b0056c615a40067b9804c",
+      "pane_id": "w370:p3"
+    },
+    {
+      "tab_id": "w38C:t1",
+      "workspace_id": "w38C",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "7c7a04427d803ecef20141d3ccdaf654cb315d5a372d56735ccb76cbe29f3824",
+      "pane_id": "w38C:p1"
+    },
+    {
+      "tab_id": "w38C:t1",
+      "workspace_id": "w38C",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "7c7a04427d803ecef20141d3ccdaf654cb315d5a372d56735ccb76cbe29f3824",
+      "pane_id": "w38C:p2"
+    },
+    {
+      "tab_id": "w38F:t1",
+      "workspace_id": "w38F",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "dce2bc4a4b24db3436be0cc120b558800fb8eb0bf01c148aa5ee61145997e0b6",
+      "pane_id": "w38F:p1"
+    },
+    {
+      "tab_id": "w38F:t1",
+      "workspace_id": "w38F",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "dce2bc4a4b24db3436be0cc120b558800fb8eb0bf01c148aa5ee61145997e0b6",
+      "pane_id": "w38F:p2"
+    },
+    {
+      "tab_id": "w38J:t1",
+      "workspace_id": "w38J",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "e4c22f081a3c9c7817f3a81392311072d8fb8b8039d9a1f9d3b0bcf4ae46cdb2",
+      "pane_id": "w38J:p1"
+    },
+    {
+      "tab_id": "w38J:t1",
+      "workspace_id": "w38J",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "e4c22f081a3c9c7817f3a81392311072d8fb8b8039d9a1f9d3b0bcf4ae46cdb2",
+      "pane_id": "w38J:p2"
+    },
+    {
+      "tab_id": "w38K:t1",
+      "workspace_id": "w38K",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0bd977ba3fbc0f0215acf74c3bdc43fd52f81cd9661988c832150a34d257488b",
+      "pane_id": "w38K:p1"
+    },
+    {
+      "tab_id": "w38K:t1",
+      "workspace_id": "w38K",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0bd977ba3fbc0f0215acf74c3bdc43fd52f81cd9661988c832150a34d257488b",
+      "pane_id": "w38K:p2"
+    },
+    {
+      "tab_id": "w38X:t1",
+      "workspace_id": "w38X",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "9f492902e9649c43360b6845ebb040c1e8f840b982265ae6f13ccb830c82cb47",
+      "pane_id": "w38X:p1"
+    },
+    {
+      "tab_id": "w38X:t1",
+      "workspace_id": "w38X",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "9f492902e9649c43360b6845ebb040c1e8f840b982265ae6f13ccb830c82cb47",
+      "pane_id": "w38X:p2"
+    },
+    {
+      "tab_id": "w38Y:t1",
+      "workspace_id": "w38Y",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0bd1e3c971380da6df4767e358fd7a4444b48ccd4b78f8bd83a3360310e2aebe",
+      "pane_id": "w38Y:p1"
+    },
+    {
+      "tab_id": "w38Y:t1",
+      "workspace_id": "w38Y",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "0bd1e3c971380da6df4767e358fd7a4444b48ccd4b78f8bd83a3360310e2aebe",
+      "pane_id": "w38Y:p2"
+    },
+    {
+      "tab_id": "w393:t1",
+      "workspace_id": "w393",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "00b6263f78734b46645ac1877eaefe22ff70eef142a092b0402c49e6e1ee1b71",
+      "pane_id": "w393:p1"
+    },
+    {
+      "tab_id": "w393:t1",
+      "workspace_id": "w393",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "00b6263f78734b46645ac1877eaefe22ff70eef142a092b0402c49e6e1ee1b71",
+      "pane_id": "w393:p2"
+    },
+    {
+      "tab_id": "w396:t1",
+      "workspace_id": "w396",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "38e5d262c53e1a8a7f39bac1a58b6e50ad05e005674ae2ad5b979b3fb346693b",
+      "pane_id": "w396:p1"
+    },
+    {
+      "tab_id": "w396:t1",
+      "workspace_id": "w396",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "38e5d262c53e1a8a7f39bac1a58b6e50ad05e005674ae2ad5b979b3fb346693b",
+      "pane_id": "w396:p2"
+    },
+    {
+      "tab_id": "w39A:t1",
+      "workspace_id": "w39A",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "91c981a601b8647c992d5f4bdfc80bdd619f93b9fc4760792f543767380822fc",
+      "pane_id": "w39A:p1"
+    },
+    {
+      "tab_id": "w39A:t1",
+      "workspace_id": "w39A",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "91c981a601b8647c992d5f4bdfc80bdd619f93b9fc4760792f543767380822fc",
+      "pane_id": "w39A:p2"
+    },
+    {
+      "tab_id": "w39A:t9",
+      "workspace_id": "w39A",
+      "label": "agent:mig01-pg",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "b51a3ed5d492d990adde50d6a7259446624ff79440c6b42441e3ff4e20f8542f",
+      "pane_id": "w39A:pA"
+    },
+    {
+      "tab_id": "w39B:t1",
+      "workspace_id": "w39B",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "bca4d5eadff18cb5b36c3deb321383e7948fc4375a93925132dc4199e001c147",
+      "pane_id": "w39B:p1"
+    },
+    {
+      "tab_id": "w39B:t1",
+      "workspace_id": "w39B",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "bca4d5eadff18cb5b36c3deb321383e7948fc4375a93925132dc4199e001c147",
+      "pane_id": "w39B:p2"
+    },
+    {
+      "tab_id": "w39B:t4",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "cd91c0cbfc59206f1087aeedd299d611a1fdfecf12d43b035b0203fe2b58a370",
+      "pane_id": "w39B:p5"
+    },
+    {
+      "tab_id": "w39B:t5",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "3fbf380e360f4aadf8ca36dcdb4843f37ab717b416ca6ad604b9bdc8fb6b3bdd",
+      "pane_id": "w39B:p6"
+    },
+    {
+      "tab_id": "w39B:t6",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "7b906ff9dc96c71c6503da77ff539fc1f79499b8b0a7e54ba4d20de9134d5b89",
+      "pane_id": "w39B:p7"
+    },
+    {
+      "tab_id": "w39B:t7",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "56fd5719f5acf9e264939eec5f1a8309b0634677170641b26e9ceb3c2262b569",
+      "pane_id": "w39B:p8"
+    },
+    {
+      "tab_id": "w39B:t8",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "989e6a5845f79e51c0f6fbf406dc560607a4b8a40e965f46961dc970f362c3d0",
+      "pane_id": "w39B:p9"
+    },
+    {
+      "tab_id": "w39B:t9",
+      "workspace_id": "w39B",
+      "label": "agent:other-provers",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "5f91a4830d471983d7d58694c5c07da152a1581c3d47a857c53fd5bd230cd4c6",
+      "pane_id": "w39B:pA"
+    },
+    {
+      "tab_id": "w39D:t1",
+      "workspace_id": "w39D",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "f173cc7261022aa3319c0d2d8a1d12332e9732e13d131bb96a1555dc3f95514e",
+      "pane_id": "w39D:p1"
+    },
+    {
+      "tab_id": "w39D:t1",
+      "workspace_id": "w39D",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "f173cc7261022aa3319c0d2d8a1d12332e9732e13d131bb96a1555dc3f95514e",
+      "pane_id": "w39D:p2"
+    },
+    {
+      "tab_id": "w39G:t1",
+      "workspace_id": "w39G",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "653cc874702312140f9e4c9a055e7ac7e2d6cac4d07de9b2bf574e07cf72cdc6",
+      "pane_id": "w39G:p1"
+    },
+    {
+      "tab_id": "w39G:t1",
+      "workspace_id": "w39G",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "653cc874702312140f9e4c9a055e7ac7e2d6cac4d07de9b2bf574e07cf72cdc6",
+      "pane_id": "w39G:p2"
+    },
+    {
+      "tab_id": "w39H:t1",
+      "workspace_id": "w39H",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "3fef1fda68bffa4f75a9961658035889a7ffc677e701e0b6d903360141b8e344",
+      "pane_id": "w39H:p1"
+    },
+    {
+      "tab_id": "w39H:t1",
+      "workspace_id": "w39H",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "3fef1fda68bffa4f75a9961658035889a7ffc677e701e0b6d903360141b8e344",
+      "pane_id": "w39H:p2"
+    },
+    {
+      "tab_id": "w39J:t1",
+      "workspace_id": "w39J",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "5265dabbb23e9b54496b495070b917316950fc982a858b5fa4367f4aaff560b5",
+      "pane_id": "w39J:p1"
+    },
+    {
+      "tab_id": "w39J:t1",
+      "workspace_id": "w39J",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "5265dabbb23e9b54496b495070b917316950fc982a858b5fa4367f4aaff560b5",
+      "pane_id": "w39J:p2"
+    },
+    {
+      "tab_id": "w39N:t1",
+      "workspace_id": "w39N",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "ff282f3b3f7a9ef5e488c106cc08b65edfd5b4cd2f3c7fdb5013487ecdc0c335",
+      "pane_id": "w39N:p1"
+    },
+    {
+      "tab_id": "w39N:t1",
+      "workspace_id": "w39N",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "ff282f3b3f7a9ef5e488c106cc08b65edfd5b4cd2f3c7fdb5013487ecdc0c335",
+      "pane_id": "w39N:p2"
+    },
+    {
+      "tab_id": "w39Q:t1",
+      "workspace_id": "w39Q",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "30113a7583fe54e8bfb0150250579fbacce9fa2be50fa1efa688a0ac2598628d",
+      "pane_id": "w39Q:p1"
+    },
+    {
+      "tab_id": "w39Q:t1",
+      "workspace_id": "w39Q",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "30113a7583fe54e8bfb0150250579fbacce9fa2be50fa1efa688a0ac2598628d",
+      "pane_id": "w39Q:p2"
+    },
+    {
+      "tab_id": "w39Q:t2",
+      "workspace_id": "w39Q",
+      "label": "agent:ink-shell-s01",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "1baba24cdca0f19bd140e88e08a5fcc0be6f19c20ac98589e3ac14c2d689c53d",
+      "pane_id": "w39Q:p3"
+    },
+    {
+      "tab_id": "w39Q:t3",
+      "workspace_id": "w39Q",
+      "label": "agent:ink-shell-s01",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "20ae1448a2b765b47d31c5e56d9c41e18356246cfd2e4b5276abd7b1365bddda",
+      "pane_id": "w39Q:p4"
+    },
+    {
+      "tab_id": "w39Q:t4",
+      "workspace_id": "w39Q",
+      "label": "agent:ink-shell-s01",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "8cf148c8c2f3cff813e3ffd411d38c7d2fd92c4e23d326a8fda26ea4b8027e30",
+      "pane_id": "w39Q:p5"
+    },
+    {
+      "tab_id": "w39V:t1",
+      "workspace_id": "w39V",
+      "label": "1",
+      "decision": "keep",
+      "why": "unknown occupant or unrecorded shell",
+      "token": "6ec5a82e48c6006a51b48363315caaf7cd7fe48189e5f9402214f62a3b1417ba",
+      "pane_id": "w39V:p1"
+    },
+    {
+      "tab_id": "w39V:t2",
+      "workspace_id": "w39V",
+      "label": "agent:host-check-loop",
+      "decision": "keep",
+      "why": "background or unknown pane process remains",
+      "token": "1d3b1e0f3dc7262f9dd82d65ac745552766ead0a643344efedc4655e9ead3cc2",
+      "pane_id": "w39V:p2"
+    }
+  ],
+  "diagnostics": [],
+  "token": "a2d18d557c9fd6c3ff611ba9d8a1afd840a5a3690aeadce8f5c2fac4208233f6"
+}

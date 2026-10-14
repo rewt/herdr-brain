@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-14T22:10:03.699Z",
+  "source_commit": "0ae4aef",
+  "mode": "read-only plan",
+  "runtime_layout": "copyProduct candidate; no release or activation",
+  "executable": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node",
+  "argv": [
+    "/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/eng-335-adoption-W2LyYL/supervisor/retire.mjs",
+    "plan",
+    "--repo",
+    "/Users/rewt/development/bastian/bch-cloak",
+    "--org",
+    "/Users/rewt/development/bastian/.org"
+  ],
+  "release": 0,
+  "keep": 48,
+  "diagnostics": []
+}

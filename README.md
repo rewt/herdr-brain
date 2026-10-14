@@ -36,6 +36,10 @@ that flag controls the recorded link, which is optional and counts the review on
 A review linked to wait for its parent, directly or through other work, can proceed
 after its prerequisites' work reports while other dependents wait for the review.
 Explicit work closure and active runs keep their existing status precedence.
+Unlinking a NEEDS-WORK child review does not release its parent. For an explicit
+exception, close the child review as dropped with the reason in its note:
+`record close REV-n --dropped --note "Reason for the exception"`.
+A dropped review releases its parent.
 
 `record today` ranks open operator questions by the work they block, then by
 age, oldest first. The count includes unique unresolved dependents (including

@@ -10,9 +10,10 @@ import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
 import {
-  BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns, prefixFor,
+  BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
   wouldCycleBlock, wouldCycleParent, releases, nextLessonId, lessonState, wouldCycleLesson,
 } from '../lib/state.mjs';
+import { roleIs } from '../lib/roles.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
@@ -765,7 +766,7 @@ function ingestFile(ctx, file, runHint, currentRun) {
       });
       const blocking = p.blocking ?? report.outcome === 'blocked';
       if (blocking) events.push({ type: 'link.added', blocker: id, blocked: run.item, from_run: runId });
-      const reviewHold = s.items.get(run.item)?.kind === 'work' && prefixFor('work', p.role) === 'REV';
+      const reviewHold = s.items.get(run.item)?.kind === 'work' && roleIs(p, 'REV');
       created.push({ id, title: p.title, role: p.role, blocking, reviewHold });
     }
     return {

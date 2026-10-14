@@ -185,6 +185,31 @@ test('transitive review prerequisites progress regardless of whether links or pa
   }
 });
 
+test('cross-review prerequisites become ready and complete after both PASS verdicts', () => {
+  const other = 'ENG-1350', otherReview = 'REV-786';
+  const entries = [...base().slice(0, 4),
+    { type: 'item.added', id: other, role: 'engineer' },
+    { type: 'item.added', id: otherReview, role: 'reviewer', parent: other },
+    { type: 'link.added', blocker: other, blocked: review },
+    { type: 'link.added', blocker: parent, blocked: otherReview }];
+  let s = fold(events(entries));
+  assert.equal(wouldCycleBlock(s, parent, otherReview), false, 'recorded links remain acyclic');
+  for (const id of [parent, other, review, otherReview]) assert.equal(itemStatus(s, id), 'blocked');
+  entries.push(start('R-1926', parent), done('R-1926'));
+  s = fold(events(entries));
+  assert.equal(itemStatus(s, otherReview), 'ready');
+  assert.deepEqual(blockReason(s, otherReview), []);
+  entries.push(start('R-1928', other), done('R-1928'));
+  s = fold(events(entries));
+  assert.equal(itemStatus(s, review), 'ready');
+  assert.equal(itemStatus(s, otherReview), 'ready');
+  entries.push(start('R-1927', review), done('R-1927', 'PASS'),
+    start('R-1929', otherReview), done('R-1929', 'PASS'));
+  s = fold(events(entries));
+  for (const id of [parent, other, review, otherReview]) assert.equal(itemStatus(s, id), 'done');
+  assert.equal(itemStatus(s, dependent), 'ready');
+});
+
 test('open questions under child reviews hold promotion without a review blocker link', () => {
   const question = { type: 'item.added', id: 'HUM-1', role: 'human', parent: review };
   const s = state(start('R-1927', review), done('R-1927', 'PASS'), question);
@@ -254,6 +279,25 @@ proposals:
   assert.match(f.ok(['sync']), /\+ REV-1 "Review compatibility" \(review\) blocks ENG-1/);
   assert.equal(f.events().some(e => e.type === 'link.added' && e.blocker === 'REV-1'), false);
   assert.equal(f.json(['show', 'ENG-1', '--json']).status, 'blocked');
+});
+
+test('an unmapped role with a REV fallback prefix does not announce or derive a review hold', t => {
+  const f = setupOrg(); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  f.ok(['add', 'Implement the change', '--role', 'engineer']);
+  f.ok(['start', 'ENG-1']);
+  fs.writeFileSync(path.join(f.dir, 'runs/R-1/report.md'), report(`run: R-1
+outcome: done
+summary: Implemented.
+headline: Implemented
+proposals:
+  - role: rev
+    title: Follow up
+    blocking: false`));
+  const output = f.ok(['sync']);
+  assert.match(output, /\+ REV-1 "Follow up" \(rev\)\n/);
+  assert.doesNotMatch(output, /blocks ENG-1/);
+  assert.equal(f.json(['show', 'REV-1', '--json']).role, 'rev');
+  assert.equal(f.json(['show', 'ENG-1', '--json']).status, 'done');
 });
 
 test('conditional close can finish a PASS review waiting on its parent while another child still holds the work', t => {

@@ -80,12 +80,15 @@ Pending requests with different head/run bindings cannot deduplicate each other.
 again after validation, the lane checks that this run has a recorded done report,
 belongs to this Git lane, is not superseded and has no changed outcome, closure,
 unresolved/declined blocker or overlapping work. Promotion also needs an explicit
-`verdict: PASS` in the latest report of every done reviewer-role blocker: a missing
+`verdict: PASS` in the latest report of every done reviewer-role blocker, which includes a
+reviewer-role child of the work, linked or not: a missing
 verdict refuses here, although status views still release it, and a verdict other than
 PASS holds the work everywhere. An open operator question (role human, linked or not)
 under the item or under a reviewer-role item that blocks it refuses promotion.
-Dropping or unlinking a review releases its verdict hold; a question holds until it
-is answered or its review is unlinked, even if that review was dropped. Batch completion rechecks blockers and open questions
+Dropping a review releases its verdict hold. Unlinking releases it only when the review
+is not a child of the work. A question under a review holds until it is answered, even
+if that review was dropped; unlinking a review that is not a child of the work also
+releases its questions. Batch completion rechecks blockers and open questions
 directly; a review recorded after preparation refuses there through the
 changed-since-preparation fingerprint. The final check holds the record
 lock across the fast-forward, inside the promotion lock. It never writes events

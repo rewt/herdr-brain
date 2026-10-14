@@ -5,6 +5,9 @@ ordinary reversible decisions are yours within the project's recorded authority.
 Read applicable project instructions. This protocol supplies defaults and yields
 to them. No resident model or growing history is needed to keep the cycle moving.
 
+Apply [decision routing policy v2](DECISION-ROUTING.md) for authority and review defaults;
+its appendix records project-specific constraints and standing directions.
+
 Run foreground `supervisor.mjs entry` from the canonical checkout to refresh context and recover enabled housekeeping and watchers.
 Retrieve `record show ID` only as needed; use `supervisor.mjs brief --json` when
 the preview truncates. `supervisor.mjs checkpoint --through N --role supervisor`

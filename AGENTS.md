@@ -8,6 +8,8 @@
   dependencies, keeps its own state and never writes `events.jsonl`. `supervisor/` supplies the read-only
   cold start and generic protocol and foreground notice/queue glue. Workers never invoke its cycle mutations.
 - Native harness settings own sandboxing and permissions; the product installs no wrappers or SessionStart hooks.
+- Follow [decision routing policy v2](supervisor/DECISION-ROUTING.md) for authority and review defaults;
+  project-specific constraints and standing directions belong in its appendix.
 - Tests run once, before code merges into main: the promotion batch runs the merge checks, like CI on a
   pull request. Release preparation runs the full offline suites once per candidate. In a lane, ship
   the change with the tests that prove it and run them

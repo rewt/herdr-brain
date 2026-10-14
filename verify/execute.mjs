@@ -6,11 +6,11 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lookupProcess } from '../lib/processes.mjs';
 import { descendants, stopGateGroup } from '../test-slot/watchdog.mjs';
+import { run as runBounded, slotPathOf, COMPAT_PATH_ENV, TEST_SLOT_PATH } from '../test-slot/test-slot.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { isMain } from '../lib/cli-help.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
-const SLOT = fileURLToPath(new URL('../test-slot/test-slot.mjs', import.meta.url));
 const read = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const lookup = (...args) => {
   const result = lookupProcess(...args);
@@ -37,21 +37,25 @@ async function hold(spec, directory) {
     writeFileAtomic(path.join(directory, 'phases.json'), JSON.stringify({ error: error.message, desk_refused: true }) + '\n', 0o600);
     process.exitCode = 1; return;
   }
-  const args = [SLOT, 'run', `${job.label} bounds`, '--result-path', resultPath,
-    '--timeout-seconds', String(job.timeout_seconds), '--idle-timeout-seconds', String(job.idle_timeout_seconds),
-    '--project-common', job.identity, '--tier', 'verify-job', '--', process.execPath, SELF, spec, directory];
   // This watchdog nests in the host hold. The coordinator remains alive inside
-  // that hold after a job timeout, so recorded orphans are reaped before release.
-  const wrapper = await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, { cwd: job.desk, stdio: 'inherit' });
-    child.once('error', reject); child.once('exit', (exit, signal) => resolve({ exit, signal }));
-  });
+  // that hold after a job timeout. Keep its final walk outside the stopped tree,
+  // so a delayed phase observer cannot lose the escaped children's identities.
+  const captured = path.join(directory, 'captured.json');
+  const exit = await runBounded({ positional: [`${job.label} bounds`],
+    options: { resultPath, lockPath: slotPathOf(), compatPath: process.env[COMPAT_PATH_ENV] ?? TEST_SLOT_PATH,
+      timeoutSeconds: job.timeout_seconds, idleTimeoutSeconds: job.idle_timeout_seconds,
+      common: job.identity, tier: 'verify-job',
+      onCapture: tracked => writeFileAtomic(captured, JSON.stringify([...tracked.values()]) + '\n', 0o600) },
+    child: [process.execPath, SELF, spec, directory] });
+  const wrapper = { exit, signal: read(resultPath)?.signal ?? null };
   const execution = read(resultPath), file = path.join(directory, 'phases.json');
   const phases = read(file) ?? { prepare: job.prepare ? { argv: job.prepare } : 'none', command: { argv: job.argv } };
   phases.reaped ??= [];
   const save = () => writeFileAtomic(file, JSON.stringify(phases) + '\n', 0o600);
   try {
     const tracked = new Map((phases.tracked ?? []).map(row => [row.pid, row]));
+    for (const row of read(captured) ?? []) tracked.set(row.pid, row);
+    phases.tracked = [...tracked.values()]; save();
     await stopTracked(tracked, phases.reaped, save);
     if (execution?.gate_timeout) for (const row of tracked.values()) {
       if (row.pgid === phases.pgid || phases.reaped.some(entry => entry.pid === row.pid && entry.identity === row.identity)) continue;
@@ -75,7 +79,8 @@ async function hold(spec, directory) {
 
 export async function execute(job, directory) {
   const file = path.join(directory, 'phases.json');
-  const state = { prepare: job.prepare ? { argv: job.prepare } : 'none', command: { argv: job.argv }, pgid: lookup(process.pid, { identityOnly: true }).value?.pgid ?? null, tracked: [], reaped: [] };
+  const root = lookup(process.pid, { identityOnly: true }).value;
+  const state = { prepare: job.prepare ? { argv: job.prepare } : 'none', command: { argv: job.argv }, pgid: root?.pgid ?? null, tracked: [], reaped: [] };
   const save = () => writeFileAtomic(file, JSON.stringify(state) + '\n', 0o600);
   let cancelled;
   const cancel = signal => { cancelled ??= signal; state.signal = cancelled; save(); };
@@ -115,7 +120,15 @@ export async function execute(job, directory) {
       try {
         if (stopping) await stopping;
         else if (child.pid) await stopTracked(tracked, state.reaped, save);
-        if (trackingError) throw Error(trackingError);
+        if (trackingError) {
+          const captured = read(path.join(directory, 'captured.json'));
+          // The watchdog can terminate the phase's measurement helper while
+          // cancelling. Its independently completed pre-signal walk supplies
+          // ownership even before the phase's JS signal handler runs. Every
+          // other missing/refused identity still fails closed.
+          if (/^process source unavailable: terminated by (SIGTERM|SIGINT|SIGHUP)$/.test(trackingError) && captured?.some(row => row.pid === process.pid && row.identity === root?.identity)) state.tracking_interrupted = trackingError;
+          else throw Error(trackingError);
+        }
       } catch (error) { state.cleanup_error = error.message; save(); throw error; }
       // Drain all bytes before hashing. An unobserved daemon retaining a pipe
       // must produce an explicit error instead of silently truncating its log.

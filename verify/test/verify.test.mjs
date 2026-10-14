@@ -16,6 +16,7 @@ import { lookupProcess } from '../../lib/processes.mjs';
 import { productFiles } from '../../lib/product-files.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
+import { stopGateGroup } from '../../test-slot/watchdog.mjs';
 
 const CLI = fileURLToPath(new URL('../verify.mjs', import.meta.url));
 const inboxCLI = fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url));
@@ -697,6 +698,50 @@ test('timeout also records and reaps a captured escaped descendant before releas
   await f.run(job); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
   assert.equal(receipt.timeout.kind, 'wall');
   assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.identity));
+  const captured = read(path.join(path.dirname(job.receipt), 'captured.json'));
+  const recorded = receipt.reaped_processes.find(row => row.pid === pid);
+  assert.ok(captured.some(row => row.pid === pid && row.identity === recorded.identity));
+  const live = lookupProcess(pid, { identityOnly: true }); assert.equal(live.ok, true); assert.ok(!live.value || /^Z/.test(live.value.state));
+  assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
+});
+
+test('the final timeout walk publishes a newly observable escaped identity before any signal', async () => {
+  const root = { pid: 100, ppid: 1, pgid: 100, state: 'S', identity: '1:1' };
+  const escaped = { pid: 101, ppid: 100, pgid: 101, state: 'S', identity: '2:1' };
+  // The phase's earlier poll has not seen this child. The final watchdog walk
+  // must give the receipt owner its identity before destroying the parent tree.
+  const rows = new Map([[root.pid, root], [escaped.pid, escaped]]), events = [];
+  let published;
+  await stopGateGroup(root.pid, { ownsGroup: false, tracked: new Map(),
+    lookup: pid => ({ ok: true, value: pid === undefined ? new Map(rows) : rows.get(pid) ?? null }),
+    onCapture: tracked => { published = tracked; events.push('capture'); },
+    signal: pid => {
+      assert.equal(published.get(pid).identity, rows.get(pid).identity);
+      events.push(pid); rows.delete(pid);
+    } });
+  assert.deepEqual(events, ['capture', root.pid, escaped.pid]);
+  assert.equal(published.get(escaped.pid).identity, escaped.identity);
+});
+
+test('timeout captures an escaped descendant while its phase observer is stopped', async t => {
+  const f = fixture(t), pids = path.join(f.root, 'paused-observer-escape');
+  const job = f.add({ 'timeout-seconds': '1', 'idle-timeout-seconds': '3' }, node(`
+    const fs=require('fs'), cp=require('child_process');
+    const phase=process.ppid;
+    if(phase<=1)throw Error('fixture phase parent is absent');
+    process.kill(phase,'SIGSTOP');
+    const child=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});
+    child.unref();
+    fs.writeFileSync(${JSON.stringify(pids + '.tmp')},String(child.pid));
+    fs.renameSync(${JSON.stringify(pids + '.tmp')},${JSON.stringify(pids)});
+    setInterval(()=>{},1000);
+  `));
+  await f.run(job); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
+  assert.equal(receipt.timeout.kind, 'wall');
+  assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.identity));
+  const captured = read(path.join(path.dirname(job.receipt), 'captured.json'));
+  assert.ok(captured.some(row => row.pid === receipt.slot_execution.command_pid && /^T/.test(row.state)));
+  assert.ok(captured.some(row => row.pid === pid && row.identity === receipt.reaped_processes.find(row => row.pid === pid).identity));
   const live = lookupProcess(pid, { identityOnly: true }); assert.equal(live.ok, true); assert.ok(!live.value || /^Z/.test(live.value.state));
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
 });

@@ -15,7 +15,7 @@ export function descendants(rows, root) {
   }
   return found;
 }
-export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(), rootIdentity, ownsGroup = true, ownedChild = false, firstSignal = 'SIGTERM', lookup = lookupProcess, signal = process.kill.bind(process) } = {}) {
+export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(), rootIdentity, ownsGroup = true, ownedChild = false, firstSignal = 'SIGTERM', lookup = lookupProcess, signal = process.kill.bind(process), onCapture } = {}) {
   // A detached leader that is still our unreaped child cannot have its PID or
   // PGID reused. Establish this ownership before any identity lookup or signal.
   const owned = ownsGroup && ownedChild;
@@ -38,6 +38,9 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
   for (const [pid, row] of descendants(snapshotRows, pgid)) tracked.set(pid, row);
   // Include same-group orphans while the owned PGID still exists.
   for (const row of snapshotRows.values()) if (ownsGroup && row.pgid === pgid) tracked.set(row.pid, row);
+  // Receipt owners can preserve this complete final walk before signals stop
+  // either the descendants or a child's own in-flight process measurement.
+  if (snapshot.ok) onCapture?.(new Map(tracked));
   const live = () => {
     const rows = [];
     for (const saved of tracked.values()) {

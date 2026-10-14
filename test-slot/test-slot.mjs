@@ -367,7 +367,7 @@ function parse(argv) {
 
 const exitOf = (code, signal) => (code ?? 128 + (os.constants.signals[signal] ?? 0));
 
-async function run({ positional, options, child }) {
+export async function run({ positional, options, child }) {
   const [label] = positional;
   if (label === undefined || child.length === 0) throw new Error("usage: test-slot.mjs run <label> [--wait <seconds>] -- <command> [args...]");
   const common = options.common ?? projectCommon();
@@ -409,7 +409,7 @@ async function run({ positional, options, child }) {
   };
   const retryTimeout = options.retryTimeout && process.env[RETRIED_ENV] !== "1";
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits);
+    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture);
     if (options.resultPath) writeFileAtomic(options.resultPath, JSON.stringify({ ...execution, signal: received ?? result.signal,
       history_key: historyKey, exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() }) + '\n', 0o600);
     if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
@@ -433,7 +433,7 @@ export function shouldRetryTimeout({ status, timeout, load, childRetried = false
   return status !== 0 && status !== REFUSED_EXIT && !gateTimeout && timeout && load > 1 && !childRetried;
 }
 
-async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits) {
+async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits, onCapture) {
   const capacity = Math.max(1, Math.min(4, os.availableParallelism()));
   let load = os.loadavg()[0] / capacity;
   let timeout = false;
@@ -483,7 +483,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     if (!kind) return;
     gateTimeout = { kind, limit_seconds: kind === 'wall' ? limits.wall_seconds : limits.idle_seconds, elapsed_s: elapsed };
     process.stderr.write(`GATE_TIMEOUT: ${kind} limit ${gateTimeout.limit_seconds}s exceeded; elapsed ${elapsed.toFixed(3)}s\n`);
-    stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited }).catch(error => { stopError = error; failWatchdog(error); });
+    stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
   }, 50);
   const forwarded = new Set();
   const forward = (signal) => {
@@ -491,7 +491,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     // Nested gates share the holder group; cancel only their descendants.
     if (forwarded.has(signal)) return;
     forwarded.add(signal);
-    stopping ??= stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, firstSignal: signal }).catch(error => { stopError = error; failWatchdog(error); });
+    stopping ??= stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, firstSignal: signal, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
   };
   for (const signal of SIGNALS) process.on(signal, forward);
   try {
@@ -527,7 +527,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
       if (remains() && !stopping) {
         leftover = true;
         process.stderr.write('GATE_LEFTOVER_GROUP: command exited with background descendants; stopping owned processes.\n');
-        await stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup });
+        await stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, onCapture });
       }
       if (stopping) await stopping;
       if (stopError) throw stopError;

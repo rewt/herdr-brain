@@ -1,5 +1,89 @@
 # Supervisor
 
+## Safe retirement
+
+`node supervisor/retire.mjs plan --repo CHECKOUT --org RECORD` is a read-only
+adoption preview, including keep reasons and expired-reference diagnostics.
+`apply` observes again before each close and acts only on a matching plan.
+`--lane PATH` scopes actions to one lane; `--verify-state-dir DIR` declares a
+nondefault trusted verification store. Neither command starts a schedule or
+calls a model. Use reviewed installed code for live application. Startup/shift
+entry prints a plan to catch missed events; this change starts no new schedule.
+
+The one pure policy is [lib/retire.mjs](../lib/retire.mjs). Its snapshots contain
+the record fold, canonical Git common directory and lane head, Herdr topology,
+all occupants, foreground processes and native process trees with kernel birth
+identities, and current resource references. The
+executor rechecks them before each action. It preserves working, blocked and
+unknown occupants, operator focus, persistent/operator workspaces, and lab-owned
+workspaces. A recorded report needs its ingestion sequence and a terminal
+review/correction/integration chain; a file or verdict notification cannot
+release a pane. Git must be clean and integrated (or a verified archived tip).
+Historical report/evidence links are retained but do not create live holds.
+
+Explicit continuation between different panes uses
+`record handoff R-old --to R-new --confirm --why TEXT`. The append-only event
+names a newer open run on the same item with a different launch identity. At
+execution the successor must still occupy its recorded pane and be retained.
+Reusing the same session for a new run always keeps that session. Handoff never
+overrides an active process, unknown identity, or pending live reference. Reports
+are immutable; the fold's shape and exports are unchanged and older folds ignore
+the handoff event. Labels, ledgers and session display metadata never authorize
+retirement, so unrecorded reviewer, session and watcher tabs stay.
+
+Live sources are `<git-common>/promote/queue.json` (pending, current, interrupted
+and reconciliation-pending jobs), the default trusted `verify-queue/v1` store
+under `$XDG_STATE_HOME/herdr-monitor/verify/SHA256(common)` (or the normal
+`~/.local/state` default), and the host slot lock and its `.queue` waiters. The
+existing `MONITOR_TEST_SLOT_PATH` and `MONITOR_TEST_SLOT_COMPAT_PATH` declarations
+are honored. Holders/waiters match by cwd or lane path in their label; verify
+jobs match item or exact head. A completed integration/reconciliation checkpoint
+waiting only for cleanup/delivery is no longer an active promotion resource user.
+Live or unreadable recorded watcher processes and unsettled callback receipts keep
+their run. Unknown/background pane descendants prevent retirement. Unreadable sources
+fail closed. Git/read failures retain their affected workspace; record/reference
+damage retains the project. No source is pruned or rewritten by observation.
+
+The optional generic source is `<ORG_DIR>/references/`, with one atomic JSON
+file per pending job. No writer is required. Writers publish complete files by
+atomic rename and remove their own files when the job ends. Its exact format is:
+
+```json
+{
+  "schema": "herdr-reference/v1",
+  "owner": "tool-name",
+  "kind": "host-check",
+  "job": "job-id",
+  "state": "pending",
+  "item": "ENG-123",
+  "run": "R-456",
+  "lane": "topic",
+  "cwd": "/absolute/lane/path",
+  "pane": "workspace:pane",
+  "created_at": "2026-10-14T20:00:00Z",
+  "expires_at": "2026-10-14T21:00:00Z"
+}
+```
+
+`schema`, `owner`, `kind`, `job`, `state`, `item`, `created_at` and `expires_at`
+are required; `run`, `lane`, `cwd` and `pane` are optional. State is `pending` or
+`running`. Cwd is absolute; timestamps must parse. An unexpired reference keeps
+on any item, run, lane, cwd or pane match. Expired references are ignored and
+reported. A malformed, unreadable or unknown-schema file keeps the entire
+project and is reported, even if its apparent expiry is past. References only
+ever keep; the planner never writes them.
+
+Report ingestion, review/disposition and job completion coalesce a foreground
+request in `ORG/retirement/request.json`. This is a revision hint, never stored
+status or permission to close. Existing housekeeping reconciliation reads fresh
+authority; promotion also performs its scoped cleanup after reconciliation.
+`skip-close` logs the fresh refusal. Promotion retains its successful outcome
+with `cleanup.state: pending` and `integrated-but-cleanup-pending`; a subsequent
+queue drain retries only cleanup, without revalidation or another integration.
+`lane close --git-only` requires zero live panes before removing the worktree,
+even when a pane is eligible but not yet closed. Lane archival/evidence durability
+preflight remains the separate lane-removal work.
+
 Supervisors and workers do not open blocking questions. They record each one
 with `record ask` (an action category, a safe recommendation and a reason),
 take the safe default and continue; funds, publishing, credentials and permission

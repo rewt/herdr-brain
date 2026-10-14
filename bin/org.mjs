@@ -76,6 +76,8 @@ Runs and reports
   record ingest <report.md> [--run R-n] [--if-current-run R-n]
                                           record a report; optional guard checked under the log lock
   record sync                             record every report waiting at an open run's report path
+  record handoff R-old --to R-new --confirm --why TEXT
+                                          confirm a retained successor; reports stay immutable
   record abandon <R-n> [--note T]         give up on a run (a later report is still accepted)
   record brief <R-n>                      print the brief a run was given
 
@@ -978,19 +980,25 @@ const COMMANDS = {
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
   start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.
+  handoff: lazy('../lib/retire-command.mjs', 'handoffCommand'),
   desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
   routes: lazy('../lanes/routes-command.mjs', 'routesCommand'),
   housekeeping: lazy('../housekeeping/command.mjs', 'housekeepingCommand'),
 };
 
-function main(argv) {
+async function main(argv) {
   const [command, ...rest] = argv;
   if (!command || ['help', '--help', '-h'].includes(command)) {
     out(USAGE);
     return 0;
   }
   if (!Object.hasOwn(COMMANDS, command)) throw new UserError(`unknown command "${command}" (see: record help)`);
-  return COMMANDS[command](rest);
+  const result = await COMMANDS[command](rest);
+  if (['ingest', 'sync', 'close', 'reopen', 'answer', 'unblock', 'abandon', 'handoff', 'complete-batch'].includes(command) && result === 0) {
+    try { const { requestRetirement } = await import('../lib/retire-trigger.mjs'); requestRetirement({ source: `record ${command}` }); }
+    catch (e) { err(`record: retirement request deferred: ${e.message}\n`); }
+  }
+  return result;
 }
 
 process.stdout.on('error', (error) => {

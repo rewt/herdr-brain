@@ -1,0 +1,168 @@
+TAP version 13
+# integrated-but-cleanup-pending: retirement catch-up: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-LroyWV/herdr workspace list: retirement observed before acknowledgment
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"6e22e7664bd3abf1a2f1c576792b4907d3e074af1c178ffaedebf1bd0fb504f9","action":"closed"}
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 1 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.546
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 2 - lane close --git-only keeps the worktree beneath even an eligible pane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043458
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 3 - lane close uses the executor then proves vacancy before Git and empty workspace close # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034791
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 4 - an empty unmerged lane retains its recoverable archive and immutable record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.072833
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 5 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03775
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 6 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027833
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 7 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032666
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 8 - Git-only lane without a workspace still keeps queued lane and run references # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031458
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 9 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.113542
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 10 - installed settle-watch flags keep an ingested worker while its chain is open # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075334
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 11 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.072
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 12 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028833
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 13 - promote drain consumes requests at both foreground boundaries without running a gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029042
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+not ok 14 - promote sends its ready acknowledgment before observing a pending retirement hint
+  ---
+  duration_ms: 1050.936542
+  location: '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/R-414-ack-negative-Ddtl0R/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    retirement observed before ready
+    
+    true !== false
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/R-414-ack-negative-Ddtl0R/test/retire-paths.test.mjs:213:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a dequeued job is persisted before retirement catch-up and is never left current during it
+ok 15 - a dequeued job is persisted before retirement catch-up and is never left current during it # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058333
+  ...
+# Subtest: the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+ok 16 - the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.1215
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 17 - cleanup retries are capped with backoff, record the refusal, and reset on a new request # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.046083
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 18 - lane close permits an absent Herdr executable and refuses an unreadable installed server # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0705
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 19 - tidy-tabs prunes an exited recorded watcher callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.059833
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 20 - tidy-tabs prunes an exited recorded settle callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027917
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 21 - tidy-tabs prunes an exited recorded executive callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023333
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 22 - tidy-tabs prunes an exited recorded plan callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.052875
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 23 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022542
+  ...
+# Subtest: a concurrently pruned absent receipt does not abort remaining tab closes
+ok 24 - a concurrently pruned absent receipt does not abort remaining tab closes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021375
+  ...
+# Subtest: post-close receipt pruning ENOENT preserves the successful close result
+ok 25 - post-close receipt pruning ENOENT preserves the successful close result # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020417
+  ...
+# Subtest: post-close receipt pruning EACCES preserves the successful close result
+ok 26 - post-close receipt pruning EACCES preserves the successful close result # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020291
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 27 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02025
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 28 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020541
+  ...
+1..28
+# tests 28
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 27
+# todo 0
+# duration_ms 1164.6035

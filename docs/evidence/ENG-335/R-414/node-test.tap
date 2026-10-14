@@ -1,0 +1,348 @@
+TAP version 13
+# Subtest: fixture cleanup ignores an ambient record inbox owner
+ok 1 - fixture cleanup ignores an ambient record inbox owner
+  ---
+  duration_ms: 69.698375
+  ...
+# Subtest: busy supervisor does not hold completed queue accounting by default
+ok 2 - busy supervisor does not hold completed queue accounting by default
+  ---
+  duration_ms: 4016.937459
+  ...
+# Subtest: idle supervisor receives a default queued promotion notice without a false alert
+ok 3 - idle supervisor receives a default queued promotion notice without a false alert
+  ---
+  duration_ms: 1718.406875
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 4 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6801.315084
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 5 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 3027.451958
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 6 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1773.453417
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 7 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 2223.899583
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 8 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1833.470416
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 9 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 476.194834
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 10 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 2227.570917
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 11 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2263.180375
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 12 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2984.616916
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 13 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2356.222041
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 14 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 2563.789958
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 15 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 4764.755375
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 16 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1840.862958
+  ...
+# Subtest: a drain owner this caller may not signal still counts as running
+ok 17 - a drain owner this caller may not signal still counts as running
+  ---
+  duration_ms: 81.35875
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 18 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 4926.639917
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 19 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 3435.426791
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 20 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 753.9945
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 21 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 211.179375
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 22 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 304.666416
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 23 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 692.603375
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 24 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4491.701917
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 25 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4402.71825
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 26 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1819.608417
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 27 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1800.595041
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 28 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 688.810708
+  ...
+# Subtest: only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+ok 29 - only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+  ---
+  duration_ms: 1075.110833
+  ...
+# Subtest: an unborn canonical branch has no gate profile, whatever its working tree holds
+ok 30 - an unborn canonical branch has no gate profile, whatever its working tree holds
+  ---
+  duration_ms: 20.370042
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: consume reclaims a proven dead owner and its dead recovery guard
+ok 31 - consume reclaims a proven dead owner and its dead recovery guard
+  ---
+  duration_ms: 44.358666
+  ...
+# Subtest: consume respects a live owner without observing or changing its receipt
+ok 32 - consume respects a live owner without observing or changing its receipt
+  ---
+  duration_ms: 18.972625
+  ...
+# Subtest: request recovers its dead owner without rereading the event log
+ok 33 - request recovers its dead owner without rereading the event log
+  ---
+  duration_ms: 20.548542
+  ...
+# Subtest: unknown owners are retained, while PID reuse proves the recorded owner gone
+ok 34 - unknown owners are retained, while PID reuse proves the recorded owner gone
+  ---
+  duration_ms: 14.055291
+  ...
+# Subtest: an expired consumer deadline returns pending and leaves no lock or handled revision
+ok 35 - an expired consumer deadline returns pending and leaves no lock or handled revision
+  ---
+  duration_ms: 7.451667
+  ...
+# Subtest: a partially applied deadline leaves its hint resumable and releases the consumer lock
+ok 36 - a partially applied deadline leaves its hint resumable and releases the consumer lock
+  ---
+  duration_ms: 20.927292
+  ...
+# Subtest: a returned skip-close at or past the deadline never acknowledges the hint
+ok 37 - a returned skip-close at or past the deadline never acknowledges the hint
+  ---
+  duration_ms: 13.753833
+  ...
+# Subtest: deadline diagnostics after an otherwise successful apply keep its hint pending
+ok 38 - deadline diagnostics after an otherwise successful apply keep its hint pending
+  ---
+  duration_ms: 13.80925
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"e19d127b12a64b6ed187f6dab6d155f0559316ee5058629f8afea19ad61ae0fd","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"c00d961e1a223bd6e494dfd61ae115b33b7df588da7de7b7d2d96728fa1847b7","action":"closed"}
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 39 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+  ---
+  duration_ms: 1131.405292
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 40 - lane close --git-only keeps the worktree beneath even an eligible pane
+  ---
+  duration_ms: 682.162959
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 41 - lane close uses the executor then proves vacancy before Git and empty workspace close
+  ---
+  duration_ms: 1401.04925
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 42 - an empty unmerged lane retains its recoverable archive and immutable record
+  ---
+  duration_ms: 606.215458
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 43 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+  ---
+  duration_ms: 1683.964708
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 44 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+  ---
+  duration_ms: 850.798833
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 45 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+  ---
+  duration_ms: 195.4595
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 46 - Git-only lane without a workspace still keeps queued lane and run references
+  ---
+  duration_ms: 466.42925
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 47 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+  ---
+  duration_ms: 616.0015
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 48 - installed settle-watch flags keep an ingested worker while its chain is open
+  ---
+  duration_ms: 629.32275
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 49 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+  ---
+  duration_ms: 961.600125
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 50 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+  ---
+  duration_ms: 219.261
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 51 - promote drain consumes requests at both foreground boundaries without running a gate
+  ---
+  duration_ms: 1113.965
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+ok 52 - promote sends its ready acknowledgment before observing a pending retirement hint
+  ---
+  duration_ms: 772.693791
+  ...
+# {"id":"job","topic":"topic","outcome":"refused","reason":"lane: fixture refusal","log":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-0YNlQV/repo/.git/promote/job.log","delivered":false,"inbox":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-0YNlQV/record/supervisor/inbox.log","queued":true,"owner_pid":73834,"message":"[promote-queue] id=job lane=topic outcome=refused reason=\\"lane: fixture refusal\\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-0YNlQV/repo/.git/promote/job.log","delivery_id":"promote:job"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"f8af65f01a7fd49a0ca5e6a958f3807453c3bc3865e2662a809e8c2dcbe85101","action":"closed"}
+# Subtest: a dequeued job is persisted before retirement catch-up and is never left current during it
+ok 53 - a dequeued job is persisted before retirement catch-up and is never left current during it
+  ---
+  duration_ms: 1151.561
+  ...
+# Subtest: the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+ok 54 - the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+  ---
+  duration_ms: 924.775125
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 55 - cleanup retries are capped with backoff, record the refusal, and reset on a new request
+  ---
+  duration_ms: 3647.678041
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 56 - lane close permits an absent Herdr executable and refuses an unreadable installed server
+  ---
+  duration_ms: 553.54675
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 57 - tidy-tabs prunes an exited recorded watcher callback through the shared guard
+  ---
+  duration_ms: 1493.531334
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 58 - tidy-tabs prunes an exited recorded settle callback through the shared guard
+  ---
+  duration_ms: 1479.581083
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 59 - tidy-tabs prunes an exited recorded executive callback through the shared guard
+  ---
+  duration_ms: 1513.372334
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 60 - tidy-tabs prunes an exited recorded plan callback through the shared guard
+  ---
+  duration_ms: 1475.818083
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 61 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+  ---
+  duration_ms: 898.230458
+  ...
+# Subtest: a concurrently pruned absent receipt does not abort remaining tab closes
+ok 62 - a concurrently pruned absent receipt does not abort remaining tab closes
+  ---
+  duration_ms: 966.760875
+  ...
+# Subtest: post-close receipt pruning ENOENT preserves the successful close result
+ok 63 - post-close receipt pruning ENOENT preserves the successful close result
+  ---
+  duration_ms: 937.851583
+  ...
+# Subtest: post-close receipt pruning EACCES preserves the successful close result
+ok 64 - post-close receipt pruning EACCES preserves the successful close result
+  ---
+  duration_ms: 916.417667
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 65 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+  ---
+  duration_ms: 4644.698125
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 66 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+  ---
+  duration_ms: 1089.603916
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..66
+# tests 66
+# suites 0
+# pass 66
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 65759.429417
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

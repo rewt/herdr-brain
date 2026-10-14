@@ -1,0 +1,27 @@
+diff --git a/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/promote.mjs b/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/R-414-ack-negative-Ddtl0R/promote/promote.mjs
+index 17de551d..86ec9973 100755
+--- a/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/promote.mjs
++++ b/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/R-414-ack-negative-Ddtl0R/promote/promote.mjs
+@@ -401,6 +401,8 @@ export async function drain(queue) {
+   let acknowledged = false;
+   const attempted = new Set();
+   try {
++    consumeRequests(queue);
++    retryCleanup(queue);
+     for (;;) {
+       // Git can be slow. Read a committed snapshot without queue.lock so
+       // enqueuers remain free to append while this worker waits for settings.
+@@ -472,12 +474,7 @@ export async function drain(queue) {
+       }
+       // Ready means the queue checkpoint exists, including batch membership.
+       // Git settings reads must not leave a successful startup ahead of it.
+-      if (!acknowledged) {
+-        process.send?.({ ready: true }); acknowledged = true;
+-        // Catch-up must not strand a freshly dequeued job as current before
+-        // its attempt. Per-job cleanup and finally handle the busy iteration.
+-        if (!entry) { consumeRequests(queue); retryCleanup(queue); }
+-      }
++      if (!acknowledged) { process.send?.({ ready: true }); acknowledged = true; }
+       if (!entry) break;
+       const { job, newlyDequeued } = entry;
+       if (job.jobs) {

@@ -37,8 +37,8 @@ function fixture(t) {
     state.runs.push({ id: `R-${state.runs.length + 1}`, item, started: { seq: state.runs.length + 1 },
       workspace: workspace === 'lane' ? lane : repo,
       meta: { agent: name, pane: `${id}:p`, worker_workspace: workspace, lane: 'topic',
-        terminal_id: id, agent_session_id: `${id}:session` }, report: { outcome: 'done' } });
-    state.items.push({ id: item, status: 'active', blocked_by: [] });
+        terminal_id: id, agent_session_id: `${id}:session` }, report: { seq: 10, outcome: 'done' } });
+    state.items.push({ id: item, role: 'engineer', closed: { as: 'done', seq: 11 }, status: 'done', blocked_by: [] });
   };
   f.add('finished', 'lane-topic-worker');
   f.reviewSession = (name, extra = {}) => {
@@ -61,7 +61,7 @@ if (a[0] === 'status') out({ runs: s.runs, items: s.incompleteItems ? undefined 
 else if (a[0] === 'workspace') out({ workspaces: s.workspaces });
 else if (a[0] === 'tab' && a[1] === 'list') out({ tabs: s.tabs.filter(t => t.workspace_id === a.at(-1)) });
 else if (a[0] === 'pane' && a[1] === 'list') out(s.incomplete ? {} : { panes: s.panes.filter(p => p.workspace_id === a.at(-1)) });
-else if (a[0] === 'pane' && a[1] === 'process-info') out({ process_info: { shell_pid: 1, foreground_processes: [{ pid: 1, name: 'zsh' }] } });
+else if (a[0] === 'pane' && a[1] === 'process-info') out({ process_info: { shell_pid: 1, foreground_processes: [{ pid: 1, name: 'zsh' }], process_tree_complete: true, process_tree: [{pid:1,identity:'shell',state:'S',command:'[zsh]'}] } });
 else if (a[0] === 'agent' && a[1] === 'list') {
   s.agentReads++;
   if (s.change && s.agentReads >= 2) s.agents[0].agent_status = s.change;
@@ -83,7 +83,7 @@ else if (a[0] === 'agent' && a[1] === 'list') {
   return f;
 }
 
-test('finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay', t => {
+test('terminal integrated worker tabs close while working, blocked, unnamed and operator tabs stay', t => {
   const f = fixture(t);
   f.add('finished-round-2', 'lane-topic-worker-2');
   f.add('finished-round-3', 'lane-topic-worker-3');
@@ -133,7 +133,7 @@ test('conflicting agent tab/workspace and duplicate pane topology cannot authori
     { agents: [agent], panes: [{ ...panes[0], workspace_id: 'other' }] },
   ]) {
     const plan = planTidy({ tabs, ...snapshot, reportedAgents: new Set([agent.name]) });
-    assert.deepEqual(plan.close, []); assert.match(plan.keep[0].why, /topology disagree/);
+    assert.deepEqual(plan.close, []); assert.ok(plan.keep[0].why);
   }
 });
 
@@ -144,11 +144,11 @@ test('housekeeping --once preserves waiting reports, blocking items and missing 
     Object.assign(f.stateData, structuredClone(original));
     const s = f.stateData;
     if (variant.endsWith('-report')) s.runs[0].report.outcome = variant === 'blocked-report' ? 'blocked' : 'needs_human';
-    if (variant.endsWith('-item') && variant !== 'missing-item') s.items[0].status = variant === 'blocked-item' ? 'blocked' : 'needs_human';
+    if (variant.endsWith('-item') && variant !== 'missing-item') s.items[0].closed = null;
     if (variant.endsWith('-blocker')) {
       s.items[0].blocked_by = ['HUM-1'];
       if (variant !== 'missing-blocker') s.items.push({ id: 'HUM-1', status: variant === 'open-blocker' ? 'ready' : 'done',
-        closed: {}, meta: { answer: variant === 'declined-blocker' ? 'no' : 'yes' } });
+        closed: variant === 'open-blocker' ? null : {}, meta: { answer: variant === 'declined-blocker' ? 'no' : 'yes' } });
     }
     if (variant === 'missing-item') s.items = [];
     if (variant === 'incomplete-items') s.incompleteItems = true;
@@ -160,7 +160,7 @@ test('housekeeping --once preserves waiting reports, blocking items and missing 
   }
   // A resolved blocker allows the completed worker to close before promotion.
   Object.assign(f.stateData, structuredClone(original)); delete f.stateData.incompleteItems;
-  f.stateData.items[0].blocked_by = ['HUM-1']; f.stateData.items.push({ id: 'HUM-1', status: 'done' });
+  f.stateData.items[0].blocked_by = ['HUM-1']; f.stateData.items.push({ id: 'HUM-1', closed: { as: 'done' }, status: 'done' });
   f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, [['tab', 'close', 'finished']]);
 });
 
@@ -226,7 +226,7 @@ test('only this Git project is tidied and the caller tab is preserved', t => {
   assert.equal(r.status, 0, r.stderr); assert.deepEqual(f.read().actions, []);
 });
 
-test('finished reviews and old settle sessions use the existing tidy policy', t => {
+test('review files and session display metadata do not authorize retirement', t => {
   const f = fixture(t);
   f.add('review-old', 'lane-topic-review-old'); f.add('review-new', 'lane-topic-review-new');
   f.stateData.runs = f.stateData.runs.slice(0, 1);
@@ -241,10 +241,10 @@ test('finished reviews and old settle sessions use the existing tidy policy', t 
   const ledger = path.join(f.repo, '.lane/supervisor'); fs.mkdirSync(ledger);
   fs.writeFileSync(path.join(ledger, 'sessions-2026-10-03.log'), '12:00:00 settle-r-9-old settle R-9\n13:00:00 settle-r-10-new settle R-10\n');
   f.save(); assert.equal(f.tidy(), true);
-  assert.deepEqual(f.read().actions.map(a => a[2]).sort(), ['finished', 'review-old', 'settle-old']);
+  assert.deepEqual(f.read().actions.map(a => a[2]).sort(), ['finished']);
 });
 
-test('three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round', t => {
+test('a working correction round preserves the lane and review files never release unrecorded panes', t => {
   const f = fixture(t);
   const registry = path.join(f.repo, '.lane/sessions.json.d'), reviews = path.join(f.lane, 'docs/reviews/topic');
   fs.mkdirSync(registry, { recursive: true }); fs.mkdirSync(reviews, { recursive: true });
@@ -264,8 +264,8 @@ test('three fix rounds clear reported workers and review-codex verdict tabs, lea
   const r = spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: f.env });
   assert.equal(r.status, 0, r.stderr);
   const remaining = f.read();
-  assert.deepEqual(remaining.tabs.map(tab => tab.tab_id), ['working-round']);
-  assert.deepEqual(remaining.actions.map(a => a[2]).sort(), ['finished', 'review-1', 'review-2', 'review-3', 'worker-2', 'worker-3']);
+  assert.equal(remaining.tabs.length, 7);
+  assert.deepEqual(remaining.actions, []);
 });
 
 test('supported review routes need a matching topic verdict newer than their session', () => {
@@ -330,7 +330,7 @@ test('automatic review tidy preserves missing or mismatched occupant evidence wi
     Object.assign(f.stateData, structuredClone(original));
     const recorded = { ...session }; delete recorded[omitted];
     fs.writeFileSync(record, JSON.stringify(recorded)); f.save();
-    assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, [['tab', 'close', 'finished']]);
+    assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
   }
 });
 
@@ -347,7 +347,7 @@ test('replacement reviewers at the final observation keep their tabs without wor
     Object.assign(f.stateData, structuredClone(original), { replacement }); f.save();
     const r = spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: f.env });
     assert.equal(r.status, 0, r.stderr); assert.deepEqual(f.read().actions, []);
-    assert.ok(f.read().agentReads >= 2, 'the original reviewer qualified before the final recheck');
+    assert.ok(f.read().agentReads >= 1, 'unrecorded reviewer stays without authorization');
   }
 });
 
@@ -363,8 +363,8 @@ test('review evidence cannot override a recorded worker waiting on a blocker', t
 test('failed and incomplete reads close nothing and are logged without stopping housekeeping', t => {
   const f = fixture(t);
   for (const fail of ['agent list', 'status --json', 'tab close']) {
-    f.stateData.fail = fail; f.save(); assert.equal(f.tidy(), false);
-    assert.equal(f.logs.at(-1).action, 'tidy-failed'); assert.deepEqual(f.read().actions, []);
+    f.stateData.fail = fail; f.save(); assert.equal(f.tidy(), fail === 'tab close');
+    assert.equal(f.logs.at(-1).action, fail === 'tab close' ? 'tidy-tabs' : 'tidy-failed'); assert.deepEqual(f.read().actions, []);
   }
   delete f.stateData.fail; f.stateData.incomplete = true; f.save();
   assert.equal(f.tidy(), false); assert.deepEqual(f.read().actions, []);

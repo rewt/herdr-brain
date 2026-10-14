@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRetirement } from '../supervisor/retire.mjs';
 import { parseArgs } from '../lib/cli-help.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
@@ -162,45 +163,23 @@ function newTab(label, env) {
   return r.result.root_pane.pane_id;
 }
 
-// Tidy-up. A watcher started with --spawn closes its own tab when it finishes
-// cleanly (an error leaves the tab open to be read); after a hand-off it also
-// closes the stopped worker's tab; before opening a session, finished settle and
-// executive tabs beyond the newest two are closed. Nothing working or blocked is touched.
-function closeOwnTab() {
-  const tab = process.env.HERDR_TAB_ID;
-  if (dry || !opt['close-tab-on-exit'] || !tab) return;
-  log(`closing this watcher tab (${tab})`);
-  spawn('herdr', ['tab', 'close', tab], { detached: true, stdio: 'ignore' }).unref();
+// All retirement goes through the record/Git/job planner. In particular, a
+// report file or a launched settle session cannot authorize closing its worker.
+function retireTabs() {
+  try {
+    const retirement = createRetirement({ cwd: opt.cwd, org: opt.org,
+      log: entry => log(JSON.stringify(entry)) });
+    const plan = retirement.plan();
+    for (const kept of plan.keep) log(`keep ${kept.tab_id}: ${kept.why}`);
+    if (!dry) retirement.apply(plan);
+  } catch (error) { log(`retirement kept panes: ${error.message}`); }
 }
+// The running watcher is a live callback, and its own tab remains occupied.
+// A later reconciliation can reconsider it after the process exits.
+function closeOwnTab() { if (opt['close-tab-on-exit']) retireTabs(); }
 const finish = (msg) => { if (msg) log(msg); closeOwnTab(); process.exit(0); };
-
-function closeWorkerTab(agentName) {
-  const got = herdr(['agent', 'get', agentName]);
-  const info = got.ok ? got.result.agent : null;
-  if (!info?.tab_id || !['idle', 'done'].includes(info.agent_status)) return;
-  const r = act('close worker tab', 'herdr', ['tab', 'close', info.tab_id]);
-  log(r.ok ? `closed worker tab ${info.tab_id} (${agentName})` : `could not close worker tab ${info.tab_id}: ${r.error}`);
-}
-
-function pruneSessionTabs(keep = 2) {
-  const ws = workspaceId();
-  const tabs = herdr(['tab', 'list', '--workspace', ws]).result?.tabs ?? [];
-  const panes = herdr(['pane', 'list', '--workspace', ws]).result?.panes ?? [];
-  const agents = Object.fromEntries((herdr(['agent', 'list']).result?.agents ?? []).map((a) => [a.pane_id, a]));
-  const finished = [];
-  for (const t of tabs) {
-    if (!/^(settle R-\d+|executive)$/.test(t.label)) continue;
-    const found = panes.filter((p) => p.tab_id === t.tab_id).map((p) => agents[p.pane_id]);
-    if (found.length === 0 || found.some((a) => !a || !['idle', 'done'].includes(a.agent_status))) continue;
-    finished.push({ tab: t.tab_id, name: found[0].name ?? '' });
-  }
-  const stamp = (n) => n.match(/(\d{4})$/)?.[1] ?? '';
-  finished.sort((x, y) => stamp(y.name).localeCompare(stamp(x.name)));
-  for (const f of finished.slice(keep)) {
-    const r = act('close finished session tab', 'herdr', ['tab', 'close', f.tab]);
-    if (r.ok && !dry) log(`closed finished session tab ${f.tab} (${f.name})`);
-  }
-}
+function closeWorkerTab() { retireTabs(); }
+function pruneSessionTabs() { retireTabs(); }
 
 // --spawn: run this same watcher inside a visible tab, so it outlives whoever armed it.
 if (opt.spawn && !opt.open) {
@@ -430,7 +409,7 @@ let notified = null; // the state we last told the operator about
 for (;;) {
   const state = agentStatus(agent);
   const r = orgRun();
-  if (r.report || (r.meta.settled_by && r.meta.settled_by !== handedTo)) finish(`${runId} was settled elsewhere`);
+  if (r.report || (r.meta.settled_by && r.meta.settled_by !== handedTo)) { retireTabs(); finish(`${runId} was settled elsewhere`); }
 
   if (state === 'working' || state === 'unknown') {
     notified = null;
@@ -444,7 +423,9 @@ for (;;) {
     continue;
   }
   if (reportReady(r.report_path)) {
-    openSession({ mode: 'settle', r });
+    const ingested = run('org', ['ingest', r.report_path, '--run', runId], { env: orgEnv, quiet: true });
+    if (ingested.status !== 0) die(`report ingestion failed; worker retained: ${(ingested.stderr || ingested.stdout).trim()}`);
+    openSession({ mode: 'settle', r: orgRun() });
     closeWorkerTab(agent);
     finish();
   }

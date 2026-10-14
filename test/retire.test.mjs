@@ -22,7 +22,7 @@ function fixture() {
     workspaces: [{ workspace_id: 'w', worktree: { checkout_path: '/repo/lane', repo_key: '/repo/.git', is_linked_worktree: true } }],
     tabs: [{ tab_id: 'w:t', workspace_id: 'w' }],
     panes: [{ pane_id: 'w:p', tab_id: 'w:t', workspace_id: 'w', shellOnly: false,
-      process_info: { shell_pid: 5, foreground_processes: [{ name: 'native', pid: 10 }], process_tree_complete: true, process_tree: [{pid:5,identity:'shell',state:'S'},{pid:10,identity:'agent',state:'S'}] } }],
+      process_info: { shell_pid: 5, foreground_processes: [{ name: 'native', pid: 10 }], process_tree_complete: true, process_tree: [{pid:5,identity:'shell',state:'S',command:'[zsh]'},{pid:10,identity:'agent',state:'S',command:'[native]'}] } }],
     agents: [{ name: 'worker', agent: 'native', agent_status: 'done', pane_id: 'w:p', tab_id: 'w:t', workspace_id: 'w',
       cwd: '/repo/lane', terminal_id: 'terminal', agent_session: { value: 'session' }, state_change_seq: 4 }],
     references: [], handoffs: [], errors: [] };
@@ -199,4 +199,23 @@ test('older folds ignore the confirmed handoff event', () => {
   const events=[{type:'item.added',id:'ENG-1',role:'engineer',seq:1},{type:'run.started',id:'R-1',item:'ENG-1',seq:2},
     {type:'retirement.handoff',from:'R-1',to:'R-2',confirmed:true,seq:3}];
   assert.deepEqual([...olderFold(events).runs.values()],[...olderFold(events.slice(0,2)).runs.values()]);
+});
+
+test('a reported successor is reserved until the superseded pane is actually gone', () => {
+  const s=fixture(),old=s.record.runs.get('R-1');
+  const successor={...old,id:'R-2',started:{seq:10},meta:{...old.meta,agent:'successor',pane:'w:q',terminal_id:'next-term',agent_session_id:'next-session'}};
+  s.record.runs.set('R-2',successor);s.tabs.push({tab_id:'w:u',workspace_id:'w'});s.panes.push({...s.panes[0],pane_id:'w:q',tab_id:'w:u'});
+  s.agents.push({...s.agents[0],name:'successor',pane_id:'w:q',tab_id:'w:u',terminal_id:'next-term',agent_session:{value:'next-session'}});
+  s.handoffs.push({from:'R-1',to:'R-2',seq:11,confirmed:true});
+  const plan=planRetirement(s);assert.deepEqual(plan.close.map(t=>t.tab_id),['w:t']);assert.match(plan.keep[0].why,/retained successor/);
+  s.tabs.shift();s.panes.shift();s.agents.shift();assert.deepEqual(planRetirement(s).close.map(t=>t.tab_id),['w:u']);
+});
+
+test('a native session without its launch receipt stays unknown even on the old terminal', () => {
+  const s=fixture();delete s.record.runs.get('R-1').meta.agent_session_id;assert.match(kept(s),/identity/);
+});
+
+test('project reference damage is reported even when no tabs are present', () => {
+  const s=fixture();s.tabs=[];s.panes=[];s.agents=[];s.errors=['malformed reference; project kept'];
+  assert.deepEqual(planRetirement(s).diagnostics,[{reason:s.errors[0],scope:'project'}]);
 });

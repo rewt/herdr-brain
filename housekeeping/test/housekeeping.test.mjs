@@ -1,4 +1,3 @@
-import { waitForChange } from '../../test/helpers/file-wait.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
@@ -36,9 +35,9 @@ function fixture(t, { promoted = true, reported = true } = {}) {
     workspace_id: 'w', cwd: lane, terminal_id: 'term-a', state_change_seq: 7 };
   const run = { id: 'R-1', item: 'ENG-1', started: { seq: 1 }, workspace: lane, report_path: path.join(lane, 'report.md'),
     meta: { agent: agent.name, pane: agent.pane_id, worker_workspace: 'w', terminal_id: agent.terminal_id, lane: 'topic' },
-    report: reported ? { outcome: 'done' } : null, abandoned: null };
+    report: reported ? { seq: 3, outcome: 'done' } : null, abandoned: null };
   const f = { root, repo, lane, git, common, agent, run,
-    items: [{ id: 'ENG-1', status: reported ? 'done' : 'active', blocked_by: [] }], runs: [run], agents: [agent],
+    items: [{ id: 'ENG-1', role: 'engineer', closed: reported ? { as: 'done', seq: 4 } : null, status: reported ? 'done' : 'active', blocked_by: [] }], runs: [run], agents: [agent],
     tabs: [{ tab_id: 'w:t', label: 'worker' }], panes: [{ pane_id: 'w:p', tab_id: 'w:t' }],
     ws: [{ workspace_id: 'w', worktree: { checkout_path: lane, repo_root: repo, repo_key: common, is_linked_worktree: true } }],
     actions: [], logs: [], shell: true, text: screen, before: () => {} };
@@ -52,7 +51,7 @@ function fixture(t, { promoted = true, reported = true } = {}) {
     if (args[0] === 'tab' && args[1] === 'list') return result({ tabs: f.tabs });
     if (args[0] === 'pane' && args[1] === 'list') return result({ panes: f.panes });
     if (args[0] === 'pane' && args[1] === 'process-info') return result({ process_info: { shell_pid: 1,
-      foreground_processes: [{ pid: f.shell ? 1 : 2, name: f.shell ? 'zsh' : 'node' }] } });
+      foreground_processes: [{ pid: f.shell ? 1 : 2, name: f.shell ? 'zsh' : 'node' }], process_tree_complete: true, process_tree: [{pid:1,identity:'shell',state:'S',command:'[zsh]'}, ...(f.shell ? [] : [{pid:2,identity:'extra',state:'S',command:'[node]'}])] } });
     if (args[0] === 'agent' && args[1] === 'list') return result({ agents: f.agents });
     if (args[0] === 'agent' && args[1] === 'read') return { status: 0, stdout: f.text, stderr: '' };
     f.actions.push(args);
@@ -80,15 +79,15 @@ test('recorded promoted workers close through the shared tidy planner', (t) => {
   assert.match(f.logs.find((x) => x.action === 'closed').why, /R-1/);
 });
 
-test('abandoned promoted workers may close', (t) => {
+test('abandonment alone never substitutes for ingestion', (t) => {
   const f = fixture(t); f.run.report = null; f.run.abandoned = { seq: 4 };
-  f.runner().tick(); assert.equal(f.actions.length, 1);
+  f.runner().tick(); assert.equal(f.actions.length, 0);
 });
 
-test('CLI-closed unmerged work is authorized by its Git archive, never a session done marker', (t) => {
+test('a removed checkout with an archive stays unknown without an exact observed head', (t) => {
   const f = fixture(t, { promoted: false });
   f.git(['worktree', 'remove', f.lane]); f.git(['tag', 'archive/lane/topic', 'lane/topic']); f.git(['branch', '-D', 'lane/topic']);
-  f.runner().tick(); assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
+  f.runner().tick(); assert.deepEqual(f.actions, []); assert.ok(f.git(['rev-parse', 'archive/lane/topic']));
 });
 
 for (const variant of ['open', 'unpromoted', 'dirty', 'blocked', 'working', 'unknown', 'unnamed', 'unrecorded',
@@ -127,11 +126,11 @@ test('latest open fix round defeats an older reported run using the same worker 
   f.text = 'finished\n› Ask Codex'; f.runner().tick(); assert.deepEqual(f.actions, []);
 });
 
-test('unknown finished sessions stay; exited watcher shell tabs use tidy-tabs', (t) => {
+test('unknown finished sessions and unrecorded watcher shells stay', (t) => {
   const f = fixture(t); f.ws[0].worktree.is_linked_worktree = false;
   f.ws[0].worktree.checkout_path = f.repo;
   f.tabs[0].label = 'watch R-99'; f.agents = [];
-  f.runner().tick(); assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
+  f.runner().tick(); assert.deepEqual(f.actions, []);
   f.actions = []; f.tabs[0].label = 'executive'; f.agents = [{ ...f.agent, name: 'exec-1' }];
   f.runner().tick(); assert.deepEqual(f.actions, []);
 });
@@ -200,7 +199,7 @@ test('incomplete or failed reads never authorize any action', (t) => {
       if (failure === 'topology' && args[0] === 'pane' && args[1] === 'list') return { status: 0, stdout: '{"result":{}}' };
       return original(exe, args, opts);
     };
-    assert.throws(() => f.runner().tick(), /offline|topology/); assert.deepEqual(f.actions, []);
+    assert.throws(() => f.runner().tick(), /offline|incomplete panes/); assert.deepEqual(f.actions, []);
   }
 });
 
@@ -366,6 +365,7 @@ test('injected housekeeping startup assertion failure', t => {
 
 for (const runtimeKind of ['canonical checkout', 'installed copy']) {
 test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) => {
+  if (!process.env.HERDR_TEST_SUITE_PID) { t.skip('receipt-owned startup requires the gate runner process group'); return; }
   let f;
   const start = createHousekeepingStarter(t, () => f);
   f = cliFixture(t);
@@ -381,7 +381,9 @@ test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) 
   assert.equal(owner.record_cli.every((file) => fs.existsSync(file)), true);
   const again = start(); assert.equal(again.status, 0, again.stderr); assert.match(again.stdout, /already-running/);
   fs.writeFileSync(f.config, '{"enabled":false}');
-  await waitForChange([lock], () => !fs.existsSync(lock), { timeoutMs: 5000 });
+  const deadline = Date.now() + loadTimeout(5000);
+  while (fs.existsSync(lock) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(fs.existsSync(lock), false, 'schedule released its fixture lock');
   assert.match(fs.readFileSync(path.join(f.state, 'actions.jsonl'), 'utf8'), /disabled/);
 });
 }

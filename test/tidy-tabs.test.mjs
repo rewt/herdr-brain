@@ -1,177 +1,47 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
-import { isShellOnly, planTidy, reportEvidenceFromRecords, reportedAgentsFromRecords, reviewedAgentsFromRecords, reviewVerdict, sessionOrderFromLedgers } from '../supervisor/tidy-tabs.mjs';
+import { planTidy, isShellOnly, matchingRun, reviewVerdict, reviewedAgentsFromRecords } from '../supervisor/tidy-tabs.mjs';
+import { planRetirement } from '../lib/retire.mjs';
 
-const tab = (tab_id, label, lane = false) => ({ tab_id, label, workspace_id: lane ? 'wL' : 'wM', lane });
-const pane = (pane_id, tab_id, shellOnly = true) => ({ pane_id, tab_id, shellOnly });
-const ids = (list) => list.map((x) => x.tab_id).sort();
-
-function workerFixture() {
-  const agent = { name: 'lane-worker', status: 'idle', pane_id: 'p1', workspace_id: 'wL', cwd: process.cwd(), terminal_id: 'terminal' };
+function fixture() {
+  const agent = { name: 'lane-worker', agent: 'native', agent_status: 'done', pane_id: 'p', tab_id: 't', workspace_id: 'w', cwd: '/repo/lane', terminal_id: 'terminal' };
   const run = { id: 'R-1', item: 'ENG-1', started: { seq: 1 }, workspace: agent.cwd,
-    meta: { agent: agent.name, pane: agent.pane_id, worker_workspace: agent.workspace_id, terminal_id: agent.terminal_id },
-    report: { outcome: 'done' } };
-  return { agents: [agent], runs: [run], items: [{ id: run.item, status: 'done' }],
-    tabs: [tab('t1', 'worker', true)], panes: [pane('p1', 't1')] };
+    meta: { agent: agent.name, pane: 'p', worker_workspace: 'w', terminal_id: agent.terminal_id, lane: 'topic' }, report: { seq: 2, outcome: 'done' } };
+  return { common: '/repo/.git', workspaces: [{workspace_id:'w',worktree:{checkout_path:agent.cwd,repo_key:'/repo/.git',is_linked_worktree:true}}],
+    record: { runs: [run], items: [{id:'ENG-1',role:'engineer',closed:{as:'done'}}] },
+    git: [{path:agent.cwd,common:'/repo/.git',head:'head',clean:true,integrated:true,lane:'topic'}],
+    tabs: [{tab_id:'t',workspace_id:'w'}], panes: [{pane_id:'p',tab_id:'t',workspace_id:'w',shellOnly:true,process_info:{shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}],process_tree_complete:true,process_tree:[{pid:1,identity:'shell',state:'S',command:'[zsh]'}]}}], agents:[agent] };
 }
-
-for (const cause of ['no-run', 'no-report', 'newer-open-run', 'identity', 'tied-newest', 'blocked', 'needs_human', 'item', 'blocker', 'duplicate-name']) {
-  test(`lane keep reason identifies ${cause} without authorizing closure`, () => {
-    const snapshot = workerFixture(), run = snapshot.runs[0], agent = snapshot.agents[0];
-    let expected = 'no recorded report for lane-worker';
-    if (cause === 'no-run') snapshot.runs = [];
-    if (cause === 'no-report') run.report = null;
-    if (cause === 'newer-open-run') snapshot.runs.push({ ...run, id: 'R-2', started: { seq: 2 }, report: null });
-    if (['identity', 'tied-newest', 'duplicate-name'].includes(cause)) {
-      expected = 'recorded launch identity does not match lane-worker';
-      if (cause === 'identity') run.meta.terminal_id = 'old-terminal';
-      if (cause === 'tied-newest') snapshot.runs.push({ ...run, id: 'R-2' });
-      if (cause === 'duplicate-name') snapshot.agents.push({ ...agent, terminal_id: 'other-terminal' });
-    }
-    if (['blocked', 'needs_human'].includes(cause)) {
-      run.report.outcome = cause;
-      expected = `waiting on recorded ${cause} outcome for lane-worker`;
-    }
-    if (['item', 'blocker'].includes(cause)) {
-      expected = 'waiting on recorded item or blockers for lane-worker';
-      if (cause === 'item') snapshot.items[0].status = 'blocked';
-      else snapshot.items[0].blocked_by = ['HUM-1'];
-    }
-    const evidence = reportEvidenceFromRecords(snapshot.agents, snapshot.runs, snapshot.items);
-    const plan = planTidy({ ...snapshot, ...evidence });
-    assert.deepEqual(plan.close, []);
-    assert.equal(plan.keep[0].why, expected);
-    assert.deepEqual([...reportedAgentsFromRecords(snapshot.agents, snapshot.runs, snapshot.items)], []);
-    if (['blocked', 'needs_human', 'item', 'blocker'].includes(cause)) {
-      run.report.outcome = 'done'; snapshot.items[0] = { id: run.item, status: 'done' };
-      const resolved = reportEvidenceFromRecords(snapshot.agents, snapshot.runs, snapshot.items);
-      assert.deepEqual(ids(planTidy({ ...snapshot, ...resolved }).close), ['t1']);
-    }
-  });
-}
-
-test('a shared tab lists the distinct reasons for each ineligible worker', () => {
-  const snapshot = workerFixture(), waiting = snapshot.agents[0];
-  snapshot.runs[0].report.outcome = 'blocked';
-  snapshot.agents.push({ ...waiting, name: 'lane-missing', pane_id: 'p2' });
-  snapshot.panes.push(pane('p2', 't1'));
-  const plan = planTidy({ ...snapshot, ...reportEvidenceFromRecords(snapshot.agents, snapshot.runs, snapshot.items) });
-  assert.deepEqual(plan.close, []);
-  assert.equal(plan.keep[0].why, 'waiting on recorded blocked outcome for lane-worker; no recorded report for lane-missing');
+test('compatibility planner is the one shared pure policy', () => {
+  const s=fixture(); assert.deepEqual(planTidy(s),planRetirement(s)); assert.equal(planTidy(s).close.length,1);
+  s.record.items[0].closed=null; assert.equal(planTidy(s).close.length,0);
 });
-
-test('closes exited watchers and old finished sessions, keeps the newest session', () => {
-  const plan = planTidy({
-    tabs: [tab('t1', 'watch R-1'), tab('t2', 'deliver R-2'), tab('t3', 'settle R-3'), tab('t4', 'settle R-4'), tab('t5', 'executive')],
-    panes: [pane('p1', 't1'), pane('p2', 't2'), pane('p3', 't3'), pane('p4', 't4'), pane('p5', 't5')],
-    agents: [
-      { name: 'settle-r-3-1700', status: 'idle', pane_id: 'p3' },
-      { name: 'settle-r-4-1800', status: 'done', pane_id: 'p4' },
-      { name: 'exec-1900', status: 'idle', pane_id: 'p5' },
-    ],
-    sessionOrder: sessionOrderFromLedgers([{ day: '2026-09-16', text: '17:00:00 settle-r-3-1700 settle R-3\n18:00:00 settle-r-4-1800 settle R-4\n19:00:00 exec-1900 continue \n' }]),
-    keepSessions: 1,
-  });
-  assert.deepEqual(ids(plan.close), ['t1', 't2', 't3', 't4']);
-  assert.deepEqual(plan.keep.map((k) => k.tab_id), ['t5']);
+test('labels, verdict files and session metadata cannot release an unknown occupant', () => {
+  for(const label of ['watch R-1','deliver R-1','settle R-1','executive','plan','audit','review']) {
+    const s=fixture();s.tabs[0].label=label;s.record.runs=[];
+    s.reportedAgents=new Set(['lane-worker']);s.reviewedAgents=new Set(['lane-worker']);
+    s.agents[0].session_metadata={status:'done',role:'review',verdict:'PASS'};
+    assert.equal(planTidy(s).close.length,0,label);
+  }
 });
-
-test('never closes active, unnamed or still-running tabs, or its own tab', () => {
-  const plan = planTidy({
-    tabs: [tab('t1', 'watch R-1'), tab('t2', 'settle R-2'), tab('t3', 'supervisor'), tab('t4', 'executive'), tab('t5', 'watch R-5')],
-    panes: [pane('p1', 't1', false), pane('p2', 't2'), pane('p3', 't3'), pane('p4', 't4'), pane('p5', 't5')],
-    agents: [
-      { name: 'settle-r-2-1700', status: 'working', pane_id: 'p2' },
-      { name: null, status: 'idle', pane_id: 'p3' },
-      { name: 'exec-1800', status: 'blocked', pane_id: 'p4' },
-    ],
-    selfTab: 't5',
-    keepSessions: 0,
-  });
-  assert.deepEqual(plan.close, []);
-  assert.deepEqual(ids(plan.keep), ['t1', 't2', 't3', 't4', 't5']);
+test('newer continuation on same pane defeats an old report even if its name changes', () => {
+  const s=fixture(), old=s.record.runs[0];
+  s.record.runs.push({...old,id:'R-2',started:{seq:3},report:null,meta:{...old.meta,agent:'renamed'}});
+  assert.equal(matchingRun(s.agents[0],s.record.runs),null);
+  assert.equal(planTidy(s).close.length,0);
 });
-
-test('an operator chat (unnamed agent) is kept even in a session or lane tab', () => {
-  const plan = planTidy({
-    tabs: [tab('t1', 'executive'), tab('t2', 'chat', true)],
-    panes: [pane('p1', 't1'), pane('p2', 't2')],
-    agents: [
-      { name: null, status: 'idle', pane_id: 'p1' },
-      { name: null, status: 'done', pane_id: 'p2' },
-    ],
-    keepSessions: 0,
-  });
-  assert.deepEqual(plan.close, []);
-  for (const k of plan.keep) assert.match(k.why, /unnamed agent/);
+test('tied launch identity is ambiguous and does not release', () => {
+  const s=fixture();s.record.runs.push({...s.record.runs[0],id:'R-2'});
+  assert.equal(matchingRun(s.agents[0],s.record.runs),null);assert.match(planTidy(s).keep[0].why,/identity/);
 });
-
-test('closes lane worker tabs only when every worker there has a recorded report', () => {
-  const plan = planTidy({
-    tabs: [tab('t1', 'engineer', true), tab('t2', 'review', true), tab('t3', 'shell', true)],
-    panes: [pane('p1', 't1'), pane('p2', 't2'), pane('p3', 't3')],
-    agents: [
-      { name: 'lane-a-1', status: 'idle', pane_id: 'p1' },
-      { name: 'lane-b-1', status: 'done', pane_id: 'p2' },
-    ],
-    reportedAgents: new Set(['lane-a-1']),
-  });
-  assert.deepEqual(ids(plan.close), ['t1']);
-  assert.match(plan.keep.find((k) => k.tab_id === 't2').why, /no recorded report for lane-b-1/);
-  assert.match(plan.keep.find((k) => k.tab_id === 't3').why, /not a tab this tool manages/);
+test('verdict parsing remains evidence-only for compatibility readers', () => {
+  assert.equal(reviewVerdict('\n**PASS**\n'),'PASS');assert.equal(reviewVerdict('heading\n**PASS**'),null);
+  const reviewed=reviewedAgentsFromRecords([{name:'reviewer',role:'review-codex',topic:'topic',created_at:'2026-01-01T00:00:00Z'}],
+    [{topic:'topic',verdict:'NEEDS-WORK',mtimeMs:Date.parse('2026-01-01T01:00:00Z')}]);
+  assert.deepEqual([...reviewed],['reviewer']);
 });
-
-test('a newer lane review verdict finishes its idle review tab, but an older verdict does not', () => {
-  const reviewedAgents = reviewedAgentsFromRecords([
-    { name: 'lane-topic-review-old', role: 'review', topic: 'topic', created_at: '2026-09-18T15:00:00Z' },
-    { name: 'lane-topic-review-new', role: 'review', topic: 'topic', created_at: '2026-09-18T17:00:00Z' },
-    { name: 'lane-topic-engineer', role: 'engineer', topic: 'topic', created_at: '2026-09-18T15:00:00Z' },
-  ], [
-    { topic: 'topic', verdict: true, mtimeMs: Date.parse('2026-09-18T16:00:00Z') },
-    { topic: 'not-a-verdict', verdict: false, mtimeMs: Date.parse('2026-09-18T18:00:00Z') },
-  ]);
-  assert.deepEqual([...reviewedAgents], ['lane-topic-review-old']);
-
-  const plan = planTidy({
-    tabs: [tab('t1', 'review old', true), tab('t2', 'review new', true), tab('t3', 'engineer', true), tab('t4', 'working', true)],
-    panes: [pane('p1', 't1'), pane('p2', 't2'), pane('p3', 't3'), pane('p4', 't4')],
-    agents: [
-      { name: 'lane-topic-review-old', status: 'idle', pane_id: 'p1' },
-      { name: 'lane-topic-review-new', status: 'done', pane_id: 'p2' },
-      { name: 'lane-topic-engineer', status: 'idle', pane_id: 'p3' },
-      { name: 'lane-topic-working', status: 'working', pane_id: 'p4' },
-    ],
-    reportedAgents: new Set(['lane-topic-engineer']),
-    reviewedAgents,
-  });
-  assert.deepEqual(ids(plan.close), ['t1', 't3']);
-  assert.match(plan.close.find((c) => c.tab_id === 't1').why, /review verdict is recorded/);
-  assert.match(plan.keep.find((k) => k.tab_id === 't2').why, /no recorded report/);
-  assert.match(plan.keep.find((k) => k.tab_id === 't4').why, /still active/);
-});
-
-test('a FAIL review record on its first nonempty line finishes an older review session', () => {
-  assert.equal(reviewVerdict('\n\n**FAIL**\nSchema: lane-review/v1\n'), 'FAIL');
-  assert.equal(reviewVerdict('\nheading\n**PASS**\n'), null);
-  const reviewed = reviewedAgentsFromRecords([
-    { name: 'lane-topic-review', role: 'review', topic: 'topic', created_at: '2026-09-18T15:00:00Z' },
-  ], [
-    { topic: 'topic', verdict: reviewVerdict('\n**FAIL**\n'), mtimeMs: Date.parse('2026-09-18T16:00:00Z') },
-  ]);
-  assert.deepEqual([...reviewed], ['lane-topic-review']);
-});
-
-test('a watcher label in a lane workspace or with an agent inside is left alone', () => {
-  const plan = planTidy({
-    tabs: [tab('t1', 'watch R-1', true), tab('t2', 'watch R-2')],
-    panes: [pane('p1', 't1'), pane('p2', 't2')],
-    agents: [{ name: 'lane-x', status: 'idle', pane_id: 'p2' }],
-  });
-  assert.deepEqual(plan.close, []);
-});
-
-test('shell-only detection', () => {
-  assert.equal(isShellOnly({ shell_pid: 5, foreground_processes: [{ name: 'zsh', argv0: 'zsh', pid: 5 }] }), true);
-  assert.equal(isShellOnly({ shell_pid: 5, foreground_processes: [{ name: 'node', argv0: 'node', pid: 9 }] }), false);
-  assert.equal(isShellOnly(null), false);
+test('shell-only detection requires observed foreground processes', () => {
+  assert.equal(isShellOnly({shell_pid:5,foreground_processes:[{name:'zsh',argv0:'zsh',pid:5}]}),true);
+  assert.equal(isShellOnly({shell_pid:5,foreground_processes:[{name:'node',argv0:'node',pid:9}]}),false);
+  assert.equal(isShellOnly(null),false);
 });

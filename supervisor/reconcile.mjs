@@ -12,6 +12,7 @@ import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { completionFingerprint, completionEvents, stable } from '../lib/completion.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
+import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { isMain } from '../lib/cli-help.mjs';
 
 const hash = v => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(v ?? '');
@@ -109,6 +110,7 @@ export function reconcile(argv) {
       ...(action === 'refresh' ? ['--accept-delta', opt['accept-delta'], '--why', opt.why] : [])],
       { cwd: project.canonical, env: { ...process.env, ORG_DIR: org, ORG_ACTOR: process.env.ORG_ACTOR || 'supervisor-completion' }, encoding: 'utf8', timeout: 30000 });
     if (r.status !== 0 || r.error) throw Error(`Git is integrated but record reconciliation is pending: ${r.stderr || r.error?.message || r.stdout}`);
+    try { requestRetirement({ org, cwd: project.canonical, source: 'promotion reconciliation' }); } catch (e) { process.stderr.write(`integrated-but-cleanup-pending: ${e.message}\n`); }
     return { result: action === 'refresh' ? 'refreshed' : 'reconciled', ...JSON.parse(r.stdout), receipt };
   } finally { lock(); }
 }

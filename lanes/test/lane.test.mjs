@@ -19,11 +19,22 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test, { currentTest } from '../../test/helpers/bounded-test.mjs';
 import { repositorySeed } from '../../test/helpers/git-seed.mjs';
-import { waitForFile } from '../../test/helpers/file-wait.mjs';
+
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../review-evidence.mjs';
+// Bounded evidence polling avoids the shared host's exhausted FSEvents pool.
+async function waitForFile(file, predicate = () => true, { timeoutMs = 10000 } = {}) {
+  const deadline = Date.now() + loadTimeout(timeoutMs);
+  for (;;) {
+    let text; try { text = readFileSync(file, 'utf8'); } catch(e) { if(e.code !== 'ENOENT') throw e; }
+    if(text !== undefined && predicate(text)) return text || true;
+    if(Date.now() >= deadline) throw Error(`timed out waiting for ${file}`);
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+}
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LANE = resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs"));
 const HERDR_CLIENT = resolve(HERE, "..", "board", "herdr-client.mjs");
@@ -153,6 +164,9 @@ function makeFixture(config = { main: "main", validate: "true" }, { repoParts = 
       LANE_CONFIG: configPath,
       LANE_WORKTREE_ROOT: worktrees,
       SHELL: "/bin/zsh",
+      ORG_DIR: "",
+      MONITOR_TEST_SLOT_PATH: join(root, "retire-slot"),
+      MONITOR_TEST_SLOT_COMPAT_PATH: join(root, "retire-slot"),
     },
     cleanup() {
       rmSync(root, { recursive: true, force: true });
@@ -167,6 +181,13 @@ function writeConfig(fixture, config) {
 }
 
 function lane(fixture, args, options = {}) {
+  // Git-only close fixtures explicitly prove an empty Herdr inventory. A
+  // missing/unreadable live source now keeps the lane under the shared rule.
+  const reader = join(fixture.bin, 'herdr');
+  if (args[0] === 'close' && !existsSync(reader)) {
+    writeFileSync(reader, `#!${process.execPath}\nconst a=process.argv.slice(2);if(a[1]==='list')console.log(JSON.stringify({result:{workspaces:[],agents:[],tabs:[],panes:[]}}));else process.exit(1);\n`);
+    chmodSync(reader, 0o755);
+  }
   return spawnSync(process.execPath, [options.executable ?? LANE, ...args], {
     cwd: options.cwd ?? fixture.repo,
     env: hermeticGitEnvironment(options.env ?? fixture.env),
@@ -306,6 +327,10 @@ if (args[0] === "workspace" && args[1] === "list") {
   }
   workspaces.push(...JSON.parse(process.env.FAKE_HERDR_EXTRA_WORKSPACES || "[]"));
   result("cli:workspace:list", { type: "workspace_list", workspaces });
+} else if (args[0] === "tab" && args[1] === "list") {
+  result("cli:tab:list", { tabs: [] });
+} else if (args[0] === "pane" && args[1] === "list") {
+  result("cli:pane:list", { panes: [] });
 } else if (args[0] === "worktree" && args[1] === "list") {
   const openId = state.opened ? "w-lane" : process.env.FAKE_HERDR_STALE_ID;
   const worktrees = [{
@@ -1888,13 +1913,10 @@ test("stale Herdr checkout metadata is not used for dispatch or close", () => {
       noRepair: true,
     });
     const closed = lane(closeFixture, ["close", "stale-close"]);
-    assert.equal(closed.status, 0, closed.stderr);
-    assert.equal(
-      closed.stderr,
-      `lane: note: Herdr metadata for ${closePath} does not match this repository; removed the worktree with git only\n`,
-    );
+    assert.equal(closed.status, 1, closed.stderr);
+    assert.match(closed.stderr, /metadata\/common directory mismatch/);
     assert.ok(!closeFake.calls().some((args) => args[0] === "worktree" && args[1] === "remove"));
-    assert.ok(!existsSync(closePath));
+    assert.ok(existsSync(closePath));
     negativeControl("stale Herdr path identity refusal");
   } finally {
     dispatchFixture.cleanup();
@@ -2152,6 +2174,10 @@ for (const rcChild of [false, true]) test(`dispatch uses the pane POSIX shell de
   // an rc child. Keep stdin open so the process remains alive through dispatch.
   const shell = rcChild ? spawnChild(t, "/bin/sh", [], { stdio: ["pipe", "ignore", "ignore"] }) : undefined;
   try {
+    if (rcChild) {
+      const probe = spawnSync('/bin/ps', ['-p', String(shell.pid), '-o', 'comm='], { encoding: 'utf8' });
+      if (probe.status !== 0 || !probe.stdout.trim()) { t.skip('host /bin/ps cannot observe the POSIX shell for this native fixture'); return; }
+    }
     ignoreLaneState(fixture);
     const path = openLane(fixture, "pane-shell");
     const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/pane-shell" });
@@ -2841,6 +2867,8 @@ test("close marks exact repository topic sessions done only after git close succ
     assert.ok(loadRegistry(fixture.repo, { registry: ".lane/sessions.json" }).sessions.every((session) => !session.done));
     rmSync(join(path, "dirty.txt"));
     writeFakeHerdr(fixture, { lanePath: path, branch: "lane/close-sessions", initiallyOpened: true });
+    const stoppedState = join(fixture.root, 'herdr-state.json');
+    writeFileSync(stoppedState, JSON.stringify({ ...JSON.parse(readFileSync(stoppedState, 'utf8')), agent: null }));
     const closed = lane(fixture, ["close", "close-sessions"]);
     assert.equal(closed.status, 0, closed.stderr);
     assert.match(closed.stderr, /warning: session registry.*unrelated-malformed\.json/u);
@@ -2864,6 +2892,8 @@ test("failed archive and post-close metadata writes preserve honest completion s
     writeFakeHerdr(archiveFixture, { lanePath: archivePath, branch: "lane/archive-failure", initiallyOpened: true });
     assert.equal(lane(archiveFixture, ["dispatch", "archive-failure", "archive me"]).status, 0);
     git(archiveFixture.repo, ["tag", "archive/lane/archive-failure", "lane/archive-failure"]);
+    const stoppedArchiveState = join(archiveFixture.root, 'herdr-state.json');
+    writeFileSync(stoppedArchiveState, JSON.stringify({ ...JSON.parse(readFileSync(stoppedArchiveState, 'utf8')), agent: null }));
     const archiveClose = lane(archiveFixture, ["close", "archive-failure"]);
     assert.equal(archiveClose.status, 1);
     assert.ok(refExists(archiveFixture.repo, "refs/heads/lane/archive-failure"));
@@ -2882,6 +2912,8 @@ test("failed archive and post-close metadata writes preserve honest completion s
     const metadataRegistry = join(metadataFixture.repo, ".lane", "sessions.json");
     const [metadataSession] = loadRegistry(metadataFixture.repo).sessions;
     mkdirSync(join(`${metadataRegistry}.d`, `${metadataSession.session_id}.done.json`));
+    const stoppedMetadataState = join(metadataFixture.root, 'herdr-state.json');
+    writeFileSync(stoppedMetadataState, JSON.stringify({ ...JSON.parse(readFileSync(stoppedMetadataState, 'utf8')), agent: null }));
     const metadataClose = lane(metadataFixture, ["close", "metadata-failure"]);
     assert.equal(metadataClose.status, 1);
     assert.match(metadataClose.stderr, /lane closed; metadata update failed/u);

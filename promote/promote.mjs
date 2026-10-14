@@ -10,7 +10,7 @@ import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
-import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
+import { createRetirement } from '../supervisor/retire.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { runProjectGateSync } from './gate-profile.mjs';
 import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
@@ -144,21 +144,25 @@ export function enqueue(queue, topics, options) {
 }
 
 function cleanup(job, queue, workspace) {
-  if (!job.org) return ['no record discovered; finished tabs preserved'];
   const warnings = [];
+  const log = entry => {
+    fs.appendFileSync(path.join(queue.directory, `${job.id}-cleanup.jsonl`), JSON.stringify(entry) + '\n');
+    if (['keep', 'close-failed', 'skip-close'].includes(entry.action)) warnings.push(singleLine(JSON.stringify(entry)));
+  };
   try {
-    createHousekeeping({ cwd: queue.project.canonical, org: job.org, herdr: job.herdr, main: git(queue.project.canonical, ['symbolic-ref', '--short', 'HEAD']), selfTab: null,
-      log: (entry) => {
-        fs.appendFileSync(path.join(queue.directory, `${job.id}-cleanup.jsonl`), JSON.stringify(entry) + '\n');
-        if (['close-failed', 'skip-close'].includes(entry.action)) warnings.push(singleLine(JSON.stringify(entry)));
-      } }).tick({ cleanup: true, resume: false, workspacePath: workspace });
+    const retirement = createRetirement({ cwd: queue.project.canonical, org: job.org, herdr: job.herdr,
+      main: git(queue.project.canonical, ['symbolic-ref', '--short', 'HEAD']), selfTab: null, log });
+    const plan = retirement.plan(workspace);
+    for (const kept of plan.keep) log({ action: 'keep', ...kept });
+    for (const diagnostic of plan.diagnostics) log({ action: 'reference-diagnostic', ...diagnostic });
+    retirement.apply(plan, workspace);
   } catch (error) { warnings.push(`tab cleanup: ${error.message}`); }
   return warnings;
 }
 
 function perform(job, queue) {
   const cwd = queue.project.canonical;
-  const env = { ...process.env, LANE_VALIDATE: job.validate ?? undefined, LANE_CONFIG: job.laneConfig ?? undefined };
+  const env = { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_VALIDATE: job.validate ?? undefined, LANE_CONFIG: job.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
   const log = path.join(queue.directory, `${job.id}.log`);
   const entries = git(cwd, ['worktree', 'list', '--porcelain']).split('\n\n');
@@ -184,14 +188,8 @@ function perform(job, queue) {
     const tip = job.expectedHead ?? git(cwd, ['rev-parse', 'HEAD']);
     // Persist success before cleanup: a crash must not cause a second gate/FF.
     queue.transaction((data) => { data.current = { ...job, phase: 'promoted', tip, log }; });
-    const warnings = workspace ? cleanup(job, queue, workspace) : ['lane worktree no longer present'];
-    try {
-      // The lane CLI's generic close removes its entire Herdr workspace. Queue
-      // cleanup closes only authorized finished tabs, so protect remaining chats.
-      const closed = invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', tip], { cwd, env });
-      fs.appendFileSync(log, closed + '\n');
-    } catch (error) { warnings.push(`lane close: ${error.message}`); }
-    return { outcome: 'promoted', tip, reason: warnings.length ? warnings.join('; ') : 'green fast-forward; lane closed', warnings, log };
+    return finishCleanup(job, { outcome: 'promoted', tip, workspace, log,
+      reason: 'green fast-forward' }, queue);
   } catch (error) {
     return { outcome: 'promoted', reason: `fast-forward succeeded; post-promotion bookkeeping failed: ${error.message}; lane kept for inspection`, warnings: [error.message], log };
   }
@@ -256,6 +254,43 @@ function performBatch(batch, queue, settings) {
     ...(train.host_receipt ? { host_receipt: train.host_receipt } : {}) } }));
 }
 
+export function finishCleanup(job, result, queue) {
+  const warnings = [];
+  const diagnostics = (result.warnings ?? []).filter(w => w.startsWith('velocity record:'));
+  try {
+    if (job.run) {
+      const env = { ...process.env, ORG_DIR: job.org };
+      const run = JSON.parse(invoke(process.execPath, [RECORD, 'show', job.run, '--json'], { cwd: queue.project.canonical, env }));
+      const item = JSON.parse(invoke(process.execPath, [RECORD, 'show', run.item, '--json'], { cwd: queue.project.canonical, env }));
+      if (!run.report?.seq || !item.closed || item.runs.at(-1) !== run.id) throw Error('record chain remains open or run changed; lane retained');
+    }
+    const entries = git(queue.project.canonical, ['worktree', 'list', '--porcelain']).split('\n\n');
+    const workspace = result.workspace ?? entries.find(e => e.split('\n').includes(`branch refs/heads/lane/${job.topic}`))?.split('\n').find(l => l.startsWith('worktree '))?.slice(9);
+    if (!workspace || !fs.existsSync(workspace)) {
+      // A prior cleanup may have completed before its checkpoint was saved.
+      try { git(queue.project.canonical, ['rev-parse', '--verify', `refs/heads/lane/${job.topic}`]); }
+      catch { return { ...result, cleanup: { state: 'complete' } }; }
+      throw Error('lane branch remains without its worktree; inspect before cleanup');
+    }
+    warnings.push(...cleanup(job, queue, workspace));
+    if (!warnings.length) invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', result.tip], {
+      cwd: queue.project.canonical, env: { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_CONFIG: job.laneConfig ?? undefined } });
+  } catch (error) { warnings.push(`lane cleanup: ${error.message}`); }
+  return { ...result, warnings: [...diagnostics, ...warnings], cleanup: { state: warnings.length ? 'pending' : 'complete', warnings },
+    reason: warnings.length ? `integrated-but-cleanup-pending: ${warnings.join('; ')}` : 'green fast-forward; cleanup complete' };
+}
+
+// Restart/reconciliation retries only the cleanup checkpoint, never the gate.
+export function retryCleanup(queue) {
+  for (const saved of queue.load().results.filter(r => r.outcome === 'promoted' && r.cleanup?.state === 'pending' && r.reconciliation?.state !== 'pending')) {
+    const result = finishCleanup(saved, saved, queue);
+    queue.transaction(data => {
+      const row = data.results.findLast(r => r.id === saved.id);
+      if (row) Object.assign(row, result);
+    });
+  }
+}
+
 function finishBatchJob(job, result, queue) {
   if (result.outcome !== 'promoted' || result.reconciliation?.state === 'pending') return result;
   const warnings = result.replacement_pending ? [] : [...(result.warnings ?? [])];
@@ -293,14 +328,9 @@ function finishBatchJob(job, result, queue) {
     } catch (error) { return { ...result, reason: `lane replacement pending: ${error.message}` }; }
     finally { release?.(); }
   }
-  if ((result.warnings?.length ?? 0) === 0 && result.workspace) {
-    warnings.push(...cleanup(job, queue, result.workspace));
-    try {
-      invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', result.tip], {
-        cwd: queue.project.canonical, env: { ...process.env, LANE_CONFIG: job.laneConfig ?? undefined } });
-    } catch (error) { warnings.push(`lane close: ${error.message}`); }
-  }
-  return { ...result, warnings, reason: warnings.length ? warnings.join('; ') : result.reason };
+  if ((result.warnings?.length ?? 0) === 0 && result.workspace) return finishCleanup(job, { ...result, warnings }, queue);
+  return { ...result, warnings, cleanup: { state: 'pending', warnings },
+    reason: `integrated-but-cleanup-pending: ${warnings.join('; ') || result.reason}` };
 }
 
 export function notice(job, result) {
@@ -342,6 +372,7 @@ export async function drain(queue) {
   let acknowledged = false;
   const attempted = new Set();
   try {
+    retryCleanup(queue);
     for (;;) {
       // Git can be slow. Read a committed snapshot without queue.lock so
       // enqueuers remain free to append while this worker waits for settings.
@@ -463,6 +494,14 @@ export async function drain(queue) {
       }
       let result;
       if (job.phase === 'completed') result = job.result;
+      else if (job.phase === 'promoted' && job.tip) {
+        // The acknowledged integration checkpoint survived a lost cleanup
+        // reply. Verify containment, then resume only resource retirement.
+        try {
+          git(queue.project.canonical, ['merge-base', '--is-ancestor', job.tip, 'HEAD']);
+          result = finishCleanup(job, { outcome: 'promoted', tip: job.tip, log: job.log }, queue);
+        } catch (e) { result = { outcome: 'interrupted', tip: job.tip, reason: `integration checkpoint cannot be verified: ${e.message}; lane retained`, log: job.log }; }
+      }
       else if (!newlyDequeued) result = { outcome: 'interrupted', tip: job.tip,
         reason: `previous worker stopped in ${job.phase}; lane preserved; inspect Git and log before explicitly re-enqueuing`, log: job.log ?? path.join(queue.directory, `${job.id}.log`) };
       else {

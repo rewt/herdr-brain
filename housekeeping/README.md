@@ -1,6 +1,6 @@
 # Housekeeping
 
-Housekeeping closes settled worker tabs, tidies exited watcher tabs, and recovers
+Housekeeping retires eligible recorded worker tabs and recovers
 accidental terminal interruptions without a model in the scheduler. It defaults
 on. A project needs no housekeeping configuration: the record supplies the runs,
 Git supplies repository and lane identity, and Herdr supplies live workers.
@@ -36,12 +36,13 @@ remain supported.
 
 The detached process is a timer, not an agent: tidy finished tabs and resume every
 60 seconds, with settled-lane cleanup on startup and every 600 seconds. Every
-tick runs `supervisor/tidy-tabs.mjs` for this Git project and record, so recorded
-finished worker tabs can close while their lane remains open. It also tidies
-finished reviews, exited watchers and older finished settle sessions, keeping the
-newest finished session for reading. Tidy failures are logged as `tidy-failed`
-and do not prevent recovery or subsequent ticks. Dry-run forwards `--dry-run`
-to this pass and logs its preview without closing tabs.
+tick runs `supervisor/tidy-tabs.mjs` through the same pure retirement planner
+and guarded executor as settled cleanup. Ingested reports keep their pane while
+review, correction, integration or a live resource reference can return to it.
+Unrecorded reviews, sessions and watcher shells stay. See the exact eligibility
+and generic reference contract in [the supervisor README](../supervisor/README.md#safe-retirement).
+Tidy failures are logged and do not prevent recovery or subsequent ticks.
+Dry-run previews the plan without closing tabs.
 A loop covers interruptions while watch waits,
 and catches promotion/closure long after watch's final notice. Herdr events alone
 do not include Git promotion or record ingestion; a small timer avoids wiring
@@ -62,30 +63,13 @@ for canonical-supervisor startup and the manual one-time backlog procedure.
   and at least one recorded occupant identity (`terminal_id` or `agent_session_id`).
   Both identities are checked when recorded. Legacy runs missing pane, workspace,
   cwd or occupant identity are preserved; session registry data cannot fill it in.
-- Per-tick worker closing requires a recorded report, no unresolved blocking item
-  or waiting report, and an idle/done worker. Blocked and needs_human reports stay
-  even when Herdr reports an idle worker. Review routes (`review`, `review-codex`,
-  `review-max` and other `review-*` routes) require a newer verdict for their topic;
-  the newest unambiguous review record must match the live pane, workspace,
-  lane checkout and every recorded immutable occupant identity, with at least one
-  identity recorded. Git resolves the recorded lane branch to its checkout for
-  the cwd check. Missing or mismatched review evidence preserves the tab, including
-  when a later reviewer reuses the name. These checks run again before each close;
-  that evidence never overrides a recorded worker's missing identity or waiting run.
-- Settled-lane cleanup requires a recorded report or abandonment, no open run in the same lane,
-  no unresolved blocking item or waiting report, and an idle/done worker. Git
-  must show its clean attached lane tip contained in the base branch, or an absent
-  lane branch/worktree with its `archive/lane/TOPIC` tag. Unmerged work stays
-  recoverable. A removed merged lane without archive evidence is left alone.
-- Every agent in a tab must qualify. Unnamed/operator chats, blocked/working/unknown
-  agents, running extra programs, unknown sessions and a foreground timer's own tab stay.
-  A detached timer clears inherited pane/tab/workspace IDs; it has no terminal to protect.
-  Agents identifying a tab directly are included even when their pane is absent
-  from the earlier pane list; inconsistent tab/pane/workspace observations preserve
-  the tab. Topology, processes, record and Git are reread before each close. The slower
-  settled-lane cleanup uses `supervisor/tidy-tabs.mjs`'s shared planner in strict
-  mode. The separate per-tick finished-tab command retains its existing
-  report/review-verdict policy without requiring lane promotion or archival.
+- Both per-tick and settled cleanup require report ingestion and a terminal chain,
+  or an explicit confirmed handoff to a retained successor. Pending promote,
+  verify, host-slot, declared references and watcher callbacks keep panes.
+- Every occupant and process in a tab must qualify. The executor rechecks record,
+  jobs, Git path/head/common directory, pane, terminal and native session against
+  the plan. It logs the current refusal if anything changed. Unknown, lab-owned,
+  persistent and operator sessions stay; display metadata cannot supply authority.
 - Recovery requires an open run, idle/done Codex, a current `■ Conversation
   interrupted` (or `■ Turn interrupted`) banner at the end of the visible output,
   and only SGR wheel junk (`<64` through `<67`; coordinates; `M`/`m`) in the composer.

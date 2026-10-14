@@ -75,6 +75,11 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
     attempt('locks', () => inspectEntryLocks(project, report));
     // STOP/torn record permits the cold start and lock inspection, never recovery mutations.
     if (doc.project.stopped || doc.project.torn_tail) { report('Supervisor entry recovery paused: STOP or incomplete record event; inspect.\n'); return; }
+    // Read-only catch-up after startup/shift; scheduling policy is unchanged.
+    attempt('retirement plan', () => {
+      const plan = JSON.parse(call(local('./retire.mjs'), ['plan', '--repo', project.canonical, '--org', org]));
+      report(`Supervisor entry retirement: ${plan.close.length} releasable tabs, ${plan.keep.length} retained; use supervisor/retire.mjs plan|apply for details.\n`);
+    });
     attempt('housekeeping', () => {
       const snapshot = housekeepingSnapshot({ cwd: project.canonical, org, readProcess: readOwner });
       if (snapshot.configError) throw new Error(snapshot.configError);

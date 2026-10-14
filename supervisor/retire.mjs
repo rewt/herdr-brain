@@ -127,9 +127,12 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
   const git = (root, args) => invoke('git', ['-C', root, ...args]);
   const commonAt = root => canonical(git(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
   const common = commonAt(cwd);
+  const canonicalRoot = canonical(git(cwd, ['worktree', 'list', '--porcelain']).split('\n').find(line => line.startsWith('worktree '))?.slice(9));
+  if (!canonicalRoot || commonAt(canonicalRoot) !== common) throw Error('canonical checkout identity is unavailable');
+  main ??= git(canonicalRoot, ['symbolic-ref', '--short', 'HEAD']);
   org ??= findOrgDir({ cwd, env });
   function observe(workspacePath) {
-    if (commonAt(cwd) !== common) throw Error('canonical common directory changed');
+    if (commonAt(cwd) !== common || commonAt(canonicalRoot) !== common) throw Error('canonical common directory changed');
     const readRecord = () => {
     let state, events = [];
     if (record) state = json(invoke(record[0], [...record.slice(1), 'status', '--json']));
@@ -166,7 +169,7 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
         const head = git(root, ['rev-parse', 'HEAD']);
         let branch = null; try { branch = git(root, ['symbolic-ref', '--short', 'HEAD']); } catch {}
         let integrated = false;
-        try { git(root, ['merge-base', '--is-ancestor', head, main ?? 'refs/heads/main']); integrated = true; } catch {}
+        try { git(root, ['merge-base', '--is-ancestor', head, main]); integrated = true; } catch {}
         gitState.push({ path: root, common: identity, head, branch, lane: branch?.startsWith('lane/') ? branch.slice(5) : null,
           clean: !git(root, ['status', '--porcelain']), integrated });
       } catch (e) { gitState.push({ path: root, common: wt.repo_key, error: `Git observation ${root}: ${e.message}` }); }

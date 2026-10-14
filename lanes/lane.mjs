@@ -12,6 +12,7 @@
 // (see README).
 
 import { cliHelp } from '../lib/cli-help.mjs';
+import { createRetirement } from '../supervisor/retire.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
@@ -2481,6 +2482,12 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
     // before Git removes its metadata, but close it only after removal succeeds.
     // Git refusals (including locked worktrees) must preserve the running panes.
     let mismatchedMetadata = false, workspaceId;
+    const retirement = createRetirement({ cwd: REPO_ROOT, main: MAIN,
+      log: entry => process.stdout.write(JSON.stringify(entry) + '\n') });
+    try {
+      if (!gitOnly) retirement.apply(retirement.plan(path), path);
+      retirement.assertVacant(path);
+    } catch (error) { fail(`lane retained: ${error.message}`); }
     try {
       workspaceId = gitOnly ? undefined : openWorkspaceIdFor(path, {
         refuseStale: false,
@@ -2489,11 +2496,14 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
     } catch {
       // herdr unavailable; fall back to git below
     }
+    // Recheck current record, jobs, every pane/process and Git after all reads.
+    try { retirement.assertVacant(path); } catch (error) { fail(`lane retained: ${error.message}`); }
+    if (expectedTip !== undefined && git(["rev-parse", "HEAD"], { cwd: path }) !== expectedTip) fail('lane tip changed before removal; lane kept');
+    requireClean(path, 'lane worktree');
     git(["worktree", "remove", path]);
     if (workspaceId !== undefined) {
-      spawnSync("herdr", ["workspace", "close", workspaceId], {
-        encoding: "utf8",
-      });
+      try { retirement.closeEmptyWorkspace(workspaceId, path); }
+      catch (error) { process.stderr.write(`lane: integrated-but-cleanup-pending: ${error.message}\n`); }
     }
     if (mismatchedMetadata) {
       process.stderr.write(`lane: note: Herdr metadata for ${path} does not match this repository; removed the worktree with git only\n`);

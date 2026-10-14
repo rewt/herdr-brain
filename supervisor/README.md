@@ -23,12 +23,15 @@ Historical report/evidence links are retained but do not create live holds.
 
 Explicit continuation between different panes uses
 `record handoff R-old --to R-new --confirm --why TEXT`. The append-only event
-names a newer open run on the same item with a different launch identity. At
-execution the successor must still occupy its recorded pane and be retained.
+names a newer run on the same item with a different launch identity. At
+execution the successor must still occupy its recorded pane. It is reserved while
+the predecessor pane exists, including when its own report is ingested; a later
+observation can release it after the predecessor is gone and its chain is terminal.
 Reusing the same session for a new run always keeps that session. Handoff never
 overrides an active process, unknown identity, or pending live reference. Reports
 are immutable; the fold's shape and exports are unchanged and older folds ignore
-the handoff event. Labels, ledgers and session display metadata never authorize
+the handoff event. A live native session needs its recorded launch session id;
+a terminal-only legacy receipt cannot authorize a later native session. Labels, ledgers and session display metadata never authorize
 retirement, so unrecorded reviewer, session and watcher tabs stay.
 
 Live sources are `<git-common>/promote/queue.json` (pending, current, interrupted

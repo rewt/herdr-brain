@@ -94,21 +94,15 @@ changed-since-preparation fingerprint. The final check holds the record
 lock across the fast-forward, inside the promotion lock. It never writes events
 or trusts session metadata. Canonical supervisor STOP also refuses integration.
 
-On success the worker runs one cleanup pass limited to the promoted lane, with
-resume disabled. It discovers the record and uses housekeeping's existing live
-occupant, record, Git and topology checks to close eligible finished worker tabs.
-It never starts the project-wide housekeeping loop. Missing records, unavailable
-Herdr, blocked/open workers and operator chats preserve tabs. Cleanup failures
-appear in the outcome. Then `lane close TOPIC --git-only --expected-tip COMMIT`
-takes the same promotion lock and rechecks the saved promoted tip, base ancestry
-and clean worktree before removing the worktree and merged branch. Contention with a direct gate preserves
-the lane and is included in the supervisor outcome as a closure warning. It does
-not repeat promotion. Git-only closure preserves the Herdr workspace and its
-protected tabs.
-Remaining workspace shells/chats stay for the operator. A red gate, dirty lane
-or conflicting replay leaves that lane intact and continues with the other
-requests. Replay conflicts live only in the train's scratch worktree and are
-aborted there; the original lane never acquires a paused rebase.
+On success the worker runs the shared retirement planner and executor scoped to
+its promoted lane, after record reconciliation. A kept or occupied pane prevents
+Git-only worktree removal. Cleanup refusal/failure is retained as
+`integrated-but-cleanup-pending` with `cleanup.state: pending`, preserving the
+promoted outcome and successful gate. A later `--drain` retries this cleanup
+checkpoint only; it never revalidates or reintegrates it. The current keep reason
+and close errors remain in the per-job cleanup JSONL.
+See [safe retirement](../supervisor/README.md#safe-retirement) for references,
+immutable launch identity and the installed `plan|apply` adoption CLI.
 
 After every completed attempt, including unknown lanes, refusals and legacy interrupted attempts,
 [the shared supervisor input gate](../supervisor/README.md) journals a compact

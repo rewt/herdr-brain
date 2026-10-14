@@ -8,7 +8,9 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
-import { planTidy, isShellOnly, matchingRun, waitingOnRecord } from '../supervisor/tidy-tabs.mjs';
+import { matchingRun, waitingOnRecord } from '../supervisor/tidy-tabs.mjs';
+import { createRetirement } from '../supervisor/retire.mjs';
+import { planRetirement } from '../lib/retire.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
@@ -103,81 +105,13 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     if (r.error || r.status !== 0) throw new Error(`${exe} ${args.slice(0, 2).join(' ')}: ${(r.stderr || r.error?.message || r.stdout || `exit ${r.status}`).trim()}`);
     return r.stdout.trim();
   };
-  const json = (text) => { const data = JSON.parse(text); if (data.error) throw new Error(JSON.stringify(data.error)); return data.result ?? data; };
-  const h = (args) => json(invoke(herdr, args));
-  const git = (args, root = cwd) => invoke('git', ['-C', root, ...args]);
-  const commonAt = (root) => fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir'], root));
-  const common = commonAt(cwd);
-  const recordState = () => {
-    const data = json(invoke(record[0], [...record.slice(1), 'status', '--json']));
-    if (!Array.isArray(data.runs)) throw new Error('record returned no runs');
-    if (!Array.isArray(data.items)) throw new Error('record returned no items');
-    return data;
+  const retirement = createRetirement({ cwd, org, main, herdr, record, command, selfTab, log });
+  const common = retirement.common;
+  const observe = workspacePath => {
+    const snapshot = retirement.observe(workspacePath);
+    return { ...snapshot, runs: snapshot.record.runs, items: snapshot.record.items };
   };
-  function mine(w) {
-    const wt = w.worktree;
-    if (!wt?.checkout_path || !wt.repo_root || !wt.repo_key) return false;
-    try {
-      if (fs.realpathSync(wt.repo_key) !== common || commonAt(wt.repo_root) !== common) return false;
-      return !fs.existsSync(wt.checkout_path) || commonAt(wt.checkout_path) === common;
-    } catch { return false; }
-  }
-  function observe(workspacePath) {
-    const workspaces = h(['workspace', 'list']).workspaces;
-    if (!Array.isArray(workspaces)) throw new Error('Herdr returned no workspaces');
-    const owned = workspaces.filter(mine).filter((w) => !workspacePath || canonicalPath(w.worktree.checkout_path) === canonicalPath(workspacePath));
-    const tabs = [], panes = [];
-    for (const w of owned) {
-      const ts = h(['tab', 'list', '--workspace', w.workspace_id]).tabs;
-      const ps = h(['pane', 'list', '--workspace', w.workspace_id]).panes;
-      if (!Array.isArray(ts) || !Array.isArray(ps)) throw new Error('incomplete Herdr topology');
-      for (const t of ts) tabs.push({ ...t, workspace_id: w.workspace_id, lane: Boolean(w.worktree.is_linked_worktree) });
-      for (const p of ps) panes.push({ ...p, shellOnly: isShellOnly(h(['pane', 'process-info', '--pane', p.pane_id]).process_info) });
-    }
-    const agents = h(['agent', 'list']).agents;
-    if (!Array.isArray(agents)) throw new Error('Herdr returned no agents');
-    const state = recordState();
-    return { workspaces: owned, tabs, panes, agents, runs: state.runs, items: state.items };
-  }
-  function settled(run, workspace) {
-    const topic = run.meta?.lane;
-    if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic ?? '') || !workspace?.worktree.is_linked_worktree ||
-        canonicalPath(workspace.worktree.checkout_path) !== canonicalPath(run.workspace)) return false;
-    const branch = `refs/heads/lane/${topic}`;
-    const entries = git(['worktree', 'list', '--porcelain']).split('\n\n');
-    const entry = entries.find((e) => e.split('\n').some((line) => line.startsWith('worktree ') && canonicalPath(line.slice(9)) === canonicalPath(run.workspace)));
-    let tip;
-    try { tip = git(['rev-parse', '--verify', branch]); } catch {
-      // An unmerged CLI close leaves its recoverable archive tag. Metadata's
-      // display-only "done" marker is deliberately never read.
-      if (entry || entries.some((e) => e.split('\n').includes(`branch ${branch}`))) return false;
-      try { git(['rev-parse', '--verify', `refs/tags/archive/lane/${topic}`]); return true; } catch { return false; }
-    }
-    if (!entry || !entry.split('\n').includes(`branch ${branch}`) || !fs.existsSync(run.workspace)) return false;
-    if (git(['status', '--porcelain'], run.workspace)) return false;
-    if (git(['rev-parse', 'HEAD'], run.workspace) !== tip) return false;
-    try { git(['merge-base', '--is-ancestor', tip, `refs/heads/${main}`]); return true; } catch { return false; }
-  }
-  function eligibility(snapshot) {
-    const allowed = new Map(), denied = new Set();
-    for (const agent of snapshot.agents) {
-      if (!FINISHED.has(agent.agent_status)) continue;
-      const run = matchingRun(agent, snapshot.runs);
-      const workspace = snapshot.workspaces.find((w) => w.workspace_id === agent.workspace_id);
-      const openLaneRun = snapshot.runs.some((r) => r.workspace && agent.cwd &&
-        canonicalPath(r.workspace) === canonicalPath(agent.cwd) && !r.report && !r.abandoned);
-      if (run && !openLaneRun && !waitingOnRecord(snapshot, run) && (run.report || run.abandoned) && settled(run, workspace)) {
-        allowed.set(agent.pane_id, `${run.id} recorded ${run.report ? 'report' : 'abandonment'}; lane promoted or archived`);
-      } else denied.add(agent.pane_id);
-    }
-    for (const pane of denied) allowed.delete(pane);
-    return allowed;
-  }
-  function tidy(snapshot) {
-    return planTidy({ ...snapshot,
-      agents: snapshot.agents.map((a) => ({ ...a, status: a.agent_status })),
-      workerEligibility: eligibility(snapshot), selfTab });
-  }
+  const tidy = snapshot => planRetirement(snapshot);
   function candidate(snapshot, agent) {
     if (agent.agent !== 'codex' || !FINISHED.has(agent.agent_status) || !Number.isInteger(agent.state_change_seq)) return null;
     const run = matchingRun(agent, snapshot.runs);
@@ -191,16 +125,14 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
   }
   function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath } = {}) {
     const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
-    const plan = cleanup ? tidy(snapshot) : { close: [], keep: [] };
+    const selected = workspacePath ? new Set(snapshot.workspaces.filter(w => canonicalPath(w.worktree.checkout_path) === canonicalPath(workspacePath)).map(w => w.workspace_id)) : null;
+    const allPlan = cleanup ? tidy(snapshot) : { close: [], keep: [] };
+    const plan = selected ? { ...allPlan, close: allPlan.close.filter(t => selected.has(t.workspace_id)), keep: allPlan.keep.filter(t => selected.has(t.workspace_id)) } : allPlan;
     log({ action: 'scan', close: plan.close.length, keep: plan.keep.length, cleanup, resume, dryRun });
     for (const tab of plan.keep) log({ action: 'keep', ...tab, dryRun });
-    for (const tab of plan.close) {
-      if (dryRun) { log({ action: 'would-close', ...tab }); continue; }
-      // Re-read record, topology, process state and Git before every deletion.
-      if (!tidy(observe(workspacePath)).close.some((t) => t.tab_id === tab.tab_id)) { log({ action: 'skip-close', ...tab }); continue; }
-      try { invoke(herdr, ['tab', 'close', tab.tab_id]); log({ action: 'closed', ...tab }); }
-      catch (error) { log({ action: 'close-failed', ...tab, error: error.message }); }
-    }
+    for (const diagnostic of plan.diagnostics ?? []) log({ action: 'reference-diagnostic', ...diagnostic });
+    if (dryRun) for (const tab of plan.close) log({ action: 'would-close', ...tab });
+    else retirement.apply(plan, workspacePath);
     if (resume) for (const agent of snapshot.agents) {
       const run = candidate(snapshot, agent);
       if (!run || seen.has(resumeKey(run, agent))) continue;

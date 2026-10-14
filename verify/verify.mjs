@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, transact } from '../lib/store.mjs';
+import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { fold } from '../lib/state.mjs';
 import { plainDirectory, writeFileAtomic } from '../lib/files.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -377,6 +378,7 @@ export async function drain(queue, admitted, { notify } = {}) {
       const completed = await perform(queue, job);
       await deliver(queue, job, completed, notify);
       queue.transaction(data => { Object.assign(data.jobs.find(row => row.id === job.id), completed, { completed_at: stamp() }); });
+      try { requestRetirement({ org: job.org, cwd: job.repo, source: `verify job ${job.id} completion` }); } catch (e) { process.stderr.write(`retirement request deferred: ${e.message}\n`); }
       if (completed.halted) {
         queue.transaction(data => { data.halted = { job: job.id, receipt: completed.receipt, at: stamp() }; });
         break;

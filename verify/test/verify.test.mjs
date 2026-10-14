@@ -30,6 +30,13 @@ function fixture(t, { defaultState = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'verify-'))), repo = path.join(root, 'repo');
   fs.mkdirSync(repo);
   const before = { ...process.env };
+  // Trusted fixtures must also be outside system temp. They belong to this
+  // test's temporary project, never the source checkout's live verify store.
+  const storeParent = fileURLToPath(new URL('../../.lane/verify-fixtures/', import.meta.url));
+  fs.mkdirSync(storeParent, { recursive: true });
+  const storeRoot = fs.mkdtempSync(path.join(storeParent, 'store-'));
+  process.env.XDG_STATE_HOME = storeRoot;
+  delete process.env.VERIFY_UNTRUSTED_ROOTS;
   process.env.MONITOR_TEST_SLOT_PATH = process.env.MONITOR_TEST_SLOT_COMPAT_PATH = path.join(root, 'slot');
   process.env.HERDR_MONITOR_FLEET = path.join(root, 'fleet');
   process.env.ORG_ACTOR = 'fixture-submitter';
@@ -43,7 +50,7 @@ function fixture(t, { defaultState = false } = {}) {
   transact(org, () => ({ add: [{ type: 'item.added', id: 'ENG-1', title: 'Fixture' }] }), { actor: 'fixture' });
   const fake = path.join(root, 'herdr.cjs');
   fs.writeFileSync(fake, `#!${process.execPath}\nconsole.log(JSON.stringify({result:{agent:{agent:'codex',agent_status:'working',pane_id:'fixture'}}}));\n`, { mode: 0o755 });
-  const queue = queueFor(repo, defaultState ? undefined : path.join(root, 'state'));
+  const queue = queueFor(repo, defaultState ? undefined : path.join(storeRoot, 'state'));
   const add = (opt = {}, argv = node("console.log('ok')"), prepare = null) => submit(queue, { org, item: 'ENG-1', sha: sha1, to: 'ops-fixture', herdr: fake, ...opt }, argv, prepare);
   const notify = async (to, text, opt) => enqueueSupervisor(to, text, opt);
   const run = async (...jobs) => { const token = admit(queue, jobs.map(job => job.job)); await drain(queue, token, { notify }); };
@@ -55,10 +62,11 @@ function fixture(t, { defaultState = false } = {}) {
     await stopFixtureInbox(path.join(org, 'supervisor/inbox.log'), { script: inboxCLI });
     for (const desk of Object.keys(queue.load().desks)) git('worktree', 'remove', '--force', desk);
     fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(storeRoot, { recursive: true, force: true });
     for (const key of Object.keys(process.env)) if (!(key in before)) delete process.env[key];
     Object.assign(process.env, before);
   });
-  return { root, repo, org, queue, sha1, sha2, git, add, run, cli, notify, fake };
+  return { root, storeRoot, repo, org, queue, sha1, sha2, git, add, run, cli, notify, fake };
 }
 
 test('submit exits while the slot is busy; no job runs without explicit admission', async t => {
@@ -73,19 +81,84 @@ test('submit exits while the slot is busy; no job runs without explicit admissio
   assert.equal(status(f.queue).jobs[0].state, 'pending-admission');
   assert.equal(fs.existsSync(job.receipt), false); assert.equal(fs.existsSync(marker), false);
   assert.equal(f.queue.load().runner, null);
+  assert.equal(fs.existsSync(f.queue.directory), false, 'submit never writes the trusted store');
+  assert.equal(f.queue.inbox.load().jobs.length, 1);
   holder.release(); await f.run(job);
   assert.equal(read(job.receipt).outcome, 'pass'); assert.equal(fs.readFileSync(marker, 'utf8'), 'ran');
 });
 
-test('the default persistent desk and queue use canonical Git identity from a linked checkout', async t => {
+test('the default trusted store is outside Git and uses canonical identity from a linked checkout', async t => {
   const f = fixture(t, { defaultState: true }), lane = path.join(f.root, 'lane');
   f.git('worktree', 'add', '--detach', lane, f.sha1);
   try {
     assert.equal(queueFor(lane).directory, f.queue.directory);
+    assert.equal(f.queue.directory, path.join(f.storeRoot, 'herdr-monitor/verify', sha256(f.git('rev-parse', '--path-format=absolute', '--git-common-dir'))));
     const job = f.add(); await f.run(job);
     assert.equal(read(job.receipt).outcome, 'pass');
-    assert.equal(read(job.receipt).desk, path.join(f.repo, '.git/verify/desks/default'));
+    assert.equal(read(job.receipt).desk, path.join(f.queue.directory, 'desks/default'));
   } finally { f.git('worktree', 'remove', '--force', lane); }
+});
+
+test('trusted store paths refuse Git, every worktree, records, desks and symlink aliases', t => {
+  const f = fixture(t), lane = path.join(f.root, 'linked');
+  f.git('worktree', 'add', '--detach', lane, f.sha1);
+  try {
+    for (const root of [f.repo, path.join(f.repo, '.git'), lane, f.org]) {
+      assert.throws(() => queueFor(f.repo, path.join(root, 'trusted')), /trusted store must be outside/);
+    }
+    const alias = path.join(f.storeRoot, 'git-alias'); fs.symlinkSync(path.join(f.repo, '.git'), alias);
+    assert.throws(() => queueFor(f.repo, path.join(alias, 'trusted')), /trusted store must be outside/);
+    assert.throws(() => f.add({ desk: f.storeRoot }), /trusted store must be outside|desk cannot contain/);
+    const externalOrg = path.join(f.storeRoot, 'record'); initOrg(externalOrg);
+    transact(externalOrg, () => ({ add: [{ type: 'item.added', id: 'ENG-1', title: 'External' }] }), { actor: 'fixture' });
+    const insideRecord = queueFor(f.repo, path.join(externalOrg, 'trusted'));
+    assert.throws(() => submit(insideRecord, { org: externalOrg, item: 'ENG-1', sha: f.sha1 }, node('')), /trusted store must be outside/);
+    assert.equal(fs.existsSync(insideRecord.directory), false);
+    const job = f.add();
+    f.queue.inbox.transaction(data => { data.jobs[0].desk = f.storeRoot; });
+    assert.throws(() => admit(f.queue, [job.job]), /trusted store must be outside/);
+    assert.equal(fs.existsSync(f.queue.directory), false);
+  } finally { f.git('worktree', 'remove', '--force', lane); }
+});
+
+test('trusted stores refuse all system temp roots, including configured TMPDIR and default XDG placement', t => {
+  const f = fixture(t);
+  for (const root of ['/tmp', '/private/tmp', os.tmpdir()]) assert.throws(() => queueFor(f.repo, path.join(root, 'verify-refused')), /system temp/);
+  process.env.TMPDIR = path.join(f.storeRoot, 'native-temp');
+  assert.throws(() => queueFor(f.repo, path.join(process.env.TMPDIR, 'trusted')), /system temp/);
+  process.env.XDG_STATE_HOME = '/private/tmp';
+  assert.throws(() => queueFor(f.repo), /system temp/);
+  delete process.env.XDG_STATE_HOME;
+  assert.equal(queueFor(f.repo).directory, path.join(os.homedir(), '.local/state/herdr-monitor/verify', sha256(f.queue.project.identity)));
+});
+
+test('repeatable CLI and colon-separated environment roots refuse stores after resolving aliases', async t => {
+  const f = fixture(t), other = path.join(f.storeRoot, 'other-root');
+  const result = await waitForExit(spawnChild(t, process.execPath, [CLI, 'status', '--repo', f.repo, '--state-dir', f.queue.directory,
+    '--untrusted-root', other, '--untrusted-root', f.storeRoot]));
+  assert.equal(result.code, 1); assert.match(result.stderr, /untrusted roots/);
+  process.env.VERIFY_UNTRUSTED_ROOTS = [other, f.storeRoot].join(path.delimiter);
+  assert.throws(() => queueFor(f.repo, f.queue.directory), /untrusted roots/);
+  delete process.env.VERIFY_UNTRUSTED_ROOTS;
+  const alias = path.join(f.root, 'untrusted-alias'); fs.symlinkSync(f.storeRoot, alias);
+  assert.throws(() => queueFor(f.repo, f.queue.directory, { untrustedRoots: [alias] }), /untrusted roots/);
+  assert.equal(queueFor(f.repo, f.queue.directory, { untrustedRoots: [other] }).directory, f.queue.directory);
+});
+
+test('probe-store fires an exclusive write, removes it, and reports refusal in a read-only store', async t => {
+  const f = fixture(t);
+  const absent = await f.cli(['probe-store']);
+  assert.equal(absent.writable, false); assert.match(absent.error, /ENOENT/);
+  fs.mkdirSync(f.queue.directory, { mode: 0o700 });
+  assert.deepEqual(await f.cli(['probe-store']), { writable: true, error: null });
+  assert.deepEqual(fs.readdirSync(f.queue.directory), []);
+  fs.chmodSync(f.queue.directory, 0o500);
+  try {
+    const refused = await f.cli(['probe-store']);
+    assert.equal(refused.writable, false); assert.match(refused.error, /EACCES|EPERM/);
+    assert.equal(fs.statSync(f.queue.directory).mode & 0o777, 0o500);
+    assert.deepEqual(fs.readdirSync(f.queue.directory), []);
+  } finally { fs.chmodSync(f.queue.directory, 0o700); }
 });
 
 test('one detached admitted worker returns before grant, drains FIFO and records holders plus one note and notice', async t => {
@@ -119,6 +192,14 @@ test('one detached admitted worker returns before grant, drains FIFO and records
   await deliver(f.queue, saved, saved, f.notify);
   assert.equal(loadEvents(f.org).events.filter(event => event.type === 'note.added').length, 2);
   assert.equal(snapshot(path.join(f.org, 'supervisor/inbox.log')).length, 2);
+});
+
+test('FIFO preserves submission order when an older pending job enters a later admission batch', async t => {
+  const f = fixture(t), order = path.join(f.root, 'order');
+  const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`));
+  const b = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'B')`));
+  admit(f.queue, [b.job]); await recover(f.queue, { notify: f.notify });
+  await f.run(b, a); assert.equal(fs.readFileSync(order, 'utf8'), 'AB');
 });
 
 test('detached admission refuses edited specs even with forged queue digests; recorded spec files cannot change execution', async t => {
@@ -172,8 +253,117 @@ test('a detached worker ignores jobs injected with its active token and forged a
   assert.equal(injected.state, 'pending-admission'); assert.equal(fs.existsSync(injected.receipt), false);
 });
 
-test('every immutable submit field is bound before a worker can create its execution directory', async t => {
-  const f = fixture(t), a = f.add(), original = f.queue.load().jobs[0];
+test('admission snapshots only submission fields; drain and recover never read the writable inbox', async t => {
+  const f = fixture(t), order = path.join(f.root, 'order'), injected = path.join(f.root, 'injected');
+  const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`));
+  const b = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'B')`));
+  f.queue.inbox.transaction(data => Object.assign(data.jobs[0], { admission: { token: 'forged' }, started_at: 'forged', completed_at: 'forged', receipt_sha256: '0'.repeat(64), outcome: 'pass' }));
+  const holder = await acquireTestSlot('untrusted inbox fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
+  t.after(() => holder.release());
+  await f.cli(['admit', b.job, a.job, '--untrusted-root', path.join(f.storeRoot, 'unused-worker-root')]);
+  const log = path.join(f.queue.directory, 'jobs', a.job, 'execution.log');
+  await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('TEST_SLOT_WAIT'), 'worker did not wait for inbox edit');
+  const argv = read(path.join(f.queue.directory, 'worker.lock/owner.json')).argv;
+  assert.ok(argv.includes('--untrusted-root')); assert.ok(argv.includes(path.join(f.storeRoot, 'unused-worker-root')));
+  assert.equal(f.queue.load().jobs[0].completed_at, undefined);
+  assert.equal(f.queue.load().jobs[0].receipt_sha256, undefined);
+  assert.notEqual(f.queue.load().jobs[0].admission.token, 'forged');
+  const trusted = fs.readFileSync(path.join(f.queue.directory, 'queue.json'));
+  f.queue.inbox.transaction(data => {
+    data.jobs[1].argv = node(`require('fs').writeFileSync(${JSON.stringify(injected)},'bad')`);
+    data.jobs.push({ ...data.jobs[1], id: 'injected', admission: f.queue.load().jobs[1].admission });
+  });
+  const planted = path.join(f.queue.inbox.directory, 'jobs', b.job, 'receipt.json');
+  fs.mkdirSync(path.dirname(planted), { recursive: true }); writeReceipt(planted, { schema: 'verify-receipt/v1', job: b.job, outcome: 'pass' });
+  assert.deepEqual(fs.readFileSync(path.join(f.queue.directory, 'queue.json')), trusted, 'inbox edits cannot alter trusted rows');
+  fs.writeFileSync(path.join(f.queue.inbox.directory, 'inbox.json'), 'invalid JSON');
+  holder.release(); await until(() => f.queue.load().runner === null, 'worker read the corrupted inbox');
+  assert.equal(fs.readFileSync(order, 'utf8'), 'AB'); assert.equal(fs.existsSync(injected), false);
+  assert.deepEqual((await f.cli(['recover'])).delivered, [a.job, b.job]);
+  assert.equal(loadEvents(f.org).events.filter(event => event.type === 'note.added').length, 2);
+  assert.equal(snapshot(path.join(f.org, 'supervisor/inbox.log')).length, 2);
+});
+
+function plantReceipt(f, submitted) {
+  const job = f.queue.load().jobs.find(job => job.id === submitted.job) ?? f.queue.inbox.load().jobs.find(job => job.id === submitted.job);
+  fs.mkdirSync(path.dirname(submitted.receipt), { recursive: true });
+  writeReceipt(submitted.receipt, { schema: 'verify-receipt/v1', job: job.id, admitted_spec_sha256: jobDigest(job),
+    admitted_at: job.admission?.admitted_at ?? 'forged', admitted_by: job.admission?.admitted_by ?? 'forged', outcome: 'pass' });
+  return fs.readFileSync(submitted.receipt);
+}
+function assertUndelivered(f, job) {
+  assert.equal(loadEvents(f.org).events.some(event => event.type === 'note.added' && event.text.includes(`job=${job.job} `)), false);
+  assert.equal(snapshot(path.join(f.org, 'supervisor/inbox.log')).some(notice => JSON.stringify(notice).includes(`job=${job.job} `)), false);
+  assert.equal(f.queue.load().jobs.find(row => row.id === job.job)?.completed_at, undefined);
+  assert.equal(f.queue.load().jobs.find(row => row.id === job.job)?.receipt_sha256, undefined);
+}
+
+test('a forged pass receipt for a never-admitted pending job is unverified and never delivered', async t => {
+  const f = fixture(t), marker = path.join(f.root, 'never-ran');
+  const job = f.add({}, node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`));
+  const bytes = plantReceipt(f, job), recovered = await f.cli(['recover']);
+  assert.deepEqual(recovered.delivered, []); assert.deepEqual(recovered.unverified.map(row => row.job), [job.job]);
+  assert.match(recovered.unverified[0].error, /no admitted trusted job/);
+  assertUndelivered(f, job); assert.equal(status(f.queue, { id: job.job }).jobs[0].state, 'pending-admission');
+  assert.deepEqual(fs.readFileSync(job.receipt), bytes); assert.equal(fs.existsSync(marker), false);
+  assert.throws(() => admit(f.queue, [job.job]), /already has a receipt/);
+});
+
+test('a forged pass receipt for an admitted queued job halts the worker with runner.error', async t => {
+  const f = fixture(t), marker = path.join(f.root, 'never-ran');
+  const holder = await acquireTestSlot('queued forgery fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
+  t.after(() => holder.release());
+  const a = f.add(), b = f.add({}, node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`));
+  await f.cli(['admit', a.job, b.job]);
+  const log = path.join(f.queue.directory, 'jobs', a.job, 'execution.log');
+  await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('TEST_SLOT_WAIT'), 'worker did not wait before forgery');
+  const bytes = plantReceipt(f, b);
+  holder.release(); await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')), 'worker did not refuse queued receipt');
+  assert.match(f.queue.load().runner.error, /receipt already exists.*this worker did not write it/);
+  assert.equal(f.queue.load().jobs[1].started_at, undefined); assertUndelivered(f, b);
+  const recovered = await f.cli(['recover']);
+  assert.deepEqual(recovered.delivered, [a.job]); assert.deepEqual(recovered.unverified.map(row => row.job), [b.job]);
+  assert.deepEqual(recovered.pending_admission, [b.job]); assertUndelivered(f, b);
+  assert.equal(fs.existsSync(marker), false); assert.deepEqual(fs.readFileSync(b.receipt), bytes);
+});
+
+test('a forged pass receipt during execution fails exclusive publication and recovery requires a new retry job', async t => {
+  const f = fixture(t), started = path.join(f.root, 'started'), finish = path.join(f.root, 'finish');
+  const job = f.add({}, node(`const fs=require('fs');fs.writeFileSync(${JSON.stringify(started)},'1');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(finish)}))clearInterval(timer)},25);`));
+  const running = drain(f.queue, admit(f.queue, [job.job]), { notify: f.notify });
+  const rejected = assert.rejects(running, { code: 'EEXIST' });
+  let bytes;
+  try {
+    await until(() => fs.existsSync(started), 'command did not start before forgery');
+    bytes = plantReceipt(f, job);
+  } finally { fs.writeFileSync(finish, 'done'); }
+  await rejected;
+  assert.match(f.queue.load().runner.error, /EEXIST/); assertUndelivered(f, job);
+  const recovered = await f.cli(['recover']);
+  assert.deepEqual(recovered.delivered, []); assert.deepEqual(recovered.unverified.map(row => row.job), [job.job]);
+  assert.deepEqual(recovered.needs_retry, [job.job]); assertUndelivered(f, job);
+  assert.equal(status(f.queue, { id: job.job }).jobs[0].state, 'needs-retry');
+  assert.deepEqual(fs.readFileSync(job.receipt), bytes); assert.equal(fs.readFileSync(started, 'utf8'), '1');
+});
+
+for (const changed of ['receipt bytes', 'admission', 'started job']) test(`recovery refuses a runner receipt after its ${changed} no longer matches publication`, async t => {
+  const f = fixture(t), job = f.add();
+  await assert.rejects(drain(f.queue, admit(f.queue, [job.job]), { notify: async () => { throw Error('delivery unavailable'); } }), /delivery unavailable/);
+  const before = loadEvents(f.org).events;
+  assert.equal(f.queue.load().jobs[0].receipt_sha256, sha256(fs.readFileSync(job.receipt)));
+  if (changed === 'receipt bytes') fs.appendFileSync(job.receipt, ' ');
+  else f.queue.transaction(data => {
+    if (changed === 'admission') data.jobs[0].admission.admitted_by = 'other';
+    else delete data.jobs[0].started_at;
+  });
+  const recovered = await f.cli(['recover']);
+  assert.deepEqual(recovered.delivered, []); assert.deepEqual(recovered.unverified.map(row => row.job), [job.job]);
+  assert.deepEqual(loadEvents(f.org).events, before); assert.equal(snapshot(path.join(f.org, 'supervisor/inbox.log')).length, 0);
+  assert.equal(f.queue.load().jobs[0].completed_at, undefined);
+});
+
+test('every admitted immutable field is bound before a worker can create its execution directory', async t => {
+  const f = fixture(t), a = f.add(), original = f.queue.inbox.load().jobs[0];
   const changes = { repo: f.root, identity: f.root, org: f.root, item: 'ENG-2', submitter: 'other', submitted_at: 'other',
     sha: f.sha2, tree: '0'.repeat(40), group: 'other', desk: f.root, desk_name: 'other', argv: node('process.exit(1)'),
     prepare: node('process.exit(1)'), expectations: [], timeout_seconds: 1, idle_timeout_seconds: 1,
@@ -200,6 +390,7 @@ for (const boundary of ['record', 'notice']) test(`${boundary} delivery failure 
   assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false);
   for (const job of [b, c]) assert.equal(status(f.queue, { id: job.job }).jobs[0].state, 'pending-admission');
   const bytes = fs.readFileSync(a.receipt);
+  assert.equal(f.queue.load().jobs[0].receipt_sha256, sha256(bytes), 'publication is recorded before delivery');
   if (boundary === 'record') fs.renameSync(saved, events);
   await assert.rejects(recover(f.queue, { notify: async () => { throw Error('still unavailable'); } }), /still unavailable/);
   assert.match(f.queue.load().runner.error, /still unavailable/);
@@ -243,7 +434,7 @@ test('a log hashing error is recoverable bookkeeping but an executed job never r
   const f = fixture(t), count = path.join(f.root, 'executions');
   const a = f.add(), b = f.add();
   const log = path.join(f.queue.directory, 'jobs', a.job, 'execution.log');
-  f.queue.transaction(data => { data.jobs[0].argv = node(`const fs=require('fs');fs.appendFileSync(${JSON.stringify(count)},'1');fs.unlinkSync(${JSON.stringify(log)});fs.mkdirSync(${JSON.stringify(log)});`); });
+  f.queue.inbox.transaction(data => { data.jobs[0].argv = node(`const fs=require('fs');fs.appendFileSync(${JSON.stringify(count)},'1');fs.unlinkSync(${JSON.stringify(log)});fs.mkdirSync(${JSON.stringify(log)});`); });
   await assert.rejects(f.run(a, b), /EISDIR/);
   assert.match(f.queue.load().runner.error, /EISDIR/);
   assert.equal(status(f.queue, { id: b.job }).jobs[0].state, 'pending-admission');
@@ -311,7 +502,7 @@ test('groups pin SHA and tree across completion and status lists individual grou
   assert.deepEqual(rows.jobs.map(job => job.receipt), [a.receipt, b.receipt]);
   assert.equal('outcome' in rows, false);
   // A corrupted/stale tree binding cannot be silently accepted either.
-  f.queue.transaction(data => { data.jobs[0].tree = '0'.repeat(40); });
+  f.queue.inbox.transaction(data => { data.jobs[0].tree = '0'.repeat(40); });
   assert.throws(() => f.add({ group: 'run-1' }), /fixed/);
 });
 
@@ -333,7 +524,7 @@ test('dirty runner desks refuse without discarding edits or running the next job
 test('an absolute desk is created by the runner and a mismatching checked-out tree refuses execution', async t => {
   const f = fixture(t), a = f.add({ desk: path.join(f.root, 'absolute-desk') });
   await f.run(a); assert.equal(read(a.receipt).outcome, 'pass');
-  const b = f.add(); f.queue.transaction(data => { data.jobs.find(job => job.id === b.job).tree = '0'.repeat(40); });
+  const b = f.add(); f.queue.inbox.transaction(data => { data.jobs.find(job => job.id === b.job).tree = '0'.repeat(40); });
   await f.run(b); assert.match(read(b.receipt).error, /tree differs/);
 });
 

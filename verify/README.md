@@ -18,6 +18,7 @@ node verify/verify.mjs admit JOB_ID OTHER_JOB_ID
 node verify/verify.mjs status [JOB_ID]
 node verify/verify.mjs status --group regression-1
 node verify/verify.mjs recover
+node verify/verify.mjs probe-store [--state-dir ABS_PATH]
 ```
 
 Submit prints `{"job":"…","receipt":"/absolute/path/receipt.json"}`. Jobs stay
@@ -28,16 +29,43 @@ worker cannot inherit a later admitting process's native permissions. Admit a ba
 together, or admit the next batch after it finishes. Unadmitted jobs do not hold
 up admitted work; admitted jobs run in submission order, regardless of the order
 of IDs passed to `admit`. There are no priorities, classes or group verdicts.
-Admission captures each job's immutable specification as a SHA256 digest and
-passes the exact ID/digest allowlist to the worker through argv. Queue edits
-cannot expand that allowlist; a changed specification halts the batch before
-execution. The receipt records `admitted_spec_sha256`. All submit fields,
+Submission writes only the untrusted inbox at `GIT_COMMON_DIR/verify-inbox`.
+Admission copies the selected immutable specifications into the trusted store,
+captures their SHA256 digests and passes the exact ID/digest allowlist to the
+worker through argv. Submitter-supplied admission, completion and publication
+fields are discarded. After admission, drain and recover read only the trusted
+store; inbox edits, injected jobs and planted inbox receipts have no authority.
+A changed trusted specification halts the batch before execution. The receipt
+records `admitted_spec_sha256`. All submit fields,
 including prepare, expectations, bounds and delivery settings, are bound. The
 admitted snapshot also travels through argv to both slot phase processes;
 `jobs/JOB/spec.json` retains an evidence copy.
 
-The default state directory is `GIT_COMMON_DIR/verify`; `--state-dir ABS_PATH`
-selects another. `--repo` selects the repository on every command. `--desk` is
+The trusted store defaults to
+`${XDG_STATE_HOME:-~/.local/state}/herdr-monitor/verify/<sha256 of canonical Git common directory>`;
+`--state-dir ABS_PATH` selects another. The module refuses a trusted store inside
+the repository, its Git common directory, any registered worktree, any job's
+desk or record, or system temp (`/tmp`, `/private/tmp`, `$TMPDIR`). Paths are
+resolved through existing ancestors before checking, including symlink aliases.
+Repeat `--untrusted-root PATH` to list additional worker write roots, or set
+`VERIFY_UNTRUSTED_ROOTS` to a colon-separated list. Both sources apply together;
+the detached worker inherits the CLI roots as well as environment roots.
+
+The trusted store **must be outside every submitter's sandbox write roots**.
+The module cannot inspect native sandbox policy; mode 0700 alone does not
+separate processes running as the same user. Adoption requires the supervisor
+to create the selected directory, then run `verify probe-store` from each
+worker sandbox with the same `--repo`, `--state-dir` and root options. Expect
+`{"writable":false,"error":"EACCES: …"}` (or a native permission denial) before
+relying on any receipt. The probe attempts exclusive creation of a unique file
+and removes it if created; it creates no directory and changes no permissions.
+An `ENOENT` result means the store was not created and does not prove isolation.
+`writable:true` means adoption must fix the store location or worker sandbox
+policy first. An unsandboxed worker with write access to the trusted store cannot
+provide this boundary. Existing Git-local queue state is not imported as trusted
+execution evidence; resubmit jobs after configuring the store.
+
+`--repo` selects the repository on every command. `--desk` is
 per job: a name (default `default`) under `STATE/desks/`, or an absolute path.
 Only runner-created, registered detached worktrees are accepted. Each desk
 keeps its own ignored caches and prepared state. Before a job the runner refuses
@@ -95,8 +123,13 @@ from the supervisor's intended permission context after inspecting the failure.
 It requires no existing `worker.lock` (including a stale crash lock), acquires
 that lock to exclude other workers, and re-delivers published receipts' plain
 notes and notices with the same IDs. Delivery is idempotent; recovery executes
-no job and never rewrites a receipt. A receipt must match the job's admitted
-specification. An interrupted job without a receipt becomes `needs-retry` and
+no job and never rewrites a receipt. Immediately after exclusive publication,
+the runner records `receipt_sha256` on the trusted job row, before delivery.
+Recovery requires a started job, a matching admission and that exact hash.
+Other receipts, including receipts with no admitted trusted job, are listed in
+`unverified` with no note or notice. A worker refuses any pre-existing receipt
+with `runner.error`; only recovery can finish a prior worker's verified delivery.
+An interrupted job without a verified receipt becomes `needs-retry` and
 cannot be admitted again: inspect its desk and surviving owned processes and
 submit a new job. Recovery returns unstarted jobs to `pending-admission`, saves
 the old runner as `last_runner`, and clears the active admission. If delivery

@@ -11,6 +11,7 @@ import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../supervisor/retire.mjs';
+import { consumeRetirement } from '../lib/retire-trigger.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { runProjectGateSync } from './gate-profile.mjs';
 import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
@@ -254,7 +255,15 @@ function performBatch(batch, queue, settings) {
     ...(train.host_receipt ? { host_receipt: train.host_receipt } : {}) } }));
 }
 
-export function finishCleanup(job, result, queue) {
+function cleanupRevision(job, queue) {
+  const org = job.org ?? findOrgDir({ cwd: queue.project.canonical });
+  if (!org) return 'no-record';
+  const stat = fs.statSync(path.join(org, 'events.jsonl'));
+  const request = path.join(org, 'retirement/request.json');
+  return `${stat.size}:${stat.mtimeMs}:${fs.existsSync(request) ? JSON.parse(fs.readFileSync(request, 'utf8')).revision : 0}`;
+}
+
+export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
   const warnings = [];
   const diagnostics = (result.warnings ?? []).filter(w => w.startsWith('velocity record:'));
   try {
@@ -276,19 +285,39 @@ export function finishCleanup(job, result, queue) {
     if (!warnings.length) invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', result.tip], {
       cwd: queue.project.canonical, env: { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_CONFIG: job.laneConfig ?? undefined } });
   } catch (error) { warnings.push(`lane cleanup: ${error.message}`); }
-  return { ...result, warnings: [...diagnostics, ...warnings], cleanup: { state: warnings.length ? 'pending' : 'complete', warnings },
+  let revision;
+  try { revision = cleanupRevision(job, queue); } catch (e) { revision = `unreadable:${e.message}`; }
+  const attempts = (result.cleanup?.revision === revision ? result.cleanup.attempts ?? 0 : 0) + 1;
+  return { ...result, warnings: [...diagnostics, ...warnings], cleanup: { state: warnings.length ? 'pending' : 'complete', warnings,
+    revision, attempts, attempted_at: now, next_attempt_at: now + Math.min(3600000, 60000 * 2 ** (attempts - 1)),
+    last_refusal: warnings.length ? warnings.join('; ') : null },
     reason: warnings.length ? `integrated-but-cleanup-pending: ${warnings.join('; ')}` : 'green fast-forward; cleanup complete' };
 }
 
 // Restart/reconciliation retries only the cleanup checkpoint, never the gate.
-export function retryCleanup(queue) {
+export function retryCleanup(queue, { now = Date.now() } = {}) {
   for (const saved of queue.load().results.filter(r => r.outcome === 'promoted' && r.cleanup?.state === 'pending' && r.reconciliation?.state !== 'pending')) {
-    const result = finishCleanup(saved, saved, queue);
+    let revision;
+    try { revision = cleanupRevision(saved, queue); } catch (e) { revision = `unreadable:${e.message}`; }
+    if (saved.cleanup.revision === revision && ((saved.cleanup.attempts ?? 0) >= 5 || now < saved.cleanup.next_attempt_at)) continue;
+    const result = finishCleanup(saved, saved, queue, { now });
     queue.transaction(data => {
       const row = data.results.findLast(r => r.id === saved.id);
       if (row) Object.assign(row, result);
     });
   }
+}
+
+function consumeRequests(queue) {
+  try {
+    const jobs = queueJobs(queue.load());
+    const discovered = findOrgDir({ cwd: queue.project.canonical });
+    const orgs = new Set([discovered, ...jobs.map(j => j.org)].filter(Boolean));
+    for (const org of orgs) try {
+      consumeRetirement({ org, retirement: () => createRetirement({ cwd: queue.project.canonical, org,
+        herdr: jobs.find(j => j.org === org)?.herdr, log: result => process.stderr.write(JSON.stringify(result) + '\n') }) });
+    } catch (e) { process.stderr.write(`integrated-but-cleanup-pending: retirement catch-up: ${e.message}\n`); }
+  } catch (e) { process.stderr.write(`integrated-but-cleanup-pending: retirement discovery: ${e.message}\n`); }
 }
 
 function finishBatchJob(job, result, queue) {
@@ -372,6 +401,7 @@ export async function drain(queue) {
   let acknowledged = false;
   const attempted = new Set();
   try {
+    consumeRequests(queue);
     retryCleanup(queue);
     for (;;) {
       // Git can be slow. Read a committed snapshot without queue.lock so
@@ -516,7 +546,9 @@ export async function drain(queue) {
       });
       process.stdout.write(JSON.stringify({ id: job.id, topic: job.topic, ...result, ...delivery }) + '\n');
     }
-  } finally { release?.(); }
+  } finally {
+    try { consumeRequests(queue); retryCleanup(queue); } finally { release?.(); }
+  }
 }
 
 async function start(queue) {

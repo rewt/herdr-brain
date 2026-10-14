@@ -21,6 +21,7 @@ function fixture(t, { promoted = true, reported = true } = {}) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const repo = path.join(root, 'project'), lane = path.join(root, 'lane');
   fs.mkdirSync(repo);
+  fs.writeFileSync(path.join(root, 'events.jsonl'), '');
   const git = (args, cwd = repo) => {
     const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: TEST_ENV });
     assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
@@ -77,6 +78,19 @@ test('recorded promoted workers close through the shared tidy planner', (t) => {
   const f = fixture(t); const plan = f.runner().tick();
   assert.equal(plan.close.length, 1); assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
   assert.match(f.logs.find((x) => x.action === 'closed').why, /R-1/);
+});
+
+test('the housekeeping CLI record reader loads confirmed handoffs and reserves the successor', t => {
+  const f = fixture(t, { reported: false });
+  const newer = { ...f.run, id: 'R-2', started: { seq: 2 }, meta: { ...f.run.meta,
+    agent: 'successor', pane: 'w:q', terminal_id: 'term-b' } };
+  f.runs.push(newer); f.agents.push({ ...f.agent, name: 'successor', pane_id: 'w:q', tab_id: 'w:u', terminal_id: 'term-b' });
+  f.tabs.push({ tab_id: 'w:u' }); f.panes.push({ pane_id: 'w:q', tab_id: 'w:u' });
+  fs.writeFileSync(path.join(f.root, 'events.jsonl'), JSON.stringify({ type: 'retirement.handoff', from: 'R-1', to: 'R-2', confirmed: true, seq: 3 }) + '\n');
+  const plan = f.runner().tick({ resume: false });
+  assert.deepEqual(plan.close.map(t => t.tab_id), ['w:t']);
+  assert.match(plan.keep[0].why, /retained successor/);
+  assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
 });
 
 test('abandonment alone never substitutes for ingestion', (t) => {

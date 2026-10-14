@@ -14,6 +14,7 @@ import {
   wouldCycleBlock, wouldCycleParent, releases, nextLessonId, lessonState, wouldCycleLesson,
 } from '../lib/state.mjs';
 import { roleIs } from '../lib/roles.mjs';
+import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
@@ -158,6 +159,10 @@ function mutate(ctx, fn) {
     unattributed: who.unattributed,
   });
   if (res.repaired) err('record: repaired an incomplete last event left by an interrupted write\n');
+  if (res.added.some(e => ['report.ingested', 'item.closed', 'item.reopened', 'question.answered', 'link.removed', 'run.abandoned', 'promotion.reconciled'].includes(e.type) || (e.type === 'note.added' && e.decision))) {
+    try { requestRetirement({ org: ctx.dir, eventSeq: res.added.at(-1).seq, source: `record ${process.argv[2]}` }); }
+    catch (e) { err(`record: retirement request deferred: ${e.message}\n`); }
+  }
   return res;
 }
 
@@ -994,10 +999,6 @@ async function main(argv) {
   }
   if (!Object.hasOwn(COMMANDS, command)) throw new UserError(`unknown command "${command}" (see: record help)`);
   const result = await COMMANDS[command](rest);
-  if (['ingest', 'sync', 'close', 'reopen', 'answer', 'unblock', 'abandon', 'handoff', 'complete-batch'].includes(command) && result === 0) {
-    try { const { requestRetirement } = await import('../lib/retire-trigger.mjs'); requestRetirement({ source: `record ${command}` }); }
-    catch (e) { err(`record: retirement request deferred: ${e.message}\n`); }
-  }
   return result;
 }
 

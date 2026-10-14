@@ -237,6 +237,11 @@ time.
 is first preserved as `archive/lane/<topic>`. After Git succeeds, matching session
 metadata is marked done; metadata errors never rewrite the Git result.
 
+Closure rechecks the shared retirement policy and requires zero occupants before
+Git removes a worktree, including with `--git-only`. If the Herdr executable is
+absent, its inventory is empty and Git-only removal can proceed with the record
+and job guards. An installed CLI whose server cannot be read refuses closure.
+
 ## Commands
 
 | Command | Purpose |

@@ -18,6 +18,19 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { stopGateGroup } from '../../test-slot/watchdog.mjs';
 
+// A full native snapshot can race a short-lived transport. Retry the refused
+// inspection only; each call still pins ownership and rechecks every signal.
+async function stopOwnedInbox(file, options) {
+  const deadline = Date.now() + loadTimeout(5000);
+  for (;;) {
+    try { return await stopFixtureInbox(file, options); }
+    catch (e) {
+      if (!/^Cannot confirm fixture inbox (children|owner|shutdown):/.test(e.message) || Date.now() >= deadline) throw e;
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+  }
+}
+
 const CLI = fileURLToPath(new URL('../verify.mjs', import.meta.url));
 const inboxCLI = fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url));
 const node = code => [process.execPath, '-e', code];
@@ -69,7 +82,7 @@ function fixture(t, { defaultState = false } = {}) {
     assert.equal(result.code, 0, result.stderr); return JSON.parse(result.stdout);
   };
   t.after(async () => {
-    await stopFixtureInbox(path.join(org, 'supervisor/inbox.log'), { script: inboxCLI });
+    await stopOwnedInbox(path.join(org, 'supervisor/inbox.log'), { script: inboxCLI });
     for (const desk of Object.keys(queue.load().desks)) git('worktree', 'remove', '--force', desk);
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(storeRoot, { recursive: true, force: true });
@@ -365,6 +378,9 @@ test('pending status shows current inbox content; stale consent refuses and admi
 test('completed status keeps the admitted spec and group after inbox edits', async t => {
   const f = fixture(t), argv = node("console.log('admitted')"), job = f.add({ group: 'admitted-group' }, argv);
   await f.run(job);
+  const retirementHint = read(path.join(f.org, 'retirement/request.json'));
+  assert.equal(retirementHint.key, `verify:${job.job}`);
+  assert.equal(retirementHint.source, `verify job ${job.job} completion`);
   f.queue.inbox.transaction(data => { Object.assign(data.jobs[0], { argv: node("console.log('edited')"), group: 'edited-group' }); });
   const current = (await f.cli(['status', job.job])).jobs[0];
   assert.equal(current.state, 'pass'); assert.deepEqual(current.argv, argv);

@@ -552,7 +552,8 @@ cp.spawnSync=function(cmd,args,options){
   const actions = fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(actions.filter((a) => a[0] === 'tab' && a[1] === 'close'), [['tab', 'close', 'w:worker']]);
   assert.ok(!actions.some((a) => a[0] === 'worktree' || a[0] === 'workspace' && a[1] !== 'list'));
-  assert.ok(!actions.some((a) => ['pane','tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'));
+  assert.ok(actions.some((a) => ['pane','tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'), 'foreground hint catch-up observes the project');
+  assert.ok(!actions.some(a => a[0] === 'tab' && a[1] === 'close' && a[2].startsWith('other:')));
   assert.equal(fs.existsSync(wt), true, 'kept operator pane retains its worktree'); assert.equal(fs.existsSync(other), true);
   const inbox = path.join(org, 'supervisor/inbox.log');
   assert.equal(f.results()[0].inbox, inbox);

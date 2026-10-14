@@ -7,8 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
-import { findOrgDir, loadEvents } from '../lib/store.mjs';
+import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
+import { consumeRetirement } from '../lib/retire-trigger.mjs';
 import { ownerAlive } from '../lib/process-owner.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
@@ -115,11 +116,12 @@ export function readLiveReferences({ common, org, env = process.env, verifyState
 
 export function createRetirement({ cwd = process.cwd(), org, herdr = process.env.HERDR_RETIRE_HERDR ?? 'herdr', record,
   command = spawnSync, selfTab = process.env.HERDR_TAB_ID ?? null, main,
-  env = process.env, log = () => {}, verifyStateDir, readOwner = ownerAlive } = {}) {
+  env = process.env, log = () => {}, verifyStateDir, readOwner = ownerAlive, allowAbsentHerdr = false, selfRetirement } = {}) {
+  if (selfRetirement && (selfRetirement.pid !== process.pid || selfRetirement.tab !== env.HERDR_TAB_ID || selfRetirement.pane !== env.HERDR_PANE_ID)) throw Error('self-retirement must name this process and its own Herdr tab and pane');
   const invoke = (exe, args) => {
     const r = command(exe, args, { cwd, encoding: 'utf8', timeout: loadTimeout(10000), maxBuffer: 64 * 1024 * 1024,
       env: { ...env, ORG_DIR: org } });
-    if (r.error || r.status !== 0) throw Error(`${exe} ${args.slice(0, 2).join(' ')}: ${(r.stderr || r.error?.message || r.stdout || `exit ${r.status}`).trim()}`);
+    if (r.error || r.status !== 0) throw Object.assign(Error(`${exe} ${args.slice(0, 2).join(' ')}: ${(r.stderr || r.error?.message || r.stdout || `exit ${r.status}`).trim()}`), { code: r.error?.code });
     return r.stdout.trim();
   };
   const json = text => { const d = JSON.parse(text); if (d.error) throw Error(JSON.stringify(d.error)); return d.result ?? d; };
@@ -134,19 +136,25 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
   function observe(workspacePath) {
     if (commonAt(cwd) !== common || commonAt(canonicalRoot) !== common) throw Error('canonical common directory changed');
     const readRecord = () => {
-    let state, events = [];
-    if (record) state = json(invoke(record[0], [...record.slice(1), 'status', '--json']));
-    else {
-      const loaded = org ? loadEvents(org) : { events: [], tornTail: false }; if (loaded.tornTail) throw Error('incomplete record tail');
-      events = loaded.events; state = fold(events);
-    }
-    const runs = state.runs instanceof Map ? [...state.runs.values()] : array(state.runs, 'record runs');
-    const items = state.items instanceof Map ? [...state.items.values()] : array(state.items, 'record items');
+      const loaded = org ? loadEvents(org) : { events: [], tornTail: false };
+      if (loaded.tornTail) throw Error('incomplete record tail');
+      const events = loaded.events;
+      const state = record ? json(invoke(record[0], [...record.slice(1), 'status', '--json'])) : fold(events);
+      const runs = state.runs instanceof Map ? [...state.runs.values()] : array(state.runs, 'record runs');
+      const items = state.items instanceof Map ? [...state.items.values()] : array(state.items, 'record items');
       return { state, events, runs, items };
     };
     let { state, events = [], runs = [], items = [] } = workspacePath ? readRecord() : {};
     const successorWorkspaces = new Set(events.filter(e => e.type === 'retirement.handoff' && runs.some(r => r.id === e.from && canonical(r.workspace) === canonical(workspacePath))).map(e => runs.find(r => r.id === e.to)?.meta?.worker_workspace));
-    const all = array(h(['workspace', 'list']).workspaces, 'workspaces');
+    let all, absent = false;
+    try { all = array(h(['workspace', 'list']).workspaces, 'workspaces'); }
+    catch (e) {
+      // Only an absent executable proves this host has no Herdr panes. A
+      // present CLI with an unreadable server remains an observation failure.
+      const installed = (herdr.includes(path.sep) ? [path.resolve(cwd, herdr)] : (env.PATH ?? '').split(path.delimiter).map(dir => path.join(dir, herdr))).some(file => fs.existsSync(file));
+      if (!allowAbsentHerdr || e.code !== 'ENOENT' || installed) throw e;
+      all = []; absent = true;
+    }
     const workspaces = all.filter(w => {
       const wt = w.worktree;
       // Include mismatched metadata for this path/repository so it causes a
@@ -207,17 +215,41 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
           lane: branch.startsWith('lane/') ? branch.slice(5) : null, clean: !git(root, ['status', '--porcelain']) });
       } catch (e) { gitState.push({ path: root, error: `Git observation ${root}: ${e.message}` }); }
     }
-    const agents = array(h(['agent', 'list']).agents, 'agents').map(a => ({ ...a, cwd: canonical(a.cwd) }));
+    const agents = absent ? [] : array(h(['agent', 'list']).agents, 'agents').map(a => ({ ...a, cwd: canonical(a.cwd) }));
     ({ state, events, runs, items } = readRecord());
     const refs = readLiveReferences({ common, org, env, verifyStateDir });
     for (const run of runs) if (run.meta?.watcher_pid) {
-      try { if (readOwner({ pid: Number(run.meta.watcher_pid), identity: run.meta.watcher_identity })) refs.references.push({ kind: 'watcher callback', job: run.id, run: run.id, cwd: canonical(run.workspace) }); }
+      try { if (readOwner({ pid: Number(run.meta.watcher_pid), identity: run.meta.watcher_identity })) refs.references.push({ kind: 'watcher callback', job: run.id, run: run.id, cwd: canonical(run.workspace), pid: Number(run.meta.watcher_pid), identity: run.meta.watcher_identity }); }
       catch (e) { refs.references.push({ kind: 'unknown watcher callback', job: run.id, run: run.id, cwd: canonical(run.workspace) }); refs.diagnostics.push({ run: run.id, reason: e.message }); }
+    }
+    const callbacks = [];
+    if (org) try {
+      const directory = path.join(org, 'retirement/occupants');
+      if (fs.existsSync(directory)) for (const name of fs.readdirSync(directory)) {
+        const receipt = optional(path.join(directory, name));
+        if (receipt?.schema !== 'retirement-occupant/v1' || !['watcher', 'settle', 'executive', 'plan'].includes(receipt.kind) ||
+            ['common', 'cwd', 'workspace', 'tab', 'pane'].some(k => typeof receipt[k] !== 'string' || !receipt[k]) ||
+            [receipt.shell, receipt.process].some(p => !Number.isSafeInteger(p?.pid) || p.pid < 1 || typeof p.identity !== 'string' || !p.identity || !p.command)) throw Error(`invalid callback receipt ${name}`);
+        if (canonical(receipt.common) !== common) continue;
+        let process_gone = false;
+        try { process_gone = !readOwner(receipt.process); } catch (e) { refs.diagnostics.push({ file: name, reason: e.message }); }
+        callbacks.push({ ...receipt, cwd: canonical(receipt.cwd), common, process_gone });
+      }
+    } catch (e) { errors.push(`callback receipts unreadable: ${e.message}; project kept`); }
+    // Our synchronous observation helpers have exited by now. For narrow
+    // self-retirement, discard only descendants proved gone by birth identity;
+    // a surviving child or an unreadable process source still keeps the tab.
+    if (selfRetirement?.pid === process.pid) for (const p of panes.filter(p => p.pane_id === selfRetirement.pane)) {
+      p.process_info.process_tree = p.process_info.process_tree?.filter(row => {
+        if (row.pid === p.process_info.shell_pid || row.pid === process.pid) return true;
+        try { return readOwner(row); } catch { return true; }
+      });
     }
     return { common, workspaces, tabs, panes, agents, git: gitState,
       record: { runs: runs.map(r => ({ ...r, workspace: canonical(r.workspace) })), items, links: state.links ?? [], revision: state.eventCount },
       references: refs.references, errors: [...errors, ...refs.errors], diagnostics: refs.diagnostics, selfTab,
       handoffs: events.filter(e => e.type === 'retirement.handoff'),
+      callbacks, selfRetirement,
     };
   }
   const plan = workspacePath => {
@@ -225,6 +257,26 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
     if (!workspacePath) return result;
     const ids = new Set(snapshot.workspaces.filter(w => w.worktree.checkout_path === canonical(workspacePath)).map(w => w.workspace_id));
     return { ...result, close: result.close.filter(t => ids.has(t.workspace_id)), keep: result.keep.filter(t => ids.has(t.workspace_id)) };
+  };
+  const recordCallback = ({ kind, pane: paneId, pid, run, agent }) => {
+    if (!org) throw Error('callback launch needs a record');
+    const snapshot = observe(), p = snapshot.panes.find(p => p.pane_id === paneId);
+    const ws = snapshot.workspaces.find(w => w.workspace_id === p?.workspace_id);
+    const a = snapshot.agents.find(a => a.pane_id === paneId && a.name === agent);
+    pid ??= p?.process_info.foreground_processes.filter(row => row.pid !== p.process_info.shell_pid).at(0)?.pid;
+    const tree = p?.process_info.process_tree ?? [];
+    const processRow = tree.find(row => row.pid === pid), shell = tree.find(row => row.pid === p?.process_info.shell_pid);
+    if (!p || !ws || !processRow?.identity || !shell?.identity || (agent && !a) || !['watcher', 'settle', 'executive', 'plan'].includes(kind)) throw Error('callback launch identity is incomplete');
+    const receipt = { schema: 'retirement-occupant/v1', kind, common, cwd: ws.worktree.checkout_path,
+      workspace: ws.workspace_id, tab: p.tab_id, pane: paneId,
+      shell: { pid: shell.pid, identity: shell.identity, command: shell.command }, process: { pid, identity: processRow.identity, command: processRow.command },
+      ...(run ? { run } : {}), ...(a ? { agent: a.name, terminal_id: a.terminal_id, agent_session_id: a.agent_session?.value } : {}) };
+    const file = path.join(org, 'retirement/occupants', createHash('sha256').update(p.tab_id).digest('hex') + '.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const previous = optional(file);
+    if (previous && JSON.stringify(previous) !== JSON.stringify(receipt) && readOwner(previous.process)) throw Error('callback launch receipt belongs to a live process');
+    writeFileAtomic(file, JSON.stringify(receipt) + '\n');
+    return receipt;
   };
   const apply = (planned = plan(), workspacePath) => executeRetirement(planned, { observe: () => observe(workspacePath), close: id => invoke(herdr, ['tab', 'close', id]), log });
   const assertVacant = lane => {
@@ -248,15 +300,20 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
       observe: emptyObservation, closeWorkspace: workspace => invoke(herdr, ['workspace', 'close', workspace]), log });
     if (result.some(r => r.action !== 'closed')) throw Error(result.map(r => r.why).join('; '));
   };
-  return { common, observe, plan, apply, assertVacant, closeEmptyWorkspace };
+  return { common, observe, plan, apply, assertVacant, closeEmptyWorkspace, recordCallback };
 }
 
 function main() {
   const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, herdr: { type: 'string', default: 'herdr' },
     'verify-state-dir': { type: 'string' }, lane: { type: 'string' },
-  }, usage: 'Usage: node supervisor/retire.mjs plan|apply --repo CHECKOUT --org RECORD [--lane PATH] [--verify-state-dir DIR]' });
-  if (positionals.length !== 1 || !['plan', 'apply'].includes(positionals[0])) throw Error('expected plan or apply');
+  }, usage: 'Usage: node supervisor/retire.mjs plan|apply|consume --repo CHECKOUT --org RECORD [--lane PATH] [--verify-state-dir DIR]' });
+  if (positionals.length !== 1 || !['plan', 'apply', 'consume'].includes(positionals[0])) throw Error('expected plan, apply or consume');
+  if (positionals[0] === 'consume') {
+    const org = opt.org ?? findOrgDir({ cwd: opt.repo });
+    const result = org ? consumeRetirement({ org, retirement: () => createRetirement({ cwd: canonical(opt.repo), org, herdr: opt.herdr }) }) : { handled: false };
+    process.stdout.write(JSON.stringify(result) + '\n'); return;
+  }
   const retirement = createRetirement({ cwd: canonical(opt.repo), org: opt.org, herdr: opt.herdr, verifyStateDir: opt['verify-state-dir'] });
   const plan = retirement.plan(opt.lane);
   process.stdout.write(JSON.stringify(positionals[0] === 'plan' ? plan : { plan, results: retirement.apply(plan, opt.lane) }) + '\n');

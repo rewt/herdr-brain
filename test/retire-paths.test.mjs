@@ -6,10 +6,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRetirement } from '../supervisor/retire.mjs';
-import { queueFor, finishCleanup, retryCleanup } from '../promote/promote.mjs';
+import { queueFor, finishCleanup, retryCleanup, drain } from '../promote/promote.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
+import { requestRetirement, consumeRetirement } from '../lib/retire-trigger.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
@@ -30,7 +31,7 @@ function fixture(t, { merged = true, occupied = true } = {}) {
   const head = git(['rev-parse', 'HEAD'], lane); if (merged) git(['merge', '--ff-only', head]);
   const common = fs.realpathSync(path.join(repo, '.git'));
   const state = { workspaces: [{ workspace_id: 'w', worktree: { checkout_path: lane, repo_key: common, repo_root: repo, is_linked_worktree: true } }],
-    tabs: occupied ? [{ tab_id: 'w:t' }] : [], panes: occupied ? [{ pane_id: 'w:p', tab_id: 'w:t' }] : [],
+    tabs: occupied ? [{ tab_id: 'w:t', workspace_id: 'w' }] : [], panes: occupied ? [{ pane_id: 'w:p', tab_id: 'w:t', workspace_id: 'w' }] : [],
     agents: occupied ? [{ name: 'worker', agent: 'native', agent_status: 'done', pane_id: 'w:p', tab_id: 'w:t', workspace_id: 'w',
       cwd: lane, terminal_id: 'term', agent_session: { value: 'session' }, state_change_seq: 5 }] : [], actions: [] };
   const file = path.join(scratch, 'state.json'), herdr = path.join(scratch, 'herdr');
@@ -40,14 +41,17 @@ const fs = require('node:fs'), file = ${JSON.stringify(file)}, s = JSON.parse(fs
 const out = result => console.log(JSON.stringify({ result }));
 if (a[0] === 'workspace' && a[1] === 'list') out({workspaces:s.workspaces});
 else if (a[0] === 'worktree' && a[1] === 'list') out({source:{repo_key:${JSON.stringify(common)},repo_root:${JSON.stringify(repo)},source_checkout_path:${JSON.stringify(repo)}},worktrees:[{path:${JSON.stringify(lane)},open_workspace_id:'w'}]});
-else if (a[0] === 'tab' && a[1] === 'list') out({tabs:s.tabs});
-else if (a[0] === 'pane' && a[1] === 'list') out({panes:s.panes});
-else if (a[0] === 'pane' && a[1] === 'process-info') out({process_info:{shell_pid:1,foreground_processes:[{name:'native',pid:2}],process_tree_complete:true,process_tree:[{pid:1,identity:'shell',state:'S',command:'[zsh]'},{pid:2,identity:'native',state:'S',command:'[native]'}]}});
+else if (a[0] === 'tab' && a[1] === 'list') out({tabs:s.tabs.filter(t=>t.workspace_id===a.at(-1))});
+else if (a[0] === 'pane' && a[1] === 'list') out({panes:s.panes.filter(p=>p.workspace_id===a.at(-1))});
+else if (a[0] === 'pane' && a[1] === 'process-info') out({process_info:s.watcherMode&&a.at(-1)==='main:watch:p'?{shell_pid:1,foreground_processes:[{name:'node',pid:process.ppid}],process_tree_complete:true,process_tree:[{pid:1,identity:'shell',state:'S',command:'[zsh]'},{pid:process.ppid,identity:'watcher',state:'S',command:'[node]'}]}:s.info??{shell_pid:1,foreground_processes:[{name:'native',pid:2}],process_tree_complete:true,process_tree:[{pid:1,identity:'shell',state:'S',command:'[zsh]'},{pid:2,identity:'native',state:'S',command:'[native]'}]}});
 else if (a[0] === 'agent' && a[1] === 'list') out({agents:s.agents});
 else if (a[0] === 'tab' && a[1] === 'close') {
   if(s.failClose) { console.error('injected tab failure'); process.exit(1); }
-  s.actions.push(a); s.tabs=[]; s.panes=[]; s.agents=[]; fs.writeFileSync(file,JSON.stringify(s)); out({});
+  s.actions.push(a); s.tabs=s.tabs.filter(t=>t.tab_id!==a[2]); s.panes=s.panes.filter(p=>p.tab_id!==a[2]); s.agents=s.agents.filter(g=>g.tab_id!==a[2]); fs.writeFileSync(file,JSON.stringify(s)); out({});
+  if(s.triggerOnClose){const hint=${JSON.stringify(path.join(org,'retirement/request.json'))};const r=JSON.parse(fs.readFileSync(hint));fs.writeFileSync(hint,JSON.stringify({...r,revision:r.revision+1,source:'completion during apply'}));}
 } else if(a[0] === 'workspace' && a[1] === 'close') {s.actions.push(a);s.workspaces=[];fs.writeFileSync(file,JSON.stringify(s));out({});}
+else if(a[0]==='tab'&&a[1]==='create') {s.actions.push(a);s.tabs.push({tab_id:'main:watch',workspace_id:'main'});s.panes.push({pane_id:'main:watch:p',tab_id:'main:watch',workspace_id:'main'});fs.writeFileSync(file,JSON.stringify(s));out({root_pane:{pane_id:'main:watch:p'}});}
+else if(a[0]==='pane'&&a[1]==='run') {const r=require('node:child_process').spawnSync(a[3],{shell:true,encoding:'utf8',env:{...process.env,HERDR_TAB_ID:'main:watch',HERDR_PANE_ID:'main:watch:p'}});if(r.status!==0){console.error(r.stdout+r.stderr);process.exit(1);}out({child:r.stdout});}
 else {console.error('unexpected fixture command '+a.join(' '));process.exit(1);}
 `, { mode: 0o755 });
   env.HERDR_RETIRE_HERDR = herdr;
@@ -99,6 +103,7 @@ test('promotion keeps integrated success on a live reference and retries cleanup
   assert.equal(result.outcome,'promoted'); assert.equal(result.cleanup.state,'pending'); assert.match(result.reason,/integrated-but-cleanup-pending.*host-job/);
   assert.equal(fs.existsSync(f.lane),true); assert.deepEqual(f.read().actions,[]);
   queue.transaction(data => data.results.push({...f.job,...result})); fs.unlinkSync(ref);
+  requestRetirement({ org:f.org, key:'host completed', source:'host completion' });
   // Product helpers inherit the fixture's source declarations, never the live host slot.
   const old = {};
   for(const key of ['MONITOR_TEST_SLOT_PATH','MONITOR_TEST_SLOT_COMPAT_PATH','XDG_STATE_HOME']) {old[key]=process.env[key];process.env[key]=f.env[key];}
@@ -146,5 +151,76 @@ test('installed settle-watch flags keep an ingested worker while its chain is op
   const config=path.join(f.scratch,'lane.json'),checklist=path.join(f.scratch,'CHECKLIST.md');fs.writeFileSync(config,'{}');fs.writeFileSync(checklist,'fixture');
   const r=spawnSync(process.execPath,[path.join(root,'contrib/settle-watch.mjs'),'R-1','--org',f.org,'--cwd',f.repo,
     '--lane-config',config,'--checklist',checklist,'--model','opaque-model','--effort','opaque-effort','--close-tab-on-exit'],{env:f.env,encoding:'utf8'});
-  assert.equal(r.status,0,r.stdout+r.stderr);assert.match(r.stdout,/chain is still open/);assert.deepEqual(f.read().actions,[]);
+  assert.equal(r.status,0,r.stdout+r.stderr);assert.match(f.retirement().plan().keep[0].why,/chain is still open/);assert.deepEqual(f.read().actions,[]);
+});
+
+test('a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op', t => {
+  const f=fixture(t), events=loadEvents(f.org).events.filter(e=>e.type!=='item.closed');
+  fs.writeFileSync(f.eventFile,events.map(e=>JSON.stringify(e)+'\n').join(''));
+  assert.equal(f.retirement().plan().close.length,0);
+  const r=spawnSync(process.execPath,[recordCLI,'close','ENG-1'],{cwd:f.repo,env:f.env,encoding:'utf8'});
+  assert.equal(r.status,0,r.stderr);
+  const hint=JSON.parse(fs.readFileSync(path.join(f.org,'retirement/request.json')));
+  assert.equal(hint.event_seq,loadEvents(f.org).events.at(-1).seq);
+  let observations=0;
+  const consume=()=>consumeRetirement({org:f.org,retirement:()=>{observations++;return f.retirement();}});
+  assert.equal(consume().handled,true);assert.deepEqual(f.read().actions,[['tab','close','w:t']]);
+  requestRetirement({org:f.org,eventSeq:hint.event_seq,source:'repeated disposition'});
+  assert.equal(consume().handled,false);assert.equal(observations,1);
+  // Hint writing needs no log read; the event owner supplied the sequence.
+  fs.writeFileSync(f.eventFile,'invalid event log');
+  requestRetirement({org:f.org,eventSeq:hint.event_seq+1,source:'known appended sequence'});
+});
+
+test('promote drain consumes requests at both foreground boundaries without running a gate', async t => {
+  const f=fixture(t);f.state.triggerOnClose=true;f.save();const queue=f.queue();
+  const old={};for(const key of ['ORG_DIR','HERDR_MONITOR_FLEET','HERDR_RETIRE_HERDR','MONITOR_TEST_SLOT_PATH','MONITOR_TEST_SLOT_COMPAT_PATH','XDG_STATE_HOME']){old[key]=process.env[key];process.env[key]=f.env[key];}
+  t.after(()=>{for(const[key,value]of Object.entries(old)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
+  requestRetirement({org:f.org,eventSeq:4,source:'disposition'});await drain(queue);
+  const handled=JSON.parse(fs.readFileSync(path.join(f.org,'retirement/handled.json')));
+  assert.equal(handled.revision,5);assert.deepEqual(f.read().actions,[['tab','close','w:t']]);assert.deepEqual(queue.load().results,[]);
+});
+
+test('cleanup retries are capped with backoff, record the refusal, and reset on a new request', t => {
+  const f=fixture(t), queue=f.queue(); f.state.failClose=true;f.save();
+  const old={};for(const key of ['MONITOR_TEST_SLOT_PATH','MONITOR_TEST_SLOT_COMPAT_PATH','XDG_STATE_HOME']){old[key]=process.env[key];process.env[key]=f.env[key];}
+  t.after(()=>{for(const[key,value]of Object.entries(old)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
+  const result=finishCleanup(f.job,{outcome:'promoted',tip:f.head,workspace:f.lane},queue,{now:1000});
+  assert.match(result.cleanup.last_refusal,/injected tab failure/);queue.transaction(data=>data.results.push({...f.job,...result}));
+  retryCleanup(queue,{now:1001});assert.equal(queue.load().results[0].cleanup.attempts,1);
+  for(let attempt=2;attempt<=5;attempt++) {retryCleanup(queue,{now:queue.load().results[0].cleanup.next_attempt_at});assert.equal(queue.load().results[0].cleanup.attempts,attempt);}
+  const capped=queue.load().results[0];retryCleanup(queue,{now:1e12});assert.deepEqual(queue.load().results[0],capped);
+  requestRetirement({org:f.org,key:'new completion',source:'completion'});retryCleanup(queue,{now:1e12});
+  assert.equal(queue.load().results[0].cleanup.attempts,1);assert.equal(queue.load().results[0].outcome,'promoted');
+});
+
+test('lane close permits an absent Herdr executable and refuses an unreadable installed server', t => {
+  const f=fixture(t,{occupied:false});
+  fs.writeFileSync(f.job.herdr,'#!/bin/sh\necho unreadable-server >&2\nexit 1\n',{mode:0o755});
+  const unavailable=f.close();assert.notEqual(unavailable.status,0);assert.match(unavailable.stderr,/unreadable-server/);
+  assert.equal(fs.existsSync(f.lane),true);
+  fs.unlinkSync(f.job.herdr); const absent=f.close();assert.equal(absent.status,0,absent.stderr);assert.equal(fs.existsSync(f.lane),false);
+});
+
+for(const kind of ['watcher','settle','executive','plan']) test(`tidy-tabs prunes an exited recorded ${kind} callback through the shared guard`,t=>{
+  const f=fixture(t), retirement=f.retirement();
+  retirement.recordCallback({kind,pane:'w:p',pid:2,...(['watcher','settle'].includes(kind)?{run:'R-1'}:{}),agent:'worker'});
+  f.state.agents=[];f.state.info={shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}],process_tree_complete:true,process_tree:[{pid:1,identity:'shell',state:'S',command:'[zsh]'}]};f.save();
+  const cli=()=>spawnSync(process.execPath,[path.join(root,'supervisor/tidy-tabs.mjs'),'--cwd',f.repo,'--org',f.org,'--herdr',f.job.herdr,'--org-cli',process.execPath,'--org-cli-arg',recordCLI],{env:f.env,encoding:'utf8'});
+  // A replacement shell never inherits the departed callback's authority.
+  f.state.info.process_tree[0].identity='replacement';f.save();const kept=cli();assert.equal(kept.status,0,kept.stderr);assert.deepEqual(f.read().actions,[]);
+  f.state.info.process_tree[0].identity='shell';f.save();const released=cli();assert.equal(released.status,0,released.stderr);
+  assert.deepEqual(f.read().actions,[['tab','close','w:t']]);
+});
+
+test('settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion',t=>{
+  const f=fixture(t);f.state.watcherMode=true;
+  f.state.workspaces.push({workspace_id:'main',worktree:{checkout_path:f.repo,repo_key:f.common,repo_root:f.repo,is_linked_worktree:false}});f.save();
+  fs.writeFileSync(path.join(f.scratch,'org'),`#!/bin/sh\nexec '${process.execPath}' '${recordCLI}' "$@"\n`,{mode:0o755});
+  const config=path.join(f.scratch,'lane.json'),checklist=path.join(f.scratch,'CHECKLIST.md');fs.writeFileSync(config,'{}');fs.writeFileSync(checklist,'fixture');
+  const r=spawnSync(process.execPath,[path.join(root,'contrib/settle-watch.mjs'),'R-1','--spawn','--org',f.org,'--cwd',f.repo,
+    '--lane-config',config,'--checklist',checklist,'--model','opaque-model','--effort','opaque-effort'],{env:f.env,encoding:'utf8'});
+  assert.equal(r.status,0,r.stdout+r.stderr);const state=f.read();assert.ok(state.actions.some(a=>a[0]==='tab'&&a[1]==='create'));
+  assert.deepEqual(state.actions.filter(a=>a[1]==='close'),[['tab','close','main:watch']]);
+  assert.ok(state.tabs.some(t=>t.tab_id==='w:t'));assert.equal(fs.readFileSync(f.eventFile,'utf8'),f.eventBytes);
 });

@@ -2482,7 +2482,7 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
     // before Git removes its metadata, but close it only after removal succeeds.
     // Git refusals (including locked worktrees) must preserve the running panes.
     let mismatchedMetadata = false, workspaceId;
-    const retirement = createRetirement({ cwd: REPO_ROOT, main: MAIN,
+    const retirement = createRetirement({ cwd: REPO_ROOT, main: MAIN, allowAbsentHerdr: true,
       log: entry => process.stdout.write(JSON.stringify(entry) + '\n') });
     try {
       if (!gitOnly) retirement.apply(retirement.plan(path), path);
@@ -2494,7 +2494,8 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
         onMismatch: () => { mismatchedMetadata = true; },
       });
     } catch {
-      // herdr unavailable; fall back to git below
+      // Vacancy was already proven. An absent Herdr executable permits Git
+      // removal; an unreadable installed server fails the retirement guard.
     }
     // Recheck current record, jobs, every pane/process and Git after all reads.
     try { retirement.assertVacant(path); } catch (error) { fail(`lane retained: ${error.message}`); }

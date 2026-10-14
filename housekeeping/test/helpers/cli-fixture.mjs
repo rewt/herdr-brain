@@ -12,6 +12,7 @@ export function installRuntime(root) {
   return fs.realpathSync(path.join(root, 'housekeeping/housekeeping.mjs'));
 }
 export function configureCliFixture(f) {
+  if (!fs.existsSync(path.join(f.root, 'events.jsonl'))) fs.writeFileSync(path.join(f.root, 'events.jsonl'), '');
   f.config = path.join(f.root, 'config.json'); f.state = path.join(f.root, 'state');
   fs.writeFileSync(f.config, JSON.stringify({ enabled: true, tick_seconds: 1, cleanup_seconds: 2 }));
   const fake = path.join(f.root, 'fake.mjs');

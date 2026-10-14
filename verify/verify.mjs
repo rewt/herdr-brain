@@ -378,7 +378,7 @@ export async function drain(queue, admitted, { notify } = {}) {
       const completed = await perform(queue, job);
       await deliver(queue, job, completed, notify);
       queue.transaction(data => { Object.assign(data.jobs.find(row => row.id === job.id), completed, { completed_at: stamp() }); });
-      try { requestRetirement({ org: job.org, cwd: job.repo, source: `verify job ${job.id} completion` }); } catch (e) { process.stderr.write(`retirement request deferred: ${e.message}\n`); }
+      try { requestRetirement({ org: job.org, cwd: job.repo, key: `verify:${job.id}`, source: `verify job ${job.id} completion` }); } catch (e) { process.stderr.write(`retirement request deferred: ${e.message}\n`); }
       if (completed.halted) {
         queue.transaction(data => { data.halted = { job: job.id, receipt: completed.receipt, at: stamp() }; });
         break;
@@ -419,6 +419,8 @@ export async function recover(queue, { notify } = {}) {
         if (completed) {
           await deliver(queue, job, completed, notify);
           queue.transaction(data => { Object.assign(data.jobs.find(row => row.id === job.id), completed, { completed_at: job.completed_at ?? stamp() }); });
+          if (!job.completed_at) try { requestRetirement({ org: job.org, cwd: job.repo, key: `verify:${job.id}`, source: `verify job ${job.id} completion` }); }
+          catch (e) { process.stderr.write(`retirement request deferred: ${e.message}\n`); }
           recovered.delivered.push(job.id); continue;
         }
       }

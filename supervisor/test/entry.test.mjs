@@ -13,6 +13,7 @@ import { gitProject } from '../../lib/project.mjs';
 import { joinFleet } from '../../lib/fleet.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture.mjs';
+import { requestRetirement, consumeRetirement } from '../../lib/retire-trigger.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const linuxBoot = '12345678-1234-4234-8234-123456789abc';
@@ -50,6 +51,16 @@ function fixture(t) {
   return { root: scratch, repo, org, project, binding, record, git, start };
 }
 const load = () => import('../entry.mjs');
+test('canonical supervisor entry consumes a hint once without starting housekeeping', async t => {
+  const f=fixture(t);fs.writeFileSync(path.join(f.repo,'.housekeeping.json'),'{"enabled":false}');
+  requestRetirement({org:f.org,eventSeq:1,source:'completion'});
+  const fake=fakeCommands(f);let plans=0,applies=0;
+  const command=(file,args)=>args[0].endsWith('retire.mjs') ? {status:0,stderr:'',stdout:JSON.stringify(consumeRetirement({org:f.org,retirement:()=>({
+    plan:()=>{plans++;return{keep:[],close:[],diagnostics:[]};},apply:()=>{applies++;return[];}})}))} : fake.command(file,args);
+  const {enterSupervisor}=await load();const options={cwd:f.repo,org:f.org,role:'supervisor',command,output:()=>{}};
+  enterSupervisor(options);enterSupervisor(options);assert.equal(plans,1);assert.equal(applies,1);
+  assert.equal(fake.calls.some(a=>a[0].endsWith('housekeeping.mjs')),false);
+});
 test('repository does not track a Codex project hook that can interrupt unattended workers', () => {
   assert.equal(fs.existsSync(path.join(root, '.codex/hooks.json')), false);
 });
@@ -117,7 +128,7 @@ test('entry twice restarts stopped housekeeping and dead open watchers only once
   assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
   assert.deepEqual([...fake.watching], [run]); assert.ok(!fake.watching.has(reported)); assert.ok(!fake.watching.has(live));
   assert.equal(fake.calls.filter(a => a[0].endsWith('housekeeping.mjs')).length, 1);
-  assert.equal(fake.calls.slice(count).filter(a => !a[0].endsWith('supervisor.mjs')).length, 0);
+  assert.deepEqual(fake.calls.slice(count).filter(a => !a[0].endsWith('supervisor.mjs')).map(a => [path.basename(a[0]), a[1]]), [['retire.mjs', 'consume']]);
   assert.ok(output.join('').includes('Supervisor cold start'));
 });
 

@@ -174,9 +174,17 @@ function retireTabs() {
     if (!dry) retirement.apply(plan);
   } catch (error) { log(`retirement kept panes: ${error.message}`); }
 }
-// The running watcher is a live callback, and its own tab remains occupied.
-// A later reconciliation can reconsider it after the process exits.
-function closeOwnTab() { if (opt['close-tab-on-exit']) retireTabs(); }
+function closeOwnTab() {
+  if (!opt['close-tab-on-exit'] || dry || !process.env.HERDR_TAB_ID || !process.env.HERDR_PANE_ID) return;
+  try {
+    const retirement = createRetirement({ cwd: opt.cwd, org: opt.org,
+      selfRetirement: { tab: process.env.HERDR_TAB_ID, pane: process.env.HERDR_PANE_ID, pid: process.pid },
+      log: entry => log(JSON.stringify(entry)) });
+    const plan = retirement.plan();
+    retirement.apply({ ...plan, close: plan.close.filter(t => t.tab_id === process.env.HERDR_TAB_ID) });
+    for (const kept of plan.keep.filter(t => t.tab_id === process.env.HERDR_TAB_ID)) log(`keep ${kept.tab_id}: ${kept.why}`);
+  } catch (error) { log(`self-retirement kept watcher: ${error.message}`); }
+}
 const finish = (msg) => { if (msg) log(msg); closeOwnTab(); process.exit(0); };
 function closeWorkerTab() { retireTabs(); }
 function pruneSessionTabs() { retireTabs(); }
@@ -206,6 +214,10 @@ if (!dry && !opt.open) {
   } catch { /* no lock */ }
   fs.writeFileSync(lock, String(process.pid));
   process.on('exit', () => { try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {} });
+}
+if (!dry && !opt.open && process.env.HERDR_TAB_ID && process.env.HERDR_PANE_ID) {
+  try { createRetirement({ cwd: opt.cwd, org: opt.org }).recordCallback({ kind: 'watcher', pane: process.env.HERDR_PANE_ID, pid: process.pid, run: runId }); }
+  catch (error) { log(`watcher launch receipt unavailable: ${error.message}`); }
 }
 
 // Account and memory settings exactly as `ai claude` would choose them in --cwd.
@@ -334,6 +346,9 @@ function openSession({ mode, r }) {
     log(`agent start attempt ${attempt} failed: ${started.error}`);
   }
   if (!started.ok) die(`settle session did not start in ${pane}: ${started.error}`);
+  if (!dry) try { createRetirement({ cwd: opt.cwd, org: opt.org }).recordCallback({
+    kind: mode === 'settle' ? 'settle' : 'executive', pane, agent: name, ...(runId ? { run: runId } : {}) }); }
+  catch (error) { log(`session launch receipt unavailable: ${error.message}`); }
   const want = env.find((e) => e.startsWith('CLAUDE_CONFIG_DIR='));
   if (!dry && want && pick.kind === 'claude') {
     const shell = herdr(['pane', 'process-info', '--pane', pane]).result?.process_info?.shell_pid;

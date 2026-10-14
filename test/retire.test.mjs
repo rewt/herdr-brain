@@ -38,6 +38,35 @@ test('ingestion AND terminal chain plus clean integrated Git releases; no report
   assert.deepEqual(actions, ['w:t']);
 });
 
+test('process state changes do not change identity tokens, but stopped processes still keep on fresh decision', () => {
+  const s=fixture(), plan=planRetirement(s);
+  s.panes[0].process_info.process_tree[1].state='R';
+  assert.equal(planRetirement(s).close[0].token,plan.close[0].token);
+  assert.equal(executeRetirement(plan,{observe:()=>s,close:()=>{}})[0].action,'closed');
+  s.panes[0].process_info.process_tree[1].state='T';
+  const refused=executeRetirement(plan,{observe:()=>s,close:()=>assert.fail('stopped process')});
+  assert.equal(refused[0].action,'skip-close');assert.match(refused[0].why,/process/);
+});
+
+test('narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities', () => {
+  const base=fixture();base.agents=[];base.selfTab='w:t';base.selfRetirement={tab:'w:t',pane:'w:p',pid:10};
+  base.callbacks=[{schema:'retirement-occupant/v1',kind:'watcher',common:base.common,cwd:'/repo/lane',workspace:'w',tab:'w:t',pane:'w:p',run:'R-1',
+    shell:{pid:5,identity:'shell',command:'[zsh]'},process:{pid:10,identity:'agent',command:'[native]'},process_gone:false}];
+  assert.equal(planRetirement(base).close.length,1);
+  for(const variant of ['focus','extra-pane','extra-process','job','not-ingested','wrong-pid','wrong-birth','live-other-callback']) {
+    const s=structuredClone(base);
+    if(variant==='focus')s.tabs[0].focused=true;
+    if(variant==='extra-pane')s.panes.push({...s.panes[0],pane_id:'w:q'});
+    if(variant==='extra-process')s.panes[0].process_info.process_tree.push({pid:99,identity:'extra',command:'server',state:'S'});
+    if(variant==='job')s.references.push({kind:'job',item:'ENG-1'});
+    if(variant==='not-ingested')s.record.runs.get('R-1').report=null;
+    if(variant==='wrong-pid')s.selfRetirement.pid=99;
+    if(variant==='wrong-birth')s.callbacks[0].process.identity='replacement';
+    if(variant==='live-other-callback')delete s.selfRetirement;
+    assert.equal(planRetirement(s).close.length,0,variant);
+  }
+});
+
 for (const variant of ['report-file-only', 'report-before-review', 'blocked', 'needs-human', 'working', 'unknown', 'wrong-common',
   'wrong-head', 'dirty', 'wrong-terminal', 'wrong-session', 'wrong-pane', 'wrong-cwd', 'new-shell', 'other-program',
   'focused', 'lab', 'persistent', 'operator', 'missing-process']) test(`keeps ${variant}`, () => {

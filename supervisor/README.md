@@ -8,7 +8,8 @@ adoption preview, including keep reasons and expired-reference diagnostics.
 `--lane PATH` scopes actions to one lane; `--verify-state-dir DIR` declares a
 nondefault trusted verification store. Neither command starts a schedule or
 calls a model. Use reviewed installed code for live application. Startup/shift
-entry prints a plan to catch missed events; this change starts no new schedule.
+entry consumes pending requests through a fresh plan and guarded apply; this
+change starts no new schedule.
 
 The one pure policy is [lib/retire.mjs](../lib/retire.mjs). Its snapshots contain
 the record fold, canonical Git common directory and lane head, Herdr topology,
@@ -33,6 +34,22 @@ are immutable; the fold's shape and exports are unchanged and older folds ignore
 the handoff event. A live native session needs its recorded launch session id;
 a terminal-only legacy receipt cannot authorize a later native session. Labels, ledgers and session display metadata never authorize
 retirement, so unrecorded reviewer, session and watcher tabs stay.
+
+Short-lived watcher and settle/executive/plan launches can write a mechanical
+`retirement-occupant/v1` receipt under `ORG/retirement/occupants/`. It binds the
+canonical common directory, cwd, workspace, tab, pane, shell PID and kernel birth,
+and callback PID, birth and command; session launches also bind the agent's
+terminal and native session. This receipt is independent of the display registry.
+The shared planner can prune an unchanged shell after the recorded process exits
+and its callback completes. A watcher requires an ingested report; settle sessions
+also require a terminal chain, and other sessions require no open run in their cwd.
+Live jobs, unknown occupants, background processes, changed shells, operator focus,
+and persistent/operator/lab workspace guards still keep. Recorded short-lived tabs
+in the canonical checkout can retire without treating the desk itself as a lane.
+`settle-watch --spawn` still appends `--close-tab-on-exit`. At its final instruction
+that flag permits only its own recorded tab, pane, PID and birth to retire after
+report ingestion, with no other occupant or process. If its guarded close fails,
+a later tidy pass can reconsider its exited-process receipt.
 
 Live sources are `<git-common>/promote/queue.json` (pending, current, interrupted
 and reconciliation-pending jobs), the default trusted `verify-queue/v1` store
@@ -78,11 +95,21 @@ ever keep; the planner never writes them.
 
 Report ingestion, review/disposition and job completion coalesce a foreground
 request in `ORG/retirement/request.json`. This is a revision hint, never stored
-status or permission to close. Existing housekeeping reconciliation reads fresh
-authority; promotion also performs its scoped cleanup after reconciliation.
+status or permission to close. Event writers supply the sequence they just
+appended, without another log read; job completions supply a unique completion
+key. A coalesced monotonically increasing request revision identifies each hint.
+Canonical supervisor entry and both ends of a foreground promote drain consume
+it once through the shared plan and guarded apply, recording the handled revision
+and actual keep/refusal reasons. A repeated hint is a no-op; a hint arriving during
+apply remains pending. `node supervisor/retire.mjs consume --repo CHECKOUT --org RECORD`
+provides the same finite catch-up. Existing housekeeping reads fresh authority;
+promotion also performs its scoped cleanup after reconciliation.
 `skip-close` logs the fresh refusal. Promotion retains its successful outcome
 with `cleanup.state: pending` and `integrated-but-cleanup-pending`; a subsequent
 queue drain retries only cleanup, without revalidation or another integration.
+Per-result retries wait one minute, then back off exponentially, capped at five
+attempts for unchanged record/request revisions. A changed record or request
+revision permits another attempt immediately; receipts retain the last refusal.
 `lane close --git-only` requires zero live panes before removing the worktree,
 even when a pane is eligible but not yet closed. Lane archival/evidence durability
 preflight remains the separate lane-removal work.

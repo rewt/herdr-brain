@@ -101,6 +101,10 @@ Git-only worktree removal. Cleanup refusal/failure is retained as
 promoted outcome and successful gate. A later `--drain` retries this cleanup
 checkpoint only; it never revalidates or reintegrates it. The current keep reason
 and close errors remain in the per-job cleanup JSONL.
+Unchanged record/request revisions allow at most five cleanup attempts, with
+exponential backoff starting at one minute. A new revision resets that budget;
+`cleanup.last_refusal`, attempt count and next-attempt time remain visible. The
+drain consumes retirement hints once at its foreground start and end.
 See [safe retirement](../supervisor/README.md#safe-retirement) for references,
 immutable launch identity and the installed `plan|apply` adoption CLI.
 

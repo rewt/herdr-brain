@@ -33,7 +33,7 @@ build() {
   mkdir "$dir.partial" || die "$dir.partial already exists; inspect the unfinished build"
   git -C "$REPO" archive "refs/tags/$tag" | tar -x -C "$dir.partial"
   git -C "$REPO" rev-parse "refs/tags/$tag^{commit}" > "$dir.partial/.release-commit"
-  for file in bin/org.mjs lanes/lane.mjs contrib/settle-watch.mjs lib/cli-help.mjs; do
+  for file in bin/org.mjs lanes/lane.mjs contrib/settle-watch.mjs lib/cli-help.mjs verify/verify.mjs verify/execute.mjs verify/expectations.mjs; do
     [ -f "$dir.partial/$file" ] || die "release is missing $file"
   done
   # Like the promotion train, queue for the shared host test slot instead of refusing while another

@@ -1,0 +1,307 @@
+#!/usr/bin/env node
+// A model-free queue outside the core record. Only explicit admission starts a
+// finite detached worker, inheriting that admitting process's native permissions.
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawn, execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { parseArgs, isMain } from '../lib/cli-help.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { findOrgDir, loadEvents, transact } from '../lib/store.mjs';
+import { fold } from '../lib/state.mjs';
+import { plainDirectory, writeFileAtomic } from '../lib/files.mjs';
+import { acquireLock } from '../lanes/promotion-lock.mjs';
+import { environmentFingerprint, validationEnvironment } from '../lanes/validation.mjs';
+import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
+import { limitSeconds } from '../test-slot/limits.mjs';
+import { sha256, fileSha256, parseExpectations, evaluate } from './expectations.mjs';
+
+const SELF = fileURLToPath(import.meta.url);
+const SLOT = fileURLToPath(new URL('../test-slot/test-slot.mjs', import.meta.url));
+const EXECUTE = fileURLToPath(new URL('./execute.mjs', import.meta.url));
+const stamp = () => new Date().toISOString();
+const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000 }).trim();
+const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+const optional = file => fs.existsSync(file) ? read(file) : null;
+const privateDir = directory => { plainDirectory(directory); fs.chmodSync(directory, 0o700); return directory; };
+const safeID = value => typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(value);
+
+export function queueFor(repo = process.cwd(), stateDir) {
+  const project = gitProject(repo);
+  const directory = privateDir(path.resolve(stateDir ?? path.join(project.identity, 'verify')));
+  const file = path.join(directory, 'queue.json');
+  const load = () => {
+    const data = optional(file) ?? { schema: 'verify-queue/v1', identity: project.identity, jobs: [], desks: {}, runner: null };
+    if (data.schema !== 'verify-queue/v1' || data.identity !== project.identity || !Array.isArray(data.jobs)) throw Error('invalid verification queue identity or contents');
+    return data;
+  };
+  const transaction = fn => {
+    const release = acquireLock(path.join(directory, 'queue.lock'), { waitMs: 5000 });
+    try { const data = load(), result = fn(data); writeFileAtomic(file, JSON.stringify(data, null, 2) + '\n', 0o600); return result; }
+    finally { release(); }
+  };
+  return { project, directory, load, transaction };
+}
+
+// The only scheduling policy: submission order among admitted, unfinished jobs.
+export function orderedJobs(data) { return data.jobs.filter(job => job.admission && !job.completed_at); }
+export function receiptPath(queue, job) { return path.join(queue.directory, 'jobs', job.id, 'receipt.json'); }
+export function writeReceipt(file, receipt) {
+  const bytes = JSON.stringify(receipt, null, 2) + '\n';
+  const fd = fs.openSync(file, 'wx', 0o600);
+  try { fs.writeFileSync(fd, bytes); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  return sha256(bytes);
+}
+function checkItem(org, item) {
+  if (!fold(loadEvents(org).events).items.has(item)) throw Error(`unknown item ${item}`);
+}
+export function submit(queue, opt, argv, prepare = null) {
+  if (!argv.length || argv.some(arg => typeof arg !== 'string' || arg.includes('\0'))) throw Error('submit requires command argv after --');
+  if (prepare && (!prepare.length || prepare.some(arg => typeof arg !== 'string' || arg.includes('\0')))) throw Error('--prepare requires command argv');
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(opt.sha ?? '')) throw Error('--sha requires a full commit hash');
+  const sha = git(queue.project.canonical, 'rev-parse', '--verify', `${opt.sha}^{commit}`);
+  if (sha !== opt.sha) throw Error('--sha must name the exact commit');
+  const tree = git(queue.project.canonical, 'rev-parse', `${sha}^{tree}`);
+  const org = fs.realpathSync(opt.org ?? findOrgDir({ cwd: queue.project.canonical }) ?? '');
+  checkItem(org, opt.item);
+  if (opt.group !== undefined && !safeID(opt.group)) throw Error('invalid group ID');
+  const deskName = opt.desk ?? 'default';
+  if (!path.isAbsolute(deskName) && !safeID(deskName)) throw Error('--desk requires a name or absolute path');
+  const desk = path.isAbsolute(deskName) ? path.resolve(deskName) : path.join(queue.directory, 'desks', deskName);
+  if (queue.directory === desk || queue.directory.startsWith(desk + path.sep)) throw Error('desk cannot contain the runner state');
+  const wall = Number(opt['timeout-seconds'] ?? 4500), idle = Number(opt['idle-timeout-seconds'] ?? 300);
+  limitSeconds(wall, '--timeout-seconds'); limitSeconds(idle, '--idle-timeout-seconds');
+  const wait = Number(opt.wait ?? 86400);
+  if (!Number.isSafeInteger(wait) || wait < 0 || wait > 9999999) throw Error('--wait requires bounded whole seconds');
+  const to = opt.to ?? process.env.MONITOR_SUPERVISOR_AGENT ?? 'supervisor-herdr';
+  if (!to.trim()) throw Error('notice recipient must be nonempty');
+  const expectations = parseExpectations(opt);
+  const job = { id: randomUUID(), repo: queue.project.canonical, identity: queue.project.identity, org, item: opt.item,
+    submitter: process.env.ORG_ACTOR ?? 'human', submitted_at: stamp(), sha, tree, group: opt.group ?? null,
+    desk, desk_name: deskName, argv, prepare, expectations, timeout_seconds: wall, idle_timeout_seconds: idle,
+    wait_seconds: wait, label: opt.label ?? `verify ${opt.item}`, to, herdr: opt.herdr ?? 'herdr' };
+  queue.transaction(data => {
+    for (const prior of data.jobs) if (desk !== prior.desk && (desk.startsWith(prior.desk + path.sep) || prior.desk.startsWith(desk + path.sep))) throw Error('desk worktrees must not overlap');
+    const first = job.group && data.jobs.find(prior => prior.group === job.group);
+    if (first && (first.sha !== sha || first.tree !== tree)) throw Error(`group ${job.group} is fixed at sha ${first.sha} tree ${first.tree}`);
+    data.jobs.push(job);
+  });
+  return { job: job.id, receipt: receiptPath(queue, job) };
+}
+
+// An existing worker cannot inherit a later admitter's permission context. Refuse
+// overlapping admission rather than guessing from harness/provider metadata.
+export function admit(queue, ids) {
+  if (!ids.length || new Set(ids).size !== ids.length) throw Error('admit requires unique job IDs');
+  const token = randomUUID(), at = stamp();
+  queue.transaction(data => {
+    if (data.runner) throw Error('a verification admission is active; inspect status and admit after it finishes (never remove a live worker lock)');
+    if (fs.existsSync(path.join(queue.directory, 'worker.lock'))) throw Error('worker lock remains; inspect its owner and surviving processes before recovery');
+    for (const id of ids) {
+      const job = data.jobs.find(job => job.id === id);
+      if (!job || job.completed_at || fs.existsSync(receiptPath(queue, job))) throw Error(`job ${id} is unknown or already has a receipt`);
+      if (job.started_at) throw Error(`job ${id} was interrupted; inspect it and retry as a new job`);
+    }
+    for (const job of data.jobs.filter(job => ids.includes(job.id))) job.admission = { token, admitted_at: at, admitted_by: process.env.ORG_ACTOR ?? 'human' };
+    data.runner = { token, admitted_at: at, admitted_by: process.env.ORG_ACTOR ?? 'human', jobs: ids };
+  });
+  return token;
+}
+function clean(desk) {
+  if (git(desk, 'status', '--porcelain', '--untracked-files=all')) throw Error(`desk is dirty: ${desk}`);
+}
+function deskFor(queue, job) {
+  const registered = queue.load().desks[job.desk];
+  if (!registered) {
+    if (fs.existsSync(job.desk)) throw Error(`desk was not created by this runner: ${job.desk}`);
+    plainDirectory(path.dirname(job.desk));
+    git(job.repo, 'worktree', 'add', '--detach', job.desk, job.sha);
+    queue.transaction(data => { data.desks[job.desk] = { identity: job.identity, created_at: stamp() }; });
+  }
+  plainDirectory(job.desk, { create: false });
+  if (gitProject(job.desk).identity !== job.identity || git(job.desk, 'rev-parse', '--show-toplevel') !== fs.realpathSync(job.desk) || git(job.desk, 'branch', '--show-current')) throw Error('desk must be its registered detached worktree');
+}
+function restore(job, previous) {
+  // This is a dedicated runner-created worktree, never a worker's checkout.
+  git(job.desk, 'checkout', '--detach', '--force', previous);
+  git(job.desk, 'reset', '--hard', previous);
+  git(job.desk, 'clean', '-fd'); // ignored pnpm/build caches deliberately survive
+  clean(job.desk);
+  if (git(job.desk, 'rev-parse', 'HEAD') !== previous) throw Error('desk restoration changed its commit');
+}
+async function runSlot(queue, job, directory, log) {
+  const args = [SLOT, 'run', job.label, '--wait', String(job.wait_seconds),
+    '--wait-receipt-path', path.join(directory, 'slot-wait.json'), '--result-path', path.join(directory, 'slot-result.json'),
+    '--timeout-seconds', String(job.timeout_seconds + 60), '--idle-timeout-seconds', String(job.idle_timeout_seconds + 60),
+    '--project-common', job.identity, '--tier', 'verify', '--', process.execPath, EXECUTE, '--hold', path.join(directory, 'spec.json'), directory];
+  // Never inherit a stale slot token into an admitted job as nesting authority.
+  const env = validationEnvironment(process.env);
+  delete env.MONITOR_TEST_SLOT_TOKEN; delete env.BCH_CLOAK_TEST_SLOT_TOKEN;
+  return await new Promise((resolve, reject) => {
+    const proc = spawn(process.execPath, args, { cwd: job.desk, env, stdio: ['ignore', log, log] });
+    proc.once('error', reject); proc.once('exit', (exit, signal) => resolve({ exit, signal }));
+  });
+}
+export async function perform(queue, job) {
+  const directory = privateDir(path.join(queue.directory, 'jobs', job.id));
+  const receipt = receiptPath(queue, job);
+  if (fs.existsSync(receipt)) throw Error('receipt already exists; execution will not be replayed');
+  const logPath = path.join(directory, 'execution.log'), log = fs.openSync(logPath, 'wx', 0o600);
+  const start = process.hrtime.bigint();
+  const result = { schema: 'verify-receipt/v1', job: job.id, repo: job.repo, repo_identity: job.identity,
+    item: job.item, submitter: job.submitter, group: job.group, sha: job.sha, tree: job.tree,
+    desk: job.desk, desk_previous_sha: null, argv: job.argv, prepare: job.prepare ? { argv: job.prepare, exit: null, duration_s: null } : 'none',
+    environment_fingerprint: environmentFingerprint({ env: validationEnvironment(process.env), prepare: job.prepare ?? [] }),
+    submitted_at: job.submitted_at, admitted_at: job.admission.admitted_at, admitted_by: job.admission.admitted_by,
+    slot_wait_started_at: null, granted_at: null, slot_waits: [], started_at: null, finished_at: null,
+    exit: null, signal: null, outcome: 'error', timeout: null, reaped_processes: [] };
+  let previous, checkedOut = false, halted = false, safeToRestore = true;
+  try {
+    deskFor(queue, job);
+    previous = result.desk_previous_sha = git(job.desk, 'rev-parse', 'HEAD');
+    clean(job.desk);
+    checkedOut = true; git(job.desk, 'checkout', '--detach', job.sha);
+    if (git(job.desk, 'rev-parse', 'HEAD^{tree}') !== job.tree) throw Error('desk tree differs from submitted tree');
+    git(job.desk, 'clean', '-fd');
+    writeFileAtomic(path.join(directory, 'spec.json'), JSON.stringify(job), 0o600);
+    result.slot_wait_started_at = stamp();
+    safeToRestore = false;
+    const wrapper = await runSlot(queue, job, directory, log);
+    const wait = optional(path.join(directory, 'slot-wait.json'));
+    const envelope = optional(path.join(directory, 'slot-result.json'));
+    const execution = optional(path.join(directory, 'job-result.json'));
+    const phases = optional(path.join(directory, 'phases.json'));
+    result.slot_waits = wait?.waits ?? [];
+    result.granted_at = wait?.acquired_at ?? null;
+    result.started_at = execution?.started_at ?? null;
+    result.slot_execution = execution;
+    result.slot_envelope = envelope;
+    result.timeout = execution?.gate_timeout ?? envelope?.gate_timeout ?? null;
+    result.reaped_processes = phases?.reaped ?? [];
+    safeToRestore = (Boolean(envelope?.finished_at) && !envelope.cleanup_error && !execution?.cleanup_error && phases?.cleanup_confirmed === true) || (!envelope && wrapper.exit === 75);
+    if (phases?.prepare && phases.prepare !== 'none') result.prepare = { ...result.prepare, ...phases.prepare };
+    result.command = phases?.command ?? null;
+    result.exit = phases?.command?.exit ?? null;
+    result.signal = phases?.command?.signal ?? execution?.signal ?? envelope?.signal ?? wrapper.signal;
+    const checked = await evaluate(job.expectations, { desk: job.desk, exit: result.exit, signal: result.signal, log: path.join(directory, 'command.log') });
+    Object.assign(result, checked);
+    if (!wait || !execution?.finished_at || !safeToRestore || execution.cleanup_error || phases?.error || phases?.command?.error || wrapper.exit !== 0 || phases?.wrapper?.exit !== 0 || result.timeout || !phases?.command?.finished_at || (job.prepare && phases?.prepare?.exit !== 0)) {
+      result.error = envelope?.cleanup_error ?? execution?.cleanup_error ?? phases?.cleanup_error ?? phases?.error ?? (result.timeout ? `job ${result.timeout.kind} timeout` : !wait ? 'slot not granted; see private execution log' : 'execution or prepare did not complete successfully');
+      halted = !safeToRestore || Boolean(execution?.cleanup_error || phases?.error);
+    } else result.outcome = checked.expectations.every(row => row.passed) ? 'pass' : 'fail';
+  } catch (error) { result.error = error.message; halted = true; }
+  finally {
+    if (checkedOut && safeToRestore) {
+      try { restore(job, previous); result.desk_restored = true; }
+      catch (error) { result.outcome = 'error'; result.restore_error = error.message; halted = true; }
+    }
+    fs.closeSync(log);
+  }
+  if (!result.expectations) result.expectations = job.expectations.map(expectation => ({ ...expectation, passed: false, error: 'job did not complete' }));
+  result.finished_at = stamp(); result.duration_s = Number(process.hrtime.bigint() - start) / 1e9;
+  const logs = ['execution', 'prepare', 'command'].map(name => path.join(directory, `${name}.log`)).filter(file => fs.existsSync(file));
+  result.logs = await Promise.all(logs.map(async file => ({ path: file, sha256: await fileSha256(file) })));
+  result.halted = halted;
+  const hash = writeReceipt(receipt, result);
+  return { receipt, sha256: hash, outcome: result.outcome, halted };
+}
+
+export async function deliver(queue, job, completed, notify = promptSupervisor) {
+  const text = `[verify] job=${job.id} item=${job.item} outcome=${completed.outcome} receipt=${completed.receipt} sha256=${completed.sha256}`;
+  // The record lock makes recovery idempotent across a lost note acknowledgement.
+  transact(job.org, events => {
+    if (!fold(events).items.has(job.item)) throw Error(`unknown item ${job.item}`);
+    return { add: events.some(event => event.type === 'note.added' && event.id === job.item && event.text === text) ? [] : [{ type: 'note.added', id: job.item, text, decision: false }] };
+  }, { actor: job.submitter });
+  await notify(job.to, text, { org: job.org, cwd: job.repo, inbox: inboxPath({ org: job.org }),
+    id: `verify:${job.id}`, herdr: job.herdr, waitSeconds: 0, pollSeconds: 1 });
+}
+export async function drain(queue, token, { notify } = {}) {
+  const release = acquireLock(path.join(queue.directory, 'worker.lock'));
+  try {
+    queue.transaction(data => {
+      if (data.runner?.token !== token) throw Error('worker has no matching explicit admission');
+      data.runner.pid = process.pid;
+    });
+    process.send?.({ ready: true });
+    for (;;) {
+      const job = orderedJobs(queue.load()).find(job => job.admission.token === token);
+      if (!job) break;
+      // A crash may have happened after executing or after exclusive publication.
+      // Never replay. Published receipts can finish note/notice delivery safely.
+      let completed;
+      const file = receiptPath(queue, job);
+      if (fs.existsSync(file)) {
+        const result = read(file);
+        completed = { receipt: file, sha256: sha256(fs.readFileSync(file)), outcome: result.outcome, halted: result.halted };
+      } else {
+        if (job.started_at) throw Error(`interrupted job ${job.id}; inspect execution and descendants before recovery; retry is a new job`);
+        queue.transaction(data => { data.jobs.find(row => row.id === job.id).started_at = stamp(); });
+        completed = await perform(queue, job);
+      }
+      await deliver(queue, job, completed, notify);
+      queue.transaction(data => { Object.assign(data.jobs.find(row => row.id === job.id), completed, { completed_at: stamp() }); });
+      if (completed.halted) {
+        queue.transaction(data => { data.halted = { job: job.id, receipt: completed.receipt, at: stamp() }; });
+        break;
+      }
+    }
+    queue.transaction(data => {
+      // A halted batch cannot leave jobs apparently runnable by a worker whose
+      // permission context no longer exists. They require a new explicit admit.
+      for (const job of data.jobs.filter(job => !job.completed_at && job.admission?.token === token)) {
+        job.previous_admissions = [...(job.previous_admissions ?? []), job.admission];
+        delete job.admission;
+      }
+      data.runner = null;
+    });
+  } finally { release(); }
+}
+export async function startWorker(queue, token) {
+  const output = fs.openSync(path.join(queue.directory, 'worker.log'), 'a', 0o600);
+  let child;
+  try { child = spawn(process.execPath, [SELF, '--worker', token, '--repo', queue.project.canonical, '--state-dir', queue.directory], {
+    cwd: queue.project.canonical, env: validationEnvironment(process.env), detached: true, stdio: ['ignore', output, output, 'ipc'],
+  }); } finally { fs.closeSync(output); }
+  return await new Promise((resolve, reject) => {
+    const finish = error => { clearTimeout(timer); child.removeAllListeners(); if (child.connected) child.disconnect(); child.unref(); error ? reject(error) : resolve(); };
+    const timer = setTimeout(() => finish(Error(`worker startup unconfirmed; inspect ${queue.directory}/worker.log`)), 5000);
+    child.once('error', finish); child.once('exit', code => finish(Error(`worker exited ${code}; inspect worker.log`)));
+    child.once('message', message => finish(message.ready ? null : Error(message.error ?? 'worker startup failed')));
+  });
+}
+export function status(queue, { id, group } = {}) {
+  const data = queue.load();
+  const jobs = data.jobs.filter(job => (!id || job.id === id) && (!group || job.group === group)).map(job => ({ ...job,
+    receipt: receiptPath(queue, job), state: job.completed_at ? job.outcome : job.started_at ? 'running-or-interrupted' : job.admission ? 'admitted' : 'pending-admission' }));
+  return { identity: data.identity, runner: data.runner, halted: data.halted ?? null, jobs };
+}
+export async function main(args = process.argv.slice(2)) {
+  const separator = args.indexOf('--');
+  let options = separator < 0 ? args : args.slice(0, separator), prepare = null;
+  const prepareAt = options.indexOf('--prepare');
+  if (prepareAt >= 0) { prepare = options.slice(prepareAt + 1); options = options.slice(0, prepareAt); }
+  const { values: opt, positionals } = parseArgs({ args: options, allowPositionals: true, options: {
+    ...Object.fromEntries(['repo', 'org', 'item', 'sha', 'label', 'to', 'desk', 'group', 'state-dir', 'timeout-seconds', 'idle-timeout-seconds', 'wait', 'worker', 'herdr'].map(name => [name, { type: 'string' }])),
+    ...Object.fromEntries(['expect', 'expect-tap', 'expect-vitest', 'expect-test', 'expect-file', 'expect-json'].map(name => [name, { type: 'string', multiple: true }])),
+    admit: { type: 'boolean' },
+  }, usage: 'verify.mjs submit OPTIONS [--prepare CMD ARGS...] -- CMD ARGS... | admit JOB... | status [JOB] [--group ID]' });
+  const queue = queueFor(opt.repo, opt['state-dir']);
+  if (opt.worker) return await drain(queue, opt.worker);
+  const [action, ...ids] = positionals;
+  if (action === 'submit') {
+    if (ids.length) throw Error('unexpected submit argument');
+    const submitted = submit(queue, opt, separator < 0 ? [] : args.slice(separator + 1), prepare);
+    console.log(JSON.stringify(submitted));
+    if (opt.admit) { const token = admit(queue, [submitted.job]); await startWorker(queue, token); }
+    return;
+  }
+  if (action === 'admit') { const token = admit(queue, ids); await startWorker(queue, token); console.log(JSON.stringify({ admitted: ids })); return; }
+  if (action === 'status' && ids.length <= 1) { console.log(JSON.stringify(status(queue, { id: ids[0], group: opt.group }))); return; }
+  throw Error('usage: verify.mjs submit|admit|status; see --help');
+}
+if (isMain(import.meta.url)) {
+  try { await main(); }
+  catch (error) { process.send?.({ ready: false, error: error.message }); console.error(`verify: ${error.message}`); process.exitCode = 1; }
+}

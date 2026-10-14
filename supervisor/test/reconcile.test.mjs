@@ -222,6 +222,73 @@ test(`finish reconciles a reverted ${change} without refresh with ${legacy ? 'ol
   assert.equal(fs.readFileSync(f.prepared, 'utf8'), original);
 });
 
+for (const legacy of [false, true]) for (const change of ['question', 'link'])
+test(`a plain note and reverted ${change} on the same member refresh with ${legacy ? 'older' : 'new'} receipts`, () => {
+  const f = fixture();
+  f.events = appended(f.events, { type: 'note.added', id: 'ENG-1', text: 'Note retained from preparation' });
+  for (const entry of [...f.plan.items, ...f.plan.excluded]) entry.expected = completionFingerprint(fold(f.events), entry.item);
+  if (!legacy) f.plan.prepared_seq = f.events.at(-1).seq;
+  // The new note precedes the revert so older receipts recover the original
+  // boundary rather than the later matching state after the revert.
+  const reverted = change === 'question' ? [
+    { type: 'item.added', id: 'HUM-1', parent: 'ENG-1', role: 'human', title: 'Proceed?' },
+    { type: 'item.closed', id: 'HUM-1', as: 'done' },
+  ] : [
+    { type: 'link.added', blocker: 'ENG-3', blocked: 'ENG-1' },
+    { type: 'link.removed', blocker: 'ENG-3', blocked: 'ENG-1' },
+  ];
+  const tail = [{ type: 'note.added', id: 'ENG-1', text: 'Inspected supervisor note' }, ...reverted];
+  const events = appended(f.events, ...tail), state = fold(events), delta = completionDelta(state, events, f.plan);
+  // ENG-2 also fingerprints ENG-1 as its blocker, so the note affects both.
+  assert.deepEqual(delta.items.map(e => e.item), ['ENG-2', 'ENG-1']);
+  assert.ok(delta.items.every(e => e.acceptance_relevant === false));
+  const member = delta.items.find(e => e.item === 'ENG-1');
+  assert.deepEqual(member.events.map(e => e.event), events.slice(f.events.length));
+  assert.deepEqual(member.events.map(e => e.acceptance_relevant), [false, true, true]);
+  const { message, accepted } = refusal(() => f.complete(f.plan, events));
+  for (const e of tail) assert.ok(message.includes(e.type), message);
+  const refreshed = refreshCompletionEvents(state, events, f.plan, f.plan.org, accepted, 'Inspected the note and reverted change');
+  assert.deepEqual(refreshed.add[0].items, delta.items);
+  const completed = f.complete(f.plan, appended(events, ...refreshed.add));
+  const final = fold(appended(events, ...refreshed.add, ...completed.add));
+  assert.equal(itemStatus(final, 'ENG-1'), 'done');
+  assert.deepEqual(final.items.get('ENG-1').notes.slice(0, 2).map(n => n.text),
+    ['Note retained from preparation', 'Inspected supervisor note']);
+});
+
+for (const decision of [false, true])
+test(`an asked and answered question followed by a ${decision ? 'decision' : 'plain'} note ${decision ? 'refuses refresh' : 'refreshes and finishes'}`, t => {
+  const f = integration(t); f.prepare();
+  const original = fs.readFileSync(f.prepared, 'utf8');
+  git(f.root, 'merge', '--ff-only', f.head); fs.writeFileSync(f.log, 'original successful gate\n');
+  const start = f.events().length;
+  const question = f.ok(['ask', 'Proceed after integration?', '--parent', 'ENG-1', '--category', 'design',
+    '--recommend', 'yes', '--why', 'Confirm the integrated work', '--wait']).trim();
+  f.ok(['answer', question, 'yes']);
+  f.ok(['note', 'ENG-1', decision ? 'Changed acceptance decision' : 'Retained supervisor note', ...(decision ? ['--decision'] : [])]);
+  const before = f.events(), { message, accepted } = refusal(f.finish);
+  const receipt = fs.readFileSync(f.prepared + '.record.json', 'utf8');
+  const delta = completionDelta(fold(before), before, JSON.parse(receipt));
+  assert.equal(delta.items[0].acceptance_relevant, decision);
+  assert.deepEqual(delta.items[0].events.map(e => e.event), before.slice(start));
+  for (const e of before.slice(start)) assert.ok(message.includes(`seq ${e.seq}: ${e.type}`), message);
+  if (decision) {
+    assert.throws(() => f.refresh(accepted), /cannot be refreshed as plain notes/);
+    assert.deepEqual(f.events(), before);
+    assert.equal(fold(before).items.get('ENG-1').closed, null);
+  } else {
+    assert.equal(f.refresh(accepted).result, 'refreshed');
+    assert.deepEqual(f.events().at(-1).items, delta.items);
+    assert.equal(f.refresh(accepted).replayed, true);
+    assert.equal(f.finish().result, 'reconciled');
+    assert.equal(itemStatus(fold(f.events()), 'ENG-1'), 'done');
+    assert.equal(f.finish().replayed, true);
+  }
+  assert.equal(fs.readFileSync(f.prepared, 'utf8'), original);
+  assert.equal(fs.readFileSync(f.prepared + '.record.json', 'utf8'), receipt);
+  assert.equal(fs.readFileSync(f.log, 'utf8'), 'original successful gate\n');
+});
+
 test('refusal shows every changed member and only an exact inspected plain-note delta can be accepted', () => {
   const f = fixture(); f.plan.prepared_seq = f.events.at(-1).seq;
   const events = appended(f.events,

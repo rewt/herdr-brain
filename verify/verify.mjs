@@ -280,6 +280,7 @@ export async function perform(queue, job) {
     result.slot_envelope = envelope;
     result.timeout = execution?.gate_timeout ?? envelope?.gate_timeout ?? null;
     result.reaped_processes = phases?.reaped ?? [];
+    if (phases?.tracking_interrupted) result.tracking_interrupted = phases.tracking_interrupted;
     safeToRestore = (Boolean(envelope?.finished_at) && !envelope.cleanup_error && !execution?.cleanup_error && phases?.cleanup_confirmed === true) || (!envelope && wrapper.exit === 75);
     if (phases?.prepare && phases.prepare !== 'none') result.prepare = { ...result.prepare, ...phases.prepare };
     result.command = phases?.command ?? null;

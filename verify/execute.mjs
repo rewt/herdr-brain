@@ -45,7 +45,10 @@ async function hold(spec, directory) {
     options: { resultPath, lockPath: slotPathOf(), compatPath: process.env[COMPAT_PATH_ENV] ?? TEST_SLOT_PATH,
       timeoutSeconds: job.timeout_seconds, idleTimeoutSeconds: job.idle_timeout_seconds,
       common: job.identity, tier: 'verify-job',
-      onCapture: tracked => writeFileAtomic(captured, JSON.stringify([...tracked.values()]) + '\n', 0o600) },
+      onCapture: tracked => {
+        const captured_at = new Date().toISOString();
+        writeFileAtomic(captured, JSON.stringify([...tracked.values()].map(row => ({ ...row, captured_at }))) + '\n', 0o600);
+      } },
     child: [process.execPath, SELF, spec, directory] });
   const wrapper = { exit, signal: read(resultPath)?.signal ?? null };
   const execution = read(resultPath), file = path.join(directory, 'phases.json');
@@ -102,7 +105,13 @@ export async function execute(job, directory) {
       const observe = () => {
         if (!child.pid) return;
         const snapshot = lookup(undefined, { identityOnly: true });
-        if (!snapshot.ok) { trackingError ??= snapshot.error; return; }
+        if (!snapshot.ok) {
+          if (trackingError === undefined) {
+            trackingError = snapshot.error;
+            state.tracking_error_at = new Date().toISOString(); save();
+          }
+          return;
+        }
         let changed = false;
         for (const [pid, entry] of descendants(snapshot.value, child.pid)) {
           const prior = tracked.get(pid);
@@ -122,11 +131,13 @@ export async function execute(job, directory) {
         else if (child.pid) await stopTracked(tracked, state.reaped, save);
         if (trackingError) {
           const captured = read(path.join(directory, 'captured.json'));
-          // The watchdog can terminate the phase's measurement helper while
-          // cancelling. Its independently completed pre-signal walk supplies
-          // ownership even before the phase's JS signal handler runs. Every
-          // other missing/refused identity still fails closed.
-          if (/^process source unavailable: terminated by (SIGTERM|SIGINT|SIGHUP)$/.test(trackingError) && captured?.some(row => row.pid === process.pid && row.identity === root?.identity)) state.tracking_interrupted = trackingError;
+          // The watchdog may terminate a measurement helper after its own
+          // completed walk. A later capture cannot cover an earlier gap, and
+          // only the runner's confirmed birth ties that walk to this phase.
+          const ownCapture = root?.identity && captured?.find(row => row.pid === process.pid && row.identity === root.identity);
+          if (/^process source unavailable: terminated by (SIGTERM|SIGINT|SIGHUP)$/.test(trackingError) && ownCapture && Date.parse(state.tracking_error_at) >= Date.parse(ownCapture.captured_at)) {
+            state.tracking_interrupted = { error: trackingError, seen_at: state.tracking_error_at, captured_at: ownCapture.captured_at };
+          }
           else throw Error(trackingError);
         }
       } catch (error) { state.cleanup_error = error.message; save(); throw error; }

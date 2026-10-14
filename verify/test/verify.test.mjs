@@ -774,3 +774,131 @@ test('distribution manifest and release guard include the queue and all runtime 
   const release = fs.readFileSync(path.join(root, 'herdr/release.sh'), 'utf8');
   for (const file of ['verify/verify.mjs', 'verify/execute.mjs', 'verify/expectations.mjs']) assert.ok(release.includes(file));
 });
+
+// Inject the observer's process source, leaving confirmed births and cleanup
+// lookups real. The command waits for the test so captures and failures can be
+// ordered explicitly, including repeated failures after a later capture.
+for (const kind of ['after-capture', 'before-capture', 'non-signal', 'wrong-birth', 'missing-time']) test(`tracking interruption ${kind} is bound to capture time and the runner's birth`, async t => {
+  const f = fixture(t), directory = path.join(f.root, 'phase'); fs.mkdirSync(directory);
+  const captured = path.join(directory, 'captured.json'), finish = path.join(directory, 'finish');
+  const faults = path.join(directory, 'faults.json'), preload = path.join(directory, 'inject.mjs');
+  const execute = fileURLToPath(new URL('../execute.mjs', import.meta.url));
+  const error = kind === 'non-signal' ? 'process source unavailable: injected permission refusal' : 'process source unavailable: terminated by SIGTERM';
+  fs.writeFileSync(preload, `
+    import fs from 'node:fs';
+    import cp from 'node:child_process';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { lookupProcess } from ${JSON.stringify(fileURLToPath(new URL('../../lib/processes.mjs', import.meta.url)))};
+    if (process.argv[1] === ${JSON.stringify(execute)}) {
+    const root = lookupProcess(process.pid, { identityOnly: true });
+    if (!root.ok || !root.value) throw Error('fixture runner birth unconfirmed');
+    const kind = ${JSON.stringify(kind)}, captured = ${JSON.stringify(captured)}, finish = ${JSON.stringify(finish)};
+    if (kind !== 'before-capture') {
+      const row = { ...root.value, captured_at: new Date().toISOString() };
+      if (kind === 'wrong-birth') row.identity += ':replacement';
+      if (kind === 'missing-time') delete row.captured_at;
+      fs.writeFileSync(captured, JSON.stringify([row]), { mode: 0o600 });
+    }
+    const native = cp.spawnSync, list = fs.readdirSync;
+    let count = 0;
+    const fail = () => {
+      if (fs.existsSync(finish)) return false;
+      fs.writeFileSync(${JSON.stringify(faults + '.tmp')}, JSON.stringify({ count: ++count }));
+      fs.renameSync(${JSON.stringify(faults + '.tmp')}, ${JSON.stringify(faults)});
+      return true;
+    };
+    cp.spawnSync = (file, argv, ...args) => {
+      if (String(file).includes('process-source-') && argv.every(arg => arg === '--identity') && fail())
+        return ${kind === 'non-signal' ? "{ error: Error('injected permission refusal') }" : "{ signal: 'SIGTERM' }"};
+      return native(file, argv, ...args);
+    };
+    fs.readdirSync = (file, ...args) => {
+      if (String(file) === '/proc' && fail()) throw Error(${JSON.stringify(error.replace('process source unavailable: ', ''))});
+      return list(file, ...args);
+    };
+    syncBuiltinESMExports();
+    }
+  `);
+  const command = node(`const fs=require('fs');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(finish)}))clearInterval(timer)},20);`);
+  const child = spawnChild(t, process.execPath, [execute, JSON.stringify({ desk: f.root, argv: command }), directory],
+    { env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` } });
+  const phases = path.join(directory, 'phases.json');
+  await until(() => fs.existsSync(phases) && read(phases).tracking_error_at, 'first tracking failure persisted');
+  const firstSeen = read(phases).tracking_error_at;
+  assert.ok(Number.isFinite(Date.parse(firstSeen)));
+  if (kind === 'before-capture') {
+    while (Date.now() <= Date.parse(firstSeen)) await new Promise(resolve => setTimeout(resolve, 1));
+    const root = lookupProcess(child.pid, { identityOnly: true });
+    assert.equal(root.ok, true); assert.ok(root.value);
+    fs.writeFileSync(captured, JSON.stringify([{ ...root.value, captured_at: new Date().toISOString() }]), { mode: 0o600 });
+  }
+  const count = read(faults).count;
+  await until(() => read(faults).count > count, 'subsequent tracking failure observed');
+  assert.equal(read(phases).tracking_error_at, firstSeen, 'later failures cannot replace the first time');
+  fs.writeFileSync(finish, 'done');
+  if (kind === 'after-capture') {
+    const result = await waitForExit(child); assert.equal(result.code, 0, result.stderr);
+    const state = read(phases), capture = read(captured)[0];
+    assert.deepEqual(state.tracking_interrupted, { error, seen_at: firstSeen, captured_at: capture.captured_at });
+    assert.ok(Date.parse(firstSeen) >= Date.parse(capture.captured_at));
+    assert.equal(state.cleanup_error, undefined);
+  } else {
+    await until(() => read(phases).error === error, 'uncovered tracking failure retained the hold');
+    const state = read(phases);
+    assert.equal(state.cleanup_error, error); assert.equal(state.tracking_interrupted, undefined);
+    assert.ok(state.command.finished_at); assert.equal(state.command.exit, 0);
+    assert.equal(child.exitCode, null, 'runner remains alive instead of releasing unknown ownership');
+    if (kind === 'before-capture') assert.ok(Date.parse(firstSeen) < Date.parse(read(captured)[0].captured_at));
+    assert.equal(child.kill('SIGKILL'), true);
+    assert.equal((await waitForExit(child)).signal, 'SIGKILL');
+  }
+});
+
+test('a measurement interrupted after the watchdog capture includes its error and both times in the receipt', async t => {
+  const f = fixture(t), preload = path.join(f.root, 'post-capture.mjs');
+  const execute = fileURLToPath(new URL('../execute.mjs', import.meta.url));
+  fs.writeFileSync(preload, `
+    import fs from 'node:fs';
+    import path from 'node:path';
+    import cp from 'node:child_process';
+    import { syncBuiltinESMExports } from 'node:module';
+    if (process.argv[1] === ${JSON.stringify(execute)} && process.argv[2] !== '--hold') {
+      const captured = path.join(process.argv[3], 'captured.json');
+      const native = cp.spawnSync, list = fs.readdirSync;
+      let pending = true;
+      const interrupted = () => {
+        if (!pending) return false;
+        pending = false;
+        // Keep a source lookup in flight until the real, independent watchdog
+        // has completed and preserved its walk. It then returns a signal error.
+        const by = Date.now() + 20000;
+        while (!fs.existsSync(captured) && Date.now() < by) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
+        if (!fs.existsSync(captured)) throw Error('watchdog capture did not arrive');
+        return true;
+      };
+      cp.spawnSync = (file, argv, ...args) => {
+        if (String(file).includes('process-source-') && argv.every(arg => arg === '--identity') && interrupted()) return { signal: 'SIGTERM' };
+        return native(file, argv, ...args);
+      };
+      fs.readdirSync = (file, ...args) => {
+        if (String(file) === '/proc' && interrupted()) throw Error('terminated by SIGTERM');
+        return list(file, ...args);
+      };
+      syncBuiltinESMExports();
+    }
+  `);
+  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}`;
+  const job = f.add({ 'timeout-seconds': '1', 'idle-timeout-seconds': '3' }, node('setInterval(()=>{},1000)'));
+  await f.run(job);
+  const receipt = read(job.receipt), directory = path.dirname(job.receipt), phases = read(path.join(directory, 'phases.json'));
+  const interrupted = receipt.tracking_interrupted;
+  assert.ok(interrupted, receipt.error);
+  assert.deepEqual(interrupted, phases.tracking_interrupted);
+  assert.equal(interrupted.error, 'process source unavailable: terminated by SIGTERM');
+  assert.equal(interrupted.seen_at, phases.tracking_error_at);
+  assert.ok(Date.parse(interrupted.seen_at) >= Date.parse(interrupted.captured_at));
+  assert.ok(read(path.join(directory, 'captured.json')).some(row => row.pid === receipt.slot_execution.command_pid && row.captured_at === interrupted.captured_at));
+  assert.equal(phases.cleanup_error, undefined); assert.equal(phases.cleanup_confirmed, true);
+  assert.equal(receipt.timeout.kind, 'wall'); assert.equal(receipt.halted, false); assert.equal(receipt.desk_restored, true);
+  assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
+});

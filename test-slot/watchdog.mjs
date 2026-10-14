@@ -19,7 +19,7 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
   // A detached leader that is still our unreaped child cannot have its PID or
   // PGID reused. Establish this ownership before any identity lookup or signal.
   const owned = ownsGroup && ownedChild;
-  let groupGone = false, identityError;
+  let groupGone = false, identityError, captureError;
   const groupLive = () => {
     if (groupGone) return false;
     if (probe(-pgid) === false) { groupGone = true; return false; }
@@ -40,7 +40,10 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
   for (const row of snapshotRows.values()) if (ownsGroup && row.pgid === pgid) tracked.set(row.pid, row);
   // Receipt owners can preserve this complete final walk before signals stop
   // either the descendants or a child's own in-flight process measurement.
-  if (snapshot.ok) onCapture?.(new Map(tracked));
+  if (snapshot.ok) {
+    try { onCapture?.(new Map(tracked)); }
+    catch (error) { captureError = error instanceof Error ? error : Error(String(error)); }
+  }
   const live = () => {
     const rows = [];
     for (const saved of tracked.values()) {
@@ -78,4 +81,5 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
   // Unknown escaped identities retain the slot, but must not prevent KILL of
   // the group whose ownership was established while its leader was our child.
   if (identityError) throw identityError;
+  if (captureError) throw captureError;
 }

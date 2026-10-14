@@ -112,6 +112,28 @@ test('parent walk excludes unrelated processes and escaped-child signalling conf
   assert.deepEqual(signals, [], 'reused leader never authorizes group signals');
 });
 
+test('a throwing capture callback reports its error only after TERM and KILL stop the job', async () => {
+  const root = { pid: 100, ppid: 1, pgid: 100, identity: '1:1' };
+  const escaped = { pid: 101, ppid: 100, pgid: 101, identity: '2:1' };
+  const rows = new Map([[root.pid, root], [escaped.pid, escaped]]), events = [];
+  const error = Error('capture write refused');
+  await assert.rejects(stopGateGroup(root.pid, { ownsGroup: false, graceMs: 0,
+    lookup: pid => ({ ok: true, value: pid === undefined ? new Map(rows) : rows.get(pid) ?? null }),
+    onCapture: captured => {
+      assert.equal(captured.get(escaped.pid).identity, escaped.identity);
+      events.push('capture'); throw error;
+    },
+    signal: (pid, signal) => {
+      events.push([pid, signal]);
+      if (signal === 'SIGKILL') rows.delete(pid);
+    } }), reported => {
+    assert.equal(reported, error);
+    assert.equal(rows.size, 0, 'cleanup precedes error delivery');
+    return true;
+  });
+  assert.deepEqual(events, ['capture', [root.pid, 'SIGTERM'], [escaped.pid, 'SIGTERM'], [root.pid, 'SIGKILL'], [escaped.pid, 'SIGKILL']]);
+});
+
 for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records timeout, isolates correction and leaves main unchanged`, { timeout: 20000 }, t => {
   const f = fixture(t); fixtureFleet(t, f.root); f.env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
   const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });

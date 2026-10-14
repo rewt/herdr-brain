@@ -18,6 +18,7 @@ node verify/verify.mjs status [JOB_ID]
 node verify/verify.mjs admit JOB_ID=SPEC_SHA256 OTHER_JOB_ID=SPEC_SHA256
 node verify/verify.mjs status --group regression-1
 node verify/verify.mjs recover
+node verify/verify.mjs init [--state-dir ABS_PATH]
 node verify/verify.mjs probe-store [--state-dir ABS_PATH]
 ```
 
@@ -63,15 +64,22 @@ the detached worker inherits the CLI roots as well as environment roots.
 The trusted store **must be outside every submitter's sandbox write roots**.
 The module cannot inspect native sandbox policy; mode 0700 alone does not
 separate processes running as the same user. Adoption requires the supervisor
-to create the selected directory, then run `verify probe-store` from each
-worker sandbox with the same `--repo`, `--state-dir` and root options. Expect
-`{"writable":false,"error":"EACCES: …"}` (or a native permission denial) before
-relying on any receipt. The probe attempts exclusive creation of a unique file
-and removes it if created; it creates no directory and changes no permissions.
-An `ENOENT` result means the store was not created and does not prove isolation.
-`writable:true` means adoption must fix the store location or worker sandbox
-policy first. An unsandboxed worker with write access to the trusted store cannot
-provide this boundary. Existing Git-local queue state is not imported as trusted
+to run `node verify/verify.mjs init` from its trusted permission context, then run
+`node verify/verify.mjs probe-store` from each worker sandbox with the same
+`--repo`, `--state-dir` and root options. Init applies the admission location
+guards, creates the store with mode 0700 and prints its path. It is idempotent
+and refuses an existing store with a different owner or mode.
+Require `state: protected` with `writable: false` and code `EACCES` or `EPERM`
+before relying on any receipt. The probe attempts exclusive creation of a unique
+file and removes it if created; it creates no directory and changes no permissions.
+It always includes `code` (`null` on success) and `error`. A missing directory
+reports `state: absent`, `writable: null`, code `ENOENT` and a nonzero exit,
+with instructions to run `verify init` from the trusted side. Any other error
+reports `state: unknown`, `writable: null` and a nonzero exit. Neither proves
+isolation. `state: writable` with `writable: true` means adoption must fix the
+store location or worker sandbox policy first. An unsandboxed worker with write
+access to the trusted store cannot provide this boundary. Existing Git-local
+queue state is not imported as trusted
 execution evidence; resubmit jobs after configuring the store.
 
 `--repo` selects the repository on every command. `--desk` is

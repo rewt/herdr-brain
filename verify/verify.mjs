@@ -466,12 +466,33 @@ export function status(queue, { id, group } = {}) {
     receipt: receiptPath(queue, job), state: job.completed_at ? job.outcome : job.retry_required_at ? 'needs-retry' : job.started_at ? 'running-or-interrupted' : job.admission ? 'admitted' : 'pending-admission' }));
   return { identity: data.identity, runner: data.runner, last_runner: data.last_runner ?? null, halted: data.halted ?? null, jobs };
 }
+export function initStore(queue) {
+  queue.checkStore([...queue.load().jobs, ...queue.inbox.load().jobs]);
+  plainDirectory(path.dirname(queue.directory));
+  let created = false;
+  try { fs.mkdirSync(queue.directory, { mode: 0o700 }); created = true; }
+  catch (error) { if (error.code !== 'EEXIST') throw error; }
+  if (created) fs.chmodSync(queue.directory, 0o700);
+  plainDirectory(queue.directory, { create: false });
+  const stat = fs.statSync(queue.directory);
+  if (stat.uid !== process.getuid()) throw Error('trusted store has a different owner');
+  if ((stat.mode & 0o7777) !== 0o700) throw Error('trusted store must have mode 0700');
+  return queue.directory;
+}
 export function probeStore(queue) {
   const file = path.join(queue.directory, `.probe-${randomUUID()}`);
-  let fd;
-  try { fd = fs.openSync(file, 'wx', 0o600); return { writable: true, error: null }; }
-  catch (error) { return { writable: false, error: `${error.code ?? 'error'}: ${error.message}` }; }
-  finally { if (fd !== undefined) { fs.closeSync(fd); fs.unlinkSync(file); } }
+  let created = false;
+  try {
+    const fd = fs.openSync(file, 'wx', 0o600); created = true;
+    fs.closeSync(fd);
+    fs.unlinkSync(file);
+    return { state: 'writable', writable: true, code: null, error: null };
+  } catch (error) {
+    const code = error.code ?? null;
+    const state = !created && ['EACCES', 'EPERM'].includes(code) ? 'protected' : !created && code === 'ENOENT' ? 'absent' : 'unknown';
+    return { state, writable: state === 'protected' ? false : null, code,
+      error: `${code ?? 'error'}: ${error.message}${state === 'absent' ? '; run verify init from the trusted side' : ''}` };
+  }
 }
 export async function main(args = process.argv.slice(2)) {
   const separator = args.indexOf('--');
@@ -483,7 +504,7 @@ export async function main(args = process.argv.slice(2)) {
     ...Object.fromEntries(['expect', 'expect-tap', 'expect-vitest', 'expect-test', 'expect-file', 'expect-json'].map(name => [name, { type: 'string', multiple: true }])),
     'untrusted-root': { type: 'string', multiple: true },
     admit: { type: 'boolean' },
-  }, usage: 'verify.mjs submit OPTIONS [--prepare CMD ARGS...] -- CMD ARGS... | admit JOB=SPEC_SHA256... | status [JOB] [--group ID] | recover | probe-store [--state-dir DIR]' });
+  }, usage: 'verify.mjs submit OPTIONS [--prepare CMD ARGS...] -- CMD ARGS... | admit JOB=SPEC_SHA256... | status [JOB] [--group ID] | recover | init [--state-dir DIR] | probe-store [--state-dir DIR]' });
   const queue = queueFor(opt.repo, opt['state-dir'], { untrustedRoots: opt['untrusted-root'] });
   if (opt.worker) return await drain(queue, JSON.parse(opt.worker));
   const [action, ...ids] = positionals;
@@ -497,8 +518,13 @@ export async function main(args = process.argv.slice(2)) {
   if (action === 'admit') { const admission = admit(queue, ids); await startWorker(queue, admission); console.log(JSON.stringify({ admitted: admission.jobs })); return; }
   if (action === 'status' && ids.length <= 1) { console.log(JSON.stringify(status(queue, { id: ids[0], group: opt.group }))); return; }
   if (action === 'recover' && !ids.length) { console.log(JSON.stringify(await recover(queue))); return; }
-  if (action === 'probe-store' && !ids.length) { console.log(JSON.stringify(probeStore(queue))); return; }
-  throw Error('usage: verify.mjs submit|admit|status|recover|probe-store; see --help');
+  if (action === 'init' && !ids.length) { console.log(initStore(queue)); return; }
+  if (action === 'probe-store' && !ids.length) {
+    const probe = probeStore(queue); console.log(JSON.stringify(probe));
+    if (probe.writable === null) process.exitCode = 1;
+    return;
+  }
+  throw Error('usage: verify.mjs submit|admit|status|recover|init|probe-store; see --help');
 }
 if (isMain(import.meta.url)) {
   try { await main(); }

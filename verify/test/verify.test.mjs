@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { queueFor, submit, admit, drain, recover, status, deliver, writeReceipt, jobDigest } from '../verify.mjs';
+import { queueFor, submit, admit, drain, recover, status, deliver, writeReceipt, jobDigest, initStore, probeStore } from '../verify.mjs';
 import { parseExpectations, evaluate, sha256 } from '../expectations.mjs';
 import { initOrg, transact, loadEvents } from '../../lib/store.mjs';
 import { enqueueSupervisor, readInbox as snapshot } from '../../supervisor/prompt-supervisor.mjs';
@@ -155,20 +155,131 @@ test('repeatable CLI and colon-separated environment roots refuse stores after r
   assert.equal(queueFor(f.repo, f.queue.directory, { untrustedRoots: [other] }).directory, f.queue.directory);
 });
 
-test('probe-store fires an exclusive write, removes it, and reports refusal in a read-only store', async t => {
+test('probe-store reports an absent store with a nonzero exit and trusted-side init instructions', async t => {
   const f = fixture(t);
-  const absent = await f.cli(['probe-store']);
-  assert.equal(absent.writable, false); assert.match(absent.error, /ENOENT/);
+  const result = await waitForExit(spawnChild(t, process.execPath, [CLI, 'probe-store', '--repo', f.repo, '--state-dir', f.queue.directory]));
+  assert.equal(result.code, 1);
+  const absent = JSON.parse(result.stdout);
+  assert.equal(absent.state, 'absent'); assert.equal(absent.writable, null); assert.equal(absent.code, 'ENOENT');
+  assert.match(absent.error, /ENOENT.*verify init.*trusted side/);
+  assert.equal(fs.existsSync(f.queue.directory), false);
+});
+
+test('probe-store fires an exclusive write, removes it, and reports protected in a read-only store', async t => {
+  const f = fixture(t);
   fs.mkdirSync(f.queue.directory, { mode: 0o700 });
-  assert.deepEqual(await f.cli(['probe-store']), { writable: true, error: null });
+  assert.deepEqual(await f.cli(['probe-store']), { state: 'writable', writable: true, code: null, error: null });
   assert.deepEqual(fs.readdirSync(f.queue.directory), []);
   fs.chmodSync(f.queue.directory, 0o500);
   try {
     const refused = await f.cli(['probe-store']);
+    assert.equal(refused.state, 'protected'); assert.ok(['EACCES', 'EPERM'].includes(refused.code));
     assert.equal(refused.writable, false); assert.match(refused.error, /EACCES|EPERM/);
     assert.equal(fs.statSync(f.queue.directory).mode & 0o777, 0o500);
     assert.deepEqual(fs.readdirSync(f.queue.directory), []);
   } finally { fs.chmodSync(f.queue.directory, 0o700); }
+});
+
+test('probe-store reports unknown for a non-directory store and exits nonzero', async t => {
+  const f = fixture(t);
+  fs.writeFileSync(f.queue.directory, 'not a directory');
+  try {
+    const result = await waitForExit(spawnChild(t, process.execPath, [CLI, 'probe-store', '--repo', f.repo, '--state-dir', f.queue.directory]));
+    assert.equal(result.code, 1);
+    const unknown = JSON.parse(result.stdout);
+    assert.equal(unknown.state, 'unknown'); assert.equal(unknown.writable, null); assert.equal(unknown.code, 'ENOTDIR');
+    assert.match(unknown.error, /ENOTDIR/);
+    assert.equal(fs.readFileSync(f.queue.directory, 'utf8'), 'not a directory');
+  } finally { fs.unlinkSync(f.queue.directory); }
+});
+
+test('probe-store reports EPERM as protected and a cleanup failure as unknown', t => {
+  const f = fixture(t);
+  initStore(f.queue);
+  const open = fs.openSync;
+  const denied = t.mock.method(fs, 'openSync', (file, ...args) => {
+    if (String(file).startsWith(path.join(f.queue.directory, '.probe-'))) throw Object.assign(Error('denied'), { code: 'EPERM' });
+    return open(file, ...args);
+  });
+  assert.deepEqual(probeStore(f.queue), { state: 'protected', writable: false, code: 'EPERM', error: 'EPERM: denied' });
+  denied.mock.restore();
+  const unlink = fs.unlinkSync;
+  const cleanup = t.mock.method(fs, 'unlinkSync', (file, ...args) => {
+    if (String(file).startsWith(path.join(f.queue.directory, '.probe-'))) throw Object.assign(Error('cleanup failed'), { code: 'ENOENT' });
+    return unlink(file, ...args);
+  });
+  assert.deepEqual(probeStore(f.queue), { state: 'unknown', writable: null, code: 'ENOENT', error: 'ENOENT: cleanup failed' });
+  cleanup.mock.restore();
+});
+
+for (const defaultState of [false, true]) test(`init creates a private ${defaultState ? 'default' : 'selected'} store, prints its path and is idempotent`, async t => {
+  const f = fixture(t, { defaultState });
+  const args = [CLI, 'init', '--repo', f.repo, ...(defaultState ? [] : ['--state-dir', f.queue.directory])];
+  for (let i = 0; i < 2; i++) {
+    const result = await waitForExit(spawnChild(t, process.execPath, args));
+    assert.equal(result.code, 0, result.stderr); assert.equal(result.stdout.trim(), f.queue.directory);
+    const stat = fs.statSync(f.queue.directory);
+    assert.equal(stat.mode & 0o7777, 0o700); assert.equal(stat.uid, process.getuid());
+    if (!i) fs.writeFileSync(path.join(f.queue.directory, 'retained'), 'keep');
+  }
+  assert.deepEqual(fs.readdirSync(f.queue.directory), ['retained']);
+  assert.equal(fs.readFileSync(path.join(f.queue.directory, 'retained'), 'utf8'), 'keep');
+  assert.equal(fs.existsSync(f.queue.inbox.directory), false);
+});
+
+test('init creates mode 0700 even with a restrictive umask', t => {
+  const f = fixture(t), previous = process.umask(0o777);
+  try { assert.equal(initStore(f.queue), f.queue.directory); }
+  finally { process.umask(previous); }
+  assert.equal(fs.statSync(f.queue.directory).mode & 0o7777, 0o700);
+});
+
+test('init refuses existing stores with a different mode or owner without repairing them', t => {
+  const f = fixture(t);
+  initStore(f.queue);
+  for (const mode of [0o755, 0o750, 0o770, 0o500, 0o1700]) {
+    fs.chmodSync(f.queue.directory, mode);
+    assert.throws(() => initStore(f.queue), /mode 0700/);
+    assert.equal(fs.statSync(f.queue.directory).mode & 0o7777, mode);
+  }
+  fs.chmodSync(f.queue.directory, 0o700);
+  const stat = fs.statSync;
+  const owner = t.mock.method(fs, 'statSync', (file, ...args) => {
+    const result = stat(file, ...args);
+    return file === f.queue.directory ? Object.assign(result, { uid: process.getuid() + 1 }) : result;
+  });
+  assert.throws(() => initStore(f.queue), /different owner/);
+  owner.mock.restore();
+  assert.equal(fs.statSync(f.queue.directory).mode & 0o7777, 0o700);
+  assert.deepEqual(fs.readdirSync(f.queue.directory), []);
+});
+
+test('init applies admission location guards before creating a store', async t => {
+  const f = fixture(t), lane = path.join(f.root, 'linked'), alias = path.join(f.storeRoot, 'git-alias');
+  f.git('worktree', 'add', '--detach', lane, f.sha1);
+  fs.symlinkSync(path.join(f.repo, '.git'), alias);
+  try {
+    for (const root of [f.repo, path.join(f.repo, '.git'), lane, f.org, alias, '/tmp', '/private/tmp', os.tmpdir()]) {
+      const directory = path.join(root, 'init-refused');
+      const result = await waitForExit(spawnChild(t, process.execPath, [CLI, 'init', '--repo', f.repo, '--state-dir', directory]));
+      assert.equal(result.code, 1); assert.match(result.stderr, /trusted store must be outside/);
+      assert.equal(fs.existsSync(directory), false);
+    }
+    const job = f.add();
+    f.queue.inbox.transaction(data => { data.jobs.find(row => row.id === job.job).desk = f.storeRoot; });
+    assert.throws(() => initStore(f.queue), /trusted store must be outside/);
+    assert.equal(fs.existsSync(f.queue.directory), false);
+  } finally { f.git('worktree', 'remove', '--force', lane); }
+});
+
+test('init applies repeatable CLI roots and environment roots before creating a store', async t => {
+  const f = fixture(t);
+  for (const opt of [ ['--untrusted-root', path.join(f.storeRoot, 'other'), '--untrusted-root', f.storeRoot], [] ]) {
+    if (!opt.length) process.env.VERIFY_UNTRUSTED_ROOTS = [path.join(f.storeRoot, 'other'), f.storeRoot].join(path.delimiter);
+    const result = await waitForExit(spawnChild(t, process.execPath, [CLI, 'init', '--repo', f.repo, '--state-dir', f.queue.directory, ...opt]));
+    assert.equal(result.code, 1); assert.match(result.stderr, /untrusted roots/);
+    assert.equal(fs.existsSync(f.queue.directory), false);
+  }
 });
 
 test('one detached admitted worker returns before grant, drains FIFO and records holders plus one note and notice', async t => {

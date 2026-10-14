@@ -52,6 +52,7 @@ Questions for the operator
                                           facts are fixed (e.g. record set R-3 tokens_in=48210)
   record close <ID> [--dropped] [--note T] [--if-current-run R-n]
   record complete-batch --file JSON       supervisor-attested batch reconciliation (all members)
+    [--accept-delta SHA256 --why TEXT]    accept inspected plain notes without completing
   record reopen <ID> [--note T] [--if-current-run R-n]
 
 Lessons (durable knowledge, separate from work items)

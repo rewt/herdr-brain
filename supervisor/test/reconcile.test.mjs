@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { setupOrg, report } from '../../test/helpers.mjs';
 import { fold, itemStatus, openRuns } from '../../lib/state.mjs';
 import { fold as olderFold } from '../../test/fixtures/state-v0.mjs';
-import { completionEvents, completionFingerprint } from '../../lib/completion.mjs';
+import { completionEvents, completionFingerprint, completionDelta, refreshCompletionEvents, digest } from '../../lib/completion.mjs';
 import { reconcile } from '../reconcile.mjs';
 
 function fixture() {
@@ -141,8 +141,158 @@ function integration(t) {
   const common = ['--repo', f.root, '--org', f.dir, '--role', 'supervisor', '--prepared', prepared];
   const prepare = () => reconcile(['prepare', ...common, '--manifest', manifest, '--gate-log', log]);
   const finish = (code = '0', tip = head) => reconcile(['finish', ...common, '--gate-exit', code, '--tip', tip]);
-  return { ...f, lane, base, head, manifest, prepared, log, common, prepare, finish };
+  const refresh = (accepted, why = 'Inspected the supervisor notes; they do not change acceptance.') =>
+    reconcile(['refresh', ...common, '--gate-exit', '0', '--tip', head, '--accept-delta', accepted, '--why', why]);
+  return { ...f, lane, base, head, manifest, prepared, log, common, prepare, finish, refresh };
 }
+
+function refusal(fn) {
+  let message;
+  assert.throws(fn, error => { message = error.message; return true; });
+  const accepted = /delta digest: ([a-f0-9]{64})/.exec(message)?.[1];
+  assert.ok(accepted, message);
+  return { message, accepted };
+}
+
+function appended(events, ...add) {
+  return [...events, ...add.map((e, i) => ({ ...e, seq: events.length + i + 1,
+    at: '2026-10-14T01:16:38Z', by: e.by ?? 'supervisor-fixture' }))];
+}
+
+test('refusal shows every changed member and only an exact inspected plain-note delta can be accepted', () => {
+  const f = fixture(); f.plan.prepared_seq = f.events.at(-1).seq;
+  const events = appended(f.events,
+    { type: 'note.added', id: 'ENG-1', text: 'First supervisor note', by: 'supervisor-one' },
+    { type: 'note.added', id: 'ENG-2', text: 'Second supervisor note', by: 'supervisor-two' });
+  const { message, accepted } = refusal(() => f.complete(f.plan, events));
+  assert.match(message, /ENG-1 changed since batch preparation/);
+  assert.match(message, /ENG-2 changed since batch preparation/);
+  assert.match(message, /seq 12: note.added by supervisor-one \[plain note\]/);
+  assert.match(message, /seq 13: note.added by supervisor-two \[plain note\]/);
+  assert.match(message, /First supervisor note/);
+  const delta = completionDelta(fold(events), events, f.plan);
+  assert.equal(digest(delta), accepted);
+  const changed = appended(events, { type: 'note.added', id: 'ENG-1', text: 'A later note' });
+  assert.throws(() => refreshCompletionEvents(fold(changed), changed, f.plan, f.plan.org, accepted, 'Inspected'), /changed since inspection/);
+  const unrelated = appended(events, { type: 'item.added', id: 'ENG-99', title: 'Unrelated' });
+  const refreshed = refreshCompletionEvents(fold(unrelated), unrelated, f.plan, f.plan.org, accepted, 'Inspected both notes');
+  assert.equal(refreshed.add.length, 1);
+  assert.equal(refreshed.add[0].type, 'promotion.delta-accepted');
+  assert.deepEqual(refreshed.add[0].items, delta.items);
+  const acceptedEvents = appended(unrelated, ...refreshed.add);
+  assert.equal(f.complete(f.plan, acceptedEvents).result.replayed, false);
+  assert.deepEqual(refreshCompletionEvents(fold(acceptedEvents), acceptedEvents, f.plan, f.plan.org, accepted, 'Retry').add, []);
+  const newer = appended(acceptedEvents, { type: 'note.added', id: 'ENG-1', text: 'Not yet inspected' });
+  assert.throws(() => f.complete(f.plan, newer), /changed since batch preparation/);
+  const decision = appended(acceptedEvents, { type: 'note.added', id: 'ENG-1', decision: true, text: 'New hold' });
+  assert.throws(() => f.complete(f.plan, decision), /acceptance-relevant/);
+});
+
+test('decision notes, newer runs, reports, links, questions, holds and close/reopen remain acceptance-relevant', () => {
+  const cases = [
+    [{ type: 'note.added', id: 'ENG-1', text: 'New acceptance decision', decision: true }],
+    [{ type: 'note.added', id: 'ENG-1', text: 'New plan', kind: 'plan' }],
+    [{ type: 'run.started', id: 'R-5', item: 'ENG-1' }],
+    [{ type: 'report.ingested', run: 'R-1', report: { outcome: 'blocked', blockers: ['New blocker'] } }],
+    [{ type: 'link.added', blocker: 'ENG-3', blocked: 'ENG-1' }],
+    [{ type: 'item.added', id: 'HUM-1', parent: 'ENG-1', role: 'human', title: 'Proceed?' }],
+    [{ type: 'note.added', id: 'ENG-1', text: 'Hold pending operator decision', decision: true }],
+    [{ type: 'item.closed', id: 'ENG-1', as: 'done' }, { type: 'item.reopened', id: 'ENG-1' }],
+  ];
+  for (const add of cases) {
+    const f = fixture(); f.plan.prepared_seq = f.events.at(-1).seq;
+    const events = appended(f.events, ...add), before = JSON.stringify(events);
+    const { message, accepted } = refusal(() => f.complete(f.plan, events));
+    for (const e of add) assert.ok(message.includes(e.type), message);
+    assert.match(message, /acceptance-relevant/);
+    assert.throws(() => refreshCompletionEvents(fold(events), events, f.plan, f.plan.org, accepted, 'Inspected'), /cannot be refreshed as plain notes/);
+    assert.equal(JSON.stringify(events), before);
+  }
+});
+
+test('refresh refuses a missing historical binding and a preparation sequence that contradicts its fingerprints', () => {
+  const f = fixture(); f.plan.items[0].expected = 'd'.repeat(64);
+  const { message, accepted } = refusal(() => f.complete());
+  assert.match(message, /Original record boundary unavailable/);
+  assert.throws(() => refreshCompletionEvents(f.state, f.events, f.plan, f.plan.org, accepted, 'Inspected'), /cannot be refreshed as plain notes/);
+  f.plan.prepared_seq = f.events.at(-1).seq;
+  assert.throws(() => f.complete(), /sequence does not match/);
+});
+
+test('questions under a blocking review are included in the delta without changing the work fingerprint', () => {
+  const f = fixture();
+  f.events = appended(f.events,
+    { type: 'item.added', id: 'REV-1', role: 'reviewer', title: 'Review' },
+    { type: 'item.closed', id: 'REV-1', as: 'done' },
+    { type: 'link.added', blocker: 'REV-1', blocked: 'ENG-1' });
+  for (const entry of [...f.plan.items, ...f.plan.excluded]) entry.expected = completionFingerprint(fold(f.events), entry.item);
+  f.plan.prepared_seq = f.events.at(-1).seq;
+  const events = appended(f.events, { type: 'item.added', id: 'HUM-1', parent: 'REV-1', role: 'human', title: 'Hold review?' });
+  assert.equal(completionFingerprint(fold(events), 'ENG-1'), f.plan.items[1].expected);
+  const delta = completionDelta(fold(events), events, f.plan);
+  assert.deepEqual(delta.items.map(e => e.item), ['ENG-1']);
+  assert.equal(delta.items[0].events[0].type, 'item.added');
+  assert.equal(delta.items[0].events[0].acceptance_relevant, true);
+});
+
+for (const legacy of [false, true]) test(`plain supervisor notes recover the original integrated range with ${legacy ? 'older' : 'new'} v1 receipts`, t => {
+  const f = integration(t); f.prepare();
+  if (legacy) {
+    const old = JSON.parse(fs.readFileSync(f.prepared)); delete old.prepared_seq;
+    fs.writeFileSync(f.prepared, JSON.stringify(old, null, 2) + '\n');
+  }
+  const original = fs.readFileSync(f.prepared, 'utf8');
+  git(f.root, 'merge', '--ff-only', f.head); fs.writeFileSync(f.log, 'original successful gate\n');
+  const noteStart = f.events().at(-1).seq + 1;
+  f.ok(['note', 'ENG-1', 'Integrated batch; retained original gate'], { env: { ORG_ACTOR: 'supervisor-first' } });
+  f.ok(['note', 'ENG-1', 'Record reconciliation pending after gate'], { env: { ORG_ACTOR: 'supervisor-second' } });
+  const before = f.events(), log = fs.readFileSync(f.log, 'utf8');
+  const { message, accepted } = refusal(f.finish);
+  assert.ok(message.includes(`seq ${noteStart}: note.added by supervisor-first [plain note]`));
+  assert.ok(message.includes(`seq ${noteStart + 1}: note.added by supervisor-second [plain note]`));
+  assert.deepEqual(f.events(), before);
+  const recordReceipt = fs.readFileSync(f.prepared + '.record.json', 'utf8');
+  const actor = process.env.ORG_ACTOR; process.env.ORG_ACTOR = 'inspecting-supervisor';
+  t.after(() => { if (actor === undefined) delete process.env.ORG_ACTOR; else process.env.ORG_ACTOR = actor; });
+  assert.equal(f.refresh(accepted).result, 'refreshed');
+  const refreshed = f.events(), event = refreshed.at(-1);
+  assert.equal(event.type, 'promotion.delta-accepted');
+  assert.equal(event.by, 'inspecting-supervisor'); assert.equal(event.batch, 'fixture-batch');
+  assert.equal(event.delta_digest, accepted);
+  assert.deepEqual(event.items[0].events.map(e => e.seq), [noteStart, noteStart + 1]);
+  const history = f.ok(['show', 'ENG-1']);
+  assert.ok(history.includes(`inspecting-supervisor accepted plain-note delta ${accepted} for batch fixture-batch`));
+  assert.ok(history.includes(`ENG-1 (seq ${noteStart}, ${noteStart + 1})`));
+  for (const read of [fold, olderFold]) {
+    assert.deepEqual(read(refreshed).items, read(before).items);
+    assert.deepEqual(read(refreshed).runs, read(before).runs);
+    assert.equal(read(refreshed).items.get('ENG-1').closed, null);
+  }
+  assert.equal(f.refresh(accepted).replayed, true); assert.deepEqual(f.events(), refreshed);
+  assert.equal(f.finish().result, 'reconciled');
+  const marker = f.events().at(-1);
+  assert.equal(marker.type, 'promotion.reconciled'); assert.equal(marker.base, f.base); assert.equal(marker.tip, f.head);
+  assert.notEqual(marker.base, marker.tip); assert.equal(marker.batch, 'fixture-batch');
+  assert.equal(marker.gate.log, f.log);
+  assert.equal(fs.readFileSync(f.prepared, 'utf8'), original);
+  assert.equal(fs.readFileSync(f.prepared + '.record.json', 'utf8'), recordReceipt);
+  assert.equal(fs.readFileSync(f.log, 'utf8'), log);
+  const done = f.events(); assert.equal(f.finish().replayed, true); assert.deepEqual(f.events(), done);
+});
+
+for (const change of ['decision', 'run', 'question']) test(`finish explains a post-prepare ${change} and refresh refuses it`, t => {
+  const f = integration(t); f.prepare();
+  git(f.root, 'merge', '--ff-only', f.head); fs.writeFileSync(f.log, 'passed once\n');
+  if (change === 'decision') f.ok(['note', 'ENG-1', 'Hold for a new acceptance decision', '--decision']);
+  if (change === 'run') f.ok(['start', 'ENG-1', '--harness', 'fixture', '--workspace', f.lane]);
+  if (change === 'question') f.ok(['ask', 'Proceed after integration?', '--parent', 'ENG-1', '--category', 'design',
+    '--recommend', 'no', '--why', 'Needs operator inspection', '--wait']);
+  const before = f.events(), { message, accepted } = refusal(f.finish);
+  assert.match(message, /acceptance-relevant/);
+  assert.ok(message.includes(change === 'decision' ? 'note.added' : change === 'run' ? 'run.started' : 'item.added'));
+  assert.throws(() => f.refresh(accepted), /cannot be refreshed as plain notes/);
+  assert.deepEqual(f.events(), before);
+});
 
 test('shared adapter verifies exact Git integration and uses explicit project record despite inherited ORG_DIR', t => {
   const f = integration(t), old = process.env.ORG_DIR;

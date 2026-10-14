@@ -176,8 +176,39 @@ open attempts explicitly; omitted attempts refuse admission and remain intact.
    but reconciliation refuses, report **integrated; reconciliation pending** and
    retain lanes/evidence for inspection. Do not rerun a successful gate to retry
    bookkeeping. An identical finish is a no-op, even after a later item reopen;
-   changed evidence cannot reuse the batch identity. A new run, blocker, report,
-   hold or relevant note requires inspection before a newly prepared receipt.
+   changed Git or gate evidence cannot reuse the batch identity. A refused finish
+   lists each changed member's event sequences, types, actors and contents,
+   marks acceptance-relevant changes, and prints a SHA-256 delta digest.
+   New receipts retain the preparation's record sequence; older v1 receipts
+   recover that boundary from matching fingerprints in the retained history.
+   If no matching history remains, refresh refuses rather than inventing evidence.
+
+   When the delta contains only plain notes on members, runs or blockers, inspect
+   those notes, then explicitly accept the exact shown digest:
+
+   ```sh
+   ORG_ACTOR=supervisor-name node /path/to/herdr-brain/supervisor/reconcile.mjs refresh \
+     --repo /path/to/project --org /path/to/record --role supervisor \
+     --prepared /path/to/prepared.json --gate-exit 0 --tip FULL_CANDIDATE_SHA \
+     --accept-delta SHOWN_DELTA_SHA256 --why "Inspected these notes; acceptance evidence is unchanged"
+   ```
+
+   Retry the original `finish` command afterward. Refresh verifies the same
+   integration and gate proof, then records `promotion.delta-accepted` under the
+   record lock, naming the actor, original receipt fingerprint, inspected digest,
+   affected members and accepted events. It keeps the original prepared receipt
+   and `.record.json`, batch identity, base, candidate and gate log intact. It
+   runs no gate, closes no item and retires no run. A new affected event changes
+   the digest and requires fresh inspection; unrelated writes do not invalidate
+   that inspection. Repeating the same refresh is a no-op.
+
+   A plain note has neither `decision` nor a structured `kind`. Record holds and
+   acceptance instructions as decision notes, as required by the supervisor
+   protocol. Decision or structured notes, dependency evidence, a newer run,
+   report, link, open question (including under a blocking review), or close/reopen
+   cannot be accepted through this plain-note refresh. They remain pending for
+   inspection and resolved, reviewed completion evidence. Notes are never omitted
+   from fingerprints, and no change is silently accepted.
 
 The helper is foreground and dependency-free. It never dispatches, tests, promotes,
 pushes, deletes a lane, installs a release, starts a scheduler, or polls. Keep the

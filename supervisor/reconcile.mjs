@@ -28,10 +28,15 @@ export function reconcile(argv) {
     repo: { type: 'string' }, org: { type: 'string' }, role: { type: 'string' },
     manifest: { type: 'string' }, prepared: { type: 'string' },
     'gate-log': { type: 'string' }, 'gate-exit': { type: 'string' }, tip: { type: 'string' },
+    'accept-delta': { type: 'string' }, why: { type: 'string' },
   } });
   const [action] = positionals;
-  if (positionals.length !== 1 || !['prepare', 'finish'].includes(action) || !opt.repo || !opt.org || !opt.prepared || opt.role !== 'supervisor')
-    throw Error('usage: reconcile.mjs prepare|finish --repo PATH --org PATH --role supervisor --prepared FILE [--manifest FILE --gate-log FILE | --gate-exit 0 --tip SHA]');
+  if (positionals.length !== 1 || !['prepare', 'finish', 'refresh'].includes(action) || !opt.repo || !opt.org || !opt.prepared || opt.role !== 'supervisor')
+    throw Error('usage: reconcile.mjs prepare|finish|refresh --repo PATH --org PATH --role supervisor --prepared FILE [--manifest FILE --gate-log FILE | --gate-exit 0 --tip SHA [--accept-delta SHA256 --why TEXT]]');
+  if (action === 'refresh' && (!/^[a-f0-9]{64}$/.test(opt['accept-delta'] ?? '') || !opt.why?.trim()))
+    throw Error('refresh needs --accept-delta SHA256 and --why TEXT after inspecting the refused finish');
+  if (action !== 'refresh' && (opt['accept-delta'] !== undefined || opt.why !== undefined))
+    throw Error('--accept-delta and --why require refresh');
   const project = gitProject(opt.repo), org = fs.realpathSync(opt.org);
   if (project.checkout !== project.canonical) throw Error('completion requires the canonical checkout');
   const discovered = findOrgDir({ cwd: project.canonical, env: { ...process.env, ORG_DIR: '' } });
@@ -70,6 +75,7 @@ export function reconcile(argv) {
       };
       const prepared = { version: 1, batch: manifest.batch, identity: project.identity, org,
         canonical: project.canonical, branch, base: git(project.canonical, ['rev-parse', 'HEAD']),
+        prepared_seq: loaded.events.at(-1)?.seq ?? 0,
         candidate: manifest.candidate, gate_log: path.resolve(opt['gate-log']), items: manifest.items.map(e => bind(e, true)),
         excluded: (manifest.excluded ?? []).map(e => bind(e, false)) };
       ancestor(project.canonical, prepared.base, prepared.candidate);
@@ -92,16 +98,18 @@ export function reconcile(argv) {
     if (!bytes.length) throw Error('gate log is empty');
     const payload = { version: 1, batch: prepared.batch, org, identity: project.identity,
       base: prepared.base, tip: opt.tip,
+      ...(prepared.prepared_seq !== undefined ? { prepared_seq: prepared.prepared_seq } : {}),
       gate: { exit_code: 0, log: prepared.gate_log, sha256: createHash('sha256').update(bytes).digest('hex') },
       items: prepared.items, excluded: prepared.excluded };
     const receipt = file + '.record.json';
     if (fs.existsSync(receipt) && stable(JSON.parse(fs.readFileSync(receipt, 'utf8'))) !== stable(payload))
       throw Error('completion evidence changed; preserve the original receipt and inspect');
     if (!fs.existsSync(receipt)) writeFileAtomic(receipt, JSON.stringify(payload, null, 2) + '\n');
-    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/org.mjs', import.meta.url)), 'complete-batch', '--file', receipt],
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/org.mjs', import.meta.url)), 'complete-batch', '--file', receipt,
+      ...(action === 'refresh' ? ['--accept-delta', opt['accept-delta'], '--why', opt.why] : [])],
       { cwd: project.canonical, env: { ...process.env, ORG_DIR: org, ORG_ACTOR: process.env.ORG_ACTOR || 'supervisor-completion' }, encoding: 'utf8', timeout: 30000 });
     if (r.status !== 0 || r.error) throw Error(`Git is integrated but record reconciliation is pending: ${r.stderr || r.error?.message || r.stdout}`);
-    return { result: 'reconciled', ...JSON.parse(r.stdout), receipt };
+    return { result: action === 'refresh' ? 'refreshed' : 'reconciled', ...JSON.parse(r.stdout), receipt };
   } finally { lock(); }
 }
 

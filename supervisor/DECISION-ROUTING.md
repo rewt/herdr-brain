@@ -41,7 +41,7 @@ changes. This policy does not reactivate superseded rules or grant a release.
 | Tier | Decider and boundary | Existing record |
 |---|---|---|
 | T0 | Working engineer or reviewer. Implementation, refactoring, test design and diagnosis within approved scope and contract. Engineers select development checks within required acceptance; reviewers independently judge evidence and give verdicts. Routine security-code repair restoring an approved invariant can be T0, with required security review. | Material choices in the report or receipt; no note for every edit or command. |
-| T1 | Supervisor applying a standing rule. Dispatch, retained-session reuse, authorized bounded retries, queue order, promotion after required evidence, and safe lifecycle actions under the approved shared contract. Apply a cap or route its exception; never invent a waiver. Unknown identity or evidence is a hold to resolve. | Job, promotion or lifecycle receipt with the rule reference; a separate note only for a material disposition or exception needing one. |
+| T1 | Supervisor applying a standing rule. Dispatch, retained-session reuse, authorized bounded retries, queue order, promotion after required evidence, and safe lifecycle actions under the approved shared contract. Apply a cap or route its exception; never invent a waiver. Unknown identity or evidence is a hold to resolve, not permission to clean up. | Job, promotion or lifecycle receipt with the rule reference; a separate note only for a material disposition or exception needing one. |
 | T2 | An authorized technical delegate. New or changed technical or security contracts within the product mandate; bounded residual risk; unresolved engineer/reviewer evidence disagreement; an exception beyond the standing revision cap; a new cross-project priority agreement; new process mechanisms or required-evidence changes within delegated scope. Authorizing implementation scope is not a review PASS. | Concise item decision note: class, authority, choice, evidence and unknowns, limits, follow-up or revisit trigger. |
 | T3 | Operator. Reserved effects below, or a request to change the delegation itself. | Reuse or create the relevant HUM item, quote the answer exactly and bind its scope. Ordinary technical escalations do not all become HUM items. |
 
@@ -79,8 +79,8 @@ erase a negative finding, approve their own missing-authority exception or expan
 their own permissions. They may choose how to implement authorized work. Proposing
 an option does not force its decision to T3. If the technical delegate implemented
 the change, obtain another qualified independent reviewer and another authorized
-decision-maker for any remaining contested T2 exception. Ask the operator when
-reserved authority or missing delegation requires it. One qualified independent
+decision-maker for any remaining contested T2 exception. Ask the operator only
+when reserved authority or missing delegation requires it. One qualified independent
 review can supply both implementation review and security concurrence.
 
 Adopted review defaults:

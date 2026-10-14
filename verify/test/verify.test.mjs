@@ -902,3 +902,33 @@ test('a measurement interrupted after the watchdog capture includes its error an
   assert.equal(receipt.timeout.kind, 'wall'); assert.equal(receipt.halted, false); assert.equal(receipt.desk_restored, true);
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
 });
+
+test('a timeout records a captured descendant sharing the stopped phase runner group', async t => {
+  const f = fixture(t), pids = path.join(f.root, 'shared-group-child');
+  const job = f.add({ 'timeout-seconds': '1', 'idle-timeout-seconds': '3' }, node(`
+    const fs=require('fs'), cp=require('child_process');
+    if(process.ppid<=1)throw Error('fixture phase parent is absent');
+    process.kill(process.ppid,'SIGSTOP');
+    const child=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:false,stdio:'ignore'});
+    child.unref();
+    fs.writeFileSync(${JSON.stringify(pids + '.tmp')},String(child.pid));
+    fs.renameSync(${JSON.stringify(pids + '.tmp')},${JSON.stringify(pids)});
+    setInterval(()=>{},1000);
+  `));
+  await f.run(job);
+  const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids)), directory = path.dirname(job.receipt);
+  const phases = read(path.join(directory, 'phases.json')), captured = read(path.join(directory, 'captured.json'));
+  const saved = captured.find(row => row.pid === pid);
+  assert.equal(receipt.timeout.kind, 'wall');
+  assert.ok(saved?.identity, 'watchdog captured the child birth');
+  assert.equal(saved.pgid, phases.pgid, 'child shares the phase group');
+  assert.notEqual(saved.pid, saved.pgid, 'child is not the group leader');
+  assert.notEqual(receipt.slot_execution.command_pid, phases.pgid, 'phase runner is nested in the live hold group');
+  const live = lookupProcess(pid, { identityOnly: true }); assert.equal(live.ok, true); assert.ok(!live.value || /^Z/.test(live.value.state));
+  t.diagnostic(JSON.stringify({ child_pid: pid, phase_pgid: phases.pgid, captured_child: saved, reaped_processes: receipt.reaped_processes }));
+  const recorded = receipt.reaped_processes.find(row => row.pid === pid && row.identity === saved.identity);
+  assert.ok(recorded, 'receipt includes cleanup of the captured child in the shared group');
+  assert.equal(recorded.source, 'job-watchdog'); assert.equal(recorded.confirmed_gone, true);
+  assert.equal(receipt.halted, false); assert.equal(receipt.desk_restored, true);
+  assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
+});

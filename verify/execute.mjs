@@ -61,9 +61,11 @@ async function hold(spec, directory) {
     phases.tracked = [...tracked.values()]; save();
     await stopTracked(tracked, phases.reaped, save);
     if (execution?.gate_timeout) for (const row of tracked.values()) {
-      if (row.pgid === phases.pgid || phases.reaped.some(entry => entry.pid === row.pid && entry.identity === row.identity)) continue;
+      // A descendant may share the phase's group. Group membership does not
+      // replace evidence that this captured birth was stopped by the watchdog.
+      if (phases.reaped.some(entry => entry.pid === row.pid && entry.identity === row.identity)) continue;
       const now = lookup(row.pid, { identityOnly: true });
-      if (!now.ok) throw Error(`cannot confirm escaped process cleanup: ${now.error}`);
+      if (!now.ok) throw Error(`cannot confirm captured process cleanup: ${now.error}`);
       if (!now.value || now.value.identity !== row.identity) {
         // The unchanged job watchdog protocol has no individual signal receipt.
         phases.reaped.push({ pid: row.pid, identity: row.identity, signal: null, source: 'job-watchdog', confirmed_gone: true });

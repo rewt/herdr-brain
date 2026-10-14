@@ -77,3 +77,25 @@ test('a partially applied deadline leaves its hint resumable and releases the co
   const resumed = consumeRetirement({ org: f.org, retirement: () => ({ plan: () => ({ close: [], keep: [], diagnostics: [] }), apply: () => [] }) });
   assert.equal(resumed.handled, true); assert.equal(resumed.revision, 1);
 });
+
+test('a returned skip-close at or past the deadline never acknowledges the hint', t => {
+  const f = fixture(t); requestRetirement({ org: f.org, eventSeq: 1, source: 'completion' });
+  const now = Date.now, deadline = now() + 60000;
+  try {
+    const result = consumeRetirement({ org: f.org, deadline, retirement: () => ({
+      plan: () => ({ close: [{ tab_id: 'last' }], keep: [], diagnostics: [] }),
+      apply: () => { Date.now = () => deadline; return [{ tab_id: 'last', action: 'skip-close' }]; },
+    }) });
+    assert.equal(result.pending, true); assert.equal(fs.existsSync(f.lock('handled.json')), false);
+  } finally { Date.now = now; }
+});
+
+test('deadline diagnostics after an otherwise successful apply keep its hint pending', t => {
+  const f = fixture(t); requestRetirement({ org: f.org, eventSeq: 1, source: 'completion' });
+  const result = consumeRetirement({ org: f.org, retirement: () => ({
+    diagnostics: [{ code: 'RETIREMENT_DEADLINE', reason: 'late pruning diagnostic' }],
+    plan: () => ({ close: [], keep: [], diagnostics: [] }), apply: () => [{ action: 'closed' }],
+  }) });
+  assert.equal(result.pending, true); assert.equal(result.results[0].action, 'closed');
+  assert.equal(fs.existsSync(f.lock('handled.json')), false); assert.equal(fs.existsSync(f.lock('consume.lock')), false);
+});

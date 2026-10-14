@@ -474,8 +474,9 @@ export async function drain(queue) {
       // Git settings reads must not leave a successful startup ahead of it.
       if (!acknowledged) {
         process.send?.({ ready: true }); acknowledged = true;
-        consumeRequests(queue);
-        retryCleanup(queue);
+        // Catch-up must not strand a freshly dequeued job as current before
+        // its attempt. Per-job cleanup and finally handle the busy iteration.
+        if (!entry) { consumeRequests(queue); retryCleanup(queue); }
       }
       if (!entry) break;
       const { job, newlyDequeued } = entry;

@@ -11,6 +11,8 @@ import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
 import { requestRetirement, consumeRetirement } from '../lib/retire-trigger.mjs';
+import { retirementDeadline } from '../lib/retire-lock.mjs';
+import { stopFixtureInbox } from './helpers/inbox.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
@@ -39,7 +41,8 @@ function fixture(t, { merged = true, occupied = true } = {}) {
   fs.writeFileSync(herdr, `#!${process.execPath}
 const fs = require('node:fs'), file = ${JSON.stringify(file)}, s = JSON.parse(fs.readFileSync(file)), a = process.argv.slice(2);
 const out = result => console.log(JSON.stringify({ result }));
-if(a[0]==='workspace'&&a[1]==='list'&&s.readyMarker&&!fs.existsSync(s.readyMarker)){console.error('retirement observed before acknowledgment');process.exit(1);}
+if(a[0]==='workspace'&&a[1]==='list'&&s.readyMarker&&!fs.existsSync(s.readyMarker)){s.preReadyObservation=true;fs.writeFileSync(file,JSON.stringify(s));console.error('retirement observed before acknowledgment');process.exit(1);}
+if(a[0]==='workspace'&&a[1]==='list'&&s.currentQueue){const q=JSON.parse(fs.readFileSync(s.currentQueue));s.catchupCurrent=q.current?.id??null;s.catchupPersisted=q.results.length;fs.writeFileSync(file,JSON.stringify(s));if(q.current){s.observedCurrent=true;fs.writeFileSync(file,JSON.stringify(s));console.error('retirement catch-up left a dequeued job current');process.exit(1);}}
 if(a[0]==='workspace'&&a[1]==='list'&&s.delayWorkspace)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,s.delayWorkspace);
 if (a[0] === 'workspace' && a[1] === 'list') out({workspaces:s.workspaces});
 else if (a[0] === 'worktree' && a[1] === 'list') out({source:{repo_key:${JSON.stringify(common)},repo_root:${JSON.stringify(repo)},source_checkout_path:${JSON.stringify(repo)}},worktrees:[{path:${JSON.stringify(lane)},open_workspace_id:'w'}]});
@@ -200,14 +203,56 @@ test('promote sends its ready acknowledgment before observing a pending retireme
   f.state.readyMarker = marker; f.save();
   const old = {};
   for (const key of ['ORG_DIR', 'HERDR_MONITOR_FLEET', 'HERDR_RETIRE_HERDR', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME']) { old[key] = process.env[key]; process.env[key] = f.env[key]; }
-  const send = process.send, messages = [];
-  process.send = message => { messages.push(message); if (message.ready) fs.writeFileSync(marker, 'acknowledged'); return true; };
-  t.after(() => { process.send = send; for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  const send = process.send, write = process.stderr.write, messages = [], earlyErrors = [];
+  let ready = false;
+  process.send = message => { messages.push(message); if (message.ready) { ready = true; fs.writeFileSync(marker, 'acknowledged'); } return true; };
+  process.stderr.write = function(chunk, ...args) { if (!ready && String(chunk).includes('retirement catch-up')) earlyErrors.push(String(chunk)); return write.call(this, chunk, ...args); };
+  t.after(() => { process.send = send; process.stderr.write = write; for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
   requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' });
   await drain(queue);
+  assert.equal(f.read().preReadyObservation ?? false, false, 'retirement observed before ready');
+  assert.deepEqual(earlyErrors, [], 'retirement catch-up error preceded ready');
   assert.deepEqual(messages, [{ ready: true }]);
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.org, 'retirement/handled.json'))).revision, 4);
   assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
+test('a dequeued job is persisted before retirement catch-up and is never left current during it', async t => {
+  let inbox;
+  t.after(async () => { if (inbox) await stopFixtureInbox(inbox, { script: path.join(root, 'supervisor/prompt-supervisor.mjs') }); });
+  const f = fixture(t), queue = f.queue(), fakeLane = path.join(f.scratch, 'refused-lane.mjs');
+  inbox = path.join(f.org, 'supervisor/inbox.log');
+  fs.writeFileSync(fakeLane, "console.error('lane: fixture refusal');process.exit(1);\n");
+  // A refused legacy job avoids per-job cleanup, so workspace reads identify
+  // foreground catch-up rather than an integration or its scoped cleanup.
+  queue.transaction(data => data.pending.push({ ...f.job, laneCLI: fakeLane, to: 'fixture', attempts: 1, retry: 0 }));
+  f.state.currentQueue = queue.file; f.save();
+  const old = {};
+  for (const key of ['ORG_DIR', 'HERDR_MONITOR_FLEET', 'HERDR_RETIRE_HERDR', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME']) { old[key] = process.env[key]; process.env[key] = f.env[key]; }
+  const send = process.send, messages = [];
+  process.send = message => { messages.push(message); return true; };
+  t.after(() => { process.send = send; for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' }); await drain(queue);
+  assert.deepEqual(messages, [{ ready: true }]);
+  assert.equal(f.read().observedCurrent ?? false, false, 'catch-up observed the dequeued job as current');
+  assert.equal(f.read().catchupCurrent, null); assert.equal(f.read().catchupPersisted, 1);
+  assert.equal(queue.load().results[0].outcome, 'refused');
+});
+
+test('the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending', t => {
+  const f = fixture(t); f.retirement().recordCallback({ kind: 'executive', pane: 'w:p', pid: 2, agent: 'worker' });
+  f.state.agents = []; f.state.info = { shell_pid: 1, foreground_processes: [{ pid: 1, name: 'zsh' }], process_tree_complete: true,
+    process_tree: [{ pid: 1, identity: 'shell', state: 'S', command: '[zsh]' }] }; f.save();
+  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' });
+  const now = Date.now, deadline = now() + 60000; let reads = 0;
+  try {
+    const result = consumeRetirement({ org: f.org, deadline, retirement: () => createRetirement({ cwd: f.repo, org: f.org, herdr: f.job.herdr, env: f.env, deadline,
+      readOwner: () => { if (++reads === 3) { Date.now = () => deadline; throw retirementDeadline(); } return false; } }) });
+    assert.equal(reads, 3); assert.equal(result.pending, true); assert.equal(result.handled, false);
+    assert.equal(result.results.at(-1).action, 'deferred');
+    assert.equal(fs.existsSync(path.join(f.org, 'retirement/handled.json')), false);
+    assert.equal(fs.existsSync(path.join(f.org, 'retirement/consume.lock')), false); assert.deepEqual(f.read().actions, []);
+  } finally { Date.now = now; }
 });
 
 test('cleanup retries are capped with backoff, record the refusal, and reset on a new request', t => {
@@ -253,6 +298,35 @@ test('apply prunes an absent callback receipt without reading its owner; scoped 
   assert.equal(fs.readdirSync(directory).length, 1, 'a scoped observation cannot prune another workspace');
   const preview = retirement.plan(); assert.equal(fs.readdirSync(directory).length, 1, 'preview remains read-only');
   retirement.apply(preview); assert.deepEqual(fs.readdirSync(directory), []);
+});
+
+test('a concurrently pruned absent receipt does not abort remaining tab closes', t => {
+  const f = fixture(t); f.retirement().recordCallback({ kind: 'watcher', pane: 'w:p', pid: 2, run: 'R-1' });
+  const directory = path.join(f.org, 'retirement/occupants'), file = path.join(directory, fs.readdirSync(directory)[0]);
+  const receipt = JSON.parse(fs.readFileSync(file)); receipt.tab = 'already-gone'; fs.writeFileSync(file, JSON.stringify(receipt));
+  const retirement = f.retirement(), plan = retirement.plan(), unlink = fs.unlinkSync;
+  let raced = false;
+  fs.unlinkSync = function(target) { if (target === file && !raced) { raced = true; unlink(target); return unlink(target); } return unlink(target); };
+  try {
+    const results = retirement.apply(plan); assert.equal(raced, true); assert.equal(results[0].action, 'closed');
+    assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+  } finally { fs.unlinkSync = unlink; }
+});
+
+for (const code of ['ENOENT', 'EACCES']) test(`post-close receipt pruning ${code} preserves the successful close result`, t => {
+  const f = fixture(t); f.retirement().recordCallback({ kind: 'executive', pane: 'w:p', pid: 2, agent: 'worker' });
+  f.state.agents = []; f.state.info = { shell_pid: 1, foreground_processes: [{ pid: 1, name: 'zsh' }], process_tree_complete: true,
+    process_tree: [{ pid: 1, identity: 'shell', state: 'S', command: '[zsh]' }] }; f.save();
+  const directory = path.join(f.org, 'retirement/occupants'), file = path.join(directory, fs.readdirSync(directory)[0]), logs = [];
+  const retirement = createRetirement({ cwd: f.repo, org: f.org, herdr: f.job.herdr, env: f.env, readOwner: () => false, log: row => logs.push(row) });
+  const plan = retirement.plan(), unlink = fs.unlinkSync;
+  fs.unlinkSync = function(target) { if (target === file) { if (code === 'ENOENT') { unlink(target); return unlink(target); } throw Object.assign(Error('injected receipt pruning error'), { code }); } return unlink(target); };
+  try {
+    const results = retirement.apply(plan); assert.equal(results[0].action, 'closed');
+    assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+    assert.equal(logs.some(row => row.action === 'close-failed'), false);
+    assert.equal(logs.some(row => row.action === 'receipt-pruning-diagnostic'), code === 'EACCES');
+  } finally { fs.unlinkSync = unlink; }
 });
 
 test('settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion',t=>{

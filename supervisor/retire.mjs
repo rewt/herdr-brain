@@ -231,7 +231,8 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
     const refs = readLiveReferences({ common, org, env, verifyStateDir });
     for (const run of runs) if (run.meta?.watcher_pid) {
       try { if (readOwner({ pid: Number(run.meta.watcher_pid), identity: run.meta.watcher_identity })) refs.references.push({ kind: 'watcher callback', job: run.id, run: run.id, cwd: canonical(run.workspace), pid: Number(run.meta.watcher_pid), identity: run.meta.watcher_identity }); }
-      catch (e) { refs.references.push({ kind: 'unknown watcher callback', job: run.id, run: run.id, cwd: canonical(run.workspace) }); refs.diagnostics.push({ run: run.id, reason: e.message }); }
+      catch (e) { if (e.code === 'RETIREMENT_DEADLINE') throw e;
+        refs.references.push({ kind: 'unknown watcher callback', job: run.id, run: run.id, cwd: canonical(run.workspace) }); refs.diagnostics.push({ run: run.id, reason: e.message }); }
     }
     const callbacks = [], callbackPruning = [];
     if (org) try {
@@ -252,17 +253,20 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
         }
         callbackPruning.push({ file: path.join(directory, name), receipt, absent: false });
         let process_gone = false;
-        try { process_gone = !readOwner(receipt.process); } catch (e) { refs.diagnostics.push({ file: name, reason: e.message }); }
+        try { process_gone = !readOwner(receipt.process); } catch (e) {
+          if (e.code === 'RETIREMENT_DEADLINE') throw e;
+          refs.diagnostics.push({ file: name, reason: e.message }); }
         callbacks.push({ ...receipt, cwd: canonical(receipt.cwd), common, process_gone });
       }
-    } catch (e) { errors.push(`callback receipts unreadable: ${e.message}; project kept`); }
+    } catch (e) { if (e.code === 'RETIREMENT_DEADLINE') throw e;
+      errors.push(`callback receipts unreadable: ${e.message}; project kept`); }
     // Our synchronous observation helpers have exited by now. For narrow
     // self-retirement, discard only descendants proved gone by birth identity;
     // a surviving child or an unreadable process source still keeps the tab.
     if (selfRetirement?.pid === process.pid) for (const p of panes.filter(p => p.pane_id === selfRetirement.pane)) {
       p.process_info.process_tree = p.process_info.process_tree?.filter(row => {
         if (row.pid === p.process_info.shell_pid || row.pid === process.pid) return true;
-        try { return readOwner(row); } catch { return true; }
+        try { return readOwner(row); } catch (e) { if (e.code === 'RETIREMENT_DEADLINE') throw e; return true; }
       });
     }
     return { common, workspaces, tabs, panes, agents, git: gitState,
@@ -302,14 +306,24 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
     remaining();
     // Never erase a newer launch that replaced the receipt since observation.
     const current = optional(file);
-    if (current && JSON.stringify(current) === JSON.stringify(receipt)) fs.unlinkSync(file);
+    if (current && JSON.stringify(current) === JSON.stringify(receipt)) try { fs.unlinkSync(file); }
+    catch (e) { if (e.code !== 'ENOENT') throw e; }
   };
+  let diagnostics = [];
   const apply = (planned = plan(), workspacePath) => {
+    diagnostics = [];
     let snapshot = observe(workspacePath);
     for (const receipt of snapshot.callbackPruning.filter(receipt => receipt.absent)) pruneReceipt(receipt);
     return executeRetirement(planned, { observe: () => (snapshot = observe(workspacePath)), close: id => {
       invoke(herdr, ['tab', 'close', id]);
-      for (const receipt of snapshot.callbackPruning.filter(row => row.receipt.tab === id)) pruneReceipt(receipt);
+      for (const receipt of snapshot.callbackPruning.filter(row => row.receipt.tab === id)) try { pruneReceipt(receipt); }
+      catch (e) {
+        const diagnostic = { action: 'receipt-pruning-diagnostic', tab_id: id, file: receipt.file, code: e.code, reason: e.message };
+        diagnostics.push(diagnostic);
+        // Bookkeeping after a successful close cannot change its result, even
+        // if the diagnostic logger itself fails.
+        try { log(diagnostic); } catch {}
+      }
     }, log });
   };
   const assertVacant = lane => {
@@ -333,7 +347,7 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
       observe: emptyObservation, closeWorkspace: workspace => invoke(herdr, ['workspace', 'close', workspace]), log });
     if (result.some(r => r.action !== 'closed')) throw Error(result.map(r => r.why).join('; '));
   };
-  return { common, observe, plan, apply, assertVacant, closeEmptyWorkspace, recordCallback };
+  return { common, observe, plan, apply, assertVacant, closeEmptyWorkspace, recordCallback, get diagnostics() { return diagnostics; } };
 }
 
 function main() {

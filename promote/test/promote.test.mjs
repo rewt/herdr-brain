@@ -549,6 +549,9 @@ cp.spawnSync=function(cmd,args,options){
     assert.equal(f.results()[0].cleanup.state, 'pending');
     assert.equal(JSON.parse(record(['show', run, '--json'])).notes.filter(n => n.text.startsWith('Promotion: report-to-main ')).length, 1);
   }
+  // Results are durable before the deferred project-wide catch-up begins.
+  await waitForFile(calls, text => text.trim().split('\n').map(JSON.parse).some(a =>
+    ['pane', 'tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'), { timeoutMs: 30000 });
   const actions = fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(actions.filter((a) => a[0] === 'tab' && a[1] === 'close'), [['tab', 'close', 'w:worker']]);
   assert.ok(!actions.some((a) => a[0] === 'worktree' || a[0] === 'workspace' && a[1] !== 'list'));

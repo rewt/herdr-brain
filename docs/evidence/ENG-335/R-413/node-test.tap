@@ -1,0 +1,742 @@
+TAP version 13
+# Subtest: fixture cleanup ignores an ambient record inbox owner
+ok 1 - fixture cleanup ignores an ambient record inbox owner
+  ---
+  duration_ms: 89.408792
+  ...
+# Subtest: busy supervisor does not hold completed queue accounting by default
+ok 2 - busy supervisor does not hold completed queue accounting by default
+  ---
+  duration_ms: 4071.980375
+  ...
+# Subtest: idle supervisor receives a default queued promotion notice without a false alert
+ok 3 - idle supervisor receives a default queued promotion notice without a false alert
+  ---
+  duration_ms: 1829.468917
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 4 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6792.551625
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 5 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 2988.331833
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 6 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1786.164333
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 7 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 2329.771
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 8 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 2032.7665
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 9 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 514.145209
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 10 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 2294.789916
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 11 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2364.712334
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 12 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 3213.194083
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 13 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2634.073625
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 14 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 2750.116958
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 15 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 4578.430834
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 16 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1967.717583
+  ...
+# Subtest: a drain owner this caller may not signal still counts as running
+ok 17 - a drain owner this caller may not signal still counts as running
+  ---
+  duration_ms: 92.200291
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 18 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 5172.9105
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 19 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 3602.306167
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 20 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 734.156083
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 21 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 220.605
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 22 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 317.480167
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 23 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 778.446875
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 24 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 5037.884041
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 25 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4975.003667
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 26 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1872.45775
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 27 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1997.037166
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 28 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 741.651833
+  ...
+# Subtest: only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+ok 29 - only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+  ---
+  duration_ms: 1273.531959
+  ...
+# Subtest: an unborn canonical branch has no gate profile, whatever its working tree holds
+ok 30 - an unborn canonical branch has no gate profile, whatever its working tree holds
+  ---
+  duration_ms: 25.483541
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: canonical supervisor entry consumes a hint once without starting housekeeping
+ok 31 - canonical supervisor entry consumes a hint once without starting housekeeping
+  ---
+  duration_ms: 366.193542
+  ...
+# Subtest: repository does not track a Codex project hook that can interrupt unattended workers
+ok 32 - repository does not track a Codex project hook that can interrupt unattended workers
+  ---
+  duration_ms: 0.070792
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 33 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 1058.160291
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 34 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 319.786833
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 35 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 1093.523083
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 36 - entry respects {"enabled":false}
+  ---
+  duration_ms: 198.933541
+  ...
+# Subtest: entry respects {"resume":false}
+ok 37 - entry respects {"resume":false}
+  ---
+  duration_ms: 191.42575
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 38 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 129.1
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 39 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 190.4885
+  ...
+# Subtest: entry lock inspection includes retirement request, consume and recovery owners
+ok 40 - entry lock inspection includes retirement request, consume and recovery owners
+  ---
+  duration_ms: 84.621708
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 41 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 335.024375
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 42 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 509.387875
+  ...
+# Subtest: entry safely handles STOP
+ok 43 - entry safely handles STOP
+  ---
+  duration_ms: 268.854167
+  ...
+# Subtest: entry safely handles invalid-config
+ok 44 - entry safely handles invalid-config
+  ---
+  duration_ms: 412.988041
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 45 - entry safely handles invalid-pid
+  ---
+  duration_ms: 349.804625
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 46 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 388.226167
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 47 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 354.647291
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 48 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 183.790458
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 49 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 189.938833
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 50 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 180.681417
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 51 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 181.565625
+  ...
+# Subtest: watch recovery handles reused identity without blocking entry
+ok 52 - watch recovery handles reused identity without blocking entry
+  ---
+  duration_ms: 468.816833
+  ...
+# Subtest: watch recovery handles unreadable identity without blocking entry
+ok 53 - watch recovery handles unreadable identity without blocking entry
+  ---
+  duration_ms: 318.061333
+  ...
+# Subtest: watch recovery handles legacy-live identity without blocking entry
+ok 54 - watch recovery handles legacy-live identity without blocking entry
+  ---
+  duration_ms: 343.889083
+  ...
+# Subtest: watch recovery handles changed-during-entry identity without blocking entry
+ok 55 - watch recovery handles changed-during-entry identity without blocking entry
+  ---
+  duration_ms: 351.985625
+  ...
+# Subtest: empty supervisor environment and null dispatch recipient use the supervisor fallback
+ok 56 - empty supervisor environment and null dispatch recipient use the supervisor fallback
+  ---
+  duration_ms: 431.750834
+  ...
+# Subtest: housekeeping snapshot reports reused birth without changing the lock
+ok 57 - housekeeping snapshot reports reused birth without changing the lock
+  ---
+  duration_ms: 108.636917
+  ...
+# Subtest: housekeeping snapshot reports unreadable birth without changing the lock
+ok 58 - housekeeping snapshot reports unreadable birth without changing the lock
+  ---
+  duration_ms: 112.879917
+  ...
+# Subtest: housekeeping snapshot reports legacy-live birth without changing the lock
+ok 59 - housekeeping snapshot reports legacy-live birth without changing the lock
+  ---
+  duration_ms: 106.756375
+  ...
+# Subtest: housekeeping resume replaces a reused PID without signaling the replacement process
+ok 60 - housekeeping resume replaces a reused PID without signaling the replacement process
+  ---
+  duration_ms: 914.405959
+  ...
+# Subtest: Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+ok 61 - Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+  ---
+  duration_ms: 906.718875
+  ...
+# Subtest: consume reclaims a proven dead owner and its dead recovery guard
+ok 62 - consume reclaims a proven dead owner and its dead recovery guard
+  ---
+  duration_ms: 52.718917
+  ...
+# Subtest: consume respects a live owner without observing or changing its receipt
+ok 63 - consume respects a live owner without observing or changing its receipt
+  ---
+  duration_ms: 21.744375
+  ...
+# Subtest: request recovers its dead owner without rereading the event log
+ok 64 - request recovers its dead owner without rereading the event log
+  ---
+  duration_ms: 19.92575
+  ...
+# Subtest: unknown owners are retained, while PID reuse proves the recorded owner gone
+ok 65 - unknown owners are retained, while PID reuse proves the recorded owner gone
+  ---
+  duration_ms: 14.07725
+  ...
+# Subtest: an expired consumer deadline returns pending and leaves no lock or handled revision
+ok 66 - an expired consumer deadline returns pending and leaves no lock or handled revision
+  ---
+  duration_ms: 8.601417
+  ...
+# Subtest: a partially applied deadline leaves its hint resumable and releases the consumer lock
+ok 67 - a partially applied deadline leaves its hint resumable and releases the consumer lock
+  ---
+  duration_ms: 25.761834
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"3940f699478a7301e0e275d0895ac57a666f53a4ba5d35b38b5dfd80e3511242","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"e64464395ef301a3ab341b8682a7b10ad72a0bedaa000597565c58013c30b47e","action":"closed"}
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 68 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+  ---
+  duration_ms: 1055.773917
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 69 - lane close --git-only keeps the worktree beneath even an eligible pane
+  ---
+  duration_ms: 670.037042
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 70 - lane close uses the executor then proves vacancy before Git and empty workspace close
+  ---
+  duration_ms: 1457.495167
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 71 - an empty unmerged lane retains its recoverable archive and immutable record
+  ---
+  duration_ms: 624.300917
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 72 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+  ---
+  duration_ms: 1635.506167
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 73 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+  ---
+  duration_ms: 820.651584
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 74 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+  ---
+  duration_ms: 191.156625
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 75 - Git-only lane without a workspace still keeps queued lane and run references
+  ---
+  duration_ms: 478.880166
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 76 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+  ---
+  duration_ms: 507.136625
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 77 - installed settle-watch flags keep an ingested worker while its chain is open
+  ---
+  duration_ms: 563.159625
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 78 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+  ---
+  duration_ms: 1021.554458
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 79 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+  ---
+  duration_ms: 229.64
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 80 - promote drain consumes requests at both foreground boundaries without running a gate
+  ---
+  duration_ms: 1154.195334
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+ok 81 - promote sends its ready acknowledgment before observing a pending retirement hint
+  ---
+  duration_ms: 803.800042
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 82 - cleanup retries are capped with backoff, record the refusal, and reset on a new request
+  ---
+  duration_ms: 3702.183
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 83 - lane close permits an absent Herdr executable and refuses an unreadable installed server
+  ---
+  duration_ms: 505.205291
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 84 - tidy-tabs prunes an exited recorded watcher callback through the shared guard
+  ---
+  duration_ms: 1474.024834
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 85 - tidy-tabs prunes an exited recorded settle callback through the shared guard
+  ---
+  duration_ms: 1531.739417
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 86 - tidy-tabs prunes an exited recorded executive callback through the shared guard
+  ---
+  duration_ms: 1671.190917
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 87 - tidy-tabs prunes an exited recorded plan callback through the shared guard
+  ---
+  duration_ms: 1520.387375
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 88 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+  ---
+  duration_ms: 904.541958
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 89 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+  ---
+  duration_ms: 4732.867417
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 90 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+  ---
+  duration_ms: 982.817917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation
+ok 91 - ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation
+  ---
+  duration_ms: 1.978542
+  ...
+# Subtest: process state changes do not change identity tokens, but stopped processes still keep on fresh decision
+ok 92 - process state changes do not change identity tokens, but stopped processes still keep on fresh decision
+  ---
+  duration_ms: 0.926167
+  ...
+# Subtest: the shared executor stops cleanly at a deadline without acting on later candidates
+ok 93 - the shared executor stops cleanly at a deadline without acting on later candidates
+  ---
+  duration_ms: 0.42525
+  ...
+# Subtest: pruning another tab callback does not invalidate this tab token
+ok 94 - pruning another tab callback does not invalidate this tab token
+  ---
+  duration_ms: 0.470208
+  ...
+# Subtest: narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities
+ok 95 - narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities
+  ---
+  duration_ms: 1.671375
+  ...
+# Subtest: keeps report-file-only
+ok 96 - keeps report-file-only
+  ---
+  duration_ms: 0.378667
+  ...
+# Subtest: keeps report-before-review
+ok 97 - keeps report-before-review
+  ---
+  duration_ms: 0.14475
+  ...
+# Subtest: keeps blocked
+ok 98 - keeps blocked
+  ---
+  duration_ms: 0.124375
+  ...
+# Subtest: keeps needs-human
+ok 99 - keeps needs-human
+  ---
+  duration_ms: 0.262875
+  ...
+# Subtest: keeps working
+ok 100 - keeps working
+  ---
+  duration_ms: 0.195125
+  ...
+# Subtest: keeps unknown
+ok 101 - keeps unknown
+  ---
+  duration_ms: 0.145792
+  ...
+# Subtest: keeps wrong-common
+ok 102 - keeps wrong-common
+  ---
+  duration_ms: 0.150042
+  ...
+# Subtest: keeps wrong-head
+ok 103 - keeps wrong-head
+  ---
+  duration_ms: 0.127084
+  ...
+# Subtest: keeps dirty
+ok 104 - keeps dirty
+  ---
+  duration_ms: 0.11525
+  ...
+# Subtest: keeps wrong-terminal
+ok 105 - keeps wrong-terminal
+  ---
+  duration_ms: 0.140792
+  ...
+# Subtest: keeps wrong-session
+ok 106 - keeps wrong-session
+  ---
+  duration_ms: 0.144334
+  ...
+# Subtest: keeps wrong-pane
+ok 107 - keeps wrong-pane
+  ---
+  duration_ms: 0.256958
+  ...
+# Subtest: keeps wrong-cwd
+ok 108 - keeps wrong-cwd
+  ---
+  duration_ms: 0.187292
+  ...
+# Subtest: keeps new-shell
+ok 109 - keeps new-shell
+  ---
+  duration_ms: 0.371333
+  ...
+# Subtest: keeps other-program
+ok 110 - keeps other-program
+  ---
+  duration_ms: 0.230333
+  ...
+# Subtest: keeps focused
+ok 111 - keeps focused
+  ---
+  duration_ms: 0.122458
+  ...
+# Subtest: keeps lab
+ok 112 - keeps lab
+  ---
+  duration_ms: 0.097625
+  ...
+# Subtest: keeps persistent
+ok 113 - keeps persistent
+  ---
+  duration_ms: 0.083458
+  ...
+# Subtest: keeps operator
+ok 114 - keeps operator
+  ---
+  duration_ms: 0.082917
+  ...
+# Subtest: keeps missing-process
+ok 115 - keeps missing-process
+  ---
+  duration_ms: 0.084125
+  ...
+# Subtest: pending review and NEEDS-WORK preserve the engineer across a fix gap
+ok 116 - pending review and NEEDS-WORK preserve the engineer across a fix gap
+  ---
+  duration_ms: 0.471125
+  ...
+# Subtest: same native session new run keeps even after a rename and with immutable older report
+ok 117 - same native session new run keeps even after a rename and with immutable older report
+  ---
+  duration_ms: 0.131458
+  ...
+# Subtest: confirmed supersession releases an older round only with a retained different successor
+ok 118 - confirmed supersession releases an older round only with a retained different successor
+  ---
+  duration_ms: 0.3215
+  ...
+# Subtest: all tab occupants must be independently eligible; metadata never releases
+ok 119 - all tab occupants must be independently eligible; metadata never releases
+  ---
+  duration_ms: 0.259833
+  ...
+# Subtest: reference only keeps: promote
+ok 120 - reference only keeps: promote
+  ---
+  duration_ms: 0.452958
+  ...
+# Subtest: reference only keeps: verify
+ok 121 - reference only keeps: verify
+  ---
+  duration_ms: 0.185375
+  ...
+# Subtest: reference only keeps: host-check
+ok 122 - reference only keeps: host-check
+  ---
+  duration_ms: 0.132166
+  ...
+# Subtest: reference only keeps: callback
+ok 123 - reference only keeps: callback
+  ---
+  duration_ms: 0.309833
+  ...
+# Subtest: reference only keeps: test-slot
+ok 124 - reference only keeps: test-slot
+  ---
+  duration_ms: 0.167833
+  ...
+# Subtest: reference only keeps: waiter
+ok 125 - reference only keeps: waiter
+  ---
+  duration_ms: 0.129625
+  ...
+# Subtest: reference only keeps: reconcile
+ok 126 - reference only keeps: reconcile
+  ---
+  duration_ms: 0.140292
+  ...
+# Subtest: executor rechecks reactivated and reports the fresh reason
+ok 127 - executor rechecks reactivated and reports the fresh reason
+  ---
+  duration_ms: 0.379125
+  ...
+# Subtest: executor rechecks native-session and reports the fresh reason
+ok 128 - executor rechecks native-session and reports the fresh reason
+  ---
+  duration_ms: 0.15325
+  ...
+# Subtest: executor rechecks head and reports the fresh reason
+ok 129 - executor rechecks head and reports the fresh reason
+  ---
+  duration_ms: 0.163417
+  ...
+# Subtest: executor rechecks record-reopened and reports the fresh reason
+ok 130 - executor rechecks record-reopened and reports the fresh reason
+  ---
+  duration_ms: 0.122792
+  ...
+# Subtest: executor rechecks reference and reports the fresh reason
+ok 131 - executor rechecks reference and reports the fresh reason
+  ---
+  duration_ms: 0.153125
+  ...
+# Subtest: executor rechecks new-pane and reports the fresh reason
+ok 132 - executor rechecks new-pane and reports the fresh reason
+  ---
+  duration_ms: 0.122
+  ...
+# Subtest: executor rechecks read-error and reports the fresh reason
+ok 133 - executor rechecks read-error and reports the fresh reason
+  ---
+  duration_ms: 0.082834
+  ...
+# Subtest: restart/idempotency uses fresh authority; failures are cleanup failures
+ok 134 - restart/idempotency uses fresh authority; failures are cleanup failures
+  ---
+  duration_ms: 0.19125
+  ...
+# Subtest: Git-only deletion rejects even a releasable pane until its removal is observed
+ok 135 - Git-only deletion rejects even a releasable pane until its removal is observed
+  ---
+  duration_ms: 0.138958
+  ...
+# Subtest: herdr-reference/v1 matches each declared key, expires visibly, and never releases
+ok 136 - herdr-reference/v1 matches each declared key, expires visibly, and never releases
+  ---
+  duration_ms: 7.261625
+  ...
+# Subtest: malformed, missing expiry, unknown schema, unreadable reference fail the whole project closed
+ok 137 - malformed, missing expiry, unknown schema, unreadable reference fail the whole project closed
+  ---
+  duration_ms: 1.459958
+  ...
+# Subtest: generic promote and trusted verify sources are read-only and include interrupted/reconcile holds
+ok 138 - generic promote and trusted verify sources are read-only and include interrupted/reconcile holds
+  ---
+  duration_ms: 1.866875
+  ...
+# Subtest: pending settlement callbacks keep; completed receipts remain historical
+ok 139 - pending settlement callbacks keep; completed receipts remain historical
+  ---
+  duration_ms: 1.24625
+  ...
+# Subtest: session display changes have no retirement authority
+ok 140 - session display changes have no retirement authority
+  ---
+  duration_ms: 0.428166
+  ...
+# Subtest: background descendants and unknown kernel birth keep, and PID reuse invalidates a plan
+ok 141 - background descendants and unknown kernel birth keep, and PID reuse invalidates a plan
+  ---
+  duration_ms: 0.200917
+  ...
+# Subtest: older folds ignore the confirmed handoff event
+ok 142 - older folds ignore the confirmed handoff event
+  ---
+  duration_ms: 0.155625
+  ...
+# Subtest: a reported successor is reserved until the superseded pane is actually gone
+ok 143 - a reported successor is reserved until the superseded pane is actually gone
+  ---
+  duration_ms: 0.322375
+  ...
+# Subtest: a native session without its launch receipt stays unknown even on the old terminal
+ok 144 - a native session without its launch receipt stays unknown even on the old terminal
+  ---
+  duration_ms: 0.131292
+  ...
+# Subtest: project reference damage is reported even when no tabs are present
+ok 145 - project reference damage is reported even when no tabs are present
+  ---
+  duration_ms: 0.072458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..145
+# tests 145
+# suites 0
+# pass 145
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 69198.65975
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

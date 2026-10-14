@@ -33,9 +33,10 @@ of IDs passed to `admit`. There are no priorities, classes or group verdicts.
 Submission writes only the untrusted inbox at `GIT_COMMON_DIR/verify-inbox`.
 Admission copies the selected immutable specifications into the trusted store,
 captures their SHA256 digests and passes the exact ID/digest allowlist to the
-worker through argv. Inspect `status` before admission: every job without a
-current admission displays its current inbox specification and `spec_sha256`,
-including jobs returned to pending. Admitted jobs display the admitted spec.
+worker through argv. Inspect `status` before admission: a job that never started
+and holds no current admission displays its current inbox specification and
+`spec_sha256`. Admitted, started, retry-required and completed jobs display the
+trusted spec that was admitted.
 `admit` requires `JOB=SPEC_SHA256`; bare IDs refuse, and a changed inbox digest
 refuses before a worker starts. It prints `{"admitted":{"JOB":"SPEC_SHA256"}}`.
 A trusted admitted spec is never overwritten. A pending job requires a fresh

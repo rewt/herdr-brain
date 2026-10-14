@@ -46,12 +46,23 @@ const within = (directory, root) => {
   const relative = path.relative(root, directory);
   return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep));
 };
-function checkStore(project, directory, untrustedRoots, jobs = []) {
+function untrustedLocations(project, untrustedRoots, jobs, ownDesk) {
   const worktrees = git(project.canonical, 'worktree', 'list', '--porcelain').split('\n').filter(line => line.startsWith('worktree ')).map(line => line.slice(9));
-  const roots = [project.canonical, project.identity, ...worktrees, findOrgDir({ cwd: project.canonical }),
+  return [project.canonical, project.identity, ...worktrees.filter(root => !ownDesk || resolvedPath(root) !== ownDesk), findOrgDir({ cwd: project.canonical }),
     '/tmp', '/private/tmp', os.tmpdir(), process.env.TMPDIR, ...untrustedRoots,
-    ...jobs.flatMap(job => [job.org, job.desk])].filter(Boolean).map(resolvedPath);
+    ...jobs.map(job => job.org)].filter(Boolean).map(resolvedPath);
+}
+function checkStore(project, directory, untrustedRoots, jobs = []) {
+  const roots = [...untrustedLocations(project, untrustedRoots, jobs), ...jobs.map(job => resolvedPath(job.desk))];
   if (roots.some(root => within(resolvedPath(directory), root))) throw Error('trusted store must be outside the repository, Git common directory, worktrees, desks, record, system temp directories and untrusted roots');
+}
+function checkDesk(project, job, untrustedRoots, data) {
+  const desk = resolvedPath(job.desk);
+  // A persistent runner-owned desk is itself a registered worktree. Exempt only
+  // that worktree entry; every other protected root still applies to its path.
+  const ownDesk = data.desks[job.desk]?.identity === project.identity ? desk : null;
+  const roots = untrustedLocations(project, untrustedRoots, [...data.jobs, job], ownDesk);
+  if (roots.some(root => within(desk, root))) throw Error('desk must be outside the repository, Git common directory, worktrees, record, system temp directories and untrusted roots');
 }
 export function queueFor(repo = process.cwd(), stateDir, { untrustedRoots = [] } = {}) {
   const project = gitProject(repo);
@@ -71,7 +82,7 @@ export function queueFor(repo = process.cwd(), stateDir, { untrustedRoots = [] }
     try { const data = load(), result = fn(data); writeFileAtomic(file, JSON.stringify(data, null, 2) + '\n', 0o600); return result; }
     finally { release(); }
   };
-  // Only submission and explicit admission read this untrusted inbox. A worker
+  // Submission, status and explicit admission read this untrusted inbox. A worker
   // never derives authority or publication evidence from it.
   const inboxDirectory = path.join(project.identity, 'verify-inbox'), inboxFile = path.join(inboxDirectory, 'inbox.json');
   const loadInbox = () => {
@@ -86,7 +97,8 @@ export function queueFor(repo = process.cwd(), stateDir, { untrustedRoots = [] }
     finally { release(); }
   } };
   return { project, directory, load, transaction, inbox, untrustedRoots,
-    checkStore: jobs => checkStore(project, directory, untrustedRoots, jobs) };
+    checkStore: jobs => checkStore(project, directory, untrustedRoots, jobs),
+    checkDesk: job => checkDesk(project, job, untrustedRoots, load()) };
 }
 
 // The only scheduling policy: submission order among admitted, unfinished jobs.
@@ -134,26 +146,37 @@ export function submit(queue, opt, argv, prepare = null) {
     desk, desk_name: deskName, argv, prepare, expectations, timeout_seconds: wall, idle_timeout_seconds: idle,
     wait_seconds: wait, label: opt.label ?? `verify ${opt.item}`, to, herdr: opt.herdr ?? 'herdr' };
   queue.checkStore([job]);
+  queue.checkDesk(job);
   queue.inbox.transaction(data => {
     for (const prior of data.jobs) if (desk !== prior.desk && (desk.startsWith(prior.desk + path.sep) || prior.desk.startsWith(desk + path.sep))) throw Error('desk worktrees must not overlap');
     const first = job.group && data.jobs.find(prior => prior.group === job.group);
     if (first && (first.sha !== sha || first.tree !== tree)) throw Error(`group ${job.group} is fixed at sha ${first.sha} tree ${first.tree}`);
     data.jobs.push(job);
   });
-  return { job: job.id, receipt: receiptPath(queue, job) };
+  return { job: job.id, receipt: receiptPath(queue, job), spec_sha256: jobDigest(job) };
 }
 
 // An existing worker cannot inherit a later admitter's permission context. Refuse
 // overlapping admission rather than guessing from harness/provider metadata.
-export function admit(queue, ids) {
-  if (!ids.length || new Set(ids).size !== ids.length) throw Error('admit requires unique job IDs');
+export function admit(queue, references) {
+  const expected = new Map();
+  for (const reference of references) {
+    const match = typeof reference === 'string' && reference.match(/^(.+)=([a-f0-9]{64})$/);
+    if (!match || !safeID(match[1])) throw Error('admit requires JOB=SPEC_SHA256 for every job; bare IDs refuse');
+    if (expected.has(match[1])) throw Error('admit requires unique job IDs');
+    expected.set(match[1], match[2]);
+  }
+  const ids = [...expected.keys()];
+  if (!ids.length) throw Error('admit requires JOB=SPEC_SHA256');
   const submitted = queue.inbox.load();
   const specs = submitted.jobs.filter(job => ids.includes(job.id)).map(jobSpec);
   for (const id of ids) {
     const matches = specs.filter(job => job.id === id), job = matches[0];
     if (matches.length !== 1 || !safeID(id)) throw Error(`unknown or duplicate submitted job ${id}`);
+    if (jobDigest(job) !== expected.get(id)) throw Error(`inbox spec digest differs for job ${id}; inspect status and admit its current digest`);
     if (job.repo !== queue.project.canonical || job.identity !== queue.project.identity || typeof job.org !== 'string' || typeof job.desk !== 'string' || !path.isAbsolute(job.desk)) throw Error(`invalid submitted spec for job ${id}`);
     checkItem(job.org, job.item);
+    queue.checkDesk(job);
   }
   queue.checkStore(specs);
   const admission = { token: randomUUID(), admitted_at: stamp(), admitted_by: process.env.ORG_ACTOR ?? 'human', jobs: {} };
@@ -165,6 +188,7 @@ export function admit(queue, ids) {
       if (matches.length > 1) throw Error(`duplicate job ${id}`);
       if (job?.completed_at || fs.existsSync(receiptPath(queue, { id }))) throw Error(`job ${id} already has a receipt`);
       if (job?.started_at || job?.retry_required_at) throw Error(`job ${id} was interrupted; inspect it and retry as a new job`);
+      if (job && jobDigest(job) !== expected.get(id)) throw Error(`admitted spec is immutable for job ${id}; changed content requires a new job`);
     }
     for (const spec of specs) {
       for (const prior of data.jobs) {
@@ -173,8 +197,7 @@ export function admit(queue, ids) {
         if (spec.group && prior.group === spec.group && (spec.sha !== prior.sha || spec.tree !== prior.tree)) throw Error(`group ${spec.group} is fixed at sha ${prior.sha} tree ${prior.tree}`);
       }
       let job = data.jobs.find(job => job.id === spec.id);
-      if (job) Object.assign(job, spec);
-      else { job = spec; data.jobs.push(job); }
+      if (!job) { job = spec; data.jobs.push(job); }
       job.submission_order = submitted.jobs.findIndex(row => row.id === job.id);
       const digest = jobDigest(job);
       admission.jobs[job.id] = digest;
@@ -188,6 +211,7 @@ function clean(desk) {
   if (git(desk, 'status', '--porcelain', '--untracked-files=all')) throw Error(`desk is dirty: ${desk}`);
 }
 function deskFor(queue, job) {
+  queue.checkDesk(job);
   const registered = queue.load().desks[job.desk];
   if (!registered) {
     if (fs.existsSync(job.desk)) throw Error(`desk was not created by this runner: ${job.desk}`);
@@ -430,8 +454,13 @@ export async function startWorker(queue, admission) {
 export function status(queue, { id, group } = {}) {
   const data = queue.load();
   const trusted = new Map(data.jobs.map(job => [job.id, job]));
-  const submitted = queue.inbox.load().jobs.map(jobSpec);
-  const rows = [...submitted.map(job => trusted.get(job.id) ?? job), ...data.jobs.filter(job => !submitted.some(row => row.id === job.id))];
+  const submitted = new Map(queue.inbox.load().jobs.map(job => [job.id, jobSpec(job)]));
+  const rows = [...new Set([...submitted.keys(), ...trusted.keys()])].map(id => {
+    const saved = trusted.get(id);
+    const spec = saved?.admission && !saved.completed_at ? jobSpec(saved) : submitted.get(id);
+    const runtime = Object.fromEntries(Object.entries(saved ?? {}).filter(([key]) => !specFields.includes(key)));
+    return { ...runtime, ...(spec ?? { id }), spec_sha256: spec ? jobDigest(spec) : null };
+  });
   const jobs = rows.filter(job => (!id || job.id === id) && (!group || job.group === group)).map(job => ({ ...job,
     receipt: receiptPath(queue, job), state: job.completed_at ? job.outcome : job.retry_required_at ? 'needs-retry' : job.started_at ? 'running-or-interrupted' : job.admission ? 'admitted' : 'pending-admission' }));
   return { identity: data.identity, runner: data.runner, last_runner: data.last_runner ?? null, halted: data.halted ?? null, jobs };
@@ -453,7 +482,7 @@ export async function main(args = process.argv.slice(2)) {
     ...Object.fromEntries(['expect', 'expect-tap', 'expect-vitest', 'expect-test', 'expect-file', 'expect-json'].map(name => [name, { type: 'string', multiple: true }])),
     'untrusted-root': { type: 'string', multiple: true },
     admit: { type: 'boolean' },
-  }, usage: 'verify.mjs submit OPTIONS [--prepare CMD ARGS...] -- CMD ARGS... | admit JOB... | status [JOB] [--group ID] | recover | probe-store [--state-dir DIR]' });
+  }, usage: 'verify.mjs submit OPTIONS [--prepare CMD ARGS...] -- CMD ARGS... | admit JOB=SPEC_SHA256... | status [JOB] [--group ID] | recover | probe-store [--state-dir DIR]' });
   const queue = queueFor(opt.repo, opt['state-dir'], { untrustedRoots: opt['untrusted-root'] });
   if (opt.worker) return await drain(queue, JSON.parse(opt.worker));
   const [action, ...ids] = positionals;
@@ -461,10 +490,10 @@ export async function main(args = process.argv.slice(2)) {
     if (ids.length) throw Error('unexpected submit argument');
     const submitted = submit(queue, opt, separator < 0 ? [] : args.slice(separator + 1), prepare);
     console.log(JSON.stringify(submitted));
-    if (opt.admit) { const admission = admit(queue, [submitted.job]); await startWorker(queue, admission); }
+    if (opt.admit) { const admission = admit(queue, [`${submitted.job}=${submitted.spec_sha256}`]); await startWorker(queue, admission); }
     return;
   }
-  if (action === 'admit') { const admission = admit(queue, ids); await startWorker(queue, admission); console.log(JSON.stringify({ admitted: ids })); return; }
+  if (action === 'admit') { const admission = admit(queue, ids); await startWorker(queue, admission); console.log(JSON.stringify({ admitted: admission.jobs })); return; }
   if (action === 'status' && ids.length <= 1) { console.log(JSON.stringify(status(queue, { id: ids[0], group: opt.group }))); return; }
   if (action === 'recover' && !ids.length) { console.log(JSON.stringify(await recover(queue))); return; }
   if (action === 'probe-store' && !ids.length) { console.log(JSON.stringify(probeStore(queue))); return; }

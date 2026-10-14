@@ -14,14 +14,14 @@ node verify/verify.mjs submit --repo /project --org /project/.org --item ENG-1 \
   --expect-test 'a specific test title' --expect-file 'out.json=SHA256' \
   --expect-json 'out.json#/results/passed=20' \
   --prepare pnpm build -- pnpm test --reporter=tap
-node verify/verify.mjs admit JOB_ID OTHER_JOB_ID
 node verify/verify.mjs status [JOB_ID]
+node verify/verify.mjs admit JOB_ID=SPEC_SHA256 OTHER_JOB_ID=SPEC_SHA256
 node verify/verify.mjs status --group regression-1
 node verify/verify.mjs recover
 node verify/verify.mjs probe-store [--state-dir ABS_PATH]
 ```
 
-Submit prints `{"job":"…","receipt":"/absolute/path/receipt.json"}`. Jobs stay
+Submit prints `{"job":"…","receipt":"/absolute/path/receipt.json","spec_sha256":"…"}`. Jobs stay
 `pending-admission` until `admit`; the supervisor can use `submit --admit` for its
 own jobs. No permission comparison or auto-admission policy is inferred from
 harness/session metadata. Admission while a worker is active refuses: an existing
@@ -32,8 +32,17 @@ of IDs passed to `admit`. There are no priorities, classes or group verdicts.
 Submission writes only the untrusted inbox at `GIT_COMMON_DIR/verify-inbox`.
 Admission copies the selected immutable specifications into the trusted store,
 captures their SHA256 digests and passes the exact ID/digest allowlist to the
-worker through argv. Submitter-supplied admission, completion and publication
-fields are discarded. After admission, drain and recover read only the trusted
+worker through argv. Inspect `status` before admission: every job without a
+current admission displays its current inbox specification and `spec_sha256`,
+including jobs returned to pending. Admitted jobs display the admitted spec.
+`admit` requires `JOB=SPEC_SHA256`; bare IDs refuse, and a changed inbox digest
+refuses before a worker starts. It prints `{"admitted":{"JOB":"SPEC_SHA256"}}`.
+A trusted admitted spec is never overwritten. A pending job requires a fresh
+explicit admission against its current inbox digest; changed content after a
+prior admission requires submission as a new job. `submit --admit` binds the
+specification created by that submit call. Submitter-supplied admission,
+completion and publication fields are discarded. After admission, drain and
+recover read only the trusted
 store; inbox edits, injected jobs and planted inbox receipts have no authority.
 A changed trusted specification halts the batch before execution. The receipt
 records `admitted_spec_sha256`. All submit fields,
@@ -67,6 +76,13 @@ execution evidence; resubmit jobs after configuring the store.
 
 `--repo` selects the repository on every command. `--desk` is
 per job: a name (default `default`) under `STATE/desks/`, or an absolute path.
+Named desks under the trusted store are recommended. Desks need the same
+isolation from every submitter's sandbox write roots as the trusted store.
+Submission, admission and execution each refuse desks under the repository,
+Git common directory, other registered worktrees, the record, system temp or
+configured untrusted roots, resolving symlink aliases. An already registered
+runner-owned desk can be reused; its own worktree entry is the sole exception
+to the worktree check, and all other roots still apply.
 Only runner-created, registered detached worktrees are accepted. Each desk
 keeps its own ignored caches and prepared state. Before a job the runner refuses
 a dirty desk, saves `desk_previous_sha`, checks out the exact commit, verifies

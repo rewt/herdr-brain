@@ -21,6 +21,11 @@ const CLI = fileURLToPath(new URL('../verify.mjs', import.meta.url));
 const inboxCLI = fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url));
 const node = code => [process.execPath, '-e', code];
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+const references = (queue, ids) => {
+  const inspected = status(queue).jobs;
+  return ids.map(id => `${id}=${inspected.find(job => job.id === id).spec_sha256}`);
+};
+const admitJobs = (queue, ids) => admit(queue, references(queue, ids));
 async function until(fn, message) {
   const by = Date.now() + loadTimeout(10000);
   while (Date.now() < by) { if (fn()) return; await new Promise(resolve => setTimeout(resolve, 25)); }
@@ -53,8 +58,12 @@ function fixture(t, { defaultState = false } = {}) {
   const queue = queueFor(repo, defaultState ? undefined : path.join(storeRoot, 'state'));
   const add = (opt = {}, argv = node("console.log('ok')"), prepare = null) => submit(queue, { org, item: 'ENG-1', sha: sha1, to: 'ops-fixture', herdr: fake, ...opt }, argv, prepare);
   const notify = async (to, text, opt) => enqueueSupervisor(to, text, opt);
-  const run = async (...jobs) => { const token = admit(queue, jobs.map(job => job.job)); await drain(queue, token, { notify }); };
+  const run = async (...jobs) => { const token = admitJobs(queue, jobs.map(job => job.job)); await drain(queue, token, { notify }); };
   const cli = async args => {
+    if (args[0] === 'admit') {
+      const jobs = status(queue).jobs;
+      args = args.map(arg => jobs.some(job => job.id === arg) ? references(queue, [arg])[0] : arg);
+    }
     const result = await waitForExit(spawnChild(t, process.execPath, [CLI, ...args, '--repo', repo, '--state-dir', queue.directory], { env: process.env }));
     assert.equal(result.code, 0, result.stderr); return JSON.parse(result.stdout);
   };
@@ -116,7 +125,7 @@ test('trusted store paths refuse Git, every worktree, records, desks and symlink
     assert.equal(fs.existsSync(insideRecord.directory), false);
     const job = f.add();
     f.queue.inbox.transaction(data => { data.jobs[0].desk = f.storeRoot; });
-    assert.throws(() => admit(f.queue, [job.job]), /trusted store must be outside/);
+    assert.throws(() => admitJobs(f.queue, [job.job]), /trusted store must be outside/);
     assert.equal(fs.existsSync(f.queue.directory), false);
   } finally { f.git('worktree', 'remove', '--force', lane); }
 });
@@ -167,9 +176,10 @@ test('one detached admitted worker returns before grant, drains FIFO and records
   t.after(() => holder.release());
   const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`));
   const b = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'B')`));
-  await f.cli(['admit', b.job, a.job]);
+  const admitted = await f.cli(['admit', b.job, a.job]);
+  assert.deepEqual(admitted.admitted, { [a.job]: a.spec_sha256, [b.job]: b.spec_sha256 });
   assert.equal(fs.existsSync(a.receipt), false); assert.equal(fs.existsSync(b.receipt), false);
-  assert.throws(() => admit(f.queue, [a.job]), /admission is active/);
+  assert.throws(() => admitJobs(f.queue, [a.job]), /admission is active/);
   await until(() => fs.existsSync(path.join(f.queue.directory, 'jobs', a.job, 'execution.log')) && fs.readFileSync(path.join(f.queue.directory, 'jobs', a.job, 'execution.log'), 'utf8').includes('TEST_SLOT_WAIT'), 'worker did not wait for slot');
   holder.release();
   await until(() => f.queue.load().runner === null, 'detached worker did not finish');
@@ -198,8 +208,46 @@ test('FIFO preserves submission order when an older pending job enters a later a
   const f = fixture(t), order = path.join(f.root, 'order');
   const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`));
   const b = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'B')`));
-  admit(f.queue, [b.job]); await recover(f.queue, { notify: f.notify });
+  admitJobs(f.queue, [b.job]); await recover(f.queue, { notify: f.notify });
   await f.run(b, a); assert.equal(fs.readFileSync(order, 'utf8'), 'AB');
+});
+
+test('admit refuses bare IDs through the API and CLI before creating trusted state', async t => {
+  const f = fixture(t), job = f.add();
+  assert.throws(() => admit(f.queue, [job.job]), /JOB=SPEC_SHA256.*bare IDs refuse/);
+  const result = await waitForExit(spawnChild(t, process.execPath, [CLI, 'admit', job.job, '--repo', f.repo, '--state-dir', f.queue.directory]));
+  assert.equal(result.code, 1); assert.match(result.stderr, /JOB=SPEC_SHA256/);
+  assert.equal(fs.existsSync(f.queue.directory), false);
+});
+
+test('a never-admitted inbox edit refuses the previously inspected digest and accepts the newly inspected digest', async t => {
+  const f = fixture(t), job = f.add(), inspected = references(f.queue, [job.job]);
+  const changed = node("console.log('changed after inspection')");
+  f.queue.inbox.transaction(data => { data.jobs[0].argv = changed; });
+  assert.throws(() => admit(f.queue, inspected), /inbox spec digest differs/);
+  assert.equal(fs.existsSync(f.queue.directory), false);
+  const current = status(f.queue, { id: job.job }).jobs[0];
+  assert.deepEqual(current.argv, changed); assert.equal(current.spec_sha256, jobDigest(f.queue.inbox.load().jobs[0]));
+  await f.run(job); assert.deepEqual(read(job.receipt).argv, changed);
+});
+
+test('pending status shows current inbox content; stale consent refuses and admitted specs never change', async t => {
+  const f = fixture(t), marker = path.join(f.root, 'changed-command'), job = f.add();
+  admitJobs(f.queue, [job.job]); await recover(f.queue, { notify: f.notify });
+  const displayed = (await f.cli(['status', job.job])).jobs[0];
+  assert.equal(displayed.state, 'pending-admission'); assert.equal(displayed.spec_sha256, job.spec_sha256);
+  const saved = f.queue.load(), changed = node(`require('fs').writeFileSync(${JSON.stringify(marker)},'changed')`);
+  f.queue.inbox.transaction(data => { data.jobs[0].argv = changed; });
+  const current = (await f.cli(['status', job.job])).jobs[0];
+  assert.deepEqual(current.argv, changed); assert.notEqual(current.spec_sha256, displayed.spec_sha256);
+  assert.equal(current.spec_sha256, jobDigest(f.queue.inbox.load().jobs[0]));
+  const result = await waitForExit(spawnChild(t, process.execPath, [CLI, 'admit', `${job.job}=${displayed.spec_sha256}`, '--repo', f.repo, '--state-dir', f.queue.directory]));
+  assert.equal(result.code, 1); assert.match(result.stderr, /inbox spec digest differs/);
+  assert.throws(() => admit(f.queue, [`${job.job}=${current.spec_sha256}`]), /admitted spec is immutable.*new job/);
+  assert.deepEqual(f.queue.load(), saved); assert.equal(fs.existsSync(marker), false);
+  assert.equal(fs.existsSync(job.receipt), false);
+  const retry = f.add({}, changed); await f.run(retry);
+  assert.equal(fs.readFileSync(marker, 'utf8'), 'changed'); assert.deepEqual(read(retry.receipt).argv, changed);
 });
 
 test('detached admission refuses edited specs even with forged queue digests; recorded spec files cannot change execution', async t => {
@@ -306,7 +354,7 @@ test('a forged pass receipt for a never-admitted pending job is unverified and n
   assert.match(recovered.unverified[0].error, /no admitted trusted job/);
   assertUndelivered(f, job); assert.equal(status(f.queue, { id: job.job }).jobs[0].state, 'pending-admission');
   assert.deepEqual(fs.readFileSync(job.receipt), bytes); assert.equal(fs.existsSync(marker), false);
-  assert.throws(() => admit(f.queue, [job.job]), /already has a receipt/);
+  assert.throws(() => admitJobs(f.queue, [job.job]), /already has a receipt/);
 });
 
 test('a forged pass receipt for an admitted queued job halts the worker with runner.error', async t => {
@@ -330,7 +378,7 @@ test('a forged pass receipt for an admitted queued job halts the worker with run
 test('a forged pass receipt during execution fails exclusive publication and recovery requires a new retry job', async t => {
   const f = fixture(t), started = path.join(f.root, 'started'), finish = path.join(f.root, 'finish');
   const job = f.add({}, node(`const fs=require('fs');fs.writeFileSync(${JSON.stringify(started)},'1');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(finish)}))clearInterval(timer)},25);`));
-  const running = drain(f.queue, admit(f.queue, [job.job]), { notify: f.notify });
+  const running = drain(f.queue, admitJobs(f.queue, [job.job]), { notify: f.notify });
   const rejected = assert.rejects(running, { code: 'EEXIST' });
   let bytes;
   try {
@@ -348,7 +396,7 @@ test('a forged pass receipt during execution fails exclusive publication and rec
 
 for (const changed of ['receipt bytes', 'admission', 'started job']) test(`recovery refuses a runner receipt after its ${changed} no longer matches publication`, async t => {
   const f = fixture(t), job = f.add();
-  await assert.rejects(drain(f.queue, admit(f.queue, [job.job]), { notify: async () => { throw Error('delivery unavailable'); } }), /delivery unavailable/);
+  await assert.rejects(drain(f.queue, admitJobs(f.queue, [job.job]), { notify: async () => { throw Error('delivery unavailable'); } }), /delivery unavailable/);
   const before = loadEvents(f.org).events;
   assert.equal(f.queue.load().jobs[0].receipt_sha256, sha256(fs.readFileSync(job.receipt)));
   if (changed === 'receipt bytes') fs.appendFileSync(job.receipt, ' ');
@@ -369,7 +417,7 @@ test('every admitted immutable field is bound before a worker can create its exe
     prepare: node('process.exit(1)'), expectations: [], timeout_seconds: 1, idle_timeout_seconds: 1,
     wait_seconds: 1, label: 'other', to: 'other', herdr: '/other' };
   for (const [field, value] of Object.entries(changes)) {
-    const admission = admit(f.queue, [a.job]);
+    const admission = admitJobs(f.queue, [a.job]);
     f.queue.transaction(data => { data.jobs[0][field] = value; });
     await assert.rejects(drain(f.queue, admission, { notify: f.notify }), /admitted spec digest differs/, field);
     assert.equal(fs.existsSync(path.join(f.queue.directory, 'jobs', a.job)), false, field);
@@ -383,7 +431,7 @@ for (const boundary of ['record', 'notice']) test(`${boundary} delivery failure 
   const script = `const fs=require('fs');fs.appendFileSync(${JSON.stringify(count)},'1');` +
     (boundary === 'record' ? `fs.renameSync(${JSON.stringify(events)},${JSON.stringify(saved)});` : '');
   const a = f.add({}, node(script)), b = f.add(), c = f.add();
-  const admission = admit(f.queue, [a.job, b.job, c.job]);
+  const admission = admitJobs(f.queue, [a.job, b.job, c.job]);
   await assert.rejects(drain(f.queue, admission, { notify: async (...args) => { await f.notify(...args); throw Error('lost notice acknowledgement'); } }),
     boundary === 'record' ? /ENOENT/ : /lost notice acknowledgement/);
   assert.ok(f.queue.load().runner.error);
@@ -403,14 +451,14 @@ for (const boundary of ['record', 'notice']) test(`${boundary} delivery failure 
   assert.equal(fs.readFileSync(count, 'utf8'), '1'); assert.deepEqual(fs.readFileSync(a.receipt), bytes);
   assert.equal(loadEvents(f.org).events.filter(event => event.type === 'note.added').length, 1);
   assert.equal(snapshot(path.join(f.org, 'supervisor/inbox.log')).length, 1);
-  assert.throws(() => admit(f.queue, [a.job]), /already has a receipt/);
+  assert.throws(() => admitJobs(f.queue, [a.job]), /already has a receipt/);
   await f.run(b, c);
 });
 
 test('recovery refuses an existing worker lock and marks an interrupted job for a new retry job', async t => {
   const f = fixture(t), marker = path.join(f.root, 'must-not-replay');
   const a = f.add({}, node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`)), b = f.add(), c = f.add();
-  const admission = admit(f.queue, [a.job, b.job, c.job]);
+  const admission = admitJobs(f.queue, [a.job, b.job, c.job]);
   f.queue.transaction(data => { data.jobs[0].started_at = new Date().toISOString(); });
   const release = acquireLock(path.join(f.queue.directory, 'worker.lock'));
   try {
@@ -424,7 +472,7 @@ test('recovery refuses an existing worker lock and marks an interrupted job for 
   assert.deepEqual(recovered.needs_retry, [a.job]);
   assert.deepEqual(recovered.pending_admission, [b.job, c.job]);
   assert.equal(status(f.queue, { id: a.job }).jobs[0].state, 'needs-retry');
-  assert.throws(() => admit(f.queue, [a.job]), /retry as a new job/);
+  assert.throws(() => admitJobs(f.queue, [a.job]), /retry as a new job/);
   assert.equal(fs.existsSync(a.receipt), false); assert.equal(fs.existsSync(marker), false);
   const retry = f.add(); await f.run(retry, b, c);
   assert.equal(read(retry.receipt).outcome, 'pass');
@@ -441,7 +489,7 @@ test('a log hashing error is recoverable bookkeeping but an executed job never r
   const recovered = await f.cli(['recover']);
   assert.deepEqual(recovered.needs_retry, [a.job]);
   assert.equal(f.queue.load().runner, null); assert.equal(fs.readFileSync(count, 'utf8'), '1');
-  assert.throws(() => admit(f.queue, [a.job]), /retry as a new job/);
+  assert.throws(() => admitJobs(f.queue, [a.job]), /retry as a new job/);
   assert.equal(fs.existsSync(a.receipt), false);
 });
 
@@ -489,7 +537,7 @@ test('two named desks keep independent previous SHAs and prepared state in A, B,
   assert.notEqual(ra.desk, rb.desk); assert.equal(rc.desk, ra.desk);
   assert.equal(rc.desk_previous_sha, f.sha1); assert.equal(rb.desk_previous_sha, f.sha2);
   assert.equal(fs.readFileSync(path.join(rb.desk, 'cache/prepared'), 'utf8'), 'B');
-  assert.throws(() => f.add({ desk: path.join(ra.desk, 'nested') }), /must not overlap/);
+  assert.throws(() => f.add({ desk: path.join(ra.desk, 'nested') }), /desk must be outside/);
 });
 
 test('groups pin SHA and tree across completion and status lists individual group receipts', async t => {
@@ -516,16 +564,46 @@ test('dirty runner desks refuse without discarding edits or running the next job
   assert.equal(fs.readFileSync(path.join(desk, 'version'), 'utf8'), 'preserve me');
   assert.equal(fs.existsSync(c.receipt), false); assert.equal(fs.existsSync(marker), false);
   assert.equal(status(f.queue, { id: c.job }).jobs[0].state, 'pending-admission');
-  const existing = f.add({ desk: f.repo });
+  const existingPath = path.join(f.storeRoot, 'existing-desk'); fs.mkdirSync(existingPath);
+  const existing = f.add({ desk: existingPath });
   await f.run(existing);
   assert.match(read(existing.receipt).error, /not created by this runner/);
 });
 
 test('an absolute desk is created by the runner and a mismatching checked-out tree refuses execution', async t => {
-  const f = fixture(t), a = f.add({ desk: path.join(f.root, 'absolute-desk') });
+  const f = fixture(t), a = f.add({ desk: path.join(f.storeRoot, 'absolute-desk') });
   await f.run(a); assert.equal(read(a.receipt).outcome, 'pass');
   const b = f.add(); f.queue.inbox.transaction(data => { data.jobs.find(job => job.id === b.job).tree = '0'.repeat(40); });
   await f.run(b); assert.match(read(b.receipt).error, /tree differs/);
+});
+
+test('absolute desks under system temp, the repository and configured write roots refuse at submit and admit', t => {
+  const f = fixture(t);
+  for (const desk of [path.join(os.tmpdir(), 'verify-refused-desk'), path.join(f.repo, 'desk'), path.join(f.repo, '.git/desk'), path.join(f.org, 'desk')]) {
+    assert.throws(() => f.add({ desk }), /desk must be outside/);
+    assert.equal(fs.existsSync(desk), false);
+  }
+  const alias = path.join(f.storeRoot, 'desk-alias'); fs.symlinkSync(f.repo, alias);
+  assert.throws(() => f.add({ desk: path.join(alias, 'desk') }), /desk must be outside/);
+  const workers = path.join(f.storeRoot, 'workers'), guarded = queueFor(f.repo, f.queue.directory, { untrustedRoots: [workers] });
+  assert.throws(() => submit(guarded, { org: f.org, item: 'ENG-1', sha: f.sha1, desk: path.join(workers, 'desk') }, node('')), /desk must be outside/);
+  const job = f.add();
+  f.queue.inbox.transaction(data => { data.jobs[0].desk = path.join(f.root, 'admission-desk'); });
+  assert.throws(() => admitJobs(f.queue, [job.job]), /desk must be outside/);
+  assert.equal(fs.existsSync(f.queue.directory), false);
+});
+
+test('deskFor rechecks isolation before execution and preserves named persistent desks', async t => {
+  const f = fixture(t), desk = path.join(f.storeRoot, 'newly-untrusted-desk'), marker = path.join(f.root, 'must-not-run');
+  const job = f.add({ desk }, node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`));
+  const admission = admitJobs(f.queue, [job.job]);
+  const guarded = queueFor(f.repo, f.queue.directory, { untrustedRoots: [desk] });
+  await drain(guarded, admission, { notify: f.notify });
+  assert.match(read(job.receipt).error, /desk must be outside/); assert.equal(read(job.receipt).outcome, 'error');
+  assert.equal(fs.existsSync(desk), false); assert.equal(fs.existsSync(marker), false);
+  const first = f.add({ desk: 'persistent' }), second = f.add({ desk: 'persistent' });
+  await f.run(first); await f.run(second);
+  assert.equal(read(second.receipt).outcome, 'pass'); assert.equal(read(first.receipt).desk, read(second.receipt).desk);
 });
 
 test('a desk that remains dirty after restoration halts the batch and preserves the leftover', async t => {
@@ -589,7 +667,7 @@ test('receipts use exclusive create and completed jobs cannot be admitted or exe
   const before = fs.readFileSync(a.receipt);
   assert.throws(() => writeReceipt(a.receipt, { outcome: 'different' }), { code: 'EEXIST' });
   assert.deepEqual(fs.readFileSync(a.receipt), before);
-  assert.throws(() => admit(f.queue, [a.job]), /already has a receipt/);
+  assert.throws(() => admitJobs(f.queue, [a.job]), /already has a receipt/);
   const retry = f.add(); assert.notEqual(retry.job, a.job); assert.notEqual(retry.receipt, a.receipt);
 });
 

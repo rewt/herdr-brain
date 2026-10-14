@@ -159,6 +159,69 @@ function appended(events, ...add) {
     at: '2026-10-14T01:16:38Z', by: e.by ?? 'supervisor-fixture' }))];
 }
 
+for (const legacy of [false, true]) for (const change of ['question', 'link'])
+test(`a reverted ${change} is omitted beside a plain-note delta with ${legacy ? 'older' : 'new'} receipts`, () => {
+  const f = fixture();
+  if (!legacy) f.plan.prepared_seq = f.events.at(-1).seq;
+  // Put the note first so an older receipt must scan history before the revert.
+  const reverted = change === 'question' ? [
+    { type: 'item.added', id: 'HUM-1', parent: 'ENG-1', role: 'human', title: 'Proceed?' },
+    { type: 'item.closed', id: 'HUM-1', as: 'done' },
+  ] : [
+    { type: 'link.added', blocker: 'ENG-3', blocked: 'ENG-1' },
+    { type: 'link.removed', blocker: 'ENG-3', blocked: 'ENG-1' },
+  ];
+  const events = appended(f.events, { type: 'note.added', id: 'ENG-2', text: 'Retained supervisor note' }, ...reverted);
+  const state = fold(events), delta = completionDelta(state, events, f.plan);
+  assert.deepEqual(delta.items.map(e => e.item), ['ENG-2']);
+  assert.deepEqual(delta.items[0].events.map(e => e.type), ['note.added']);
+  assert.equal(delta.items[0].events[0].acceptance_relevant, false);
+  const { message, accepted } = refusal(() => f.complete(f.plan, events));
+  assert.match(message, /ENG-2 changed since batch preparation/);
+  assert.doesNotMatch(message, /ENG-1 changed|ENG-3 changed|item.added|link.added|link.removed/);
+  const refreshed = refreshCompletionEvents(state, events, f.plan, f.plan.org, accepted, 'Inspected the retained note');
+  assert.deepEqual(refreshed.result.items, ['ENG-2']);
+  assert.equal(f.complete(f.plan, appended(events, ...refreshed.add)).result.replayed, false);
+});
+
+for (const legacy of [false, true]) for (const change of ['question', 'auto-question', 'link'])
+test(`finish reconciles a reverted ${change} without refresh with ${legacy ? 'older' : 'new'} receipts`, t => {
+  const f = integration(t); f.prepare();
+  if (legacy) {
+    const old = JSON.parse(fs.readFileSync(f.prepared)); delete old.prepared_seq;
+    fs.writeFileSync(f.prepared, JSON.stringify(old, null, 2) + '\n');
+  }
+  const original = fs.readFileSync(f.prepared, 'utf8');
+  git(f.root, 'merge', '--ff-only', f.head); fs.writeFileSync(f.log, 'original successful gate\n');
+  if (change === 'link') {
+    const blocker = f.ok(['add', 'Temporary blocker', '--role', 'engineer']).trim();
+    f.ok(['block', 'ENG-1', '--by', blocker]);
+    assert.throws(f.finish, /acceptance-relevant/);
+    f.ok(['unblock', 'ENG-1', '--by', blocker]);
+  } else {
+    if (change === 'auto-question') {
+      const configFile = path.join(f.dir, 'config.json'), config = JSON.parse(fs.readFileSync(configFile));
+      config.approvals.categories.design = 'auto';
+      fs.writeFileSync(configFile, JSON.stringify(config));
+    }
+    const question = f.ok(['ask', 'Proceed after integration?', '--parent', 'ENG-1', '--category', 'design',
+      '--recommend', 'yes', '--why', 'Confirm the integrated work', ...(change === 'question' ? ['--wait'] : [])]).trim();
+    if (change === 'question') {
+      assert.throws(f.finish, /acceptance-relevant/);
+      f.ok(['answer', question, 'yes']);
+    }
+    assert.ok(fold(f.events()).items.get(question).closed);
+  }
+  const state = fold(f.events()), prepared = JSON.parse(original);
+  assert.equal(completionFingerprint(state, 'ENG-1'), prepared.items[0].expected);
+  assert.equal(f.finish().result, 'reconciled');
+  assert.equal(itemStatus(fold(f.events()), 'ENG-1'), 'done');
+  assert.equal(f.events().some(e => e.type === 'promotion.delta-accepted'), false);
+  const marker = f.events().at(-1);
+  assert.equal(marker.batch, prepared.batch); assert.equal(marker.base, f.base); assert.equal(marker.tip, f.head);
+  assert.equal(fs.readFileSync(f.prepared, 'utf8'), original);
+});
+
 test('refusal shows every changed member and only an exact inspected plain-note delta can be accepted', () => {
   const f = fixture(); f.plan.prepared_seq = f.events.at(-1).seq;
   const events = appended(f.events,

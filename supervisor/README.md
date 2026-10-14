@@ -50,6 +50,11 @@ in the canonical checkout can retire without treating the desk itself as a lane.
 that flag permits only its own recorded tab, pane, PID and birth to retire after
 report ingestion, with no other occupant or process. If its guarded close fails,
 a later tidy pass can reconsider its exited-process receipt.
+Only watchers launched with `--close-tab-on-exit` record ownership of their tab;
+a foreground watcher borrowing an ordinary operator tab leaves no receipt.
+Apply removes receipts after their tab closes or when the current inventory
+proves the tab absent. Preview skips absent-tab owner lookups and stays read-only.
+Scoped cleanup retains receipts for workspaces outside its observed scope.
 
 Live sources are `<git-common>/promote/queue.json` (pending, current, interrupted
 and reconciliation-pending jobs), the default trusted `verify-queue/v1` store
@@ -104,6 +109,12 @@ and actual keep/refusal reasons. A repeated hint is a no-op; a hint arriving dur
 apply remains pending. `node supervisor/retire.mjs consume --repo CHECKOUT --org RECORD`
 provides the same finite catch-up. Existing housekeeping reads fresh authority;
 promotion also performs its scoped cleanup after reconciliation.
+Request and consume locks bind PID and kernel birth identity. A proven dead
+owner can be reclaimed; live or unreadable owners retain their locks. Entry lists
+these locks and gives consume an internal `--budget-ms` deadline, with no outer
+SIGKILL of the lock holder. A deadline releases the lock and leaves the hint pending,
+including after partial apply; the next consumer observes again before resuming.
+Promotion sends its ready acknowledgment before start-of-drain catch-up.
 `skip-close` logs the fresh refusal. Promotion retains its successful outcome
 with `cleanup.state: pending` and `integrated-but-cleanup-pending`; a subsequent
 queue drain retries only cleanup, without revalidation or another integration.

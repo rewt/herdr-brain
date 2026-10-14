@@ -401,8 +401,6 @@ export async function drain(queue) {
   let acknowledged = false;
   const attempted = new Set();
   try {
-    consumeRequests(queue);
-    retryCleanup(queue);
     for (;;) {
       // Git can be slow. Read a committed snapshot without queue.lock so
       // enqueuers remain free to append while this worker waits for settings.
@@ -474,7 +472,11 @@ export async function drain(queue) {
       }
       // Ready means the queue checkpoint exists, including batch membership.
       // Git settings reads must not leave a successful startup ahead of it.
-      if (!acknowledged) { process.send?.({ ready: true }); acknowledged = true; }
+      if (!acknowledged) {
+        process.send?.({ ready: true }); acknowledged = true;
+        consumeRequests(queue);
+        retryCleanup(queue);
+      }
       if (!entry) break;
       const { job, newlyDequeued } = entry;
       if (job.jobs) {

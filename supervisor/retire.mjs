@@ -10,6 +10,7 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { consumeRetirement } from '../lib/retire-trigger.mjs';
+import { retirementDeadline } from '../lib/retire-lock.mjs';
 import { ownerAlive } from '../lib/process-owner.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
@@ -116,11 +117,21 @@ export function readLiveReferences({ common, org, env = process.env, verifyState
 
 export function createRetirement({ cwd = process.cwd(), org, herdr = process.env.HERDR_RETIRE_HERDR ?? 'herdr', record,
   command = spawnSync, selfTab = process.env.HERDR_TAB_ID ?? null, main,
-  env = process.env, log = () => {}, verifyStateDir, readOwner = ownerAlive, allowAbsentHerdr = false, selfRetirement } = {}) {
+  env = process.env, log = () => {}, verifyStateDir, readOwner, allowAbsentHerdr = false, selfRetirement, deadline = Infinity } = {}) {
+  const remaining = () => { const ms = deadline - Date.now(); if (ms <= 0) throw retirementDeadline(); return ms; };
+  const readProcess = pid => {
+    remaining();
+    const result = lookupProcess(pid, { identityOnly: true, allowance: ms => Math.min(ms, remaining()), pause: () => {} });
+    remaining();
+    return result;
+  };
+  readOwner ??= owner => ownerAlive(owner, readProcess);
   if (selfRetirement && (selfRetirement.pid !== process.pid || selfRetirement.tab !== env.HERDR_TAB_ID || selfRetirement.pane !== env.HERDR_PANE_ID)) throw Error('self-retirement must name this process and its own Herdr tab and pane');
   const invoke = (exe, args) => {
-    const r = command(exe, args, { cwd, encoding: 'utf8', timeout: loadTimeout(10000), maxBuffer: 64 * 1024 * 1024,
+    const r = command(exe, args, { cwd, encoding: 'utf8', timeout: Math.min(loadTimeout(10000), remaining()), maxBuffer: 64 * 1024 * 1024,
       env: { ...env, ORG_DIR: org } });
+    if (Number.isFinite(deadline) && r.error?.code === 'ETIMEDOUT') throw retirementDeadline();
+    remaining();
     if (r.error || r.status !== 0) throw Object.assign(Error(`${exe} ${args.slice(0, 2).join(' ')}: ${(r.stderr || r.error?.message || r.stdout || `exit ${r.status}`).trim()}`), { code: r.error?.code });
     return r.stdout.trim();
   };
@@ -189,7 +200,7 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
       // adapters. Current Herdr supplies foreground rows, so use the shared
       // native source to include background descendants and birth identities.
       if (info.process_tree_complete === true && Array.isArray(info.process_tree)) continue;
-      processRows ??= lookupProcess(undefined, { identityOnly: true });
+      processRows ??= readProcess(undefined);
       if (!processRows.ok) { errors.push(processRows.error); continue; }
       const roots = new Set([info.shell_pid, ...info.foreground_processes.map(p => p.pid)]);
       const tree = [...processRows.value.values()].filter(row => {
@@ -222,7 +233,7 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
       try { if (readOwner({ pid: Number(run.meta.watcher_pid), identity: run.meta.watcher_identity })) refs.references.push({ kind: 'watcher callback', job: run.id, run: run.id, cwd: canonical(run.workspace), pid: Number(run.meta.watcher_pid), identity: run.meta.watcher_identity }); }
       catch (e) { refs.references.push({ kind: 'unknown watcher callback', job: run.id, run: run.id, cwd: canonical(run.workspace) }); refs.diagnostics.push({ run: run.id, reason: e.message }); }
     }
-    const callbacks = [];
+    const callbacks = [], callbackPruning = [];
     if (org) try {
       const directory = path.join(org, 'retirement/occupants');
       if (fs.existsSync(directory)) for (const name of fs.readdirSync(directory)) {
@@ -231,6 +242,15 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
             ['common', 'cwd', 'workspace', 'tab', 'pane'].some(k => typeof receipt[k] !== 'string' || !receipt[k]) ||
             [receipt.shell, receipt.process].some(p => !Number.isSafeInteger(p?.pid) || p.pid < 1 || typeof p.identity !== 'string' || !p.identity || !p.command)) throw Error(`invalid callback receipt ${name}`);
         if (canonical(receipt.common) !== common) continue;
+        if (!tabs.some(tab => tab.tab_id === receipt.tab)) {
+          // Scoped observations cannot prove another workspace's tab absent.
+          // They still skip its owner lookup. Full apply prunes absent tabs.
+          if (!workspacePath || absent || workspaces.some(ws => ws.workspace_id === receipt.workspace) || canonical(receipt.cwd) === canonical(workspacePath)) {
+            callbackPruning.push({ file: path.join(directory, name), receipt, absent: true });
+          }
+          continue;
+        }
+        callbackPruning.push({ file: path.join(directory, name), receipt, absent: false });
         let process_gone = false;
         try { process_gone = !readOwner(receipt.process); } catch (e) { refs.diagnostics.push({ file: name, reason: e.message }); }
         callbacks.push({ ...receipt, cwd: canonical(receipt.cwd), common, process_gone });
@@ -249,7 +269,7 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
       record: { runs: runs.map(r => ({ ...r, workspace: canonical(r.workspace) })), items, links: state.links ?? [], revision: state.eventCount },
       references: refs.references, errors: [...errors, ...refs.errors], diagnostics: refs.diagnostics, selfTab,
       handoffs: events.filter(e => e.type === 'retirement.handoff'),
-      callbacks, selfRetirement,
+      callbacks, selfRetirement, callbackPruning,
     };
   }
   const plan = workspacePath => {
@@ -278,7 +298,20 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
     writeFileAtomic(file, JSON.stringify(receipt) + '\n');
     return receipt;
   };
-  const apply = (planned = plan(), workspacePath) => executeRetirement(planned, { observe: () => observe(workspacePath), close: id => invoke(herdr, ['tab', 'close', id]), log });
+  const pruneReceipt = ({ file, receipt }) => {
+    remaining();
+    // Never erase a newer launch that replaced the receipt since observation.
+    const current = optional(file);
+    if (current && JSON.stringify(current) === JSON.stringify(receipt)) fs.unlinkSync(file);
+  };
+  const apply = (planned = plan(), workspacePath) => {
+    let snapshot = observe(workspacePath);
+    for (const receipt of snapshot.callbackPruning.filter(receipt => receipt.absent)) pruneReceipt(receipt);
+    return executeRetirement(planned, { observe: () => (snapshot = observe(workspacePath)), close: id => {
+      invoke(herdr, ['tab', 'close', id]);
+      for (const receipt of snapshot.callbackPruning.filter(row => row.receipt.tab === id)) pruneReceipt(receipt);
+    }, log });
+  };
   const assertVacant = lane => {
     const reason = laneRemovalReason(observe(lane), canonical(lane));
     if (reason) throw Error(reason);
@@ -307,11 +340,15 @@ function main() {
   const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, herdr: { type: 'string', default: 'herdr' },
     'verify-state-dir': { type: 'string' }, lane: { type: 'string' },
+    'budget-ms': { type: 'string', default: '11000' },
   }, usage: 'Usage: node supervisor/retire.mjs plan|apply|consume --repo CHECKOUT --org RECORD [--lane PATH] [--verify-state-dir DIR]' });
   if (positionals.length !== 1 || !['plan', 'apply', 'consume'].includes(positionals[0])) throw Error('expected plan, apply or consume');
   if (positionals[0] === 'consume') {
+    const budget = Number(opt['budget-ms']);
+    if (!Number.isSafeInteger(budget) || budget < 1) throw Error('consume budget must be a positive integer');
+    const deadline = Date.now() + budget;
     const org = opt.org ?? findOrgDir({ cwd: opt.repo });
-    const result = org ? consumeRetirement({ org, retirement: () => createRetirement({ cwd: canonical(opt.repo), org, herdr: opt.herdr }) }) : { handled: false };
+    const result = org ? consumeRetirement({ org, deadline, retirement: () => createRetirement({ cwd: canonical(opt.repo), org, herdr: opt.herdr, deadline }) }) : { handled: false };
     process.stdout.write(JSON.stringify(result) + '\n'); return;
   }
   const retirement = createRetirement({ cwd: canonical(opt.repo), org: opt.org, herdr: opt.herdr, verifyStateDir: opt['verify-state-dir'] });

@@ -20,7 +20,7 @@ function dead(pid) {
 }
 
 // Read only known lock locations bound to this Git common-directory identity.
-export function inspectEntryLocks(project, report) {
+export function inspectEntryLocks(project, report, { readProcess } = {}) {
   const inspect = (file, readPid) => {
     try { if (dead(readPid())) report(`Stale lock (owner gone; retained): ${file}\n`); }
     catch (e) { report(`Lock inspection: ${file}: ${e.message}\n`); }
@@ -30,6 +30,14 @@ export function inspectEntryLocks(project, report) {
   };
   owner(path.join(project.identity, 'lane-promote.lock')); // Promotion ownership.
   for (const name of ['queue.lock', 'worker.lock']) owner(path.join(project.identity, 'promote', name));
+  const retirement = path.join(project.org, 'retirement');
+  if (fs.existsSync(retirement)) for (const name of fs.readdirSync(retirement).filter(name => /^(request|consume)\.lock(?:\.recovery)*$/.test(name))) {
+    const file = path.join(retirement, name);
+    try {
+      const receipt = JSON.parse(fs.readFileSync(path.join(file, 'owner.json'), 'utf8'));
+      if (!ownerAlive(receipt, readProcess)) report(`Stale lock (owner gone; retained): ${file}\n`);
+    } catch (e) { report(`Lock inspection: ${file}: ${e.message}\n`); }
+  }
   const directory = receiptDirectory(project.org, project.identity);
   if (fs.existsSync(directory)) for (const name of fs.readdirSync(directory)) if (/^(R-\d+|cursor)\.lock$/.test(name)) owner(path.join(directory, name));
   const settle = path.join(project.org, 'settle');
@@ -59,11 +67,14 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
         return spawnSync(file, args, { ...options, timeout: Math.min(remaining, options.timeout) });
       },
     }));
-    const call = (file, args) => {
+    const call = (file, args, { cooperative = false } = {}) => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error('entry time limit reached; inspect or repeat entry');
-      const r = command(process.execPath, [file, ...args], { cwd: project.canonical, encoding: 'utf8',
-        env: { ...process.env, ORG_DIR: org }, timeout: Math.min(remaining, 11000), killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024 });
+      // The retirement consumer releases its lock at its own deadline. Never
+      // kill its lock holder from entry while it is applying a guarded close.
+      const allowance = Math.min(remaining, 11000);
+      const r = command(process.execPath, [file, ...args, ...(cooperative ? ['--budget-ms', String(allowance)] : [])], { cwd: project.canonical, encoding: 'utf8',
+        env: { ...process.env, ORG_DIR: org }, ...(cooperative ? {} : { timeout: allowance, killSignal: 'SIGKILL' }), maxBuffer: 16 * 1024 * 1024 });
       if (r.error || r.status !== 0) throw new Error((r.stderr || r.error?.message || `exit ${r.status}`).trim());
       return r.stdout;
     };
@@ -72,13 +83,14 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
     if (!doc) return;
     project.org = doc.project.org;
     org = project.org;
-    attempt('locks', () => inspectEntryLocks(project, report));
+    attempt('locks', () => inspectEntryLocks(project, report, { readProcess: readOwner }));
     // STOP/torn record permits the cold start and lock inspection, never recovery mutations.
     if (doc.project.stopped || doc.project.torn_tail) { report('Supervisor entry recovery paused: STOP or incomplete record event; inspect.\n'); return; }
     // One foreground catch-up per request revision; no schedule is started.
     attempt('retirement', () => {
-      const result = JSON.parse(call(local('./retire.mjs'), ['consume', '--repo', project.canonical, '--org', org]));
+      const result = JSON.parse(call(local('./retire.mjs'), ['consume', '--repo', project.canonical, '--org', org], { cooperative: true }));
       if (result.handled) report(`Supervisor entry retirement: ${result.results.length} guarded attempts, ${result.keep.length} retained.\n`);
+      if (result.pending) report('Supervisor entry retirement: deadline reached; remaining cleanup stays pending.\n');
     });
     attempt('housekeeping', () => {
       const snapshot = housekeepingSnapshot({ cwd: project.canonical, org, readProcess: readOwner });

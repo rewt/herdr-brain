@@ -39,6 +39,8 @@ function fixture(t, { merged = true, occupied = true } = {}) {
   fs.writeFileSync(herdr, `#!${process.execPath}
 const fs = require('node:fs'), file = ${JSON.stringify(file)}, s = JSON.parse(fs.readFileSync(file)), a = process.argv.slice(2);
 const out = result => console.log(JSON.stringify({ result }));
+if(a[0]==='workspace'&&a[1]==='list'&&s.readyMarker&&!fs.existsSync(s.readyMarker)){console.error('retirement observed before acknowledgment');process.exit(1);}
+if(a[0]==='workspace'&&a[1]==='list'&&s.delayWorkspace)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,s.delayWorkspace);
 if (a[0] === 'workspace' && a[1] === 'list') out({workspaces:s.workspaces});
 else if (a[0] === 'worktree' && a[1] === 'list') out({source:{repo_key:${JSON.stringify(common)},repo_root:${JSON.stringify(repo)},source_checkout_path:${JSON.stringify(repo)}},worktrees:[{path:${JSON.stringify(lane)},open_workspace_id:'w'}]});
 else if (a[0] === 'tab' && a[1] === 'list') out({tabs:s.tabs.filter(t=>t.workspace_id===a.at(-1))});
@@ -172,6 +174,18 @@ test('a disposition trigger gets a fresh foreground plan once, and the repeated 
   requestRetirement({org:f.org,eventSeq:hint.event_seq+1,source:'known appended sequence'});
 });
 
+test('the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock', t => {
+  const f = fixture(t); f.state.delayWorkspace = 1000; f.save();
+  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' });
+  const r = spawnSync(process.execPath, [path.join(root, 'supervisor/retire.mjs'), 'consume', '--repo', f.repo, '--org', f.org,
+    '--herdr', f.job.herdr, '--budget-ms', '100'], { env: f.env, encoding: 'utf8', timeout: 5000 });
+  assert.equal(r.status, 0, r.stderr); const result = JSON.parse(r.stdout);
+  assert.equal(result.pending, true); assert.equal(result.handled, false);
+  assert.equal(fs.existsSync(path.join(f.org, 'retirement/consume.lock')), false);
+  assert.equal(fs.existsSync(path.join(f.org, 'retirement/handled.json')), false);
+  assert.deepEqual(f.read().actions, []);
+});
+
 test('promote drain consumes requests at both foreground boundaries without running a gate', async t => {
   const f=fixture(t);f.state.triggerOnClose=true;f.save();const queue=f.queue();
   const old={};for(const key of ['ORG_DIR','HERDR_MONITOR_FLEET','HERDR_RETIRE_HERDR','MONITOR_TEST_SLOT_PATH','MONITOR_TEST_SLOT_COMPAT_PATH','XDG_STATE_HOME']){old[key]=process.env[key];process.env[key]=f.env[key];}
@@ -179,6 +193,21 @@ test('promote drain consumes requests at both foreground boundaries without runn
   requestRetirement({org:f.org,eventSeq:4,source:'disposition'});await drain(queue);
   const handled=JSON.parse(fs.readFileSync(path.join(f.org,'retirement/handled.json')));
   assert.equal(handled.revision,5);assert.deepEqual(f.read().actions,[['tab','close','w:t']]);assert.deepEqual(queue.load().results,[]);
+});
+
+test('promote sends its ready acknowledgment before observing a pending retirement hint', async t => {
+  const f = fixture(t), queue = f.queue(), marker = path.join(f.scratch, 'ready');
+  f.state.readyMarker = marker; f.save();
+  const old = {};
+  for (const key of ['ORG_DIR', 'HERDR_MONITOR_FLEET', 'HERDR_RETIRE_HERDR', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME']) { old[key] = process.env[key]; process.env[key] = f.env[key]; }
+  const send = process.send, messages = [];
+  process.send = message => { messages.push(message); if (message.ready) fs.writeFileSync(marker, 'acknowledged'); return true; };
+  t.after(() => { process.send = send; for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' });
+  await drain(queue);
+  assert.deepEqual(messages, [{ ready: true }]);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.org, 'retirement/handled.json'))).revision, 4);
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
 });
 
 test('cleanup retries are capped with backoff, record the refusal, and reset on a new request', t => {
@@ -211,6 +240,19 @@ for(const kind of ['watcher','settle','executive','plan']) test(`tidy-tabs prune
   f.state.info.process_tree[0].identity='replacement';f.save();const kept=cli();assert.equal(kept.status,0,kept.stderr);assert.deepEqual(f.read().actions,[]);
   f.state.info.process_tree[0].identity='shell';f.save();const released=cli();assert.equal(released.status,0,released.stderr);
   assert.deepEqual(f.read().actions,[['tab','close','w:t']]);
+  assert.deepEqual(fs.readdirSync(path.join(f.org, 'retirement/occupants')), []);
+});
+
+test('apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces', t => {
+  const f = fixture(t);
+  f.retirement().recordCallback({ kind: 'watcher', pane: 'w:p', pid: 2, run: 'R-1' });
+  const directory = path.join(f.org, 'retirement/occupants');
+  f.state.tabs = []; f.state.panes = []; f.state.agents = []; f.save();
+  const retirement = createRetirement({ cwd: f.repo, org: f.org, herdr: f.job.herdr, env: f.env, readOwner: () => assert.fail('absent receipt owner was inspected') });
+  const scoped = retirement.plan(f.repo); retirement.apply(scoped, f.repo);
+  assert.equal(fs.readdirSync(directory).length, 1, 'a scoped observation cannot prune another workspace');
+  const preview = retirement.plan(); assert.equal(fs.readdirSync(directory).length, 1, 'preview remains read-only');
+  retirement.apply(preview); assert.deepEqual(fs.readdirSync(directory), []);
 });
 
 test('settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion',t=>{
@@ -223,4 +265,20 @@ test('settle-watch --spawn keeps its flags and narrowly retires its own tab afte
   assert.equal(r.status,0,r.stdout+r.stderr);const state=f.read();assert.ok(state.actions.some(a=>a[0]==='tab'&&a[1]==='create'));
   assert.deepEqual(state.actions.filter(a=>a[1]==='close'),[['tab','close','main:watch']]);
   assert.ok(state.tabs.some(t=>t.tab_id==='w:t'));assert.equal(fs.readFileSync(f.eventFile,'utf8'),f.eventBytes);
+});
+
+test('a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab', t => {
+  const f = fixture(t); f.state.watcherMode = true;
+  f.state.workspaces.push({ workspace_id: 'main', worktree: { checkout_path: f.repo, repo_key: f.common, repo_root: f.repo, is_linked_worktree: false } });
+  f.state.tabs.push({ tab_id: 'main:watch', workspace_id: 'main' });
+  f.state.panes.push({ pane_id: 'main:watch:p', tab_id: 'main:watch', workspace_id: 'main' }); f.save();
+  fs.writeFileSync(path.join(f.scratch, 'org'), `#!/bin/sh\nexec '${process.execPath}' '${recordCLI}' "$@"\n`, { mode: 0o755 });
+  const config = path.join(f.scratch, 'lane.json'), checklist = path.join(f.scratch, 'CHECKLIST.md'); fs.writeFileSync(config, '{}'); fs.writeFileSync(checklist, 'fixture');
+  const r = spawnSync(process.execPath, [path.join(root, 'contrib/settle-watch.mjs'), 'R-1', '--org', f.org, '--cwd', f.repo,
+    '--lane-config', config, '--checklist', checklist, '--model', 'opaque-model', '--effort', 'opaque-effort'], {
+    env: { ...f.env, HERDR_TAB_ID: 'main:watch', HERDR_PANE_ID: 'main:watch:p' }, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(fs.existsSync(path.join(f.org, 'retirement/occupants')), false);
+  const plan = f.retirement().plan(); assert.ok(plan.keep.some(tab => tab.tab_id === 'main:watch'));
+  f.retirement().apply({ ...plan, close: [] }); assert.ok(f.read().tabs.some(tab => tab.tab_id === 'main:watch')); assert.deepEqual(f.read().actions, []);
 });

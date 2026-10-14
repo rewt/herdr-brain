@@ -7,6 +7,7 @@ import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
 import { readDeclaredReferences, readLiveReferences } from '../supervisor/retire.mjs';
+import { retirementDeadline } from '../lib/retire-lock.mjs';
 
 function fixture() {
   const events = [
@@ -46,6 +47,21 @@ test('process state changes do not change identity tokens, but stopped processes
   s.panes[0].process_info.process_tree[1].state='T';
   const refused=executeRetirement(plan,{observe:()=>s,close:()=>assert.fail('stopped process')});
   assert.equal(refused[0].action,'skip-close');assert.match(refused[0].why,/process/);
+});
+
+test('the shared executor stops cleanly at a deadline without acting on later candidates', () => {
+  const s = fixture(), planned = planRetirement(s);
+  planned.close.push({ ...planned.close[0], tab_id: 'later' });
+  let reads = 0; const actions = [];
+  const results = executeRetirement(planned, { observe: () => { if (++reads === 2) throw retirementDeadline(); return s; }, close: id => actions.push(id) });
+  assert.deepEqual(actions, ['w:t']); assert.deepEqual(results.map(result => result.action), ['closed', 'deferred']);
+});
+
+test('pruning another tab callback does not invalidate this tab token', () => {
+  const s = fixture(); s.callbacks = [{ tab: 'another-tab', process_gone: true }];
+  const token = planRetirement(s).close[0].token;
+  s.callbacks = [];
+  assert.equal(planRetirement(s).close[0].token, token);
 });
 
 test('narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities', () => {

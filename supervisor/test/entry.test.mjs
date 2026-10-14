@@ -55,8 +55,13 @@ test('canonical supervisor entry consumes a hint once without starting housekeep
   const f=fixture(t);fs.writeFileSync(path.join(f.repo,'.housekeeping.json'),'{"enabled":false}');
   requestRetirement({org:f.org,eventSeq:1,source:'completion'});
   const fake=fakeCommands(f);let plans=0,applies=0;
-  const command=(file,args)=>args[0].endsWith('retire.mjs') ? {status:0,stderr:'',stdout:JSON.stringify(consumeRetirement({org:f.org,retirement:()=>({
-    plan:()=>{plans++;return{keep:[],close:[],diagnostics:[]};},apply:()=>{applies++;return[];}})}))} : fake.command(file,args);
+  const command=(file,args,options)=>{
+    if (!args[0].endsWith('retire.mjs')) return fake.command(file,args);
+    assert.equal(options.timeout, undefined); assert.equal(options.killSignal, undefined);
+    assert.ok(Number(args[args.indexOf('--budget-ms')+1])>0);
+    return {status:0,stderr:'',stdout:JSON.stringify(consumeRetirement({org:f.org,retirement:()=>({
+      plan:()=>{plans++;return{keep:[],close:[],diagnostics:[]};},apply:()=>{applies++;return[];}})}))};
+  };
   const {enterSupervisor}=await load();const options={cwd:f.repo,org:f.org,role:'supervisor',command,output:()=>{}};
   enterSupervisor(options);enterSupervisor(options);assert.equal(plans,1);assert.equal(applies,1);
   assert.equal(fake.calls.some(a=>a[0].endsWith('housekeeping.mjs')),false);
@@ -161,6 +166,16 @@ test('entry reports dead promotion, release and settle owners but preserves all 
   enterSupervisor({ cwd: f.repo, org: f.org, role: 'supervisor', command: fakeCommands(f).command, output: s => output.push(s) });
   const text = output.join(''); for (const file of [...dirs, contender]) { assert.ok(text.includes(file), text); assert.ok(fs.existsSync(file)); }
   assert.ok(!text.includes(live)); assert.ok(!text.includes(foreign));
+});
+
+test('entry lock inspection includes retirement request, consume and recovery owners', async t => {
+  const f = fixture(t), output = [];
+  const names = ['request.lock', 'consume.lock', 'consume.lock.recovery'];
+  for (const name of names) { const directory = path.join(f.org, 'retirement', name); fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify({ pid: deadPid, identity: 'old-birth' })); }
+  const { inspectEntryLocks } = await load();
+  inspectEntryLocks(f.project, line => output.push(line), { readProcess: linuxOwner('100') });
+  for (const name of names) assert.ok(output.some(line => line.includes(name) && line.includes('Stale lock')));
 });
 
 test('failed cold start, housekeeping and watch print reasons and allow later recovery steps', async t => {

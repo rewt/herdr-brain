@@ -215,7 +215,7 @@ if (!dry && !opt.open) {
   fs.writeFileSync(lock, String(process.pid));
   process.on('exit', () => { try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {} });
 }
-if (!dry && !opt.open && process.env.HERDR_TAB_ID && process.env.HERDR_PANE_ID) {
+if (!dry && !opt.open && opt['close-tab-on-exit'] && process.env.HERDR_TAB_ID && process.env.HERDR_PANE_ID) {
   try { createRetirement({ cwd: opt.cwd, org: opt.org }).recordCallback({ kind: 'watcher', pane: process.env.HERDR_PANE_ID, pid: process.pid, run: runId }); }
   catch (error) { log(`watcher launch receipt unavailable: ${error.message}`); }
 }

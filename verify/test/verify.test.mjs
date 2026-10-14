@@ -362,6 +362,17 @@ test('pending status shows current inbox content; stale consent refuses and admi
   assert.equal(fs.readFileSync(marker, 'utf8'), 'changed'); assert.deepEqual(read(retry.receipt).argv, changed);
 });
 
+test('completed status keeps the admitted spec and group after inbox edits', async t => {
+  const f = fixture(t), argv = node("console.log('admitted')"), job = f.add({ group: 'admitted-group' }, argv);
+  await f.run(job);
+  f.queue.inbox.transaction(data => { Object.assign(data.jobs[0], { argv: node("console.log('edited')"), group: 'edited-group' }); });
+  const current = (await f.cli(['status', job.job])).jobs[0];
+  assert.equal(current.state, 'pass'); assert.deepEqual(current.argv, argv);
+  assert.equal(current.spec_sha256, job.spec_sha256); assert.equal(current.group, 'admitted-group');
+  assert.deepEqual((await f.cli(['status', '--group', 'admitted-group'])).jobs.map(row => row.id), [job.job]);
+  assert.deepEqual((await f.cli(['status', '--group', 'edited-group'])).jobs, []);
+});
+
 test('detached admission refuses edited specs even with forged queue digests; recorded spec files cannot change execution', async t => {
   const f = fixture(t), marker = path.join(f.root, 'must-not-run'), order = path.join(f.root, 'order');
   const holder = await acquireTestSlot('admission mutation fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });

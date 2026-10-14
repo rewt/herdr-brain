@@ -458,7 +458,7 @@ export function status(queue, { id, group } = {}) {
   const submitted = new Map(queue.inbox.load().jobs.map(job => [job.id, jobSpec(job)]));
   const rows = [...new Set([...submitted.keys(), ...trusted.keys()])].map(id => {
     const saved = trusted.get(id);
-    const spec = saved?.admission && !saved.completed_at ? jobSpec(saved) : submitted.get(id);
+    const spec = saved && (saved.admission || saved.started_at || saved.retry_required_at || saved.completed_at) ? jobSpec(saved) : submitted.get(id);
     const runtime = Object.fromEntries(Object.entries(saved ?? {}).filter(([key]) => !specFields.includes(key)));
     return { ...runtime, ...(spec ?? { id }), spec_sha256: spec ? jobDigest(spec) : null };
   });

@@ -13,6 +13,7 @@ import { shouldRetryTimeout, acquireTestSlot, HOLDER_UNKNOWN_CODE } from '../tes
 import { processStartRecord } from '../lock-support.mjs';
 import { canonicalValidation } from '../../lanes/validation.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
+import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
 import { descendants, stopGateGroup } from '../watchdog.mjs';
 import { fixture } from '../../promote/test/helpers/conformance.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
@@ -350,14 +351,36 @@ for (const kind of ['wall', 'idle']) test(`unbatched queue maps ${kind} timeout 
 });
 
 test('an unknown escaped identity cannot prevent killing the owned group', async t => {
-  const s = scratch(t), ready = path.join(s.root, 'ready');
-  const child = spawn(process.execPath, ['-e', `process.on('SIGTERM',()=>{});require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000);`], { detached: true, env: s.env, stdio: 'ignore' });
+  const s = scratch(t), preload = path.join(s.root, 'ignore-term.mjs');
+  fs.writeFileSync(preload, "process.on('SIGTERM',()=>{});\n");
+  // The containment policy deliberately preserves nested bounded workers as
+  // real group leaders. Its IPC death handler and fixed suite bound also own
+  // teardown if this parent is cancelled before the assertion completes.
+  const runner = fileURLToPath(new URL('../../test/helpers/run.mjs', import.meta.url));
+  const child = spawn(process.execPath, [runner, '--worker', '--file-timeout=2000', '--suite-timeout=2500',
+    '--fixed-deadlines', fileURLToPath(import.meta.url)], { detached: true,
+    env: { ...s.env, NODE_OPTIONS: `${s.env.NODE_OPTIONS ?? ''} --import=${preload}` },
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
   const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
-  t.after(async () => { if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid, 'SIGKILL'); await exited; });
-  await until(() => fs.existsSync(ready));
+  let owner, ready = false;
+  child.on('message', message => { ready ||= message.ready === true; });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      if (owner) assert.equal(killProcess(owner).ok, true);
+      else child.disconnect();
+    }
+    await exited;
+  });
+  await until(() => ready);
+  owner = registerProcess(child.pid, true);
+  const actual = lookupProcess(child.pid); assert.equal(actual.ok, true); assert.equal(actual.value.pgid, child.pid);
   const escaped = { pid: 99999999, ppid: child.pid, pgid: 99999999, identity: '1:1' };
+  const sent = [];
   await assert.rejects(stopGateGroup(child.pid, { ownedChild: true, graceMs: 50,
+    signal: (pid, kind) => { sent.push([pid, kind]); process.kill(pid, kind); },
     lookup: pid => pid ? { ok: false, error: 'injected escaped identity failure' } : { ok: true, value: new Map([[child.pid, { pid: child.pid, ppid: process.pid, pgid: child.pid, identity: '2:2' }], [escaped.pid, escaped]]) } }), /cannot confirm gate descendant/);
+  assert.ok(sent.some(([pid, kind]) => pid === -child.pid && kind === 'SIGKILL'), 'the watchdog, rather than the fixture deadline, kills its owned group');
+  assert.equal(sent.some(([pid]) => pid === escaped.pid), false, 'the unknown escaped PID never receives a signal');
   assert.throws(() => process.kill(-child.pid, 0), { code: 'ESRCH' });
   const result = await exited; assert.equal(result.signal, 'SIGKILL');
 });

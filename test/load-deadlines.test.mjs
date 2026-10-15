@@ -171,8 +171,8 @@ test('housekeeping gives each evidence read a loaded response allowance and pres
   const { createHousekeeping } = await import('../housekeeping/housekeeping.mjs');
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'loaded-housekeeping-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const command = (_exe, _args, options) => options.timeout >= 60000
-    ? { status: 0, stdout: root, stderr: '' } : timedOut;
+  const command = (_exe, args, options) => options.timeout >= 60000
+    ? { status: 0, stdout: args.includes('worktree') && args.includes('list') ? `worktree ${root}\n` : root, stderr: '' } : timedOut;
   assert.equal(createHousekeeping({ cwd: root, command }).common, root);
   assert.throws(() => createHousekeeping({ cwd: root, command: () => ({ status: 1, stderr: 'refused' }) }), /refused/);
 });

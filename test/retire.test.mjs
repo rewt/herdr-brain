@@ -219,6 +219,37 @@ test('generic promote and trusted verify sources are read-only and include inter
   assert.equal(fs.readFileSync(file, 'utf8'), bytes);
 });
 
+test('promotion references follow the latest request checkpoint and preserve active holds', t => {
+  const f = referenceFixture(t), common = path.join(f.org, 'common');
+  fs.mkdirSync(path.join(common, 'promote'), { recursive: true });
+  const file = path.join(common, 'promote/queue.json');
+  const job = { id: 'recovered', topic: 'topic' }, other = { id: 'other', topic: 'other' };
+  const pending = { outcome: 'promoted', reconciliation: { state: 'pending' } };
+  const complete = { outcome: 'promoted', reconciliation: { state: 'complete' } };
+  const queue = { identity: common, pending: [], results: [{ ...job, ...pending }, { ...other, ...pending }],
+    current: { id: 'batch', jobs: [job], results: [{ job, result: complete }] } };
+  const read = () => {
+    const bytes = JSON.stringify(queue); fs.writeFileSync(file, bytes);
+    const observed = readLiveReferences({ common, org: f.org, verifyStateDir: path.join(f.org, 'verify'),
+      env: { MONITOR_TEST_SLOT_PATH: path.join(f.org, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(f.org, 'slot') } });
+    assert.deepEqual(observed.errors, []); assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+    return observed.references.map(ref => ref.job);
+  };
+  assert.deepEqual(read(), ['other'], 'durable current completion supersedes its historical pending result');
+  queue.current.results[0].result = pending;
+  assert.deepEqual(read(), ['recovered', 'other'], 'current reconciliation still pending keeps');
+  queue.current.results[0].result = { ...complete, replacement_pending: true };
+  assert.deepEqual(read(), ['recovered', 'other'], 'replacement work still keeps');
+  queue.current = null; queue.results.push({ ...job, ...complete });
+  assert.deepEqual(read(), ['other'], 'the latest persisted result supersedes only the same request');
+  queue.results.push({ ...job, ...pending });
+  assert.deepEqual(read(), ['recovered', 'other'], 'a later pending result restores the hold');
+  queue.results.push({ ...job, ...complete }); queue.pending = [job];
+  assert.deepEqual(read(), ['recovered', 'other'], 'newly pending work overrides completed history');
+  queue.pending = []; queue.interrupted = [{ jobs: [job] }];
+  assert.deepEqual(read(), ['recovered', 'other'], 'interrupted work keeps even with completed history');
+});
+
 test('pending settlement callbacks keep; completed receipts remain historical', t => {
   const f=referenceFixture(t), common=fs.realpathSync(f.org);
   fs.mkdirSync(path.join(f.org,'settle'));

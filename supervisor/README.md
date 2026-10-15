@@ -29,6 +29,11 @@ the installed CLI and compatibility exports. After guarded Git removal, empty
 workspaces close only through `herdr workspace close`; Herdr worktree removal is
 never used because it moves operator focus to the parent.
 
+Promotion references follow each request's latest durable queue checkpoint.
+Pending, interrupted and current work still keep their targets; a completed
+reconciliation supersedes that request's older pending results, which remain
+in the append-only history. A different request's hold is never superseded.
+
 Explicit continuation between different panes uses
 `record handoff R-old --to R-new --confirm --why TEXT`. The append-only event
 names a newer run on the same item with a different launch identity. At

@@ -356,3 +356,25 @@ test('a foreground watcher without close-tab-on-exit never adopts an ordinary op
   const plan = f.retirement().plan(); assert.ok(plan.keep.some(tab => tab.tab_id === 'main:watch'));
   f.retirement().apply({ ...plan, close: [] }); assert.ok(f.read().tabs.some(tab => tab.tab_id === 'main:watch')); assert.deepEqual(f.read().actions, []);
 });
+
+test('standalone contrib retires only its owned watcher with no supervisor directory', t => {
+  const f = fixture(t), installed = path.join(f.scratch, 'standalone');
+  copyProduct(root, installed);
+  fs.rmSync(path.join(installed, 'supervisor'), { recursive: true });
+  f.state.watcherMode = true;
+  f.state.workspaces.push({ workspace_id: 'main', worktree: {
+    checkout_path: f.repo, repo_key: f.common, repo_root: f.repo, is_linked_worktree: false } });
+  f.save();
+  fs.writeFileSync(path.join(f.scratch, 'org'), `#!/bin/sh\nexec '${process.execPath}' '${path.join(installed, 'bin/org.mjs')}' "$@"\n`, { mode: 0o755 });
+  const config = path.join(f.scratch, 'lane.json'), checklist = path.join(f.scratch, 'CHECKLIST.md');
+  fs.writeFileSync(config, '{}'); fs.writeFileSync(checklist, 'fixture');
+  const result = spawnSync(process.execPath, [path.join(installed, 'contrib/settle-watch.mjs'), 'R-1', '--spawn',
+    '--org', f.org, '--cwd', f.repo, '--lane-config', config, '--checklist', checklist,
+    '--model', 'opaque-model', '--effort', 'opaque-effort'], { env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const state = f.read();
+  assert.ok(state.actions.some(action => action[0] === 'tab' && action[1] === 'create'));
+  assert.deepEqual(state.actions.filter(action => action[1] === 'close'), [['tab', 'close', 'main:watch']]);
+  assert.ok(state.tabs.some(tab => tab.tab_id === 'w:t'));
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});

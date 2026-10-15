@@ -4,6 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { productFiles } from '../../lib/product-files.mjs';
 
 const source = readFileSync(new URL("../lane.mjs", import.meta.url), "utf8");
 
@@ -21,6 +23,21 @@ test("lane never moves Herdr focus when it creates or opens a workspace, worktre
 });
 
 test("lane closure cannot invoke Herdr's parent-focusing worktree removal", () => {
-  assert.doesNotMatch(source, /\[\s*"worktree",\s*"remove",\s*"--workspace"/);
-  assert.match(source, /spawnSync\("herdr", \["workspace", "close", workspaceId\]/);
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const modules = new Map(productFiles(root).filter(file => file.endsWith('.mjs'))
+    .map(file => [file, readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')]));
+  const removalIsGitOnly = (file, text) => {
+    for (const match of text.matchAll(/\[\s*(['"])worktree\1\s*,\s*(['"])remove\2/g)) {
+      assert.match(text.slice(0, match.index), /\bgit\(\s*$/, `${file}: worktree removal must invoke Git, never Herdr`);
+    }
+  };
+  // Scan every shipped module, including every caller and the moved executor.
+  for (const [file, text] of modules) removalIsGitOnly(file, text);
+  assert.match(source, /retirement\.closeEmptyWorkspace\(workspaceId, path\)/);
+  const executor = modules.get('lib/retire-runtime.mjs');
+  assert.match(executor, /closeWorkspace: workspace => invoke\(herdr, \['workspace', 'close', workspace\]\)/);
+  // Exercise the actual close call's forbidden replacement, not a vacuous scan.
+  const unsafe = executor.replace("['workspace', 'close', workspace]", "['worktree', 'remove', '--workspace', workspace]");
+  assert.notEqual(unsafe, executor);
+  assert.throws(() => removalIsGitOnly('lib/retire-runtime.mjs', unsafe), /worktree removal must invoke Git/);
 });

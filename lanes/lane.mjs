@@ -12,7 +12,7 @@
 // (see README).
 
 import { cliHelp } from '../lib/cli-help.mjs';
-import { createRetirement } from '../supervisor/retire.mjs';
+import { createRetirement } from '../lib/retire-runtime.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { projectFleet } from '../lib/fleet.mjs';

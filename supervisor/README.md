@@ -22,6 +22,13 @@ review/correction/integration chain; a file or verdict notification cannot
 release a pane. Git must be clean and integrated (or a verified archived tip).
 Historical report/evidence links are retained but do not create live holds.
 
+Shared record, Git, native-process and Herdr IO lives in
+[lib/retire-runtime.mjs](../lib/retire-runtime.mjs). All close-path consumers,
+including standalone contrib, import that library. `supervisor/retire.mjs` retains
+the installed CLI and compatibility exports. After guarded Git removal, empty
+workspaces close only through `herdr workspace close`; Herdr worktree removal is
+never used because it moves operator focus to the parent.
+
 Explicit continuation between different panes uses
 `record handoff R-old --to R-new --confirm --why TEXT`. The append-only event
 names a newer run on the same item with a different launch identity. At

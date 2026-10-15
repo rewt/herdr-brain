@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { matchingRun, waitingOnRecord } from '../supervisor/tidy-tabs.mjs';
-import { createRetirement } from '../supervisor/retire.mjs';
+import { createRetirement } from '../lib/retire-runtime.mjs';
 import { planRetirement } from '../lib/retire.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { planRetirement, matchingRun } from '../lib/retire.mjs';
-import { createRetirement, isShellOnly } from './retire.mjs';
+import { createRetirement, isShellOnly } from '../lib/retire-runtime.mjs';
 export { matchingRun, isShellOnly };
 
 const canonicalPath = (file) => fs.existsSync(file) ? fs.realpathSync(file) : path.resolve(file);

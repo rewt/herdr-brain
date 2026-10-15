@@ -10,7 +10,7 @@ import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
-import { createRetirement } from '../supervisor/retire.mjs';
+import { createRetirement } from '../lib/retire-runtime.mjs';
 import { consumeRetirement } from '../lib/retire-trigger.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { runProjectGateSync } from './gate-profile.mjs';
@@ -145,20 +145,24 @@ export function enqueue(queue, topics, options) {
 }
 
 function cleanup(job, queue, workspace) {
+  const org = job.org ?? findOrgDir({ cwd: queue.project.canonical });
+  // No record authorizes no tab retirement. This is a durable informational
+  // outcome; Git-only cleanup must still prove vacancy through the lane guard.
+  if (!org) return { warnings: [], diagnostics: ['no record discovered; finished tabs preserved'] };
   const warnings = [];
   const log = entry => {
     fs.appendFileSync(path.join(queue.directory, `${job.id}-cleanup.jsonl`), JSON.stringify(entry) + '\n');
     if (['keep', 'close-failed', 'skip-close'].includes(entry.action)) warnings.push(singleLine(JSON.stringify(entry)));
   };
   try {
-    const retirement = createRetirement({ cwd: queue.project.canonical, org: job.org, herdr: job.herdr,
+    const retirement = createRetirement({ cwd: queue.project.canonical, org, herdr: job.herdr,
       main: git(queue.project.canonical, ['symbolic-ref', '--short', 'HEAD']), selfTab: null, log });
     const plan = retirement.plan(workspace);
     for (const kept of plan.keep) log({ action: 'keep', ...kept });
     for (const diagnostic of plan.diagnostics) log({ action: 'reference-diagnostic', ...diagnostic });
     retirement.apply(plan, workspace);
   } catch (error) { warnings.push(`tab cleanup: ${error.message}`); }
-  return warnings;
+  return { warnings, diagnostics: [] };
 }
 
 function perform(job, queue) {
@@ -281,7 +285,9 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
       catch { return { ...result, cleanup: { state: 'complete' } }; }
       throw Error('lane branch remains without its worktree; inspect before cleanup');
     }
-    warnings.push(...cleanup(job, queue, workspace));
+    const tabs = cleanup(job, queue, workspace);
+    warnings.push(...tabs.warnings);
+    diagnostics.push(...tabs.diagnostics);
     if (!warnings.length) invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', result.tip], {
       cwd: queue.project.canonical, env: { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_CONFIG: job.laneConfig ?? undefined } });
   } catch (error) { warnings.push(`lane cleanup: ${error.message}`); }

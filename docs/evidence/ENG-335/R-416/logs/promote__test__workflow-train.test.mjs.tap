@@ -1,0 +1,32 @@
+TAP version 13
+# Subtest: a copied product train promotes without any workflow engine
+ok 1 - a copied product train promotes without any workflow engine
+  ---
+  duration_ms: 939.319209
+  ...
+# Subtest: a receipt saved by the retired workflow engine finishes on the default train
+ok 2 - a receipt saved by the retired workflow engine finishes on the default train
+  ---
+  duration_ms: 621.451
+  ...
+# Subtest: lane promote-batch no longer takes the retired workflow flag
+ok 3 - lane promote-batch no longer takes the retired workflow flag
+  ---
+  duration_ms: 155.356042
+  ...
+# Subtest: older queued jobs that carry a workflow field are accepted and promoted on the default train
+ok 4 - older queued jobs that carry a workflow field are accepted and promoted on the default train
+  ---
+  duration_ms: 1543.098125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3362.998292
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

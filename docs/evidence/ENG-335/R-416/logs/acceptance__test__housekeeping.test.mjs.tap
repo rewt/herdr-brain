@@ -1,0 +1,32 @@
+TAP version 13
+# Subtest: housekeeping accepts either its direct closure or auto-tidy for the eligible worker
+ok 1 - housekeeping accepts either its direct closure or auto-tidy for the eligible worker
+  ---
+  duration_ms: 0.699375
+  ...
+# Subtest: housekeeping rejects unrelated closures, dry runs and failed tidy output
+ok 2 - housekeeping rejects unrelated closures, dry runs and failed tidy output
+  ---
+  duration_ms: 0.44475
+  ...
+# Subtest: housekeeping rejects closure of any ineligible worker through either path
+ok 3 - housekeeping rejects closure of any ineligible worker through either path
+  ---
+  duration_ms: 0.119584
+  ...
+# Subtest: housekeeping requires a keep action for every ineligible worker
+ok 4 - housekeeping requires a keep action for every ineligible worker
+  ---
+  duration_ms: 0.083167
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 85.841667
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

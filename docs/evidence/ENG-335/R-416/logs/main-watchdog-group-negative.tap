@@ -1,0 +1,12 @@
+TAP version 13
+# Subtest: an unknown escaped identity cannot prevent killing the owned group
+not ok 1 - an unknown escaped identity cannot prevent killing the owned group
+  ---
+  duration_ms: 2002.166792
+  type: 'test'
+  location: '/private/tmp/R-416-main-LnQUXY/test-slot/test/watchdog.test.mjs:352:1'
+  failureType: 'testTimeoutFailure'
+  error: 'test timed out after 2000ms'
+  code: 'ERR_TEST_FAILURE'
+  ...
+Test suite exceeded 4000ms. Files: test-slot/test/watchdog.test.mjs

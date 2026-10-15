@@ -1,0 +1,57 @@
+TAP version 13
+# Subtest: acceptance admits the exact private lane environment handoff including literal shell metacharacters
+ok 1 - acceptance admits the exact private lane environment handoff including literal shell metacharacters
+  ---
+  duration_ms: 2.348042
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: outside
+ok 2 - acceptance refuses altered lane environment handoff: outside
+  ---
+  duration_ms: 0.707958
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: suffix
+ok 3 - acceptance refuses altered lane environment handoff: suffix
+  ---
+  duration_ms: 1.1975
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: cleanup
+ok 4 - acceptance refuses altered lane environment handoff: cleanup
+  ---
+  duration_ms: 0.670208
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: mode
+ok 5 - acceptance refuses altered lane environment handoff: mode
+  ---
+  duration_ms: 0.927291
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: symlink
+ok 6 - acceptance refuses altered lane environment handoff: symlink
+  ---
+  duration_ms: 0.736042
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: script
+ok 7 - acceptance refuses altered lane environment handoff: script
+  ---
+  duration_ms: 0.732125
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: verifier
+ok 8 - acceptance refuses altered lane environment handoff: verifier
+  ---
+  duration_ms: 0.828375
+  ...
+# Subtest: an empty route environment proves shell readiness without printing ambient exports
+ok 9 - an empty route environment proves shell readiness without printing ambient exports
+  ---
+  duration_ms: 0.788375
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 98.349667
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

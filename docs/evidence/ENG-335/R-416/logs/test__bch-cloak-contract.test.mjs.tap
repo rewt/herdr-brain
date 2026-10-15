@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: bch-cloak subcommands, output parsers, event fields and compatibility paths remain usable
+ok 1 - bch-cloak subcommands, output parsers, event fields and compatibility paths remain usable
+  ---
+  duration_ms: 1875.683375
+  ...
+# Subtest: old release events still fold and list, while release mutations are unavailable
+ok 2 - old release events still fold and list, while release mutations are unavailable
+  ---
+  duration_ms: 114.168
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2083.209083
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

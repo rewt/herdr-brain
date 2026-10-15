@@ -1,0 +1,42 @@
+TAP version 13
+# Subtest: compatibility planner is the one shared pure policy
+ok 1 - compatibility planner is the one shared pure policy
+  ---
+  duration_ms: 1.720875
+  ...
+# Subtest: labels, verdict files and session metadata cannot release an unknown occupant
+ok 2 - labels, verdict files and session metadata cannot release an unknown occupant
+  ---
+  duration_ms: 0.690167
+  ...
+# Subtest: newer continuation on same pane defeats an old report even if its name changes
+ok 3 - newer continuation on same pane defeats an old report even if its name changes
+  ---
+  duration_ms: 0.138958
+  ...
+# Subtest: tied launch identity is ambiguous and does not release
+ok 4 - tied launch identity is ambiguous and does not release
+  ---
+  duration_ms: 0.212083
+  ...
+# Subtest: verdict parsing remains evidence-only for compatibility readers
+ok 5 - verdict parsing remains evidence-only for compatibility readers
+  ---
+  duration_ms: 0.160333
+  ...
+# Subtest: shell-only detection requires observed foreground processes
+ok 6 - shell-only detection requires observed foreground processes
+  ---
+  duration_ms: 0.060208
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 99.779833
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

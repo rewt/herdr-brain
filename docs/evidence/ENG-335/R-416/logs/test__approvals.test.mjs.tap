@@ -1,0 +1,82 @@
+TAP version 13
+# Subtest: org ask records a question, its reason and its blocking links in one transaction
+ok 1 - org ask records a question, its reason and its blocking links in one transaction
+  ---
+  duration_ms: 258.04075
+  ...
+# Subtest: org ask refuses what would hand the operator an unusable question
+ok 2 - org ask refuses what would hand the operator an unusable question
+  ---
+  duration_ms: 419.254292
+  ...
+# Subtest: answering yes releases the blocked work
+ok 3 - answering yes releases the blocked work
+  ---
+  duration_ms: 296.135208
+  ...
+# Subtest: a declined question keeps its dependents blocked until the work is re-planned
+ok 4 - a declined question keeps its dependents blocked until the work is re-planned
+  ---
+  duration_ms: 516.572041
+  ...
+# Subtest: a decline says so truthfully for a dependent that is already running
+ok 5 - a decline says so truthfully for a dependent that is already running
+  ---
+  duration_ms: 401.757292
+  ...
+# Subtest: a decline says so truthfully for a dependent that is already closed
+ok 6 - a decline says so truthfully for a dependent that is already closed
+  ---
+  duration_ms: 457.115833
+  ...
+# Subtest: a reply that starts with yes or no is that answer, and the rest is kept as the note
+ok 7 - a reply that starts with yes or no is that answer, and the rest is kept as the note
+  ---
+  duration_ms: 2335.621875
+  ...
+# Subtest: a text answer releases the blocked work like yes
+ok 8 - a text answer releases the blocked work like yes
+  ---
+  duration_ms: 352.036584
+  ...
+# Subtest: an auto category answers at once and the operator can still overrule it
+ok 9 - an auto category answers at once and the operator can still overrule it
+  ---
+  duration_ms: 508.6995
+  ...
+# Subtest: decision notes can carry a plain summary
+ok 10 - decision notes can carry a plain summary
+  ---
+  duration_ms: 265.041042
+  ...
+# Subtest: reports carry an optional headline and missing ones only warn
+ok 11 - reports carry an optional headline and missing ones only warn
+  ---
+  duration_ms: 303.383084
+  ...
+# Subtest: older folds ignore the new fields
+ok 12 - older folds ignore the new fields
+  ---
+  duration_ms: 277.035167
+  ...
+# Subtest: an older fold treats a "no" as resolved and releases the dependents
+ok 13 - an older fold treats a "no" as resolved and releases the dependents
+  ---
+  duration_ms: 272.15575
+  ...
+# Subtest: a review that finishes without PASS keeps holding its work, named with its verdict
+ok 14 - a review that finishes without PASS keeps holding its work, named with its verdict
+  ---
+  duration_ms: 423.660334
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7180.185209
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

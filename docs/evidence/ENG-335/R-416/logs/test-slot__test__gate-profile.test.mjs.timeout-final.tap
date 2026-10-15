@@ -1,0 +1,142 @@
+TAP version 13
+# Subtest: project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+ok 1 - project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+  ---
+  duration_ms: 1141.433666
+  ...
+# Subtest: fresh profiled STOP refuses before acquiring any promotion resource
+ok 2 - fresh profiled STOP refuses before acquiring any promotion resource
+  ---
+  duration_ms: 191.353167
+  ...
+# Subtest: profiled STOP resumes its validated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+ok 3 - profiled STOP resumes its validated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+  ---
+  duration_ms: 8141.86725
+  ...
+# Subtest: profiled STOP resumes its integrated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+ok 4 - profiled STOP resumes its integrated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+  ---
+  duration_ms: 8472.016708
+  ...
+# Subtest: profile initial memory wait holds no locks and clearing proceeds
+ok 5 - profile initial memory wait holds no locks and clearing proceeds
+  ---
+  duration_ms: 6196.752417
+  ...
+# Subtest: profile initial memory wait holds no locks and STOP refuses
+ok 6 - profile initial memory wait holds no locks and STOP refuses
+  ---
+  duration_ms: 5227.301583
+  ...
+# Subtest: profile pressure at --held caps and releases every acquired lock without gate evidence
+ok 7 - profile pressure at --held caps and releases every acquired lock without gate evidence
+  ---
+  duration_ms: 5357.2105
+  ...
+# Subtest: profile pressure at --execute caps and releases every acquired lock without gate evidence
+ok 8 - profile pressure at --execute caps and releases every acquired lock without gate evidence
+  ---
+  duration_ms: 5644.45475
+  ...
+# Subtest: profile pressure at project-lock caps and releases every acquired lock without gate evidence
+ok 9 - profile pressure at project-lock caps and releases every acquired lock without gate evidence
+  ---
+  duration_ms: 5590.023334
+  ...
+# Subtest: pressure clearing after both host locks are acquired proceeds within the bound
+ok 10 - pressure clearing after both host locks are acquired proceeds within the bound
+  ---
+  duration_ms: 1130.9335
+  ...
+# Subtest: queue delivers a coded memory refusal with no bisection and permits re-enqueue after pressure clears
+ok 11 - queue delivers a coded memory refusal with no bisection and permits re-enqueue after pressure clears
+  ---
+  duration_ms: 8414.083833
+  ...
+# Subtest: busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+ok 12 - busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+  ---
+  duration_ms: 2285.7025
+  ...
+# Subtest: a released legacy lock admits the waiting train and stays held for the complete batch
+ok 13 - a released legacy lock admits the waiting train and stays held for the complete batch
+  ---
+  duration_ms: 1269.056958
+  ...
+# Subtest: a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+ok 14 - a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+  ---
+  duration_ms: 1902.616791
+  ...
+# Subtest: a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+ok 15 - a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+  ---
+  duration_ms: 3742.121209
+  ...
+# Subtest: busy host slot writes its grant receipt only after release and the train inherits it
+ok 16 - busy host slot writes its grant receipt only after release and the train inherits it
+  ---
+  duration_ms: 1163.024583
+  ...
+# Subtest: busy host slot caps without a red gate receipt or integration
+ok 17 - busy host slot caps without a red gate receipt or integration
+  ---
+  duration_ms: 1510.442
+  ...
+# Subtest: a declared competing process refuses before taking the slot or building
+ok 18 - a declared competing process refuses before taking the slot or building
+  ---
+  duration_ms: 397.389958
+  ...
+# Subtest: a competing process started during a slot wait refuses before preparation
+ok 19 - a competing process started during a slot wait refuses before preparation
+  ---
+  duration_ms: 639.35
+  ...
+# Subtest: malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence
+ok 20 - malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence
+  ---
+  duration_ms: 552.355625
+  ...
+# Subtest: inner idle timeout uses canonical lane-only limits without timing out the completed host envelope
+ok 21 - inner idle timeout uses canonical lane-only limits without timing out the completed host envelope
+  ---
+  duration_ms: 1384.030417
+  ...
+# Subtest: promotion host envelope derives from the declared inner history key
+ok 22 - promotion host envelope derives from the declared inner history key
+  ---
+  duration_ms: 972.038041
+  ...
+# Subtest: three-lane red bisection fits the host envelope and promotes both healthy green lanes
+ok 23 - three-lane red bisection fits the host envelope and promotes both healthy green lanes
+  ---
+  duration_ms: 3093.520792
+  ...
+# Subtest: two-lane host envelope timeout returns batch re-enqueue wording
+ok 24 - two-lane host envelope timeout returns batch re-enqueue wording
+  ---
+  duration_ms: 1821.933292
+  ...
+# Subtest: a signaled preparation without a host timeout remains a refusal
+ok 25 - a signaled preparation without a host timeout remains a refusal
+  ---
+  duration_ms: 702.678417
+  ...
+# Subtest: host timeout preserves an earlier preparation refusal while classifying its interrupted member
+ok 26 - host timeout preserves an earlier preparation refusal while classifying its interrupted member
+  ---
+  duration_ms: 5197.00025
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..26
+# tests 26
+# suites 0
+# pass 26
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 82241.709209
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

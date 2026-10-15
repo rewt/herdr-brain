@@ -1,0 +1,88 @@
+TAP version 13
+# Subtest: nested gates preserve the legacy holder pgid after both wrappers die
+not ok 1 - nested gates preserve the legacy holder pgid after both wrappers die
+  ---
+  duration_ms: 155.622708
+  type: 'test'
+  location: '/private/tmp/R-416-main-LnQUXY/test-slot/test/watchdog.test.mjs:199:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    17329 !== 17347
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 17347
+  actual: 17329
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/tmp/R-416-main-LnQUXY/test-slot/test/watchdog.test.mjs:208:10)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=true)
+not ok 2 - leftover group fails distinctly after bounded grace (inherited pipes=true)
+  ---
+  duration_ms: 1319.561916
+  type: 'test'
+  location: '/private/tmp/R-416-main-LnQUXY/test-slot/test/watchdog.test.mjs:237:45'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 123
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 123
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/tmp/R-416-main-LnQUXY/test-slot/test/watchdog.test.mjs:241:10)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    node:internal/test_runner/test:1285:31
+    node:internal/process/task_queues:151:7
+    AsyncResource.runInAsyncScope (node:async_hooks:226:14)
+    AsyncResource.runMicrotask (node:internal/process/task_queues:148:8)
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=false)
+not ok 3 - leftover group fails distinctly after bounded grace (inherited pipes=false)
+  ---
+  duration_ms: 313.676083
+  type: 'test'
+  location: '/private/tmp/R-416-main-LnQUXY/test-slot/test/watchdog.test.mjs:237:45'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 123
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 123
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/tmp/R-416-main-LnQUXY/test-slot/test/watchdog.test.mjs:241:10)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 0
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1844.990417
+Surviving fixture: PID 17553, command /opt/homebrew/Cellar/node/26.4.0/bin/node -e setInterval(()=>{},1000). Files: test-slot/test/watchdog.test.mjs
+Surviving fixture: PID 17417, command /opt/homebrew/Cellar/node/26.4.0/bin/node -e setInterval(()=>{},1000). Files: test-slot/test/watchdog.test.mjs

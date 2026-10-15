@@ -1,0 +1,1162 @@
+{
+  "run": "R-416",
+  "main": "1a663c791afa182b4364cba77d9bf9bd52c7664f",
+  "source": "016c624b025379107127304cec2c361b5a10407a",
+  "start": "99666f45",
+  "method": "Grep every .test.mjs file for literal import/path references to all requested or changed modules, resolving root and relative paths and conservative basename joins. Follow test-helper references as well and include lane-changed tests. Add the complete offline acceptance suite after its focus fixture update. No file or time-budget exclusions.",
+  "modules": [
+    "bin/org.mjs",
+    "contrib/settle-watch.mjs",
+    "housekeeping/command.mjs",
+    "housekeeping/config.mjs",
+    "housekeeping/housekeeping.mjs",
+    "lanes/lane.mjs",
+    "lib/retire-command.mjs",
+    "lib/retire-lock.mjs",
+    "lib/retire-runtime.mjs",
+    "lib/retire-trigger.mjs",
+    "lib/retire.mjs",
+    "promote/completion.mjs",
+    "promote/evidence.mjs",
+    "promote/gate-profile.mjs",
+    "promote/guard.mjs",
+    "promote/host-gate.mjs",
+    "promote/memory-gate.mjs",
+    "promote/metrics.mjs",
+    "promote/promote.mjs",
+    "promote/test-plan.mjs",
+    "promote/train.mjs",
+    "supervisor/entry.mjs",
+    "supervisor/reconcile.mjs",
+    "supervisor/retire.mjs",
+    "supervisor/tidy-tabs.mjs",
+    "verify/execute.mjs",
+    "verify/expectations.mjs",
+    "verify/verify.mjs"
+  ],
+  "tests": [
+    {
+      "file": "acceptance/test/harness.test.mjs",
+      "references": [
+        "supervisor/tidy-tabs.mjs"
+      ],
+      "chain": [
+        "acceptance/test/harness.test.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "acceptance/test/recovery.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "acceptance/test/recovery.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "acceptance/test/snapshot.test.mjs",
+      "references": [
+        "contrib/settle-watch.mjs"
+      ],
+      "chain": [
+        "acceptance/test/snapshot.test.mjs",
+        "contrib/settle-watch.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "discovery/test/lessons.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "discovery/test/lessons.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "dispatch/test/dispatch.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "dispatch/test/dispatch.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "dispatch/test/record-worker.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "dispatch/test/record-worker.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "dispatch/test/timing.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "dispatch/test/timing.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "housekeeping/test/auto-tidy.test.mjs",
+      "references": [
+        "housekeeping/housekeeping.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ],
+      "chain": [
+        "housekeeping/test/auto-tidy.test.mjs",
+        "housekeeping/test/helpers/cli-fixture.mjs",
+        "housekeeping/housekeeping.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "housekeeping/test/housekeeping.test.mjs",
+      "references": [
+        "housekeeping/housekeeping.mjs"
+      ],
+      "chain": [
+        "housekeeping/test/housekeeping.test.mjs",
+        "housekeeping/test/helpers/cli-fixture.mjs",
+        "housekeeping/housekeeping.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "lanes/test/lane.test.mjs",
+      "references": [
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "lanes/test/lane.test.mjs",
+        "lanes/lane.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "lanes/test/no-focus.test.mjs",
+      "references": [
+        "lanes/lane.mjs",
+        "lib/retire-runtime.mjs"
+      ],
+      "chain": [
+        "lanes/test/no-focus.test.mjs",
+        "lanes/lane.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "lanes/test/validation.test.mjs",
+      "references": [
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "lanes/test/validation.test.mjs",
+        "lanes/lane.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "lanes/test/workspace-native.test.mjs",
+      "references": [
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "lanes/test/workspace-native.test.mjs",
+        "lanes/lane.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/affected-tests.test.mjs",
+      "references": [
+        "promote/test-plan.mjs",
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "promote/test/affected-tests.test.mjs",
+        "test/helpers/affected-tests.mjs",
+        "lanes/lane.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/completion.test.mjs",
+      "references": [
+        "promote/promote.mjs",
+        "promote/completion.mjs",
+        "supervisor/reconcile.mjs",
+        "promote/guard.mjs",
+        "bin/org.mjs",
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "promote/test/completion.test.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/conformance.test.mjs",
+      "references": [],
+      "chain": [
+        "promote/test/conformance.test.mjs",
+        "promote/test/helpers/conformance.mjs",
+        "promote/metrics.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/memory-gate.test.mjs",
+      "references": [
+        "promote/memory-gate.mjs"
+      ],
+      "chain": [
+        "promote/test/memory-gate.test.mjs",
+        "promote/memory-gate.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/metrics-profile.test.mjs",
+      "references": [],
+      "chain": [
+        "promote/test/metrics-profile.test.mjs",
+        "promote/test/helpers/conformance.mjs",
+        "promote/metrics.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/metrics.test.mjs",
+      "references": [
+        "promote/metrics.mjs",
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "promote/test/metrics.test.mjs",
+        "promote/metrics.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/promote.test.mjs",
+      "references": [
+        "promote/promote.mjs",
+        "promote/gate-profile.mjs",
+        "lanes/lane.mjs",
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "promote/test/promote.test.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "promote/test/train.test.mjs",
+      "references": [
+        "promote/promote.mjs",
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "promote/test/train.test.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/wait-timing.test.mjs",
+      "references": [],
+      "chain": [
+        "promote/test/wait-timing.test.mjs",
+        "promote/test/helpers/conformance.mjs",
+        "promote/metrics.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "promote/test/workflow-train.test.mjs",
+      "references": [
+        "promote/promote.mjs",
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "promote/test/workflow-train.test.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/config.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "settle/test/config.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/fleet-isolation.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/fleet-isolation.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/memory-boundaries.test.mjs",
+      "references": [
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "settle/test/memory-boundaries.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/rebase-paths.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/rebase-paths.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/rebase-review.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/rebase-review.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/rebase-safety.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/rebase-safety.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/rebase.test.mjs",
+      "references": [
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "settle/test/rebase.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/recapture.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "settle/test/recapture.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/receipts.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "settle/test/receipts.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/record-recovery.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/record-recovery.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/record-safety.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "settle/test/record-safety.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/report-evidence.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/report-evidence.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/review-delivery.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/review-delivery.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/review-holds.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/review-holds.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/round-cap.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "settle/test/round-cap.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/settle.test.mjs",
+      "references": [
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "settle/test/settle.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/teardown.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/teardown.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/test-evidence.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/test-evidence.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/test-plan.test.mjs",
+      "references": [],
+      "chain": [
+        "settle/test/test-plan.test.mjs",
+        "test/helpers/affected-tests.mjs",
+        "lanes/lane.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/train.test.mjs",
+      "references": [
+        "promote/promote.mjs",
+        "promote/train.mjs",
+        "lanes/lane.mjs",
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "settle/test/train.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "settle/test/validation-tiers.test.mjs",
+      "references": [
+        "promote/promote.mjs",
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "settle/test/validation-tiers.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "supervisor/test/autopilot.test.mjs",
+      "references": [],
+      "chain": [
+        "supervisor/test/autopilot.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "supervisor/test/entry.test.mjs",
+      "references": [
+        "housekeeping/command.mjs",
+        "lib/retire-trigger.mjs",
+        "bin/org.mjs",
+        "supervisor/entry.mjs",
+        "lib/retire.mjs",
+        "supervisor/retire.mjs",
+        "housekeeping/housekeeping.mjs"
+      ],
+      "chain": [
+        "supervisor/test/entry.test.mjs",
+        "housekeeping/command.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "supervisor/test/reconcile.test.mjs",
+      "references": [
+        "supervisor/reconcile.mjs"
+      ],
+      "chain": [
+        "supervisor/test/reconcile.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "supervisor/test/status.test.mjs",
+      "references": [],
+      "chain": [
+        "supervisor/test/status.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "supervisor/test/supervisor.test.mjs",
+      "references": [
+        "promote/promote.mjs",
+        "lanes/lane.mjs",
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "supervisor/test/supervisor.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test-slot/test/gate-profile.test.mjs",
+      "references": [
+        "promote/gate-profile.mjs",
+        "promote/promote.mjs",
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "test-slot/test/gate-profile.test.mjs",
+        "promote/gate-profile.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "test-slot/test/train-conformance.test.mjs",
+      "references": [],
+      "chain": [
+        "test-slot/test/train-conformance.test.mjs",
+        "promote/test/helpers/conformance.mjs",
+        "promote/metrics.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test-slot/test/watchdog.test.mjs",
+      "references": [
+        "promote/promote.mjs",
+        "promote/gate-profile.mjs",
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "test-slot/test/watchdog.test.mjs",
+        "promote/test/helpers/conformance.mjs",
+        "promote/metrics.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "test/approvals.test.mjs",
+      "references": [],
+      "chain": [
+        "test/approvals.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/bch-cloak-contract.test.mjs",
+      "references": [
+        "bin/org.mjs",
+        "contrib/settle-watch.mjs",
+        "supervisor/reconcile.mjs"
+      ],
+      "chain": [
+        "test/bch-cloak-contract.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/cli-help.test.mjs",
+      "references": [
+        "bin/org.mjs",
+        "contrib/settle-watch.mjs",
+        "housekeeping/housekeeping.mjs",
+        "lanes/lane.mjs",
+        "promote/host-gate.mjs",
+        "promote/promote.mjs",
+        "promote/metrics.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ],
+      "chain": [
+        "test/cli-help.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/discernment.test.mjs",
+      "references": [],
+      "chain": [
+        "test/discernment.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/fixture-lifetime.test.mjs",
+      "references": [
+        "promote/host-gate.mjs"
+      ],
+      "chain": [
+        "test/fixture-lifetime.test.mjs",
+        "settle/test/fixture.mjs",
+        "promote/promote.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/fleet.test.mjs",
+      "references": [
+        "bin/org.mjs",
+        "lanes/lane.mjs"
+      ],
+      "chain": [
+        "test/fleet.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/flow.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "test/flow.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/lessons.test.mjs",
+      "references": [],
+      "chain": [
+        "test/lessons.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/load-deadlines.test.mjs",
+      "references": [
+        "housekeeping/housekeeping.mjs"
+      ],
+      "chain": [
+        "test/load-deadlines.test.mjs",
+        "housekeeping/housekeeping.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "test/main-module.test.mjs",
+      "references": [
+        "promote/metrics.mjs",
+        "promote/promote.mjs",
+        "supervisor/tidy-tabs.mjs",
+        "housekeeping/housekeeping.mjs",
+        "bin/org.mjs",
+        "housekeeping/command.mjs"
+      ],
+      "chain": [
+        "test/main-module.test.mjs",
+        "promote/metrics.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/name-alias.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "test/name-alias.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/one-watcher.test.mjs",
+      "references": [
+        "contrib/settle-watch.mjs"
+      ],
+      "chain": [
+        "test/one-watcher.test.mjs",
+        "contrib/settle-watch.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/release.test.mjs",
+      "references": [
+        "contrib/settle-watch.mjs",
+        "bin/org.mjs",
+        "lanes/lane.mjs",
+        "supervisor/reconcile.mjs"
+      ],
+      "chain": [
+        "test/release.test.mjs",
+        "contrib/settle-watch.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/retire-lock.test.mjs",
+      "references": [
+        "lib/retire-lock.mjs",
+        "lib/retire-trigger.mjs"
+      ],
+      "chain": [
+        "test/retire-lock.test.mjs",
+        "lib/retire-lock.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "test/retire-paths.test.mjs",
+      "references": [
+        "supervisor/retire.mjs",
+        "promote/promote.mjs",
+        "lib/retire-trigger.mjs",
+        "lib/retire-lock.mjs",
+        "lanes/lane.mjs",
+        "bin/org.mjs",
+        "contrib/settle-watch.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ],
+      "chain": [
+        "test/retire-paths.test.mjs",
+        "supervisor/retire.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "test/retire.test.mjs",
+      "references": [
+        "lib/retire.mjs",
+        "supervisor/retire.mjs",
+        "lib/retire-lock.mjs"
+      ],
+      "chain": [
+        "test/retire.test.mjs",
+        "lib/retire.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "test/review-children.test.mjs",
+      "references": [],
+      "chain": [
+        "test/review-children.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/sanitization.test.mjs",
+      "references": [],
+      "chain": [
+        "test/sanitization.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/settle-watch.test.mjs",
+      "references": [
+        "contrib/settle-watch.mjs"
+      ],
+      "chain": [
+        "test/settle-watch.test.mjs",
+        "contrib/settle-watch.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/startup-deadlines.test.mjs",
+      "references": [
+        "promote/promote.mjs"
+      ],
+      "chain": [
+        "test/startup-deadlines.test.mjs",
+        "housekeeping/test/helpers/cli-fixture.mjs",
+        "housekeeping/housekeeping.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "test/tidy-tabs.test.mjs",
+      "references": [
+        "supervisor/tidy-tabs.mjs",
+        "lib/retire.mjs"
+      ],
+      "chain": [
+        "test/tidy-tabs.test.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "test/today.test.mjs",
+      "references": [],
+      "chain": [
+        "test/today.test.mjs",
+        "test/helpers.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "verify/test/verify.test.mjs",
+      "references": [
+        "verify/verify.mjs",
+        "verify/expectations.mjs",
+        "verify/execute.mjs"
+      ],
+      "chain": [
+        "verify/test/verify.test.mjs",
+        "verify/verify.mjs"
+      ],
+      "changed": true
+    },
+    {
+      "file": "watch/test/existing-project.test.mjs",
+      "references": [
+        "bin/org.mjs"
+      ],
+      "chain": [
+        "watch/test/existing-project.test.mjs",
+        "bin/org.mjs"
+      ],
+      "changed": false
+    },
+    {
+      "file": "acceptance/test/boundary.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/cases.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/cleanup.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/deadlines.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/default-cycle.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/environment.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/focus.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/housekeeping.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/load-round2.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/load.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/probe.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/results.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    },
+    {
+      "file": "acceptance/test/signal.test.mjs",
+      "references": [],
+      "chain": null,
+      "changed": false,
+      "reason": "complete offline acceptance suite after fixture update"
+    }
+  ],
+  "batches": [
+    [
+      "lanes/test/lane.test.mjs"
+    ],
+    [
+      "acceptance/test/harness.test.mjs",
+      "acceptance/test/recovery.test.mjs",
+      "acceptance/test/snapshot.test.mjs",
+      "discovery/test/lessons.test.mjs"
+    ],
+    [
+      "dispatch/test/dispatch.test.mjs",
+      "dispatch/test/record-worker.test.mjs",
+      "dispatch/test/timing.test.mjs",
+      "housekeeping/test/auto-tidy.test.mjs"
+    ],
+    [
+      "housekeeping/test/housekeeping.test.mjs",
+      "lanes/test/no-focus.test.mjs",
+      "lanes/test/validation.test.mjs",
+      "lanes/test/workspace-native.test.mjs"
+    ],
+    [
+      "promote/test/affected-tests.test.mjs",
+      "promote/test/completion.test.mjs",
+      "promote/test/conformance.test.mjs",
+      "promote/test/memory-gate.test.mjs"
+    ],
+    [
+      "promote/test/metrics-profile.test.mjs",
+      "promote/test/metrics.test.mjs",
+      "promote/test/promote.test.mjs",
+      "promote/test/train.test.mjs"
+    ],
+    [
+      "promote/test/wait-timing.test.mjs",
+      "promote/test/workflow-train.test.mjs",
+      "settle/test/config.test.mjs",
+      "settle/test/fleet-isolation.test.mjs"
+    ],
+    [
+      "settle/test/memory-boundaries.test.mjs",
+      "settle/test/rebase-paths.test.mjs",
+      "settle/test/rebase-review.test.mjs",
+      "settle/test/rebase-safety.test.mjs"
+    ],
+    [
+      "settle/test/rebase.test.mjs",
+      "settle/test/recapture.test.mjs",
+      "settle/test/receipts.test.mjs",
+      "settle/test/record-recovery.test.mjs"
+    ],
+    [
+      "settle/test/record-safety.test.mjs",
+      "settle/test/report-evidence.test.mjs",
+      "settle/test/review-delivery.test.mjs",
+      "settle/test/review-holds.test.mjs"
+    ],
+    [
+      "settle/test/round-cap.test.mjs",
+      "settle/test/settle.test.mjs",
+      "settle/test/teardown.test.mjs",
+      "settle/test/test-evidence.test.mjs"
+    ],
+    [
+      "settle/test/test-plan.test.mjs",
+      "settle/test/train.test.mjs",
+      "settle/test/validation-tiers.test.mjs",
+      "supervisor/test/autopilot.test.mjs"
+    ],
+    [
+      "supervisor/test/entry.test.mjs",
+      "supervisor/test/reconcile.test.mjs",
+      "supervisor/test/status.test.mjs",
+      "supervisor/test/supervisor.test.mjs"
+    ],
+    [
+      "test-slot/test/gate-profile.test.mjs",
+      "test-slot/test/train-conformance.test.mjs",
+      "test-slot/test/watchdog.test.mjs",
+      "test/approvals.test.mjs"
+    ],
+    [
+      "test/bch-cloak-contract.test.mjs",
+      "test/cli-help.test.mjs",
+      "test/discernment.test.mjs",
+      "test/fixture-lifetime.test.mjs"
+    ],
+    [
+      "test/fleet.test.mjs",
+      "test/flow.test.mjs",
+      "test/lessons.test.mjs",
+      "test/load-deadlines.test.mjs"
+    ],
+    [
+      "test/main-module.test.mjs",
+      "test/name-alias.test.mjs",
+      "test/one-watcher.test.mjs",
+      "test/release.test.mjs"
+    ],
+    [
+      "test/retire-lock.test.mjs",
+      "test/retire-paths.test.mjs",
+      "test/retire.test.mjs",
+      "test/review-children.test.mjs"
+    ],
+    [
+      "test/sanitization.test.mjs",
+      "test/settle-watch.test.mjs",
+      "test/startup-deadlines.test.mjs",
+      "test/tidy-tabs.test.mjs"
+    ],
+    [
+      "test/today.test.mjs",
+      "verify/test/verify.test.mjs",
+      "watch/test/existing-project.test.mjs"
+    ],
+    [
+      "acceptance/test/boundary.test.mjs",
+      "acceptance/test/cases.test.mjs",
+      "acceptance/test/cleanup.test.mjs",
+      "acceptance/test/deadlines.test.mjs"
+    ],
+    [
+      "acceptance/test/default-cycle.test.mjs",
+      "acceptance/test/environment.test.mjs",
+      "acceptance/test/focus.test.mjs",
+      "acceptance/test/housekeeping.test.mjs"
+    ],
+    [
+      "acceptance/test/load-round2.test.mjs",
+      "acceptance/test/load.test.mjs",
+      "acceptance/test/probe.test.mjs",
+      "acceptance/test/results.test.mjs"
+    ],
+    [
+      "acceptance/test/signal.test.mjs"
+    ]
+  ]
+}

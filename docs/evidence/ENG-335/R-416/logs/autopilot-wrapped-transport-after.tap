@@ -1,0 +1,462 @@
+TAP version 13
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 1 - done handles, PASS promotes with named policy, and duplicate notices do no work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.528833
+  ...
+# Subtest: fix_round is left in flight
+ok 2 - fix_round is left in flight # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037708
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 3 - base movement gets exactly one handle retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028667
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 4 - repeated base movement wakes and never repeats the retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.065583
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 5 - exit-one unknown refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030791
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 6 - exit-one wrong-run refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025166
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 7 - exit-one wrong-journal refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031792
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 8 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028625
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 9 - exit-one wrong-exit refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.112125
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 10 - exit-one signal refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.079167
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 11 - Moderate and Minor findings file one follow-up before accepting promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0675
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 12 - unknown result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028417
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 13 - uncertain result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027167
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 14 - interrupted result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058125
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 15 - refusal result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02625
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 16 - fail result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.057833
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 17 - cappedMajor result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032542
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 18 - unparsed result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.105167
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 19 - noPASS result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.063375
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 20 - cappedUnknown result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025375
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 21 - STOP disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.045041
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 22 - paused disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021459
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 23 - kill disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018666
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 24 - invalidConfig disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 25 - nullConfig disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019541
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 26 - nullPolicy disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01825
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 27 - reserved disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016834
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 28 - category disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018041
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 29 - questions disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01675
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 30 - blocked disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017333
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 31 - foreign disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 32 - torn disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.079375
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 33 - superseded disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062083
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 34 - incomplete disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0185
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 35 - an unacknowledged action wakes on replay instead of running again # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017667
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 36 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017292
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 37 - a corrupted action receipt wakes and preserves the evidence bytes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017875
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 38 - reserved report decisions wake even when the work item has no category # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01775
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 39 - un-ingested missing report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016416
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 40 - un-ingested malformed report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0255
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 41 - un-ingested wrong-run report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016666
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 42 - un-ingested blocked report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016375
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 43 - un-ingested needs_human report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018125
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 44 - un-ingested failed report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023833
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 45 - un-ingested questions report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027334
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 46 - un-ingested blockers report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023542
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 47 - un-ingested reserved-decision report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019916
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 48 - un-ingested uncategorized-decision report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017917
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 49 - un-ingested category-evidence report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018167
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 50 - a pending report cannot authorize promotion if handle did not perform intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019667
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 51 - a pause appearing after handle prevents promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018291
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 52 - reopening after a handled notice wakes and retains the operator change # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0225
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 53 - promotion refusal and every unknown notice wake without commands # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01825
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 54 - intermediate notices pass through unchanged with a healthy record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0175
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 55 - intermediate notices pass through unchanged with a missing record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01725
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 56 - intermediate notices pass through unchanged with a unreadable record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025708
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 57 - intermediate notices pass through unchanged with a malformed record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017292
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 58 - a missing record prevents classification without changing a report notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031125
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 59 - a unreadable record prevents classification without changing a report notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 60 - a malformed record prevents classification without changing a report notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01575
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 61 - promoted queue notice handles its bound run and a closed item is a no-op # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014625
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 62 - runless completion fleet-membership retains an explicit binding diagnostic # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023917
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 63 - runless completion gate-profile retains an explicit binding diagnostic # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015167
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+ok 64 - completion after an interrupted promotion has its own receipt and closes once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015209
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 65 - abandoned watch-no-report is journaled without waking or acting # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015208
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 66 - abandoned watch-long-running is journaled without waking or acting # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 67 - abandoned watch-invalid-report is journaled without waking or acting # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015083
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 68 - abandoned org-report is journaled without waking or acting # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015542
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+ok 69 - awaited promotion closes before waking with one short plan line and later notices stay silent # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014917
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 70 - awaited PASS queued for promotion stays silent until closure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019208
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 71 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014917
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 72 - abandoned watcher inbox entry is handled without Herdr delivery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0145
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 73 - legacy uncertain promotion receipts still forbid command replay after the key upgrade # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015167
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 74 - inbox consumes routine results before any Herdr delivery and retains original notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014375
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 75 - report exception delivery preserves the exact original notice through the existing input gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014417
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 76 - promotion exception delivery preserves the exact original notice through the existing input gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014459
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 77 - unknown exception delivery preserves the exact original notice through the existing input gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014333
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 78 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01425
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 79 - a busy chat drain cannot prevent a routine policy action # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014375
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 80 - actual handle and promotion commands settle PASS and enqueue offline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.050667
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 81 - actual handle and promotion commands file findings and accept them offline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014208
+  ...
+# Subtest: real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+ok 82 - real handle still wakes for a non-test claim alongside ingest proof and deferred tests # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0135
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+ok 83 - automatic PASS reaches the real queue, lands and closes without waking the supervisor # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029167
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+ok 84 - automatic PASS reaches the real queue, lands and closes with one awaited wake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013708
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+ok 85 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013167
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+ok 86 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed. # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017334
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 87 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it. # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013375
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 88 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 8397.374125
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing:
+ok 89 - stderr-only failed action preserves refusal instead of JSON parsing:  # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.086709
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 90 - stderr-only failed action preserves refusal instead of JSON parsing: {broken # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029459
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..90
+# tests 90
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 89
+# todo 0
+# duration_ms 8508.313333
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,112 @@
+TAP version 13
+# Subtest: terminal integrated worker tabs close while working, blocked, unnamed and operator tabs stay
+ok 1 - terminal integrated worker tabs close while working, blocked, unnamed and operator tabs stay
+  ---
+  duration_ms: 2128.74325
+  ...
+# Subtest: dry-run previews finished tabs and never closes, including through housekeeping --once
+ok 2 - dry-run previews finished tabs and never closes, including through housekeeping --once
+  ---
+  duration_ms: 1381.676167
+  ...
+# Subtest: a working or blocked change at the final recheck preserves the finished tab
+ok 3 - a working or blocked change at the final recheck preserves the finished tab
+  ---
+  duration_ms: 1357.770875
+  ...
+# Subtest: new occupants revealed after the final pane list preserve their tab
+ok 4 - new occupants revealed after the final pane list preserve their tab
+  ---
+  duration_ms: 2455.972167
+  ...
+# Subtest: conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+ok 5 - conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+  ---
+  duration_ms: 0.746042
+  ...
+# Subtest: housekeeping --once preserves waiting reports, blocking items and missing item evidence
+ok 6 - housekeeping --once preserves waiting reports, blocking items and missing item evidence
+  ---
+  duration_ms: 6253.252291
+  ...
+# Subtest: automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+ok 7 - automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+  ---
+  duration_ms: 3878.630167
+  ...
+# Subtest: replacement identity and a waiting report at the final observation prevent closing
+ok 8 - replacement identity and a waiting report at the final observation prevent closing
+  ---
+  duration_ms: 2364.267042
+  ...
+# Subtest: a reused worker name with a newer open run and an extra unnamed occupant never close
+ok 9 - a reused worker name with a newer open run and an extra unnamed occupant never close
+  ---
+  duration_ms: 796.180333
+  ...
+# Subtest: a matching worker cannot authorize another occupant reusing its name
+ok 10 - a matching worker cannot authorize another occupant reusing its name
+  ---
+  duration_ms: 1292.639292
+  ...
+# Subtest: only this Git project is tidied and the caller tab is preserved
+ok 11 - only this Git project is tidied and the caller tab is preserved
+  ---
+  duration_ms: 717.47175
+  ...
+# Subtest: review files and session display metadata do not authorize retirement
+ok 12 - review files and session display metadata do not authorize retirement
+  ---
+  duration_ms: 949.722375
+  ...
+# Subtest: a working correction round preserves the lane and review files never release unrecorded panes
+ok 13 - a working correction round preserves the lane and review files never release unrecorded panes
+  ---
+  duration_ms: 1430.779416
+  ...
+# Subtest: supported review routes need a matching topic verdict newer than their session
+ok 14 - supported review routes need a matching topic verdict newer than their session
+  ---
+  duration_ms: 0.251667
+  ...
+# Subtest: automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+ok 15 - automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+  ---
+  duration_ms: 14241.671375
+  ...
+# Subtest: replacement reviewers at the final observation keep their tabs without worker runs
+ok 16 - replacement reviewers at the final observation keep their tabs without worker runs
+  ---
+  duration_ms: 5115.082917
+  ...
+# Subtest: review evidence cannot override a recorded worker waiting on a blocker
+ok 17 - review evidence cannot override a recorded worker waiting on a blocker
+  ---
+  duration_ms: 575.781667
+  ...
+# Subtest: failed and incomplete reads close nothing and are logged without stopping housekeeping
+ok 18 - failed and incomplete reads close nothing and are logged without stopping housekeeping
+  ---
+  duration_ms: 2178.697542
+  ...
+# Subtest: every tick tidies despite the ten-minute cleanup interval and a tidy failure
+ok 19 - every tick tidies despite the ten-minute cleanup interval and a tidy failure
+  ---
+  duration_ms: 5425.593625
+  ...
+# Subtest: auto-tidy preserves a focused finished worker at initial and final observation
+ok 20 - auto-tidy preserves a focused finished worker at initial and final observation
+  ---
+  duration_ms: 1134.4485
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 53781.002875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

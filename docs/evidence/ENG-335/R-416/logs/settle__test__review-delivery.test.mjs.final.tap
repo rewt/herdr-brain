@@ -1,0 +1,17 @@
+TAP version 13
+# Subtest: settle accepts and commits a review delivered through the lane worktree
+ok 1 - settle accepts and commits a review delivered through the lane worktree
+  ---
+  duration_ms: 4276.792042
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4368.017
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

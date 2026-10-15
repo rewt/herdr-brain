@@ -1,0 +1,341 @@
+TAP version 13
+# Preparing worktree (detached HEAD 1002f1e)
+# Subtest: submit exits while the slot is busy; no job runs without explicit admission
+ok 1 - submit exits while the slot is busy; no job runs without explicit admission
+  ---
+  duration_ms: 883.296292
+  ...
+# Preparing worktree (detached HEAD 2ae2f0b)
+# Subtest: the default trusted store is outside Git and uses canonical identity from a linked checkout
+ok 2 - the default trusted store is outside Git and uses canonical identity from a linked checkout
+  ---
+  duration_ms: 833.785916
+  ...
+# Subtest: trusted store paths refuse Git, every worktree, records, desks and symlink aliases
+ok 3 - trusted store paths refuse Git, every worktree, records, desks and symlink aliases
+  ---
+  duration_ms: 519.858709
+  ...
+# Subtest: trusted stores refuse all system temp roots, including configured TMPDIR and default XDG placement
+ok 4 - trusted stores refuse all system temp roots, including configured TMPDIR and default XDG placement
+  ---
+  duration_ms: 349.753417
+  ...
+# Subtest: repeatable CLI and colon-separated environment roots refuse stores after resolving aliases
+ok 5 - repeatable CLI and colon-separated environment roots refuse stores after resolving aliases
+  ---
+  duration_ms: 309.849416
+  ...
+# Subtest: probe-store reports an absent store with a nonzero exit and trusted-side init instructions
+ok 6 - probe-store reports an absent store with a nonzero exit and trusted-side init instructions
+  ---
+  duration_ms: 181.291166
+  ...
+# Subtest: probe-store fires an exclusive write, removes it, and reports protected in a read-only store
+ok 7 - probe-store fires an exclusive write, removes it, and reports protected in a read-only store
+  ---
+  duration_ms: 259.085875
+  ...
+# Subtest: probe-store reports unknown for a non-directory store and exits nonzero
+ok 8 - probe-store reports unknown for a non-directory store and exits nonzero
+  ---
+  duration_ms: 180.620625
+  ...
+# Subtest: probe-store reports EPERM as protected and a cleanup failure as unknown
+ok 9 - probe-store reports EPERM as protected and a cleanup failure as unknown
+  ---
+  duration_ms: 127.214083
+  ...
+# Subtest: init creates a private selected store, prints its path and is idempotent
+ok 10 - init creates a private selected store, prints its path and is idempotent
+  ---
+  duration_ms: 303.687375
+  ...
+# Preparing worktree (detached HEAD e397532)
+# Subtest: init creates a private default store, prints its path and is idempotent
+ok 11 - init creates a private default store, prints its path and is idempotent
+  ---
+  duration_ms: 300.350083
+  ...
+# Subtest: init creates mode 0700 even with a restrictive umask
+ok 12 - init creates mode 0700 even with a restrictive umask
+  ---
+  duration_ms: 121.476084
+  ...
+# Subtest: init refuses existing stores with a different mode or owner without repairing them
+ok 13 - init refuses existing stores with a different mode or owner without repairing them
+  ---
+  duration_ms: 227.789042
+  ...
+# Subtest: init applies admission location guards before creating a store
+ok 14 - init applies admission location guards before creating a store
+  ---
+  duration_ms: 788.068583
+  ...
+# Subtest: init applies repeatable CLI roots and environment roots before creating a store
+ok 15 - init applies repeatable CLI roots and environment roots before creating a store
+  ---
+  duration_ms: 243.885542
+  ...
+# Subtest: one detached admitted worker returns before grant, drains FIFO and records holders plus one note and notice
+ok 16 - one detached admitted worker returns before grant, drains FIFO and records holders plus one note and notice
+  ---
+  duration_ms: 1623.722333
+  ...
+# Subtest: FIFO preserves submission order when an older pending job enters a later admission batch
+ok 17 - FIFO preserves submission order when an older pending job enters a later admission batch
+  ---
+  duration_ms: 1254.841291
+  ...
+# Subtest: admit refuses bare IDs through the API and CLI before creating trusted state
+ok 18 - admit refuses bare IDs through the API and CLI before creating trusted state
+  ---
+  duration_ms: 213.56475
+  ...
+# Subtest: a never-admitted inbox edit refuses the previously inspected digest and accepts the newly inspected digest
+ok 19 - a never-admitted inbox edit refuses the previously inspected digest and accepts the newly inspected digest
+  ---
+  duration_ms: 691.828917
+  ...
+# Subtest: pending status shows current inbox content; stale consent refuses and admitted specs never change
+ok 20 - pending status shows current inbox content; stale consent refuses and admitted specs never change
+  ---
+  duration_ms: 1103.357917
+  ...
+# Subtest: completed status keeps the admitted spec and group after inbox edits
+ok 21 - completed status keeps the admitted spec and group after inbox edits
+  ---
+  duration_ms: 898.254333
+  ...
+# Subtest: detached admission refuses edited specs even with forged queue digests; recorded spec files cannot change execution
+ok 22 - detached admission refuses edited specs even with forged queue digests; recorded spec files cannot change execution
+  ---
+  duration_ms: 1324.659541
+  ...
+# Subtest: a detached worker ignores jobs injected with its active token and forged allowlist entries
+ok 23 - a detached worker ignores jobs injected with its active token and forged allowlist entries
+  ---
+  duration_ms: 1616.242792
+  ...
+# Subtest: admission snapshots only submission fields; drain and recover never read the writable inbox
+ok 24 - admission snapshots only submission fields; drain and recover never read the writable inbox
+  ---
+  duration_ms: 1775.281583
+  ...
+# Subtest: a forged pass receipt for a never-admitted pending job is unverified and never delivered
+ok 25 - a forged pass receipt for a never-admitted pending job is unverified and never delivered
+  ---
+  duration_ms: 324.872375
+  ...
+# Subtest: a forged pass receipt for an admitted queued job halts the worker with runner.error
+ok 26 - a forged pass receipt for an admitted queued job halts the worker with runner.error
+  ---
+  duration_ms: 1369.493042
+  ...
+# Subtest: a forged pass receipt during execution fails exclusive publication and recovery requires a new retry job
+ok 27 - a forged pass receipt during execution fails exclusive publication and recovery requires a new retry job
+  ---
+  duration_ms: 751.260708
+  ...
+# Subtest: recovery refuses a runner receipt after its receipt bytes no longer matches publication
+ok 28 - recovery refuses a runner receipt after its receipt bytes no longer matches publication
+  ---
+  duration_ms: 769.793292
+  ...
+# Subtest: recovery refuses a runner receipt after its admission no longer matches publication
+ok 29 - recovery refuses a runner receipt after its admission no longer matches publication
+  ---
+  duration_ms: 785.472584
+  ...
+# Subtest: recovery refuses a runner receipt after its started job no longer matches publication
+ok 30 - recovery refuses a runner receipt after its started job no longer matches publication
+  ---
+  duration_ms: 757.689709
+  ...
+# Subtest: every admitted immutable field is bound before a worker can create its execution directory
+ok 31 - every admitted immutable field is bound before a worker can create its execution directory
+  ---
+  duration_ms: 4074.15575
+  ...
+# Subtest: record delivery failure preserves its receipt, returns unstarted jobs and recovers without execution
+ok 32 - record delivery failure preserves its receipt, returns unstarted jobs and recovers without execution
+  ---
+  duration_ms: 2284.776375
+  ...
+# Subtest: notice delivery failure preserves its receipt, returns unstarted jobs and recovers without execution
+ok 33 - notice delivery failure preserves its receipt, returns unstarted jobs and recovers without execution
+  ---
+  duration_ms: 2324.624625
+  ...
+# Subtest: recovery refuses an existing worker lock and marks an interrupted job for a new retry job
+ok 34 - recovery refuses an existing worker lock and marks an interrupted job for a new retry job
+  ---
+  duration_ms: 2097.657625
+  ...
+# Subtest: a log hashing error is recoverable bookkeeping but an executed job never replays without a receipt
+ok 35 - a log hashing error is recoverable bookkeeping but an executed job never replays without a receipt
+  ---
+  duration_ms: 927.458292
+  ...
+# Subtest: a desk edited during a busy slot wait is refused at grant and its edits are preserved
+ok 36 - a desk edited during a busy slot wait is refused at grant and its edits are preserved
+  ---
+  duration_ms: 1050.711125
+  ...
+# Subtest: prepare and command share the slot; receipts bind prior SHA with and without prepare and preserve ignored caches
+ok 37 - prepare and command share the slot; receipts bind prior SHA with and without prepare and preserve ignored caches
+  ---
+  duration_ms: 1306.875709
+  ...
+# Subtest: two named desks keep independent previous SHAs and prepared state in A, B, A order
+ok 38 - two named desks keep independent previous SHAs and prepared state in A, B, A order
+  ---
+  duration_ms: 1660.125583
+  ...
+# Subtest: groups pin SHA and tree across completion and status lists individual group receipts
+ok 39 - groups pin SHA and tree across completion and status lists individual group receipts
+  ---
+  duration_ms: 1703.288917
+  ...
+# Subtest: dirty runner desks refuse without discarding edits or running the next job; arbitrary existing desks are refused
+ok 40 - dirty runner desks refuse without discarding edits or running the next job; arbitrary existing desks are refused
+  ---
+  duration_ms: 1492.191041
+  ...
+# Subtest: an absolute desk is created by the runner and a mismatching checked-out tree refuses execution
+ok 41 - an absolute desk is created by the runner and a mismatching checked-out tree refuses execution
+  ---
+  duration_ms: 1129.808875
+  ...
+# Subtest: absolute desks under system temp, the repository and configured write roots refuse at submit and admit
+ok 42 - absolute desks under system temp, the repository and configured write roots refuse at submit and admit
+  ---
+  duration_ms: 482.240209
+  ...
+# Subtest: deskFor rechecks isolation before execution and preserves named persistent desks
+ok 43 - deskFor rechecks isolation before execution and preserves named persistent desks
+  ---
+  duration_ms: 1573.894208
+  ...
+# Subtest: a desk that remains dirty after restoration halts the batch and preserves the leftover
+ok 44 - a desk that remains dirty after restoration halts the batch and preserves the leftover
+  ---
+  duration_ms: 777.900584
+  ...
+# Subtest: public submit --admit parses prepare argv, detaches and exposes individual group receipts
+ok 45 - public submit --admit parses prepare argv, detaches and exposes individual group receipts
+  ---
+  duration_ms: 1111.982667
+  ...
+# Subtest: prepare failure produces error, records its exit and never runs the command
+ok 46 - prepare failure produces error, records its exit and never runs the command
+  ---
+  duration_ms: 678.3805
+  ...
+# Subtest: TAP, Vitest, named test, exit, artifact and JSON expectations record actual values and mismatches
+ok 47 - TAP, Vitest, named test, exit, artifact and JSON expectations record actual values and mismatches
+  ---
+  duration_ms: 1230.300125
+  ...
+# Subtest: prepare output cannot satisfy named tests or totals; paths cannot escape the desk and missing JSON differs from null
+ok 48 - prepare output cannot satisfy named tests or totals; paths cannot escape the desk and missing JSON differs from null
+  ---
+  duration_ms: 722.69925
+  ...
+# Subtest: receipts use exclusive create and completed jobs cannot be admitted or executed twice
+ok 49 - receipts use exclusive create and completed jobs cannot be admitted or executed twice
+  ---
+  duration_ms: 778.224125
+  ...
+# Subtest: wall cap ends one job, restores its desk and records watchdog evidence without retry
+ok 50 - wall cap ends one job, restores its desk and records watchdog evidence without retry
+  ---
+  duration_ms: 1526.338166
+  ...
+# Subtest: idle cap ends one job, restores its desk and records watchdog evidence without retry
+ok 51 - idle cap ends one job, restores its desk and records watchdog evidence without retry
+  ---
+  duration_ms: 1225.497
+  ...
+# Subtest: a captured descendant in a separate session is identity-confirmed, reaped and recorded before the next job
+ok 52 - a captured descendant in a separate session is identity-confirmed, reaped and recorded before the next job
+  ---
+  duration_ms: 1199.43675
+  ...
+# Subtest: timeout also records and reaps a captured escaped descendant before releasing the host slot
+ok 53 - timeout also records and reaps a captured escaped descendant before releasing the host slot
+  ---
+  duration_ms: 1789.320375
+  ...
+# Subtest: the final timeout walk publishes a newly observable escaped identity before any signal
+ok 54 - the final timeout walk publishes a newly observable escaped identity before any signal
+  ---
+  duration_ms: 0.296875
+  ...
+# Subtest: timeout captures an escaped descendant while its phase observer is stopped
+ok 55 - timeout captures an escaped descendant while its phase observer is stopped
+  ---
+  duration_ms: 2772.002667
+  ...
+# Subtest: a previously observed orphan is reaped inside the host hold after job timeout
+ok 56 - a previously observed orphan is reaped inside the host hold after job timeout
+  ---
+  duration_ms: 4312.167041
+  ...
+# Subtest: large output drains completely before totals are parsed and private logs are hashed
+ok 57 - large output drains completely before totals are parsed and private logs are hashed
+  ---
+  duration_ms: 675.729417
+  ...
+# Subtest: distribution manifest and release guard include the queue and all runtime imports
+ok 58 - distribution manifest and release guard include the queue and all runtime imports
+  ---
+  duration_ms: 0.995042
+  ...
+# Subtest: tracking interruption after-capture is bound to capture time and the runner's birth
+ok 59 - tracking interruption after-capture is bound to capture time and the runner's birth
+  ---
+  duration_ms: 231.7025
+  ...
+# Subtest: tracking interruption before-capture is bound to capture time and the runner's birth
+ok 60 - tracking interruption before-capture is bound to capture time and the runner's birth
+  ---
+  duration_ms: 268.711125
+  ...
+# Subtest: tracking interruption non-signal is bound to capture time and the runner's birth
+ok 61 - tracking interruption non-signal is bound to capture time and the runner's birth
+  ---
+  duration_ms: 270.699375
+  ...
+# Subtest: tracking interruption wrong-birth is bound to capture time and the runner's birth
+ok 62 - tracking interruption wrong-birth is bound to capture time and the runner's birth
+  ---
+  duration_ms: 262.393583
+  ...
+# Subtest: tracking interruption missing-time is bound to capture time and the runner's birth
+ok 63 - tracking interruption missing-time is bound to capture time and the runner's birth
+  ---
+  duration_ms: 228.979958
+  ...
+# Subtest: a measurement interrupted after the watchdog capture includes its error and both times in the receipt
+ok 64 - a measurement interrupted after the watchdog capture includes its error and both times in the receipt
+  ---
+  duration_ms: 1734.246541
+  ...
+# Subtest: a timeout records a captured descendant sharing the stopped phase runner group
+ok 65 - a timeout records a captured descendant sharing the stopped phase runner group
+  ---
+  duration_ms: 2794.64
+  ...
+# {"child_pid":21746,"phase_pgid":66939,"captured_child":{"pid":21746,"ppid":21739,"pgid":66939,"state":"R","identity":"1792037362:930093","command":"[node]","captured_at":"2026-10-15T04:09:23.916Z"},"reaped_processes":[{"pid":21746,"identity":"1792037362:930093","signal":null,"source":"job-watchdog","confirmed_gone":true},{"pid":21739,"identity":"1792037362:910421","signal":null,"source":"job-watchdog","confirmed_gone":true},{"pid":21725,"identity":"1792037362:879684","signal":null,"source":"job-watchdog","confirmed_gone":true}]}
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..65
+# tests 65
+# suites 0
+# pass 65
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 67704.605291
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

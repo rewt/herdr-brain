@@ -1,0 +1,37 @@
+TAP version 13
+# Subtest: auto items flag each risky signal, including case and inflections, without classifying the action
+ok 1 - auto items flag each risky signal, including case and inflections, without classifying the action
+  ---
+  duration_ms: 1.392333
+  ...
+# Subtest: report checks cover decisions and questions, all prose, legacy extras and newer normalized fields
+ok 2 - report checks cover decisions and questions, all prose, legacy extras and newer normalized fields
+  ---
+  duration_ms: 0.276208
+  ...
+# Subtest: ask flags but still auto-answers; explicit uncertainty waits and still blocks dependent work
+ok 3 - ask flags but still auto-answers; explicit uncertainty waits and still blocks dependent work
+  ---
+  duration_ms: 390.994334
+  ...
+# Subtest: ingest durably flags miscategorized report fixtures, keeps outcome, and is idempotent and backwards compatible
+ok 4 - ingest durably flags miscategorized report fixtures, keeps outcome, and is idempotent and backwards compatible
+  ---
+  duration_ms: 308.700083
+  ...
+# Subtest: guidance is shared in report templates and CLI question help
+ok 5 - guidance is shared in report templates and CLI question help
+  ---
+  duration_ms: 78.565208
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 870.5355
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

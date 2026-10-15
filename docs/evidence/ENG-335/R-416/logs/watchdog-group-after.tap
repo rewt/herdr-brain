@@ -1,0 +1,172 @@
+TAP version 13
+# Subtest: config, recent healthy clocks and conservative default resolve independently of slot waiting
+ok 1 - config, recent healthy clocks and conservative default resolve independently of slot waiting # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.388875
+  ...
+# Subtest: wall timeout stops a forever-blocked grandchild, releases slot and never retries under load
+ok 2 - wall timeout stops a forever-blocked grandchild, releases slot and never retries under load # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.172417
+  ...
+# Subtest: wall timeout stops a forever-blocked grandchild in its own group, releases slot and never retries under load
+ok 3 - wall timeout stops a forever-blocked grandchild in its own group, releases slot and never retries under load # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035084
+  ...
+# Subtest: enabled idle limit stops silence, output refreshes it and healthy clocks record final silence
+ok 4 - enabled idle limit stops silence, output refreshes it and healthy clocks record final silence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.07875
+  ...
+# Subtest: wall overrun and a descendant marker cannot spend a load retry
+ok 5 - wall overrun and a descendant marker cannot spend a load retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034583
+  ...
+# Subtest: parent walk excludes unrelated processes and escaped-child signalling confirms birth
+ok 6 - parent walk excludes unrelated processes and escaped-child signalling confirms birth # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028458
+  ...
+# Subtest: a throwing capture callback reports its error only after TERM and KILL stop the job
+ok 7 - a throwing capture callback reports its error only after TERM and KILL stop the job # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024541
+  ...
+# Subtest: lane records timeout, isolates correction and leaves main unchanged
+ok 8 - lane records timeout, isolates correction and leaves main unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034459
+  ...
+# Subtest: queue records timeout, isolates correction and leaves main unchanged
+ok 9 - queue records timeout, isolates correction and leaves main unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.070625
+  ...
+# Subtest: fast records timeout, isolates correction and leaves main unchanged
+ok 10 - fast records timeout, isolates correction and leaves main unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.073125
+  ...
+# Subtest: slot waiting consumes none of a short command deadline
+ok 11 - slot waiting consumes none of a short command deadline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036
+  ...
+# Subtest: nested gates preserve the legacy holder pgid after both wrappers die
+ok 12 - nested gates preserve the legacy holder pgid after both wrappers die # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.064
+  ...
+# Subtest: dead groups-lock owners recover and live or unknown owners fail with a coded path
+ok 13 - dead groups-lock owners recover and live or unknown owners fail with a coded path # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02275
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=true)
+ok 14 - leftover group fails distinctly after bounded grace (inherited pipes=true) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068917
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=false)
+ok 15 - leftover group fails distinctly after bounded grace (inherited pipes=false) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032958
+  ...
+# Subtest: canonical validation includes layered lane-only wall and idle settings for both envelopes
+ok 16 - canonical validation includes layered lane-only wall and idle settings for both envelopes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.290791
+  ...
+# Subtest: nested watchdog stops its parent-walk children and preserves a sibling in the shared group
+ok 17 - nested watchdog stops its parent-walk children and preserves a sibling in the shared group # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030541
+  ...
+# Subtest: printed descendant timeout marker follows command status 0
+ok 18 - printed descendant timeout marker follows command status 0 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.099875
+  ...
+# Subtest: printed descendant timeout marker follows command status 1
+ok 19 - printed descendant timeout marker follows command status 1 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035041
+  ...
+# Subtest: printed descendant timeout marker follows command status 124
+ok 20 - printed descendant timeout marker follows command status 124 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058333
+  ...
+# Subtest: failed descendant identity source stops the owned hung group and retains the slot
+ok 21 - failed descendant identity source stops the owned hung group and retains the slot # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023791
+  ...
+# Subtest: planned train file lists record and resolve one declared command history
+ok 22 - planned train file lists record and resolve one declared command history # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016875
+  ...
+# Subtest: healthy history prunes old command files while preserving the current key
+ok 23 - healthy history prunes old command files while preserving the current key # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015291
+  ...
+# Subtest: unbatched queue maps wall timeout to correction wording
+ok 24 - unbatched queue maps wall timeout to correction wording # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015541
+  ...
+# Subtest: unbatched queue maps idle timeout to correction wording
+ok 25 - unbatched queue maps idle timeout to correction wording # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015458
+  ...
+# Subtest: an unknown escaped identity cannot prevent killing the owned group
+ok 26 - an unknown escaped identity cannot prevent killing the owned group
+  ---
+  duration_ms: 132.5565
+  ...
+# Subtest: fixture gates cannot create or modify the real repository history
+ok 27 - fixture gates cannot create or modify the real repository history # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040042
+  ...
+# Subtest: history origin guard handles a concurrent unattributed writer
+ok 28 - history origin guard handles a concurrent unattributed writer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020166
+  ...
+# Subtest: history origin guard handles a concurrent foreign writer
+ok 29 - history origin guard handles a concurrent foreign writer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016125
+  ...
+# Subtest: history origin guard handles a concurrent descendant-leak writer
+ok 30 - history origin guard handles a concurrent descendant-leak writer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013833
+  ...
+# Subtest: three sane samples are required for wall and idle derivation, including legacy fixture history
+ok 31 - three sane samples are required for wall and idle derivation, including legacy fixture history # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013917
+  ...
+# Subtest: observed healthy full gates fit clean-history defaults and trained limits
+ok 32 - observed healthy full gates fit clean-history defaults and trained limits # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.063
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..32
+# tests 32
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 31
+# todo 0
+# duration_ms 185.016208
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

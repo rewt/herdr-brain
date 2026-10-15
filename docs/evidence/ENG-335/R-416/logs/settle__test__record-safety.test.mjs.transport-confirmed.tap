@@ -1,0 +1,62 @@
+TAP version 13
+# Subtest: settling an ingested older report preserves every newer reported outcome without review or correction
+ok 1 - settling an ingested older report preserves every newer reported outcome without review or correction
+  ---
+  duration_ms: 6912.446583
+  ...
+# Subtest: an unrecorded stale report cannot overwrite a newer outcome through ingestion
+ok 2 - an unrecorded stale report cannot overwrite a newer outcome through ingestion
+  ---
+  duration_ms: 813.502792
+  ...
+# Subtest: cached readiness and uncertain review retries hand off superseded runs
+ok 3 - cached readiness and uncertain review retries hand off superseded runs
+  ---
+  duration_ms: 6588.690167
+  ...
+# Subtest: conditional ingest and reopen protect a newer report arriving immediately before the record write
+ok 4 - conditional ingest and reopen protect a newer report arriving immediately before the record write
+  ---
+  duration_ms: 2588.786166
+  ...
+# Subtest: a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+ok 5 - a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+  ---
+  duration_ms: 8132.523542
+  ...
+# Subtest: conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+ok 6 - conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+  ---
+  duration_ms: 4333.651667
+  ...
+# Subtest: incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+ok 7 - incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+  ---
+  duration_ms: 11988.235
+  ...
+# Subtest: resolved blocker links allow recovery of only the recorded correction run
+ok 8 - resolved blocker links allow recovery of only the recorded correction run
+  ---
+  duration_ms: 6468.955708
+  ...
+# Subtest: correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+ok 9 - correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+  ---
+  duration_ms: 4550.575792
+  ...
+# Subtest: legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+ok 10 - legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+  ---
+  duration_ms: 5411.079167
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 57887.484041
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

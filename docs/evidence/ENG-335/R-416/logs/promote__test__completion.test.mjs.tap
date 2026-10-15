@@ -1,0 +1,501 @@
+TAP version 13
+# Subtest: native 1-member batch reconciles atomically before cleanup and duplicate recovery
+ok 1 - native 1-member batch reconciles atomically before cleanup and duplicate recovery
+  ---
+  duration_ms: 2567.458917
+  ...
+# Subtest: native 3-member batch reconciles atomically before cleanup and duplicate recovery
+ok 2 - native 3-member batch reconciles atomically before cleanup and duplicate recovery
+  ---
+  duration_ms: 5787.331166
+  ...
+# Subtest: integrated record refusal retains every lane and resumes records without another gate
+not ok 3 - integrated record refusal retains every lane and resumes records without another gate
+  ---
+  duration_ms: 5067.429459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:102:93
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: bisected batch accounts for its exclusion without mutating newer excluded work
+not ok 4 - bisected batch accounts for its exclusion without mutating newer excluded work
+  ---
+  duration_ms: 6612.977291
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:115:93
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: recovery refuses new-run and retains all integrated lanes
+ok 5 - recovery refuses new-run and retains all integrated lanes
+  ---
+  duration_ms: 3720.423833
+  ...
+# Subtest: recovery refuses blocker and retains all integrated lanes
+ok 6 - recovery refuses blocker and retains all integrated lanes
+  ---
+  duration_ms: 3760.615708
+  ...
+# Subtest: recovery refuses missing-member and retains all integrated lanes
+ok 7 - recovery refuses missing-member and retains all integrated lanes
+  ---
+  duration_ms: 3492.345541
+  ...
+# Subtest: lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+not ok 8 - lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+  ---
+  duration_ms: 4827.491083
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:146:43
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: native completion refuses operator-reserved work before gating or integration
+ok 9 - native completion refuses operator-reserved work before gating or integration
+  ---
+  duration_ms: 1240.215792
+  ...
+# Subtest: native completion refuses human work before gating or integration
+ok 10 - native completion refuses human work before gating or integration
+  ---
+  duration_ms: 1249.819209
+  ...
+# Subtest: native admission isolates unknown-run while valid members reconcile
+ok 11 - native admission isolates unknown-run while valid members reconcile
+  ---
+  duration_ms: 4486.373708
+  ...
+# Subtest: native admission isolates wrong-record while valid members reconcile
+ok 12 - native admission isolates wrong-record while valid members reconcile
+  ---
+  duration_ms: 4665.15725
+  ...
+# Subtest: native admission isolates duplicate-item while valid members reconcile
+ok 13 - native admission isolates duplicate-item while valid members reconcile
+  ---
+  duration_ms: 4783.842791
+  ...
+# Subtest: bound and unbound requests use separate native batches
+ok 14 - bound and unbound requests use separate native batches
+  ---
+  duration_ms: 5710.305875
+  ...
+# Subtest: a done report with questions is refused before the gate while valid members complete
+ok 15 - a done report with questions is refused before the gate while valid members complete
+  ---
+  duration_ms: 3108.345041
+  ...
+# Subtest: included item notes during the gate refuse integration without refreshing captured fingerprints
+ok 16 - included item notes during the gate refuse integration without refreshing captured fingerprints
+  ---
+  duration_ms: 1525.55875
+  ...
+# Subtest: the held record lock checks the original fingerprint immediately before fast-forward
+ok 17 - the held record lock checks the original fingerprint immediately before fast-forward
+  ---
+  duration_ms: 418.006792
+  ...
+# Subtest: native completion explicitly retires superseded open runs through the record transaction
+ok 18 - native completion explicitly retires superseded open runs through the record transaction
+  ---
+  duration_ms: 4031.266416
+  ...
+# Subtest: manual reconciliation recovery complete retains proof and handles cleanup
+not ok 19 - manual reconciliation recovery complete retains proof and handles cleanup
+  ---
+  duration_ms: 5900.671333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:292:12
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: manual reconciliation recovery missing-member retains proof and handles cleanup
+ok 20 - manual reconciliation recovery missing-member retains proof and handles cleanup
+  ---
+  duration_ms: 4859.725083
+  ...
+# Subtest: manual reconciliation recovery wrong-head retains proof and handles cleanup
+ok 21 - manual reconciliation recovery wrong-head retains proof and handles cleanup
+  ---
+  duration_ms: 4890.793708
+  ...
+# Subtest: manual reconciliation recovery reopened retains proof and handles cleanup
+not ok 22 - manual reconciliation recovery reopened retains proof and handles cleanup
+  ---
+  duration_ms: 5421.352875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:292:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: manual reconciliation recovery new-run retains proof and handles cleanup
+not ok 23 - manual reconciliation recovery new-run retains proof and handles cleanup
+  ---
+  duration_ms: 5462.416166
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:292:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: native admission refuses omitted superseded attempts without wedging valid work
+ok 24 - native admission refuses omitted superseded attempts without wedging valid work
+  ---
+  duration_ms: 2955.773792
+  ...
+# Subtest: bisected manual recovery covered accounts for newer excluded work
+not ok 25 - bisected manual recovery covered accounts for newer excluded work
+  ---
+  duration_ms: 6931.672875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:324:43
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: bisected manual recovery missing-exclusion accounts for newer excluded work
+ok 26 - bisected manual recovery missing-exclusion accounts for newer excluded work
+  ---
+  duration_ms: 5808.020667
+  ...
+# Subtest: a refused questioned dependency cannot let another member integrate before completion refuses
+ok 27 - a refused questioned dependency cannot let another member integrate before completion refuses
+  ---
+  duration_ms: 3921.974667
+  ...
+# Subtest: split recovery accounts for never-captured dirty members without another gate
+not ok 28 - split recovery accounts for never-captured dirty members without another gate
+  ---
+  duration_ms: 5696.160375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:385:93
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: split recovery accounts for never-captured off-main members without another gate
+not ok 29 - split recovery accounts for never-captured off-main members without another gate
+  ---
+  duration_ms: 5631.972167
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:385:93
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: split recovery accounts for never-captured host-timeout members without another gate
+ok 30 - split recovery accounts for never-captured host-timeout members without another gate
+  ---
+  duration_ms: 4493.306958
+  ...
+# Subtest: bisected canonical dirty refusal preserves captured historical exclusions
+not ok 31 - bisected canonical dirty refusal preserves captured historical exclusions
+  ---
+  duration_ms: 6438.789917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:401:43
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: bisected canonical off-main refusal preserves captured historical exclusions
+not ok 32 - bisected canonical off-main refusal preserves captured historical exclusions
+  ---
+  duration_ms: 6352.375083
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:401:43
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: complete
+not ok 33 - legacy queue and late notices recover only inspected exact coverage: complete
+  ---
+  duration_ms: 7802.327125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:463:43
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: no-marker
+ok 34 - legacy queue and late notices recover only inspected exact coverage: no-marker
+  ---
+  duration_ms: 6134.617458
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-member
+ok 35 - legacy queue and late notices recover only inspected exact coverage: missing-member
+  ---
+  duration_ms: 6403.157916
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: wrong-head
+ok 36 - legacy queue and late notices recover only inspected exact coverage: wrong-head
+  ---
+  duration_ms: 6468.325709
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-exclusion
+ok 37 - legacy queue and late notices recover only inspected exact coverage: missing-exclusion
+  ---
+  duration_ms: 6365.485959
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-superseded
+ok 38 - legacy queue and late notices recover only inspected exact coverage: missing-superseded
+  ---
+  duration_ms: 6530.515167
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: reopened
+not ok 39 - legacy queue and late notices recover only inspected exact coverage: reopened
+  ---
+  duration_ms: 7528.141333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:463:43
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: new-run
+not ok 40 - legacy queue and late notices recover only inspected exact coverage: new-run
+  ---
+  duration_ms: 7453.542291
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:463:43
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-evidence
+ok 41 - legacy queue and late notices recover only inspected exact coverage: missing-evidence
+  ---
+  duration_ms: 7066.915625
+  ...
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

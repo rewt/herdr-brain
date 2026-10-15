@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: SIGINT removes credentials before cleanup and reports cleanup failure/residue
+ok 1 - SIGINT removes credentials before cleanup and reports cleanup failure/residue
+  ---
+  duration_ms: 29.762416
+  ...
+# Subtest: SIGTERM removes credentials before cleanup and reports cleanup failure/residue
+ok 2 - SIGTERM removes credentials before cleanup and reports cleanup failure/residue
+  ---
+  duration_ms: 26.807292
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 141.434375
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

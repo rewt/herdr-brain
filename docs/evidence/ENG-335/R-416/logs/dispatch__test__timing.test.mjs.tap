@@ -1,0 +1,66 @@
+TAP version 13
+# Subtest: timing allowlist keeps a synthetic secret out of the journal and real run metadata
+ok 1 - timing allowlist keeps a synthetic secret out of the journal and real run metadata
+  ---
+  duration_ms: 191.333292
+  ...
+# Subtest: memory entry is durable while blocked, grants and stopped retries have exact splits
+ok 2 - memory entry is durable while blocked, grants and stopped retries have exact splits
+  ---
+  duration_ms: 1.3675
+  ...
+# Subtest: unfinished memory entries survive restart and legacy runs are missing rather than zero
+ok 3 - unfinished memory entries survive restart and legacy runs are missing rather than zero
+  ---
+  duration_ms: 0.883583
+  ...
+# Subtest: timing persistence and journal failures preserve the wait result and original errors
+ok 4 - timing persistence and journal failures preserve the wait result and original errors
+  ---
+  duration_ms: 1.571667
+  ...
+# Subtest: a resumed worker supersedes the previous terminal attempt and replays its latest lost reply
+ok 5 - a resumed worker supersedes the previous terminal attempt and replays its latest lost reply
+  ---
+  duration_ms: 1.05275
+  ...
+# Subtest: process end ignores startup idle, blocked and unavailable, and replays a lost record reply without changing the timestamp
+ok 6 - process end ignores startup idle, blocked and unavailable, and replays a lost record reply without changing the timestamp
+  ---
+  duration_ms: 0.554125
+  ...
+# Subtest: malformed, mismatched, reversed and duplicate clocks do not fabricate wait measurements
+ok 7 - malformed, mismatched, reversed and duplicate clocks do not fabricate wait measurements
+  ---
+  duration_ms: 0.193375
+  ...
+# Subtest: only measured immediate grants count as zero; legacy clocks remain missing
+ok 8 - only measured immediate grants count as zero; legacy clocks remain missing
+  ---
+  duration_ms: 0.131209
+  ...
+# Subtest: watch writes terminal observation through the record CLI and metrics reads it separately from report time
+ok 9 - watch writes terminal observation through the record CLI and metrics reads it separately from report time
+  ---
+  duration_ms: 790.983667
+  ...
+# Subtest: watch idle → working → done records the final terminal attempt with idle grace 0
+ok 10 - watch idle → working → done records the final terminal attempt with idle grace 0
+  ---
+  duration_ms: 1470.097167
+  ...
+# Subtest: watch idle → working → done records the final terminal attempt with idle grace 1
+ok 11 - watch idle → working → done records the final terminal attempt with idle grace 1
+  ---
+  duration_ms: 1101.018084
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3595.681334
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

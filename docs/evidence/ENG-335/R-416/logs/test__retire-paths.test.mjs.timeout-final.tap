@@ -1,0 +1,161 @@
+TAP version 13
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"fc2d9182f0f940626639fc4715cdfc1d65432248a24671f4f590f7e3f4d01c03","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"e625bc9cbfe5953f99bcb2b03a98d5298448eacf87c86fd331e2ec4ce292e26b","action":"closed"}
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 1 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+  ---
+  duration_ms: 818.976958
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 2 - lane close --git-only keeps the worktree beneath even an eligible pane
+  ---
+  duration_ms: 662.875
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 3 - lane close uses the executor then proves vacancy before Git and empty workspace close
+  ---
+  duration_ms: 1267.686208
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 4 - an empty unmerged lane retains its recoverable archive and immutable record
+  ---
+  duration_ms: 621.786
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 5 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+  ---
+  duration_ms: 1299.293917
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 6 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+  ---
+  duration_ms: 659.650583
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 7 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+  ---
+  duration_ms: 192.483291
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 8 - Git-only lane without a workspace still keeps queued lane and run references
+  ---
+  duration_ms: 438.839042
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 9 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+  ---
+  duration_ms: 464.975917
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 10 - installed settle-watch flags keep an ingested worker while its chain is open
+  ---
+  duration_ms: 639.910125
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 11 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+  ---
+  duration_ms: 902.955875
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 12 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+  ---
+  duration_ms: 222.269292
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 13 - promote drain consumes requests at both foreground boundaries without running a gate
+  ---
+  duration_ms: 750.916875
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+ok 14 - promote sends its ready acknowledgment before observing a pending retirement hint
+  ---
+  duration_ms: 584.644667
+  ...
+# {"id":"job","topic":"topic","outcome":"refused","reason":"lane: fixture refusal","log":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-vf7uyV/repo/.git/promote/job.log","delivered":false,"inbox":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-vf7uyV/record/supervisor/inbox.log","queued":true,"owner_pid":97675,"message":"[promote-queue] id=job lane=topic outcome=refused reason=\\"lane: fixture refusal\\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-vf7uyV/repo/.git/promote/job.log","delivery_id":"promote:job"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"d5dbf60c7e5c4307f42eedac276f313361094fd7a506196a1bc962a0f555bacd","action":"closed"}
+# Subtest: a dequeued job is persisted before retirement catch-up and is never left current during it
+ok 15 - a dequeued job is persisted before retirement catch-up and is never left current during it
+  ---
+  duration_ms: 946.412292
+  ...
+# Subtest: the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+ok 16 - the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+  ---
+  duration_ms: 877.154791
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 17 - cleanup retries are capped with backoff, record the refusal, and reset on a new request
+  ---
+  duration_ms: 2641.607917
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 18 - lane close permits an absent Herdr executable and refuses an unreadable installed server
+  ---
+  duration_ms: 497.638084
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 19 - tidy-tabs prunes an exited recorded watcher callback through the shared guard
+  ---
+  duration_ms: 1420.114333
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 20 - tidy-tabs prunes an exited recorded settle callback through the shared guard
+  ---
+  duration_ms: 1377.775041
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 21 - tidy-tabs prunes an exited recorded executive callback through the shared guard
+  ---
+  duration_ms: 1457.554625
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 22 - tidy-tabs prunes an exited recorded plan callback through the shared guard
+  ---
+  duration_ms: 1497.136917
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 23 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+  ---
+  duration_ms: 814.387791
+  ...
+# Subtest: a concurrently pruned absent receipt does not abort remaining tab closes
+ok 24 - a concurrently pruned absent receipt does not abort remaining tab closes
+  ---
+  duration_ms: 927.26575
+  ...
+# Subtest: post-close receipt pruning ENOENT preserves the successful close result
+ok 25 - post-close receipt pruning ENOENT preserves the successful close result
+  ---
+  duration_ms: 887.954292
+  ...
+# Subtest: post-close receipt pruning EACCES preserves the successful close result
+ok 26 - post-close receipt pruning EACCES preserves the successful close result
+  ---
+  duration_ms: 894.628542
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 27 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+  ---
+  duration_ms: 4578.885166
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 28 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+  ---
+  duration_ms: 657.436666
+  ...
+# Subtest: standalone contrib retires only its owned watcher with no supervisor directory
+ok 29 - standalone contrib retires only its owned watcher with no supervisor directory
+  ---
+  duration_ms: 4873.383833
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..29
+# tests 29
+# suites 0
+# pass 29
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 33977.117542
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

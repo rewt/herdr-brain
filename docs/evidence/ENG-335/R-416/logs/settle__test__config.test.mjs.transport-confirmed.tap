@@ -1,0 +1,42 @@
+TAP version 13
+# Subtest: a project with only settle settings and no parent routes completes independent review
+ok 1 - a project with only settle settings and no parent routes completes independent review
+  ---
+  duration_ms: 4011.29825
+  ...
+# Subtest: relative LANE_CONFIG uses the intake file for canonical review without running validation
+ok 2 - relative LANE_CONFIG uses the intake file for canonical review without running validation
+  ---
+  duration_ms: 3981.255417
+  ...
+# Subtest: review retry from another checkout retains the selected absolute config and effective routes
+ok 3 - review retry from another checkout retains the selected absolute config and effective routes
+  ---
+  duration_ms: 4734.750542
+  ...
+# Subtest: relative LANE_CONFIG resolves from the invoking directory even with --repo elsewhere
+ok 4 - relative LANE_CONFIG resolves from the invoking directory even with --repo elsewhere
+  ---
+  duration_ms: 3974.064167
+  ...
+# Subtest: a review retry retains discovery when the new invocation sets LANE_CONFIG
+ok 5 - a review retry retains discovery when the new invocation sets LANE_CONFIG
+  ---
+  duration_ms: 4655.022375
+  ...
+# Subtest: CLI desk overrides are consumed by settle without adopting routes or losing lifecycle settings
+ok 6 - CLI desk overrides are consumed by settle without adopting routes or losing lifecycle settings
+  ---
+  duration_ms: 4143.837458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 25595.700584
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

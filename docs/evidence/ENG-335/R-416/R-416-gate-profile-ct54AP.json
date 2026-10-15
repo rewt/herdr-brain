@@ -1,0 +1,60 @@
+{
+  "queue": {
+    "identity": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git",
+    "pending": [],
+    "current": null,
+    "results": [
+      {
+        "id": "fc26bc29-c265-436e-8dee-3436e35dc522",
+        "topic": "profile",
+        "queued": true,
+        "laneCLI": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/lanes/lane.mjs",
+        "org": null,
+        "to": "offline",
+        "attempts": 1,
+        "retry": 0,
+        "herdr": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/herdr",
+        "outcome": "refused",
+        "reason": "train preparation failed: node -e \"setInterval(()=>{},1000)\"",
+        "batch": "87017bf9-8ced-4e1b-820c-385c111e3ec9",
+        "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/train.log",
+        "receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/train.json",
+        "delivered": false,
+        "inbox": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/supervisor/inbox.log",
+        "owner_pid": 70484,
+        "message": "[promote-queue] id=fc26bc29-c265-436e-8dee-3436e35dc522 lane=profile outcome=refused reason=\"train preparation failed: node -e \\\"setInterval(()=>{},1000)\\\"\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/train.log receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/train.json",
+        "delivery_id": "promote:fc26bc29-c265-436e-8dee-3436e35dc522",
+        "finished": "2026-10-15T03:25:45.032Z"
+      },
+      {
+        "id": "a020e9e6-9f96-4dfa-beb9-1a930988d573",
+        "topic": "other",
+        "queued": true,
+        "laneCLI": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/lanes/lane.mjs",
+        "org": null,
+        "to": "offline",
+        "attempts": 1,
+        "retry": 0,
+        "herdr": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/herdr",
+        "outcome": "refused",
+        "reason": "train preparation failed: node -e \"setInterval(()=>{},1000)\"",
+        "batch": "87017bf9-8ced-4e1b-820c-385c111e3ec9",
+        "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/train.log",
+        "receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/train.json",
+        "delivered": false,
+        "inbox": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/supervisor/inbox.log",
+        "owner_pid": 70484,
+        "message": "[promote-queue] id=a020e9e6-9f96-4dfa-beb9-1a930988d573 lane=other outcome=refused reason=\"train preparation failed: node -e \\\"setInterval(()=>{},1000)\\\"\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/train.log receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/train.json",
+        "delivery_id": "promote:a020e9e6-9f96-4dfa-beb9-1a930988d573",
+        "finished": "2026-10-15T03:25:45.124Z"
+      }
+    ]
+  },
+  "cleanup": {
+    "87017bf9-8ced-4e1b-820c-385c111e3ec9/host-gate.json": "{\n  \"schema\": \"promotion-host-gate/v1\",\n  \"profile_fingerprint\": \"41a2b7bf9175757b61c5278a30fff53939bb34df8b525c3eaeeb01fa06fb06ef\",\n  \"started_at\": \"2026-10-15T03:25:43.790Z\",\n  \"phase\": \"timeout\",\n  \"slot_receipt\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/test-slot-wait.json\",\n  \"node\": {\n    \"pin\": \"20.19.4\",\n    \"executable\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/home/.nvm/versions/node/v20.19.4/bin/node\"\n  },\n  \"command_started\": true,\n  \"command_started_at\": \"2026-10-15T03:25:43.971Z\",\n  \"finished_at\": \"2026-10-15T03:25:44.875Z\",\n  \"exit_code\": 124,\n  \"signal\": \"SIGTERM\",\n  \"gate_timeout\": {\n    \"kind\": \"wall\",\n    \"limit_seconds\": 0.8,\n    \"elapsed_s\": 0.8266099579923321\n  },\n  \"reason\": \"gate wall-clock limit exceeded; lane isolated for correction\"\n}\n",
+    "87017bf9-8ced-4e1b-820c-385c111e3ec9/test-slot-wait.json": "{\n  \"schema\": \"test-slot-wait/v1\",\n  \"state\": \"acquired\",\n  \"started_at\": \"2026-10-15T03:25:43.897Z\",\n  \"wait_seconds\": 1,\n  \"waits\": [],\n  \"acquired_at\": \"2026-10-15T03:25:43.902Z\",\n  \"finished_at\": \"2026-10-15T03:25:43.902Z\",\n  \"nested\": false\n}\n",
+    "87017bf9-8ced-4e1b-820c-385c111e3ec9/train.json": "{\n  \"schema\": \"promotion-train/v1\",\n  \"id\": \"87017bf9-8ced-4e1b-820c-385c111e3ec9\",\n  \"identity\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git\",\n  \"jobs\": [\n    {\n      \"id\": \"fc26bc29-c265-436e-8dee-3436e35dc522\",\n      \"topic\": \"profile\",\n      \"queued\": \"2026-10-15T03:25:43.393Z\",\n      \"laneCLI\": \"/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/lanes/lane.mjs\",\n      \"org\": null,\n      \"to\": \"offline\",\n      \"attempts\": 1,\n      \"retry\": 0,\n      \"herdr\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/herdr\"\n    },\n    {\n      \"id\": \"a020e9e6-9f96-4dfa-beb9-1a930988d573\",\n      \"topic\": \"other\",\n      \"queued\": \"2026-10-15T03:25:43.393Z\",\n      \"laneCLI\": \"/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/lanes/lane.mjs\",\n      \"org\": null,\n      \"to\": \"offline\",\n      \"attempts\": 1,\n      \"retry\": 0,\n      \"herdr\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/herdr\"\n    }\n  ],\n  \"phase\": \"complete\",\n  \"started_at\": \"2026-10-15T03:25:43.702Z\",\n  \"host_receipt\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/host-gate.json\",\n  \"external_lock_required\": false,\n  \"slot_granted_at\": \"2026-10-15T03:25:43.902Z\",\n  \"completion\": {\n    \"version\": 1,\n    \"git_only\": true\n  },\n  \"results\": {\n    \"fc26bc29-c265-436e-8dee-3436e35dc522\": {\n      \"outcome\": \"refused\",\n      \"reason\": \"train preparation failed: node -e \\\"setInterval(()=>{},1000)\\\"\",\n      \"batch\": \"87017bf9-8ced-4e1b-820c-385c111e3ec9\"\n    },\n    \"a020e9e6-9f96-4dfa-beb9-1a930988d573\": {\n      \"outcome\": \"refused\",\n      \"reason\": \"train preparation failed: node -e \\\"setInterval(()=>{},1000)\\\"\",\n      \"batch\": \"87017bf9-8ced-4e1b-820c-385c111e3ec9\"\n    }\n  },\n  \"attempts\": [\n    {\n      \"ids\": [\n        \"fc26bc29-c265-436e-8dee-3436e35dc522\",\n        \"a020e9e6-9f96-4dfa-beb9-1a930988d573\"\n      ],\n      \"jobs\": [\n        {\n          \"id\": \"fc26bc29-c265-436e-8dee-3436e35dc522\",\n          \"topic\": \"profile\",\n          \"queued\": \"2026-10-15T03:25:43.393Z\",\n          \"laneCLI\": \"/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/lanes/lane.mjs\",\n          \"org\": null,\n          \"to\": \"offline\",\n          \"attempts\": 1,\n          \"retry\": 0,\n          \"herdr\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/herdr\",\n          \"workspace\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/lane\",\n          \"sourceHead\": \"55f1c1453c0fad8dce49f6abfede5c7a25c4045a\"\n        },\n        {\n          \"id\": \"a020e9e6-9f96-4dfa-beb9-1a930988d573\",\n          \"topic\": \"other\",\n          \"queued\": \"2026-10-15T03:25:43.393Z\",\n          \"laneCLI\": \"/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/lanes/lane.mjs\",\n          \"org\": null,\n          \"to\": \"offline\",\n          \"attempts\": 1,\n          \"retry\": 0,\n          \"herdr\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/herdr\",\n          \"workspace\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/other\",\n          \"sourceHead\": \"37e3010bfb5cb708107fa67462bf0903bae7fcaf\"\n        }\n      ],\n      \"base\": \"52bebd284c626d0599a62bd78c1c1d74b62cd3c7\",\n      \"branch\": \"promote-train/26d500f2-50fc-4eb7-b311-fe001093b08a\",\n      \"scratch\": \"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git/promote/batches/87017bf9-8ced-4e1b-820c-385c111e3ec9/scratch-0\",\n      \"tips\": {\n        \"fc26bc29-c265-436e-8dee-3436e35dc522\": \"55f1c1453c0fad8dce49f6abfede5c7a25c4045a\",\n        \"a020e9e6-9f96-4dfa-beb9-1a930988d573\": \"dd64b9d229f7ff6bcf39d582057330a9b4678e06\"\n      },\n      \"phase\": \"invalid\",\n      \"tip\": \"dd64b9d229f7ff6bcf39d582057330a9b4678e06\",\n      \"prepare\": {\n        \"started_at\": \"2026-10-15T03:25:44.344Z\",\n        \"finished_at\": \"2026-10-15T03:25:44.775Z\"\n      },\n      \"error\": \"train preparation failed: node -e \\\"setInterval(()=>{},1000)\\\"\"\n    }\n  ],\n  \"groups\": []\n}\n",
+    "87017bf9-8ced-4e1b-820c-385c111e3ec9/train.log": "GATE_TIMEOUT: wall limit 0.8s exceeded; elapsed 0.827s\n",
+    "profile/train.json": "{\"schema\":\"promotion-train/v1\",\"id\":\"profile\",\"identity\":\"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-profile-ct54AP/repo/.git\",\"jobs\":[{\"id\":\"job\",\"topic\":\"profile\",\"expectedHead\":\"55f1c1453c0fad8dce49f6abfede5c7a25c4045a\"}]}"
+  }
+}

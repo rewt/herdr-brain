@@ -1,0 +1,82 @@
+TAP version 13
+# Subtest: a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure
+ok 1 - a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure
+  ---
+  duration_ms: 55.639125
+  ...
+# Subtest: settle bounded child timeout is PENDING with its operation samples
+ok 2 - settle bounded child timeout is PENDING with its operation samples
+  ---
+  duration_ms: 310.600958
+  ...
+# Subtest: settle report deadline is PENDING with its own wait samples
+ok 3 - settle report deadline is PENDING with its own wait samples
+  ---
+  duration_ms: 7214.449791
+  ...
+# Subtest: settle bounded child timeout is FAIL with its operation samples
+ok 4 - settle bounded child timeout is FAIL with its operation samples
+  ---
+  duration_ms: 322.608791
+  ...
+# Subtest: settle report deadline is FAIL with its own wait samples
+ok 5 - settle report deadline is FAIL with its own wait samples
+  ---
+  duration_ms: 5885.799625
+  ...
+# Subtest: settle independent child assertion failure stays FAIL under heavy load
+ok 6 - settle independent child assertion failure stays FAIL under heavy load
+  ---
+  duration_ms: 214.24725
+  ...
+# Subtest: supervisor bounded child timeout is PENDING with its operation samples
+ok 7 - supervisor bounded child timeout is PENDING with its operation samples
+  ---
+  duration_ms: 544.044125
+  ...
+# Subtest: supervisor report deadline is PENDING with its own wait samples
+ok 8 - supervisor report deadline is PENDING with its own wait samples
+  ---
+  duration_ms: 7955.392166
+  ...
+# Subtest: supervisor bounded child timeout is FAIL with its operation samples
+ok 9 - supervisor bounded child timeout is FAIL with its operation samples
+  ---
+  duration_ms: 509.712292
+  ...
+# Subtest: supervisor report deadline is FAIL with its own wait samples
+ok 10 - supervisor report deadline is FAIL with its own wait samples
+  ---
+  duration_ms: 6572.567458
+  ...
+# Subtest: supervisor independent child assertion failure stays FAIL under heavy load
+ok 11 - supervisor independent child assertion failure stays FAIL under heavy load
+  ---
+  duration_ms: 402.323583
+  ...
+# Subtest: supervisor queue deadline is PENDING with queue-operation samples
+ok 12 - supervisor queue deadline is PENDING with queue-operation samples
+  ---
+  duration_ms: 15347.229042
+  ...
+# Subtest: supervisor queue deadline is FAIL with queue-operation samples
+ok 13 - supervisor queue deadline is FAIL with queue-operation samples
+  ---
+  duration_ms: 13656.524833
+  ...
+# Subtest: delegated fixture setup timeout also cleans its owned root before returning
+ok 14 - delegated fixture setup timeout also cleans its owned root before returning
+  ---
+  duration_ms: 103.850667
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 59189.943334
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

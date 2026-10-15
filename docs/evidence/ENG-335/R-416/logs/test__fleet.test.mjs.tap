@@ -1,0 +1,153 @@
+TAP version 13
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-FhZqNZ/existing/app' with monitor fleet join --record '/private/tmp/ft-FhZqNZ/existing/.org' --worktrees '/private/tmp/ft-FhZqNZ/existing/.worktrees/app' --layer '/private/tmp/ft-FhZqNZ/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-SvX2eo/existing/moved app'\\''s checkout' with monitor fleet join --record '/private/tmp/ft-SvX2eo/existing/.org' --worktrees '/private/tmp/ft-SvX2eo/existing/worktrees/moved app'\\''s checkout' --layer '/private/tmp/ft-SvX2eo/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-Ed4F13/existing/app' with monitor fleet join --record '/private/tmp/ft-Ed4F13/records/external' --worktrees '/private/tmp/ft-Ed4F13/existing/existing-worktrees/app' --layer '/private/tmp/ft-Ed4F13/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-UrubYj/existing/moved app'\\''s checkout' with monitor fleet join --record '/private/tmp/ft-UrubYj/records/external' --worktrees '/private/tmp/ft-UrubYj/existing/existing-worktrees/moved app'\\''s checkout' --layer '/private/tmp/ft-UrubYj/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-iKPqXH/legacy/app' with monitor fleet join --record '/private/tmp/ft-iKPqXH/legacy/.org' --worktrees '/private/tmp/ft-iKPqXH/legacy/.worktrees/app' --layer '/private/tmp/ft-iKPqXH/legacy/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-hfttKX/unjoined' with monitor fleet join --record '/private/tmp/ft-hfttKX/unjoined/.org' --worktrees '/Users/rewt/.herdr/worktrees/unjoined'
+# Subtest: concurrent joins publish one complete fleet with both projects
+ok 1 - concurrent joins publish one complete fleet with both projects
+  ---
+  duration_ms: 202.958625
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 2 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 338.322834
+  ...
+# Subtest: moved checkout remains stale in fleet instead of being guessed by name
+ok 3 - moved checkout remains stale in fleet instead of being guessed by name
+  ---
+  duration_ms: 138.811833
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 4 - a moved default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 392.568167
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 5 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 444.076416
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 6 - explicit replacement remaps the default checkout record by its relative path
+  ---
+  duration_ms: 303.0535
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 7 - a re-clone in place can explicitly replace a missing native record
+  ---
+  duration_ms: 376.834708
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 8 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 192.347541
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 9 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 56.730167
+  ...
+# Subtest: a unmoved existing project keeps its layout when another project creates the fleet
+ok 10 - a unmoved existing project keeps its layout when another project creates the fleet
+  ---
+  duration_ms: 525.661667
+  ...
+# Subtest: a moved existing project keeps its layout when another project creates the fleet
+ok 11 - a moved existing project keeps its layout when another project creates the fleet
+  ---
+  duration_ms: 524.562375
+  ...
+# Subtest: explicit external ORG_DIR preserves the unmoved unjoined layout until adoption
+ok 12 - explicit external ORG_DIR preserves the unmoved unjoined layout until adoption
+  ---
+  duration_ms: 423.662292
+  ...
+# Subtest: explicit external ORG_DIR preserves the moved unjoined layout until adoption
+ok 13 - explicit external ORG_DIR preserves the moved unjoined layout until adoption
+  ---
+  duration_ms: 442.378708
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer
+ok 14 - a neighbor with its own record cannot inherit another project's mapped parent layer
+  ---
+  duration_ms: 489.543792
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer through an alias
+ok 15 - a neighbor with its own record cannot inherit another project's mapped parent layer through an alias
+  ---
+  duration_ms: 483.125541
+  ...
+# Subtest: legacy record discovery keeps its symlink path and does not depend on valid parent settings
+ok 16 - legacy record discovery keeps its symlink path and does not depend on valid parent settings
+  ---
+  duration_ms: 200.71875
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 17 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 128.621417
+  ...
+# Subtest: join adopts a legacy console.json mapping without writing its record
+ok 18 - join adopts a legacy console.json mapping without writing its record
+  ---
+  duration_ms: 190.547792
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 19 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 122.993125
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 20 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 578.172916
+  ...
+# Subtest: fleet repair: join suggests the stale external record for a moved checkout
+ok 21 - fleet repair: join suggests the stale external record for a moved checkout
+  ---
+  duration_ms: 207.762458
+  ...
+# Subtest: fleet repair: join suggests the stale external record for a re-cloned checkout
+ok 22 - fleet repair: join suggests the stale external record for a re-cloned checkout
+  ---
+  duration_ms: 224.750458
+  ...
+# Subtest: fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record
+ok 23 - fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record
+  ---
+  duration_ms: 212.097917
+  ...
+# Subtest: fleet repair: live same-name external mappings join separately; multiple stale matches only suggest
+ok 24 - fleet repair: live same-name external mappings join separately; multiple stale matches only suggest
+  ---
+  duration_ms: 261.396542
+  ...
+# Subtest: fleet repair: unknown names and live records remain refused before writes
+ok 25 - fleet repair: unknown names and live records remain refused before writes
+  ---
+  duration_ms: 324.187
+  ...
+# Subtest: legacy temp and exclusion settings are inert, and nested peers keep distinct record mappings
+ok 26 - legacy temp and exclusion settings are inert, and nested peers keep distinct record mappings
+  ---
+  duration_ms: 305.737792
+  ...
+# Subtest: a project's own worktree_root wins over its fleet mapping; without it the fleet mapping applies
+ok 27 - a project's own worktree_root wins over its fleet mapping; without it the fleet mapping applies
+  ---
+  duration_ms: 297.442875
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8484.230417
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,92 @@
+TAP version 13
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold before reviewing
+ok 1 - legacy outcome-owner refusal rechecks the repaired fold before reviewing
+  ---
+  duration_ms: 5617.402875
+  ...
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+ok 2 - legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+  ---
+  duration_ms: 1478.387042
+  ...
+# Subtest: recovery: older overlapping run clears a new refusal
+ok 3 - recovery: older overlapping run clears a new refusal
+  ---
+  duration_ms: 5574.206625
+  ...
+# Subtest: recovery: older overlapping run clears a legacy refusal after main moves
+ok 4 - recovery: older overlapping run clears a legacy refusal after main moves
+  ---
+  duration_ms: 6064.810125
+  ...
+# Subtest: a fresh handle also rechecks an existing completed overlapping-run refusal
+ok 5 - a fresh handle also rechecks an existing completed overlapping-run refusal
+  ---
+  duration_ms: 4443.67375
+  ...
+# Subtest: record readiness recovery retains the completed review
+ok 6 - record readiness recovery retains the completed review
+  ---
+  duration_ms: 5630.321167
+  ...
+# Subtest: record readiness recovery retains the completed review from a legacy receipt
+ok 7 - record readiness recovery retains the completed review from a legacy receipt
+  ---
+  duration_ms: 5607.691
+  ...
+# Subtest: a legacy correction refusal resumes the fix stage after blockers clear and main moves
+ok 8 - a legacy correction refusal resumes the fix stage after blockers clear and main moves
+  ---
+  duration_ms: 6562.133625
+  ...
+# Subtest: a legacy dispatching refusal adopts only its existing correction after blockers clear
+ok 9 - a legacy dispatching refusal adopts only its existing correction after blockers clear
+  ---
+  duration_ms: 7155.311583
+  ...
+# Subtest: legacy refusal recovery rechecks identity before reviewing
+ok 10 - legacy refusal recovery rechecks identity before reviewing
+  ---
+  duration_ms: 947.593667
+  ...
+# Subtest: legacy refusal recovery rechecks head before reviewing
+ok 11 - legacy refusal recovery rechecks head before reviewing
+  ---
+  duration_ms: 1032.351625
+  ...
+# Subtest: legacy refusal recovery rechecks dirty before reviewing
+ok 12 - legacy refusal recovery rechecks dirty before reviewing
+  ---
+  duration_ms: 1031.578875
+  ...
+# Subtest: legacy refusal recovery rechecks report before reviewing
+ok 13 - legacy refusal recovery rechecks report before reviewing
+  ---
+  duration_ms: 1181.250667
+  ...
+# Subtest: legacy refusal recovery rechecks superseded before reviewing
+ok 14 - legacy refusal recovery rechecks superseded before reviewing
+  ---
+  duration_ms: 1319.442625
+  ...
+# Subtest: legacy refusal recovery rechecks blocked before reviewing
+ok 15 - legacy refusal recovery rechecks blocked before reviewing
+  ---
+  duration_ms: 1357.852875
+  ...
+# Subtest: unverified acceptance remains a terminal escalation on retry
+ok 16 - unverified acceptance remains a terminal escalation on retry
+  ---
+  duration_ms: 4010.727917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 59112.98725
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

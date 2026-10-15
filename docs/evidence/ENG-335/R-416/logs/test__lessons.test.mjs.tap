@@ -1,0 +1,87 @@
+TAP version 13
+# Subtest: run brief omits Lessons when no active lesson matches, including retired and superseded claims
+ok 1 - run brief omits Lessons when no active lesson matches, including retired and superseded claims
+  ---
+  duration_ms: 1.931
+  ...
+# Subtest: run brief selects broad, literal path/module and item/ancestor evidence matches deterministically
+ok 2 - run brief selects broad, literal path/module and item/ancestor evidence matches deterministically
+  ---
+  duration_ms: 2.935917
+  ...
+# Subtest: run brief matches acceptance, reason and recorded ask notes but respects selector boundaries
+ok 3 - run brief matches acceptance, reason and recorded ask notes but respects selector boundaries
+  ---
+  duration_ms: 2.235916
+  ...
+# Subtest: run brief bounds five claims and metadata and points to the remaining lessons
+ok 4 - run brief bounds five claims and metadata and points to the remaining lessons
+  ---
+  duration_ms: 0.585
+  ...
+# Subtest: record start writes lessons into the saved brief for arbitrary harness metadata
+ok 5 - record start writes lessons into the saved brief for arbitrary harness metadata
+  ---
+  duration_ms: 232.580958
+  ...
+# Subtest: lesson fold retains facts and derives proposal, activation, retirement and supersession
+ok 6 - lesson fold retains facts and derives proposal, activation, retirement and supersession
+  ---
+  duration_ms: 0.145459
+  ...
+# Subtest: frozen older fold ignores actual lesson event types through its unknown-type path
+ok 7 - frozen older fold ignores actual lesson event types through its unknown-type path
+  ---
+  duration_ms: 0.378666
+  ...
+# Subtest: lesson CLI stores bounded claims, targets, evidence and proposer in the single event log
+ok 8 - lesson CLI stores bounded claims, targets, evidence and proposer in the single event log
+  ---
+  duration_ms: 432.803583
+  ...
+# Subtest: invalid lesson data and unknown evidence refuse atomically without consuming IDs
+ok 9 - invalid lesson data and unknown evidence refuse atomically without consuming IDs
+  ---
+  duration_ms: 660.833792
+  ...
+# Subtest: matching is literal, normalized, boundary-aware, exact for modules and deterministically ranked
+ok 10 - matching is literal, normalized, boundary-aware, exact for modules and deterministically ranked
+  ---
+  duration_ms: 0.579625
+  ...
+# Subtest: lessons CLI filters path, scope, module and derived state without model or filesystem lookup
+ok 11 - lessons CLI filters path, scope, module and derived state without model or filesystem lookup
+  ---
+  duration_ms: 608.23275
+  ...
+# Subtest: bounded rendering shows the relevant five and remaining count while JSON returns all evidence
+ok 12 - bounded rendering shows the relevant five and remaining count while JSON returns all evidence
+  ---
+  duration_ms: 0.435833
+  ...
+# Subtest: default CLI text is bounded and JSON preserves every matching lesson
+ok 13 - default CLI text is bounded and JSON preserves every matching lesson
+  ---
+  duration_ms: 623.805041
+  ...
+# Subtest: supersession is atomic, evidence-preserving and refuses unknown IDs, self-links and transitive cycles
+ok 14 - supersession is atomic, evidence-preserving and refuses unknown IDs, self-links and transitive cycles
+  ---
+  duration_ms: 570.836375
+  ...
+# Subtest: lesson allocation avoids existing item IDs and later item allocation avoids lesson IDs
+ok 15 - lesson allocation avoids existing item IDs and later item allocation avoids lesson IDs
+  ---
+  duration_ms: 192.313167
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3428.595375
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

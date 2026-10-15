@@ -1,0 +1,249 @@
+./supervisor/test/supervisor.test.mjs:10:import { queueFor } from '../../promote/promote.mjs';
+./supervisor/test/supervisor.test.mjs:142:  const cli = path.join(f.root, 'deferred-promote.mjs');
+./supervisor/test/supervisor.test.mjs:143:  fs.writeFileSync(cli, `import {parseArgs} from 'node:util'; import {queueFor,enqueue} from ${JSON.stringify(path.join(root, 'promote/promote.mjs'))};
+./supervisor/test/supervisor.test.mjs:145:const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expected-head'],run:o['if-current-run'],to:o.to??'supervisor',attempts:1,retry:0,herdr:'herdr',laneCLI:${JSON.stringify(path.join(root, 'lanes/lane.mjs'))},validate:process.env.LANE_VALIDATE??null});console.log(JSON.stringify({jobs,queue:q.file}));\n`);
+./supervisor/test/supervisor.test.mjs:148:  const drain = () => result(f.exec(process.execPath, [path.join(root, 'promote/promote.mjs'), '--repo', f.repo, '--drain']));
+./supervisor/test/supervisor.test.mjs:204:      fs.writeFileSync(gate, `import {execFileSync} from 'node:child_process'; if(process.env.VALIDATION_PHASE!=='promotion')process.exit(0); execFileSync(process.execPath,${JSON.stringify([path.join(root, 'bin/org.mjs'), ...args])},{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});\n`);
+./supervisor/test/supervisor.test.mjs:339:    const r = f.exec(process.execPath, [path.join(root, 'bin/org.mjs'), 'note', f.show(run).item, text, '--decision'], f.repo, { ORG_DIR: f.org, ORG_NOW: when });
+./supervisor/test/supervisor.test.mjs:458:  const close = () => f.exec(process.execPath, [path.join(root, 'bin/org.mjs'), 'close', item, '--if-current-run', run], f.repo, { ORG_DIR: f.org });
+./supervisor/test/autopilot.test.mjs:13:import { RECORD_CHECK_CLAIM, LEGACY_RECORD_CHECK_CLAIM } from '../../settle/report-evidence.mjs';
+./supervisor/test/reconcile.test.mjs:9:import { completionEvents, completionFingerprint, completionDelta, refreshCompletionEvents, digest } from '../../lib/completion.mjs';
+./supervisor/test/reconcile.test.mjs:10:import { reconcile } from '../reconcile.mjs';
+./supervisor/test/entry.test.mjs:11:import { housekeepingSnapshot } from '../../housekeeping/command.mjs';
+./supervisor/test/entry.test.mjs:16:import { requestRetirement, consumeRetirement } from '../../lib/retire-trigger.mjs';
+./supervisor/test/entry.test.mjs:41:  const record = args => good(exec(process.execPath, [path.join(root, 'bin/org.mjs'), ...args], repo, { ORG_DIR: org }));
+./supervisor/test/entry.test.mjs:53:const load = () => import('../entry.mjs');
+./supervisor/test/entry.test.mjs:59:    if (!args[0].endsWith('retire.mjs')) return fake.command(file,args);
+./supervisor/test/entry.test.mjs:67:  assert.equal(fake.calls.some(a=>a[0].endsWith('housekeeping.mjs')),false);
+./supervisor/test/entry.test.mjs:103:    if (args[0].endsWith('housekeeping.mjs')) {
+./supervisor/test/entry.test.mjs:107:        config: path.join(f.repo, '.housekeeping.json'), script: args[0], record_cli: [process.execPath, path.join(root, 'bin/org.mjs')] }));
+./supervisor/test/entry.test.mjs:135:  assert.equal(fake.calls.filter(a => a[0].endsWith('housekeeping.mjs')).length, 1);
+./supervisor/test/entry.test.mjs:136:  assert.deepEqual(fake.calls.slice(count).filter(a => !a[0].endsWith('supervisor.mjs')).map(a => [path.basename(a[0]), a[1]]), [['retire.mjs', 'consume']]);
+./supervisor/test/entry.test.mjs:144:  assert.equal(fake.calls.filter(a => a[0].endsWith('housekeeping.mjs')).length, 0);
+./supervisor/test/entry.test.mjs:151:    script: path.join(root, 'housekeeping/housekeeping.mjs'), record_cli: [process.execPath, path.join(root, 'bin/org.mjs')] });
+./supervisor/test/entry.test.mjs:186:    if (args[0].endsWith('org.mjs')) return exec(file, args, f.repo, { ORG_DIR: f.org });
+./supervisor/test/entry.test.mjs:217:    if (variant === 'reported-during-entry' && args[0].endsWith('housekeeping.mjs')) {
+./supervisor/test/entry.test.mjs:224:  if (variant === 'invalid-config') { assert.equal(fake.calls.filter(a => a[0].endsWith('housekeeping.mjs')).length, 0); assert.ok(fake.watching.has(run), 'independent watch recovery still runs'); }
+./supervisor/test/entry.test.mjs:279:    script: path.join(root, 'housekeeping/housekeeping.mjs'), record_cli: [process.execPath, path.join(root, 'bin/org.mjs')] };
+./watch/test/existing-project.test.mjs:14:const cli = path.join(monitor, 'bin/org.mjs');
+./discovery/test/lessons.test.mjs:22:  const record = args => command(process.execPath, [path.join(product, 'bin/org.mjs'), ...args], repo, { ORG_DIR: org });
+./promote/test/workflow-train.test.mjs:9:import { queueFor, enqueue } from '../promote.mjs';
+./promote/test/workflow-train.test.mjs:40:  const run = () => exec(process.execPath, [path.join(product, 'lanes/lane.mjs'), 'promote-batch', file]);
+./promote/test/workflow-train.test.mjs:72:  const result = f.exec(process.execPath, [path.join(source, 'lanes/lane.mjs'), 'promote-batch', f.file, '--workflow']);
+./promote/test/workflow-train.test.mjs:80:  enqueue(queue, ['first'], { workflow: true, expectedHead: f.head, org: null, herdr, to: 'fake', attempts: 1, retry: 0, laneCLI: path.join(source, 'lanes/lane.mjs') });
+./promote/test/workflow-train.test.mjs:82:  const result = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], f.repo);
+./promote/test/promote.test.mjs:9:import { queueFor, enqueue } from '../promote.mjs';
+./promote/test/promote.test.mjs:10:import { resolveGateProfile } from '../gate-profile.mjs';
+./promote/test/promote.test.mjs:15:import { drain } from '../promote.mjs';
+./promote/test/promote.test.mjs:40:const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
+./promote/test/promote.test.mjs:41:const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
+./promote/test/promote.test.mjs:497:  const orgCLI = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
+./promote/test/promote.test.mjs:577:  const orgCLI = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
+./housekeeping/test/housekeeping.test.mjs:13:import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from '../housekeeping.mjs';
+./housekeeping/test/housekeeping.test.mjs:311:  const f = { root, repo: root, runtime: path.join(root, 'housekeeping.mjs'), config: path.join(root, 'config'),
+./housekeeping/test/housekeeping.test.mjs:430:  const moduleURL = new URL('../housekeeping.mjs', import.meta.url);
+./housekeeping/test/housekeeping.test.mjs:481:    if (variant === 'missing-script') owner.script = path.join(f.root, 'removed-lane/housekeeping.mjs');
+./housekeeping/test/housekeeping.test.mjs:482:    if (variant === 'missing-record') owner.record_cli = [path.join(f.root, 'removed-lane/org.mjs')];
+./settle/test/report-evidence.test.mjs:7:import { reportIngestReceipt, remainingUnverified, RECORD_CHECK_CLAIM, LEGACY_RECORD_CHECK_CLAIM } from '../report-evidence.mjs';
+./promote/test/completion.test.mjs:8:import { queueFor, enqueue } from '../promote.mjs';
+./promote/test/completion.test.mjs:9:import { reconcileBatchCompletion, recordedBatchCompletion } from '../completion.mjs';
+./promote/test/completion.test.mjs:12:import { reconcile } from '../../supervisor/reconcile.mjs';
+./promote/test/completion.test.mjs:13:import { withPromotionGuards } from '../guard.mjs';
+./promote/test/completion.test.mjs:14:import { completionFingerprint } from '../../lib/completion.mjs';
+./promote/test/completion.test.mjs:34:  const record = args => ok(exec(process.execPath, [path.join(source, 'bin/org.mjs'), ...args]));
+./promote/test/completion.test.mjs:48:  fs.writeFileSync(preload, `if(process.argv[1]?.endsWith('org.mjs')&&process.argv.includes('complete-batch')&&require('fs').existsSync(${JSON.stringify(fault)})){if(require('fs').readFileSync(${JSON.stringify(fault)},'utf8')==='lost-ack'){process.stdout.write=()=>true;}else{console.error('injected record refusal');process.exit(1);}}`);
+./promote/test/completion.test.mjs:62:      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, expectedHead: head, superseded })[0];
+./promote/test/completion.test.mjs:65:  const drain = () => ok(exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain']));
+./promote/test/completion.test.mjs:207:  fs.appendFileSync(f.checker, `require('child_process').execFileSync(process.execPath, ${JSON.stringify([path.join(source, 'bin/org.mjs'), 'note', m.item, 'Gate-time change'])}, {env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});`);
+./promote/test/completion.test.mjs:510:  if (failTelemetry) fs.appendFileSync(f.preload, `\nif(process.argv[1]?.endsWith('org.mjs')&&process.argv.includes('note')&&process.argv.some(a=>a.startsWith('Promotion: report-to-main'))){console.error('injected telemetry refusal');process.exit(1);}`);
+./promote/test/memory-gate.test.mjs:6:import { refuseBeforeTrain } from '../memory-gate.mjs';
+./verify/test/verify.test.mjs:8:import { queueFor, submit, admit, drain, recover, status, deliver, writeReceipt, jobDigest, initStore, probeStore } from '../verify.mjs';
+./verify/test/verify.test.mjs:9:import { parseExpectations, evaluate, sha256 } from '../expectations.mjs';
+./verify/test/verify.test.mjs:34:const CLI = fileURLToPath(new URL('../verify.mjs', import.meta.url));
+./verify/test/verify.test.mjs:910:  for (const file of ['verify/verify.mjs', 'verify/execute.mjs', 'verify/expectations.mjs', 'verify/README.md']) assert.ok(files.includes(file), file);
+./verify/test/verify.test.mjs:913:  for (const file of ['verify/verify.mjs', 'verify/execute.mjs', 'verify/expectations.mjs']) assert.ok(release.includes(file));
+./verify/test/verify.test.mjs:923:  const execute = fileURLToPath(new URL('../execute.mjs', import.meta.url));
+./verify/test/verify.test.mjs:997:  const execute = fileURLToPath(new URL('../execute.mjs', import.meta.url));
+./test/fixture-lifetime.test.mjs:154:import {fixture as gateFixture} from ${JSON.stringify(local('../test-slot/test/helpers/gate-profile.mjs'))};
+./test/fixture-lifetime.test.mjs:205:    assert.ok(rows.get(evidence.host)?.command.includes('promote/host-gate.mjs'));
+./test-slot/test/watchdog.test.mjs:21:import { enqueue, queueFor } from '../../promote/promote.mjs';
+./test-slot/test/watchdog.test.mjs:22:import { resolveGateProfile } from '../../promote/gate-profile.mjs';
+./test-slot/test/watchdog.test.mjs:174:    enqueue(queue, ['topic', 'other'], { laneCLI: fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url)), org: null, to: 'offline', attempts: 1, retry: 0, herdr: fakeHerdr });
+./test-slot/test/watchdog.test.mjs:176:    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../promote/promote.mjs', import.meta.url)), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
+./test-slot/test/watchdog.test.mjs:309:  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../promote/promote.mjs', import.meta.url)), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
+./housekeeping/test/auto-tidy.test.mjs:9:import { tidyFinishedTabs } from '../housekeeping.mjs';
+./housekeeping/test/auto-tidy.test.mjs:10:import { planTidy, reviewedAgentsFromRecords } from '../../supervisor/tidy-tabs.mjs';
+./housekeeping/test/auto-tidy.test.mjs:224:  const r = spawnSync(process.execPath, [path.join(f.repo, 'supervisor/tidy-tabs.mjs'), '--cwd', f.repo,
+./housekeeping/test/auto-tidy.test.mjs:373:  const tidyScript = path.join(f.repo, 'supervisor/tidy-tabs.mjs');
+./promote/test/train.test.mjs:8:import { queueFor, enqueue, queueJobs } from '../promote.mjs';
+./promote/test/train.test.mjs:57:    laneCLI: path.join(source, 'lanes/lane.mjs'), org: null, expectedHead: git(['rev-parse', `lane/${topic}`]), ...extra });
+./promote/test/train.test.mjs:58:  const drain = () => exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain']);
+./promote/test/train.test.mjs:86:    const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: path.join(f.root, topics[0]), env: f.env });
+./promote/test/train.test.mjs:117:      const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), ...args], workspace);
+./promote/test/train.test.mjs:127:        const status = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--status']);
+./promote/test/train.test.mjs:145:  const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], workspace);
+./promote/test/train.test.mjs:155:  const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), 'missing-lane',
+./promote/test/train.test.mjs:180:  const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), 'first',
+./promote/test/train.test.mjs:192:  const status = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--status']);
+./promote/test/train.test.mjs:213:  if(process.argv[1]===${JSON.stringify(path.join(source, 'promote/promote.mjs'))} && cmd==='git' && args[2]==='ls-tree' && ++reads===2)
+./promote/test/train.test.mjs:222:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], {
+./promote/test/train.test.mjs:255:  if(process.argv[1]===${JSON.stringify(path.join(source, 'promote/promote.mjs'))} && cmd==='git' && args[2]===${JSON.stringify(command)}) {
+./promote/test/train.test.mjs:262:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], {
+./promote/test/train.test.mjs:293:  if(process.argv[1]===${JSON.stringify(path.join(source, 'promote/promote.mjs'))} && cmd==='git' && ['ls-tree','show'].includes(args[2]))
+./promote/test/train.test.mjs:327:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+./promote/test/train.test.mjs:356:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+./promote/test/train.test.mjs:376:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+./promote/test/train.test.mjs:405:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+./promote/test/train.test.mjs:428:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+./promote/test/train.test.mjs:438:    const resumed = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+./promote/test/train.test.mjs:458:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+./promote/test/train.test.mjs:465:  assert.ok(gate.command.includes(path.join(source, 'lanes/lane.mjs'))); assert.ok(checker.command.includes(f.checker));
+./promote/test/train.test.mjs:487:  const checked = f.exec(process.execPath, [path.join(source, 'lanes/lane.mjs'), 'check', '--tier', 'promotion'], wt);
+./promote/test/train.test.mjs:743:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+./settle/test/settle.test.mjs:9:import { INHERITED_GATE_NON_CLAIM } from '../../lanes/review-evidence.mjs';
+./settle/test/settle.test.mjs:312:  const gate = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), 'promote', 'topic'], f.repo);
+./promote/test/metrics.test.mjs:9:import { collectMetrics, parseLog, importBaseline, renderMetrics, stats } from '../metrics.mjs';
+./promote/test/metrics.test.mjs:11:const cli = fileURLToPath(new URL('../metrics.mjs', import.meta.url));
+./promote/test/metrics.test.mjs:12:const recordCLI = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
+./dispatch/test/dispatch.test.mjs:14:import { runMetrics } from '../metrics.mjs';
+./dispatch/test/dispatch.test.mjs:16:const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
+./lanes/test/validation.test.mjs:15:const cli = fileURLToPath(new URL('../lane.mjs', import.meta.url));
+./test-slot/test/gate-profile.test.mjs:8:import { resolveGateProfile } from '../../promote/gate-profile.mjs';
+./test-slot/test/gate-profile.test.mjs:10:import { enqueue, queueFor } from '../../promote/promote.mjs';
+./test-slot/test/gate-profile.test.mjs:15:import { fixture } from './helpers/gate-profile.mjs';
+./test-slot/test/gate-profile.test.mjs:98:  const opts = { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null, to: 'offline', attempts: 1,
+./test-slot/test/gate-profile.test.mjs:109:  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+./test-slot/test/gate-profile.test.mjs:211:  const queue = queueFor(f.repo), add = () => enqueue(queue, ['profile'], { laneCLI: path.join(source, 'lanes/lane.mjs'),
+./test-slot/test/gate-profile.test.mjs:214:  const drain = () => spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+./test-slot/test/gate-profile.test.mjs:271:  const laneCLI = path.join(source, 'lanes/lane.mjs');
+./test-slot/test/gate-profile.test.mjs:275:  const result = spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: loadTimeout(15000) });
+./test-slot/test/gate-profile.test.mjs:293:  enqueue(queue, ['profile'], { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null, to: 'offline', attempts: 1,
+./test-slot/test/gate-profile.test.mjs:299:  const drain = () => spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: loadTimeout(15000) });
+./test-slot/test/gate-profile.test.mjs:464:  enqueue(queue, ['profile', 'other'], { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null, to: 'offline', attempts: 1, retry: 0, herdr: fakeHerdr });
+./test-slot/test/gate-profile.test.mjs:466:  const r = spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: loadTimeout(15000) });
+./test-slot/test/gate-profile.test.mjs:496:  enqueue(queue, ['profile', 'other'], { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null,
+./test-slot/test/gate-profile.test.mjs:504:  const r = spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'],
+./lanes/test/no-focus.test.mjs:2:// every Herdr call in lane.mjs that creates a workspace, worktree or tab, or
+./lanes/test/no-focus.test.mjs:10:const source = readFileSync(new URL("../lane.mjs", import.meta.url), "utf8");
+./lanes/test/no-focus.test.mjs:37:  const executor = modules.get('lib/retire-runtime.mjs');
+./lanes/test/no-focus.test.mjs:42:  assert.throws(() => removalIsGitOnly('lib/retire-runtime.mjs', unsafe), /worktree removal must invoke Git/);
+./test/main-module.test.mjs:70:  ['promote/metrics.mjs', ['--unsupported'], 1, /unknown option or missing value/u],
+./test/main-module.test.mjs:71:  ...['promote/promote.mjs', 'supervisor/request.mjs', 'supervisor/supervisor.mjs',
+./test/main-module.test.mjs:72:    'supervisor/prompt-supervisor.mjs', 'supervisor/tidy-tabs.mjs', 'acceptance/run.mjs']
+./test/main-module.test.mjs:76:  ['housekeeping/housekeeping.mjs', ['--unsupported'], 1, /Unknown option/u],
+./test/main-module.test.mjs:130:  const org = fs.readFileSync(path.join(source, 'bin/org.mjs'), 'utf8');
+./test/main-module.test.mjs:132:  for (const view of ['../settle/desks-command.mjs', '../lanes/routes-command.mjs', '../housekeeping/command.mjs']) {
+./settle/test/test-plan.test.mjs:7:import { canonicalTestPlan } from '../test-plan.mjs';
+./settle/test/test-plan.test.mjs:37:  const code = `import { canonicalTestPlan } from ${JSON.stringify(new URL('../test-plan.mjs', import.meta.url).href)};
+./dispatch/test/record-worker.test.mjs:8:const record = path.resolve('bin/org.mjs'), capture = path.resolve('dispatch/record-worker.mjs');
+./settle/test/record-safety.test.mjs:69:const cli = ${JSON.stringify(path.join(f.source, 'bin/org.mjs'))}, args = process.argv.slice(2);
+./settle/test/record-safety.test.mjs:155:const cli = ${JSON.stringify(path.join(f.source, 'bin/org.mjs'))};
+./settle/test/record-safety.test.mjs:179:const cli = ${JSON.stringify(path.join(f.source, 'bin/org.mjs'))}, args = process.argv.slice(2);
+./settle/test/recapture.test.mjs:43:const r=spawnSync(process.execPath,[${JSON.stringify(path.join(f.source, 'bin/org.mjs'))},...args],{stdio:'inherit'});process.exit(r.status??1);
+./promote/test/affected-tests.test.mjs:9:import { plannedCommand, promotionTestPlan } from '../test-plan.mjs';
+./promote/test/affected-tests.test.mjs:44:  const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs', changed: ['lanes/lane.mjs', 'dispatch/dispatch.mjs'], baseCommand: 'npm run test:promotion' });
+./lanes/test/workspace-native.test.mjs:48:    const cli = process.env.LANE_HERDR_TEST_CLI ?? new URL('../lane.mjs', import.meta.url).pathname;
+./settle/test/memory-boundaries.test.mjs:16:    const r = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), 'review', 'topic',
+./settle/test/memory-boundaries.test.mjs:46:const r = spawnSync(process.execPath, [${JSON.stringify(path.join(f.source, 'lanes/lane.mjs'))}, ...args], {stdio:'inherit'});
+./settle/test/memory-boundaries.test.mjs:103:    const adapter = path.join(f.root, 'linked-lane.mjs');
+./settle/test/memory-boundaries.test.mjs:104:    fs.writeFileSync(adapter, `process.chdir(${JSON.stringify(f.workspace)}); await import(${JSON.stringify(path.join(f.source, 'lanes/lane.mjs'))});`);
+./settle/test/memory-boundaries.test.mjs:133:    const r = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), command, 'topic', ...args]);
+./acceptance/test/recovery.test.mjs:169:  fs.writeFileSync(path.join(candidate, 'bin/org.mjs'), `
+./settle/test/train.test.mjs:6:import { enqueue, queueFor } from '../../promote/promote.mjs';
+./settle/test/train.test.mjs:7:import { verifyTrainResult } from '../../promote/train.mjs';
+./settle/test/train.test.mjs:72:  const check = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), 'check'], f.workspace);
+./settle/test/train.test.mjs:85:    herdr: path.join(f.root, 'bin/herdr'), laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 });
+./settle/test/train.test.mjs:86:  const drained = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
+./settle/test/train.test.mjs:103:  fs.writeFileSync(checker, `require('child_process').execFileSync(process.execPath,[${JSON.stringify(path.join(f.source, 'bin/org.mjs'))},'start',${JSON.stringify(f.show(run).item)},'--workspace',${JSON.stringify(f.workspace)}],{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});`);
+./settle/test/train.test.mjs:105:    herdr: path.join(f.root, 'bin/herdr'), laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 });
+./settle/test/train.test.mjs:107:  const drained = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
+./settle/test/train.test.mjs:141:    laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 };
+./settle/test/train.test.mjs:144:  const drained = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
+./acceptance/test/harness.test.mjs:99:  const { planTidy } = await import('../../supervisor/tidy-tabs.mjs');
+./settle/test/fleet-isolation.test.mjs:8:import '../../test/helpers/fleet-guard.mjs';
+./settle/test/fleet-isolation.test.mjs:24:  const guard = fileURLToPath(new URL('../../test/helpers/fleet-guard.mjs', import.meta.url));
+./test/review-children.test.mjs:8:import { completionEvents, completionFingerprint } from '../lib/completion.mjs';
+./settle/test/receipts.test.mjs:16:const cli = ${JSON.stringify(path.join(f.source, 'bin/org.mjs'))}, args = process.argv.slice(2);
+./acceptance/test/snapshot.test.mjs:29:  const compat = 'contrib/settle-watch.mjs';
+./settle/test/rebase.test.mjs:106:  const promoted = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), 'promote', 'topic'], f.repo);
+./dispatch/test/timing.test.mjs:9:import { runMetrics, collectRunMetrics, renderRunMetrics } from '../metrics.mjs';
+./dispatch/test/timing.test.mjs:12:const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
+./dispatch/test/timing.test.mjs:177:  const CLI = fileURLToPath(new URL('../metrics.mjs', import.meta.url));
+./settle/test/round-cap.test.mjs:140:const forward=()=>spawnSync(process.execPath,[${JSON.stringify(path.join(f.source, 'bin/org.mjs'))},...args],{env:process.env,encoding:'utf8'});
+./test/cli-help.test.mjs:9:  "bin/org.mjs",
+./test/cli-help.test.mjs:11:  "contrib/settle-watch.mjs",
+./test/cli-help.test.mjs:14:  "housekeeping/housekeeping.mjs",
+./test/cli-help.test.mjs:15:  "lanes/lane.mjs",
+./test/cli-help.test.mjs:16:  "promote/host-gate.mjs",
+./test/cli-help.test.mjs:17:  "promote/promote.mjs",
+./test/cli-help.test.mjs:18:  "promote/metrics.mjs",
+./test/cli-help.test.mjs:23:  "supervisor/tidy-tabs.mjs",
+./test/cli-help.test.mjs:29:  ...['lanes/lane.mjs', 'brain/bin/brain.mjs'].map(module => ({ module, linked: true }))];
+./acceptance/test/housekeeping.test.mjs:3:import { assertHousekeepingActions } from '../housekeeping.mjs';
+./settle/test/test-evidence.test.mjs:9:import { deferredTests, recordedTestEvidence, TEST_ESCALATION } from '../test-evidence.mjs';
+./settle/test/test-evidence.test.mjs:10:import { RECORD_CHECK_CLAIM, LEGACY_RECORD_CHECK_CLAIM } from '../report-evidence.mjs';
+./lanes/test/lane.test.mjs:26:import { INHERITED_GATE_NON_CLAIM } from '../review-evidence.mjs';
+./lanes/test/lane.test.mjs:39:const LANE = resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs"));
+./lanes/test/lane.test.mjs:3504:          "- [Major] promote/promote.mjs:105 - Saving freshness repeats promotion. Fix: keep freshness local.",
+./settle/test/config.test.mjs:128:  const configured = f.exec(process.execPath, [path.join(f.source, 'bin/org.mjs'), 'desks', 'set', '--review-route=review-codex', '--fix-route=engineer-xhigh', '--timeout=15', '--review-round-cap=2', '--reuse=false', '--to=project-supervisor']);
+./settle/test/validation-tiers.test.mjs:8:import { queueFor, enqueue } from '../../promote/promote.mjs';
+./settle/test/validation-tiers.test.mjs:22:    const r = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), ...args], cwd);
+./settle/test/validation-tiers.test.mjs:39:    herdr: path.join(f.root, 'bin/herdr'), laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 });
+./settle/test/validation-tiers.test.mjs:41:  const promoted = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
+./test/one-watcher.test.mjs:8:  const compatibilityWatcher = read('../contrib/settle-watch.mjs');
+./test/one-watcher.test.mjs:14:  assert.equal(fs.existsSync(new URL('../contrib/settle-watch.mjs', import.meta.url)), true);
+./test/retire.test.mjs:8:import { planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
+./test/retire.test.mjs:9:import { readDeclaredReferences, readLiveReferences } from '../supervisor/retire.mjs';
+./test/retire.test.mjs:10:import { retirementDeadline } from '../lib/retire-lock.mjs';
+./test/flow.test.mjs:12:const BIN = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
+./test/bch-cloak-contract.test.mjs:10:import { completionFingerprint } from '../lib/completion.mjs';
+./test/bch-cloak-contract.test.mjs:43:  fs.writeFileSync(path.join(bin, 'org'), `#!/bin/sh\nexec '${process.execPath}' '${path.join(product, 'bin/org.mjs')}' "$@"\n`, { mode: 0o755 });
+./test/bch-cloak-contract.test.mjs:56:  const watch = spawnSync(process.execPath, [path.join(product, 'contrib/settle-watch.mjs'), 'R-1', '--dry-run', '--lane-config', config, '--model', 'M', '--effort', 'E', '--org', f.dir, '--cwd', f.root, '--checklist', checklist, '--launcher', launcher, '--cmem-domain', cmem],
+./test/bch-cloak-contract.test.mjs:60:  const reconcile = spawnSync(process.execPath, [path.join(product, 'supervisor/reconcile.mjs')], { encoding: 'utf8', timeout: 10000 });
+./test/bch-cloak-contract.test.mjs:61:  assert.match(reconcile.stdout + reconcile.stderr, /usage: reconcile.mjs prepare\|finish/i);
+./test/retire-lock.test.mjs:6:import { retirementLock } from '../lib/retire-lock.mjs';
+./test/retire-lock.test.mjs:7:import { requestRetirement, consumeRetirement } from '../lib/retire-trigger.mjs';
+./test/tidy-tabs.test.mjs:3:import { planTidy, isShellOnly, matchingRun, reviewVerdict, reviewedAgentsFromRecords } from '../supervisor/tidy-tabs.mjs';
+./test/tidy-tabs.test.mjs:4:import { planRetirement } from '../lib/retire.mjs';
+./test/retire-paths.test.mjs:8:import { createRetirement } from '../supervisor/retire.mjs';
+./test/retire-paths.test.mjs:9:import { queueFor, finishCleanup, retryCleanup, drain } from '../promote/promote.mjs';
+./test/retire-paths.test.mjs:13:import { requestRetirement, consumeRetirement } from '../lib/retire-trigger.mjs';
+./test/retire-paths.test.mjs:14:import { retirementDeadline } from '../lib/retire-lock.mjs';
+./test/retire-paths.test.mjs:18:const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
+./test/retire-paths.test.mjs:83:  const cli = spawnSync(process.execPath,[path.join(root,'supervisor/retire.mjs'),'plan','--repo',f.repo,'--org',f.org,'--herdr',f.job.herdr],{env:f.env,encoding:'utf8'});
+./test/retire-paths.test.mjs:147:  for(const file of ['supervisor/retire.mjs','contrib/settle-watch.mjs','lib/cli-help.mjs','lib/state.mjs']) assert.ok(fs.existsSync(path.join(installed,file)));
+./test/retire-paths.test.mjs:148:  const r=spawnSync(process.execPath,[path.join(installed,'supervisor/retire.mjs'),'plan','--repo',f.repo,'--org',f.org,'--herdr',f.job.herdr],{env:f.env,encoding:'utf8'});
+./test/retire-paths.test.mjs:157:  const r=spawnSync(process.execPath,[path.join(root,'contrib/settle-watch.mjs'),'R-1','--org',f.org,'--cwd',f.repo,
+./test/retire-paths.test.mjs:183:  const r = spawnSync(process.execPath, [path.join(root, 'supervisor/retire.mjs'), 'consume', '--repo', f.repo, '--org', f.org,
+./test/retire-paths.test.mjs:223:  const f = fixture(t), queue = f.queue(), fakeLane = path.join(f.scratch, 'refused-lane.mjs');
+./test/retire-paths.test.mjs:283:  const cli=()=>spawnSync(process.execPath,[path.join(root,'supervisor/tidy-tabs.mjs'),'--cwd',f.repo,'--org',f.org,'--herdr',f.job.herdr,'--org-cli',process.execPath,'--org-cli-arg',recordCLI],{env:f.env,encoding:'utf8'});
+./test/retire-paths.test.mjs:337:  const r=spawnSync(process.execPath,[path.join(root,'contrib/settle-watch.mjs'),'R-1','--spawn','--org',f.org,'--cwd',f.repo,
+./test/retire-paths.test.mjs:351:  const r = spawnSync(process.execPath, [path.join(root, 'contrib/settle-watch.mjs'), 'R-1', '--org', f.org, '--cwd', f.repo,
+./test/retire-paths.test.mjs:368:  fs.writeFileSync(path.join(f.scratch, 'org'), `#!/bin/sh\nexec '${process.execPath}' '${path.join(installed, 'bin/org.mjs')}' "$@"\n`, { mode: 0o755 });
+./test/retire-paths.test.mjs:371:  const result = spawnSync(process.execPath, [path.join(installed, 'contrib/settle-watch.mjs'), 'R-1', '--spawn',
+./test/release.test.mjs:23:  write('contrib/settle-watch.mjs', '// compatibility');
+./test/release.test.mjs:26:    write('bin/org.mjs', `console.log('${tag}');`); write('lanes/lane.mjs', `console.log('lane ${tag}');`);
+./test/release.test.mjs:47:  const f = scratch(t); f.write('bin/org.mjs', "console.log('uncommitted');");
+./test/release.test.mjs:49:  assert.equal(fs.readFileSync(path.join(f.release('t1'), 'bin/org.mjs'), 'utf8'), "console.log('t1');");
+./test/release.test.mjs:51:  assert.equal(fs.statSync(path.join(f.release('t1'), 'bin/org.mjs')).mode & 0o222, 0);
+./test/release.test.mjs:114:  for (const [name, file] of [['org', 'bin/org.mjs'], ['record', 'bin/org.mjs'], ['lane', 'lanes/lane.mjs']])
+./test/release.test.mjs:150:  f.write('bin/org.mjs', 'process.exit(3);'); f.git('add', '.'); f.git('commit', '-qm', 't3'); f.git('tag', 't3');
+./test/release.test.mjs:159:  f.write('bin/org.mjs', 'process.exit(4);'); f.git('add', '.'); f.git('commit', '-qm', 't4'); f.git('tag', 't4');
+./test/release.test.mjs:166:  f.write('bin/org.mjs', 'process.exit(5);'); f.git('add', '.'); f.git('commit', '-qm', 't5'); f.git('tag', 't5');
+./test/release.test.mjs:192:  for (const file of ['contrib/settle-watch.mjs', 'lib/cli-help.mjs', 'supervisor/reconcile.mjs', 'supervisor/request.mjs']) assert.ok(files.includes(file));
+./test/release.test.mjs:210:  for (const [name, file] of [['org', 'bin/org.mjs'], ['record', 'bin/org.mjs'], ['lane', 'lanes/lane.mjs']])
+./test/release.test.mjs:214:  const f = scratch(t); f.git('rm', 'contrib/settle-watch.mjs'); f.git('commit', '-qm', 'Incomplete distribution'); f.git('tag', 'missing');
+./test/release.test.mjs:215:  assert.match(f.run(['build', 'missing']).stderr, /release is missing contrib\/settle-watch.mjs/);
+./test/fleet.test.mjs:60:  const record = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Work proceeds'], { cwd: lane, env: { ...f.env, ORG_ACTOR: 'fleet-test' }, encoding: 'utf8' });
+./test/fleet.test.mjs:77:  execFileSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Original work'], { cwd, env: { ...f.env, ORG_ACTOR: 'fleet-test' } });
+./test/fleet.test.mjs:190:  const laneConfig = () => spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd, env: f.env, encoding: 'utf8' });
+./test/fleet.test.mjs:232:  const laneConfig = () => spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd, env: f.env, encoding: 'utf8' });
+./test/fleet.test.mjs:267:  const config = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd: neighbor, env: f.env, encoding: 'utf8' });
+./test/fleet.test.mjs:335:  const result = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd, env, encoding: 'utf8' });
+./test/fleet.test.mjs:420:  execFileSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Keep this work'], {
+./test/fleet.test.mjs:491:    const r = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd, env, encoding: 'utf8' });
+./test/name-alias.test.mjs:9:const ORG = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
+./test/name-alias.test.mjs:99:  assert.deepEqual(pkg.bin, { record: './bin/org.mjs', org: './bin/org.mjs' });
+./test/settle-watch.test.mjs:11:const WATCH = fileURLToPath(new URL('../contrib/settle-watch.mjs', import.meta.url));
+./test/load-deadlines.test.mjs:171:  const { createHousekeeping } = await import('../housekeeping/housekeeping.mjs');
+./test/startup-deadlines.test.mjs:58:    if (module === 'promote') args = [local('../promote/promote.mjs'), 'topic', '--repo', repo, '--org', root];

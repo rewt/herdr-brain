@@ -1,0 +1,292 @@
+TAP version 13
+# Subtest: ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation
+ok 1 - ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation
+  ---
+  duration_ms: 1.954375
+  ...
+# Subtest: process state changes do not change identity tokens, but stopped processes still keep on fresh decision
+ok 2 - process state changes do not change identity tokens, but stopped processes still keep on fresh decision
+  ---
+  duration_ms: 0.941458
+  ...
+# Subtest: the shared executor stops cleanly at a deadline without acting on later candidates
+ok 3 - the shared executor stops cleanly at a deadline without acting on later candidates
+  ---
+  duration_ms: 0.329375
+  ...
+# Subtest: pruning another tab callback does not invalidate this tab token
+ok 4 - pruning another tab callback does not invalidate this tab token
+  ---
+  duration_ms: 0.483709
+  ...
+# Subtest: narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities
+ok 5 - narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities
+  ---
+  duration_ms: 1.351333
+  ...
+# Subtest: keeps report-file-only
+ok 6 - keeps report-file-only
+  ---
+  duration_ms: 0.238875
+  ...
+# Subtest: keeps report-before-review
+ok 7 - keeps report-before-review
+  ---
+  duration_ms: 0.124417
+  ...
+# Subtest: keeps blocked
+ok 8 - keeps blocked
+  ---
+  duration_ms: 0.117416
+  ...
+# Subtest: keeps needs-human
+ok 9 - keeps needs-human
+  ---
+  duration_ms: 0.260167
+  ...
+# Subtest: keeps working
+ok 10 - keeps working
+  ---
+  duration_ms: 0.202917
+  ...
+# Subtest: keeps unknown
+ok 11 - keeps unknown
+  ---
+  duration_ms: 0.113792
+  ...
+# Subtest: keeps wrong-common
+ok 12 - keeps wrong-common
+  ---
+  duration_ms: 0.130375
+  ...
+# Subtest: keeps wrong-head
+ok 13 - keeps wrong-head
+  ---
+  duration_ms: 0.117125
+  ...
+# Subtest: keeps dirty
+ok 14 - keeps dirty
+  ---
+  duration_ms: 0.099917
+  ...
+# Subtest: keeps wrong-terminal
+ok 15 - keeps wrong-terminal
+  ---
+  duration_ms: 0.137417
+  ...
+# Subtest: keeps wrong-session
+ok 16 - keeps wrong-session
+  ---
+  duration_ms: 0.14425
+  ...
+# Subtest: keeps wrong-pane
+ok 17 - keeps wrong-pane
+  ---
+  duration_ms: 0.261167
+  ...
+# Subtest: keeps wrong-cwd
+ok 18 - keeps wrong-cwd
+  ---
+  duration_ms: 0.177167
+  ...
+# Subtest: keeps new-shell
+ok 19 - keeps new-shell
+  ---
+  duration_ms: 0.423416
+  ...
+# Subtest: keeps other-program
+ok 20 - keeps other-program
+  ---
+  duration_ms: 0.185
+  ...
+# Subtest: keeps focused
+ok 21 - keeps focused
+  ---
+  duration_ms: 0.114541
+  ...
+# Subtest: keeps lab
+ok 22 - keeps lab
+  ---
+  duration_ms: 0.090625
+  ...
+# Subtest: keeps persistent
+ok 23 - keeps persistent
+  ---
+  duration_ms: 0.08225
+  ...
+# Subtest: keeps operator
+ok 24 - keeps operator
+  ---
+  duration_ms: 0.077125
+  ...
+# Subtest: keeps missing-process
+ok 25 - keeps missing-process
+  ---
+  duration_ms: 0.074875
+  ...
+# Subtest: pending review and NEEDS-WORK preserve the engineer across a fix gap
+ok 26 - pending review and NEEDS-WORK preserve the engineer across a fix gap
+  ---
+  duration_ms: 0.449667
+  ...
+# Subtest: same native session new run keeps even after a rename and with immutable older report
+ok 27 - same native session new run keeps even after a rename and with immutable older report
+  ---
+  duration_ms: 0.129458
+  ...
+# Subtest: confirmed supersession releases an older round only with a retained different successor
+ok 28 - confirmed supersession releases an older round only with a retained different successor
+  ---
+  duration_ms: 0.314458
+  ...
+# Subtest: all tab occupants must be independently eligible; metadata never releases
+ok 29 - all tab occupants must be independently eligible; metadata never releases
+  ---
+  duration_ms: 0.241167
+  ...
+# Subtest: reference only keeps: promote
+ok 30 - reference only keeps: promote
+  ---
+  duration_ms: 0.135833
+  ...
+# Subtest: reference only keeps: verify
+ok 31 - reference only keeps: verify
+  ---
+  duration_ms: 0.117041
+  ...
+# Subtest: reference only keeps: host-check
+ok 32 - reference only keeps: host-check
+  ---
+  duration_ms: 0.116792
+  ...
+# Subtest: reference only keeps: callback
+ok 33 - reference only keeps: callback
+  ---
+  duration_ms: 0.228042
+  ...
+# Subtest: reference only keeps: test-slot
+ok 34 - reference only keeps: test-slot
+  ---
+  duration_ms: 0.135625
+  ...
+# Subtest: reference only keeps: waiter
+ok 35 - reference only keeps: waiter
+  ---
+  duration_ms: 0.122333
+  ...
+# Subtest: reference only keeps: reconcile
+ok 36 - reference only keeps: reconcile
+  ---
+  duration_ms: 0.117083
+  ...
+# Subtest: executor rechecks reactivated and reports the fresh reason
+ok 37 - executor rechecks reactivated and reports the fresh reason
+  ---
+  duration_ms: 0.301334
+  ...
+# Subtest: executor rechecks native-session and reports the fresh reason
+ok 38 - executor rechecks native-session and reports the fresh reason
+  ---
+  duration_ms: 0.130125
+  ...
+# Subtest: executor rechecks head and reports the fresh reason
+ok 39 - executor rechecks head and reports the fresh reason
+  ---
+  duration_ms: 0.133625
+  ...
+# Subtest: executor rechecks record-reopened and reports the fresh reason
+ok 40 - executor rechecks record-reopened and reports the fresh reason
+  ---
+  duration_ms: 0.114916
+  ...
+# Subtest: executor rechecks reference and reports the fresh reason
+ok 41 - executor rechecks reference and reports the fresh reason
+  ---
+  duration_ms: 0.126708
+  ...
+# Subtest: executor rechecks new-pane and reports the fresh reason
+ok 42 - executor rechecks new-pane and reports the fresh reason
+  ---
+  duration_ms: 0.12175
+  ...
+# Subtest: executor rechecks read-error and reports the fresh reason
+ok 43 - executor rechecks read-error and reports the fresh reason
+  ---
+  duration_ms: 0.081209
+  ...
+# Subtest: restart/idempotency uses fresh authority; failures are cleanup failures
+ok 44 - restart/idempotency uses fresh authority; failures are cleanup failures
+  ---
+  duration_ms: 0.188
+  ...
+# Subtest: Git-only deletion rejects even a releasable pane until its removal is observed
+ok 45 - Git-only deletion rejects even a releasable pane until its removal is observed
+  ---
+  duration_ms: 0.1375
+  ...
+# Subtest: herdr-reference/v1 matches each declared key, expires visibly, and never releases
+ok 46 - herdr-reference/v1 matches each declared key, expires visibly, and never releases
+  ---
+  duration_ms: 2.688459
+  ...
+# Subtest: malformed, missing expiry, unknown schema, unreadable reference fail the whole project closed
+ok 47 - malformed, missing expiry, unknown schema, unreadable reference fail the whole project closed
+  ---
+  duration_ms: 1.15
+  ...
+# Subtest: generic promote and trusted verify sources are read-only and include interrupted/reconcile holds
+ok 48 - generic promote and trusted verify sources are read-only and include interrupted/reconcile holds
+  ---
+  duration_ms: 1.253958
+  ...
+# Subtest: promotion references follow the latest request checkpoint and preserve active holds
+ok 49 - promotion references follow the latest request checkpoint and preserve active holds
+  ---
+  duration_ms: 1.885292
+  ...
+# Subtest: pending settlement callbacks keep; completed receipts remain historical
+ok 50 - pending settlement callbacks keep; completed receipts remain historical
+  ---
+  duration_ms: 1.254916
+  ...
+# Subtest: session display changes have no retirement authority
+ok 51 - session display changes have no retirement authority
+  ---
+  duration_ms: 0.215333
+  ...
+# Subtest: background descendants and unknown kernel birth keep, and PID reuse invalidates a plan
+ok 52 - background descendants and unknown kernel birth keep, and PID reuse invalidates a plan
+  ---
+  duration_ms: 0.192958
+  ...
+# Subtest: older folds ignore the confirmed handoff event
+ok 53 - older folds ignore the confirmed handoff event
+  ---
+  duration_ms: 0.142875
+  ...
+# Subtest: a reported successor is reserved until the superseded pane is actually gone
+ok 54 - a reported successor is reserved until the superseded pane is actually gone
+  ---
+  duration_ms: 0.248416
+  ...
+# Subtest: a native session without its launch receipt stays unknown even on the old terminal
+ok 55 - a native session without its launch receipt stays unknown even on the old terminal
+  ---
+  duration_ms: 0.081458
+  ...
+# Subtest: project reference damage is reported even when no tabs are present
+ok 56 - project reference damage is reported even when no tabs are present
+  ---
+  duration_ms: 0.107083
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..56
+# tests 56
+# suites 0
+# pass 56
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 123.005667
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

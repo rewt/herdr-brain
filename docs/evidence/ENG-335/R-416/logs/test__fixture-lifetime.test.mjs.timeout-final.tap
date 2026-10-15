@@ -1,0 +1,37 @@
+TAP version 13
+# Subtest: concurrent lifetime owners reuse one source-digest cached guard and keep separate writers
+ok 1 - concurrent lifetime owners reuse one source-digest cached guard and keep separate writers
+  ---
+  duration_ms: 106.587
+  ...
+# Subtest: watch guard whose spawning parent exits immediately never adopts or signals the reaper
+ok 2 - watch guard whose spawning parent exits immediately never adopts or signals the reaper
+  ---
+  duration_ms: 230.013166
+  ...
+# Subtest: native lifetime guard observes EOF and its finite deadline with the caller still alive
+ok 3 - native lifetime guard observes EOF and its finite deadline with the caller still alive
+  ---
+  duration_ms: 934.715375
+  ...
+# Subtest: SIGKILL of an enclosing suite leaves no settle inbox or gate-profile fixture
+ok 4 - SIGKILL of an enclosing suite leaves no settle inbox or gate-profile fixture
+  ---
+  duration_ms: 1212.733917
+  ...
+# Subtest: suite timeout of an enclosing suite leaves no settle inbox or gate-profile fixture
+ok 5 - suite timeout of an enclosing suite leaves no settle inbox or gate-profile fixture
+  ---
+  duration_ms: 8170.915333
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10744.402209
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

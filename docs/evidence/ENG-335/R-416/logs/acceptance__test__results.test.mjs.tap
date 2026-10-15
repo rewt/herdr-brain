@@ -1,0 +1,32 @@
+TAP version 13
+# Subtest: candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+ok 1 - candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+  ---
+  duration_ms: 0.992792
+  ...
+# Subtest: cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+ok 2 - cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+  ---
+  duration_ms: 1.023708
+  ...
+# Subtest: ordinary missing capability and source-attribution gaps fail without a safety or harness marker
+ok 3 - ordinary missing capability and source-attribution gaps fail without a safety or harness marker
+  ---
+  duration_ms: 0.2235
+  ...
+# Subtest: dependent cutover/default-cycle cases preserve prerequisite causes and origins
+ok 4 - dependent cutover/default-cycle cases preserve prerequisite causes and origins
+  ---
+  duration_ms: 0.243875
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 95.72975
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

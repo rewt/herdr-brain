@@ -1,0 +1,107 @@
+TAP version 13
+# Subtest: native adapter pins the original socket despite an isolated HOME or caller override
+ok 1 - native adapter pins the original socket despite an isolated HOME or caller override
+  ---
+  duration_ms: 235.3095
+  ...
+# Subtest: foreign pane/workspace targets and symlink escapes never reach mutation APIs
+ok 2 - foreign pane/workspace targets and symlink escapes never reach mutation APIs
+  ---
+  duration_ms: 518.872708
+  ...
+# Subtest: model launch requests are always replaced by the scratch worker script
+ok 3 - model launch requests are always replaced by the scratch worker script
+  ---
+  duration_ms: 277.186042
+  ...
+# Subtest: entry canary launch is confined to its fixed worker path and owned pane
+ok 4 - entry canary launch is confined to its fixed worker path and owned pane
+  ---
+  duration_ms: 274.914125
+  ...
+# Subtest: parent-focusing worktree removal is refused before any native mutation
+ok 5 - parent-focusing worktree removal is refused before any native mutation
+  ---
+  duration_ms: 26.700875
+  ...
+# Subtest: the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+ok 6 - the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+  ---
+  duration_ms: 115.530833
+  ...
+# Subtest: creation receipts grant the only new targets and force no-focus
+ok 7 - creation receipts grant the only new targets and force no-focus
+  ---
+  duration_ms: 487.312916
+  ...
+# Subtest: explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+ok 8 - explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+  ---
+  duration_ms: 98.904584
+  ...
+# Subtest: agent send-keys requires an owned target and checks its live cwd
+ok 9 - agent send-keys requires an owned target and checks its live cwd
+  ---
+  duration_ms: 5353.011917
+  ...
+# Subtest: named-agent mutation receipts retain the pane resolved by native identity lookup
+ok 10 - named-agent mutation receipts retain the pane resolved by native identity lookup
+  ---
+  duration_ms: 265.4725
+  ...
+# Subtest: late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+ok 11 - late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+  ---
+  duration_ms: 329.958416
+  ...
+# Subtest: non-zero native Herdr replies are harness failures through both body and forwarding paths
+ok 12 - non-zero native Herdr replies are harness failures through both body and forwarding paths
+  ---
+  duration_ms: 787.60375
+  ...
+# Subtest: stand-in registration timeout is harness pending without a safety marker
+ok 13 - stand-in registration timeout is harness pending without a safety marker
+  ---
+  duration_ms: 6277.439416
+  ...
+# Subtest: scripted PTY acknowledgement timeout is harness pending without a safety marker
+ok 14 - scripted PTY acknowledgement timeout is harness pending without a safety marker
+  ---
+  duration_ms: 10453.864083
+  ...
+# Subtest: actual capability refusals stay product FAIL even when wrapped by cleanup
+ok 15 - actual capability refusals stay product FAIL even when wrapped by cleanup
+  ---
+  duration_ms: 5173.581833
+  ...
+# Subtest: missing live pane cwd receipt is a harness limit, not a candidate capability violation
+ok 16 - missing live pane cwd receipt is a harness limit, not a candidate capability violation
+  ---
+  duration_ms: 232.786584
+  ...
+# Subtest: native transport pins the original socket when copied HOME changes
+ok 17 - native transport pins the original socket when copied HOME changes
+  ---
+  duration_ms: 338.594459
+  ...
+# Subtest: final tab rename is allowed only for receipt-owned tabs
+ok 18 - final tab rename is allowed only for receipt-owned tabs
+  ---
+  duration_ms: 203.84675
+  ...
+# Subtest: private lane environment preparation reaches only an owned pane with a live scratch cwd
+ok 19 - private lane environment preparation reaches only an owned pane with a live scratch cwd
+  ---
+  duration_ms: 5307.078125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 36855.327375
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

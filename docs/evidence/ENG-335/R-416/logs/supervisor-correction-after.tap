@@ -1,0 +1,122 @@
+TAP version 13
+# Subtest: cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+ok 1 - cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.500334
+  ...
+# Subtest: cold start Lessons handles empty records and terminal controls in claims
+ok 2 - cold start Lessons handles empty records and terminal controls in claims # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039875
+  ...
+# Subtest: cold start surfaces host memory pressure without process rows, storage advisories or record changes
+ok 3 - cold start surfaces host memory pressure without process rows, storage advisories or record changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028166
+  ...
+# Subtest: supervisor handle exposes review memory wait before pressure clears
+ok 4 - supervisor handle exposes review memory wait before pressure clears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030084
+  ...
+# Subtest: supervisor handle exposes correction memory wait before pressure clears
+ok 5 - supervisor handle exposes correction memory wait before pressure clears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068875
+  ...
+# Subtest: handle returns capped findings and promotion records explicit acceptance with exact heads
+ok 6 - handle returns capped findings and promotion records explicit acceptance with exact heads # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037334
+  ...
+# Subtest: handle explicitly sends capped findings back once and adopts its saved correction
+ok 7 - handle explicitly sends capped findings back once and adopts its saved correction # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024458
+  ...
+# Subtest: STOP arriving during review retains a resumable correction without launching another worker
+ok 8 - STOP arriving during review retains a resumable correction without launching another worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032375
+  ...
+# Subtest: supervisor binds head and run into the queue and retries confirmed refusals with history
+ok 9 - supervisor binds head and run into the queue and retries confirmed refusals with history # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.129292
+  ...
+# Subtest: bound promotion rechecks queued runs and record changes during validation before integration
+ok 10 - bound promotion rechecks queued runs and record changes during validation before integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075667
+  ...
+# Subtest: late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+ok 11 - late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.065375
+  ...
+# Subtest: late original and correction notices after lane removal preserve promotion guards and never replay settlement
+ok 12 - late original and correction notices after lane removal preserve promotion guards and never replay settlement
+  ---
+  duration_ms: 14843.448083
+  ...
+# Subtest: refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+ok 13 - refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.081333
+  ...
+# Subtest: supervisor entry and final notices carry the unconfigured cycle through actual promotion
+ok 14 - supervisor entry and final notices carry the unconfigured cycle through actual promotion
+  ---
+  duration_ms: 16908.47225
+  ...
+# Subtest: cold start includes routes, history across midnight and a durable explicit reading cursor
+ok 15 - cold start includes routes, history across midnight and a durable explicit reading cursor # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.09475
+  ...
+# Subtest: ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+ok 16 - ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.153417
+  ...
+# Subtest: workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+ok 17 - workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.249834
+  ...
+# Subtest: non-done reports hand off substance without review; saved enqueue uncertainty never replays
+ok 18 - non-done reports hand off substance without review; saved enqueue uncertainty never replays # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.098917
+  ...
+# Subtest: full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+ok 19 - full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.080584
+  ...
+# Subtest: conditional record completion preserves newer work, unresolved and declined blockers
+ok 20 - conditional record completion preserves newer work, unresolved and declined blockers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027792
+  ...
+# Subtest: a disappeared checkout retains its open record run through a dispatch identity receipt
+ok 21 - a disappeared checkout retains its open record run through a dispatch identity receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019917
+  ...
+# Subtest: supervisor retries a confirmed timeout with the same reviewed binding
+ok 22 - supervisor retries a confirmed timeout with the same reviewed binding # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022833
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..22
+# tests 22
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 20
+# todo 0
+# duration_ms 31852.005167
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,162 @@
+TAP version 13
+# Subtest: fixture cleanup ignores an ambient record inbox owner
+ok 1 - fixture cleanup ignores an ambient record inbox owner
+  ---
+  duration_ms: 56.396625
+  ...
+# Subtest: busy supervisor does not hold completed queue accounting by default
+ok 2 - busy supervisor does not hold completed queue accounting by default
+  ---
+  duration_ms: 4074.947042
+  ...
+# Subtest: idle supervisor receives a default queued promotion notice without a false alert
+ok 3 - idle supervisor receives a default queued promotion notice without a false alert
+  ---
+  duration_ms: 1700.17175
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 4 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6942.500542
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 5 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 3152.541333
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 6 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1704.129834
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 7 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 2345.972333
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 8 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1899.397125
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 9 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 484.483375
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 10 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 2104.877084
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 11 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2340.272084
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 12 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 3324.354375
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 13 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2534.534292
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 14 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 2684.924584
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 15 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 4166.774459
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 16 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1815.525584
+  ...
+# Subtest: a drain owner this caller may not signal still counts as running
+ok 17 - a drain owner this caller may not signal still counts as running
+  ---
+  duration_ms: 84.906417
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 18 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 5009.783708
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 19 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 3417.838417
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 20 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 905.9955
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 21 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 337.128416
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 22 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 323.084
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 23 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 755.736541
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 24 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4558.429458
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 25 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4626.816333
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 26 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1842.093958
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 27 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 2032.012125
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 28 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 731.581667
+  ...
+# Subtest: only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+ok 29 - only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+  ---
+  duration_ms: 1293.000041
+  ...
+# Subtest: an unborn canonical branch has no gate profile, whatever its working tree holds
+ok 30 - an unborn canonical branch has no gate profile, whatever its working tree holds
+  ---
+  duration_ms: 25.051417
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..30
+# tests 30
+# suites 0
+# pass 30
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 67387.443
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

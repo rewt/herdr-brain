@@ -1,0 +1,174 @@
+TAP version 13
+# Subtest: config, recent healthy clocks and conservative default resolve independently of slot waiting
+ok 1 - config, recent healthy clocks and conservative default resolve independently of slot waiting
+  ---
+  duration_ms: 65.928833
+  ...
+# Subtest: wall timeout stops a forever-blocked grandchild, releases slot and never retries under load
+ok 2 - wall timeout stops a forever-blocked grandchild, releases slot and never retries under load
+  ---
+  duration_ms: 1706.165625
+  ...
+# Subtest: wall timeout stops a forever-blocked grandchild in its own group, releases slot and never retries under load
+ok 3 - wall timeout stops a forever-blocked grandchild in its own group, releases slot and never retries under load
+  ---
+  duration_ms: 1689.712708
+  ...
+# Subtest: enabled idle limit stops silence, output refreshes it and healthy clocks record final silence
+ok 4 - enabled idle limit stops silence, output refreshes it and healthy clocks record final silence
+  ---
+  duration_ms: 876.867083
+  ...
+# Subtest: wall overrun and a descendant marker cannot spend a load retry
+ok 5 - wall overrun and a descendant marker cannot spend a load retry
+  ---
+  duration_ms: 51.345375
+  ...
+# Subtest: parent walk excludes unrelated processes and escaped-child signalling confirms birth
+ok 6 - parent walk excludes unrelated processes and escaped-child signalling confirms birth
+  ---
+  duration_ms: 0.393416
+  ...
+# Subtest: a throwing capture callback reports its error only after TERM and KILL stop the job
+ok 7 - a throwing capture callback reports its error only after TERM and KILL stop the job
+  ---
+  duration_ms: 0.193
+  ...
+# Subtest: lane records timeout, isolates correction and leaves main unchanged
+ok 8 - lane records timeout, isolates correction and leaves main unchanged
+  ---
+  duration_ms: 1068.980583
+  ...
+# Subtest: queue records timeout, isolates correction and leaves main unchanged
+ok 9 - queue records timeout, isolates correction and leaves main unchanged
+  ---
+  duration_ms: 1537.586042
+  ...
+# Subtest: fast records timeout, isolates correction and leaves main unchanged
+ok 10 - fast records timeout, isolates correction and leaves main unchanged
+  ---
+  duration_ms: 1042.18725
+  ...
+# Subtest: slot waiting consumes none of a short command deadline
+ok 11 - slot waiting consumes none of a short command deadline
+  ---
+  duration_ms: 1153.884583
+  ...
+# TEST_SLOT_GUARD_RECOVERED: dead owner guard /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/gate-watchdog-kN5eUF/slot.groups-lock removed.
+# Subtest: nested gates preserve the legacy holder pgid after both wrappers die
+ok 12 - nested gates preserve the legacy holder pgid after both wrappers die
+  ---
+  duration_ms: 481.852458
+  ...
+# Subtest: dead groups-lock owners recover and live or unknown owners fail with a coded path
+ok 13 - dead groups-lock owners recover and live or unknown owners fail with a coded path
+  ---
+  duration_ms: 2042.711333
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=true)
+ok 14 - leftover group fails distinctly after bounded grace (inherited pipes=true)
+  ---
+  duration_ms: 1820.926541
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=false)
+ok 15 - leftover group fails distinctly after bounded grace (inherited pipes=false)
+  ---
+  duration_ms: 1684.241833
+  ...
+# Subtest: canonical validation includes layered lane-only wall and idle settings for both envelopes
+ok 16 - canonical validation includes layered lane-only wall and idle settings for both envelopes
+  ---
+  duration_ms: 120.350791
+  ...
+# Subtest: nested watchdog stops its parent-walk children and preserves a sibling in the shared group
+ok 17 - nested watchdog stops its parent-walk children and preserves a sibling in the shared group
+  ---
+  duration_ms: 457.258791
+  ...
+# Subtest: printed descendant timeout marker follows command status 0
+ok 18 - printed descendant timeout marker follows command status 0
+  ---
+  duration_ms: 50.295292
+  ...
+# Subtest: printed descendant timeout marker follows command status 1
+ok 19 - printed descendant timeout marker follows command status 1
+  ---
+  duration_ms: 49.943917
+  ...
+# Subtest: printed descendant timeout marker follows command status 124
+ok 20 - printed descendant timeout marker follows command status 124
+  ---
+  duration_ms: 49.047625
+  ...
+# Subtest: failed descendant identity source stops the owned hung group and retains the slot
+ok 21 - failed descendant identity source stops the owned hung group and retains the slot
+  ---
+  duration_ms: 340.383958
+  ...
+# Subtest: planned train file lists record and resolve one declared command history
+ok 22 - planned train file lists record and resolve one declared command history
+  ---
+  duration_ms: 1231.81475
+  ...
+# Subtest: healthy history prunes old command files while preserving the current key
+ok 23 - healthy history prunes old command files while preserving the current key
+  ---
+  duration_ms: 13.148708
+  ...
+# Subtest: unbatched queue maps wall timeout to correction wording
+ok 24 - unbatched queue maps wall timeout to correction wording
+  ---
+  duration_ms: 477.820959
+  ...
+# Subtest: unbatched queue maps idle timeout to correction wording
+ok 25 - unbatched queue maps idle timeout to correction wording
+  ---
+  duration_ms: 445.158083
+  ...
+# Subtest: an unknown escaped identity cannot prevent killing the owned group
+ok 26 - an unknown escaped identity cannot prevent killing the owned group
+  ---
+  duration_ms: 125.847209
+  ...
+# Subtest: fixture gates cannot create or modify the real repository history
+ok 27 - fixture gates cannot create or modify the real repository history
+  ---
+  duration_ms: 62.737125
+  ...
+# Subtest: history origin guard handles a concurrent unattributed writer
+ok 28 - history origin guard handles a concurrent unattributed writer
+  ---
+  duration_ms: 70.225
+  ...
+# Subtest: history origin guard handles a concurrent foreign writer
+ok 29 - history origin guard handles a concurrent foreign writer
+  ---
+  duration_ms: 72.278791
+  ...
+# Subtest: history origin guard handles a concurrent descendant-leak writer
+ok 30 - history origin guard handles a concurrent descendant-leak writer
+  ---
+  duration_ms: 76.532583
+  ...
+# Subtest: three sane samples are required for wall and idle derivation, including legacy fixture history
+ok 31 - three sane samples are required for wall and idle derivation, including legacy fixture history
+  ---
+  duration_ms: 0.276459
+  ...
+# Subtest: observed healthy full gates fit clean-history defaults and trained limits
+ok 32 - observed healthy full gates fit clean-history defaults and trained limits
+  ---
+  duration_ms: 0.065458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..32
+# tests 32
+# suites 0
+# pass 32
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 18926.782417
+Surviving fixture: PID 40057, command /Users/rewt/.nvm/versions/node/v20.19.4/bin/node -e process.on('SIGTERM',()=>{});setInterval(()=>{},1000). Files: test-slot/test/watchdog.test.mjs
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

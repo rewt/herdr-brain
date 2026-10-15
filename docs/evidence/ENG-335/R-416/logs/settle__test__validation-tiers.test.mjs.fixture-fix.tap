@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: distinct worker, settle and queue panes reuse each tree through same-tree rebase and queued promotion
+not ok 1 - distinct worker, settle and queue panes reuse each tree through same-tree rebase and queued promotion
+  ---
+  duration_ms: 1672.966666
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-n6m30c/project/.org/settle/R-1.review-r1.log
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/settle/test/validation-tiers.test.mjs:29:41
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: saved settle readiness defers changed commands and environments to promotion without repeating review
+not ok 2 - saved settle readiness defers changed commands and environments to promotion without repeating review
+  ---
+  duration_ms: 1412.776625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + 'escalate'
+    - 'promotable'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'promotable'
+  actual: 'escalate'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/settle/test/validation-tiers.test.mjs:61:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3185.280125
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

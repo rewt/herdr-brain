@@ -1,0 +1,14 @@
+[
+  "promote/test/completion.test.mjs",
+  "promote/test/promote.test.mjs",
+  "promote/test/train.test.mjs",
+  "promote/test/workflow-train.test.mjs",
+  "test-slot/test/gate-profile.test.mjs",
+  "test-slot/test/train-conformance.test.mjs",
+  "test-slot/test/watchdog.test.mjs",
+  "test/cli-help.test.mjs",
+  "test/fixture-lifetime.test.mjs",
+  "test/main-module.test.mjs",
+  "test/retire-paths.test.mjs",
+  "test/startup-deadlines.test.mjs"
+]

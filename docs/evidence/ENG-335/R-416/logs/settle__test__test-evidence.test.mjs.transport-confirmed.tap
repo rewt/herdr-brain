@@ -1,0 +1,207 @@
+TAP version 13
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.426541
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.613459
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.42075
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 30.03975
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.426667
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 28.688042
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.427333
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 31.550208
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.425125
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 30.267416
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.417583
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.5585
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.453625
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 32.323792
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.434167
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.581708
+# Subtest: only scoped test deferrals become promotable through the planned gate
+ok 1 - only scoped test deferrals become promotable through the planned gate
+  ---
+  duration_ms: 8261.983375
+  ...
+# Subtest: test deferrals plus matching record-check proof use the bound path: - Report record-check validation not independently executed.
+ok 2 - test deferrals plus matching record-check proof use the bound path: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 12234.337292
+  ...
+# Subtest: test deferrals plus matching record-check proof use the bound path: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 3 - test deferrals plus matching record-check proof use the bound path: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 11935.80275
+  ...
+# Subtest: lane-modified planner and imports cannot shrink canonical coverage
+ok 4 - lane-modified planner and imports cannot shrink canonical coverage
+  ---
+  duration_ms: 4155.967834
+  ...
+# Subtest: lane-modified planner and imports cannot invent canonical coverage
+ok 5 - lane-modified planner and imports cannot invent canonical coverage
+  ---
+  duration_ms: 4138.569959
+  ...
+# Subtest: missing planner covers nothing, retains its error and allows recorded re-execution
+ok 6 - missing planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4760.721583
+  ...
+# Subtest: failed planner covers nothing, retains its error and allows recorded re-execution
+ok 7 - failed planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4813.890625
+  ...
+# Subtest: empty output covers nothing, retains its error and allows recorded re-execution
+ok 8 - empty output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4782.799375
+  ...
+# Subtest: whitespace output covers nothing, retains its error and allows recorded re-execution
+ok 9 - whitespace output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4818.487208
+  ...
+# Subtest: invalid JSON covers nothing, retains its error and allows recorded re-execution
+ok 10 - invalid JSON covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4777.99575
+  ...
+# Subtest: invalid coverage covers nothing, retains its error and allows recorded re-execution
+ok 11 - invalid coverage covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4758.322625
+  ...
+# Subtest: oversized output covers nothing, retains its error and allows recorded re-execution
+ok 12 - oversized output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4786.473042
+  ...
+# Subtest: hand-written receipt with matching filename and log hash must also match its derived key
+ok 13 - hand-written receipt with matching filename and log hash must also match its derived key
+  ---
+  duration_ms: 1.454625
+  ...
+# Subtest: recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+ok 14 - recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+  ---
+  duration_ms: 6137.630917
+  ...
+# Subtest: settle forwards scoped evidence as required files before applying optional caps
+ok 15 - settle forwards scoped evidence as required files before applying optional caps
+  ---
+  duration_ms: 4042.373209
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 84506.88325
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

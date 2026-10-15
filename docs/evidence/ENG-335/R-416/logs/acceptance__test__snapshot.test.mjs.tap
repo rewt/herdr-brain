@@ -1,0 +1,42 @@
+TAP version 13
+# Subtest: immutable release copy supports a scratch dependency build and contrib retirement without changing source
+ok 1 - immutable release copy supports a scratch dependency build and contrib retirement without changing source
+  ---
+  duration_ms: 6.037042
+  ...
+# Subtest: Git archive executable bits survive and snapshot chmod never follows symlinks
+ok 2 - Git archive executable bits survive and snapshot chmod never follows symlinks
+  ---
+  duration_ms: 41.098209
+  ...
+# Subtest: actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling
+ok 3 - actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling
+  ---
+  duration_ms: 2.099125
+  ...
+# Subtest: scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths
+ok 4 - scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths
+  ---
+  duration_ms: 0.9105
+  ...
+# Subtest: foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM
+ok 5 - foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM
+  ---
+  duration_ms: 1.212625
+  ...
+# Subtest: unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify
+ok 6 - unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify
+  ---
+  duration_ms: 1.508458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 156.690916
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,304 @@
+{
+  "queue": {
+    "identity": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git",
+    "pending": [],
+    "current": null,
+    "results": [
+      {
+        "id": "06a56084-cb0e-4523-aa2e-8e9d501c8590",
+        "topic": "topic",
+        "queued": false,
+        "expectedHead": "acdb439117eb8f0d2902f30553c0b29d63a4d797",
+        "run": "R-1",
+        "org": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org",
+        "to": "scratch-supervisor",
+        "herdr": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/bin/herdr",
+        "laneCLI": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/lanes/lane.mjs",
+        "attempts": 1,
+        "retry": 0,
+        "outcome": "promoted",
+        "tip": "acdb439117eb8f0d2902f30553c0b29d63a4d797",
+        "source_head": "acdb439117eb8f0d2902f30553c0b29d63a4d797",
+        "workspace": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/lane",
+        "warnings": [
+          "tab cleanup: incomplete tabs"
+        ],
+        "reason": "integrated-but-cleanup-pending: tab cleanup: incomplete tabs",
+        "batch": "435f53e4-bd73-4329-acf3-a05edbcf54e7",
+        "gate": {
+          "schema": "lane-validation/v1",
+          "key": "61406e4a6a8e03710fe8ef169119468c85eb2e3cf888c0043376ed813562a6ad",
+          "head": "acdb439117eb8f0d2902f30553c0b29d63a4d797",
+          "tree": "042fee26cd67a09d14db331e87b23db628511b82",
+          "branch": "promote-train/707c39ab-598f-4897-853a-7d5ecedec471",
+          "tier": "promotion",
+          "command": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/validation.cjs",
+          "environment_fingerprint": "7030d6777e46be67164ccd20a2a05285451f3e7f11ba9acf2b98d38249c3a50b",
+          "exit_code": 0,
+          "signal": null,
+          "started_at": "2026-10-15T02:48:41.519Z",
+          "finished_at": "2026-10-15T02:48:41.586Z",
+          "duration_s": 0.067309583,
+          "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/lane-validation/61406e4a6a8e03710fe8ef169119468c85eb2e3cf888c0043376ed813562a6ad.1f362645-8c36-4178-8f48-084a1792ead9.log",
+          "log_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "reused": false,
+          "execution_receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/lane-validation/61406e4a6a8e03710fe8ef169119468c85eb2e3cf888c0043376ed813562a6ad.1f362645-8c36-4178-8f48-084a1792ead9.log.execution.json",
+          "executed": true,
+          "outcome": "green",
+          "gate_timeout": null,
+          "command_duration_s": 0.03455416600627359,
+          "longest_silence_s": 0.03455416600627359,
+          "limits": {
+            "wall_seconds": 4500,
+            "wall_source": "default",
+            "idle_seconds": 0,
+            "idle_source": "off"
+          },
+          "slot_receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/lane-validation/slot-waits/61406e4a6a8e03710fe8ef169119468c85eb2e3cf888c0043376ed813562a6ad.1f362645-8c36-4178-8f48-084a1792ead9.log.json",
+          "command_started_at": "2026-10-15T02:48:41.549Z",
+          "command_finished_at": "2026-10-15T02:48:41.583Z"
+        },
+        "integrated_at": "2026-10-15T02:48:41.696Z",
+        "report_at": "2026-10-15T02:48:36.817Z",
+        "report_to_main_s": 4.879,
+        "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/promote/batches/435f53e4-bd73-4329-acf3-a05edbcf54e7/train.log",
+        "receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/promote/batches/435f53e4-bd73-4329-acf3-a05edbcf54e7/train.json",
+        "reconciliation": {
+          "state": "complete",
+          "batch": "435f53e4-bd73-4329-acf3-a05edbcf54e7",
+          "receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/promote/batches/435f53e4-bd73-4329-acf3-a05edbcf54e7/train.json.record.json",
+          "fingerprint": "d2cfe95f2751ab86aca68afe7a69022f820b3a56dd9f04cf29ab84321db90a7a",
+          "replayed": false
+        },
+        "cleanup": {
+          "state": "pending",
+          "warnings": [
+            "tab cleanup: incomplete tabs"
+          ],
+          "revision": "6818:1792032521884.6:8",
+          "attempts": 1,
+          "attempted_at": 1792032521943,
+          "next_attempt_at": 1792032581943,
+          "last_refusal": "tab cleanup: incomplete tabs"
+        },
+        "delivered": true,
+        "inbox": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/supervisor/inbox.log",
+        "owner_pid": null,
+        "message": "[promote-queue] id=06a56084-cb0e-4523-aa2e-8e9d501c8590 lane=topic outcome=promoted reason=\"integrated-but-cleanup-pending: tab cleanup: incomplete tabs\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/promote/batches/435f53e4-bd73-4329-acf3-a05edbcf54e7/train.log receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/promote/batches/435f53e4-bd73-4329-acf3-a05edbcf54e7/train.json",
+        "delivery_id": "promote:06a56084-cb0e-4523-aa2e-8e9d501c8590",
+        "finished": "2026-10-15T02:48:42.477Z"
+      }
+    ]
+  },
+  "cleanup": {},
+  "agents": {
+    "lane-topic-e89309-95dd0d": {
+      "name": "lane-topic-e89309-95dd0d",
+      "pane_id": "w-lane:p1",
+      "workspace_id": "w-lane",
+      "cwd": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/lane",
+      "terminal_id": "t-lane-topic-e89309-95dd0d",
+      "agent_session": {
+        "value": "s-lane-topic-e89309-95dd0d"
+      },
+      "agent_status": "idle"
+    }
+  },
+  "settle": {
+    "R-1.json": {
+      "run": "R-1",
+      "item": "ENG-1",
+      "org": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org",
+      "repo": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project",
+      "common": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git",
+      "workspace": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/lane",
+      "lane": "topic",
+      "laneConfig": null,
+      "main": "main",
+      "head": "93d47de499b8dd73a741cc732f692cc664aa2ee8",
+      "mainHead": "e25b442a82e61fd8d85ec7653c5034e94da9d013",
+      "ask": "# Produce correct work\n\nwork.txt must contain correct.\n",
+      "reviewRoute": "review-codex",
+      "fixRoute": "engineer",
+      "timeout": 1800,
+      "reuse": false,
+      "to": "supervisor-herdr",
+      "stage": "complete",
+      "reportText": "---\nrun: R-1\noutcome: done\nsummary: The worker says the work is correct.\nheadline: The work is correct\nblockers: []\nproposals: []\nartifacts: [\"work.txt\"]\n---\n\nClaim: work.txt contains correct.\n",
+      "reportHash": "a17554c87e4885a65ab629c9aafcba96c6ce09ce3ab59fd5e8be48e2dd4e1cab",
+      "summary": "The worker says the work is correct.",
+      "blockers": [],
+      "proposals": [],
+      "questions": [],
+      "outcome": "done",
+      "round": 1,
+      "reviewPolicy": {
+        "cap": 0,
+        "source": "default",
+        "round": 1,
+        "prior_runs": []
+      },
+      "routeConfig": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.routes.json",
+      "report": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.report.md",
+      "reportIngest": {
+        "schema": "report-ingest/v1",
+        "run": "R-1",
+        "report": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.report.md",
+        "ingested_report": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/reports/R-1.md",
+        "sha256": "a17554c87e4885a65ab629c9aafcba96c6ce09ce3ab59fd5e8be48e2dd4e1cab",
+        "validation": {
+          "result": "passed",
+          "via": "record ingest",
+          "equivalent_to": "record check"
+        }
+      },
+      "diff": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.diff.patch",
+      "validation": {
+        "executed": false,
+        "deferred_to": "promotion queue",
+        "exit_code": 0,
+        "inherited": {
+          "schema": "lane-validation/v1",
+          "key": "27df78aba1abb04cdc2751cee90888d9add44f02a56d8bd22b4560e2b572f44d",
+          "head": "93d47de499b8dd73a741cc732f692cc664aa2ee8",
+          "tree": "5e5213ea3785d0fcfb4c250ac055731c227637b5",
+          "branch": "lane/topic",
+          "tier": "fast",
+          "command": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/validation.cjs",
+          "environment_fingerprint": "7030d6777e46be67164ccd20a2a05285451f3e7f11ba9acf2b98d38249c3a50b",
+          "exit_code": 0,
+          "signal": null,
+          "started_at": "2026-10-15T02:48:36.487Z",
+          "finished_at": "2026-10-15T02:48:36.551Z",
+          "duration_s": 0.063590625,
+          "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/lane-validation/27df78aba1abb04cdc2751cee90888d9add44f02a56d8bd22b4560e2b572f44d.a57d150f-c6e1-4429-801a-6997742671f6.log",
+          "log_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "reused": false,
+          "execution_receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/lane-validation/27df78aba1abb04cdc2751cee90888d9add44f02a56d8bd22b4560e2b572f44d.a57d150f-c6e1-4429-801a-6997742671f6.log.execution.json",
+          "executed": true,
+          "outcome": "green",
+          "gate_timeout": null,
+          "command_duration_s": 0.03541841599508189,
+          "longest_silence_s": 0.03541841599508189,
+          "limits": {
+            "wall_seconds": 4500,
+            "wall_source": "default",
+            "idle_seconds": 0,
+            "idle_source": "off"
+          }
+        },
+        "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.validation.log"
+      },
+      "reviewRelative": "docs/reviews/topic/93d47de-r1.md",
+      "reviewLog": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.review-r1.log",
+      "review": {
+        "verdict": "PASS",
+        "path": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/lane/docs/reviews/topic/93d47de-r1.md",
+        "sha256": "05a08ad670e32bd82e6a6d0dbb1732ea050c20fe565b54e2f27a57c97e33aa5d",
+        "text": "**PASS**\nSchema: lane-review/v1\nReviewed commit: 93d47de499b8dd73a741cc732f692cc664aa2ee8\nTopic: topic\nRound: 1\nReview ID: lr-54ad4d2354078ab024c766ffff34c40a\nBase branch: main\nBase commit: 23a446e3936a8e1cf20c26d35f9d1655e3fac61c\n\n## Findings\nNone\n\n## Re-executed\n```json\n[]\n```\n\n## Non-claims\n- The supplied gate is inherited evidence; this review does not claim tests passed.\n- Validation is inherited from settle; the explicit zero-command review budget permits no independent execution.\n\n## Unverified\nNone\n\n## Sanitization\n- absolute-path: 0\n- user: 0\n- host: 0\n- private: 0\n- relative-path: 0\n- redacted execution fields: None\n\n<!-- lane-review-complete -->\n",
+        "route": "review-codex"
+      },
+      "finalHead": "acdb439117eb8f0d2902f30553c0b29d63a4d797",
+      "rebase": {
+        "from": "76613f02f616c8165d75a81be70d4b1f6095c30d",
+        "onto": "e25b442a82e61fd8d85ec7653c5034e94da9d013",
+        "base": "23a446e3936a8e1cf20c26d35f9d1655e3fac61c",
+        "reviewed_commit": "93d47de499b8dd73a741cc732f692cc664aa2ee8",
+        "expected_tree": "042fee26cd67a09d14db331e87b23db628511b82",
+        "conflicts": [],
+        "state": "applied",
+        "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.rebase.log",
+        "scratch": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-rebase-BVzORT",
+        "actual_tree": "042fee26cd67a09d14db331e87b23db628511b82",
+        "to": "acdb439117eb8f0d2902f30553c0b29d63a4d797"
+      },
+      "result": {
+        "result": "promotable",
+        "run": "R-1",
+        "item": "ENG-1",
+        "lane": "topic",
+        "reason": "Report recorded, claims independently reviewed and clean lane; the promotion queue validates the integration batch before main moves",
+        "reviewed_commit": "93d47de499b8dd73a741cc732f692cc664aa2ee8",
+        "head": "acdb439117eb8f0d2902f30553c0b29d63a4d797",
+        "report": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.report.md",
+        "report_ingest": {
+          "schema": "report-ingest/v1",
+          "run": "R-1",
+          "report": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.report.md",
+          "ingested_report": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/reports/R-1.md",
+          "sha256": "a17554c87e4885a65ab629c9aafcba96c6ce09ce3ab59fd5e8be48e2dd4e1cab",
+          "validation": {
+            "result": "passed",
+            "via": "record ingest",
+            "equivalent_to": "record check"
+          }
+        },
+        "validation": {
+          "executed": false,
+          "deferred_to": "promotion queue",
+          "exit_code": 0,
+          "inherited": {
+            "schema": "lane-validation/v1",
+            "key": "27df78aba1abb04cdc2751cee90888d9add44f02a56d8bd22b4560e2b572f44d",
+            "head": "93d47de499b8dd73a741cc732f692cc664aa2ee8",
+            "tree": "5e5213ea3785d0fcfb4c250ac055731c227637b5",
+            "branch": "lane/topic",
+            "tier": "fast",
+            "command": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/validation.cjs",
+            "environment_fingerprint": "7030d6777e46be67164ccd20a2a05285451f3e7f11ba9acf2b98d38249c3a50b",
+            "exit_code": 0,
+            "signal": null,
+            "started_at": "2026-10-15T02:48:36.487Z",
+            "finished_at": "2026-10-15T02:48:36.551Z",
+            "duration_s": 0.063590625,
+            "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/lane-validation/27df78aba1abb04cdc2751cee90888d9add44f02a56d8bd22b4560e2b572f44d.a57d150f-c6e1-4429-801a-6997742671f6.log",
+            "log_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+            "reused": false,
+            "execution_receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.git/lane-validation/27df78aba1abb04cdc2751cee90888d9add44f02a56d8bd22b4560e2b572f44d.a57d150f-c6e1-4429-801a-6997742671f6.log.execution.json",
+            "executed": true,
+            "outcome": "green",
+            "gate_timeout": null,
+            "command_duration_s": 0.03541841599508189,
+            "longest_silence_s": 0.03541841599508189,
+            "limits": {
+              "wall_seconds": 4500,
+              "wall_source": "default",
+              "idle_seconds": 0,
+              "idle_source": "off"
+            }
+          },
+          "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.validation.log"
+        },
+        "review": {
+          "verdict": "PASS",
+          "path": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/lane/docs/reviews/topic/93d47de-r1.md",
+          "route": "review-codex",
+          "sha256": "05a08ad670e32bd82e6a6d0dbb1732ea050c20fe565b54e2f27a57c97e33aa5d"
+        },
+        "journal": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.json",
+        "rounds": 1,
+        "budget": {},
+        "review_policy": {
+          "cap": 0,
+          "source": "default",
+          "round": 1,
+          "prior_runs": []
+        },
+        "rebase": {
+          "from": "76613f02f616c8165d75a81be70d4b1f6095c30d",
+          "onto": "e25b442a82e61fd8d85ec7653c5034e94da9d013",
+          "base": "23a446e3936a8e1cf20c26d35f9d1655e3fac61c",
+          "reviewed_commit": "93d47de499b8dd73a741cc732f692cc664aa2ee8",
+          "expected_tree": "042fee26cd67a09d14db331e87b23db628511b82",
+          "conflicts": [],
+          "state": "applied",
+          "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.rebase.log",
+          "scratch": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-rebase-BVzORT",
+          "actual_tree": "042fee26cd67a09d14db331e87b23db628511b82",
+          "to": "acdb439117eb8f0d2902f30553c0b29d63a4d797"
+        }
+      },
+      "settleDecision": "Settle: promotable. Report recorded, claims independently reviewed and clean lane; the promotion queue validates the integration batch before main moves. Review round cap: 0 (default); round: 1. Reviewed 93d47de499b8dd73a741cc732f692cc664aa2ee8; head acdb439117eb8f0d2902f30553c0b29d63a4d797. Evidence: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-YKLWyF/project/.org/settle/R-1.json"
+    }
+  }
+}

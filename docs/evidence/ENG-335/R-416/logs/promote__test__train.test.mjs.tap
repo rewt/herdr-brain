@@ -1,0 +1,270 @@
+TAP version 13
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 1 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 4353.409792
+  ...
+# Subtest: five pending lanes drain in arrival order with the unbounded default
+ok 2 - five pending lanes drain in arrival order with the unbounded default
+  ---
+  duration_ms: 6588.557625
+  ...
+# Subtest: five pending lanes drain in arrival order with max_batch 3
+ok 3 - five pending lanes drain in arrival order with max_batch 3
+  ---
+  duration_ms: 6925.676667
+  ...
+# Subtest: invalid committed max_batch values refuse enqueue and drain without consuming pending lanes
+ok 4 - invalid committed max_batch values refuse enqueue and drain without consuming pending lanes
+  ---
+  duration_ms: 2410.800958
+  ...
+# Subtest: batch policy ignores untracked canonical config, uncommitted edits and lane copies
+ok 5 - batch policy ignores untracked canonical config, uncommitted edits and lane copies
+  ---
+  duration_ms: 425.381791
+  ...
+# Subtest: an unborn canonical branch uses default settings even with an untracked config
+ok 6 - an unborn canonical branch uses default settings even with an untracked config
+  ---
+  duration_ms: 995.256042
+  ...
+# Subtest: a failed settings git rev-parse retains a coded queue refusal and permits retry
+ok 7 - a failed settings git rev-parse retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 3927.767667
+  ...
+# Subtest: a failed settings git ls-tree retains a coded queue refusal and permits retry
+ok 8 - a failed settings git ls-tree retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 3822.205833
+  ...
+# Subtest: a failed settings git show retains a coded queue refusal and permits retry
+ok 9 - a failed settings git show retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 3798.150791
+  ...
+# Subtest: a invalid settings refusal after startup sends one queue notice and preserves the pending tail
+ok 10 - a invalid settings refusal after startup sends one queue notice and preserves the pending tail
+  ---
+  duration_ms: 2326.70975
+  ...
+# Subtest: a git-failed settings refusal after startup sends one queue notice and preserves the pending tail
+ok 11 - a git-failed settings refusal after startup sends one queue notice and preserves the pending tail
+  ---
+  duration_ms: 2335.148375
+  ...
+# Subtest: a settings git rev-parse timeout releases the queue for enqueuers and retains a coded refusal
+ok 12 - a settings git rev-parse timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 3114.249375
+  ...
+# Subtest: a settings git ls-tree timeout releases the queue for enqueuers and retains a coded refusal
+ok 13 - a settings git ls-tree timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 3030.987417
+  ...
+# Subtest: a settings git show timeout releases the queue for enqueuers and retains a coded refusal
+ok 14 - a settings git show timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 2987.461625
+  ...
+# Subtest: settings are read once for each new batch and not for an empty queue
+ok 15 - settings are read once for each new batch and not for an empty queue
+  ---
+  duration_ms: 3447.005125
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 16 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 4347.98825
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 17 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1552.233792
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 18 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 7347.101833
+  ...
+# Subtest: unprofiled batch waits before its project lock and proceeds when memory clears
+ok 19 - unprofiled batch waits before its project lock and proceeds when memory clears
+  ---
+  duration_ms: 6680.184959
+  ...
+# Subtest: unprofiled memory re-check refuses with a code and releases the project lock
+ok 20 - unprofiled memory re-check refuses with a code and releases the project lock
+  ---
+  duration_ms: 7172.044083
+  ...
+# Subtest: unprofiled memory re-check proceeds on clearing
+ok 21 - unprofiled memory re-check proceeds on clearing
+  ---
+  duration_ms: 2649.700042
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 22 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 2810.596125
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 23 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 3611.136416
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 24 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 3996.11775
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 25 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1737.579334
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 26 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 4686.719167
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 27 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 4870.368208
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 28 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 2678.799625
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 29 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 6387.898209
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 30 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 12125.723958
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 31 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 2098.58575
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 32 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2985.580209
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 33 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2881.517958
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 34 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 6252.33975
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 35 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 6657.438667
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 36 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 8132.224833
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 37 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 8403.702916
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 38 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 5863.234292
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 39 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 9549.317083
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 40 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 2549.707584
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 41 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+  ---
+  duration_ms: 8052.777792
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 42 - a paused check exposes its clock atomically while validation is still running
+  ---
+  duration_ms: 1705.450833
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 43 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+  ---
+  duration_ms: 6259.746
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 44 - red validation finishes the published clock and retains its real exit
+  ---
+  duration_ms: 1328.361292
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 45 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+  ---
+  duration_ms: 7613.476208
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 46 - validation that throws closes its telemetry clock without inventing green evidence
+  ---
+  duration_ms: 1320.573417
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 47 - affected test supplements run once in the batch gate, are recorded and block a red landing
+  ---
+  duration_ms: 3855.306292
+  ...
+# Subtest: a lane-modified planner cannot shrink canonical bound test coverage
+ok 48 - a lane-modified planner cannot shrink canonical bound test coverage
+  ---
+  duration_ms: 1384.727542
+  ...
+# Subtest: a lane-modified planner cannot invent canonical bound test coverage
+ok 49 - a lane-modified planner cannot invent canonical bound test coverage
+  ---
+  duration_ms: 1220.889084
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 50 - a changed gate cannot omit a bound deferred test file
+  ---
+  duration_ms: 1039.545708
+  ...
+# Subtest: canonical planning receives the union of bound required files and executes them beyond the extra cap
+ok 51 - canonical planning receives the union of bound required files and executes them beyond the extra cap
+  ---
+  duration_ms: 2732.23075
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..51
+# tests 51
+# suites 0
+# pass 51
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 215183.156334
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

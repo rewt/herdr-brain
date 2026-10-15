@@ -1,0 +1,152 @@
+TAP version 13
+# Subtest: main comparison guard catches both operand orders and inequality early returns
+ok 1 - main comparison guard catches both operand orders and inequality early returns
+  ---
+  duration_ms: 2.736792
+  ...
+# Subtest: product scripts never compare a resolved argv launch path to a module path
+ok 2 - product scripts never compare a resolved argv launch path to a module path
+  ---
+  duration_ms: 37.710833
+  ...
+# Subtest: promote/metrics.mjs executes through a directory symlink
+ok 3 - promote/metrics.mjs executes through a directory symlink
+  ---
+  duration_ms: 27.481917
+  ...
+# Subtest: promote/metrics.mjs executes through a file symlink
+ok 4 - promote/metrics.mjs executes through a file symlink
+  ---
+  duration_ms: 30.302875
+  ...
+# Subtest: promote/promote.mjs executes through a directory symlink
+ok 5 - promote/promote.mjs executes through a directory symlink
+  ---
+  duration_ms: 38.556792
+  ...
+# Subtest: promote/promote.mjs executes through a file symlink
+ok 6 - promote/promote.mjs executes through a file symlink
+  ---
+  duration_ms: 34.588333
+  ...
+# Subtest: supervisor/request.mjs executes through a directory symlink
+ok 7 - supervisor/request.mjs executes through a directory symlink
+  ---
+  duration_ms: 24.664917
+  ...
+# Subtest: supervisor/request.mjs executes through a file symlink
+ok 8 - supervisor/request.mjs executes through a file symlink
+  ---
+  duration_ms: 27.832583
+  ...
+# Subtest: supervisor/supervisor.mjs executes through a directory symlink
+ok 9 - supervisor/supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 36.854667
+  ...
+# Subtest: supervisor/supervisor.mjs executes through a file symlink
+ok 10 - supervisor/supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 35.733083
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs executes through a directory symlink
+ok 11 - supervisor/prompt-supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 33.728375
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs executes through a file symlink
+ok 12 - supervisor/prompt-supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 33.45425
+  ...
+# Subtest: supervisor/tidy-tabs.mjs executes through a directory symlink
+ok 13 - supervisor/tidy-tabs.mjs executes through a directory symlink
+  ---
+  duration_ms: 28.514916
+  ...
+# Subtest: supervisor/tidy-tabs.mjs executes through a file symlink
+ok 14 - supervisor/tidy-tabs.mjs executes through a file symlink
+  ---
+  duration_ms: 28.085
+  ...
+# Subtest: acceptance/run.mjs executes through a directory symlink
+ok 15 - acceptance/run.mjs executes through a directory symlink
+  ---
+  duration_ms: 32.3975
+  ...
+# Subtest: acceptance/run.mjs executes through a file symlink
+ok 16 - acceptance/run.mjs executes through a file symlink
+  ---
+  duration_ms: 32.894291
+  ...
+# Subtest: acceptance/settle.mjs executes through a directory symlink
+ok 17 - acceptance/settle.mjs executes through a directory symlink
+  ---
+  duration_ms: 140.515208
+  ...
+# Subtest: acceptance/settle.mjs executes through a file symlink
+ok 18 - acceptance/settle.mjs executes through a file symlink
+  ---
+  duration_ms: 144.562542
+  ...
+# Subtest: acceptance/supervisor.mjs executes through a directory symlink
+ok 19 - acceptance/supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 138.710916
+  ...
+# Subtest: acceptance/supervisor.mjs executes through a file symlink
+ok 20 - acceptance/supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 148.131125
+  ...
+# Subtest: housekeeping/housekeeping.mjs executes through a directory symlink
+ok 21 - housekeeping/housekeeping.mjs executes through a directory symlink
+  ---
+  duration_ms: 34.468166
+  ...
+# Subtest: housekeeping/housekeeping.mjs executes through a file symlink
+ok 22 - housekeeping/housekeeping.mjs executes through a file symlink
+  ---
+  duration_ms: 33.847375
+  ...
+# Subtest: test-slot/test-slot.mjs executes through a directory symlink
+ok 23 - test-slot/test-slot.mjs executes through a directory symlink
+  ---
+  duration_ms: 24.909416
+  ...
+# Subtest: test-slot/test-slot.mjs executes through a file symlink
+ok 24 - test-slot/test-slot.mjs executes through a file symlink
+  ---
+  duration_ms: 24.939875
+  ...
+# Subtest: acceptance/focus.mjs executes through a directory symlink
+ok 25 - acceptance/focus.mjs executes through a directory symlink
+  ---
+  duration_ms: 24.3975
+  ...
+# Subtest: acceptance/focus.mjs executes through a file symlink
+ok 26 - acceptance/focus.mjs executes through a file symlink
+  ---
+  duration_ms: 23.676959
+  ...
+# Subtest: isMain resolves both paths and returns false for missing, dangling or different launchers
+ok 27 - isMain resolves both paths and returns false for missing, dangling or different launchers
+  ---
+  duration_ms: 23.182209
+  ...
+# Subtest: record loads settle, lanes and housekeeping views only when their command runs
+ok 28 - record loads settle, lanes and housekeeping views only when their command runs
+  ---
+  duration_ms: 0.5375
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..28
+# tests 28
+# suites 0
+# pass 28
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1345.067667
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

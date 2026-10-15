@@ -1,0 +1,42 @@
+TAP version 13
+# Subtest: external launch records the Monitor identity, retries exactly and refuses occupant changes
+ok 1 - external launch records the Monitor identity, retries exactly and refuses occupant changes
+  ---
+  duration_ms: 960.723042
+  ...
+# Subtest: missing identities, settled runs and worker names owned by newer runs cannot be backfilled
+ok 2 - missing identities, settled runs and worker names owned by newer runs cannot be backfilled
+  ---
+  duration_ms: 723.169541
+  ...
+# Subtest: one launch occupant identity suffices but a retry cannot enrich it later
+ok 3 - one launch occupant identity suffices but a retry cannot enrich it later
+  ---
+  duration_ms: 449.617875
+  ...
+# Subtest: legacy launcher fields and every partial receipt refuse live identity backfill without events
+ok 4 - legacy launcher fields and every partial receipt refuse live identity backfill without events
+  ---
+  duration_ms: 1225.938375
+  ...
+# Subtest: a complete launch receipt permits only an exact retry after settlement
+ok 5 - a complete launch receipt permits only an exact retry after settlement
+  ---
+  duration_ms: 631.326625
+  ...
+# Subtest: relative and symlink cwd are resolved once before child commands
+ok 6 - relative and symlink cwd are resolved once before child commands
+  ---
+  duration_ms: 465.592417
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4547.629125
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

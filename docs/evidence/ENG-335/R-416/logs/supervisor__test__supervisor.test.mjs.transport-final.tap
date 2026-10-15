@@ -1,0 +1,122 @@
+TAP version 13
+# Subtest: cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+ok 1 - cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+  ---
+  duration_ms: 1061.005083
+  ...
+# Subtest: cold start Lessons handles empty records and terminal controls in claims
+ok 2 - cold start Lessons handles empty records and terminal controls in claims
+  ---
+  duration_ms: 462.241125
+  ...
+# Subtest: cold start surfaces host memory pressure without process rows, storage advisories or record changes
+ok 3 - cold start surfaces host memory pressure without process rows, storage advisories or record changes
+  ---
+  duration_ms: 136.775167
+  ...
+# Subtest: supervisor handle exposes review memory wait before pressure clears
+ok 4 - supervisor handle exposes review memory wait before pressure clears
+  ---
+  duration_ms: 9201.064709
+  ...
+# Subtest: supervisor handle exposes correction memory wait before pressure clears
+ok 5 - supervisor handle exposes correction memory wait before pressure clears
+  ---
+  duration_ms: 10925.176041
+  ...
+# Subtest: handle returns capped findings and promotion records explicit acceptance with exact heads
+ok 6 - handle returns capped findings and promotion records explicit acceptance with exact heads
+  ---
+  duration_ms: 7658.609709
+  ...
+# Subtest: handle explicitly sends capped findings back once and adopts its saved correction
+ok 7 - handle explicitly sends capped findings back once and adopts its saved correction
+  ---
+  duration_ms: 6835.458417
+  ...
+# Subtest: STOP arriving during review retains a resumable correction without launching another worker
+ok 8 - STOP arriving during review retains a resumable correction without launching another worker
+  ---
+  duration_ms: 6310.817042
+  ...
+# Subtest: supervisor binds head and run into the queue and retries confirmed refusals with history
+ok 9 - supervisor binds head and run into the queue and retries confirmed refusals with history
+  ---
+  duration_ms: 9795.814084
+  ...
+# Subtest: bound promotion rechecks queued runs and record changes during validation before integration
+ok 10 - bound promotion rechecks queued runs and record changes during validation before integration
+  ---
+  duration_ms: 18529.353166
+  ...
+# Subtest: late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+ok 11 - late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+  ---
+  duration_ms: 10489.303375
+  ...
+# Subtest: late original and correction notices after lane removal preserve promotion guards and never replay settlement
+ok 12 - late original and correction notices after lane removal preserve promotion guards and never replay settlement
+  ---
+  duration_ms: 15309.826167
+  ...
+# Subtest: refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+ok 13 - refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+  ---
+  duration_ms: 6204.64475
+  ...
+# Subtest: supervisor entry and final notices carry the unconfigured cycle through actual promotion
+ok 14 - supervisor entry and final notices carry the unconfigured cycle through actual promotion
+  ---
+  duration_ms: 27336.291
+  ...
+# Subtest: cold start includes routes, history across midnight and a durable explicit reading cursor
+ok 15 - cold start includes routes, history across midnight and a durable explicit reading cursor
+  ---
+  duration_ms: 800.298167
+  ...
+# Subtest: ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+ok 16 - ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+  ---
+  duration_ms: 1221.349958
+  ...
+# Subtest: workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+ok 17 - workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+  ---
+  duration_ms: 1144.988166
+  ...
+# Subtest: non-done reports hand off substance without review; saved enqueue uncertainty never replays
+ok 18 - non-done reports hand off substance without review; saved enqueue uncertainty never replays
+  ---
+  duration_ms: 1067.486792
+  ...
+# Subtest: full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+ok 19 - full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+  ---
+  duration_ms: 874.705166
+  ...
+# Subtest: conditional record completion preserves newer work, unresolved and declined blockers
+ok 20 - conditional record completion preserves newer work, unresolved and declined blockers
+  ---
+  duration_ms: 923.675833
+  ...
+# Subtest: a disappeared checkout retains its open record run through a dispatch identity receipt
+ok 21 - a disappeared checkout retains its open record run through a dispatch identity receipt
+  ---
+  duration_ms: 216.564875
+  ...
+# Subtest: supervisor retries a confirmed timeout with the same reviewed binding
+ok 22 - supervisor retries a confirmed timeout with the same reviewed binding
+  ---
+  duration_ms: 5371.95225
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..22
+# tests 22
+# suites 0
+# pass 22
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 141990.712916
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,32 @@
+TAP version 13
+# Subtest: ingestion receipt requires the captured recorded report before review or correction
+ok 1 - ingestion receipt requires the captured recorded report before review or correction
+  ---
+  duration_ms: 7703.376333
+  ...
+# Subtest: lost successful correction start recovers through settle retry with one recorded run and one prompt
+ok 2 - lost successful correction start recovers through settle retry with one recorded run and one prompt
+  ---
+  duration_ms: 7588.300584
+  ...
+# Subtest: lost-start reconciliation retains closures, unresolved and declined blockers, and newer outcomes
+ok 3 - lost-start reconciliation retains closures, unresolved and declined blockers, and newer outcomes
+  ---
+  duration_ms: 28673.012208
+  ...
+# Subtest: lost-start reconciliation refuses multiple recorded matches without launching work
+ok 4 - lost-start reconciliation refuses multiple recorded matches without launching work
+  ---
+  duration_ms: 5736.810792
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 49795.617167
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,72 @@
+TAP version 13
+# Subtest: content-discarding path merge=keep-current driver cannot establish preservation
+ok 1 - content-discarding path merge=keep-current driver cannot establish preservation
+  ---
+  duration_ms: 4205.1175
+  ...
+# Subtest: content-discarding merge.default driver cannot establish preservation
+ok 2 - content-discarding merge.default driver cannot establish preservation
+  ---
+  duration_ms: 4241.092584
+  ...
+# Subtest: content-discarding path merge=text driver cannot establish preservation
+ok 3 - content-discarding path merge=text driver cannot establish preservation
+  ---
+  duration_ms: 4189.650291
+  ...
+# Subtest: content-discarding path merge=set driver cannot establish preservation
+ok 4 - content-discarding path merge=set driver cannot establish preservation
+  ---
+  duration_ms: 4205.507333
+  ...
+# Subtest: content-discarding path merge=unspecified driver cannot establish preservation
+ok 5 - content-discarding path merge=unspecified driver cannot establish preservation
+  ---
+  duration_ms: 4242.504167
+  ...
+# Subtest: content-discarding merge.default driver cannot establish preservation
+ok 6 - content-discarding merge.default driver cannot establish preservation
+  ---
+  duration_ms: 4230.98225
+  ...
+# Subtest: custom attributes in an intermediate reviewed commit also refuse replay
+ok 7 - custom attributes in an intermediate reviewed commit also refuse replay
+  ---
+  duration_ms: 4295.726875
+  ...
+# Subtest: directory-rename split conflicts report informational paths without unmerged files
+ok 8 - directory-rename split conflicts report informational paths without unmerged files
+  ---
+  duration_ms: 4181.681375
+  ...
+# Subtest: a concurrent commit during the final record read remains intact
+ok 9 - a concurrent commit during the final record read remains intact
+  ---
+  duration_ms: 4865.458125
+  ...
+# Subtest: a concurrent switch during the final record read remains intact
+ok 10 - a concurrent switch during the final record read remains intact
+  ---
+  duration_ms: 4812.142292
+  ...
+# Subtest: HEAD and index locks exclude native commits and branch switches during the ref transaction
+ok 11 - HEAD and index locks exclude native commits and branch switches during the ref transaction
+  ---
+  duration_ms: 5375.858125
+  ...
+# Subtest: the named-ref compare-and-swap refuses a commit after the locked identity check
+ok 12 - the named-ref compare-and-swap refuses a commit after the locked identity check
+  ---
+  duration_ms: 8758.448166
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..12
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 57707.8215
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,302 @@
+TAP version 13
+# Subtest: native 1-member batch reconciles atomically before cleanup and duplicate recovery
+ok 1 - native 1-member batch reconciles atomically before cleanup and duplicate recovery
+  ---
+  duration_ms: 2850.743458
+  ...
+# Subtest: native 3-member batch reconciles atomically before cleanup and duplicate recovery
+ok 2 - native 3-member batch reconciles atomically before cleanup and duplicate recovery
+  ---
+  duration_ms: 6083.560042
+  ...
+# Subtest: integrated record refusal retains every lane and resumes records without another gate
+ok 3 - integrated record refusal retains every lane and resumes records without another gate
+  ---
+  duration_ms: 5262.775
+  ...
+# Subtest: bisected batch accounts for its exclusion without mutating newer excluded work
+ok 4 - bisected batch accounts for its exclusion without mutating newer excluded work
+  ---
+  duration_ms: 7610.83525
+  ...
+# Subtest: recovery refuses new-run and retains all integrated lanes
+ok 5 - recovery refuses new-run and retains all integrated lanes
+  ---
+  duration_ms: 4072.409792
+  ...
+# Subtest: recovery refuses blocker and retains all integrated lanes
+ok 6 - recovery refuses blocker and retains all integrated lanes
+  ---
+  duration_ms: 4073.682125
+  ...
+# Subtest: recovery refuses missing-member and retains all integrated lanes
+ok 7 - recovery refuses missing-member and retains all integrated lanes
+  ---
+  duration_ms: 3954.273625
+  ...
+# Subtest: lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+ok 8 - lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+  ---
+  duration_ms: 5175.660083
+  ...
+# Subtest: native completion refuses operator-reserved work before gating or integration
+ok 9 - native completion refuses operator-reserved work before gating or integration
+  ---
+  duration_ms: 1264.865417
+  ...
+# Subtest: native completion refuses human work before gating or integration
+ok 10 - native completion refuses human work before gating or integration
+  ---
+  duration_ms: 1233.185833
+  ...
+# Subtest: native admission isolates unknown-run while valid members reconcile
+ok 11 - native admission isolates unknown-run while valid members reconcile
+  ---
+  duration_ms: 4932.537375
+  ...
+# Subtest: native admission isolates wrong-record while valid members reconcile
+ok 12 - native admission isolates wrong-record while valid members reconcile
+  ---
+  duration_ms: 5112.8575
+  ...
+# Subtest: native admission isolates duplicate-item while valid members reconcile
+ok 13 - native admission isolates duplicate-item while valid members reconcile
+  ---
+  duration_ms: 5526.454375
+  ...
+# Subtest: bound and unbound requests use separate native batches
+ok 14 - bound and unbound requests use separate native batches
+  ---
+  duration_ms: 6286.361875
+  ...
+# Subtest: a done report with questions is refused before the gate while valid members complete
+ok 15 - a done report with questions is refused before the gate while valid members complete
+  ---
+  duration_ms: 3273.321584
+  ...
+# Subtest: included item notes during the gate refuse integration without refreshing captured fingerprints
+ok 16 - included item notes during the gate refuse integration without refreshing captured fingerprints
+  ---
+  duration_ms: 1854.09275
+  ...
+# Subtest: the held record lock checks the original fingerprint immediately before fast-forward
+ok 17 - the held record lock checks the original fingerprint immediately before fast-forward
+  ---
+  duration_ms: 434.609792
+  ...
+# Subtest: native completion explicitly retires superseded open runs through the record transaction
+ok 18 - native completion explicitly retires superseded open runs through the record transaction
+  ---
+  duration_ms: 4161.481792
+  ...
+# Subtest: manual reconciliation recovery complete retains proof and handles cleanup
+ok 19 - manual reconciliation recovery complete retains proof and handles cleanup
+  ---
+  duration_ms: 6519.031375
+  ...
+# Subtest: manual reconciliation recovery missing-member retains proof and handles cleanup
+ok 20 - manual reconciliation recovery missing-member retains proof and handles cleanup
+  ---
+  duration_ms: 5058.446583
+  ...
+# Subtest: manual reconciliation recovery wrong-head retains proof and handles cleanup
+ok 21 - manual reconciliation recovery wrong-head retains proof and handles cleanup
+  ---
+  duration_ms: 5018.832584
+  ...
+# Subtest: manual reconciliation recovery reopened retains proof and handles cleanup
+ok 22 - manual reconciliation recovery reopened retains proof and handles cleanup
+  ---
+  duration_ms: 5962.068167
+  ...
+# Subtest: manual reconciliation recovery new-run retains proof and handles cleanup
+ok 23 - manual reconciliation recovery new-run retains proof and handles cleanup
+  ---
+  duration_ms: 6043.113833
+  ...
+# Subtest: native admission refuses omitted superseded attempts without wedging valid work
+ok 24 - native admission refuses omitted superseded attempts without wedging valid work
+  ---
+  duration_ms: 3038.553833
+  ...
+# Subtest: bisected manual recovery covered accounts for newer excluded work
+ok 25 - bisected manual recovery covered accounts for newer excluded work
+  ---
+  duration_ms: 7134.758375
+  ...
+# Subtest: bisected manual recovery missing-exclusion accounts for newer excluded work
+ok 26 - bisected manual recovery missing-exclusion accounts for newer excluded work
+  ---
+  duration_ms: 6065.945458
+  ...
+# Subtest: a refused questioned dependency cannot let another member integrate before completion refuses
+ok 27 - a refused questioned dependency cannot let another member integrate before completion refuses
+  ---
+  duration_ms: 4187.487833
+  ...
+# Subtest: split recovery accounts for never-captured dirty members without another gate
+ok 28 - split recovery accounts for never-captured dirty members without another gate
+  ---
+  duration_ms: 5924.072208
+  ...
+# Subtest: split recovery accounts for never-captured off-main members without another gate
+ok 29 - split recovery accounts for never-captured off-main members without another gate
+  ---
+  duration_ms: 5758.733125
+  ...
+# Subtest: split recovery accounts for never-captured host-timeout members without another gate
+ok 30 - split recovery accounts for never-captured host-timeout members without another gate
+  ---
+  duration_ms: 4621.723959
+  ...
+# Subtest: bisected canonical dirty refusal preserves captured historical exclusions
+ok 31 - bisected canonical dirty refusal preserves captured historical exclusions
+  ---
+  duration_ms: 6502.578625
+  ...
+# Subtest: bisected canonical off-main refusal preserves captured historical exclusions
+ok 32 - bisected canonical off-main refusal preserves captured historical exclusions
+  ---
+  duration_ms: 6447.46375
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: complete
+ok 33 - legacy queue and late notices recover only inspected exact coverage: complete
+  ---
+  duration_ms: 8593.002417
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: no-marker
+ok 34 - legacy queue and late notices recover only inspected exact coverage: no-marker
+  ---
+  duration_ms: 6346.892542
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-member
+ok 35 - legacy queue and late notices recover only inspected exact coverage: missing-member
+  ---
+  duration_ms: 6767.676417
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: wrong-head
+ok 36 - legacy queue and late notices recover only inspected exact coverage: wrong-head
+  ---
+  duration_ms: 6785.689458
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-exclusion
+ok 37 - legacy queue and late notices recover only inspected exact coverage: missing-exclusion
+  ---
+  duration_ms: 6788.524584
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-superseded
+ok 38 - legacy queue and late notices recover only inspected exact coverage: missing-superseded
+  ---
+  duration_ms: 6851.561917
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: reopened
+ok 39 - legacy queue and late notices recover only inspected exact coverage: reopened
+  ---
+  duration_ms: 8470.917041
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: new-run
+ok 40 - legacy queue and late notices recover only inspected exact coverage: new-run
+  ---
+  duration_ms: 8194.913042
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-evidence
+ok 41 - legacy queue and late notices recover only inspected exact coverage: missing-evidence
+  ---
+  duration_ms: 6899.41775
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: unproved-head
+ok 42 - legacy queue and late notices recover only inspected exact coverage: unproved-head
+  ---
+  duration_ms: 6924.222375
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: wrong-log
+ok 43 - legacy queue and late notices recover only inspected exact coverage: wrong-log
+  ---
+  duration_ms: 6328.258833
+  ...
+# Subtest: legacy replacement recovery cleans completed lanes with telemetry failure: false
+ok 44 - legacy replacement recovery cleans completed lanes with telemetry failure: false
+  ---
+  duration_ms: 6115.514083
+  ...
+# Subtest: legacy replacement recovery cleans completed lanes with telemetry failure: true
+ok 45 - legacy replacement recovery cleans completed lanes with telemetry failure: true
+  ---
+  duration_ms: 6093.355417
+  ...
+# Subtest: prepared replacement recovery cleans completed lanes with telemetry failure: false
+ok 46 - prepared replacement recovery cleans completed lanes with telemetry failure: false
+  ---
+  duration_ms: 6143.543833
+  ...
+# Subtest: prepared replacement recovery cleans completed lanes with telemetry failure: true
+ok 47 - prepared replacement recovery cleans completed lanes with telemetry failure: true
+  ---
+  duration_ms: 6048.782125
+  ...
+# Subtest: a linked pass-review recorded after enqueue is checked by the native worker
+ok 48 - a linked pass-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 2397.867833
+  ...
+# Subtest: a child-only pass-review recorded after enqueue is checked by the native worker
+ok 49 - a child-only pass-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 2425.77725
+  ...
+# Subtest: a linked fail-review recorded after enqueue is checked by the native worker
+ok 50 - a linked fail-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1571.421917
+  ...
+# Subtest: a child-only fail-review recorded after enqueue is checked by the native worker
+ok 51 - a child-only fail-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1484.8915
+  ...
+# Subtest: a linked no-verdict-review recorded after enqueue is checked by the native worker
+ok 52 - a linked no-verdict-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1488.226792
+  ...
+# Subtest: a child-only no-verdict-review recorded after enqueue is checked by the native worker
+ok 53 - a child-only no-verdict-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1379.573042
+  ...
+# Subtest: a linked open-question recorded after enqueue is checked by the native worker
+ok 54 - a linked open-question recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1185.781125
+  ...
+# Subtest: a linked review-question recorded after enqueue is checked by the native worker
+ok 55 - a linked review-question recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1637.619
+  ...
+# Subtest: a child-only review-question recorded after enqueue is checked by the native worker
+ok 56 - a child-only review-question recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1488.976083
+  ...
+# Subtest: an operator question raised under the work after the fast-forward holds batch completion until it is answered
+ok 57 - an operator question raised under the work after the fast-forward holds batch completion until it is answered
+  ---
+  duration_ms: 5928.064875
+  ...
+# Subtest: an operator question raised under the review after the fast-forward holds batch completion until it is answered
+ok 58 - an operator question raised under the review after the fast-forward holds batch completion until it is answered
+  ---
+  duration_ms: 6071.505292
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..58
+# tests 58
+# suites 0
+# pass 58
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 281965.663375
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

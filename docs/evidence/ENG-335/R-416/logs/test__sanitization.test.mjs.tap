@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: many unterminated string-control introducers sanitize independently
+ok 1 - many unterminated string-control introducers sanitize independently
+  ---
+  duration_ms: 1.356542
+  ...
+# Subtest: human-readable CLI views and generated briefs strip terminal control sequences
+ok 2 - human-readable CLI views and generated briefs strip terminal control sequences
+  ---
+  duration_ms: 346.733458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 432.322459
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

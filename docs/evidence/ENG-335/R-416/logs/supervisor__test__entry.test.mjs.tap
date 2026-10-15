@@ -1,0 +1,166 @@
+TAP version 13
+# Subtest: canonical supervisor entry consumes a hint once without starting housekeeping
+ok 1 - canonical supervisor entry consumes a hint once without starting housekeeping
+  ---
+  duration_ms: 285.805959
+  ...
+# Subtest: repository does not track a Codex project hook that can interrupt unattended workers
+ok 2 - repository does not track a Codex project hook that can interrupt unattended workers
+  ---
+  duration_ms: 0.066291
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 3 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 953.528542
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 4 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 276.484959
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 5 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 1052.429375
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 6 - entry respects {"enabled":false}
+  ---
+  duration_ms: 193.231542
+  ...
+# Subtest: entry respects {"resume":false}
+ok 7 - entry respects {"resume":false}
+  ---
+  duration_ms: 193.18925
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 8 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 140.933667
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 9 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 207.409917
+  ...
+# Subtest: entry lock inspection includes retirement request, consume and recovery owners
+ok 10 - entry lock inspection includes retirement request, consume and recovery owners
+  ---
+  duration_ms: 98.239542
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 11 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 365.524458
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 12 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 694.445583
+  ...
+# Subtest: entry safely handles STOP
+ok 13 - entry safely handles STOP
+  ---
+  duration_ms: 276.750792
+  ...
+# Subtest: entry safely handles invalid-config
+ok 14 - entry safely handles invalid-config
+  ---
+  duration_ms: 411.0495
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 15 - entry safely handles invalid-pid
+  ---
+  duration_ms: 354.273333
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 16 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 377.573208
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 17 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 313.88475
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 18 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 183.6025
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 19 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 180.775875
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 20 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 183.333125
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 21 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 172.263
+  ...
+# Subtest: watch recovery handles reused identity without blocking entry
+ok 22 - watch recovery handles reused identity without blocking entry
+  ---
+  duration_ms: 455.630916
+  ...
+# Subtest: watch recovery handles unreadable identity without blocking entry
+ok 23 - watch recovery handles unreadable identity without blocking entry
+  ---
+  duration_ms: 328.132084
+  ...
+# Subtest: watch recovery handles legacy-live identity without blocking entry
+ok 24 - watch recovery handles legacy-live identity without blocking entry
+  ---
+  duration_ms: 354.705
+  ...
+# Subtest: watch recovery handles changed-during-entry identity without blocking entry
+ok 25 - watch recovery handles changed-during-entry identity without blocking entry
+  ---
+  duration_ms: 361.797833
+  ...
+# Subtest: empty supervisor environment and null dispatch recipient use the supervisor fallback
+ok 26 - empty supervisor environment and null dispatch recipient use the supervisor fallback
+  ---
+  duration_ms: 432.08175
+  ...
+# Subtest: housekeeping snapshot reports reused birth without changing the lock
+ok 27 - housekeeping snapshot reports reused birth without changing the lock
+  ---
+  duration_ms: 105.5055
+  ...
+# Subtest: housekeeping snapshot reports unreadable birth without changing the lock
+ok 28 - housekeeping snapshot reports unreadable birth without changing the lock
+  ---
+  duration_ms: 100.077833
+  ...
+# Subtest: housekeeping snapshot reports legacy-live birth without changing the lock
+ok 29 - housekeeping snapshot reports legacy-live birth without changing the lock
+  ---
+  duration_ms: 106.906875
+  ...
+# Subtest: housekeeping resume replaces a reused PID without signaling the replacement process
+ok 30 - housekeeping resume replaces a reused PID without signaling the replacement process
+  ---
+  duration_ms: 734.082042
+  ...
+# Subtest: Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+ok 31 - Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+  ---
+  duration_ms: 877.314416
+  ...
+1..31
+# tests 31
+# suites 0
+# pass 31
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10813.245625
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

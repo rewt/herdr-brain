@@ -1,0 +1,126 @@
+TAP version 13
+# Subtest: known batch clocks split queue, slot, external lock, prepare and command time per lane
+ok 1 - known batch clocks split queue, slot, external lock, prepare and command time per lane
+  ---
+  duration_ms: 77.407
+  ...
+# Subtest: old receipts retain gate measurements while missing phase clocks are unknown, never zero
+ok 2 - old receipts retain gate measurements while missing phase clocks are unknown, never zero
+  ---
+  duration_ms: 78.512166
+  ...
+# Subtest: legacy profiled batches cannot split queue wait from external-lock and slot waits
+ok 3 - legacy profiled batches cannot split queue wait from external-lock and slot waits
+  ---
+  duration_ms: 78.844
+  ...
+# Subtest: never-prepared stale attempt contributes zero beside timed preparation: main moved; replan from the current integration branch
+ok 4 - never-prepared stale attempt contributes zero beside timed preparation: main moved; replan from the current integration branch
+  ---
+  duration_ms: 85.335375
+  ...
+# Subtest: never-prepared stale attempt contributes zero beside timed preparation: main moved during preparation; replan
+ok 5 - never-prepared stale attempt contributes zero beside timed preparation: main moved during preparation; replan
+  ---
+  duration_ms: 81.710583
+  ...
+# Subtest: never-prepared invalid attempt contributes zero beside timed preparation: capture refused before preparation
+ok 6 - never-prepared invalid attempt contributes zero beside timed preparation: capture refused before preparation
+  ---
+  duration_ms: 72.824083
+  ...
+# Subtest: never-prepared complete attempt contributes zero beside timed preparation: all lanes refused rebase replay before preparation
+ok 7 - never-prepared complete attempt contributes zero beside timed preparation: all lanes refused rebase replay before preparation
+  ---
+  duration_ms: 73.081584
+  ...
+# Subtest: terminal attempts with preparation or gate evidence cannot be mistaken for skipped work
+ok 8 - terminal attempts with preparation or gate evidence cannot be mistaken for skipped work
+  ---
+  duration_ms: 74.513625
+  ...
+# Subtest: bisection and resume phase totals follow attempt membership without charging reused proofs
+ok 9 - bisection and resume phase totals follow attempt membership without charging reused proofs
+  ---
+  duration_ms: 83.309875
+  ...
+# Subtest: unfinished and reversed phase intervals do not become zero or partial totals
+ok 10 - unfinished and reversed phase intervals do not become zero or partial totals
+  ---
+  duration_ms: 72.94075
+  ...
+# Subtest: bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+ok 11 - bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+  ---
+  duration_ms: 86.512125
+  ...
+# Subtest: unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+ok 12 - unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+  ---
+  duration_ms: 66.830375
+  ...
+# Subtest: cached and duplicated green proofs never inflate gate time or executions
+ok 13 - cached and duplicated green proofs never inflate gate time or executions
+  ---
+  duration_ms: 68.14775
+  ...
+# Subtest: window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+ok 14 - window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+  ---
+  duration_ms: 92.400083
+  ...
+# Subtest: linked worktrees read the same canonical receipts; text and JSON commands make no changes
+ok 15 - linked worktrees read the same canonical receipts; text and JSON commands make no changes
+  ---
+  duration_ms: 209.695583
+  ...
+# Subtest: missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+ok 16 - missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+  ---
+  duration_ms: 99.47575
+  ...
+# Subtest: TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+ok 17 - TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+  ---
+  duration_ms: 0.480042
+  ...
+# Subtest: slowest steps sum sequential streams per gate rather than treating streams as whole steps
+ok 18 - slowest steps sum sequential streams per gate rather than treating streams as whole steps
+  ---
+  duration_ms: 68.97225
+  ...
+# Subtest: unattributed failures and unavailable Git history remain explicit hints
+ok 19 - unattributed failures and unavailable Git history remain explicit hints
+  ---
+  duration_ms: 86.218792
+  ...
+# Subtest: malformed receipts are skipped with evidence rather than crashing the project report
+ok 20 - malformed receipts are skipped with evidence rather than crashing the project report
+  ---
+  duration_ms: 75.723292
+  ...
+# Subtest: empty projects return unavailable rates and medians instead of invented zero timings
+ok 21 - empty projects return unavailable rates and medians instead of invented zero timings
+  ---
+  duration_ms: 70.194041
+  ...
+# Subtest: archived baseline imports read-only with selection bias and lower bounds separate from the current window
+ok 22 - archived baseline imports read-only with selection bias and lower bounds separate from the current window
+  ---
+  duration_ms: 127.028042
+  ...
+# Subtest: train metrics can include run waits and legacy missing counts without changing either window basis
+ok 23 - train metrics can include run waits and legacy missing counts without changing either window basis
+  ---
+  duration_ms: 247.117458
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2117.700875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

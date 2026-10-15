@@ -1,0 +1,32 @@
+TAP version 13
+# Subtest: watch acknowledges a delayed startup at load 24, without launching real background work
+ok 1 - watch acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 202.144541
+  ...
+# Subtest: promote acknowledges a delayed startup at load 24, without launching real background work
+ok 2 - promote acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 230.8325
+  ...
+# Subtest: inbox acknowledges a delayed startup at load 24, without launching real background work
+ok 3 - inbox acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 158.711791
+  ...
+# Subtest: housekeeping acknowledges a delayed startup at load 24, without launching real background work
+ok 4 - housekeeping acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 265.103542
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 958.234875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

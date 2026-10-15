@@ -1,0 +1,61 @@
+TAP version 13
+# Subtest: project cap counts completed reviews across fix runs and records the no-dispatch decision
+ok 1 - project cap counts completed reviews across fix runs and records the no-dispatch decision
+  ---
+  duration_ms: 9981.405917
+  ...
+# Subtest: a recorded item cap overrides the project and flag overrides persist on the item
+ok 2 - a recorded item cap overrides the project and flag overrides persist on the item
+  ---
+  duration_ms: 10002.618208
+  ...
+# Subtest: explicit correction after capped findings remains resumable under STOP
+ok 3 - explicit correction after capped findings remains resumable under STOP
+  ---
+  duration_ms: 6378.825625
+  ...
+# Subtest: zero item cap disables the project cap; worker starts without reviews do not consume rounds
+ok 4 - zero item cap disables the project cap; worker starts without reviews do not consume rounds
+  ---
+  duration_ms: 5651.05975
+  ...
+# Subtest: cap reached still dispatches for Major or FAIL
+ok 5 - cap reached still dispatches for Major or FAIL
+  ---
+  duration_ms: 11118.449416
+  ...
+# Subtest: cap cannot waive unverified claims or unparsed finding severity
+ok 6 - cap cannot waive unverified claims or unparsed finding severity
+  ---
+  duration_ms: 7777.630292
+  ...
+# Subtest: uncertain reviewer retries retain the cap snapshot and do not consume another completed round
+ok 7 - uncertain reviewer retries retain the cap snapshot and do not consume another completed round
+  ---
+  duration_ms: 6197.102709
+  ...
+# Subtest: cached capped findings and explicit correction recheck head and current run
+ok 8 - cached capped findings and explicit correction recheck head and current run
+  ---
+  duration_ms: 8515.173125
+  ...
+# Subtest: malformed cap config or flags are refused before review and dispatch
+ok 9 - malformed cap config or flags are refused before review and dispatch
+  ---
+  duration_ms: 1613.48
+  ...
+# Subtest: capped decisions recover missing or lost record responses without repeating review or writing duplicate notes
+ok 10 - capped decisions recover missing or lost record responses without repeating review or writing duplicate notes
+  ---
+  duration_ms: 10319.714834
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 77592.709875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

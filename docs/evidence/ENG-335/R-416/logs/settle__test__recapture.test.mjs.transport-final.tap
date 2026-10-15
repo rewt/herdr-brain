@@ -1,0 +1,113 @@
+TAP version 13
+# Subtest: recovery: moved main cannot swallow a capped findings correction
+ok 1 - recovery: moved main cannot swallow a capped findings correction
+  ---
+  duration_ms: 6755.718333
+  ...
+# Subtest: recovery: moved main cannot swallow a capped findings correction even with a replay conflict
+ok 2 - recovery: moved main cannot swallow a capped findings correction even with a replay conflict
+  ---
+  duration_ms: 6701.159333
+  ...
+# Subtest: recovery: record-stage recapture waits for ingestion and follows the latest main
+ok 3 - recovery: record-stage recapture waits for ingestion and follows the latest main
+  ---
+  duration_ms: 5867.736959
+  ...
+# Subtest: recovery: a lost review commit response is adopted before recapturing moved main
+ok 4 - recovery: a lost review commit response is adopted before recapturing moved main
+  ---
+  duration_ms: 10105.416417
+  ...
+# Subtest: lost review commit recovery refuses unrelated changes after main moves
+ok 5 - lost review commit recovery refuses unrelated changes after main moves
+  ---
+  duration_ms: 6913.585375
+  ...
+# Subtest: lost review commit recovery refuses review-bytes changes after main moves
+ok 6 - lost review commit recovery refuses review-bytes changes after main moves
+  ---
+  duration_ms: 6658.679917
+  ...
+# Subtest: lost review commit recovery refuses merge changes after main moves
+ok 7 - lost review commit recovery refuses merge changes after main moves
+  ---
+  duration_ms: 6666.957208
+  ...
+# Subtest: two recaptures after an applied rebase replay only lane and review commits from the same lineage
+ok 8 - two recaptures after an applied rebase replay only lane and review commits from the same lineage
+  ---
+  duration_ms: 6162.724166
+  ...
+# Subtest: uncertain review retry guards lane mutation before recapturing a moved main
+ok 9 - uncertain review retry guards lane mutation before recapturing a moved main
+  ---
+  duration_ms: 5324.013167
+  ...
+# Subtest: refused recapture preflight preserves its old base and gives a terminal conflict handoff
+ok 10 - refused recapture preflight preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 2029.093667
+  ...
+# Subtest: refused recapture replay preserves its old base and gives a terminal conflict handoff
+ok 11 - refused recapture replay preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 2117.4905
+  ...
+# Subtest: a lost recapture replacement response retains the old base until the proved head is adopted
+ok 12 - a lost recapture replacement response retains the old base until the proved head is adopted
+  ---
+  duration_ms: 6324.355167
+  ...
+# Subtest: dispatching recovery after main moves exempts only its existing correction run and changed head
+not ok 13 - dispatching recovery after main moves exempts only its existing correction run and changed head
+  ---
+  duration_ms: 5954.933375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /delivery outcome is unknown/. Input:
+
+    'dispatch: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node verify-agent: MISMATCH: agent lane-topic-cad5bc-9fcd2f cwd=undefined expected=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-oiO8Vm/lane\n' +
+      'request: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-oiO8Vm/project/.org/dispatch/eba7b94b-9618-4df6-8bae-54c596f61a28.json\n' +
+      'settle: --retry: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node verify-agent: MISMATCH: agent lane-topic-cad5bc-9fcd2f cwd=undefined expected=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-oiO8Vm/lane\n' +
+      'request: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-oiO8Vm/project/.org/dispatch/eba7b94b-9618-4df6-8bae-54c596f61a28.json\n'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    dispatch: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node verify-agent: MISMATCH: agent lane-topic-cad5bc-9fcd2f cwd=undefined expected=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-oiO8Vm/lane
+    request: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-oiO8Vm/project/.org/dispatch/eba7b94b-9618-4df6-8bae-54c596f61a28.json
+    settle: --retry: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node verify-agent: MISMATCH: agent lane-topic-cad5bc-9fcd2f cwd=undefined expected=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-oiO8Vm/lane
+    request: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-oiO8Vm/project/.org/dispatch/eba7b94b-9618-4df6-8bae-54c596f61a28.json
+
+  operator: 'match'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/settle/test/recapture.test.mjs:163:77
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a stopped fix tolerates main moving and dispatches one correction after STOP clears
+ok 14 - a stopped fix tolerates main moving and dispatches one correction after STOP clears
+  ---
+  duration_ms: 6251.869125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..14
+# tests 14
+# suites 0
+# pass 13
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 83932.613875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,67 @@
+TAP version 13
+# Subtest: org today --json builds the console read model deterministically
+ok 1 - org today --json builds the console read model deterministically
+  ---
+  duration_ms: 939.933208
+  ...
+# Subtest: org today distinguishes historical abandoned reports from newer-run late reports
+ok 2 - org today distinguishes historical abandoned reports from newer-run late reports
+  ---
+  duration_ms: 8.2705
+  ...
+# Subtest: org today follows the local day of TZ
+ok 3 - org today follows the local day of TZ
+  ---
+  duration_ms: 909.683708
+  ...
+# Subtest: org today prints plain text with codes only in parentheses
+ok 4 - org today prints plain text with codes only in parentheses
+  ---
+  duration_ms: 897.264
+  ...
+# Subtest: org today --json names the latest run of each agent, finished runs included, so a front end can name idle agents
+ok 5 - org today --json names the latest run of each agent, finished runs included, so a front end can name idle agents
+  ---
+  duration_ms: 467.17075
+  ...
+# Subtest: org today says which stage is open and which stage each question belongs to
+ok 6 - org today says which stage is open and which stage each question belongs to
+  ---
+  duration_ms: 1002.0155
+  ...
+# Subtest: waiting ranks blocked work before age, ignoring question and dependent priorities
+ok 7 - waiting ranks blocked work before age, ignoring question and dependent priorities
+  ---
+  duration_ms: 1.043542
+  ...
+# Subtest: waiting impact deduplicates dependents and counts current waiting runs and named plan steps
+ok 8 - waiting impact deduplicates dependents and counts current waiting runs and named plan steps
+  ---
+  duration_ms: 1.690542
+  ...
+# Subtest: one impact index serves multiple questions without rescanning target notes
+ok 9 - one impact index serves multiple questions without rescanning target notes
+  ---
+  duration_ms: 0.292792
+  ...
+# Subtest: questions park only after seven elapsed days and remain available through the listing command
+ok 10 - questions park only after seven elapsed days and remain available through the listing command
+  ---
+  duration_ms: 347.318333
+  ...
+# Subtest: record today text works without a console and leaves record events unchanged
+ok 11 - record today text works without a console and leaves record events unchanged
+  ---
+  duration_ms: 138.310416
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4804.131792
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

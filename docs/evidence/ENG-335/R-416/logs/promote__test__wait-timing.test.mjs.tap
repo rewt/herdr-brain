@@ -1,0 +1,47 @@
+TAP version 13
+# Subtest: wall timeout retains wait metrics and correction outcomes for 1 lane(s)
+ok 1 - wall timeout retains wait metrics and correction outcomes for 1 lane(s)
+  ---
+  duration_ms: 1212.205125
+  ...
+# Subtest: wall timeout retains wait metrics and correction outcomes for 2 lane(s)
+ok 2 - wall timeout retains wait metrics and correction outcomes for 2 lane(s)
+  ---
+  duration_ms: 1294.616708
+  ...
+# Subtest: idle timeout retains wait metrics and correction outcomes for 1 lane(s)
+ok 3 - idle timeout retains wait metrics and correction outcomes for 1 lane(s)
+  ---
+  duration_ms: 959.504417
+  ...
+# Subtest: unconfigured train retains slot grants, prepare clocks and command evidence in its receipt
+ok 4 - unconfigured train retains slot grants, prepare clocks and command evidence in its receipt
+  ---
+  duration_ms: 731.894041
+  ...
+# Subtest: preparation refusal closes its measured interval without inventing slot or gate time
+ok 5 - preparation refusal closes its measured interval without inventing slot or gate time
+  ---
+  duration_ms: 421.781208
+  ...
+# Subtest: all lanes refused during rebase have known zero batch and lane preparation with reasons
+ok 6 - all lanes refused during rebase have known zero batch and lane preparation with reasons
+  ---
+  duration_ms: 284.95275
+  ...
+# Subtest: resuming preparation keeps prior intervals and the first slot grant
+ok 7 - resuming preparation keeps prior intervals and the first slot grant
+  ---
+  duration_ms: 967.953042
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5982.56625
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

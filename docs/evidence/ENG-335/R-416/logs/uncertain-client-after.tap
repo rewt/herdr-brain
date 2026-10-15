@@ -1,0 +1,178 @@
+TAP version 13
+# Subtest: settle retains the review stage under simulated memory pressure and launches once after it clears
+ok 1 - settle retains the review stage under simulated memory pressure and launches once after it clears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.509417
+  ...
+# Subtest: STOP arriving during correction dispatch memory wait returns a resumable stopped handoff
+ok 2 - STOP arriving during correction dispatch memory wait returns a resumable stopped handoff # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043083
+  ...
+# Subtest: fixture teardown waits for a concurrent child to finish writing before removing its directory
+ok 3 - fixture teardown waits for a concurrent child to finish writing before removing its directory # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029167
+  ...
+# Subtest: unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable
+ok 4 - unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.06925
+  ...
+# Subtest: already ingested reports use immutable bytes and never create duplicate proposals
+ok 5 - already ingested reports use immutable bytes and never create duplicate proposals # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038708
+  ...
+# Subtest: non-done outcomes escalate with substance without launching a reviewer or correction
+ok 6 - non-done outcomes escalate with substance without launching a reviewer or correction # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025625
+  ...
+# Subtest: settle generated review brief supplies the exact inherited-gate non-claim
+ok 7 - settle generated review brief supplies the exact inherited-gate non-claim # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031625
+  ...
+# Subtest: inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence
+ok 8 - inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031542
+  ...
+# Subtest: discovered project settings override parent settle values and inherit a non-main integration branch
+ok 9 - discovered project settings override parent settle values and inherit a non-main integration branch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.110125
+  ...
+# Subtest: explicit configuration selects one layer and command flags override settle settings
+ok 10 - explicit configuration selects one layer and command flags override settle settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075167
+  ...
+# Subtest: an item dropped or blocked during NEEDS-WORK review cannot launch a correction
+ok 11 - an item dropped or blocked during NEEDS-WORK review cannot launch a correction # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.073417
+  ...
+# Subtest: initial and cached readiness both require a clean canonical checkout
+ok 12 - initial and cached readiness both require a clean canonical checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027875
+  ...
+# Subtest: dirty lanes and foreign Git identities cannot be reviewed or dispatched
+ok 13 - dirty lanes and foreign Git identities cannot be reviewed or dispatched # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027542
+  ...
+# Subtest: malformed reviews never silently retry models; inspected uncertain launches can start a new round
+ok 14 - malformed reviews never silently retry models; inspected uncertain launches can start a new round # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060083
+  ...
+# Subtest: uncertain fix delivery recovers the dispatch journal and never starts a second correction
+ok 15 - uncertain fix delivery recovers the dispatch journal and never starts a second correction
+  ---
+  duration_ms: 7100.058292
+  ...
+# Subtest: suite execution is deferred until promotion even with an independent PASS
+ok 16 - suite execution is deferred until promotion even with an independent PASS # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.141
+  ...
+# Subtest: PASS with unverified claims and moved heads do not return promotable
+ok 17 - PASS with unverified claims and moved heads do not return promotable # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044083
+  ...
+# Subtest: same-lane contenders cannot run two independent reviews
+ok 18 - same-lane contenders cannot run two independent reviews # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.074417
+  ...
+# Subtest: other-item lane work and dropped items require judgment; a saved PASS rechecks the record
+ok 19 - other-item lane work and dropped items require judgment; a saved PASS rechecks the record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.059333
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: recovery: moved main cannot swallow a capped findings correction
+ok 20 - recovery: moved main cannot swallow a capped findings correction # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.523666
+  ...
+# Subtest: recovery: moved main cannot swallow a capped findings correction even with a replay conflict
+ok 21 - recovery: moved main cannot swallow a capped findings correction even with a replay conflict # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038708
+  ...
+# Subtest: recovery: record-stage recapture waits for ingestion and follows the latest main
+ok 22 - recovery: record-stage recapture waits for ingestion and follows the latest main # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028708
+  ...
+# Subtest: recovery: a lost review commit response is adopted before recapturing moved main
+ok 23 - recovery: a lost review commit response is adopted before recapturing moved main # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030125
+  ...
+# Subtest: lost review commit recovery refuses unrelated changes after main moves
+ok 24 - lost review commit recovery refuses unrelated changes after main moves # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032875
+  ...
+# Subtest: lost review commit recovery refuses review-bytes changes after main moves
+ok 25 - lost review commit recovery refuses review-bytes changes after main moves # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024958
+  ...
+# Subtest: lost review commit recovery refuses merge changes after main moves
+ok 26 - lost review commit recovery refuses merge changes after main moves # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.06775
+  ...
+# Subtest: two recaptures after an applied rebase replay only lane and review commits from the same lineage
+ok 27 - two recaptures after an applied rebase replay only lane and review commits from the same lineage # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028125
+  ...
+# Subtest: uncertain review retry guards lane mutation before recapturing a moved main
+ok 28 - uncertain review retry guards lane mutation before recapturing a moved main # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.105542
+  ...
+# Subtest: refused recapture preflight preserves its old base and gives a terminal conflict handoff
+ok 29 - refused recapture preflight preserves its old base and gives a terminal conflict handoff # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.079167
+  ...
+# Subtest: refused recapture replay preserves its old base and gives a terminal conflict handoff
+ok 30 - refused recapture replay preserves its old base and gives a terminal conflict handoff # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035042
+  ...
+# Subtest: a lost recapture replacement response retains the old base until the proved head is adopted
+ok 31 - a lost recapture replacement response retains the old base until the proved head is adopted # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.057208
+  ...
+# Subtest: dispatching recovery after main moves exempts only its existing correction run and changed head
+ok 32 - dispatching recovery after main moves exempts only its existing correction run and changed head
+  ---
+  duration_ms: 7140.359042
+  ...
+# Subtest: a stopped fix tolerates main moving and dispatches one correction after STOP clears
+ok 33 - a stopped fix tolerates main moving and dispatches one correction after STOP clears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.116708
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..33
+# tests 33
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 31
+# todo 0
+# duration_ms 7238.4855
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

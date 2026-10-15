@@ -1,0 +1,62 @@
+TAP version 13
+# Subtest: leading whitespace custom driver is refused for " leading.txt"
+ok 1 - leading whitespace custom driver is refused for " leading.txt"
+  ---
+  duration_ms: 4385.414083
+  ...
+# Subtest: leading whitespace custom driver is refused for " \\t\\nréviewed.txt"
+ok 2 - leading whitespace custom driver is refused for " \\t\\nréviewed.txt"
+  ---
+  duration_ms: 4190.770417
+  ...
+# Subtest: leading whitespace custom driver is refused for "﻿leading.txt"
+ok 3 - leading whitespace custom driver is refused for "﻿leading.txt"
+  ---
+  duration_ms: 4333.018167
+  ...
+# Subtest: valid UTF-8 whitespace paths survive a clean automatic rebase
+ok 4 - valid UTF-8 whitespace paths survive a clean automatic rebase
+  ---
+  duration_ms: 4500.806041
+  ...
+# Subtest: intermediate replay conflicts retain the complete whitespace filename
+ok 5 - intermediate replay conflicts retain the complete whitespace filename
+  ---
+  duration_ms: 4136.381333
+  ...
+# Subtest: a non-round-trippable raw Git path refuses before attribute lookup or lane replacement
+ok 6 - a non-round-trippable raw Git path refuses before attribute lookup or lane replacement
+  ---
+  duration_ms: 4357.756167
+  ...
+# Subtest: Git 2.38.0 attribute capabilities allow clean rebase to promotable
+ok 7 - Git 2.38.0 attribute capabilities allow clean rebase to promotable
+  ---
+  duration_ms: 5274.963083
+  ...
+# Subtest: Git 2.38.0 attribute capabilities still catch intermediate custom drivers
+ok 8 - Git 2.38.0 attribute capabilities still catch intermediate custom drivers
+  ---
+  duration_ms: 4677.089583
+  ...
+# Subtest: Git 2.39.0 attribute capabilities allow clean rebase to promotable
+ok 9 - Git 2.39.0 attribute capabilities allow clean rebase to promotable
+  ---
+  duration_ms: 5277.16325
+  ...
+# Subtest: Git 2.39.0 attribute capabilities still catch intermediate custom drivers
+ok 10 - Git 2.39.0 attribute capabilities still catch intermediate custom drivers
+  ---
+  duration_ms: 4805.121791
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 46043.701458
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

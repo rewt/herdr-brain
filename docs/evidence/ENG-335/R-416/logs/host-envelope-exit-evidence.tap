@@ -1,0 +1,156 @@
+TAP version 13
+# Subtest: project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+ok 1 - project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.504166
+  ...
+# Subtest: fresh profiled STOP refuses before acquiring any promotion resource
+ok 2 - fresh profiled STOP refuses before acquiring any promotion resource # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036667
+  ...
+# Subtest: profiled STOP resumes its validated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+ok 3 - profiled STOP resumes its validated checkpoint, reconciles main and refuses unfinished members after waiting for memory # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03075
+  ...
+# Subtest: profiled STOP resumes its integrated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+ok 4 - profiled STOP resumes its integrated checkpoint, reconciles main and refuses unfinished members after waiting for memory # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0635
+  ...
+# Subtest: profile initial memory wait holds no locks and clearing proceeds
+ok 5 - profile initial memory wait holds no locks and clearing proceeds # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032875
+  ...
+# Subtest: profile initial memory wait holds no locks and STOP refuses
+ok 6 - profile initial memory wait holds no locks and STOP refuses # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024583
+  ...
+# Subtest: profile pressure at --held caps and releases every acquired lock without gate evidence
+ok 7 - profile pressure at --held caps and releases every acquired lock without gate evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027416
+  ...
+# Subtest: profile pressure at --execute caps and releases every acquired lock without gate evidence
+ok 8 - profile pressure at --execute caps and releases every acquired lock without gate evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028291
+  ...
+# Subtest: profile pressure at project-lock caps and releases every acquired lock without gate evidence
+ok 9 - profile pressure at project-lock caps and releases every acquired lock without gate evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.102041
+  ...
+# Subtest: pressure clearing after both host locks are acquired proceeds within the bound
+ok 10 - pressure clearing after both host locks are acquired proceeds within the bound # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.071167
+  ...
+# Subtest: queue delivers a coded memory refusal with no bisection and permits re-enqueue after pressure clears
+ok 11 - queue delivers a coded memory refusal with no bisection and permits re-enqueue after pressure clears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.070375
+  ...
+# Subtest: busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+ok 12 - busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027291
+  ...
+# Subtest: a released legacy lock admits the waiting train and stays held for the complete batch
+ok 13 - a released legacy lock admits the waiting train and stays held for the complete batch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.290667
+  ...
+# Subtest: a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+ok 14 - a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.087667
+  ...
+# Subtest: a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+ok 15 - a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0315
+  ...
+# Subtest: busy host slot writes its grant receipt only after release and the train inherits it
+ok 16 - busy host slot writes its grant receipt only after release and the train inherits it # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0655
+  ...
+# Subtest: busy host slot caps without a red gate receipt or integration
+ok 17 - busy host slot caps without a red gate receipt or integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028583
+  ...
+# Subtest: a declared competing process refuses before taking the slot or building
+ok 18 - a declared competing process refuses before taking the slot or building # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.111458
+  ...
+# Subtest: a competing process started during a slot wait refuses before preparation
+ok 19 - a competing process started during a slot wait refuses before preparation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.069625
+  ...
+# Subtest: malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence
+ok 20 - malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031667
+  ...
+# Subtest: inner idle timeout uses canonical lane-only limits without timing out the completed host envelope
+ok 21 - inner idle timeout uses canonical lane-only limits without timing out the completed host envelope # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.047542
+  ...
+# Subtest: promotion host envelope derives from the declared inner history key
+ok 22 - promotion host envelope derives from the declared inner history key # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020291
+  ...
+# Subtest: three-lane red bisection fits the host envelope and promotes both healthy green lanes
+ok 23 - three-lane red bisection fits the host envelope and promotes both healthy green lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018166
+  ...
+# Subtest: two-lane host envelope timeout returns batch re-enqueue wording
+not ok 24 - two-lane host envelope timeout returns batch re-enqueue wording
+  ---
+  duration_ms: 1850.485458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    {"outcome":"refused","reason":"train preparation failed: node -e \"setInterval(()=>{},1000)\""}
+    + actual - expected
+
+    + 'refused'
+    - 'timeout'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'timeout'
+  actual: 'refused'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test-slot/test/gate-profile.test.mjs:470:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..24
+# tests 24
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 23
+# todo 0
+# duration_ms 1953.80875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

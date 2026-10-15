@@ -1,0 +1,77 @@
+TAP version 13
+# Subtest: status derives all lane stages and timing without record mutations or model calls
+ok 1 - status derives all lane stages and timing without record mutations or model calls
+  ---
+  duration_ms: 448.253167
+  ...
+# Subtest: status shows correction runs as fix and retains recent autopilot receipts
+ok 2 - status shows correction runs as fix and retains recent autopilot receipts
+  ---
+  duration_ms: 342.45925
+  ...
+# Subtest: a correction moves from fix to its own review and displays the active reviewer metadata
+ok 3 - a correction moves from fix to its own review and displays the active reviewer metadata
+  ---
+  duration_ms: 386.230208
+  ...
+# Subtest: status warns and omits structurally damaged action receipts before sorting or mapping
+ok 4 - status warns and omits structurally damaged action receipts before sorting or mapping
+  ---
+  duration_ms: 192.052166
+  ...
+# Subtest: unavailable Herdr and malformed receipts are visible without changing state
+ok 5 - unavailable Herdr and malformed receipts are visible without changing state
+  ---
+  duration_ms: 165.973917
+  ...
+# Subtest: status CLI is read-only from a linked checkout and does not require a supervisor role
+ok 6 - status CLI is read-only from a linked checkout and does not require a supervisor role
+  ---
+  duration_ms: 376.904792
+  ...
+# Subtest: review display uses matching session provider/model and excludes foreign session metadata
+ok 7 - review display uses matching session provider/model and excludes foreign session metadata
+  ---
+  duration_ms: 177.277
+  ...
+# Subtest: removed completed legacy lanes are history rather than active review lanes
+ok 8 - removed completed legacy lanes are history rather than active review lanes
+  ---
+  duration_ms: 247.08175
+  ...
+# Subtest: the current reviewer matches the configured opaque route and verified occupant, working before idle
+ok 9 - the current reviewer matches the configured opaque route and verified occupant, working before idle
+  ---
+  duration_ms: 281.694375
+  ...
+# Subtest: recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+ok 10 - recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+  ---
+  duration_ms: 408.036
+  ...
+# Subtest: open runs precede only today’s landed runs and refused promotion is blocked
+ok 11 - open runs precede only today’s landed runs and refused promotion is blocked
+  ---
+  duration_ms: 582.046917
+  ...
+# Subtest: a blocked report with no live session keeps its completed duration instead of counting idle hours
+ok 12 - a blocked report with no live session keeps its completed duration instead of counting idle hours
+  ---
+  duration_ms: 368.048583
+  ...
+# Subtest: a timed-out queue job displays blocked correction work rather than the train
+ok 13 - a timed-out queue job displays blocked correction work rather than the train
+  ---
+  duration_ms: 209.066208
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4305.6045
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

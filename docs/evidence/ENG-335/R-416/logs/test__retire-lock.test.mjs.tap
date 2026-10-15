@@ -1,0 +1,52 @@
+TAP version 13
+# Subtest: consume reclaims a proven dead owner and its dead recovery guard
+ok 1 - consume reclaims a proven dead owner and its dead recovery guard
+  ---
+  duration_ms: 61.174792
+  ...
+# Subtest: consume respects a live owner without observing or changing its receipt
+ok 2 - consume respects a live owner without observing or changing its receipt
+  ---
+  duration_ms: 17.443416
+  ...
+# Subtest: request recovers its dead owner without rereading the event log
+ok 3 - request recovers its dead owner without rereading the event log
+  ---
+  duration_ms: 18.066334
+  ...
+# Subtest: unknown owners are retained, while PID reuse proves the recorded owner gone
+ok 4 - unknown owners are retained, while PID reuse proves the recorded owner gone
+  ---
+  duration_ms: 12.929333
+  ...
+# Subtest: an expired consumer deadline returns pending and leaves no lock or handled revision
+ok 5 - an expired consumer deadline returns pending and leaves no lock or handled revision
+  ---
+  duration_ms: 7.694792
+  ...
+# Subtest: a partially applied deadline leaves its hint resumable and releases the consumer lock
+ok 6 - a partially applied deadline leaves its hint resumable and releases the consumer lock
+  ---
+  duration_ms: 18.999959
+  ...
+# Subtest: a returned skip-close at or past the deadline never acknowledges the hint
+ok 7 - a returned skip-close at or past the deadline never acknowledges the hint
+  ---
+  duration_ms: 12.653792
+  ...
+# Subtest: deadline diagnostics after an otherwise successful apply keep its hint pending
+ok 8 - deadline diagnostics after an otherwise successful apply keep its hint pending
+  ---
+  duration_ms: 12.966917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 251.848958
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

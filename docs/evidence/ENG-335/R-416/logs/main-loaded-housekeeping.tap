@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: housekeeping gives each evidence read a loaded response allowance and preserves refusals
+ok 1 - housekeeping gives each evidence read a loaded response allowance and preserves refusals
+  ---
+  duration_ms: 8.341417
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 104.366709

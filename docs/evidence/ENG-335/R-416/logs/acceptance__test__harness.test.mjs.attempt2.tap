@@ -1,0 +1,57 @@
+TAP version 13
+# Subtest: the real scripted supervisor presents an empty composer before publishing idle and after each notice
+ok 1 - the real scripted supervisor presents an empty composer before publishing idle and after each notice
+  ---
+  duration_ms: 1150.474459
+  ...
+# Subtest: scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+ok 2 - scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+  ---
+  duration_ms: 43.152584
+  ...
+# Subtest: native polling bounds each call and rejects nonresponse at the real deadline
+ok 3 - native polling bounds each call and rejects nonresponse at the real deadline
+  ---
+  duration_ms: 0.462958
+  ...
+# Subtest: native polling bounds each call and rejects late success at the real deadline
+ok 4 - native polling bounds each call and rejects late success at the real deadline
+  ---
+  duration_ms: 0.066792
+  ...
+# Subtest: harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+ok 5 - harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+  ---
+  duration_ms: 223.034625
+  ...
+# Subtest: product tidy preserves a focused finished tab while closing the same tab in the background
+ok 6 - product tidy preserves a focused finished tab while closing the same tab in the background
+  ---
+  duration_ms: 0.947542
+  ...
+# Subtest: the real adapter bounds a slow cwd native read by the polling deadline
+ok 7 - the real adapter bounds a slow cwd native read by the polling deadline
+  ---
+  duration_ms: 1529.640625
+  ...
+# Subtest: the real adapter bounds a slow registration native read by the polling deadline
+ok 8 - the real adapter bounds a slow registration native read by the polling deadline
+  ---
+  duration_ms: 1784.93
+  ...
+# Subtest: failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed
+ok 9 - failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed
+  ---
+  duration_ms: 1.200917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4843.845042
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

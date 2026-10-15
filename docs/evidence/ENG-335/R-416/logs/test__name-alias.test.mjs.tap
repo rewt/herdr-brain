@@ -1,0 +1,32 @@
+TAP version 13
+# Subtest: record and org are the same CLI for every command
+ok 1 - record and org are the same CLI for every command
+  ---
+  duration_ms: 1175.700125
+  ...
+# Subtest: help presents record and documents every retained compatibility name
+ok 2 - help presents record and documents every retained compatibility name
+  ---
+  duration_ms: 28.679417
+  ...
+# Subtest: record and org complete the same real workflow
+ok 3 - record and org complete the same real workflow
+  ---
+  duration_ms: 320.106667
+  ...
+# Subtest: the package installs record and the permanent org alias
+ok 4 - the package installs record and the permanent org alias
+  ---
+  duration_ms: 0.155792
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1612.150459
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

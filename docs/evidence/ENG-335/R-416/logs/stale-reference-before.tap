@@ -1,0 +1,321 @@
+TAP version 13
+# Subtest: ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation
+ok 1 - ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.571459
+  ...
+# Subtest: process state changes do not change identity tokens, but stopped processes still keep on fresh decision
+ok 2 - process state changes do not change identity tokens, but stopped processes still keep on fresh decision # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042459
+  ...
+# Subtest: the shared executor stops cleanly at a deadline without acting on later candidates
+ok 3 - the shared executor stops cleanly at a deadline without acting on later candidates # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032959
+  ...
+# Subtest: pruning another tab callback does not invalidate this tab token
+ok 4 - pruning another tab callback does not invalidate this tab token # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.070459
+  ...
+# Subtest: narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities
+ok 5 - narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034167
+  ...
+# Subtest: keeps report-file-only
+ok 6 - keeps report-file-only # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042792
+  ...
+# Subtest: keeps report-before-review
+ok 7 - keeps report-before-review # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02975
+  ...
+# Subtest: keeps blocked
+ok 8 - keeps blocked # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031125
+  ...
+# Subtest: keeps needs-human
+ok 9 - keeps needs-human # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.123583
+  ...
+# Subtest: keeps working
+ok 10 - keeps working # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078292
+  ...
+# Subtest: keeps unknown
+ok 11 - keeps unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.081459
+  ...
+# Subtest: keeps wrong-common
+ok 12 - keeps wrong-common # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028125
+  ...
+# Subtest: keeps wrong-head
+ok 13 - keeps wrong-head # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026834
+  ...
+# Subtest: keeps dirty
+ok 14 - keeps dirty # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058792
+  ...
+# Subtest: keeps wrong-terminal
+ok 15 - keeps wrong-terminal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025833
+  ...
+# Subtest: keeps wrong-session
+ok 16 - keeps wrong-session # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068917
+  ...
+# Subtest: keeps wrong-pane
+ok 17 - keeps wrong-pane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034125
+  ...
+# Subtest: keeps wrong-cwd
+ok 18 - keeps wrong-cwd # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.113667
+  ...
+# Subtest: keeps new-shell
+ok 19 - keeps new-shell # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.072542
+  ...
+# Subtest: keeps other-program
+ok 20 - keeps other-program # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028041
+  ...
+# Subtest: keeps focused
+ok 21 - keeps focused # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.050792
+  ...
+# Subtest: keeps lab
+ok 22 - keeps lab # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02325
+  ...
+# Subtest: keeps persistent
+ok 23 - keeps persistent # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.29975
+  ...
+# Subtest: keeps operator
+ok 24 - keeps operator # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034917
+  ...
+# Subtest: keeps missing-process
+ok 25 - keeps missing-process # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023083
+  ...
+# Subtest: pending review and NEEDS-WORK preserve the engineer across a fix gap
+ok 26 - pending review and NEEDS-WORK preserve the engineer across a fix gap # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0195
+  ...
+# Subtest: same native session new run keeps even after a rename and with immutable older report
+ok 27 - same native session new run keeps even after a rename and with immutable older report # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018417
+  ...
+# Subtest: confirmed supersession releases an older round only with a retained different successor
+ok 28 - confirmed supersession releases an older round only with a retained different successor # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017792
+  ...
+# Subtest: all tab occupants must be independently eligible; metadata never releases
+ok 29 - all tab occupants must be independently eligible; metadata never releases # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017333
+  ...
+# Subtest: reference only keeps: promote
+ok 30 - reference only keeps: promote # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017167
+  ...
+# Subtest: reference only keeps: verify
+ok 31 - reference only keeps: verify # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017041
+  ...
+# Subtest: reference only keeps: host-check
+ok 32 - reference only keeps: host-check # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.069958
+  ...
+# Subtest: reference only keeps: callback
+ok 33 - reference only keeps: callback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066625
+  ...
+# Subtest: reference only keeps: test-slot
+ok 34 - reference only keeps: test-slot # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020458
+  ...
+# Subtest: reference only keeps: waiter
+ok 35 - reference only keeps: waiter # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017583
+  ...
+# Subtest: reference only keeps: reconcile
+ok 36 - reference only keeps: reconcile # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018
+  ...
+# Subtest: executor rechecks reactivated and reports the fresh reason
+ok 37 - executor rechecks reactivated and reports the fresh reason # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016875
+  ...
+# Subtest: executor rechecks native-session and reports the fresh reason
+ok 38 - executor rechecks native-session and reports the fresh reason # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029292
+  ...
+# Subtest: executor rechecks head and reports the fresh reason
+ok 39 - executor rechecks head and reports the fresh reason # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034833
+  ...
+# Subtest: executor rechecks record-reopened and reports the fresh reason
+ok 40 - executor rechecks record-reopened and reports the fresh reason # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01725
+  ...
+# Subtest: executor rechecks reference and reports the fresh reason
+ok 41 - executor rechecks reference and reports the fresh reason # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017042
+  ...
+# Subtest: executor rechecks new-pane and reports the fresh reason
+ok 42 - executor rechecks new-pane and reports the fresh reason # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017042
+  ...
+# Subtest: executor rechecks read-error and reports the fresh reason
+ok 43 - executor rechecks read-error and reports the fresh reason # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016833
+  ...
+# Subtest: restart/idempotency uses fresh authority; failures are cleanup failures
+ok 44 - restart/idempotency uses fresh authority; failures are cleanup failures # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018625
+  ...
+# Subtest: Git-only deletion rejects even a releasable pane until its removal is observed
+ok 45 - Git-only deletion rejects even a releasable pane until its removal is observed # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021333
+  ...
+# Subtest: herdr-reference/v1 matches each declared key, expires visibly, and never releases
+ok 46 - herdr-reference/v1 matches each declared key, expires visibly, and never releases # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018
+  ...
+# Subtest: malformed, missing expiry, unknown schema, unreadable reference fail the whole project closed
+ok 47 - malformed, missing expiry, unknown schema, unreadable reference fail the whole project closed # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017375
+  ...
+# Subtest: generic promote and trusted verify sources are read-only and include interrupted/reconcile holds
+ok 48 - generic promote and trusted verify sources are read-only and include interrupted/reconcile holds # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025583
+  ...
+# Subtest: promotion references follow the latest request checkpoint and preserve active holds
+not ok 49 - promotion references follow the latest request checkpoint and preserve active holds
+  ---
+  duration_ms: 3.054
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    durable current completion supersedes its historical pending result
+    + actual - expected
+
+      [
+    +   'recovered',
+        'other'
+      ]
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'other'
+  actual:
+    0: 'recovered'
+    1: 'other'
+  operator: 'deepStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/retire.test.mjs:238:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: pending settlement callbacks keep; completed receipts remain historical
+ok 50 - pending settlement callbacks keep; completed receipts remain historical # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.047084
+  ...
+# Subtest: session display changes have no retirement authority
+ok 51 - session display changes have no retirement authority # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029208
+  ...
+# Subtest: background descendants and unknown kernel birth keep, and PID reuse invalidates a plan
+ok 52 - background descendants and unknown kernel birth keep, and PID reuse invalidates a plan # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039792
+  ...
+# Subtest: older folds ignore the confirmed handoff event
+ok 53 - older folds ignore the confirmed handoff event # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029375
+  ...
+# Subtest: a reported successor is reserved until the superseded pane is actually gone
+ok 54 - a reported successor is reserved until the superseded pane is actually gone # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025042
+  ...
+# Subtest: a native session without its launch receipt stays unknown even on the old terminal
+ok 55 - a native session without its launch receipt stays unknown even on the old terminal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022416
+  ...
+# Subtest: project reference damage is reported even when no tabs are present
+ok 56 - project reference damage is reported even when no tabs are present # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..56
+# tests 56
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 55
+# todo 0
+# duration_ms 110.921125
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

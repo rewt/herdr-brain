@@ -1,0 +1,27 @@
+TAP version 13
+# Subtest: settle fixture isolates in-process entry and children without the bounded runner
+    # Subtest: unset fleet
+    ok 1 - unset fleet
+      ---
+      duration_ms: 4398.400708
+      ...
+    # Subtest: operator fleet override
+    ok 2 - operator fleet override
+      ---
+      duration_ms: 4318.170375
+      ...
+    1..2
+ok 1 - settle fixture isolates in-process entry and children without the bounded runner
+  ---
+  duration_ms: 8717.5975
+  ...
+1..1
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8757.373
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

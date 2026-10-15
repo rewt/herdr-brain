@@ -1,0 +1,102 @@
+TAP version 13
+# Subtest: build gates the tagged partial snapshot once, then publishes a read-only immutable copy
+ok 1 - build gates the tagged partial snapshot once, then publishes a read-only immutable copy
+  ---
+  duration_ms: 904.147042
+  ...
+# Subtest: a failed gate retains partial evidence and never makes an activatable release or reruns it
+ok 2 - a failed gate retains partial evidence and never makes an activatable release or reruns it
+  ---
+  duration_ms: 649.827833
+  ...
+# Subtest: the release gate queues for the host test slot by default; an explicit wait wins
+ok 3 - the release gate queues for the host test slot by default; an explicit wait wins
+  ---
+  duration_ms: 1533.580958
+  ...
+# Subtest: build uses the tagged release declaration instead of the npm fallback or working copy
+ok 4 - build uses the tagged release declaration instead of the npm fallback or working copy
+  ---
+  duration_ms: 535.311
+  ...
+# Subtest: declared scalar and release-specific timeouts stop the gate once and retain the partial copy
+ok 5 - declared scalar and release-specific timeouts stop the gate once and retain the partial copy
+  ---
+  duration_ms: 1881.389458
+  ...
+# Subtest: an invalid release declaration refuses before running a gate
+ok 6 - an invalid release declaration refuses before running a gate
+  ---
+  duration_ms: 318.419625
+  ...
+# Subtest: --live is explicit, follows the offline gate, and a live failure prevents completion
+ok 7 - --live is explicit, follows the offline gate, and a live failure prevents completion
+  ---
+  duration_ms: 1057.222875
+  ...
+# Subtest: activation switches three launchers, retires the old plugin once, and rollback preserves previous on repeat
+ok 8 - activation switches three launchers, retires the old plugin once, and rollback preserves previous on repeat
+  ---
+  duration_ms: 1654.770833
+  ...
+# Subtest: a regular launcher refuses activation before any links switch
+ok 9 - a regular launcher refuses activation before any links switch
+  ---
+  duration_ms: 622.919
+  ...
+# Subtest: activation retires the old Brain LaunchAgent plist by moving it aside, then switches links
+ok 10 - activation retires the old Brain LaunchAgent plist by moving it aside, then switches links
+  ---
+  duration_ms: 825.012208
+  ...
+# Subtest: ship builds, activates and checks the installed launchers in one command
+ok 11 - ship builds, activates and checks the installed launchers in one command
+  ---
+  duration_ms: 1469.042083
+  ...
+# Subtest: ship rolls back to the previous release when the installed launchers fail their check
+ok 12 - ship rolls back to the previous release when the installed launchers fail their check
+  ---
+  duration_ms: 2550.757875
+  ...
+# Subtest: a failed first ship with no previous release says the tag stays active
+ok 13 - a failed first ship with no previous release says the tag stays active
+  ---
+  duration_ms: 958.3765
+  ...
+# Subtest: a scratch HOME or an empty plist setting never reaches launchctl
+ok 14 - a scratch HOME or an empty plist setting never reaches launchctl
+  ---
+  duration_ms: 1331.46525
+  ...
+# Subtest: failed plugin unlink warns and leaves the launchers usable
+ok 15 - failed plugin unlink warns and leaves the launchers usable
+  ---
+  duration_ms: 888.474209
+  ...
+# Subtest: distribution inventory retains bch-cloak launch dependencies
+ok 16 - distribution inventory retains bch-cloak launch dependencies
+  ---
+  duration_ms: 1.217416
+  ...
+# Subtest: installed release commands can inspect and switch launchers without Git metadata
+ok 17 - installed release commands can inspect and switch launchers without Git metadata
+  ---
+  duration_ms: 1500.765333
+  ...
+# Subtest: build refuses a tag missing the installed settle-watch dependency before spending a gate
+ok 18 - build refuses a tag missing the installed settle-watch dependency before spending a gate
+  ---
+  duration_ms: 294.20625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..18
+# tests 18
+# suites 0
+# pass 18
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 19073.418375
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

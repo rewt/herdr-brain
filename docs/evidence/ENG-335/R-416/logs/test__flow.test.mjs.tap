@@ -1,0 +1,109 @@
+TAP version 13
+# (node:46448) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: in-order reports keep the newest reported outcome while an unreported run stays active
+ok 1 - in-order reports keep the newest reported outcome while an unreported run stays active
+  ---
+  duration_ms: 1.042791
+  ...
+# Subtest: all report ingestion orders select the newest started reported run and retain older late reports
+ok 2 - all report ingestion orders select the newest started reported run and retain older late reports
+  ---
+  duration_ms: 0.784708
+  ...
+# Subtest: abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+ok 3 - abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+  ---
+  duration_ms: 0.173584
+  ...
+# Subtest: reopening still clears completion and unknown events are ignored by current and older folds
+ok 4 - reopening still clears completion and unknown events are ignored by current and older folds
+  ---
+  duration_ms: 0.249708
+  ...
+# Subtest: a record with retired priority events and run alignment still loads in every view
+ok 5 - a record with retired priority events and run alignment still loads in every view
+  ---
+  duration_ms: 486.004125
+  ...
+# Subtest: ingesting an older report after a correction records it as late without displacing the correction
+ok 6 - ingesting an older report after a correction records it as late without displacing the correction
+  ---
+  duration_ms: 313.00725
+  ...
+# Subtest: a blocked worker decomposes its own blocker and fresh runs pick up the thread
+ok 7 - a blocked worker decomposes its own blocker and fresh runs pick up the thread
+  ---
+  duration_ms: 536.043667
+  ...
+# Subtest: record start resolves a named route without copied harness metadata
+ok 8 - record start resolves a named route without copied harness metadata
+  ---
+  duration_ms: 188.598166
+  ...
+# Subtest: record start discovers canonical parent and repository routes from a linked worktree
+ok 9 - record start discovers canonical parent and repository routes from a linked worktree
+  ---
+  duration_ms: 228.013167
+  ...
+# Subtest: record start discovers the nearest route config from a non-Git record root
+ok 10 - record start discovers the nearest route config from a non-Git record root
+  ---
+  duration_ms: 146.689708
+  ...
+# Subtest: budgets are advisory: exceeding them is surfaced, never refused
+ok 11 - budgets are advisory: exceeding them is surfaced, never refused
+  ---
+  duration_ms: 208.833208
+  ...
+# Subtest: only record consistency is refused
+ok 12 - only record consistency is refused
+  ---
+  duration_ms: 381.378667
+  ...
+# Subtest: record set refuses to change a run start fact but may add keys or repeat one
+ok 13 - record set refuses to change a run start fact but may add keys or repeat one
+  ---
+  duration_ms: 315.740959
+  ...
+# Subtest: dropping a blocker unblocks the work it was blocking
+ok 14 - dropping a blocker unblocks the work it was blocking
+  ---
+  duration_ms: 234.570417
+  ...
+# Subtest: a brief shows sibling work and points at full reports
+ok 15 - a brief shows sibling work and points at full reports
+  ---
+  duration_ms: 178.72175
+  ...
+# Subtest: an abandoned run frees its item and a late report is not ingested
+ok 16 - an abandoned run frees its item and a late report is not ingested
+  ---
+  duration_ms: 312.626209
+  ...
+# Subtest: an interrupted write is ignored on read and repaired on the next write
+ok 17 - an interrupted write is ignored on read and repaired on the next write
+  ---
+  duration_ms: 121.853791
+  ...
+# Subtest: concurrent writers never collide
+ok 18 - concurrent writers never collide
+  ---
+  duration_ms: 192.414208
+  ...
+# Subtest: log filters by time and starting closed work reopens it
+ok 19 - log filters by time and starting closed work reopens it
+  ---
+  duration_ms: 231.848458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4167.947375
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

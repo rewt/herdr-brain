@@ -1,0 +1,784 @@
+TAP version 13
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 1 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 540.687834
+  ...
+# Subtest: fix_round is left in flight
+ok 2 - fix_round is left in flight
+  ---
+  duration_ms: 383.126459
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 3 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 444.883625
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 4 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 462.70025
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 5 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 356.288459
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 6 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 362.321
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 7 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 362.354833
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 8 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 360.562542
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 9 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 355.955959
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 10 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 354.091833
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 11 - Moderate and Minor findings file one follow-up before accepting promotion
+  ---
+  duration_ms: 494.427083
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 12 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 361.366875
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 13 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 358.646542
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 14 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 352.173208
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 15 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 357.55175
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 16 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 366.711
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 17 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 363.753583
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 18 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 352.553166
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 19 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 364.534375
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 20 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 353.4105
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 21 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 300.429708
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 22 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 302.422333
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 23 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 300.526833
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 24 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 295.896917
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 25 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 290.610292
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 26 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 295.99675
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 27 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 341.69875
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 28 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 344.113
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 29 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 502.302417
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 30 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 297.23725
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 31 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 304.596209
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 32 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 294.537791
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 33 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 362.498125
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 34 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 334.56025
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 35 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 426.204125
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 36 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 456.667791
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 37 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 389.339667
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 38 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 440.207709
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 39 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 308.655667
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 40 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 301.397417
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 41 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 297.659833
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 42 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 296.130125
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 43 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 297.052583
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 44 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 297.833667
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 45 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 299.945875
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 46 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 297.583458
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 47 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 294.672625
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 48 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 297.413167
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 49 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 302.700292
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 50 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 331.593792
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 51 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 369.625667
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 52 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 531.976
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 53 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 292.831041
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 54 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 374.155709
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 55 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 359.164875
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 56 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 363.141084
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 57 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 375.231583
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 58 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 368.114
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 59 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 356.814625
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 60 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 372.283125
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 61 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 542.903458
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 62 - runless completion fleet-membership retains an explicit binding diagnostic
+  ---
+  duration_ms: 283.963333
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 63 - runless completion gate-profile retains an explicit binding diagnostic
+  ---
+  duration_ms: 283.6405
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+ok 64 - completion after an interrupted promotion has its own receipt and closes once
+  ---
+  duration_ms: 492.491583
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 65 - abandoned watch-no-report is journaled without waking or acting
+  ---
+  duration_ms: 263.502667
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 66 - abandoned watch-long-running is journaled without waking or acting
+  ---
+  duration_ms: 269.150416
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 67 - abandoned watch-invalid-report is journaled without waking or acting
+  ---
+  duration_ms: 265.174625
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 68 - abandoned org-report is journaled without waking or acting
+  ---
+  duration_ms: 265.387458
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+ok 69 - awaited promotion closes before waking with one short plan line and later notices stay silent
+  ---
+  duration_ms: 593.10625
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 70 - awaited PASS queued for promotion stays silent until closure
+  ---
+  duration_ms: 441.731
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 71 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+  ---
+  duration_ms: 586.189208
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 72 - abandoned watcher inbox entry is handled without Herdr delivery
+  ---
+  duration_ms: 342.005167
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 73 - legacy uncertain promotion receipts still forbid command replay after the key upgrade
+  ---
+  duration_ms: 324.175
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 74 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 469.461875
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 75 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 960.338708
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 76 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 851.592958
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 77 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 797.862375
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 78 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 844.093417
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 79 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 484.989625
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+not ok 80 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 1688.1695
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    {
+      "policy": "notice-autopilot/v1",
+      "key": "report:R-1",
+      "project": {
+        "repo": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-iQX3l7/project",
+        "identity": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-iQX3l7/project/.git",
+        "org": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-iQX3l7/project/.org"
+      },
+      "notice": "[org-report] run=R-1 item=ENG-1 outcome=done headline=Done",
+      "notice_id": "report-1",
+      "actions": [
+        {
+          "name": "handle done report",
+          "file": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/supervisor.mjs",
+          "args": [
+            "handle",
+            "R-1",
+            "--repo",
+            "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-iQX3l7/project",
+            "--org",
+            "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-iQX3l7/project/.org",
+            "--role",
+            "supervisor",
+            "--to",
+            "supervisor-test"
+          ],
+          "phase": "started",
+          "at": "2026-10-15T02:50:57.221Z"
+        }
+      ],
+      "started": "2026-10-15T02:50:57.121Z",
+      "error": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-iQX3l7/project/.org/settle/R-1.review-r1.log\nsupervisor: settle.mjs: exit 1\n",
+      "disposition": "wake",
+      "reason": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-iQX3l7/project/.org/settle/R-1.review-r1.log supervisor: settle.mjs: exit 1",
+      "finished": "2026-10-15T02:50:58.560Z"
+    }
+
+    + actual - expected
+
+    + 'wake'
+    - 'handled'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'handled'
+  actual: 'wake'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:418:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+not ok 81 - actual handle and promotion commands file findings and accept them offline
+  ---
+  duration_ms: 1675.306208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    {
+      "policy": "notice-autopilot/v1",
+      "key": "report:R-1",
+      "project": {
+        "repo": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-SNWOMK/project",
+        "identity": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-SNWOMK/project/.git",
+        "org": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-SNWOMK/project/.org"
+      },
+      "notice": "[org-report] run=R-1 item=ENG-1 outcome=done headline=Done",
+      "notice_id": "report-1",
+      "actions": [
+        {
+          "name": "handle done report",
+          "file": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/supervisor.mjs",
+          "args": [
+            "handle",
+            "R-1",
+            "--repo",
+            "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-SNWOMK/project",
+            "--org",
+            "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-SNWOMK/project/.org",
+            "--role",
+            "supervisor",
+            "--to",
+            "supervisor-test"
+          ],
+          "phase": "started",
+          "at": "2026-10-15T02:50:58.925Z"
+        }
+      ],
+      "started": "2026-10-15T02:50:58.826Z",
+      "error": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-SNWOMK/project/.org/settle/R-1.review-r1.log\nsupervisor: settle.mjs: exit 1\n",
+      "disposition": "wake",
+      "reason": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-SNWOMK/project/.org/settle/R-1.review-r1.log supervisor: settle.mjs: exit 1",
+      "finished": "2026-10-15T02:51:00.235Z"
+    }
+
+    + actual - expected
+
+    + 'wake'
+    - 'handled'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'handled'
+  actual: 'wake'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:418:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+not ok 82 - real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+  ---
+  duration_ms: 1629.73025
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: "Cannot read properties of undefined (reading 'result')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:443:42
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+not ok 83 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 1847.338041
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + undefined
+    - true
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:465:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+not ok 84 - automatic PASS reaches the real queue, lands and closes with one awaited wake
+  ---
+  duration_ms: 1927.055208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + undefined
+    - true
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:465:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+not ok 85 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+  ---
+  duration_ms: 1859.11475
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + undefined
+    - true
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:465:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+not ok 86 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 1885.503542
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + undefined
+    - true
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:465:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+not ok 87 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 1980.723
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + undefined
+    - true
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:465:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+not ok 88 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 2227.739167
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    {
+      "policy": "notice-autopilot/v1",
+      "key": "report:R-1",
+      "project": {
+        "repo": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project",
+        "identity": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.git",
+        "org": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org"
+      },
+      "notice": "[org-report] run=R-1 item=ENG-1 outcome=done headline=Done",
+      "notice_id": "report-1",
+      "actions": [
+        {
+          "name": "handle done report",
+          "file": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/supervisor.mjs",
+          "args": [
+            "handle",
+            "R-1",
+            "--repo",
+            "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project",
+            "--org",
+            "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org",
+            "--role",
+            "supervisor",
+            "--to",
+            "supervisor-test"
+          ],
+          "phase": "started",
+          "at": "2026-10-15T02:51:11.775Z",
+          "exit_code": 1,
+          "stderr": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.review-r1.log\nsupervisor: settle.mjs: exit 1\n",
+          "signal": null,
+          "result": {
+            "result": "escalate",
+            "run": "R-1",
+            "reason": "independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.review-r1.log",
+            "journal": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.json",
+            "handoff": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.handoff.md"
+          },
+          "output": "{\"result\":\"escalate\",\"run\":\"R-1\",\"reason\":\"independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.review-r1.log\",\"journal\":\"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.json\",\"handoff\":\"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.handoff.md\"}\n"
+        }
+      ],
+      "started": "2026-10-15T02:51:11.672Z",
+      "error": "supervisor.mjs: settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.review-r1.log\nsupervisor: settle.mjs: exit 1\n",
+      "disposition": "wake",
+      "reason": "supervisor.mjs: settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-uYKVe5/project/.org/settle/R-1.review-r1.log supervisor: settle.mjs: exit 1",
+      "finished": "2026-10-15T02:51:13.591Z"
+    }
+
+    + actual - expected
+
+    + 'wake'
+    - 'handled'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'handled'
+  actual: 'wake'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:522:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing:
+ok 89 - stderr-only failed action preserves refusal instead of JSON parsing:
+  ---
+  duration_ms: 360.960958
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 90 - stderr-only failed action preserves refusal instead of JSON parsing: {broken
+  ---
+  duration_ms: 360.531875
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..90
+# tests 90
+# suites 0
+# pass 81
+# fail 9
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 48289.68425
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

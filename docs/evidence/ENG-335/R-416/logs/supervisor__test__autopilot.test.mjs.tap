@@ -1,0 +1,542 @@
+TAP version 13
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 1 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 553.062875
+  ...
+# Subtest: fix_round is left in flight
+ok 2 - fix_round is left in flight
+  ---
+  duration_ms: 398.977084
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 3 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 501.168792
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 4 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 542.292959
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 5 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 424.137834
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 6 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 396.816417
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 7 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 397.245083
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 8 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 383.120042
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 9 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 387.503333
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 10 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 371.07825
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 11 - Moderate and Minor findings file one follow-up before accepting promotion
+  ---
+  duration_ms: 517.340667
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 12 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 380.2015
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 13 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 371.797333
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 14 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 384.698542
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 15 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 402.7115
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 16 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 441.73825
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 17 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 405.199208
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 18 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 403.79
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 19 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 391.823958
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 20 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 398.978
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 21 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 327.148208
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 22 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 317.07225
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 23 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 308.86175
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 24 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 350.987208
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 25 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 306.593625
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 26 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 301.977125
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 27 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 360.356167
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 28 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 380.914083
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 29 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 529.727916
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 30 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 316.225667
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 31 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 313.726625
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 32 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 307.97075
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 33 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 350.935917
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 34 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 336.880167
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 35 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 429.871917
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 36 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 471.776084
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 37 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 404.126375
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 38 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 462.438875
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 39 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 318.383042
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 40 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 312.076208
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 41 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 315.911416
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 42 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 311.196834
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 43 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 316.367542
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 44 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 315.324292
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 45 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 310.063708
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 46 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 303.454542
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 47 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 299.817458
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 48 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 317.859458
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 49 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 300.056875
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 50 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 337.5025
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 51 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 405.064416
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 52 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 563.678
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 53 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 316.444583
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 54 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 394.440292
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 55 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 392.562042
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 56 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 402.289958
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 57 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 396.764333
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 58 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 393.555875
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 59 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 393.30125
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 60 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 382.235625
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 61 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 618.826375
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 62 - runless completion fleet-membership retains an explicit binding diagnostic
+  ---
+  duration_ms: 337.597916
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 63 - runless completion gate-profile retains an explicit binding diagnostic
+  ---
+  duration_ms: 321.67
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+ok 64 - completion after an interrupted promotion has its own receipt and closes once
+  ---
+  duration_ms: 525.770791
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 65 - abandoned watch-no-report is journaled without waking or acting
+  ---
+  duration_ms: 301.414833
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 66 - abandoned watch-long-running is journaled without waking or acting
+  ---
+  duration_ms: 290.659584
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 67 - abandoned watch-invalid-report is journaled without waking or acting
+  ---
+  duration_ms: 295.041333
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 68 - abandoned org-report is journaled without waking or acting
+  ---
+  duration_ms: 282.443709
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+ok 69 - awaited promotion closes before waking with one short plan line and later notices stay silent
+  ---
+  duration_ms: 650.957333
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 70 - awaited PASS queued for promotion stays silent until closure
+  ---
+  duration_ms: 469.154666
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 71 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+  ---
+  duration_ms: 631.186042
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 72 - abandoned watcher inbox entry is handled without Herdr delivery
+  ---
+  duration_ms: 351.999667
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 73 - legacy uncertain promotion receipts still forbid command replay after the key upgrade
+  ---
+  duration_ms: 334.666459
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 74 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 482.965667
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 75 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 970.044292
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 76 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 785.200958
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 77 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 759.716667
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 78 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 832.42925
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 79 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 495.76075
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 80 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 4853.504708
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 81 - actual handle and promotion commands file findings and accept them offline
+  ---
+  duration_ms: 5461.127416
+  ...
+# Subtest: real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+ok 82 - real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+  ---
+  duration_ms: 4185.188959
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+not ok 83 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 6129.188958
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+
+      assert.ok(!fs.existsSync(f.workspace))
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:475:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+not ok 84 - automatic PASS reaches the real queue, lands and closes with one awaited wake
+  ---
+  duration_ms: 6865.298834
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+
+      assert.ok(!fs.existsSync(f.workspace))
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:475:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+not ok 85 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+  ---
+  duration_ms: 6466.3955
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+
+      assert.ok(!fs.existsSync(f.workspace))
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:475:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+not ok 86 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 6376.886208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+
+      assert.ok(!fs.existsSync(f.workspace))
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:475:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+not ok 87 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 6812.063209
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+
+      assert.ok(!fs.existsSync(f.workspace))
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/supervisor/test/autopilot.test.mjs:475:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 88 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 7762.796834
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing:
+ok 89 - stderr-only failed action preserves refusal instead of JSON parsing:
+  ---
+  duration_ms: 369.641458
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 90 - stderr-only failed action preserves refusal instead of JSON parsing: {broken
+  ---
+  duration_ms: 371.284792
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..90
+# tests 90
+# suites 0
+# pass 85
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 88326.290833
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

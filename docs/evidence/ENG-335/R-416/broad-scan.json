@@ -1,0 +1,441 @@
+{
+  "source": "016c624b025379107127304cec2c361b5a10407a",
+  "test_files_scanned": 122,
+  "matched_files": 60,
+  "selected_files": 89,
+  "omitted": [],
+  "matches": [
+    {
+      "file": "acceptance/test/harness.test.mjs",
+      "modules": [
+        "supervisor/tidy-tabs.mjs"
+      ]
+    },
+    {
+      "file": "acceptance/test/housekeeping.test.mjs",
+      "modules": [
+        "housekeeping/housekeeping.mjs"
+      ]
+    },
+    {
+      "file": "acceptance/test/recovery.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "acceptance/test/snapshot.test.mjs",
+      "modules": [
+        "contrib/settle-watch.mjs"
+      ]
+    },
+    {
+      "file": "discovery/test/lessons.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "dispatch/test/dispatch.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "promote/metrics.mjs"
+      ]
+    },
+    {
+      "file": "dispatch/test/record-worker.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "dispatch/test/timing.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "promote/metrics.mjs"
+      ]
+    },
+    {
+      "file": "housekeeping/test/auto-tidy.test.mjs",
+      "modules": [
+        "housekeeping/housekeeping.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ]
+    },
+    {
+      "file": "housekeeping/test/housekeeping.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "housekeeping/housekeeping.mjs"
+      ]
+    },
+    {
+      "file": "lanes/test/lane.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "promote/evidence.mjs",
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "lanes/test/no-focus.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "lib/retire-runtime.mjs"
+      ]
+    },
+    {
+      "file": "lanes/test/validation.test.mjs",
+      "modules": [
+        "lanes/lane.mjs"
+      ]
+    },
+    {
+      "file": "lanes/test/workspace-native.test.mjs",
+      "modules": [
+        "lanes/lane.mjs"
+      ]
+    },
+    {
+      "file": "promote/test/affected-tests.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "promote/test-plan.mjs"
+      ]
+    },
+    {
+      "file": "promote/test/completion.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "lanes/lane.mjs",
+        "promote/completion.mjs",
+        "promote/guard.mjs",
+        "promote/promote.mjs",
+        "supervisor/reconcile.mjs"
+      ]
+    },
+    {
+      "file": "promote/test/memory-gate.test.mjs",
+      "modules": [
+        "promote/memory-gate.mjs"
+      ]
+    },
+    {
+      "file": "promote/test/metrics.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "promote/metrics.mjs"
+      ]
+    },
+    {
+      "file": "promote/test/promote.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "lanes/lane.mjs",
+        "promote/gate-profile.mjs",
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "promote/test/train.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "promote/test/workflow-train.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/config.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/fleet-isolation.test.mjs",
+      "modules": [
+        "promote/guard.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/memory-boundaries.test.mjs",
+      "modules": [
+        "lanes/lane.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/rebase.test.mjs",
+      "modules": [
+        "lanes/lane.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/recapture.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/receipts.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/record-safety.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/report-evidence.test.mjs",
+      "modules": [
+        "promote/evidence.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/round-cap.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/settle.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "promote/evidence.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/test-evidence.test.mjs",
+      "modules": [
+        "promote/evidence.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/test-plan.test.mjs",
+      "modules": [
+        "promote/test-plan.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/train.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "lanes/lane.mjs",
+        "promote/promote.mjs",
+        "promote/train.mjs"
+      ]
+    },
+    {
+      "file": "settle/test/validation-tiers.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "supervisor/test/autopilot.test.mjs",
+      "modules": [
+        "promote/evidence.mjs"
+      ]
+    },
+    {
+      "file": "supervisor/test/entry.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "housekeeping/command.mjs",
+        "housekeeping/housekeeping.mjs",
+        "lib/retire-trigger.mjs",
+        "lib/retire.mjs",
+        "supervisor/entry.mjs",
+        "supervisor/retire.mjs"
+      ]
+    },
+    {
+      "file": "supervisor/test/reconcile.test.mjs",
+      "modules": [
+        "promote/completion.mjs",
+        "supervisor/reconcile.mjs"
+      ]
+    },
+    {
+      "file": "supervisor/test/supervisor.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "lanes/lane.mjs",
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "test-slot/test/gate-profile.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "promote/gate-profile.mjs",
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "test-slot/test/watchdog.test.mjs",
+      "modules": [
+        "lanes/lane.mjs",
+        "promote/gate-profile.mjs",
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "test/bch-cloak-contract.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "contrib/settle-watch.mjs",
+        "promote/completion.mjs",
+        "supervisor/reconcile.mjs"
+      ]
+    },
+    {
+      "file": "test/cli-help.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "contrib/settle-watch.mjs",
+        "housekeeping/housekeeping.mjs",
+        "lanes/lane.mjs",
+        "promote/host-gate.mjs",
+        "promote/metrics.mjs",
+        "promote/promote.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ]
+    },
+    {
+      "file": "test/fixture-lifetime.test.mjs",
+      "modules": [
+        "promote/gate-profile.mjs",
+        "promote/host-gate.mjs"
+      ]
+    },
+    {
+      "file": "test/fleet.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "lanes/lane.mjs"
+      ]
+    },
+    {
+      "file": "test/flow.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "test/load-deadlines.test.mjs",
+      "modules": [
+        "housekeeping/housekeeping.mjs"
+      ]
+    },
+    {
+      "file": "test/main-module.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "housekeeping/command.mjs",
+        "housekeeping/housekeeping.mjs",
+        "promote/metrics.mjs",
+        "promote/promote.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ]
+    },
+    {
+      "file": "test/name-alias.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    },
+    {
+      "file": "test/one-watcher.test.mjs",
+      "modules": [
+        "contrib/settle-watch.mjs"
+      ]
+    },
+    {
+      "file": "test/release.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "contrib/settle-watch.mjs",
+        "lanes/lane.mjs",
+        "supervisor/reconcile.mjs"
+      ]
+    },
+    {
+      "file": "test/retire-lock.test.mjs",
+      "modules": [
+        "lib/retire-lock.mjs",
+        "lib/retire-trigger.mjs"
+      ]
+    },
+    {
+      "file": "test/retire-paths.test.mjs",
+      "modules": [
+        "bin/org.mjs",
+        "contrib/settle-watch.mjs",
+        "lanes/lane.mjs",
+        "lib/retire-lock.mjs",
+        "lib/retire-trigger.mjs",
+        "lib/retire.mjs",
+        "promote/promote.mjs",
+        "supervisor/retire.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ]
+    },
+    {
+      "file": "test/retire.test.mjs",
+      "modules": [
+        "lib/retire-lock.mjs",
+        "lib/retire.mjs",
+        "supervisor/retire.mjs"
+      ]
+    },
+    {
+      "file": "test/review-children.test.mjs",
+      "modules": [
+        "promote/completion.mjs"
+      ]
+    },
+    {
+      "file": "test/settle-watch.test.mjs",
+      "modules": [
+        "contrib/settle-watch.mjs"
+      ]
+    },
+    {
+      "file": "test/startup-deadlines.test.mjs",
+      "modules": [
+        "promote/promote.mjs"
+      ]
+    },
+    {
+      "file": "test/tidy-tabs.test.mjs",
+      "modules": [
+        "lib/retire.mjs",
+        "supervisor/retire.mjs",
+        "supervisor/tidy-tabs.mjs"
+      ]
+    },
+    {
+      "file": "verify/test/verify.test.mjs",
+      "modules": [
+        "verify/execute.mjs",
+        "verify/expectations.mjs",
+        "verify/verify.mjs"
+      ]
+    },
+    {
+      "file": "watch/test/existing-project.test.mjs",
+      "modules": [
+        "bin/org.mjs"
+      ]
+    }
+  ]
+}

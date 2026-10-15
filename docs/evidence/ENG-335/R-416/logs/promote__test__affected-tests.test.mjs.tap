@@ -1,0 +1,52 @@
+TAP version 13
+# Subtest: the three-argument planner output keeps the field set accepted by the main validator
+ok 1 - the three-argument planner output keeps the field set accepted by the main validator
+  ---
+  duration_ms: 102.0525
+  ...
+# Subtest: one-hop selection includes changed tests and direct literals without following re-exports or cycles
+ok 2 - one-hop selection includes changed tests and direct literals without following re-exports or cycles
+  ---
+  duration_ms: 2.672667
+  ...
+# Subtest: a core-module change selects bounded one-hop extras and defers the expensive lane file
+ok 3 - a core-module change selects bounded one-hop extras and defers the expensive lane file
+  ---
+  duration_ms: 389.151917
+  ...
+# Subtest: the planner CLI launched through a symlinked directory emits the same plan
+ok 4 - the planner CLI launched through a symlinked directory emits the same plan
+  ---
+  duration_ms: 190.1385
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 5 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 177.3975
+  ...
+# Subtest: a leaf change selects exactly its direct test
+ok 6 - a leaf change selects exactly its direct test
+  ---
+  duration_ms: 0.893708
+  ...
+# Subtest: time and file caps defer extras to release while bound requirements always run
+ok 7 - time and file caps defer extras to release while bound requirements always run
+  ---
+  duration_ms: 0.218292
+  ...
+# Subtest: the real planner forces required evidence beyond both caps and refuses missing required files
+ok 8 - the real planner forces required evidence beyond both caps and refuses missing required files
+  ---
+  duration_ms: 128.155541
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1093.292416
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

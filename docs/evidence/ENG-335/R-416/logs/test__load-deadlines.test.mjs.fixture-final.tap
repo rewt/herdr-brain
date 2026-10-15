@@ -1,0 +1,77 @@
+TAP version 13
+# Subtest: measured load expands internal allowances without shorter, infinite or overflowing timers
+ok 1 - measured load expands internal allowances without shorter, infinite or overflowing timers
+  ---
+  duration_ms: 0.79825
+  ...
+# Subtest: a loaded native lookup receives time to answer and timeout retries back off with fresh output
+ok 2 - a loaded native lookup receives time to answer and timeout retries back off with fresh output
+  ---
+  duration_ms: 1.538125
+  ...
+# Subtest: the default native executor under the bounded helper scales each response allowance once
+ok 3 - the default native executor under the bounded helper scales each response allowance once
+  ---
+  duration_ms: 35.761166
+  ...
+# Subtest: the record lock waits past ten seconds for a live holder under load before appending
+ok 4 - the record lock waits past ten seconds for a live holder under load before appending
+  ---
+  duration_ms: 20.433958
+  ...
+# Subtest: exhausted record-lock waits preserve live, refused and initializing owners and log bytes
+ok 5 - exhausted record-lock waits preserve live, refused and initializing owners and log bytes
+  ---
+  duration_ms: 151.210917
+  ...
+# Subtest: exhausted, refused and malformed lookups never authorize a signal, including after timeout
+ok 6 - exhausted, refused and malformed lookups never authorize a signal, including after timeout
+  ---
+  duration_ms: 2.533208
+  ...
+# Subtest: a replacement PID discovered after a retry remains unauthorized
+ok 7 - a replacement PID discovered after a retry remains unauthorized
+  ---
+  duration_ms: 0.702458
+  ...
+# Subtest: slow Herdr transport responds within a loaded allowance; refusals stay refusals
+ok 8 - slow Herdr transport responds within a loaded allowance; refusals stay refusals
+  ---
+  duration_ms: 104.555375
+  ...
+# Subtest: housekeeping gives each evidence read a loaded response allowance and preserves refusals
+ok 9 - housekeeping gives each evidence read a loaded response allowance and preserves refusals
+  ---
+  duration_ms: 16.047542
+  ...
+# Subtest: queue and notice locks wait through loaded contention and never remove a live lock
+ok 10 - queue and notice locks wait through loaded contention and never remove a live lock
+  ---
+  duration_ms: 12.728167
+  ...
+# Subtest: inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner
+ok 11 - inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner
+  ---
+  duration_ms: 392.894834
+  ...
+# Subtest: owned inbox teardown allows loaded stop confirmation before clearing its processes
+ok 12 - owned inbox teardown allows loaded stop confirmation before clearing its processes
+  ---
+  duration_ms: 23.97875
+  ...
+# Subtest: owned inbox teardown allows loaded shutdown confirmation before clearing its processes
+ok 13 - owned inbox teardown allows loaded shutdown confirmation before clearing its processes
+  ---
+  duration_ms: 23.297625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 880.609666
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

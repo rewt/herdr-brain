@@ -1,0 +1,32 @@
+TAP version 13
+# Subtest: reviewed binary, modes, renames and same-file edits survive independent upstream edits
+ok 1 - reviewed binary, modes, renames and same-file edits survive independent upstream edits
+  ---
+  duration_ms: 4814.708834
+  ...
+# Subtest: automatic rebase never updates other branches even when Git updateRefs is enabled
+ok 2 - automatic rebase never updates other branches even when Git updateRefs is enabled
+  ---
+  duration_ms: 4578.999709
+  ...
+# Subtest: a lost lane-head update response resumes only the saved proved commit without replay or review
+ok 3 - a lost lane-head update response resumes only the saved proved commit without replay or review
+  ---
+  duration_ms: 5260.10925
+  ...
+# Subtest: main moving during replay refuses lane-head replacement and keeps the reviewed lane
+ok 4 - main moving during replay refuses lane-head replacement and keeps the reviewed lane
+  ---
+  duration_ms: 4050.665125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 18806.09125
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

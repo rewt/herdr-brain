@@ -1,0 +1,27 @@
+TAP version 13
+# Subtest: memory refusal completes every fresh batch member without attempts or replacing an existing result
+ok 1 - memory refusal completes every fresh batch member without attempts or replacing an existing result
+  ---
+  duration_ms: 2.877584
+  ...
+# Subtest: memory or STOP refusals preserve every byte of an earlier integration checkpoint
+ok 2 - memory or STOP refusals preserve every byte of an earlier integration checkpoint
+  ---
+  duration_ms: 1.411333
+  ...
+# Subtest: memory refusal rejects a foreign or malformed train before changing its receipt
+ok 3 - memory refusal rejects a foreign or malformed train before changing its receipt
+  ---
+  duration_ms: 1.178125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 99.967042
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,37 @@
+TAP version 13
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 24
+ok 1 - a genuinely hung sandbox-exec reaches its finite deadline at load 24
+  ---
+  duration_ms: 304.222792
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 0
+ok 2 - a genuinely hung sandbox-exec reaches its finite deadline at load 0
+  ---
+  duration_ms: 52.629125
+  ...
+# Subtest: report polling scales once from its own operation load and stays bounded
+ok 3 - report polling scales once from its own operation load and stays bounded
+  ---
+  duration_ms: 0.318958
+  ...
+# Subtest: each command samples current load, preserves zero, and supplies a bounded default
+ok 4 - each command samples current load, preserves zero, and supplies a bounded default
+  ---
+  duration_ms: 0.336375
+  ...
+# Subtest: case 07 waits for its promotion notices at least as long as the default delivery cadence
+ok 5 - case 07 waits for its promotion notices at least as long as the default delivery cadence
+  ---
+  duration_ms: 0.391333
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 452.457417
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

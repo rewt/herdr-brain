@@ -1,0 +1,42 @@
+TAP version 13
+# Subtest: clean rebase preserves reviewed changes without running a suite
+ok 1 - clean rebase preserves reviewed changes without running a suite
+  ---
+  duration_ms: 4851.535542
+  ...
+# Subtest: conflicting reviewed diff escalates with paths and leaves the lane intact
+ok 2 - conflicting reviewed diff escalates with paths and leaves the lane intact
+  ---
+  duration_ms: 4126.27525
+  ...
+# Subtest: intermediate replay conflicts escalate even when the final trees merge cleanly
+ok 3 - intermediate replay conflicts escalate even when the final trees merge cleanly
+  ---
+  duration_ms: 4192.630458
+  ...
+# Subtest: a clean replay that loses reviewed content fails preservation before changing the lane
+ok 4 - a clean replay that loses reviewed content fails preservation before changing the lane
+  ---
+  duration_ms: 4220.095958
+  ...
+# Subtest: reviewed changes already present upstream survive an empty replay
+ok 5 - reviewed changes already present upstream survive an empty replay
+  ---
+  duration_ms: 4353.913
+  ...
+# Subtest: post-rebase suite failure belongs to promotion without a new worker
+ok 6 - post-rebase suite failure belongs to promotion without a new worker
+  ---
+  duration_ms: 4782.606709
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 26626.559916
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

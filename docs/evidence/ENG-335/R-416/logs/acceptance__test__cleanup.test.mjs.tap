@@ -1,0 +1,67 @@
+TAP version 13
+# Subtest: cleanup closes main and linked workspaces after pass, including an unfurled creation receipt
+ok 1 - cleanup closes main and linked workspaces after pass, including an unfurled creation receipt
+  ---
+  duration_ms: 16.004208
+  ...
+# Subtest: cleanup closes main and linked workspaces after fail, including an unfurled creation receipt
+ok 2 - cleanup closes main and linked workspaces after fail, including an unfurled creation receipt
+  ---
+  duration_ms: 14.148583
+  ...
+# Subtest: failed inventory still attempts every owned receipt and audits the actual residue by ID and label
+ok 3 - failed inventory still attempts every owned receipt and audits the actual residue by ID and label
+  ---
+  duration_ms: 12.421375
+  ...
+# Subtest: unreceipted scratch workspace is named by the raw audit without gaining closure authority
+ok 4 - unreceipted scratch workspace is named by the raw audit without gaining closure authority
+  ---
+  duration_ms: 4.660125
+  ...
+# Subtest: direct linked creation receipt survives a failed pane-layout read
+ok 5 - direct linked creation receipt survives a failed pane-layout read
+  ---
+  duration_ms: 336.838209
+  ...
+# Subtest: nested linked creation receipt survives a failed pane-layout read
+ok 6 - nested linked creation receipt survives a failed pane-layout read
+  ---
+  duration_ms: 290.715125
+  ...
+# Subtest: cleanup recovers implicit main and linked workspaces from a confined creation intent when the reply is lost
+ok 7 - cleanup recovers implicit main and linked workspaces from a confined creation intent when the reply is lost
+  ---
+  duration_ms: 18.116709
+  ...
+# Subtest: a malformed journal entry does not prevent closing other receipt-owned workspaces
+ok 8 - a malformed journal entry does not prevent closing other receipt-owned workspaces
+  ---
+  duration_ms: 9.030458
+  ...
+# Subtest: SIGINT closes receipt-owned main and linked workspaces before emitting summary
+ok 9 - SIGINT closes receipt-owned main and linked workspaces before emitting summary
+  ---
+  duration_ms: 41.8885
+  ...
+# Subtest: SIGTERM closes receipt-owned main and linked workspaces before emitting summary
+ok 10 - SIGTERM closes receipt-owned main and linked workspaces before emitting summary
+  ---
+  duration_ms: 41.150292
+  ...
+# Subtest: adapter records the implicit main workspace as well as the explicit linked creation reply
+ok 11 - adapter records the implicit main workspace as well as the explicit linked creation reply
+  ---
+  duration_ms: 380.712458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1256.094292
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

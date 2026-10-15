@@ -1,0 +1,429 @@
+TAP version 13
+# Subtest: lane never moves Herdr focus when it creates or opens a workspace, worktree or tab
+ok 1 - lane never moves Herdr focus when it creates or opens a workspace, worktree or tab # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.441875
+  ...
+# Subtest: lane closure cannot invoke Herdr's parent-focusing worktree removal
+ok 2 - lane closure cannot invoke Herdr's parent-focusing worktree removal
+  ---
+  duration_ms: 16.236916
+  ...
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 3 - three ready lanes stack and fast-forward with one promotion-tier run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.551084
+  ...
+# Subtest: five pending lanes drain in arrival order with the unbounded default
+ok 4 - five pending lanes drain in arrival order with the unbounded default # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.054375
+  ...
+# Subtest: five pending lanes drain in arrival order with max_batch 3
+ok 5 - five pending lanes drain in arrival order with max_batch 3 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034834
+  ...
+# Subtest: invalid committed max_batch values refuse enqueue and drain without consuming pending lanes
+ok 6 - invalid committed max_batch values refuse enqueue and drain without consuming pending lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03375
+  ...
+# Subtest: batch policy ignores untracked canonical config, uncommitted edits and lane copies
+ok 7 - batch policy ignores untracked canonical config, uncommitted edits and lane copies # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035958
+  ...
+# Subtest: an unborn canonical branch uses default settings even with an untracked config
+ok 8 - an unborn canonical branch uses default settings even with an untracked config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030917
+  ...
+# Subtest: a failed settings git rev-parse retains a coded queue refusal and permits retry
+ok 9 - a failed settings git rev-parse retains a coded queue refusal and permits retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.07975
+  ...
+# Subtest: a failed settings git ls-tree retains a coded queue refusal and permits retry
+ok 10 - a failed settings git ls-tree retains a coded queue refusal and permits retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031583
+  ...
+# Subtest: a failed settings git show retains a coded queue refusal and permits retry
+ok 11 - a failed settings git show retains a coded queue refusal and permits retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.103584
+  ...
+# Subtest: a invalid settings refusal after startup sends one queue notice and preserves the pending tail
+ok 12 - a invalid settings refusal after startup sends one queue notice and preserves the pending tail # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.085333
+  ...
+# Subtest: a git-failed settings refusal after startup sends one queue notice and preserves the pending tail
+ok 13 - a git-failed settings refusal after startup sends one queue notice and preserves the pending tail # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.474708
+  ...
+# Subtest: a settings git rev-parse timeout releases the queue for enqueuers and retains a coded refusal
+ok 14 - a settings git rev-parse timeout releases the queue for enqueuers and retains a coded refusal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.095084
+  ...
+# Subtest: a settings git ls-tree timeout releases the queue for enqueuers and retains a coded refusal
+ok 15 - a settings git ls-tree timeout releases the queue for enqueuers and retains a coded refusal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034166
+  ...
+# Subtest: a settings git show timeout releases the queue for enqueuers and retains a coded refusal
+ok 16 - a settings git show timeout releases the queue for enqueuers and retains a coded refusal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028083
+  ...
+# Subtest: settings are read once for each new batch and not for an empty queue
+ok 17 - settings are read once for each new batch and not for an empty queue # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.061916
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 18 - safe bisection lands two good lanes with the third red in exactly three runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062416
+  ...
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 19 - a lone ready lane goes immediately with one promotion run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03025
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 20 - STOP during a batch memory wait refuses promotion and permits retry after clearing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.121542
+  ...
+# Subtest: unprofiled batch waits before its project lock and proceeds when memory clears
+ok 21 - unprofiled batch waits before its project lock and proceeds when memory clears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.074083
+  ...
+# Subtest: unprofiled memory re-check refuses with a code and releases the project lock
+ok 22 - unprofiled memory re-check refuses with a code and releases the project lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028458
+  ...
+# Subtest: unprofiled memory re-check proceeds on clearing
+ok 23 - unprofiled memory re-check proceeds on clearing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.052708
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 24 - completed batch notices wait for empty input and deliver each lane once with one gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024625
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 25 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 3461.225375
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 26 - interrupted validation preserves main and drain resumes the batch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.06025
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 27 - a previously green identical tree is reused by the batch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023208
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 28 - safe bisection lands all good work with first red in exactly five runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020042
+  ...
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 29 - safe bisection lands all good work with second red in exactly five runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020542
+  ...
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 30 - a changed queued head and a dirty lane are refused without holding a clean lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019667
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 31 - a crash after the fast-forward resumes bookkeeping without a second gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02975
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 32 - recovery: a lost fast-forward is adopted after a later batch advances main # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018834
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 33 - STOP and scratch mutation preserve main and produce refusals # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021292
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 34 - batch dirty canonical checkout returns refusals and notices before scratch work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.06825
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 35 - batch off-main canonical checkout returns refusals and notices before scratch work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066625
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 36 - resuming a prepared batch after main moves replans and preserves upstream work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020709
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 37 - resuming a validated batch after main moves replans and preserves upstream work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017584
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 38 - resuming prepared capture refuses dirty input and drains the remaining lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018583
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 39 - resuming prepared capture refuses moved input and drains the remaining lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020792
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 40 - resuming prepared capture refuses stop input and drains the remaining lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016959
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 41 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015375
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 42 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0295
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 43 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017083
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 44 - a paused check exposes its clock atomically while validation is still running # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016917
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 45 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026792
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 46 - red validation finishes the published clock and retains its real exit # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020125
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 47 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016167
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 48 - validation that throws closes its telemetry clock without inventing green evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020625
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 49 - affected test supplements run once in the batch gate, are recorded and block a red landing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017541
+  ...
+# Subtest: a lane-modified planner cannot shrink canonical bound test coverage
+ok 50 - a lane-modified planner cannot shrink canonical bound test coverage # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01825
+  ...
+# Subtest: a lane-modified planner cannot invent canonical bound test coverage
+ok 51 - a lane-modified planner cannot invent canonical bound test coverage # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0175
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 52 - a changed gate cannot omit a bound deferred test file # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036458
+  ...
+# Subtest: canonical planning receives the union of bound required files and executes them beyond the extra cap
+ok 53 - canonical planning receives the union of bound required files and executes them beyond the extra cap # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: the supervisor arms the standalone watcher; contrib keeps the compatibility watcher
+ok 54 - the supervisor arms the standalone watcher; contrib keeps the compatibility watcher
+  ---
+  duration_ms: 1.168625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 55 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.551417
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 56 - lane close --git-only keeps the worktree beneath even an eligible pane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043834
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 57 - lane close uses the executor then proves vacancy before Git and empty workspace close # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034125
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 58 - an empty unmerged lane retains its recoverable archive and immutable record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068791
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 59 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0405
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 60 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0305
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 61 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 62 - Git-only lane without a workspace still keeps queued lane and run references # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037458
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 63 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.114542
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 64 - installed settle-watch flags keep an ingested worker while its chain is open # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.082208
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 65 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.077083
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 66 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0305
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 67 - promote drain consumes requests at both foreground boundaries without running a gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032875
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+ok 68 - promote sends its ready acknowledgment before observing a pending retirement hint # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062417
+  ...
+# Subtest: a dequeued job is persisted before retirement catch-up and is never left current during it
+ok 69 - a dequeued job is persisted before retirement catch-up and is never left current during it # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030042
+  ...
+# Subtest: the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+ok 70 - the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067375
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 71 - cleanup retries are capped with backoff, record the refusal, and reset on a new request # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031625
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 72 - lane close permits an absent Herdr executable and refuses an unreadable installed server # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.1195
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 73 - tidy-tabs prunes an exited recorded watcher callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.080042
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 74 - tidy-tabs prunes an exited recorded settle callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029541
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 75 - tidy-tabs prunes an exited recorded executive callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.056291
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 76 - tidy-tabs prunes an exited recorded plan callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024833
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 77 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022625
+  ...
+# Subtest: a concurrently pruned absent receipt does not abort remaining tab closes
+ok 78 - a concurrently pruned absent receipt does not abort remaining tab closes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021375
+  ...
+# Subtest: post-close receipt pruning ENOENT preserves the successful close result
+ok 79 - post-close receipt pruning ENOENT preserves the successful close result # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021
+  ...
+# Subtest: post-close receipt pruning EACCES preserves the successful close result
+ok 80 - post-close receipt pruning EACCES preserves the successful close result # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.298792
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 81 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.052291
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 82 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027458
+  ...
+# Subtest: standalone contrib retires only its owned watcher with no supervisor directory
+ok 83 - standalone contrib retires only its owned watcher with no supervisor directory
+  ---
+  duration_ms: 4803.594625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..83
+# tests 83
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 79
+# todo 0
+# duration_ms 4923.365625
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

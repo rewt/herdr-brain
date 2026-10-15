@@ -1,0 +1,67 @@
+TAP version 13
+# Subtest: review brief carries a matching ingest validation receipt (new intake)
+ok 1 - review brief carries a matching ingest validation receipt (new intake)
+  ---
+  duration_ms: 4187.457708
+  ...
+# Subtest: review brief carries a matching ingest validation receipt (previous intake)
+ok 2 - review brief carries a matching ingest validation receipt (previous intake)
+  ---
+  duration_ms: 4122.885833
+  ...
+# Subtest: matching intake discharges only report validity: - Report record-check validation not independently executed.
+ok 3 - matching intake discharges only report validity: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 4353.2715
+  ...
+# Subtest: matching intake discharges only report validity: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 4 - matching intake discharges only report validity: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 4306.588083
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: report
+ok 5 - ingest proof refuses mismatched or absent evidence: report
+  ---
+  duration_ms: 4348.807792
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: ingested_report
+ok 6 - ingest proof refuses mismatched or absent evidence: ingested_report
+  ---
+  duration_ms: 4254.993875
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: reportText
+ok 7 - ingest proof refuses mismatched or absent evidence: reportText
+  ---
+  duration_ms: 4097.460042
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: reportHash
+ok 8 - ingest proof refuses mismatched or absent evidence: reportHash
+  ---
+  duration_ms: 4141.303542
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: run
+ok 9 - ingest proof refuses mismatched or absent evidence: run
+  ---
+  duration_ms: 4027.739166
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: abandoned
+ok 10 - ingest proof refuses mismatched or absent evidence: abandoned
+  ---
+  duration_ms: 4122.32875
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: missing
+ok 11 - ingest proof refuses mismatched or absent evidence: missing
+  ---
+  duration_ms: 4022.903708
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 46085.631166
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

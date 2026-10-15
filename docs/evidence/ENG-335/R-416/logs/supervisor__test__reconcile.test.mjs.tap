@@ -1,0 +1,182 @@
+TAP version 13
+# Subtest: one batch reconciles every member and superseded run, preserving excluded work and older folds
+ok 1 - one batch reconciles every member and superseded run, preserving excluded work and older folds
+  ---
+  duration_ms: 2.344791
+  ...
+# Subtest: omissions, stale evidence, unresolved questions and malformed plans refuse the whole batch
+ok 2 - omissions, stale evidence, unresolved questions and malformed plans refuse the whole batch
+  ---
+  duration_ms: 5.71025
+  ...
+# Subtest: an excluded done report cannot satisfy an included dependency, and exclusion cycles refuse
+ok 3 - an excluded done report cannot satisfy an included dependency, and exclusion cycles refuse
+  ---
+  duration_ms: 0.542541
+  ...
+# Subtest: blocked reports require recorded supervisor resolution, while unrelated writes do not invalidate preparation
+ok 4 - blocked reports require recorded supervisor resolution, while unrelated writes do not invalidate preparation
+  ---
+  duration_ms: 0.415125
+  ...
+# Subtest: display-only session metadata never changes completion authority
+ok 5 - display-only session metadata never changes completion authority
+  ---
+  duration_ms: 0.225042
+  ...
+# Subtest: replay is a no-op even after reopening, and different evidence cannot reuse the batch id
+ok 6 - replay is a no-op even after reopening, and different evidence cannot reuse the batch id
+  ---
+  duration_ms: 0.289417
+  ...
+# Subtest: a reverted question is omitted beside a plain-note delta with new receipts
+ok 7 - a reverted question is omitted beside a plain-note delta with new receipts
+  ---
+  duration_ms: 3.44
+  ...
+# Subtest: a reverted link is omitted beside a plain-note delta with new receipts
+ok 8 - a reverted link is omitted beside a plain-note delta with new receipts
+  ---
+  duration_ms: 3.00775
+  ...
+# Subtest: a reverted question is omitted beside a plain-note delta with older receipts
+ok 9 - a reverted question is omitted beside a plain-note delta with older receipts
+  ---
+  duration_ms: 3.894958
+  ...
+# Subtest: a reverted link is omitted beside a plain-note delta with older receipts
+ok 10 - a reverted link is omitted beside a plain-note delta with older receipts
+  ---
+  duration_ms: 3.983042
+  ...
+# Subtest: finish reconciles a reverted question without refresh with new receipts
+ok 11 - finish reconciles a reverted question without refresh with new receipts
+  ---
+  duration_ms: 698.923667
+  ...
+# Subtest: finish reconciles a reverted auto-question without refresh with new receipts
+ok 12 - finish reconciles a reverted auto-question without refresh with new receipts
+  ---
+  duration_ms: 556.54025
+  ...
+# Subtest: finish reconciles a reverted link without refresh with new receipts
+ok 13 - finish reconciles a reverted link without refresh with new receipts
+  ---
+  duration_ms: 729.705667
+  ...
+# Subtest: finish reconciles a reverted question without refresh with older receipts
+ok 14 - finish reconciles a reverted question without refresh with older receipts
+  ---
+  duration_ms: 654.914334
+  ...
+# Subtest: finish reconciles a reverted auto-question without refresh with older receipts
+ok 15 - finish reconciles a reverted auto-question without refresh with older receipts
+  ---
+  duration_ms: 523.554458
+  ...
+# Subtest: finish reconciles a reverted link without refresh with older receipts
+ok 16 - finish reconciles a reverted link without refresh with older receipts
+  ---
+  duration_ms: 661.050583
+  ...
+# Subtest: a plain note and reverted question on the same member refresh with new receipts
+ok 17 - a plain note and reverted question on the same member refresh with new receipts
+  ---
+  duration_ms: 3.456459
+  ...
+# Subtest: a plain note and reverted link on the same member refresh with new receipts
+ok 18 - a plain note and reverted link on the same member refresh with new receipts
+  ---
+  duration_ms: 2.976292
+  ...
+# Subtest: a plain note and reverted question on the same member refresh with older receipts
+ok 19 - a plain note and reverted question on the same member refresh with older receipts
+  ---
+  duration_ms: 3.777167
+  ...
+# Subtest: a plain note and reverted link on the same member refresh with older receipts
+ok 20 - a plain note and reverted link on the same member refresh with older receipts
+  ---
+  duration_ms: 3.693333
+  ...
+# Subtest: an asked and answered question followed by a plain note refreshes and finishes
+ok 21 - an asked and answered question followed by a plain note refreshes and finishes
+  ---
+  duration_ms: 983.2825
+  ...
+# Subtest: an asked and answered question followed by a decision note refuses refresh
+ok 22 - an asked and answered question followed by a decision note refuses refresh
+  ---
+  duration_ms: 695.883834
+  ...
+# Subtest: refusal shows every changed member and only an exact inspected plain-note delta can be accepted
+ok 23 - refusal shows every changed member and only an exact inspected plain-note delta can be accepted
+  ---
+  duration_ms: 6.237542
+  ...
+# Subtest: decision notes, newer runs, reports, links, questions, holds and close/reopen remain acceptance-relevant
+ok 24 - decision notes, newer runs, reports, links, questions, holds and close/reopen remain acceptance-relevant
+  ---
+  duration_ms: 5.57975
+  ...
+# Subtest: refresh refuses a missing historical binding and a preparation sequence that contradicts its fingerprints
+ok 25 - refresh refuses a missing historical binding and a preparation sequence that contradicts its fingerprints
+  ---
+  duration_ms: 0.830666
+  ...
+# Subtest: questions under a blocking review are included in the delta without changing the work fingerprint
+ok 26 - questions under a blocking review are included in the delta without changing the work fingerprint
+  ---
+  duration_ms: 0.559542
+  ...
+# Subtest: plain supervisor notes recover the original integrated range with new v1 receipts
+ok 27 - plain supervisor notes recover the original integrated range with new v1 receipts
+  ---
+  duration_ms: 932.9795
+  ...
+# Subtest: plain supervisor notes recover the original integrated range with older v1 receipts
+ok 28 - plain supervisor notes recover the original integrated range with older v1 receipts
+  ---
+  duration_ms: 918.450417
+  ...
+# Subtest: finish explains a post-prepare decision and refresh refuses it
+ok 29 - finish explains a post-prepare decision and refresh refuses it
+  ---
+  duration_ms: 596.274875
+  ...
+# Subtest: finish explains a post-prepare run and refresh refuses it
+ok 30 - finish explains a post-prepare run and refresh refuses it
+  ---
+  duration_ms: 585.143666
+  ...
+# Subtest: finish explains a post-prepare question and refresh refuses it
+ok 31 - finish explains a post-prepare question and refresh refuses it
+  ---
+  duration_ms: 640.2645
+  ...
+# Subtest: shared adapter verifies exact Git integration and uses explicit project record despite inherited ORG_DIR
+ok 32 - shared adapter verifies exact Git integration and uses explicit project record despite inherited ORG_DIR
+  ---
+  duration_ms: 1064.939583
+  ...
+# Subtest: adapter refuses stale record, dirty trees, wrong record, STOP and the actual promotion lock
+ok 33 - adapter refuses stale record, dirty trees, wrong record, STOP and the actual promotion lock
+  ---
+  duration_ms: 696.65875
+  ...
+# Subtest: historical exclusions preserve newer work and cannot mutate its state
+ok 34 - historical exclusions preserve newer work and cannot mutate its state
+  ---
+  duration_ms: 0.715458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..34
+# tests 34
+# suites 0
+# pass 34
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11092.463833
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

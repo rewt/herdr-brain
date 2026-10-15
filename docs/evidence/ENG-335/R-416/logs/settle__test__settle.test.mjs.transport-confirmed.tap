@@ -1,0 +1,107 @@
+TAP version 13
+# Subtest: settle retains the review stage under simulated memory pressure and launches once after it clears
+ok 1 - settle retains the review stage under simulated memory pressure and launches once after it clears
+  ---
+  duration_ms: 9045.440291
+  ...
+# Subtest: STOP arriving during correction dispatch memory wait returns a resumable stopped handoff
+ok 2 - STOP arriving during correction dispatch memory wait returns a resumable stopped handoff
+  ---
+  duration_ms: 16677.688041
+  ...
+# Subtest: fixture teardown waits for a concurrent child to finish writing before removing its directory
+ok 3 - fixture teardown waits for a concurrent child to finish writing before removing its directory
+  ---
+  duration_ms: 239.714792
+  ...
+# Subtest: unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable
+ok 4 - unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable
+  ---
+  duration_ms: 10165.54225
+  ...
+# Subtest: already ingested reports use immutable bytes and never create duplicate proposals
+ok 5 - already ingested reports use immutable bytes and never create duplicate proposals
+  ---
+  duration_ms: 4077.705125
+  ...
+# Subtest: non-done outcomes escalate with substance without launching a reviewer or correction
+ok 6 - non-done outcomes escalate with substance without launching a reviewer or correction
+  ---
+  duration_ms: 2333.280417
+  ...
+# Subtest: settle generated review brief supplies the exact inherited-gate non-claim
+ok 7 - settle generated review brief supplies the exact inherited-gate non-claim
+  ---
+  duration_ms: 3948.070375
+  ...
+# Subtest: inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence
+ok 8 - inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence
+  ---
+  duration_ms: 7782.804792
+  ...
+# Subtest: discovered project settings override parent settle values and inherit a non-main integration branch
+ok 9 - discovered project settings override parent settle values and inherit a non-main integration branch
+  ---
+  duration_ms: 5715.760958
+  ...
+# Subtest: explicit configuration selects one layer and command flags override settle settings
+ok 10 - explicit configuration selects one layer and command flags override settle settings
+  ---
+  duration_ms: 680.336958
+  ...
+# Subtest: an item dropped or blocked during NEEDS-WORK review cannot launch a correction
+ok 11 - an item dropped or blocked during NEEDS-WORK review cannot launch a correction
+  ---
+  duration_ms: 8239.622916
+  ...
+# Subtest: initial and cached readiness both require a clean canonical checkout
+ok 12 - initial and cached readiness both require a clean canonical checkout
+  ---
+  duration_ms: 7865.325875
+  ...
+# Subtest: dirty lanes and foreign Git identities cannot be reviewed or dispatched
+ok 13 - dirty lanes and foreign Git identities cannot be reviewed or dispatched
+  ---
+  duration_ms: 4420.794
+  ...
+# Subtest: malformed reviews never silently retry models; inspected uncertain launches can start a new round
+ok 14 - malformed reviews never silently retry models; inspected uncertain launches can start a new round
+  ---
+  duration_ms: 8139.367833
+  ...
+# Subtest: uncertain fix delivery recovers the dispatch journal and never starts a second correction
+ok 15 - uncertain fix delivery recovers the dispatch journal and never starts a second correction
+  ---
+  duration_ms: 6654.494916
+  ...
+# Subtest: suite execution is deferred until promotion even with an independent PASS
+ok 16 - suite execution is deferred until promotion even with an independent PASS
+  ---
+  duration_ms: 4311.534334
+  ...
+# Subtest: PASS with unverified claims and moved heads do not return promotable
+ok 17 - PASS with unverified claims and moved heads do not return promotable
+  ---
+  duration_ms: 8095.224041
+  ...
+# Subtest: same-lane contenders cannot run two independent reviews
+ok 18 - same-lane contenders cannot run two independent reviews
+  ---
+  duration_ms: 4118.013
+  ...
+# Subtest: other-item lane work and dropped items require judgment; a saved PASS rechecks the record
+ok 19 - other-item lane work and dropped items require judgment; a saved PASS rechecks the record
+  ---
+  duration_ms: 6778.122417
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 119394.377834
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

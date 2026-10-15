@@ -1,0 +1,107 @@
+TAP version 13
+# Subtest: defaults, legacy commands, partial tracked overrides and invalid declarations
+ok 1 - defaults, legacy commands, partial tracked overrides and invalid declarations
+  ---
+  duration_ms: 200.364666
+  ...
+# Subtest: project gate limits override healthy history for promotion and release
+ok 2 - project gate limits override healthy history for promotion and release
+  ---
+  duration_ms: 55.547458
+  ...
+# Subtest: legacy host settings are ignored even in an unborn repository
+ok 3 - legacy host settings are ignored even in an unborn repository
+  ---
+  duration_ms: 11.026958
+  ...
+# Subtest: a worker check, promotion check and promotion reuse their exact commands; release never runs
+ok 4 - a worker check, promotion check and promotion reuse their exact commands; release never runs
+  ---
+  duration_ms: 932.372708
+  ...
+# Subtest: pane identities are absent from preparation, validation and fingerprints
+ok 5 - pane identities are absent from preparation, validation and fingerprints
+  ---
+  duration_ms: 643.820417
+  ...
+# Subtest: same tree after empty commits and a clean rebase reuses validation across tiers
+ok 6 - same tree after empty commits and a clean rebase reuses validation across tiers
+  ---
+  duration_ms: 544.852708
+  ...
+# Subtest: tree, command, environment, preparation and declared environment changes invalidate reuse
+ok 7 - tree, command, environment, preparation and declared environment changes invalidate reuse
+  ---
+  duration_ms: 1274.791958
+  ...
+# Subtest: red, signal, dirty and moved-head executions never supply reusable green evidence
+ok 8 - red, signal, dirty and moved-head executions never supply reusable green evidence
+  ---
+  duration_ms: 1289.601791
+  ...
+# Subtest: commands that start and exit 75 record failed receipts in both validation tiers
+ok 9 - commands that start and exit 75 record failed receipts in both validation tiers
+  ---
+  duration_ms: 848.2455
+  ...
+# Subtest: worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+ok 10 - worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+  ---
+  duration_ms: 843.559791
+  ...
+# Subtest: a started command exiting 75 is a failure in check and promote, never a slot refusal
+ok 11 - a started command exiting 75 is a failure in check and promote, never a slot refusal
+  ---
+  duration_ms: 1083.68875
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retries
+ok 12 - promotion holds the slot without replaying the chain when leaf retries
+  ---
+  duration_ms: 362.402625
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retry exhausted
+ok 13 - promotion holds the slot without replaying the chain when leaf retry exhausted
+  ---
+  duration_ms: 364.863417
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf declines
+ok 14 - promotion holds the slot without replaying the chain when leaf declines
+  ---
+  duration_ms: 342.015291
+  ...
+# Subtest: promotion holds the slot without replaying the chain when earlier timeout text
+ok 15 - promotion holds the slot without replaying the chain when earlier timeout text
+  ---
+  duration_ms: 348.439583
+  ...
+# Subtest: a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+ok 16 - a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+  ---
+  duration_ms: 583.5375
+  ...
+# Subtest: overlapping checks serialize evidence without running the same command twice
+ok 17 - overlapping checks serialize evidence without running the same command twice
+  ---
+  duration_ms: 624.477167
+  ...
+# Subtest: promotion checks in different projects serialize and a nested command uses the held slot
+ok 18 - promotion checks in different projects serialize and a nested command uses the held slot
+  ---
+  duration_ms: 849.184125
+  ...
+# Subtest: bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+ok 19 - bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+  ---
+  duration_ms: 619.547209
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11917.80025
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

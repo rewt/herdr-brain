@@ -1,0 +1,77 @@
+TAP version 13
+# Subtest: unconfigured lane review uses the portable preset with its own memory check
+ok 1 - unconfigured lane review uses the portable preset with its own memory check
+  ---
+  duration_ms: 3041.009166
+  ...
+# Subtest: unconfigured lane review uses the portable preset after the parent memory check
+ok 2 - unconfigured lane review uses the portable preset after the parent memory check
+  ---
+  duration_ms: 2815.010208
+  ...
+# Subtest: dispatch child boundary STOP restores worker stage for ordinary retry
+ok 3 - dispatch child boundary STOP restores worker stage for ordinary retry
+  ---
+  duration_ms: 2182.9925
+  ...
+# Subtest: settle review child boundary STOP restores review stage for ordinary retry
+ok 4 - settle review child boundary STOP restores review stage for ordinary retry
+  ---
+  duration_ms: 4403.038916
+  ...
+# Subtest: dispatch child boundary pressure does not create a second hidden wait
+ok 5 - dispatch child boundary pressure does not create a second hidden wait
+  ---
+  duration_ms: 1963.744667
+  ...
+# Subtest: settle review child boundary pressure does not create a second hidden wait
+ok 6 - settle review child boundary pressure does not create a second hidden wait
+  ---
+  duration_ms: 4155.500167
+  ...
+# Subtest: direct lane dispatch waits visibly and honors canonical STOP from a linked worktree
+ok 7 - direct lane dispatch waits visibly and honors canonical STOP from a linked worktree
+  ---
+  duration_ms: 5172.622334
+  ...
+# Subtest: direct lane review waits visibly and honors canonical STOP from a linked worktree
+ok 8 - direct lane review waits visibly and honors canonical STOP from a linked worktree
+  ---
+  duration_ms: 5164.047666
+  ...
+# Subtest: lane review validates missing round before memory wait
+ok 9 - lane review validates missing round before memory wait
+  ---
+  duration_ms: 143.16525
+  ...
+# Subtest: lane review validates --round 1 --brief before memory wait
+ok 10 - lane review validates --round 1 --brief before memory wait
+  ---
+  duration_ms: 137.691792
+  ...
+# Subtest: lane review validates --round 1 --change topic --route missing-route before memory wait
+ok 11 - lane review validates --round 1 --change topic --route missing-route before memory wait
+  ---
+  duration_ms: 141.650708
+  ...
+# Subtest: lane dispatch validates --route before memory wait
+ok 12 - lane dispatch validates --route before memory wait
+  ---
+  duration_ms: 137.605292
+  ...
+# Subtest: lane dispatch validates --route missing-route before memory wait
+ok 13 - lane dispatch validates --route missing-route before memory wait
+  ---
+  duration_ms: 140.134084
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 29698.669292
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

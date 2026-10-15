@@ -1,0 +1,348 @@
+TAP version 13
+# Subtest: native 1-member batch reconciles atomically before cleanup and duplicate recovery
+ok 1 - native 1-member batch reconciles atomically before cleanup and duplicate recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.5705
+  ...
+# Subtest: native 3-member batch reconciles atomically before cleanup and duplicate recovery
+ok 2 - native 3-member batch reconciles atomically before cleanup and duplicate recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043208
+  ...
+# Subtest: integrated record refusal retains every lane and resumes records without another gate
+ok 3 - integrated record refusal retains every lane and resumes records without another gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034
+  ...
+# Subtest: bisected batch accounts for its exclusion without mutating newer excluded work
+ok 4 - bisected batch accounts for its exclusion without mutating newer excluded work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.265792
+  ...
+# Subtest: recovery refuses new-run and retains all integrated lanes
+ok 5 - recovery refuses new-run and retains all integrated lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035417
+  ...
+# Subtest: recovery refuses blocker and retains all integrated lanes
+ok 6 - recovery refuses blocker and retains all integrated lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027083
+  ...
+# Subtest: recovery refuses missing-member and retains all integrated lanes
+ok 7 - recovery refuses missing-member and retains all integrated lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.076459
+  ...
+# Subtest: lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+ok 8 - lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028291
+  ...
+# Subtest: native completion refuses operator-reserved work before gating or integration
+ok 9 - native completion refuses operator-reserved work before gating or integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.100834
+  ...
+# Subtest: native completion refuses human work before gating or integration
+ok 10 - native completion refuses human work before gating or integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.086
+  ...
+# Subtest: native admission isolates unknown-run while valid members reconcile
+ok 11 - native admission isolates unknown-run while valid members reconcile # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040125
+  ...
+# Subtest: native admission isolates wrong-record while valid members reconcile
+ok 12 - native admission isolates wrong-record while valid members reconcile # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.059875
+  ...
+# Subtest: native admission isolates duplicate-item while valid members reconcile
+ok 13 - native admission isolates duplicate-item while valid members reconcile # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034167
+  ...
+# Subtest: bound and unbound requests use separate native batches
+ok 14 - bound and unbound requests use separate native batches # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025084
+  ...
+# Subtest: a done report with questions is refused before the gate while valid members complete
+ok 15 - a done report with questions is refused before the gate while valid members complete # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.054542
+  ...
+# Subtest: included item notes during the gate refuse integration without refreshing captured fingerprints
+ok 16 - included item notes during the gate refuse integration without refreshing captured fingerprints # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.057958
+  ...
+# Subtest: the held record lock checks the original fingerprint immediately before fast-forward
+ok 17 - the held record lock checks the original fingerprint immediately before fast-forward # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029167
+  ...
+# Subtest: native completion explicitly retires superseded open runs through the record transaction
+ok 18 - native completion explicitly retires superseded open runs through the record transaction # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.115417
+  ...
+# Subtest: manual reconciliation recovery complete retains proof and handles cleanup
+ok 19 - manual reconciliation recovery complete retains proof and handles cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.069125
+  ...
+# Subtest: manual reconciliation recovery missing-member retains proof and handles cleanup
+ok 20 - manual reconciliation recovery missing-member retains proof and handles cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02775
+  ...
+# Subtest: manual reconciliation recovery wrong-head retains proof and handles cleanup
+ok 21 - manual reconciliation recovery wrong-head retains proof and handles cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.053625
+  ...
+# Subtest: manual reconciliation recovery reopened retains proof and handles cleanup
+ok 22 - manual reconciliation recovery reopened retains proof and handles cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021458
+  ...
+# Subtest: manual reconciliation recovery new-run retains proof and handles cleanup
+ok 23 - manual reconciliation recovery new-run retains proof and handles cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022083
+  ...
+# Subtest: native admission refuses omitted superseded attempts without wedging valid work
+ok 24 - native admission refuses omitted superseded attempts without wedging valid work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01875
+  ...
+# Subtest: bisected manual recovery covered accounts for newer excluded work
+ok 25 - bisected manual recovery covered accounts for newer excluded work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018708
+  ...
+# Subtest: bisected manual recovery missing-exclusion accounts for newer excluded work
+ok 26 - bisected manual recovery missing-exclusion accounts for newer excluded work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019625
+  ...
+# Subtest: a refused questioned dependency cannot let another member integrate before completion refuses
+ok 27 - a refused questioned dependency cannot let another member integrate before completion refuses # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018042
+  ...
+# Subtest: split recovery accounts for never-captured dirty members without another gate
+not ok 28 - split recovery accounts for never-captured dirty members without another gate
+  ---
+  duration_ms: 6151.416583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:385:93
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: split recovery accounts for never-captured off-main members without another gate
+ok 29 - split recovery accounts for never-captured off-main members without another gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.076416
+  ...
+# Subtest: split recovery accounts for never-captured host-timeout members without another gate
+ok 30 - split recovery accounts for never-captured host-timeout members without another gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034917
+  ...
+# Subtest: bisected canonical dirty refusal preserves captured historical exclusions
+not ok 31 - bisected canonical dirty refusal preserves captured historical exclusions
+  ---
+  duration_ms: 6614.729417
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/promote/test/completion.test.mjs:401:43
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: bisected canonical off-main refusal preserves captured historical exclusions
+ok 32 - bisected canonical off-main refusal preserves captured historical exclusions # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058333
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: complete
+ok 33 - legacy queue and late notices recover only inspected exact coverage: complete # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.139916
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: no-marker
+ok 34 - legacy queue and late notices recover only inspected exact coverage: no-marker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027291
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-member
+ok 35 - legacy queue and late notices recover only inspected exact coverage: missing-member # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024166
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: wrong-head
+ok 36 - legacy queue and late notices recover only inspected exact coverage: wrong-head # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023542
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-exclusion
+ok 37 - legacy queue and late notices recover only inspected exact coverage: missing-exclusion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022125
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-superseded
+ok 38 - legacy queue and late notices recover only inspected exact coverage: missing-superseded # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022542
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: reopened
+ok 39 - legacy queue and late notices recover only inspected exact coverage: reopened # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021625
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: new-run
+ok 40 - legacy queue and late notices recover only inspected exact coverage: new-run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023666
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-evidence
+ok 41 - legacy queue and late notices recover only inspected exact coverage: missing-evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020958
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: unproved-head
+ok 42 - legacy queue and late notices recover only inspected exact coverage: unproved-head # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021083
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: wrong-log
+ok 43 - legacy queue and late notices recover only inspected exact coverage: wrong-log # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021167
+  ...
+# Subtest: legacy replacement recovery cleans completed lanes with telemetry failure: false
+ok 44 - legacy replacement recovery cleans completed lanes with telemetry failure: false # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023084
+  ...
+# Subtest: legacy replacement recovery cleans completed lanes with telemetry failure: true
+ok 45 - legacy replacement recovery cleans completed lanes with telemetry failure: true # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020875
+  ...
+# Subtest: prepared replacement recovery cleans completed lanes with telemetry failure: false
+ok 46 - prepared replacement recovery cleans completed lanes with telemetry failure: false # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044167
+  ...
+# Subtest: prepared replacement recovery cleans completed lanes with telemetry failure: true
+ok 47 - prepared replacement recovery cleans completed lanes with telemetry failure: true # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021333
+  ...
+# Subtest: a linked pass-review recorded after enqueue is checked by the native worker
+ok 48 - a linked pass-review recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025875
+  ...
+# Subtest: a child-only pass-review recorded after enqueue is checked by the native worker
+ok 49 - a child-only pass-review recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.051
+  ...
+# Subtest: a linked fail-review recorded after enqueue is checked by the native worker
+ok 50 - a linked fail-review recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.055084
+  ...
+# Subtest: a child-only fail-review recorded after enqueue is checked by the native worker
+ok 51 - a child-only fail-review recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031875
+  ...
+# Subtest: a linked no-verdict-review recorded after enqueue is checked by the native worker
+ok 52 - a linked no-verdict-review recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025458
+  ...
+# Subtest: a child-only no-verdict-review recorded after enqueue is checked by the native worker
+ok 53 - a child-only no-verdict-review recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024083
+  ...
+# Subtest: a linked open-question recorded after enqueue is checked by the native worker
+ok 54 - a linked open-question recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023416
+  ...
+# Subtest: a linked review-question recorded after enqueue is checked by the native worker
+ok 55 - a linked review-question recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022291
+  ...
+# Subtest: a child-only review-question recorded after enqueue is checked by the native worker
+ok 56 - a child-only review-question recorded after enqueue is checked by the native worker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0225
+  ...
+# Subtest: an operator question raised under the work after the fast-forward holds batch completion until it is answered
+ok 57 - an operator question raised under the work after the fast-forward holds batch completion until it is answered # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02125
+  ...
+# Subtest: an operator question raised under the review after the fast-forward holds batch completion until it is answered
+ok 58 - an operator question raised under the review after the fast-forward holds batch completion until it is answered # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..58
+# tests 58
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 56
+# todo 0
+# duration_ms 12887.071208
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

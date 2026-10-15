@@ -1,0 +1,39 @@
+TAP version 13
+# Subtest: two-lane host envelope timeout returns batch re-enqueue wording
+not ok 1 - two-lane host envelope timeout returns batch re-enqueue wording
+  ---
+  duration_ms: 1811.609166
+  type: 'test'
+  location: '/private/tmp/R-416-main-LnQUXY/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    {"outcome":"refused","reason":"train preparation failed: node -e \"setInterval(()=>{},1000)\""}
+    + actual - expected
+
+    + 'refused'
+    - 'timeout'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'timeout'
+  actual: 'refused'
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/R-416-main-LnQUXY/test-slot/test/gate-profile.test.mjs:470:12
+    file:///private/tmp/R-416-main-LnQUXY/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/R-416-main-LnQUXY/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.start (node:internal/test_runner/test:1242:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1914.307084

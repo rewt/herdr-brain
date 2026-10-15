@@ -1,0 +1,112 @@
+TAP version 13
+# Subtest: bin/org.mjs --help exits successfully before operational work
+ok 1 - bin/org.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.416458
+  ...
+# Subtest: brain/bin/brain.mjs --help exits successfully before operational work
+ok 2 - brain/bin/brain.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.570667
+  ...
+# Subtest: contrib/settle-watch.mjs --help exits successfully before operational work
+ok 3 - contrib/settle-watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.992083
+  ...
+# Subtest: discovery/client.mjs --help exits successfully before operational work
+ok 4 - discovery/client.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.331458
+  ...
+# Subtest: dispatch/dispatch.mjs --help exits successfully before operational work
+ok 5 - dispatch/dispatch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.422167
+  ...
+# Subtest: housekeeping/housekeeping.mjs --help exits successfully before operational work
+ok 6 - housekeeping/housekeeping.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.112417
+  ...
+# Subtest: lanes/lane.mjs --help exits successfully before operational work
+ok 7 - lanes/lane.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.770875
+  ...
+# Subtest: promote/host-gate.mjs --help exits successfully before operational work
+ok 8 - promote/host-gate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.386375
+  ...
+# Subtest: promote/promote.mjs --help exits successfully before operational work
+ok 9 - promote/promote.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.083375
+  ...
+# Subtest: promote/metrics.mjs --help exits successfully before operational work
+ok 10 - promote/metrics.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.916667
+  ...
+# Subtest: settle/settle.mjs --help exits successfully before operational work
+ok 11 - settle/settle.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.393917
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+ok 12 - supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.214916
+  ...
+# Subtest: supervisor/supervisor.mjs --help exits successfully before operational work
+ok 13 - supervisor/supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.590958
+  ...
+# Subtest: supervisor/request.mjs --help exits successfully before operational work
+ok 14 - supervisor/request.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.586375
+  ...
+# Subtest: supervisor/tidy-tabs.mjs --help exits successfully before operational work
+ok 15 - supervisor/tidy-tabs.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.633916
+  ...
+# Subtest: test-slot/test-slot.mjs --help exits successfully before operational work
+ok 16 - test-slot/test-slot.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.560083
+  ...
+# Subtest: watch/watch.mjs --help exits successfully before operational work
+ok 17 - watch/watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.098208
+  ...
+# Subtest: acceptance/run.mjs --help exits successfully before operational work
+ok 18 - acceptance/run.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.559583
+  ...
+# Subtest: lanes/lane.mjs via release symlinks --help exits successfully before operational work
+ok 19 - lanes/lane.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 35.243791
+  ...
+# Subtest: brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+ok 20 - brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 27.353708
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 711.706666
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

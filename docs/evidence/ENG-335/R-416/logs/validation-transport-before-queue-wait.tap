@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: distinct worker, settle and queue panes reuse each tree through same-tree rebase and queued promotion
+ok 1 - distinct worker, settle and queue panes reuse each tree through same-tree rebase and queued promotion
+  ---
+  duration_ms: 6895.664833
+  ...
+# Subtest: saved settle readiness defers changed commands and environments to promotion without repeating review
+ok 2 - saved settle readiness defers changed commands and environments to promotion without repeating review
+  ---
+  duration_ms: 4926.143541
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11925.560208
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

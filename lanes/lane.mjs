@@ -2480,57 +2480,17 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
       fail(`lane tip is not contained in ${MAIN}; lane kept`);
     }
   }
-  const path = worktreeFor(branch);
-  if (path !== undefined) {
-    requireClean(path, "lane worktree");
-    // Herdr 0.8.2 worktree.remove always focuses the parent workspace, even
-    // when removing a background lane. Retain the verified workspace identity
-    // before Git removes its metadata, but close it only after removal succeeds.
-    // Git refusals (including locked worktrees) must preserve the running panes.
-    let mismatchedMetadata = false, workspaceId;
-    const retirement = createRetirement({ cwd: REPO_ROOT, main: MAIN, allowAbsentHerdr: true,
-      log: entry => process.stdout.write(JSON.stringify(entry) + '\n') });
-    try {
-      if (!gitOnly) retirement.apply(retirement.plan(path), path);
-      retirement.assertVacant(path);
-    } catch (error) { fail(`lane retained: ${error.message}`); }
-    try {
-      workspaceId = gitOnly ? undefined : openWorkspaceIdFor(path, {
-        refuseStale: false,
-        onMismatch: () => { mismatchedMetadata = true; },
-      });
-    } catch {
-      // Vacancy was already proven. An absent Herdr executable permits Git
-      // removal; an unreadable installed server fails the retirement guard.
-    }
-    // Recheck current record, jobs, every pane/process and Git after all reads.
-    try { retirement.assertVacant(path); } catch (error) { fail(`lane retained: ${error.message}`); }
-    if (expectedTip !== undefined && git(["rev-parse", "HEAD"], { cwd: path }) !== expectedTip) fail('lane tip changed before removal; lane kept');
-    requireClean(path, 'lane worktree');
-    const held = retirementHold(REPO_ROOT);
-    if (held) fail(`lane retained: ${held}`);
-    git(["worktree", "remove", path]);
-    if (workspaceId !== undefined) {
-      try { retirement.closeEmptyWorkspace(workspaceId, path); }
-      catch (error) { process.stderr.write(`lane: integrated-but-cleanup-pending: ${error.message}\n`); }
-    }
-    if (mismatchedMetadata) {
-      process.stderr.write(`lane: note: Herdr metadata for ${path} does not match this repository; removed the worktree with git only\n`);
-    }
-    process.stdout.write(`removed worktree ${path}\n`);
-  }
-  const merged = tryGit(["merge-base", "--is-ancestor", branch, MAIN]) !== undefined;
-  if (merged) {
-    // `-d` judges "merged" against THIS worktree's HEAD, which may be behind
-    // the main branch; the ancestor check above already proved it contains the lane.
-    git(["branch", "-D", branch]);
-    process.stdout.write(`deleted merged branch ${branch}\n`);
-  } else {
-    const tag = `archive/${branch}`;
-    git(["tag", tag, branch]);
-    git(["branch", "-D", branch]);
-    process.stdout.write(`archived unmerged lane as tag ${tag}, then deleted branch\n`);
-  }
+  const lane = worktreeFor(branch);
+  if (lane !== undefined) requireClean(lane, 'lane worktree');
+  const retirement = createRetirement({ cwd: REPO_ROOT, main: MAIN, allowAbsentHerdr: true,
+    log: entry => process.stdout.write(JSON.stringify(entry) + '\n') });
+  let result;
+  try { result = retirement.removeLane({ lane: lane ?? join(WORKTREE_ROOT, `lane-${topic}`), branch, expectedTip, gitOnly }); }
+  catch (error) { fail(`lane retained: ${error.message}`); }
+  if (lane !== undefined) process.stdout.write(`removed worktree ${lane}\n`);
+  if (result.integrated) process.stdout.write(`deleted merged branch ${branch}\n`);
+  else process.stdout.write(`archived unmerged lane as tag ${result.archiveTag}, then deleted branch\n`);
+  if (result.pending.length) fail(`lane closed; workspace cleanup pending: ${result.pending.join('; ')}`);
   const configuredRegistry = registryPathFor(REPO_ROOT, CONFIG);
   if (existsSync(configuredRegistry) || existsSync(registryDirectoryFor(configuredRegistry))) {
     try {

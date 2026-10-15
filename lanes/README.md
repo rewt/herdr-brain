@@ -214,8 +214,9 @@ still runs before lookup and must leave tracked and untracked files clean.
 The [promotion queue](../promote/README.md) runs promotion, scoped finished-tab cleanup,
 lane closure and supervisor notices in order. `lane promote` and `lane close` share
 a Git lock, so closing cannot remove a worktree while a gate is running.
-`lane close --git-only` preserves Herdr workspaces; the queue uses it after closing
-only authorized finished tabs. Its `--expected-tip COMMIT` guard requires that exact
+`lane close --git-only` preserves occupied tabs; the queue uses it after closing
+only authorized finished tabs. Both modes close the empty lane workspace through
+the shared guarded executor. Its `--expected-tip COMMIT` guard requires that exact
 tip to remain on the lane and be contained in the base, checked under the lock
 before removal. Without that guard, ordinary close retains unmerged archive-tag
 recovery.
@@ -234,11 +235,29 @@ review or the worker's gate file as promotion authority. Run one promotion at a
 time.
 
 `close` removes the clean worktree and deletes a merged branch. An unmerged branch
-is first preserved as `archive/lane/<topic>`. After Git succeeds, matching session
+is first preserved as `archive/lane/<topic>` and freshly resolved to the exact tip.
+A different existing tag target refuses the close; a matching tag permits retry.
+Before deleting anything, close probes writes, renames and removal in the affected
+Git metadata directories and copies ignored/untracked evidence (including `.lane/`)
+to `GIT_COMMON_DIR/lane-archive/<topic>/<unique timestamp>/`. Its `sha256.json`
+manifest records file hashes and symlink targets. The copy and unchanged source
+are verified against that manifest before removal; any failure keeps the lane.
+Ordinary untracked changes still fail the clean Git requirement. Close refuses
+`assume-unchanged` and `skip-worktree` index flags because they can hide unique
+local bytes from Git status.
+After Git succeeds, matching session
 metadata is marked done; metadata errors never rewrite the Git result.
 
 Closure rechecks the shared retirement policy and requires zero occupants before
-Git removes a worktree, including with `--git-only`. If the Herdr executable is
+Git removes a worktree, including with `--git-only`. This includes shell panes,
+processes with a cwd inside the worktree, open runs, pending references, promotion
+and verify jobs, and test-slot holders/waiters. Recorded work must have a terminal
+review/correction/integration chain and explicit disposition, including parked,
+design or non-code work. Age never authorizes deletion. The canonical
+`.lane/supervisor/HOLD-WORKER-TAB-CLOSE` stops every mode. A kept workspace and its
+reason remain in the promotion cleanup receipt and notice; cleanup retries do not
+repeat successful validation or integration. No housekeeping schedule is started.
+If the Herdr executable is
 absent, its inventory is empty and Git-only removal can proceed with the record
 and job guards. An installed CLI whose server cannot be read refuses closure.
 

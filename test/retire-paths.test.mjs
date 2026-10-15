@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { createRetirement } from '../supervisor/retire.mjs';
 import { queueFor, finishCleanup, retryCleanup, drain } from '../promote/promote.mjs';
 import { loadEvents } from '../lib/store.mjs';
@@ -76,7 +77,7 @@ else if (a[0] === 'tab' && a[1] === 'close') {
   if(s.failClose) { console.error('injected tab failure'); process.exit(1); }
   s.actions.push(a); s.tabs=s.tabs.filter(t=>t.tab_id!==a[2]); s.panes=s.panes.filter(p=>p.tab_id!==a[2]); s.agents=s.agents.filter(g=>g.tab_id!==a[2]); fs.writeFileSync(file,JSON.stringify(s)); out({});
   if(s.triggerOnClose){const hint=${JSON.stringify(path.join(org,'retirement/request.json'))};const r=JSON.parse(fs.readFileSync(hint));fs.writeFileSync(hint,JSON.stringify({...r,revision:r.revision+1,source:'completion during apply'}));}
-} else if(a[0] === 'workspace' && a[1] === 'close') {s.actions.push(a);s.workspaces=[];fs.writeFileSync(file,JSON.stringify(s));out({});}
+} else if(a[0] === 'workspace' && a[1] === 'close') {if(s.failWorkspace){console.error('injected workspace failure');process.exit(1);}s.actions.push(a);s.workspaces=[];fs.writeFileSync(file,JSON.stringify(s));out({});}
 else if(a[0]==='tab'&&a[1]==='create') {s.actions.push(a);s.tabs.push({tab_id:'main:watch',workspace_id:'main'});s.panes.push({pane_id:'main:watch:p',tab_id:'main:watch',workspace_id:'main'});fs.writeFileSync(file,JSON.stringify(s));out({root_pane:{pane_id:'main:watch:p'}});}
 else if(a[0]==='pane'&&a[1]==='run') {const r=require('node:child_process').spawnSync(a[3],{shell:true,encoding:'utf8',env:{...process.env,HERDR_TAB_ID:'main:watch',HERDR_PANE_ID:'main:watch:p'}});if(r.status!==0){console.error(r.stdout+r.stderr);process.exit(1);}console.error(r.stdout);out({child:r.stdout});}
 else if(a[0]==='agent'&&a[1]==='get') out({agent:s.sessionMode?{agent_status:'done'}:s.agents.find(g=>g.name===a[2])??{agent_status:'done'}});
@@ -580,4 +581,87 @@ test('standalone contrib retires only its owned watcher with no supervisor direc
   assert.deepEqual(state.actions.filter(action => action[1] === 'close'), [['tab', 'close', 'main:watch']]);
   assert.ok(state.tabs.some(tab => tab.tab_id === 'w:t'));
   assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});
+
+for (const keep of [true, false]) test(`composed promotion then native completion reconcile then cleanup: ${keep ? 'KEEP protects lane and evidence' : 'release closes workspace after verified preservation'}`, t => {
+  const f = fixture(t, { merged: false }); isolatedEnv(t, f);
+  // Native completion discovers this disposable project's record itself.
+  fs.symlinkSync(f.org, path.join(f.repo, '.org'));
+  fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n.org\n.lane/\n');
+  const events = loadEvents(f.org).events.filter(e => e.type !== 'item.closed');
+  fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
+  fs.mkdirSync(path.join(f.lane, '.lane')); const scratch = path.join(f.lane, '.lane/review-and-scratch');
+  const bytes = Buffer.from('unique review, report and scratch evidence\n'); fs.writeFileSync(scratch, bytes);
+  const manifest = path.join(f.scratch, 'manifest.json'), prepared = path.join(f.scratch, 'prepared.json'), gate = path.join(f.scratch, 'gate.log');
+  fs.writeFileSync(manifest, JSON.stringify({ batch: 'composed', candidate: f.head,
+    items: [{ item: 'ENG-1', run: 'R-1', head: f.head, superseded: [], why: 'Disposable fixture independent acceptance' }], excluded: [] }));
+  const config = path.join(f.scratch, 'lane.json'); fs.writeFileSync(config, JSON.stringify({ main: 'main', validate: 'true' }));
+  f.env.LANE_CONFIG = config;
+  const run = args => {
+    const r = spawnSync(process.execPath, args, { cwd: f.repo, env: f.env, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stdout + r.stderr); return r;
+  };
+  const completion = [path.join(root, 'supervisor/reconcile.mjs')];
+  const options = ['--repo', f.repo, '--org', f.org, '--role', 'supervisor', '--prepared', prepared];
+  run([...completion, 'prepare', ...options, '--manifest', manifest, '--gate-log', gate]);
+  const promoted = run([laneCLI, 'promote', 'topic']); fs.writeFileSync(gate, promoted.stdout + promoted.stderr);
+  assert.equal(f.git(['rev-parse', 'main']), f.head);
+  assert.equal(Boolean(fold(loadEvents(f.org).events).items.get('ENG-1').closed), false);
+  const reconciled = run([...completion, 'finish', ...options, '--gate-exit', '0', '--tip', f.head]);
+  assert.equal(JSON.parse(reconciled.stdout).result, 'reconciled');
+  assert.ok(fold(loadEvents(f.org).events).items.get('ENG-1').closed);
+  if (keep) {
+    // The default shell pane is an occupant even after the native worker's
+    // report and chain become terminal. No callback receipt releases it.
+    f.state.tabs.push({ tab_id: 'w:shell', workspace_id: 'w' });
+    f.state.panes.push({ pane_id: 'w:shell:p', tab_id: 'w:shell', workspace_id: 'w' }); f.save();
+  }
+  const queue = f.queue(), job = { ...f.job, laneConfig: config };
+  const result = finishCleanup(job, { outcome: 'promoted', tip: f.head, workspace: f.lane }, queue);
+  assert.equal(result.outcome, 'promoted');
+  const receipt = fs.readFileSync(path.join(queue.directory, 'job-cleanup.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  if (keep) {
+    assert.equal(result.cleanup.state, 'pending'); assert.match(result.reason, /unknown occupant|shell/);
+    assert.deepEqual(fs.readFileSync(scratch), bytes); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+    assert.ok(f.read().workspaces.some(w => w.workspace_id === 'w'));
+    assert.ok(receipt.some(r => r.action === 'keep' && r.tab_id === 'w:shell'));
+    assert.equal(receipt.some(r => r.action === 'lane-removed'), false);
+  } else {
+    assert.equal(result.cleanup.state, 'complete', result.reason); assert.equal(fs.existsSync(f.lane), false);
+    assert.equal(f.git(['branch', '--list', 'lane/topic']), ''); assert.equal(f.read().workspaces.length, 0);
+    const proof = receipt.find(r => r.action === 'lane-preflight'); assert.ok(proof?.evidence?.sha256);
+    assert.deepEqual(fs.readFileSync(path.join(proof.evidence.directory, 'files/.lane/review-and-scratch')), bytes);
+    const manifestBytes = fs.readFileSync(proof.evidence.manifest);
+    assert.equal(createHash('sha256').update(manifestBytes).digest('hex'), proof.evidence.sha256);
+    assert.ok(receipt.findIndex(r => r.action === 'lane-preflight') < receipt.findIndex(r => r.action === 'lane-removed'));
+    assert.ok(f.read().actions.some(a => a[0] === 'workspace' && a[1] === 'close'));
+  }
+});
+
+
+test('workspace close failure retries only the empty workspace after Git removal', t => {
+  const f = fixture(t, { occupied: false }); isolatedEnv(t, f);
+  f.state.failWorkspace = true; f.save();
+  const queue = f.queue(), result = finishCleanup(f.job, { outcome: 'promoted', tip: f.head, workspace: f.lane }, queue);
+  assert.equal(result.outcome, 'promoted'); assert.equal(result.cleanup.state, 'pending');
+  assert.match(result.reason, /workspace.*failure/); assert.equal(fs.existsSync(f.lane), false);
+  assert.equal(f.git(['branch', '--list', 'lane/topic']), ''); assert.equal(f.read().workspaces.length, 1);
+  const state = f.read(); state.failWorkspace = false; fs.writeFileSync(f.file, JSON.stringify(state));
+  const retried = finishCleanup(f.job, result, queue);
+  assert.equal(retried.cleanup.state, 'complete', retried.reason); assert.equal(f.read().workspaces.length, 0);
+  assert.equal(retried.reason, 'green fast-forward; cleanup complete'); assert.deepEqual(retried.warnings, []);
+});
+
+
+test('an occupied workspace retry retains its reason in the cleanup receipt after the lane is gone', t => {
+  const f = fixture(t, { occupied: false }); isolatedEnv(t, f);
+  const queue = f.queue(), result = finishCleanup(f.job, { outcome: 'promoted', tip: f.head, workspace: f.lane }, queue);
+  assert.equal(result.cleanup.state, 'complete', result.reason);
+  f.state.tabs = [{ tab_id: 'w:shell', workspace_id: 'w' }];
+  f.state.panes = [{ pane_id: 'w:shell:p', tab_id: 'w:shell', workspace_id: 'w' }]; f.save();
+  const retried = finishCleanup(f.job, { ...result, cleanup: { state: 'pending' } }, queue);
+  assert.equal(retried.outcome, 'promoted'); assert.equal(retried.cleanup.state, 'pending');
+  assert.match(retried.reason, /occupied lane/); assert.equal(f.read().workspaces.length, 1);
+  const receipt = fs.readFileSync(path.join(queue.directory, 'job-cleanup.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(receipt.some(r => r.action === 'keep' && r.workspace_id === 'w' && /occupied lane/.test(r.why)));
 });

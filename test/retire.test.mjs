@@ -319,3 +319,18 @@ test('project reference damage is reported even when no tabs are present', () =>
   const s=fixture();s.tabs=[];s.panes=[];s.agents=[];s.errors=['malformed reference; project kept'];
   assert.deepEqual(planRetirement(s).diagnostics,[{reason:s.errors[0],scope:'project'}]);
 });
+
+test('lane removal uses fresh shared authority: new references and HOLD both stop the executor', () => {
+  const s = fixture(); s.tabs = []; s.panes = []; s.agents = [];
+  s.removal = { cwd: '/repo/lane', branch: 'lane/topic', tip: 'abc', evidence: { sha256: 'hash' } };
+  const actions = [], plan = planRetirement(s); assert.equal(plan.laneClose.length, 1);
+  s.references.push({ kind: 'verify desk', job: 'job', cwd: '/repo/lane' });
+  const kept = executeRetirement(plan, { observe: () => s, removeLane: row => actions.push(row) });
+  assert.equal(kept[0].action, 'skip-close'); assert.match(kept[0].why, /verify desk/); assert.deepEqual(actions, []);
+  s.references = []; s.retirementHold = 'held by supervisor';
+  assert.equal(executeRetirement(plan, { observe: () => s, removeLane: row => actions.push(row) })[0].action, 'held');
+  assert.deepEqual(actions, []);
+  delete s.retirementHold;
+  const done = executeRetirement(planRetirement(s), { observe: () => s, removeLane: row => actions.push(row) });
+  assert.equal(done[0].action, 'lane-removed'); assert.equal(actions.length, 1);
+});

@@ -2909,7 +2909,7 @@ test("failed archive and post-close metadata writes preserve honest completion s
     commitFile(archivePath, "lane-change.txt", "unmerged\n", "leave lane unmerged");
     writeFakeHerdr(archiveFixture, { lanePath: archivePath, branch: "lane/archive-failure", initiallyOpened: true });
     assert.equal(lane(archiveFixture, ["dispatch", "archive-failure", "archive me"]).status, 0);
-    git(archiveFixture.repo, ["tag", "archive/lane/archive-failure", "lane/archive-failure"]);
+    git(archiveFixture.repo, ["tag", "archive/lane/archive-failure", "main"]);
     const stoppedArchiveState = join(archiveFixture.root, 'herdr-state.json');
     writeFileSync(stoppedArchiveState, JSON.stringify({ ...JSON.parse(readFileSync(stoppedArchiveState, 'utf8')), agent: null }));
     const archiveClose = lane(archiveFixture, ["close", "archive-failure"]);

@@ -58,7 +58,9 @@ export function queueFor(cwd) {
 }
 
 function invoke(command, args, options = {}) {
-  const r = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, ...options });
+  const { onOutput, ...commandOptions } = options;
+  const r = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, ...commandOptions });
+  onOutput?.(r.stdout ?? '');
   if (r.error || r.status !== 0) throw new Error(singleLine(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`));
   return r.stdout.trim();
 }
@@ -298,7 +300,14 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
     if (!workspace || !fs.existsSync(workspace)) {
       // A prior cleanup may have completed before its checkpoint was saved.
       try { git(queue.project.canonical, ['rev-parse', '--verify', `refs/heads/lane/${job.topic}`]); }
-      catch { return { ...result, cleanup: { state: 'complete' } }; }
+      catch {
+        if (workspace) {
+          const retirement = createRetirement({ cwd: queue.project.canonical, org: job.org, herdr: job.herdr,
+            log: row => fs.appendFileSync(path.join(queue.directory, `${job.id}-cleanup.jsonl`), JSON.stringify(row) + '\n') });
+          for (const ws of retirement.observe(workspace).workspaces.filter(w => w.worktree.checkout_path === workspace)) retirement.closeEmptyWorkspace(ws.workspace_id, workspace);
+        }
+        return { ...result, warnings: diagnostics, cleanup: { state: 'complete' }, reason: 'green fast-forward; cleanup complete' };
+      }
       throw Error('lane branch remains without its worktree; inspect before cleanup');
     }
     const tabs = cleanup(job, queue, workspace);
@@ -306,7 +315,13 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
     diagnostics.push(...tabs.diagnostics);
     checkHold();
     if (!warnings.length) invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', result.tip], {
-      cwd: queue.project.canonical, env: { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_CONFIG: job.laneConfig ?? undefined } });
+      cwd: queue.project.canonical, env: { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_CONFIG: job.laneConfig ?? undefined },
+      onOutput: output => {
+        for (const line of output.split('\n').filter(Boolean)) {
+          let entry; try { entry = JSON.parse(line); } catch { entry = { action: 'lane-close-output', text: line }; }
+          fs.appendFileSync(path.join(queue.directory, `${job.id}-cleanup.jsonl`), JSON.stringify(entry) + '\n');
+        }
+      } });
   } catch (error) { warnings.push(`lane cleanup: ${error.message}`); }
   let revision;
   try { revision = cleanupRevision(job, queue); } catch (e) { revision = `unreadable:${e.message}`; }

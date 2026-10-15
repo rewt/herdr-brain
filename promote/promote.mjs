@@ -12,6 +12,7 @@ import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { consumeRetirement } from '../lib/retire-trigger.mjs';
+import { retirementHold } from '../lib/retire-hold.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { runProjectGateSync } from './gate-profile.mjs';
 import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
@@ -152,7 +153,7 @@ function cleanup(job, queue, workspace) {
   const warnings = [];
   const log = entry => {
     fs.appendFileSync(path.join(queue.directory, `${job.id}-cleanup.jsonl`), JSON.stringify(entry) + '\n');
-    if (['keep', 'close-failed', 'skip-close'].includes(entry.action)) warnings.push(singleLine(JSON.stringify(entry)));
+    if (['keep', 'held', 'close-failed', 'skip-close'].includes(entry.action)) warnings.push(singleLine(JSON.stringify(entry)));
   };
   try {
     const retirement = createRetirement({ cwd: queue.project.canonical, org, herdr: job.herdr,
@@ -267,16 +268,25 @@ function performBatch(batch, queue, settings) {
 
 function cleanupRevision(job, queue) {
   const org = job.org ?? findOrgDir({ cwd: queue.project.canonical });
-  if (!org) return 'no-record';
+  const held = retirementHold(queue.project.canonical) ? ':held' : '';
+  if (!org) return `no-record${held}`;
   const stat = fs.statSync(path.join(org, 'events.jsonl'));
   const request = path.join(org, 'retirement/request.json');
-  return `${stat.size}:${stat.mtimeMs}:${fs.existsSync(request) ? JSON.parse(fs.readFileSync(request, 'utf8')).revision : 0}`;
+  return `${stat.size}:${stat.mtimeMs}:${fs.existsSync(request) ? JSON.parse(fs.readFileSync(request, 'utf8')).revision : 0}${held}`;
 }
 
 export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
   const warnings = [];
+  let held;
+  const checkHold = () => {
+    held = retirementHold(queue.project.canonical);
+    if (!held) return;
+    fs.appendFileSync(path.join(queue.directory, `${job.id}-cleanup.jsonl`), JSON.stringify({ action: 'held', why: held }) + '\n');
+    throw Error(held);
+  };
   const diagnostics = (result.warnings ?? []).filter(w => w.startsWith('velocity record:'));
   try {
+    checkHold();
     if (job.run) {
       const env = { ...process.env, ORG_DIR: job.org };
       const run = JSON.parse(invoke(process.execPath, [RECORD, 'show', job.run, '--json'], { cwd: queue.project.canonical, env }));
@@ -294,6 +304,7 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
     const tabs = cleanup(job, queue, workspace);
     warnings.push(...tabs.warnings);
     diagnostics.push(...tabs.diagnostics);
+    checkHold();
     if (!warnings.length) invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', result.tip], {
       cwd: queue.project.canonical, env: { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_CONFIG: job.laneConfig ?? undefined } });
   } catch (error) { warnings.push(`lane cleanup: ${error.message}`); }
@@ -301,6 +312,7 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
   try { revision = cleanupRevision(job, queue); } catch (e) { revision = `unreadable:${e.message}`; }
   const attempts = (result.cleanup?.revision === revision ? result.cleanup.attempts ?? 0 : 0) + 1;
   return { ...result, warnings: [...diagnostics, ...warnings], cleanup: { state: warnings.length ? 'pending' : 'complete', warnings,
+    ...(held ? { outcome: 'held' } : {}),
     revision, attempts, attempted_at: now, next_attempt_at: now + Math.min(3600000, 60000 * 2 ** (attempts - 1)),
     last_refusal: warnings.length ? warnings.join('; ') : null },
     reason: warnings.length ? `integrated-but-cleanup-pending: ${warnings.join('; ')}` : 'green fast-forward; cleanup complete' };
@@ -327,7 +339,8 @@ function consumeRequests(queue) {
     const orgs = new Set([discovered, ...jobs.map(j => j.org)].filter(Boolean));
     for (const org of orgs) try {
       consumeRetirement({ org, retirement: () => createRetirement({ cwd: queue.project.canonical, org,
-        herdr: jobs.find(j => j.org === org)?.herdr, log: result => process.stderr.write(JSON.stringify(result) + '\n') }) });
+        herdr: jobs.find(j => j.org === org)?.herdr, log: result => process.stderr.write(JSON.stringify(result) + '\n') }),
+        output: result => { if (result.action === 'held') process.stderr.write(JSON.stringify(result) + '\n'); } });
     } catch (e) { process.stderr.write(`integrated-but-cleanup-pending: retirement catch-up: ${e.message}\n`); }
   } catch (e) { process.stderr.write(`integrated-but-cleanup-pending: retirement discovery: ${e.message}\n`); }
 }

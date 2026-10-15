@@ -12,6 +12,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
 
 import { acquireWatcherLock } from './lock.mjs';
 import { readReport } from '../lib/report.mjs';
@@ -330,6 +332,13 @@ function acquireLock() {
 
 function closeOwnTab() {
   if (dry || !opt['close-tab-on-exit'] || !process.env.HERDR_TAB_ID) return;
+  try {
+    const held = retirementHold(gitProject(opt.cwd).canonical);
+    if (held) { log(JSON.stringify({ action: 'held', tab_id: process.env.HERDR_TAB_ID, why: held })); return; }
+  } catch (error) {
+    log(JSON.stringify({ action: 'held', tab_id: process.env.HERDR_TAB_ID, why: RETIREMENT_HOLD_REASON, error: error.message }));
+    return;
+  }
   const child = spawn(opt.herdr, ['tab', 'close', process.env.HERDR_TAB_ID], { detached: true, stdio: 'ignore' });
   child.unref();
 }

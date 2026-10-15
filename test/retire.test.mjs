@@ -39,6 +39,30 @@ test('ingestion AND terminal chain plus clean integrated Git releases; no report
   assert.deepEqual(actions, ['w:t']);
 });
 
+test('retirement hold: pure policy retains every pane and executor logs a distinct held outcome', () => {
+  const s = fixture(), actions = [], logs = [], reason = 'retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE';
+  const stale = planRetirement(s); s.retirementHold = reason;
+  const plan = planRetirement(s); assert.equal(plan.close.length, 0); assert.equal(plan.keep[0].why, reason);
+  assert.ok(plan.panes.every(p => p.decision === 'keep' && p.why === reason));
+  const result = executeRetirement(stale, { observe: () => s, close: id => actions.push(id), log: row => logs.push(row) });
+  assert.deepEqual(actions, []); assert.equal(result[0].action, 'held'); assert.deepEqual(logs, result);
+  delete s.retirementHold; executeRetirement(planRetirement(s), { observe: () => s, close: id => actions.push(id) }); assert.deepEqual(actions, ['w:t']);
+});
+
+test('retirement hold: executor checks each tab and empty workspace immediately before closing', () => {
+  const s = fixture(), plan = planRetirement(s), actions = [], reason = 'retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE';
+  plan.close.push({ ...plan.close[0], tab_id: 'later' }); let held = null;
+  const results = executeRetirement(plan, { observe: () => s, hold: () => held, close: id => { actions.push(id); held = reason; } });
+  assert.deepEqual(actions, ['w:t']); assert.equal(results[1].action, 'held');
+  const empty = fixture(); empty.tabs = []; empty.panes = []; empty.agents = [];
+  const workspacePlan = { close: [], workspaceClose: [{ workspace_id: 'w', cwd: '/repo/lane', token: planRetirement(empty).token }] };
+  held = null;
+  const blocked = executeRetirement(workspacePlan, { observe: () => { held = reason; return empty; }, hold: () => held, closeWorkspace: id => actions.push(id) });
+  assert.equal(blocked[0].action, 'held'); assert.deepEqual(actions, ['w:t']);
+  held = null; executeRetirement(workspacePlan, { observe: () => empty, hold: () => held, closeWorkspace: id => actions.push(id) });
+  assert.deepEqual(actions, ['w:t', 'w']);
+});
+
 test('process state changes do not change identity tokens, but stopped processes still keep on fresh decision', () => {
   const s=fixture(), plan=planRetirement(s);
   s.panes[0].process_info.process_tree[1].state='R';

@@ -66,6 +66,25 @@ function startWatcher(t, args) {
   return spawnChild(t, process.execPath, args, { env: TEST_ENV });
 }
 
+test('retirement hold: native watcher self-retirement keeps its tab from a linked cwd', async t => {
+  const f = watcherFixture('R-901'); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  const repo = path.join(f.root, 'repo'), lane = path.join(f.root, 'lane'); fs.mkdirSync(repo);
+  for (const args of [['init', '-q', '-b', 'main'], ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-qm', 'base'], ['worktree', 'add', '-b', 'lane/held', lane]]) {
+    const r = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
+  }
+  const hold = path.join(repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'); fs.mkdirSync(path.dirname(hold), { recursive: true }); fs.writeFileSync(hold, 'hold');
+  executable(f.org, `printf '%s\\n' '{"id":"R-901","item":"ENG-9","meta":{"agent":"lane-nine"},"abandoned":{"note":"fixture complete"},"report_path":"${f.report}"}'`);
+  executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'; echo '{"result":{}}'`);
+  const run = async () => { const child = spawnChild(t, process.execPath, [...f.args, '--cwd', lane, '--close-tab-on-exit'], { env: { ...TEST_ENV, HERDR_TAB_ID: 'watch-tab' } }); const result = await waitForExit(child); assert.equal(result.code, 0, result.stderr); return result; };
+  const held = await run(); assert.ok(!fs.existsSync(f.calls) || !/tab close|workspace close|worktree remove/.test(fs.readFileSync(f.calls, 'utf8'))); assert.match(held.stdout, /held/);
+  fs.unlinkSync(hold); await run();
+  const deadline = Date.now() + loadTimeout(5000);
+  while (!fs.existsSync(f.calls) || !/tab close watch-tab/.test(fs.readFileSync(f.calls, 'utf8'))) {
+    assert.ok(Date.now() < deadline, 'watcher did not close its tab after the hold was removed');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+});
+
 function waitForText(file, pattern, timeoutMs = 10_000) {
   return waitForFile(file, body => pattern.test(body), { timeoutMs });
 }

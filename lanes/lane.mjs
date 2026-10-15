@@ -13,6 +13,7 @@
 
 import { cliHelp } from '../lib/cli-help.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
+import { retirementHold } from '../lib/retire-hold.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
@@ -1167,6 +1168,8 @@ function dispatch(topic, promptText, options = {}) {
     tabId = created.result.tab.tab_id;
   }
   const failedTab = () => {
+    const held = retirementHold(REPO_ROOT);
+    if (held) return held;
     if (initial !== undefined) return "initial tab retained";
     spawnSync("herdr", ["tab", "close", tabId], { encoding: "utf8" });
     return "tab closed";
@@ -2459,11 +2462,14 @@ function promoteLocked(topic, root, options) {
 }
 
 function close(topic, options = {}) {
-  repositoryRoot({ requiredBy: "close" });
+  const held = retirementHold(repositoryRoot({ requiredBy: "close" }));
+  if (held) fail(`lane retained: ${held}`);
   return withPromotionLock(() => closeLocked(topic, options));
 }
 
 function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
+  const held = retirementHold(REPO_ROOT);
+  if (held) fail(`lane retained: ${held}`);
   const branch = laneBranch(topic);
   if (!branchExists(branch)) fail(`no such lane branch: ${branch}`);
   if (expectedTip !== undefined) {
@@ -2501,6 +2507,8 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
     try { retirement.assertVacant(path); } catch (error) { fail(`lane retained: ${error.message}`); }
     if (expectedTip !== undefined && git(["rev-parse", "HEAD"], { cwd: path }) !== expectedTip) fail('lane tip changed before removal; lane kept');
     requireClean(path, 'lane worktree');
+    const held = retirementHold(REPO_ROOT);
+    if (held) fail(`lane retained: ${held}`);
     git(["worktree", "remove", path]);
     if (workspaceId !== undefined) {
       try { retirement.closeEmptyWorkspace(workspaceId, path); }

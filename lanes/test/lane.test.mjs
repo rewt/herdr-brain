@@ -2222,6 +2222,21 @@ test("dispatch leaves earlier and concurrently opened workspace shells untouched
   negativeControl("initial pane requires an invocation-owned creation receipt");
 });
 
+test('retirement hold: failed dispatch keeps its newly created tab', () => {
+  const fixture = makeFixture();
+  try {
+    ignoreLaneState(fixture);
+    const path = openLane(fixture, 'held-dispatch');
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: 'lane/held-dispatch', initiallyOpened: true, startFail: true });
+    const hold = join(fixture.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'); mkdirSync(dirname(hold), { recursive: true }); writeFileSync(hold, 'hold');
+    const held = lane(fixture, ['dispatch', 'held-dispatch', '--json']);
+    assert.equal(held.status, 1); assert.match(held.stderr, /retirement held/);
+    assert.ok(!fake.calls().some(a => ['close', 'remove'].includes(a[1])));
+    rmSync(hold); const resumed = lane(fixture, ['dispatch', 'held-dispatch', '--json']);
+    assert.equal(resumed.status, 1); assert.ok(fake.calls().some(a => a[0] === 'tab' && a[1] === 'close'));
+  } finally { fixture.cleanup(); }
+});
+
 test("dispatch retains initial tabs on environment and agent cwd failures", () => {
   for (const failure of ['send', 'dropped', 'wrong', 'start', 'cwd', 'prompt']) {
     const fixture = makeFixture();

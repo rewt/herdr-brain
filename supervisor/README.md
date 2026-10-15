@@ -11,6 +11,24 @@ calls a model. Use reviewed installed code for live application. Startup/shift
 entry consumes pending requests through a fresh plan and guarded apply; this
 change starts no new schedule.
 
+To keep all worker/session/watcher tabs, panes and lane worktrees, create
+`<canonical>/.lane/supervisor/HOLD-WORKER-TAB-CLOSE`, next to the `STOP` convention.
+The canonical checkout comes from the Git common-directory identity, including
+when invoked from a linked lane. Any entry holds retirement: file, directory,
+symlink or dangling symlink. Only `ENOENT` means absent; other lookup errors
+hold. Contents are never read. The planner keeps every tab with reason
+`retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE`; apply logs `held`,
+preserves callback receipts and rechecks immediately before each tab/workspace
+close. This applies to tidy, both housekeeping paths, retirement CLI, watcher
+and settle-watch retirement, failed dispatch tab cleanup and promotion cleanup.
+`lane close` in any mode refuses before lifecycle changes. Promotion still
+reports `promoted`, retaining the lane and branch with cleanup pending and
+outcome `held`; its existing bounded, revision-checked retry can finish only
+after the hold is removed. Drain catch-up still acknowledges ready first and
+leaves retirement hints pending without writing `handled.json`. Removing the
+entry restores normal fresh observation and guarded cleanup; it grants no
+additional retirement authority.
+
 The one pure policy is [lib/retire.mjs](../lib/retire.mjs). Its snapshots contain
 the record fold, canonical Git common directory and lane head, Herdr topology,
 all occupants, foreground processes and native process trees with kernel birth

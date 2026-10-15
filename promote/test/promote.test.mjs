@@ -246,6 +246,27 @@ test('unconfigured project: detached worker promotes two lanes in FIFO order usi
   assert.equal(fs.existsSync(path.join(f.repo, '.promote.json')), false);
 });
 
+for (const mode of ['batch', 'single']) test(`retirement hold: ${mode} promotion keeps its integrated lane and skips git-only cleanup`, async t => {
+  const f = fixture(t), workspace = f.lane('held-topic');
+  // Runtime holds must be ignored by Git cleanliness checks, like real projects.
+  fs.appendFileSync(path.join(f.repo, '.git/info/exclude'), '\n.lane/\n');
+  const hold = path.join(f.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'); fs.mkdirSync(path.dirname(hold), { recursive: true }); fs.writeFileSync(hold, 'hold');
+  const calls = path.join(f.root, 'lane-calls.jsonl'), wrapper = path.join(f.root, 'lane-wrapper.mjs');
+  fs.writeFileSync(wrapper, `import fs from 'node:fs';import {spawnSync} from 'node:child_process';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(a)+'\\n');const r=spawnSync(process.execPath,[${JSON.stringify(LANE)},...a],{stdio:'inherit'});process.exit(r.status??1);`);
+  const launch = () => f.launch(['held-topic', ...(mode === 'single' ? ['--lane-cli', wrapper] : [])]);
+  const launched = launch(); await until(() => f.results().length === 1 && f.results()[0].delivered);
+  const result = f.results()[0]; assert.equal(result.outcome, 'promoted', result.reason);
+  assert.equal(fs.existsSync(workspace), true); assert.equal(result.cleanup.outcome, 'held'); assert.equal(result.cleanup.state, 'pending');
+  assert.match(result.cleanup.last_refusal, /retirement held/); assert.equal(f.git(['rev-parse', 'lane/held-topic']), result.tip);
+  if (mode === 'single') assert.deepEqual(fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse).map(a => a[0]), ['promote']);
+  await until(() => { const current = lookupProcess(launched.worker.pid); return current.ok && (current.value === null || /^Z/.test(current.value.state)); });
+  // Reuse the foreground retry command; it must finish cleanup without a second gate.
+  fs.unlinkSync(hold);
+  // Removing the hold changes the cleanup revision, permitting its bounded retry.
+  const retried = f.cli(['--drain']); assert.equal(retried.status, 0, retried.stdout + retried.stderr);
+  assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].cleanup.state, 'complete', JSON.stringify(f.results()[0])); assert.equal(fs.existsSync(workspace), false);
+});
+
 test('promotion notice queues during typing and delivers after clearing without repeating promotion', async (t) => {
   const f = fixture(t); f.lane('first');
   const inbox = path.join(f.repo, '.git/supervisor/inbox.log');

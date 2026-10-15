@@ -13,9 +13,31 @@ import { copyProduct } from '../lib/product-files.mjs';
 import { requestRetirement, consumeRetirement } from '../lib/retire-trigger.mjs';
 import { retirementDeadline } from '../lib/retire-lock.mjs';
 import { stopFixtureInbox } from './helpers/inbox.mjs';
+import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
+const heldReason = 'retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE';
+function hold(f, kind = 'file') {
+  f.traceGit();
+  const file = path.join(f.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (kind === 'directory') fs.mkdirSync(file);
+  else if (kind === 'symlink') fs.symlinkSync('missing-target', file);
+  else fs.writeFileSync(file, 'contents must never be read');
+  return () => fs.rmSync(file, { recursive: true, force: true });
+}
+function isolatedEnv(t, f) {
+  const old = {};
+  for (const key of ['ORG_DIR', 'HERDR_MONITOR_FLEET', 'HERDR_RETIRE_HERDR', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME']) {
+    old[key] = process.env[key]; process.env[key] = f.env[key];
+  }
+  t.after(() => { for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+}
+function assertNoRemoval(f) {
+  assert.deepEqual(f.read().actions.filter(a => ['close', 'remove'].includes(a[1])), []);
+  assert.deepEqual(f.gitCalls().filter(a => a.includes('worktree') && a.includes('remove')), []);
+}
 function fixture(t, { merged = true, occupied = true } = {}) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'retire-path-')));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -56,11 +78,18 @@ else if (a[0] === 'tab' && a[1] === 'close') {
   if(s.triggerOnClose){const hint=${JSON.stringify(path.join(org,'retirement/request.json'))};const r=JSON.parse(fs.readFileSync(hint));fs.writeFileSync(hint,JSON.stringify({...r,revision:r.revision+1,source:'completion during apply'}));}
 } else if(a[0] === 'workspace' && a[1] === 'close') {s.actions.push(a);s.workspaces=[];fs.writeFileSync(file,JSON.stringify(s));out({});}
 else if(a[0]==='tab'&&a[1]==='create') {s.actions.push(a);s.tabs.push({tab_id:'main:watch',workspace_id:'main'});s.panes.push({pane_id:'main:watch:p',tab_id:'main:watch',workspace_id:'main'});fs.writeFileSync(file,JSON.stringify(s));out({root_pane:{pane_id:'main:watch:p'}});}
-else if(a[0]==='pane'&&a[1]==='run') {const r=require('node:child_process').spawnSync(a[3],{shell:true,encoding:'utf8',env:{...process.env,HERDR_TAB_ID:'main:watch',HERDR_PANE_ID:'main:watch:p'}});if(r.status!==0){console.error(r.stdout+r.stderr);process.exit(1);}out({child:r.stdout});}
+else if(a[0]==='pane'&&a[1]==='run') {const r=require('node:child_process').spawnSync(a[3],{shell:true,encoding:'utf8',env:{...process.env,HERDR_TAB_ID:'main:watch',HERDR_PANE_ID:'main:watch:p'}});if(r.status!==0){console.error(r.stdout+r.stderr);process.exit(1);}console.error(r.stdout);out({child:r.stdout});}
+else if(a[0]==='agent'&&a[1]==='get') out({agent:s.sessionMode?{agent_status:'done'}:s.agents.find(g=>g.name===a[2])??{agent_status:'done'}});
+else if(s.sessionMode && a[0]==='agent'&&a[1]==='start') {s.agents.forEach(g=>g.agent_status='done');fs.writeFileSync(file,JSON.stringify(s));out({});}
+else if(s.sessionMode && a[0]==='agent'&&['prompt','wait'].includes(a[1])) out({});
+else if(s.sessionMode && a[0]==='pane'&&a[1]==='read') {console.log('fixture session complete');}
+else if(s.sessionMode && a[0]==='notification') out({});
 else {console.error('unexpected fixture command '+a.join(' '));process.exit(1);}
 `, { mode: 0o755 });
   env.HERDR_RETIRE_HERDR = herdr;
   env.PATH = `${scratch}:${process.env.PATH}`;
+  const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim(), gitLog = path.join(scratch, 'git-calls.jsonl');
+  const traceGit = () => fs.writeFileSync(path.join(scratch, 'git'), `#!${process.execPath}\nconst fs=require('node:fs'),{spawnSync}=require('node:child_process'),args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(gitLog)},JSON.stringify(args)+'\\n');const r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);\n`, { mode: 0o755 });
   const events = [
     { type: 'item.added', id: 'ENG-1', role: 'engineer', kind: 'work' },
     { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: lane, meta: { agent: 'worker', pane: 'w:p', worker_workspace: 'w', terminal_id: 'term', agent_session_id: 'session', lane: 'topic' } },
@@ -72,7 +101,8 @@ else {console.error('unexpected fixture command '+a.join(' '));process.exit(1);}
   const close = (gitOnly = true) => spawnSync(process.execPath, [laneCLI, 'close', 'topic', ...(gitOnly ? ['--git-only'] : []), ...(merged ? ['--expected-tip',head] : [])], { cwd: repo, env, encoding: 'utf8' });
   const job = { id: 'job', topic: 'topic', org, run: 'R-1', herdr, laneCLI };
   return { scratch, repo, lane, org, env, git, head, common, state, save, file, retirement, close, job,
-    eventFile, eventBytes, read: () => JSON.parse(fs.readFileSync(file)), queue: () => queueFor(repo) };
+    eventFile, eventBytes, read: () => JSON.parse(fs.readFileSync(file)), queue: () => queueFor(repo),
+    traceGit, gitCalls: () => fs.existsSync(gitLog) ? fs.readFileSync(gitLog, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [] };
 }
 
 test('CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement', t => {
@@ -82,6 +112,179 @@ test('CLI dry plan reads the fold and shared executor refuses a concurrent nativ
   assert.deepEqual(f.read().actions,[]); assert.equal(fs.readFileSync(f.eventFile,'utf8'),f.eventBytes);
   const cli = spawnSync(process.execPath,[path.join(root,'supervisor/retire.mjs'),'plan','--repo',f.repo,'--org',f.org,'--herdr',f.job.herdr],{env:f.env,encoding:'utf8'});
   assert.equal(cli.status,0,cli.stderr); assert.equal(JSON.parse(cli.stdout).keep.length,1);
+});
+
+for (const kind of ['file', 'directory', 'symlink']) test(`retirement hold: ${kind} in the canonical checkout keeps every tab and receipt`, t => {
+  const f = fixture(t), logs = [];
+  const retirement = createRetirement({ cwd: f.lane, org: f.org, herdr: f.job.herdr, env: f.env, log: row => logs.push(row) });
+  retirement.recordCallback({ kind: 'executive', pane: 'w:p', pid: 2, agent: 'worker' });
+  const directory = path.join(f.org, 'retirement/occupants'), original = fs.readdirSync(directory)[0];
+  const receipt = JSON.parse(fs.readFileSync(path.join(directory, original)));
+  fs.writeFileSync(path.join(directory, original), JSON.stringify({ ...receipt, tab: 'another-gone' }));
+  fs.writeFileSync(path.join(directory, 'absent.json'), JSON.stringify({ ...receipt, tab: 'gone' }));
+  const release = hold(f, kind), plan = retirement.plan();
+  const results = retirement.apply(plan);
+  assertNoRemoval(f); assert.equal(plan.close.length, 0); assert.equal(plan.keep[0].why, heldReason);
+  assert.equal(results[0].action, 'held'); assert.ok(logs.some(r => r.action === 'held' && r.tab_id === 'w:t'));
+  assert.equal(fs.readdirSync(directory).length, 2);
+  release(); retirement.apply(retirement.plan());
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]); assert.deepEqual(fs.readdirSync(directory), []);
+});
+
+test('retirement hold: appearing between plan and apply stops the stale close', t => {
+  const f = fixture(t), retirement = f.retirement(), plan = retirement.plan(); assert.equal(plan.close.length, 1);
+  const release = hold(f), result = retirement.apply(plan);
+  assertNoRemoval(f); assert.equal(result[0].action, 'held'); assert.equal(result[0].why, heldReason);
+  release(); retirement.apply(plan); assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
+for (const code of ['EACCES', 'ENOTDIR', 'EIO']) test(`retirement hold: indeterminate lstat ${code} fails closed without reading contents`, t => {
+  const f = fixture(t), retirement = f.retirement(), original = fs.lstatSync, read = fs.readFileSync;
+  const file = path.join(f.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE');
+  fs.lstatSync = function(target, ...args) { if (target === file) throw Object.assign(Error('injected hold lookup failure'), { code }); return original(target, ...args); };
+  fs.readFileSync = function(target, ...args) { assert.notEqual(target, file, 'hold contents must not be read'); return read(target, ...args); };
+  try { const plan = retirement.plan(), result = retirement.apply(plan); assertNoRemoval(f); assert.equal(plan.keep[0].why, heldReason); assert.equal(result[0].action, 'held'); }
+  finally { fs.lstatSync = original; fs.readFileSync = read; }
+  retirement.apply(retirement.plan()); assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
+test('retirement hold: rechecked after the final observation immediately before a close', t => {
+  const f = fixture(t), plan = f.retirement().plan(); let release;
+  const command = (exe, args, options) => {
+    const result = spawnSync(exe, args, options);
+    if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'list') release ??= hold(f);
+    return result;
+  };
+  const retirement = createRetirement({ cwd: f.repo, org: f.org, herdr: f.job.herdr, env: f.env, command });
+  const result = retirement.apply(plan); assertNoRemoval(f); assert.equal(result[0].action, 'held');
+  release(); f.retirement().apply(plan); assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
+test('retirement hold: an empty workspace stays open and logs held before any close', t => {
+  const f = fixture(t, { occupied: false }), logs = [];
+  f.git(['worktree', 'remove', f.lane]);
+  const retirement = createRetirement({ cwd: f.repo, org: f.org, herdr: f.job.herdr, env: f.env, log: row => logs.push(row) });
+  const release = hold(f); assert.throws(() => retirement.closeEmptyWorkspace('w', f.lane), /retirement held/);
+  assertNoRemoval(f); assert.equal(logs[0].action, 'held');
+  release(); retirement.closeEmptyWorkspace('w', f.lane); assert.deepEqual(f.read().actions, [['workspace', 'close', 'w']]);
+});
+
+test('only a canonical hold can brake retirement; a lane-local lookalike has no authority', t => {
+  const f = fixture(t), file = path.join(f.lane, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE');
+  fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n.lane/\n'); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'lane-local');
+  f.retirement().apply(f.retirement().plan()); assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
+for (const mode of ['tidy', 'housekeeping-fast', 'housekeeping-strict', 'plan', 'apply', 'consume']) test(`retirement hold: ${mode} keeps tabs and logs the hold, then resumes`, t => {
+  const f = fixture(t); isolatedEnv(t, f); const logs = [], release = hold(f);
+  if (mode === 'consume') requestRetirement({ org: f.org, eventSeq: 4, source: 'held test' });
+  const run = () => {
+    if (mode === 'housekeeping-fast') {
+      assert.equal(tidyFinishedTabs({ cwd: f.lane, org: f.org, herdr: f.job.herdr, record: [process.execPath, recordCLI], log: r => logs.push(r) }), true);
+      return JSON.stringify(logs);
+    }
+    if (mode === 'housekeeping-strict') {
+      createHousekeeping({ cwd: f.lane, org: f.org, herdr: f.job.herdr, log: r => logs.push(r) }).tick({ resume: false });
+      return JSON.stringify(logs);
+    }
+    const args = mode === 'tidy' ? [path.join(root, 'supervisor/tidy-tabs.mjs'), '--cwd', f.lane, '--org', f.org, '--herdr', f.job.herdr]
+      : [path.join(root, 'supervisor/retire.mjs'), mode, '--repo', f.lane, '--org', f.org, '--herdr', f.job.herdr];
+    const r = spawnSync(process.execPath, args, { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stdout + r.stderr);
+    return r.stdout + r.stderr;
+  };
+  const held = run(); assertNoRemoval(f); assert.ok(held.includes(heldReason), held);
+  if (mode !== 'plan') assert.match(held, /held/);
+  if (mode === 'consume') assert.equal(fs.existsSync(path.join(f.org, 'retirement/handled.json')), false);
+  release(); const resumed = run();
+  if (mode === 'plan') { assert.equal(JSON.parse(resumed).close.length, 1); assertNoRemoval(f); }
+  else assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
+test('retirement hold: drain catch-up acknowledges ready first and leaves the hint pending at both boundaries', async t => {
+  const f = fixture(t); isolatedEnv(t, f); const queue = f.queue(), release = hold(f), outputs = [], messages = [];
+  const send = process.send, write = process.stderr.write;
+  process.send = m => { messages.push(m); return true; };
+  process.stderr.write = function(chunk, ...args) { outputs.push({ text: String(chunk), ready: messages.some(m => m.ready) }); return write.call(this, chunk, ...args); };
+  t.after(() => { process.send = send; process.stderr.write = write; });
+  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' }); await drain(queue);
+  assertNoRemoval(f); assert.deepEqual(messages, [{ ready: true }]);
+  assert.equal(fs.existsSync(path.join(f.org, 'retirement/handled.json')), false);
+  const held = outputs.filter(row => row.text.includes('"action":"held"')); assert.ok(held.length >= 2, JSON.stringify(outputs));
+  assert.ok(held.every(row => row.ready));
+  release(); await drain(queue); assert.equal(JSON.parse(fs.readFileSync(path.join(f.org, 'retirement/handled.json'))).revision, 4);
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
+test('retirement hold: promotion cleanup never invokes git-only close and stays promoted until bounded retry', t => {
+  const f = fixture(t, { occupied: false }); isolatedEnv(t, f); const queue = f.queue(), release = hold(f);
+  const calls = path.join(f.scratch, 'lane-calls.jsonl'), wrapped = path.join(f.scratch, 'lane-wrapper.mjs');
+  fs.writeFileSync(wrapped, `import fs from 'node:fs';import {spawnSync} from 'node:child_process';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(a)+'\\n');const r=spawnSync(process.execPath,[${JSON.stringify(laneCLI)},...a],{stdio:'inherit'});process.exit(r.status??1);`);
+  const job = { ...f.job, laneCLI: wrapped };
+  const result = finishCleanup(job, { outcome: 'promoted', tip: f.head, workspace: f.lane }, queue, { now: 1000 });
+  assertNoRemoval(f); assert.equal(fs.existsSync(calls), false); assert.equal(result.outcome, 'promoted');
+  assert.equal(result.cleanup.state, 'pending'); assert.equal(result.cleanup.outcome, 'held'); assert.match(result.reason, /retirement held/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(queue.directory, 'job-cleanup.jsonl'), 'utf8').trim()).action, 'held');
+  assert.equal(fs.existsSync(f.lane), true); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  queue.transaction(data => data.results.push({ ...job, ...result }));
+  retryCleanup(queue, { now: result.cleanup.next_attempt_at }); assertNoRemoval(f); assert.equal(fs.existsSync(calls), false);
+  release(); retryCleanup(queue, { now: queue.load().results[0].cleanup.next_attempt_at });
+  assert.equal(queue.load().results[0].outcome, 'promoted'); assert.equal(queue.load().results[0].cleanup.state, 'complete');
+  assert.equal(fs.existsSync(f.lane), false); assert.match(fs.readFileSync(calls, 'utf8'), /--git-only/);
+});
+
+for (const gitOnly of [false, true]) test(`retirement hold: lane close ${gitOnly ? 'git-only' : 'normal'} retains worktree and branch before lifecycle mutations`, t => {
+  const f = fixture(t, { occupied: !gitOnly }), release = hold(f);
+  const r = f.close(gitOnly); assert.notEqual(r.status, 0); assert.match(r.stdout + r.stderr, /retirement held/);
+  assertNoRemoval(f); assert.equal(fs.existsSync(f.lane), true); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  release(); const resumed = f.close(gitOnly); assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+  assert.equal(fs.existsSync(f.lane), false); assert.ok(f.gitCalls().some(a => a.includes('worktree') && a.includes('remove')));
+});
+
+test('retirement hold: standalone settle-watch self-retirement preserves its tab and receipt', t => {
+  const f = fixture(t), installed = path.join(f.scratch, 'standalone'); copyProduct(root, installed); fs.rmSync(path.join(installed, 'supervisor'), { recursive: true });
+  f.state.watcherMode = true; f.state.workspaces.push({ workspace_id: 'main', worktree: { checkout_path: f.repo, repo_key: f.common, repo_root: f.repo, is_linked_worktree: false } });
+  f.state.tabs.push({ tab_id: 'main:watch', workspace_id: 'main' }); f.state.panes.push({ pane_id: 'main:watch:p', tab_id: 'main:watch', workspace_id: 'main' }); f.save();
+  fs.writeFileSync(path.join(f.scratch, 'org'), `#!/bin/sh\nexec '${process.execPath}' '${recordCLI}' "$@"\n`, { mode: 0o755 });
+  const config = path.join(f.scratch, 'lane.json'), checklist = path.join(f.scratch, 'checklist'); fs.writeFileSync(config, '{}'); fs.writeFileSync(checklist, 'fixture');
+  const run = () => spawnSync(process.execPath, [path.join(installed, 'contrib/settle-watch.mjs'), 'R-1', '--close-tab-on-exit', '--org', f.org, '--cwd', f.repo,
+    '--lane-config', config, '--checklist', checklist, '--model', 'opaque-model', '--effort', 'opaque-effort'], { env: { ...f.env, HERDR_TAB_ID: 'main:watch', HERDR_PANE_ID: 'main:watch:p' }, encoding: 'utf8' });
+  const release = hold(f), r = run(); assert.equal(r.status, 0, r.stdout + r.stderr); assertNoRemoval(f); assert.match(r.stdout, /held/);
+  assert.equal(fs.readdirSync(path.join(f.org, 'retirement/occupants')).length, 1);
+  release(); const resumed = run(); assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'main:watch']]);
+});
+
+test('retirement hold: settle-watch worker pruning keeps eligible workers then closes after release', t => {
+  const f = fixture(t), config = path.join(f.scratch, 'lane.json'), checklist = path.join(f.scratch, 'checklist'), count = path.join(f.scratch, 'org-count');
+  fs.writeFileSync(config, '{}'); fs.writeFileSync(checklist, 'fixture');
+  const run = fold(loadEvents(f.org).events).runs.get('R-1');
+  fs.writeFileSync(path.join(f.scratch, 'org'), `#!${process.execPath}\nconst fs=require('node:fs'),file=${JSON.stringify(count)},n=fs.existsSync(file)?Number(fs.readFileSync(file)):0;fs.writeFileSync(file,String(n+1));console.log(JSON.stringify(n?${JSON.stringify(run)}:${JSON.stringify({ ...run, report: null })}));\n`, { mode: 0o755 });
+  const watch = () => spawnSync(process.execPath, [path.join(root, 'contrib/settle-watch.mjs'), 'R-1', '--org', f.org, '--cwd', f.repo,
+    '--lane-config', config, '--checklist', checklist, '--model', 'opaque-model', '--effort', 'opaque-effort'], { env: f.env, encoding: 'utf8' });
+  const release = hold(f), r = watch(); assert.equal(r.status, 0, r.stdout + r.stderr); assertNoRemoval(f); assert.match(r.stdout, /held/);
+  release(); fs.unlinkSync(count); const resumed = watch(); assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
+for (const stage of ['pruneSessionTabs', 'closeWorkerTab']) test(`retirement hold: settle-watch ${stage} honors the brake during a real CLI handoff`, t => {
+  const f = fixture(t), config = path.join(f.scratch, 'lane.json'), checklist = path.join(f.scratch, 'checklist');
+  fs.writeFileSync(config, '{}'); fs.writeFileSync(checklist, 'fixture');
+  const reported = fold(loadEvents(f.org).events).runs.get('R-1'), report = path.join(f.scratch, 'report.md'); fs.writeFileSync(report, 'legacy report');
+  fs.writeFileSync(path.join(f.scratch, 'org'), `#!${process.execPath}\nconst a=process.argv.slice(2);console.log(JSON.stringify(a[0]==='show'?${JSON.stringify({ ...reported, report: null, report_path: report })}:{}));\n`, { mode: 0o755 });
+  const launcher = path.join(f.scratch, 'launcher'), memory = path.join(f.scratch, 'memory'), clock = path.join(f.scratch, 'no-delays.mjs');
+  fs.writeFileSync(launcher, `#!/bin/sh\necho CLAUDE_CONFIG_DIR=${f.scratch}/fake-account\n`, { mode: 0o755 }); fs.writeFileSync(memory, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  // Omit fixed UI launch sleeps in this fake-only CLI fixture.
+  fs.writeFileSync(clock, 'Atomics.wait = () => "timed-out";\n');
+  const reset = () => {
+    f.state.sessionMode = true; f.state.tabs = [{ tab_id: 'w:t', workspace_id: 'w' }]; f.state.panes = [{ pane_id: 'w:p', tab_id: 'w:t', workspace_id: 'w' }];
+    f.state.agents[0].agent_status = stage === 'closeWorkerTab' ? 'working' : 'done'; f.save();
+  };
+  f.state.workspaces.push({ workspace_id: 'main', worktree: { checkout_path: f.repo, repo_key: f.common, repo_root: f.repo, is_linked_worktree: false } });
+  const watch = () => spawnSync(process.execPath, ['--import', clock, path.join(root, 'contrib/settle-watch.mjs'), 'R-1', '--org', f.org, '--cwd', f.repo,
+    '--lane-config', config, '--checklist', checklist, '--launcher', launcher, '--cmem-domain', memory, '--model', 'opaque-model', '--effort', 'opaque-effort'], { env: f.env, encoding: 'utf8' });
+  reset(); const release = hold(f), held = watch(); assert.equal(held.status, 0, held.stdout + held.stderr); assertNoRemoval(f); assert.match(held.stdout, /"action":"held"/);
+  release(); reset(); const resumed = watch(); assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+  assert.deepEqual(f.read().actions.filter(a => a[1] === 'close'), [['tab', 'close', 'w:t']]);
 });
 
 test('lane close --git-only keeps the worktree beneath even an eligible pane', t => {

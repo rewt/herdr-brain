@@ -31,6 +31,7 @@
   (`~/.local/share/herdr-monitor/current/contrib/`), with `--model` and `--effort`, and runs
   `supervisor/reconcile.mjs` from this checkout on every promotion. Keep both files' paths, flags and
   behaviour, and keep shipping `contrib/` and `lib/cli-help.mjs` in every release (ENG-64).
+  bch-cloak's canonical `.lane/supervisor/HOLD-WORKER-TAB-CLOSE` hold file is honoured by retirement and lane cleanup.
 
 Contract:
 

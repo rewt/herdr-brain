@@ -9,6 +9,7 @@ import { testSlotEnvironment } from '../../../test/helpers/test-slot-env.mjs';
 import { stopFixtureInbox } from '../../../test/helpers/inbox.mjs';
 import { loadTimeout } from '../../../lib/deadline.mjs';
 import { ownFixtureLifetime } from '../../../test/helpers/fixture-lifetime.mjs';
+import { lookupProcess } from '../../../lib/processes.mjs';
 
 export const cli = fileURLToPath(new URL('../../../lanes/lane.mjs', import.meta.url));
 export function fixture(t) {
@@ -25,6 +26,22 @@ export function fixture(t) {
     await stopFixtureInbox(path.join(repo, '.git/supervisor/inbox.log'), {
       script: fileURLToPath(new URL('../../../supervisor/prompt-supervisor.mjs', import.meta.url)),
     });
+    // A native lifetime guard can briefly outlive its finished gate while it
+    // closes inherited descriptors. Confirm those orphaned guards have exited
+    // before ending the fixture; the runner's strict group audit stays intact.
+    const guard = process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE;
+    const fifo = process.env.HERDR_FIXTURE_LIFETIME_FIFO;
+    const prefixes = ['--exec', '--watch'].map(mode => `${guard} ${mode} ${fifo} `);
+    const guardsBy = Date.now() + loadTimeout(5000);
+    for (;;) {
+      const snapshot = lookupProcess();
+      assert.ok(snapshot.ok, snapshot.error);
+      const orphans = [...snapshot.value.values()].filter(row => row.ppid === 1 && !/^Z/.test(row.state) &&
+        prefixes.some(prefix => row.command.startsWith(prefix)));
+      if (!orphans.length) break;
+      assert.ok(Date.now() < guardsBy, `fixture lifetime guards did not exit: ${orphans.map(row => row.pid).join(', ')}`);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
     fs.rmSync(root, { recursive: true, force: true });
   });
   const config = path.join(root, 'config.json'); fs.writeFileSync(config, '{}');

@@ -1,0 +1,283 @@
+TAP version 13
+# Subtest: message schema accepts the envelope, qualified refs, body and decision evidence
+ok 1 - message schema accepts the envelope, qualified refs, body and decision evidence
+  ---
+  duration_ms: 3.469083
+  ...
+# Subtest: message schema rejects invalid scope, bounds, addresses, kinds and references
+ok 2 - message schema rejects invalid scope, bounds, addresses, kinds and references
+  ---
+  duration_ms: 3.045792
+  ...
+# Subtest: duplicate JSON keys, including escaped keys in nested data, are rejected
+ok 3 - duplicate JSON keys, including escaped keys in nested data, are rejected
+  ---
+  duration_ms: 0.255334
+  ...
+# Subtest: bodies are bounded verified data, with changed bytes and symlink escapes rejected
+ok 4 - bodies are bounded verified data, with changed bytes and symlink escapes rejected
+  ---
+  duration_ms: 5.102166
+  ...
+# Subtest: every rendered watcher notice maps without changing any text
+ok 5 - every rendered watcher notice maps without changing any text
+  ---
+  duration_ms: 1.1395
+  ...
+# Subtest: routing distinguishes deferred scope, needs-work and verified unsupported-role skip
+ok 6 - routing distinguishes deferred scope, needs-work and verified unsupported-role skip
+  ---
+  duration_ms: 0.900625
+  ...
+# Subtest: all current promotion outcomes are operational triage notices
+ok 7 - all current promotion outcomes are operational triage notices
+  ---
+  duration_ms: 0.84675
+  ...
+# Subtest: journal fsyncs private entries and rebuilds both deduplication keys after restart
+ok 8 - journal fsyncs private entries and rebuilds both deduplication keys after restart
+  ---
+  duration_ms: 42.469958
+  ...
+# Subtest: the journal has one immediate writer lock per canonical project partition
+ok 9 - the journal has one immediate writer lock per canonical project partition
+  ---
+  duration_ms: 8.209625
+  ...
+# Subtest: torn tails are readable with explicit evidence, block append, and preserve all bytes
+ok 10 - torn tails are readable with explicit evidence, block append, and preserve all bytes
+  ---
+  duration_ms: 12.208459
+  ...
+# Subtest: journal refuses symlink and nonprivate storage without writing record events
+ok 11 - journal refuses symlink and nonprivate storage without writing record events
+  ---
+  duration_ms: 8.914416
+  ...
+# Subtest: report counts accepted kinds/paths/would-wakes and duplicate/conflict attempts stably
+ok 12 - report counts accepted kinds/paths/would-wakes and duplicate/conflict attempts stably
+  ---
+  duration_ms: 67.343291
+  ...
+# Subtest: the inbox mirror keeps stable IDs, exact immutable bodies and original delivery ownership
+ok 13 - the inbox mirror keeps stable IDs, exact immutable bodies and original delivery ownership
+  ---
+  duration_ms: 94.941875
+  ...
+# Subtest: mirror errors, pending mirror work and failing diagnostics cannot block enqueue
+ok 14 - mirror errors, pending mirror work and failing diagnostics cannot block enqueue
+  ---
+  duration_ms: 180.723791
+  ...
+# Subtest: desk shadow preserves explicit request kind and surfaces unresolved canonical recipients
+ok 15 - desk shadow preserves explicit request kind and surfaces unresolved canonical recipients
+  ---
+  duration_ms: 56.110375
+  ...
+# Subtest: copied product runtimes include the message module and can import the existing inbox
+ok 16 - copied product runtimes include the message module and can import the existing inbox
+  ---
+  duration_ms: 103.837125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: retirement hold: native watcher closes its tab from a non-Git cwd
+ok 17 - retirement hold: native watcher closes its tab from a non-Git cwd
+  ---
+  duration_ms: 409.558333
+  ...
+# Subtest: retirement hold: native watcher self-retirement keeps its tab from a linked cwd
+ok 18 - retirement hold: native watcher self-retirement keeps its tab from a linked cwd
+  ---
+  duration_ms: 552.076125
+  ...
+# Subtest: retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer
+ok 19 - retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer
+  ---
+  duration_ms: 278.997833
+  ...
+# Subtest: retirement hold: native watcher keeps its tab on an indeterminate canonical lookup inside Git
+ok 20 - retirement hold: native watcher keeps its tab on an indeterminate canonical lookup inside Git
+  ---
+  duration_ms: 210.83475
+  ...
+# Subtest: retirement hold: native watcher keeps its tab on an indeterminate hold lookup inside Git
+ok 21 - retirement hold: native watcher keeps its tab on an indeterminate hold lookup inside Git
+  ---
+  duration_ms: 247.101875
+  ...
+# Subtest: every terminal condition has a distinct, compact supervisor notice
+ok 22 - every terminal condition has a distinct, compact supervisor notice
+  ---
+  duration_ms: 0.340459
+  ...
+# Subtest: spawn resolves the cwd workspace when it is run outside a Herdr pane
+ok 23 - spawn resolves the cwd workspace when it is run outside a Herdr pane
+  ---
+  duration_ms: 179.87925
+  ...
+# Subtest: a valid report is checked and delivered without Herdr being present
+ok 24 - a valid report is checked and delivered without Herdr being present
+  ---
+  duration_ms: 898.272666
+  ...
+# Subtest: watch shadow uses the checked review verdict and scope while preserving the final tag
+ok 25 - watch shadow uses the checked review verdict and scope while preserving the final tag
+  ---
+  duration_ms: 3258.761084
+  ...
+# Subtest: final watch notice waits for fake operator typing, then sends once across watcher restart
+not ok 26 - final watch notice waits for fake operator typing, then sends once across watcher restart
+  ---
+  duration_ms: 14.045
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a capped final watcher exits while its owned notice later delivers without another watcher
+not ok 27 - a capped final watcher exits while its owned notice later delivers without another watcher
+  ---
+  duration_ms: 948.218875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a report landing wakes the watcher without polling Herdr
+ok 28 - a report landing wakes the watcher without polling Herdr # SKIP filesystem notifications unavailable: EMFILE
+  ---
+  duration_ms: 1.582542
+  ...
+# Subtest: a valid report also waits while the worker state is unknown
+not ok 29 - a valid report also waits while the worker state is unknown
+  ---
+  duration_ms: 8.030042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a mismatched report is invalid even when org check passes
+ok 30 - a mismatched report is invalid even when org check passes
+  ---
+  duration_ms: 1342.0545
+  ...
+# Subtest: a vanished worker delivers exited-without-report and stops
+ok 31 - a vanished worker delivers exited-without-report and stops
+  ---
+  duration_ms: 741.435958
+  ...
+# Subtest: an initially idle worker is not terminal until it has worked
+ok 32 - an initially idle worker is not terminal until it has worked
+  ---
+  duration_ms: 1180.336459
+  ...
+# Subtest: idle grace waits for a late report before sending a no-report notice
+not ok 33 - idle grace waits for a late report before sending a no-report notice
+  ---
+  duration_ms: 10.613333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: idle grace does not start before the worker has been seen working
+ok 34 - idle grace does not start before the worker has been seen working
+  ---
+  duration_ms: 1105.3425
+  ...
+# Subtest: idle grace notices a blocked worker immediately and keeps watching
+not ok 35 - idle grace notices a blocked worker immediately and keeps watching
+  ---
+  duration_ms: 7.774667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: idle, working, idle without a report delivers both stop notices
+ok 36 - idle, working, idle without a report delivers both stop notices
+  ---
+  duration_ms: 1502.483292
+  ...
+# Subtest: a blocked worker delivers its distinct notice
+ok 37 - a blocked worker delivers its distinct notice
+  ---
+  duration_ms: 1297.967375
+  ...
+# Subtest: a valid report stays intermediate while blocked and is final only after idle
+not ok 38 - a valid report stays intermediate while blocked and is final only after idle
+  ---
+  duration_ms: 6.55775
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a refused intermediate delivery stays first in the inbox and recovers before the final report
+ok 39 - a refused intermediate delivery stays first in the inbox and recovers before the final report
+  ---
+  duration_ms: 1256.350583
+  ...
+# Subtest: a still-working worker delivers the long-running notice
+ok 40 - a still-working worker delivers the long-running notice
+  ---
+  duration_ms: 1440.059458
+  ...
+# Subtest: a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+not ok 41 - a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+  ---
+  duration_ms: 1178.634667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a Herdr outage is delivered after Herdr recovers, never reported as gone
+ok 42 - a Herdr outage is delivered after Herdr recovers, never reported as gone
+  ---
+  duration_ms: 1163.991375
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: capture the unchanged scripted review failure before fixture cleanup
+ok 43 - capture the unchanged scripted review failure before fixture cleanup
+  ---
+  duration_ms: 4551.15
+  ...
+# Subtest: capture the unchanged awaited-autopilot receipt error
+ok 44 - capture the unchanged awaited-autopilot receipt error
+  ---
+  duration_ms: 641.498083
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..44
+# tests 44
+# suites 0
+# pass 36
+# fail 7
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 19358.67875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -10,6 +10,7 @@ import { queueFor, enqueue } from '../promote.mjs';
 import { resolveGateProfile } from '../gate-profile.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { drain } from '../promote.mjs';
@@ -158,6 +159,7 @@ test('fixture cleanup ignores an ambient record inbox owner', (t) => {
 
 test('busy supervisor does not hold completed queue accounting by default', async (t) => {
   const f = fixture(t);
+  f.env.BRAIN_SHADOW_ROOT = path.join(f.root, 'shadow'); f.env.BRAIN_IDENTITY = 'example';
   delete f.env.SUPERVISOR_INPUT_WAIT_SECONDS;
   f.onCleanup(async () => {
     fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
@@ -176,6 +178,12 @@ test('busy supervisor does not hold completed queue accounting by default', asyn
   assert.equal(f.messages().length, 0, 'busy input receives no prompt');
   const id = 'promote:' + launched.jobs[0].id;
   assert.equal(readInbox(result.inbox).filter(entry => entry.id === id).length, 1, 'one durable notice owns delivery');
+  const directory = stateDirectory({ root: f.env.BRAIN_SHADOW_ROOT, identity: 'example', commonDir: fs.realpathSync(path.join(f.repo, '.git')) });
+  await until(() => { try { return fs.readFileSync(path.join(directory, 'shadow.jsonl'), 'utf8').endsWith('\n'); } catch { return false; } });
+  const shadow = (await readJournal(directory)).entries[0];
+  assert.equal(shadow.payload.legacy.id, id); assert.equal(shadow.shadow.path, 'triage');
+  assert.deepEqual(shadow.payload.evidence, { channel: 'promote-queue', validated: true, outcome: 'promoted' });
+  assert.equal(fs.readFileSync(shadow.payload.body_ref.path, 'utf8'), readInbox(result.inbox)[0].message);
   // Span several former short owner windows while input remains genuinely busy.
   await delay((Number(f.env.SUPERVISOR_INPUT_CONFIRM_SECONDS) + 1) * 2200);
   const events = fs.readFileSync(result.inbox, 'utf8').trim().split('\n').map(JSON.parse);

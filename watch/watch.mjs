@@ -218,12 +218,12 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
   });
 }
 
-async function deliver(message, sound = 'request', id, { allowQueued = false } = {}) {
+async function deliver(message, sound = 'request', id, { allowQueued = false, shadowEvidence } = {}) {
   log(message);
   if (dry) return true;
   const result = await promptSupervisor(opt.to, message, {
     org: opt.org, cwd: opt.cwd, inbox: opt.inbox, herdr: opt.herdr, attempts: deliveryAttempts,
-    retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log,
+    retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log, shadowEvidence,
   });
   if (result.delivered) return true;
   if (allowQueued && result.queued && Number.isInteger(result.owner_pid) && result.owner_pid > 0) return true;
@@ -439,7 +439,11 @@ async function watch() {
       await deliver(reportNotice({
         run: runId, item, outcome: report.report.outcome, headline,
         report: reportPath, check: 'pass',
-      }), 'done', `watch:${runId}:final`);
+      }), 'done', `watch:${runId}:final`, { shadowEvidence: {
+        channel: 'org-report', validated: true, outcome: report.report.outcome,
+        ...(report.report.extra?.verdict !== undefined ? { verdict: report.report.extra.verdict } : {}),
+        ...(report.report.extra?.review_scope === 'deferred' ? { reviewScope: 'deferred' } : {}),
+      } });
       log(`validated by ${report.check}`);
       return;
     }

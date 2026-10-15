@@ -1,0 +1,30 @@
+import test from '../test/helpers/bounded-test.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fixture } from '../settle/test/fixture.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { autopilotNotice } from '../supervisor/autopilot.mjs';
+
+const evidence = path.resolve('docs/evidence/ENG-339/R-425/logs');
+test('capture the unchanged scripted review failure before fixture cleanup', t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  const result = f.settle(run);
+  const log = path.join(f.org, 'settle', `${run}.review-r1.log`);
+  fs.writeFileSync(path.join(evidence, 'review-failure-diagnostic.json'), JSON.stringify({ status: result.status,
+    stdout: result.stdout, stderr: result.stderr, reviewLog: fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : null }, null, 2) + '\n');
+});
+test('capture the unchanged awaited-autopilot receipt error', t => {
+  const f = fixture(t), run = f.start(); f.report(run); f.record(['ingest', f.show(run).report_path]);
+  const item = f.show(run).item, configFile = path.join(f.org, 'config.json');
+  const config = JSON.parse(fs.readFileSync(configFile)); config.approvals.categories.tooling = 'auto';
+  fs.writeFileSync(configFile, JSON.stringify(config));
+  f.record(['set', item, 'meta.notify=supervisor', 'meta.notify_step=Cut RC-11']);
+  const project = { repo: f.repo, identity: gitProject(f.repo).identity, org: f.org };
+  const directory = path.join(project.identity, 'promote'); fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, 'queue.json'), JSON.stringify({ identity: project.identity, pending: [], current: null,
+    results: [{ id: 'job', topic: 'topic', run, org: f.org, outcome: 'promoted' }] }));
+  const result = autopilotNotice({ id: 'promote:job', to: 'supervisor-test', message: '[promote-queue] id=job lane=topic outcome=promoted', project },
+    { execute: () => { f.record(['close', item, '--if-current-run', run, '--note', 'Verified promotion']); return JSON.stringify({ result: 'recorded_promotion', run, item }); } });
+  fs.writeFileSync(path.join(evidence, 'autopilot-failure-diagnostic.json'), JSON.stringify({ result,
+    receipt: JSON.parse(fs.readFileSync(result.receipt)) }, null, 2) + '\n');
+});

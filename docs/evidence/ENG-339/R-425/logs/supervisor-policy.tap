@@ -1,0 +1,1024 @@
+TAP version 13
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: status derives all lane stages and timing without record mutations or model calls
+not ok 1 - status derives all lane stages and timing without record mutations or model calls
+  ---
+  duration_ms: 507.64575
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'hookFailed'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    TestContext.cleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:73:5)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: status shows correction runs as fix and retains recent autopilot receipts
+ok 2 - status shows correction runs as fix and retains recent autopilot receipts
+  ---
+  duration_ms: 436.376458
+  ...
+# Subtest: a correction moves from fix to its own review and displays the active reviewer metadata
+ok 3 - a correction moves from fix to its own review and displays the active reviewer metadata
+  ---
+  duration_ms: 449.631208
+  ...
+# Subtest: status warns and omits structurally damaged action receipts before sorting or mapping
+ok 4 - status warns and omits structurally damaged action receipts before sorting or mapping
+  ---
+  duration_ms: 237.623
+  ...
+# Subtest: unavailable Herdr and malformed receipts are visible without changing state
+ok 5 - unavailable Herdr and malformed receipts are visible without changing state
+  ---
+  duration_ms: 221.6885
+  ...
+# Subtest: status CLI is read-only from a linked checkout and does not require a supervisor role
+ok 6 - status CLI is read-only from a linked checkout and does not require a supervisor role
+  ---
+  duration_ms: 425.89775
+  ...
+# Subtest: review display uses matching session provider/model and excludes foreign session metadata
+ok 7 - review display uses matching session provider/model and excludes foreign session metadata
+  ---
+  duration_ms: 203.40775
+  ...
+# Subtest: removed completed legacy lanes are history rather than active review lanes
+ok 8 - removed completed legacy lanes are history rather than active review lanes
+  ---
+  duration_ms: 291.831334
+  ...
+# Subtest: the current reviewer matches the configured opaque route and verified occupant, working before idle
+ok 9 - the current reviewer matches the configured opaque route and verified occupant, working before idle
+  ---
+  duration_ms: 321.973125
+  ...
+# Subtest: recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+ok 10 - recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+  ---
+  duration_ms: 465.843709
+  ...
+# Subtest: open runs precede only today’s landed runs and refused promotion is blocked
+ok 11 - open runs precede only today’s landed runs and refused promotion is blocked
+  ---
+  duration_ms: 642.188459
+  ...
+# Subtest: a blocked report with no live session keeps its completed duration instead of counting idle hours
+ok 12 - a blocked report with no live session keeps its completed duration instead of counting idle hours
+  ---
+  duration_ms: 381.742958
+  ...
+# Subtest: a timed-out queue job displays blocked correction work rather than the train
+ok 13 - a timed-out queue job displays blocked correction work rather than the train
+  ---
+  duration_ms: 245.670542
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+ok 14 - cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+  ---
+  duration_ms: 1283.476417
+  ...
+# Subtest: cold start Lessons handles empty records and terminal controls in claims
+ok 15 - cold start Lessons handles empty records and terminal controls in claims
+  ---
+  duration_ms: 579.150416
+  ...
+# Subtest: cold start surfaces host memory pressure without process rows, storage advisories or record changes
+ok 16 - cold start surfaces host memory pressure without process rows, storage advisories or record changes
+  ---
+  duration_ms: 167.627083
+  ...
+# Subtest: supervisor handle exposes review memory wait before pressure clears
+ok 17 - supervisor handle exposes review memory wait before pressure clears
+  ---
+  duration_ms: 9430.367833
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: supervisor handle exposes correction memory wait before pressure clears
+not ok 18 - supervisor handle exposes correction memory wait before pressure clears
+  ---
+  duration_ms: 10212.223875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /waiting; memory pressure/. Input:
+    
+    'settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-KHMDCw/project/.org/settle/R-1.review-r1.log\n' +
+      'supervisor: settle.mjs: exit 1\n'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-KHMDCw/project/.org/settle/R-1.review-r1.log
+    supervisor: settle.mjs: exit 1
+    
+  operator: 'match'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:94:14
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: handle returns capped findings and promotion records explicit acceptance with exact heads
+not ok 19 - handle returns capped findings and promotion records explicit acceptance with exact heads
+  ---
+  duration_ms: 9684.537833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    Object.exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    invoke (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:13:45)
+    Object.handle (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:149:34)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:123:18
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: handle explicitly sends capped findings back once and adopts its saved correction
+ok 20 - handle explicitly sends capped findings back once and adopts its saved correction
+  ---
+  duration_ms: 7452.676042
+  ...
+# Subtest: STOP arriving during review retains a resumable correction without launching another worker
+not ok 21 - STOP arriving during review retains a resumable correction without launching another worker
+  ---
+  duration_ms: 6868.506583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    Object.exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    invoke (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:13:45)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:165:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: supervisor binds head and run into the queue and retries confirmed refusals with history
+ok 22 - supervisor binds head and run into the queue and retries confirmed refusals with history
+  ---
+  duration_ms: 12532.647417
+  ...
+# Subtest: bound promotion rechecks queued runs and record changes during validation before integration
+not ok 23 - bound promotion rechecks queued runs and record changes during validation before integration
+  ---
+  duration_ms: 5018.142792
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:114:59)
+    Object.git (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:115:37)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:207:77
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+not ok 24 - late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+  ---
+  duration_ms: 1676.161292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-X8k2S7/project/.org/settle/R-1.review-r1.log
+    supervisor: settle.mjs: exit 1
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:14:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:227:17
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: late original and correction notices after lane removal preserve promotion guards and never replay settlement
+not ok 25 - late original and correction notices after lane removal preserve promotion guards and never replay settlement
+  ---
+  duration_ms: 10880.321125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    Object.exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    invoke (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:13:45)
+    Object.promote (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:147:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:288:48
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+ok 26 - refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+  ---
+  duration_ms: 6716.253875
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: supervisor entry and final notices carry the unconfigured cycle through actual promotion
+not ok 27 - supervisor entry and final notices carry the unconfigured cycle through actual promotion
+  ---
+  duration_ms: 18158.802791
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    Object.exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/acceptance/supervisor.mjs:25:19)
+    supervisorCase (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/acceptance/supervisor.mjs:83:20)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:331:17
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cold start includes routes, history across midnight and a durable explicit reading cursor
+ok 28 - cold start includes routes, history across midnight and a durable explicit reading cursor
+  ---
+  duration_ms: 952.030458
+  ...
+# Subtest: ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+ok 29 - ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+  ---
+  duration_ms: 1423.651375
+  ...
+# Subtest: workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+ok 30 - workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+  ---
+  duration_ms: 1278.098458
+  ...
+# Subtest: non-done reports hand off substance without review; saved enqueue uncertainty never replays
+ok 31 - non-done reports hand off substance without review; saved enqueue uncertainty never replays
+  ---
+  duration_ms: 1239.326541
+  ...
+# Subtest: full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+ok 32 - full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+  ---
+  duration_ms: 1002.348583
+  ...
+# Subtest: conditional record completion preserves newer work, unresolved and declined blockers
+ok 33 - conditional record completion preserves newer work, unresolved and declined blockers
+  ---
+  duration_ms: 989.856375
+  ...
+# Subtest: a disappeared checkout retains its open record run through a dispatch identity receipt
+ok 34 - a disappeared checkout retains its open record run through a dispatch identity receipt
+  ---
+  duration_ms: 229.826166
+  ...
+# Subtest: supervisor retries a confirmed timeout with the same reviewed binding
+not ok 35 - supervisor retries a confirmed timeout with the same reviewed binding
+  ---
+  duration_ms: 5625.106791
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    Object.exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    invoke (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:13:45)
+    Object.promote (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:147:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/supervisor.test.mjs:502:28
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: default chat launches the native Codex harness with no sandbox preflight or Claude fallback
+ok 36 - default chat launches the native Codex harness with no sandbox preflight or Claude fallback
+  ---
+  duration_ms: 1126.559209
+  ...
+# Subtest: one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+ok 37 - one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+  ---
+  duration_ms: 1602.387125
+  ...
+# Subtest: operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+ok 38 - operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+  ---
+  duration_ms: 1084.551333
+  ...
+# Subtest: failed or uncertain startup retains one tab and never launches again on reopen
+ok 39 - failed or uncertain startup retains one tab and never launches again on reopen
+  ---
+  duration_ms: 1150.869083
+  ...
+# Subtest: agent start can wait beyond ten seconds within the requested startup window
+ok 40 - agent start can wait beyond ten seconds within the requested startup window
+  ---
+  duration_ms: 11501.289083
+  ...
+# Subtest: agent start failure explains the retained tab and reopening never repeats the launch
+ok 41 - agent start failure explains the retained tab and reopening never repeats the launch
+  ---
+  duration_ms: 888.980917
+  ...
+# Subtest: codex agent start caller receives the resolved chat environment over the launcher environment
+ok 42 - codex agent start caller receives the resolved chat environment over the launcher environment
+  ---
+  duration_ms: 858.972125
+  ...
+# Subtest: claude agent start caller receives the resolved chat environment over the launcher environment
+ok 43 - claude agent start caller receives the resolved chat environment over the launcher environment
+  ---
+  duration_ms: 769.692708
+  ...
+# Subtest: shell readiness fails before sending input and retains a recoverable tab
+ok 44 - shell readiness fails before sending input and retains a recoverable tab
+  ---
+  duration_ms: 1420.520167
+  ...
+# Subtest: an unnamed detected launch is recovered only in the receipt pane with the same harness and checkout
+ok 45 - an unnamed detected launch is recovered only in the receipt pane with the same harness and checkout
+  ---
+  duration_ms: 1072.524625
+  ...
+# Subtest: late detection after timeout recovers the unnamed chat without replaying launch
+ok 46 - late detection after timeout recovers the unnamed chat without replaying launch
+  ---
+  duration_ms: 1183.591917
+  ...
+# Subtest: an oh-my-zsh builtin update question never receives shell input
+ok 47 - an oh-my-zsh builtin update question never receives shell input
+  ---
+  duration_ms: 1332.10825
+  ...
+# Subtest: startup waits through an update question before proving prompt and command execution
+ok 48 - startup waits through an update question before proving prompt and command execution
+  ---
+  duration_ms: 1032.571167
+  ...
+# Subtest: echoed probe input is not execution proof and cannot launch an agent
+ok 49 - echoed probe input is not execution proof and cannot launch an agent
+  ---
+  duration_ms: 912.919667
+  ...
+# Subtest: the named prototype in chats is adopted unchanged and other projects join that workspace
+ok 50 - the named prototype in chats is adopted unchanged and other projects join that workspace
+  ---
+  duration_ms: 1241.872416
+  ...
+# Subtest: prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+ok 51 - prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+  ---
+  duration_ms: 933.563958
+  ...
+# Subtest: chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+ok 52 - chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+  ---
+  duration_ms: 1228.629917
+  ...
+# Subtest: a closed chat tab can be recreated while the other project remains in the same workspace
+ok 53 - a closed chat tab can be recreated while the other project remains in the same workspace
+  ---
+  duration_ms: 1971.697
+  ...
+# Subtest: an existing named control workspace is reused and ambient recipients never cross project boundaries
+ok 54 - an existing named control workspace is reused and ambient recipients never cross project boundaries
+  ---
+  duration_ms: 783.594875
+  ...
+# Subtest: committed read/scoped chat settings and older receipts with any herdr_mode open full chats
+ok 55 - committed read/scoped chat settings and older receipts with any herdr_mode open full chats
+  ---
+  duration_ms: 1516.062042
+  ...
+# Subtest: unknown and stale fleet projects fail before Herdr mutations while retired entry settings are ignored
+ok 56 - unknown and stale fleet projects fail before Herdr mutations while retired entry settings are ignored
+  ---
+  duration_ms: 817.685375
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 57 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 585.363083
+  ...
+# Subtest: fix_round is left in flight
+ok 58 - fix_round is left in flight
+  ---
+  duration_ms: 449.369541
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 59 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 500.780375
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 60 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 556.362916
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 61 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 416.555166
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 62 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 419.216166
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 63 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 430.4405
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 64 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 417.530833
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 65 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 426.011292
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 66 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 405.527292
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 67 - Moderate and Minor findings file one follow-up before accepting promotion
+  ---
+  duration_ms: 561.212667
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 68 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 417.297458
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 69 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 436.341959
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 70 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 432.750042
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 71 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 430.473334
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 72 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 416.012333
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 73 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 412.084625
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 74 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 720.162292
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 75 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 499.883417
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 76 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 388.442334
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 77 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 317.104208
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 78 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 319.137334
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 79 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 320.639875
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 80 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 321.687542
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 81 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 330.123667
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 82 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 312.704
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 83 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 376.418208
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 84 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 380.281125
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 85 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 547.268208
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 86 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 328.304041
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 87 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 322.8655
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 88 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 319.474458
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 89 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 388.488291
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 90 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 371.180083
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 91 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 489.329083
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 92 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 508.062875
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 93 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 433.8015
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 94 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 490.001708
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 95 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 324.032125
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 96 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 357.14
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 97 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 344.845167
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 98 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 332.658
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 99 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 349.947333
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 100 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 337.203583
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 101 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 349.616333
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 102 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 332.763666
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 103 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 323.583459
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 104 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 317.374209
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 105 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 332.780666
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 106 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 375.686958
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 107 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 420.864625
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 108 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 605.972542
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 109 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 320.6475
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 110 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 424.195042
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 111 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 425.240625
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 112 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 476.924541
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 113 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 408.765167
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 114 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 402.628041
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 115 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 422.353875
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 116 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 414.788708
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 117 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 742.17825
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 118 - runless completion fleet-membership retains an explicit binding diagnostic
+  ---
+  duration_ms: 349.688209
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 119 - runless completion gate-profile retains an explicit binding diagnostic
+  ---
+  duration_ms: 370.383541
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+not ok 120 - completion after an interrupted promotion has its own receipt and closes once
+  ---
+  duration_ms: 616.350291
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'hookFailed'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    TestContext.cleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:73:5)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 121 - abandoned watch-no-report is journaled without waking or acting
+  ---
+  duration_ms: 336.753291
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 122 - abandoned watch-long-running is journaled without waking or acting
+  ---
+  duration_ms: 295.223917
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 123 - abandoned watch-invalid-report is journaled without waking or acting
+  ---
+  duration_ms: 297.64975
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 124 - abandoned org-report is journaled without waking or acting
+  ---
+  duration_ms: 300.8275
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+not ok 125 - awaited promotion closes before waking with one short plan line and later notices stay silent
+  ---
+  duration_ms: 578.176792
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + '[promote-queue] id=job lane=topic outcome=promoted'
+    - '[autopilot] ENG-1 landed; unblocks: Cut RC-11'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '[autopilot] ENG-1 landed; unblocks: Cut RC-11'
+  actual: '[promote-queue] id=job lane=topic outcome=promoted'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/autopilot.test.mjs:303:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 126 - awaited PASS queued for promotion stays silent until closure
+  ---
+  duration_ms: 511.851041
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 127 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+  ---
+  duration_ms: 679.751334
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 128 - abandoned watcher inbox entry is handled without Herdr delivery
+  ---
+  duration_ms: 362.40725
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 129 - legacy uncertain promotion receipts still forbid command replay after the key upgrade
+  ---
+  duration_ms: 372.369542
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 130 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 520.234042
+  ...
+# message shadow: ENOENT: no such file or directory, realpath '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-QwuQ2s/project/.git'
+# message shadow: ENOENT: no such file or directory, realpath '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-MnRnad/project/.git'
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 131 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 960.621708
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 132 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 890.128375
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 133 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 859.089083
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 134 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 829.482417
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 135 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 536.553083
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 136 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 5058.938834
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 137 - actual handle and promotion commands file findings and accept them offline
+  ---
+  duration_ms: 5850.375
+  ...
+# Subtest: real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+ok 138 - real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+  ---
+  duration_ms: 4493.957875
+  ...
+# message shadow: ENOENT: no such file or directory, realpath '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-FPYC0p/project/.git'
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+not ok 139 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 9030.073917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'hookFailed'
+  error: 'Cannot confirm fixture queue shutdown'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    TestContext.cleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:80:30)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+not ok 140 - automatic PASS reaches the real queue, lands and closes with one awaited wake
+  ---
+  duration_ms: 6219.778292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:114:59)
+    record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:139:28)
+    Object.show (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:144:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/autopilot.test.mjs:469:16
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+not ok 141 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+  ---
+  duration_ms: 7133.537958
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:114:59)
+    record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:139:28)
+    Object.show (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:144:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/autopilot.test.mjs:469:16
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+not ok 142 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 9031.582584
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:114:59)
+    record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:139:28)
+    Object.show (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:144:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/autopilot.test.mjs:469:16
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+not ok 143 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 7772.806959
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:114:59)
+    record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:139:28)
+    Object.show (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:144:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/autopilot.test.mjs:469:16
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+not ok 144 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 7386.6515
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:47:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:112:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:114:59)
+    record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:139:28)
+    Object.show (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/settle/test/fixture.mjs:144:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/test/autopilot.test.mjs:537:39
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: 
+ok 145 - stderr-only failed action preserves refusal instead of JSON parsing: 
+  ---
+  duration_ms: 435.225584
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 146 - stderr-only failed action preserves refusal instead of JSON parsing: {broken
+  ---
+  duration_ms: 441.251291
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..146
+# tests 146
+# suites 0
+# pass 129
+# fail 17
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 113565.804625
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

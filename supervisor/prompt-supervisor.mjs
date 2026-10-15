@@ -13,6 +13,7 @@ import { findOrgDir } from '../lib/store.mjs';
 import { noticeLock, ownerPid } from './notice-lock.mjs';
 import { composerEmpty } from './composer.mjs';
 import { autopilotNotice } from './autopilot.mjs';
+import { bestEffort, mirrorNotice } from '../messages/mirror.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,7 +70,11 @@ function transaction(file, fn) {
   try {
     const append = (event) => {
       const fd = fs.openSync(file, 'a', 0o600);
-      try { fs.writeFileSync(fd, JSON.stringify({ at: new Date().toISOString(), ...event }) + '\n'); fs.fsyncSync(fd); }
+      try {
+        const stored = { at: new Date().toISOString(), ...event };
+        fs.writeFileSync(fd, JSON.stringify(stored) + '\n'); fs.fsyncSync(fd);
+        return stored;
+      }
       finally { fs.closeSync(fd); }
     };
     return fn(readInbox(file), append);
@@ -260,15 +265,19 @@ export function enqueueSupervisor(to, message, options = {}) {
   seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'SUPERVISOR_INPUT_WAIT_SECONDS');
   seconds(options.confirmSeconds ?? process.env.SUPERVISOR_INPUT_CONFIRM_SECONDS, 3, 'SUPERVISOR_INPUT_CONFIRM_SECONDS');
   seconds(options.pollSeconds ?? process.env.SUPERVISOR_INPUT_POLL_SECONDS, 10, 'SUPERVISOR_INPUT_POLL_SECONDS');
+  let observed, sequence;
   transaction(file, (entries, append) => {
     const prior = entries.find((entry) => entry.id === id);
     if (prior) {
       if (prior.to !== to || prior.message !== message) throw new Error(`notice ${id} has different content or target`);
+      observed = prior; sequence = entries.indexOf(prior) + 1;
       return;
     }
-    append({ type: 'notice', id, to, message, project: noticeProject(file, options), owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
+    observed = append({ type: 'notice', id, to, message, project: noticeProject(file, options), owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
       title: options.title ?? 'Supervisor notice queued', sound: options.sound ?? 'request' });
+    sequence = entries.length + 1;
   });
+  bestEffort(() => (options.mirror ?? mirrorNotice)({ ...observed, sequence, inbox: file, cwd: options.cwd, evidence: options.shadowEvidence }, options.shadow), options.shadow);
   return { id, inbox: file };
 }
 

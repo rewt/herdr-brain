@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { request } from '../request.mjs';
+import { flushShadow } from '../../messages/mirror.mjs';
 
 function fixture(t, existing = false, status = 'idle') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-request-'));
@@ -95,4 +96,16 @@ test('identity traversal and empty requests fail before contacting Herdr', async
   for (const args of [['../bastian', 'request'], ['bastian', ' '], ['bastian', 'text', 'extra']])
     await assert.rejects(request(args, f), /usage/);
   assert.throws(() => f.calls(), /ENOENT/);
+});
+test('a failed or pending desk mirror leaves successful literal delivery byte-identical', async t => {
+  const f = fixture(t, true), text = 'Please inspect; $(touch never-run)\nKeep the exact text.';
+  let release, observed;
+  const sent = await request(['bastian', text], { ...f, mirror: entry => { observed = entry; return new Promise(resolve => { release = resolve; }); } });
+  assert.equal(sent.desk, 'desk-bastian');
+  assert.deepEqual(f.calls().at(-1), ['agent', 'prompt', 'desk-bastian', text]);
+  assert.equal(observed.message, text); release(); await flushShadow();
+  let failure;
+  await request(['bastian', text], { ...f, mirror: () => { throw Error('mirror disk failure'); }, shadow: { onError: error => { failure = error.message; } } });
+  await flushShadow(); assert.equal(failure, 'mirror disk failure');
+  assert.deepEqual(f.calls().at(-1), ['agent', 'prompt', 'desk-bastian', text]);
 });

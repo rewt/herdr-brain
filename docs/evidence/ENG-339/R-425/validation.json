@@ -1,0 +1,270 @@
+{
+  "schema": "eng-339-validation/v1",
+  "run": "R-425",
+  "scope": "ARCH-33 stage 7, offline only",
+  "environment": {
+    "BRAIN_SHADOW_ROOT": "$PWD/.lane/eng-339-shadow",
+    "BRAIN_IDENTITY": "offline-test"
+  },
+  "result": "blocked; implementation and focused tests complete, full validation not green",
+  "required_invariants": {
+    "test/one-watcher.test.mjs": "pass",
+    "test/bch-cloak-contract.test.mjs": "pass",
+    "promote/test/train.test.mjs": "pass"
+  },
+  "diagnostics": {
+    "fs_watch": "logs/fs-watch-probe.json: fresh isolated directory reproduces EMFILE",
+    "scripted_review": "logs/review-failure-diagnostic.json: isolated control succeeds; original broader failures remain unreproduced",
+    "awaited_summary": "logs/autopilot-failure-diagnostic.json: isolated control returns the expected summary; original broader mismatch remains unreproduced",
+    "source": "logs/diagnostic-source.txt; executed through the same bounded runner"
+  },
+  "static_check": "git diff --check passed",
+  "runs": [
+    {
+      "name": "messages-delivery-request",
+      "files": [
+        "test/messages.test.mjs",
+        "supervisor/test/request.test.mjs",
+        "supervisor/test/delivery.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/messages.test.mjs supervisor/test/request.test.mjs supervisor/test/delivery.test.mjs",
+      "log": "logs/messages-delivery-request.tap",
+      "totals": {
+        "tests": 42,
+        "pass": 42,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failed_cases": [],
+      "note": "Initial focused pass; superseded by the final focused runs."
+    },
+    {
+      "name": "watch",
+      "files": [
+        "watch/test/args.test.mjs",
+        "watch/test/watch.test.mjs",
+        "watch/test/existing-project.test.mjs",
+        "watch/test/lock.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 watch/test/args.test.mjs watch/test/watch.test.mjs watch/test/existing-project.test.mjs watch/test/lock.test.mjs",
+      "log": "logs/watch.tap",
+      "totals": {
+        "tests": 42,
+        "pass": 34,
+        "fail": 7,
+        "cancelled": 0,
+        "skipped": 1
+      },
+      "failed_cases": [
+        "final watch notice waits for fake operator typing, then sends once across watcher restart",
+        "a capped final watcher exits while its owned notice later delivers without another watcher",
+        "a valid report also waits while the worker state is unknown",
+        "idle grace waits for a late report before sending a no-report notice",
+        "idle grace notices a blocked worker immediately and keeps watching",
+        "a valid report stays intermediate while blocked and is final only after idle",
+        "a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts"
+      ],
+      "note": "Seven native fs.watch EMFILE failures and one explicit environment skip. New checked-report mirror test passed."
+    },
+    {
+      "name": "promote-core",
+      "files": [
+        "promote/test/promote.test.mjs",
+        "promote/test/train.test.mjs",
+        "promote/test/workflow-train.test.mjs",
+        "promote/test/completion.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 promote/test/promote.test.mjs promote/test/train.test.mjs promote/test/workflow-train.test.mjs promote/test/completion.test.mjs",
+      "log": "logs/promote-core.tap",
+      "totals": {
+        "tests": 145,
+        "pass": 145,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failed_cases": [],
+      "note": "All pass, including the real queue shadow integration and required train invariant."
+    },
+    {
+      "name": "messages-final-and-watcher-invariant",
+      "files": [
+        "test/messages.test.mjs",
+        "supervisor/test/request.test.mjs",
+        "supervisor/test/delivery.test.mjs",
+        "test/one-watcher.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/messages.test.mjs supervisor/test/request.test.mjs supervisor/test/delivery.test.mjs test/one-watcher.test.mjs",
+      "log": "logs/messages-final-and-watcher-invariant.tap",
+      "totals": {
+        "tests": 43,
+        "pass": 43,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failed_cases": [],
+      "note": "All pass; the later message-file run adds the runtime-copy test."
+    },
+    {
+      "name": "supervisor-policy",
+      "files": [
+        "supervisor/test/status.test.mjs",
+        "supervisor/test/supervisor.test.mjs",
+        "supervisor/test/chats.test.mjs",
+        "supervisor/test/autopilot.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 supervisor/test/status.test.mjs supervisor/test/supervisor.test.mjs supervisor/test/chats.test.mjs supervisor/test/autopilot.test.mjs",
+      "log": "logs/supervisor-policy.tap",
+      "totals": {
+        "tests": 146,
+        "pass": 129,
+        "fail": 17,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failed_cases": [
+        "status derives all lane stages and timing without record mutations or model calls",
+        "supervisor handle exposes correction memory wait before pressure clears",
+        "handle returns capped findings and promotion records explicit acceptance with exact heads",
+        "STOP arriving during review retains a resumable correction without launching another worker",
+        "bound promotion rechecks queued runs and record changes during validation before integration",
+        "late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards",
+        "late original and correction notices after lane removal preserve promotion guards and never replay settlement",
+        "supervisor entry and final notices carry the unconfigured cycle through actual promotion",
+        "supervisor retries a confirmed timeout with the same reviewed binding",
+        "completion after an interrupted promotion has its own receipt and closes once",
+        "awaited promotion closes before waking with one short plan line and later notices stay silent",
+        "automatic PASS reaches the real queue, lands and closes without waking the supervisor",
+        "automatic PASS reaches the real queue, lands and closes with one awaited wake",
+        "automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence",
+        "automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.",
+        "automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.",
+        "real CLIs retry an exit-one base-moved refusal with the saved request and land once"
+      ],
+      "note": "Not green. Native process ownership/cleanup failures; two scripted review failures and one awaited-summary mismatch were not reproduced in isolated controls. No unrelated policy or lifecycle checks were weakened."
+    },
+    {
+      "name": "supervisor-inbox",
+      "files": [
+        "supervisor/test/reconcile.test.mjs",
+        "supervisor/test/entry.test.mjs",
+        "supervisor/test/notice-lock.test.mjs",
+        "test/inbox.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 supervisor/test/reconcile.test.mjs supervisor/test/entry.test.mjs supervisor/test/notice-lock.test.mjs test/inbox.test.mjs",
+      "log": "logs/supervisor-inbox.tap",
+      "totals": {
+        "tests": 95,
+        "pass": 91,
+        "fail": 4,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failed_cases": [
+        "housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process",
+        "housekeeping resume preserves a live owner",
+        "housekeeping resume preserves a resume-disabled owner",
+        "housekeeping resume replaces a reused PID without signaling the replacement process"
+      ],
+      "note": "Four missing messages/ imports in copied runtimes; fixed by the product inventory addition. The full entry file passes in runtime-copy-final."
+    },
+    {
+      "name": "promote-support",
+      "files": [
+        "promote/test/memory-gate.test.mjs",
+        "promote/test/metrics.test.mjs",
+        "promote/test/conformance.test.mjs",
+        "promote/test/metrics-profile.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 promote/test/memory-gate.test.mjs promote/test/metrics.test.mjs promote/test/conformance.test.mjs promote/test/metrics-profile.test.mjs",
+      "log": "logs/promote-support.tap",
+      "totals": {
+        "tests": 39,
+        "pass": 36,
+        "fail": 3,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failed_cases": [
+        "caller identity source failure remains an exit-75 refusal in direct check",
+        "train refuses uncommitted repair and leaves main at the validated input base",
+        "a completed gate refused at integration counts once; failed preparation counts no gate"
+      ],
+      "note": "Three conformance teardown failures: native process source returned Operation not permitted."
+    },
+    {
+      "name": "runtime-copy-final",
+      "files": [
+        "test/messages.test.mjs",
+        "supervisor/test/entry.test.mjs",
+        "test/release.test.mjs",
+        "test/bch-cloak-contract.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/messages.test.mjs supervisor/test/entry.test.mjs test/release.test.mjs test/bch-cloak-contract.test.mjs",
+      "log": "logs/runtime-copy-final.tap",
+      "totals": {
+        "tests": 67,
+        "pass": 66,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failed_cases": [
+        "copied product runtimes include the message module and can import the existing inbox"
+      ],
+      "note": "Entry, release-copy and BCH files all pass. The added import-probe test initially invoked the CLI due to argv[1]; its test-only argument fix passes in the last run."
+    },
+    {
+      "name": "promotion-and-runtime-contracts",
+      "files": [
+        "promote/test/wait-timing.test.mjs",
+        "promote/test/affected-tests.test.mjs",
+        "test/retire-paths.test.mjs",
+        "test/main-module.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 promote/test/wait-timing.test.mjs promote/test/affected-tests.test.mjs test/retire-paths.test.mjs test/main-module.test.mjs",
+      "log": "logs/promotion-and-runtime-contracts.tap",
+      "totals": {
+        "tests": 102,
+        "pass": 100,
+        "fail": 2,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failed_cases": [
+        "idle timeout retains wait metrics and correction outcomes for 1 lane(s)",
+        "all lanes refused during rebase have known zero batch and lane preparation with reasons"
+      ],
+      "note": "Two wait-timing teardown failures from the native process source. The other files pass."
+    },
+    {
+      "name": "messages-watch-final-and-diagnostics",
+      "files": [
+        "test/messages.test.mjs",
+        "watch/test/watch.test.mjs",
+        ".lane/eng-339-diagnostic.test.mjs"
+      ],
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/messages.test.mjs watch/test/watch.test.mjs .lane/eng-339-diagnostic.test.mjs",
+      "log": "logs/messages-watch-final-and-diagnostics.tap",
+      "totals": {
+        "tests": 44,
+        "pass": 36,
+        "fail": 7,
+        "cancelled": 0,
+        "skipped": 1
+      },
+      "failed_cases": [
+        "final watch notice waits for fake operator typing, then sends once across watcher restart",
+        "a capped final watcher exits while its owned notice later delivers without another watcher",
+        "a valid report also waits while the worker state is unknown",
+        "idle grace waits for a late report before sending a no-report notice",
+        "idle grace notices a blocked worker immediately and keeps watching",
+        "a valid report stays intermediate while blocked and is final only after idle",
+        "a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts"
+      ],
+      "note": "All 16 message tests pass; checked watch mirrors including inert malformed verdict pass. The same seven native watch failures and one skip remain. Both isolated diagnostic controls pass; their source is retained as diagnostic-source.txt."
+    }
+  ]
+}

@@ -1,0 +1,745 @@
+TAP version 13
+# Subtest: fixture cleanup ignores an ambient record inbox owner
+ok 1 - fixture cleanup ignores an ambient record inbox owner
+  ---
+  duration_ms: 105.906542
+  ...
+# Subtest: busy supervisor does not hold completed queue accounting by default
+ok 2 - busy supervisor does not hold completed queue accounting by default
+  ---
+  duration_ms: 6181.792666
+  ...
+# Subtest: idle supervisor receives a default queued promotion notice without a false alert
+ok 3 - idle supervisor receives a default queued promotion notice without a false alert
+  ---
+  duration_ms: 3950.895209
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 4 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 8864.915959
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 5 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 6508.837792
+  ...
+# Subtest: retirement hold: batch promotion keeps its integrated lane and skips git-only cleanup
+ok 6 - retirement hold: batch promotion keeps its integrated lane and skips git-only cleanup
+  ---
+  duration_ms: 3949.289583
+  ...
+# Subtest: retirement hold: single promotion keeps its integrated lane and skips git-only cleanup
+ok 7 - retirement hold: single promotion keeps its integrated lane and skips git-only cleanup
+  ---
+  duration_ms: 3528.041
+  ...
+# Fixture cleanup: PID 82855 lookup failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 8 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 3545.53125
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 9 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 4164.992208
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 10 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 3615.178666
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 11 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 775.6725
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 12 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 3711.936792
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 13 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 5060.154458
+  ...
+# Fixture cleanup: PID 10121 lookup failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 14 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 5392.215333
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 15 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 4136.5755
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 16 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 4004.178083
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 17 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 6596.579333
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 18 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 2858.386125
+  ...
+# Subtest: a drain owner this caller may not signal still counts as running
+ok 19 - a drain owner this caller may not signal still counts as running
+  ---
+  duration_ms: 111.296541
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 20 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 6939.048375
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 21 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 5462.914208
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 22 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 787.046542
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 23 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 239.454959
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 24 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 360.9745
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 25 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 832.297209
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 26 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4690.94225
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 27 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4612.74175
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 28 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 2880.11025
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 29 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1960.388333
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 30 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 1842.560833
+  ...
+# Subtest: only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+ok 31 - only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+  ---
+  duration_ms: 1327.859459
+  ...
+# Subtest: an unborn canonical branch has no gate profile, whatever its working tree holds
+ok 32 - an unborn canonical branch has no gate profile, whatever its working tree holds
+  ---
+  duration_ms: 25.930666
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 33 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 7552.716042
+  ...
+# Subtest: five pending lanes drain in arrival order with the unbounded default
+ok 34 - five pending lanes drain in arrival order with the unbounded default
+  ---
+  duration_ms: 21834.817625
+  ...
+# Subtest: five pending lanes drain in arrival order with max_batch 3
+ok 35 - five pending lanes drain in arrival order with max_batch 3
+  ---
+  duration_ms: 34590.1265
+  ...
+# Subtest: invalid committed max_batch values refuse enqueue and drain without consuming pending lanes
+ok 36 - invalid committed max_batch values refuse enqueue and drain without consuming pending lanes
+  ---
+  duration_ms: 4938.36775
+  ...
+# Subtest: batch policy ignores untracked canonical config, uncommitted edits and lane copies
+ok 37 - batch policy ignores untracked canonical config, uncommitted edits and lane copies
+  ---
+  duration_ms: 728.199833
+  ...
+# Subtest: an unborn canonical branch uses default settings even with an untracked config
+ok 38 - an unborn canonical branch uses default settings even with an untracked config
+  ---
+  duration_ms: 1328.575125
+  ...
+# Subtest: a failed settings git rev-parse retains a coded queue refusal and permits retry
+ok 39 - a failed settings git rev-parse retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 7636.961666
+  ...
+# Subtest: a failed settings git ls-tree retains a coded queue refusal and permits retry
+ok 40 - a failed settings git ls-tree retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 6715.885458
+  ...
+# Subtest: a failed settings git show retains a coded queue refusal and permits retry
+ok 41 - a failed settings git show retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 6212.323875
+  ...
+# Subtest: a invalid settings refusal after startup sends one queue notice and preserves the pending tail
+ok 42 - a invalid settings refusal after startup sends one queue notice and preserves the pending tail
+  ---
+  duration_ms: 3632.115959
+  ...
+# Subtest: a git-failed settings refusal after startup sends one queue notice and preserves the pending tail
+ok 43 - a git-failed settings refusal after startup sends one queue notice and preserves the pending tail
+  ---
+  duration_ms: 3633.993959
+  ...
+# Subtest: a settings git rev-parse timeout releases the queue for enqueuers and retains a coded refusal
+ok 44 - a settings git rev-parse timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 7386.54075
+  ...
+# Subtest: a settings git ls-tree timeout releases the queue for enqueuers and retains a coded refusal
+ok 45 - a settings git ls-tree timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 8810.842708
+  ...
+# Subtest: a settings git show timeout releases the queue for enqueuers and retains a coded refusal
+ok 46 - a settings git show timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 7844.2935
+  ...
+# Subtest: settings are read once for each new batch and not for an empty queue
+ok 47 - settings are read once for each new batch and not for an empty queue
+  ---
+  duration_ms: 6109.4815
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 48 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 7161.794875
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 49 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 2966.26275
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 50 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 8809.041458
+  ...
+# Subtest: unprofiled batch waits before its project lock and proceeds when memory clears
+ok 51 - unprofiled batch waits before its project lock and proceeds when memory clears
+  ---
+  duration_ms: 7979.390042
+  ...
+# Subtest: unprofiled memory re-check refuses with a code and releases the project lock
+ok 52 - unprofiled memory re-check refuses with a code and releases the project lock
+  ---
+  duration_ms: 8491.852458
+  ...
+# Subtest: unprofiled memory re-check proceeds on clearing
+ok 53 - unprofiled memory re-check proceeds on clearing
+  ---
+  duration_ms: 3938.36375
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 54 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 5136.1805
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 55 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 7008.062667
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 56 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 6648.954417
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 57 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 3000.665792
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 58 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 7466.028541
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 59 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 7417.08925
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 60 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 4436.570625
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 61 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 10000.150875
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 62 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 17440.511292
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 63 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 2259.472125
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 64 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 4050.955875
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 65 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 3779.430125
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 66 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 8272.194542
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 67 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 8841.266833
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 68 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 11565.71575
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 69 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 10860.626
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 70 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 6222.733834
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 71 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 14142.44925
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 72 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 3765.406375
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 73 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+  ---
+  duration_ms: 12765.561875
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 74 - a paused check exposes its clock atomically while validation is still running
+  ---
+  duration_ms: 2890.002
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 75 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+  ---
+  duration_ms: 8978.267333
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 76 - red validation finishes the published clock and retains its real exit
+  ---
+  duration_ms: 1393.545208
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 77 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+  ---
+  duration_ms: 10202.390541
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 78 - validation that throws closes its telemetry clock without inventing green evidence
+  ---
+  duration_ms: 1253.944792
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 79 - affected test supplements run once in the batch gate, are recorded and block a red landing
+  ---
+  duration_ms: 6539.532916
+  ...
+# Subtest: a lane-modified planner cannot shrink canonical bound test coverage
+ok 80 - a lane-modified planner cannot shrink canonical bound test coverage
+  ---
+  duration_ms: 1650.67175
+  ...
+# Subtest: a lane-modified planner cannot invent canonical bound test coverage
+ok 81 - a lane-modified planner cannot invent canonical bound test coverage
+  ---
+  duration_ms: 1168.735084
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 82 - a changed gate cannot omit a bound deferred test file
+  ---
+  duration_ms: 1232.190959
+  ...
+# Subtest: canonical planning receives the union of bound required files and executes them beyond the extra cap
+ok 83 - canonical planning receives the union of bound required files and executes them beyond the extra cap
+  ---
+  duration_ms: 4915.900042
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: a copied product train promotes without any workflow engine
+ok 84 - a copied product train promotes without any workflow engine
+  ---
+  duration_ms: 784.224667
+  ...
+# Subtest: a receipt saved by the retired workflow engine finishes on the default train
+ok 85 - a receipt saved by the retired workflow engine finishes on the default train
+  ---
+  duration_ms: 547.40125
+  ...
+# Subtest: lane promote-batch no longer takes the retired workflow flag
+ok 86 - lane promote-batch no longer takes the retired workflow flag
+  ---
+  duration_ms: 158.204291
+  ...
+# Subtest: older queued jobs that carry a workflow field are accepted and promoted on the default train
+ok 87 - older queued jobs that carry a workflow field are accepted and promoted on the default train
+  ---
+  duration_ms: 2724.311958
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: native 1-member batch reconciles atomically before cleanup and duplicate recovery
+ok 88 - native 1-member batch reconciles atomically before cleanup and duplicate recovery
+  ---
+  duration_ms: 4158.769
+  ...
+# Subtest: native 3-member batch reconciles atomically before cleanup and duplicate recovery
+ok 89 - native 3-member batch reconciles atomically before cleanup and duplicate recovery
+  ---
+  duration_ms: 10310.165833
+  ...
+# Subtest: integrated record refusal retains every lane and resumes records without another gate
+ok 90 - integrated record refusal retains every lane and resumes records without another gate
+  ---
+  duration_ms: 7708.473042
+  ...
+# Subtest: bisected batch accounts for its exclusion without mutating newer excluded work
+ok 91 - bisected batch accounts for its exclusion without mutating newer excluded work
+  ---
+  duration_ms: 9360.454583
+  ...
+# Subtest: recovery refuses new-run and retains all integrated lanes
+ok 92 - recovery refuses new-run and retains all integrated lanes
+  ---
+  duration_ms: 4062.976917
+  ...
+# Subtest: recovery refuses blocker and retains all integrated lanes
+ok 93 - recovery refuses blocker and retains all integrated lanes
+  ---
+  duration_ms: 3978.909666
+  ...
+# Subtest: recovery refuses missing-member and retains all integrated lanes
+ok 94 - recovery refuses missing-member and retains all integrated lanes
+  ---
+  duration_ms: 3672.798583
+  ...
+# Subtest: lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+ok 95 - lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+  ---
+  duration_ms: 7153.800291
+  ...
+# Subtest: native completion refuses operator-reserved work before gating or integration
+ok 96 - native completion refuses operator-reserved work before gating or integration
+  ---
+  duration_ms: 1330.821375
+  ...
+# Subtest: native completion refuses human work before gating or integration
+ok 97 - native completion refuses human work before gating or integration
+  ---
+  duration_ms: 1317.080375
+  ...
+# Subtest: native admission isolates unknown-run while valid members reconcile
+ok 98 - native admission isolates unknown-run while valid members reconcile
+  ---
+  duration_ms: 7101.640834
+  ...
+# Subtest: native admission isolates wrong-record while valid members reconcile
+ok 99 - native admission isolates wrong-record while valid members reconcile
+  ---
+  duration_ms: 7440.313875
+  ...
+# Subtest: native admission isolates duplicate-item while valid members reconcile
+ok 100 - native admission isolates duplicate-item while valid members reconcile
+  ---
+  duration_ms: 8074.770333
+  ...
+# Subtest: bound and unbound requests use separate native batches
+ok 101 - bound and unbound requests use separate native batches
+  ---
+  duration_ms: 9640.663375
+  ...
+# Subtest: a done report with questions is refused before the gate while valid members complete
+ok 102 - a done report with questions is refused before the gate while valid members complete
+  ---
+  duration_ms: 4440.228625
+  ...
+# Subtest: included item notes during the gate refuse integration without refreshing captured fingerprints
+ok 103 - included item notes during the gate refuse integration without refreshing captured fingerprints
+  ---
+  duration_ms: 1753.747458
+  ...
+# Subtest: the held record lock checks the original fingerprint immediately before fast-forward
+ok 104 - the held record lock checks the original fingerprint immediately before fast-forward
+  ---
+  duration_ms: 520.5255
+  ...
+# Subtest: native completion explicitly retires superseded open runs through the record transaction
+ok 105 - native completion explicitly retires superseded open runs through the record transaction
+  ---
+  duration_ms: 6470.223625
+  ...
+# Subtest: manual reconciliation recovery complete retains proof and handles cleanup
+ok 106 - manual reconciliation recovery complete retains proof and handles cleanup
+  ---
+  duration_ms: 8667.89375
+  ...
+# Subtest: manual reconciliation recovery missing-member retains proof and handles cleanup
+ok 107 - manual reconciliation recovery missing-member retains proof and handles cleanup
+  ---
+  duration_ms: 5551.342166
+  ...
+# Subtest: manual reconciliation recovery wrong-head retains proof and handles cleanup
+ok 108 - manual reconciliation recovery wrong-head retains proof and handles cleanup
+  ---
+  duration_ms: 5688.448791
+  ...
+# Subtest: manual reconciliation recovery reopened retains proof and handles cleanup
+ok 109 - manual reconciliation recovery reopened retains proof and handles cleanup
+  ---
+  duration_ms: 7545.130292
+  ...
+# Subtest: manual reconciliation recovery new-run retains proof and handles cleanup
+ok 110 - manual reconciliation recovery new-run retains proof and handles cleanup
+  ---
+  duration_ms: 7614.844417
+  ...
+# Subtest: native admission refuses omitted superseded attempts without wedging valid work
+ok 111 - native admission refuses omitted superseded attempts without wedging valid work
+  ---
+  duration_ms: 4546.770541
+  ...
+# Subtest: bisected manual recovery covered accounts for newer excluded work
+ok 112 - bisected manual recovery covered accounts for newer excluded work
+  ---
+  duration_ms: 10068.313834
+  ...
+# Subtest: bisected manual recovery missing-exclusion accounts for newer excluded work
+ok 113 - bisected manual recovery missing-exclusion accounts for newer excluded work
+  ---
+  duration_ms: 6853.009792
+  ...
+# Subtest: a refused questioned dependency cannot let another member integrate before completion refuses
+ok 114 - a refused questioned dependency cannot let another member integrate before completion refuses
+  ---
+  duration_ms: 5600.344417
+  ...
+# Subtest: split recovery accounts for never-captured dirty members without another gate
+ok 115 - split recovery accounts for never-captured dirty members without another gate
+  ---
+  duration_ms: 8505.9675
+  ...
+# Subtest: split recovery accounts for never-captured off-main members without another gate
+ok 116 - split recovery accounts for never-captured off-main members without another gate
+  ---
+  duration_ms: 8696.16425
+  ...
+# Subtest: split recovery accounts for never-captured host-timeout members without another gate
+ok 117 - split recovery accounts for never-captured host-timeout members without another gate
+  ---
+  duration_ms: 7348.042083
+  ...
+# Subtest: bisected canonical dirty refusal preserves captured historical exclusions
+ok 118 - bisected canonical dirty refusal preserves captured historical exclusions
+  ---
+  duration_ms: 9535.699458
+  ...
+# Subtest: bisected canonical off-main refusal preserves captured historical exclusions
+ok 119 - bisected canonical off-main refusal preserves captured historical exclusions
+  ---
+  duration_ms: 9281.062458
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: complete
+ok 120 - legacy queue and late notices recover only inspected exact coverage: complete
+  ---
+  duration_ms: 11804.152959
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: no-marker
+ok 121 - legacy queue and late notices recover only inspected exact coverage: no-marker
+  ---
+  duration_ms: 7477.567292
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-member
+ok 122 - legacy queue and late notices recover only inspected exact coverage: missing-member
+  ---
+  duration_ms: 7767.127459
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: wrong-head
+ok 123 - legacy queue and late notices recover only inspected exact coverage: wrong-head
+  ---
+  duration_ms: 7635.829125
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-exclusion
+ok 124 - legacy queue and late notices recover only inspected exact coverage: missing-exclusion
+  ---
+  duration_ms: 7710.858667
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-superseded
+ok 125 - legacy queue and late notices recover only inspected exact coverage: missing-superseded
+  ---
+  duration_ms: 8042.418042
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: reopened
+ok 126 - legacy queue and late notices recover only inspected exact coverage: reopened
+  ---
+  duration_ms: 10109.609916
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: new-run
+ok 127 - legacy queue and late notices recover only inspected exact coverage: new-run
+  ---
+  duration_ms: 9491.566583
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: missing-evidence
+ok 128 - legacy queue and late notices recover only inspected exact coverage: missing-evidence
+  ---
+  duration_ms: 7536.607584
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: unproved-head
+ok 129 - legacy queue and late notices recover only inspected exact coverage: unproved-head
+  ---
+  duration_ms: 7470.354
+  ...
+# Subtest: legacy queue and late notices recover only inspected exact coverage: wrong-log
+ok 130 - legacy queue and late notices recover only inspected exact coverage: wrong-log
+  ---
+  duration_ms: 6960.76225
+  ...
+# Subtest: legacy replacement recovery cleans completed lanes with telemetry failure: false
+ok 131 - legacy replacement recovery cleans completed lanes with telemetry failure: false
+  ---
+  duration_ms: 9993.039625
+  ...
+# Subtest: legacy replacement recovery cleans completed lanes with telemetry failure: true
+ok 132 - legacy replacement recovery cleans completed lanes with telemetry failure: true
+  ---
+  duration_ms: 9878.582417
+  ...
+# Subtest: prepared replacement recovery cleans completed lanes with telemetry failure: false
+ok 133 - prepared replacement recovery cleans completed lanes with telemetry failure: false
+  ---
+  duration_ms: 9820.288333
+  ...
+# Subtest: prepared replacement recovery cleans completed lanes with telemetry failure: true
+ok 134 - prepared replacement recovery cleans completed lanes with telemetry failure: true
+  ---
+  duration_ms: 9168.712208
+  ...
+# Subtest: a linked pass-review recorded after enqueue is checked by the native worker
+ok 135 - a linked pass-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 3697.499833
+  ...
+# Subtest: a child-only pass-review recorded after enqueue is checked by the native worker
+ok 136 - a child-only pass-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 3655.169416
+  ...
+# Subtest: a linked fail-review recorded after enqueue is checked by the native worker
+ok 137 - a linked fail-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1867.78175
+  ...
+# Subtest: a child-only fail-review recorded after enqueue is checked by the native worker
+ok 138 - a child-only fail-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1661.196292
+  ...
+# Subtest: a linked no-verdict-review recorded after enqueue is checked by the native worker
+ok 139 - a linked no-verdict-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1686.050584
+  ...
+# Subtest: a child-only no-verdict-review recorded after enqueue is checked by the native worker
+ok 140 - a child-only no-verdict-review recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1598.389417
+  ...
+# Subtest: a linked open-question recorded after enqueue is checked by the native worker
+ok 141 - a linked open-question recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1377.453333
+  ...
+# Subtest: a linked review-question recorded after enqueue is checked by the native worker
+ok 142 - a linked review-question recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1838.316416
+  ...
+# Subtest: a child-only review-question recorded after enqueue is checked by the native worker
+ok 143 - a child-only review-question recorded after enqueue is checked by the native worker
+  ---
+  duration_ms: 1635.36225
+  ...
+# Subtest: an operator question raised under the work after the fast-forward holds batch completion until it is answered
+ok 144 - an operator question raised under the work after the fast-forward holds batch completion until it is answered
+  ---
+  duration_ms: 8592.877
+  ...
+# Subtest: an operator question raised under the review after the fast-forward holds batch completion until it is answered
+ok 145 - an operator question raised under the review after the fast-forward holds batch completion until it is answered
+  ---
+  duration_ms: 8958.649666
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..145
+# tests 145
+# suites 0
+# pass 145
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 848656.134292
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

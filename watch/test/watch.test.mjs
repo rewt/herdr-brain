@@ -19,6 +19,8 @@ import {
 } from '../notice.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+import { stateDirectory, readJournal } from '../../messages/journal.mjs';
+import { gitProject } from '../../lib/project.mjs';
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
@@ -248,6 +250,32 @@ esac`);
   const sent = fs.readFileSync(calls, 'utf8');
   assert.match(sent, /agent prompt supervisor-test \[org-report\] run=R-7 item=ENG-3 outcome=done/);
   assert.match(sent, /headline="The work landed" check=pass/);
+});
+
+test('watch shadow uses the checked review verdict and scope while preserving the final tag', async t => {
+  for (const [suffix, extra, route] of [['1', 'verdict: PASS', 'triage'], ['2', 'verdict: NEEDS-WORK', 'supervisor'], ['3', 'review_scope: deferred', 'supervisor'], ['4', 'verdict:\n  toString: inert-data', 'unknown']]) {
+    const run = `R-99${suffix}`, f = watcherFixture(run);
+    t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+    fs.mkdirSync(path.join(f.root, '.org'));
+    fs.writeFileSync(f.report, reportText(run).replace('outcome: done', `outcome: done\n${extra}`));
+    executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'
+case "$1 $2" in
+  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;
+  "agent prompt") printf '%s\\n' '{"result":{}}' ;;
+  *) exit 2 ;;
+esac`);
+    const root = path.join(fs.realpathSync(f.root), 'shadow');
+    const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV, BRAIN_SHADOW_ROOT: root, BRAIN_IDENTITY: 'example' } });
+    const done = await waitForExit(child); assert.equal(done.code, 0, done.stderr);
+    const directory = stateDirectory({ root, identity: 'example', commonDir: gitProject().identity });
+    const { entries } = await readJournal(directory);
+    assert.equal(entries.length, 1, done.stderr); assert.equal(entries[0].shadow.path, route);
+    assert.equal(entries[0].payload.evidence.validated, true);
+    assert.equal(entries[0].run, run); assert.equal(entries[0].payload.refs[0].orgRef, fs.realpathSync(path.join(f.root, '.org')));
+    const text = reportNotice({ run, item: 'ENG-9', outcome: 'done', headline: 'The report arrived', report: f.report });
+    assert.equal(fs.readFileSync(entries[0].payload.body_ref.path, 'utf8'), text);
+    assert.ok(fs.readFileSync(f.calls, 'utf8').includes(`agent prompt supervisor-test ${text} notice-id=watch:${run}:final`));
+  }
 });
 
 test('final watch notice waits for fake operator typing, then sends once across watcher restart', async (t) => {

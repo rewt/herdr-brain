@@ -1,0 +1,254 @@
+TAP version 13
+# Subtest: memory refusal completes every fresh batch member without attempts or replacing an existing result
+ok 1 - memory refusal completes every fresh batch member without attempts or replacing an existing result
+  ---
+  duration_ms: 4.506959
+  ...
+# Subtest: memory or STOP refusals preserve every byte of an earlier integration checkpoint
+ok 2 - memory or STOP refusals preserve every byte of an earlier integration checkpoint
+  ---
+  duration_ms: 1.857583
+  ...
+# Subtest: memory refusal rejects a foreign or malformed train before changing its receipt
+ok 3 - memory refusal rejects a foreign or malformed train before changing its receipt
+  ---
+  duration_ms: 1.213334
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: known batch clocks split queue, slot, external lock, prepare and command time per lane
+ok 4 - known batch clocks split queue, slot, external lock, prepare and command time per lane
+  ---
+  duration_ms: 132.375209
+  ...
+# Subtest: old receipts retain gate measurements while missing phase clocks are unknown, never zero
+ok 5 - old receipts retain gate measurements while missing phase clocks are unknown, never zero
+  ---
+  duration_ms: 111.051791
+  ...
+# Subtest: legacy profiled batches cannot split queue wait from external-lock and slot waits
+ok 6 - legacy profiled batches cannot split queue wait from external-lock and slot waits
+  ---
+  duration_ms: 101.209208
+  ...
+# Subtest: never-prepared stale attempt contributes zero beside timed preparation: main moved; replan from the current integration branch
+ok 7 - never-prepared stale attempt contributes zero beside timed preparation: main moved; replan from the current integration branch
+  ---
+  duration_ms: 111.966709
+  ...
+# Subtest: never-prepared stale attempt contributes zero beside timed preparation: main moved during preparation; replan
+ok 8 - never-prepared stale attempt contributes zero beside timed preparation: main moved during preparation; replan
+  ---
+  duration_ms: 106.47925
+  ...
+# Subtest: never-prepared invalid attempt contributes zero beside timed preparation: capture refused before preparation
+ok 9 - never-prepared invalid attempt contributes zero beside timed preparation: capture refused before preparation
+  ---
+  duration_ms: 90.319417
+  ...
+# Subtest: never-prepared complete attempt contributes zero beside timed preparation: all lanes refused rebase replay before preparation
+ok 10 - never-prepared complete attempt contributes zero beside timed preparation: all lanes refused rebase replay before preparation
+  ---
+  duration_ms: 102.897417
+  ...
+# Subtest: terminal attempts with preparation or gate evidence cannot be mistaken for skipped work
+ok 11 - terminal attempts with preparation or gate evidence cannot be mistaken for skipped work
+  ---
+  duration_ms: 101.58375
+  ...
+# Subtest: bisection and resume phase totals follow attempt membership without charging reused proofs
+ok 12 - bisection and resume phase totals follow attempt membership without charging reused proofs
+  ---
+  duration_ms: 130.154542
+  ...
+# Subtest: unfinished and reversed phase intervals do not become zero or partial totals
+ok 13 - unfinished and reversed phase intervals do not become zero or partial totals
+  ---
+  duration_ms: 117.629959
+  ...
+# Subtest: bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+ok 14 - bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+  ---
+  duration_ms: 110.679375
+  ...
+# Subtest: unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+ok 15 - unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+  ---
+  duration_ms: 91.16125
+  ...
+# Subtest: cached and duplicated green proofs never inflate gate time or executions
+ok 16 - cached and duplicated green proofs never inflate gate time or executions
+  ---
+  duration_ms: 93.608
+  ...
+# Subtest: window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+ok 17 - window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+  ---
+  duration_ms: 113.696459
+  ...
+# Subtest: linked worktrees read the same canonical receipts; text and JSON commands make no changes
+ok 18 - linked worktrees read the same canonical receipts; text and JSON commands make no changes
+  ---
+  duration_ms: 277.268792
+  ...
+# Subtest: missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+ok 19 - missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+  ---
+  duration_ms: 122.982208
+  ...
+# Subtest: TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+ok 20 - TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+  ---
+  duration_ms: 0.544375
+  ...
+# Subtest: slowest steps sum sequential streams per gate rather than treating streams as whole steps
+ok 21 - slowest steps sum sequential streams per gate rather than treating streams as whole steps
+  ---
+  duration_ms: 109.506
+  ...
+# Subtest: unattributed failures and unavailable Git history remain explicit hints
+ok 22 - unattributed failures and unavailable Git history remain explicit hints
+  ---
+  duration_ms: 135.025708
+  ...
+# Subtest: malformed receipts are skipped with evidence rather than crashing the project report
+ok 23 - malformed receipts are skipped with evidence rather than crashing the project report
+  ---
+  duration_ms: 105.786834
+  ...
+# Subtest: empty projects return unavailable rates and medians instead of invented zero timings
+ok 24 - empty projects return unavailable rates and medians instead of invented zero timings
+  ---
+  duration_ms: 115.494042
+  ...
+# Subtest: archived baseline imports read-only with selection bias and lower bounds separate from the current window
+ok 25 - archived baseline imports read-only with selection bias and lower bounds separate from the current window
+  ---
+  duration_ms: 194.872042
+  ...
+# Subtest: train metrics can include run waits and legacy missing counts without changing either window basis
+ok 26 - train metrics can include run waits and legacy missing counts without changing either window basis
+  ---
+  duration_ms: 268.850375
+  ...
+# Subtest: caller identity source failure remains an exit-75 refusal in direct check
+not ok 27 - caller identity source failure remains an exit-75 refusal in direct check
+  ---
+  duration_ms: 458.54325
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'hookFailed'
+  error: 'failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/promote/test/helpers/conformance.mjs:38:14)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: caller identity source failure remains an exit-75 refusal in direct promote
+ok 28 - caller identity source failure remains an exit-75 refusal in direct promote
+  ---
+  duration_ms: 330.269666
+  ...
+# Subtest: train refuses uncommitted repair and leaves main at the validated input base
+not ok 29 - train refuses uncommitted repair and leaves main at the validated input base
+  ---
+  duration_ms: 636.66
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'hookFailed'
+  error: 'failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/promote/test/helpers/conformance.mjs:38:14)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: train refuses committed gate change and leaves main at the validated input base
+ok 30 - train refuses committed gate change and leaves main at the validated input base
+  ---
+  duration_ms: 722.279833
+  ...
+# Subtest: repeated red gates retain distinct immutable logs and hashes for the same committed tree
+ok 31 - repeated red gates retain distinct immutable logs and hashes for the same committed tree
+  ---
+  duration_ms: 1252.658291
+  ...
+# Subtest: a completed gate refused at integration counts once; failed preparation counts no gate
+not ok 32 - a completed gate refused at integration counts once; failed preparation counts no gate
+  ---
+  duration_ms: 1038.156041
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'hookFailed'
+  error: 'failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/promote/test/helpers/conformance.mjs:38:14)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: resuming a prepared attempt retains both executed gates in receipts and metrics
+ok 33 - resuming a prepared attempt retains both executed gates in receipts and metrics
+  ---
+  duration_ms: 1078.253583
+  ...
+# Subtest: executed gates that dirty the worktree still retain real exit, log and timing evidence
+ok 34 - executed gates that dirty the worktree still retain real exit, log and timing evidence
+  ---
+  duration_ms: 649.456083
+  ...
+# Subtest: interrupted execution time is included separately from completed gate time
+ok 35 - interrupted execution time is included separately from completed gate time
+  ---
+  duration_ms: 680.931791
+  ...
+# Subtest: post-gate dirty scratch drift cannot reach main
+ok 36 - post-gate dirty scratch drift cannot reach main
+  ---
+  duration_ms: 2488.342042
+  ...
+# Subtest: post-gate committed scratch drift cannot reach main
+ok 37 - post-gate committed scratch drift cannot reach main
+  ---
+  duration_ms: 2535.004875
+  ...
+# Subtest: concurrent same-tree red checks retain distinct complete logs
+ok 38 - concurrent same-tree red checks retain distinct complete logs
+  ---
+  duration_ms: 756.565458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: profile completed time excludes interruptions and exposes executed time separately
+ok 39 - profile completed time excludes interruptions and exposes executed time separately
+  ---
+  duration_ms: 187.761291
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..39
+# tests 39
+# suites 0
+# pass 36
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12775.280334
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

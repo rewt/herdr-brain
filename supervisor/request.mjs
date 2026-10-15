@@ -4,9 +4,12 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
+import { randomUUID } from 'node:crypto';
+import { bestEffort, mirrorDesk } from '../messages/mirror.mjs';
 
 export async function request(argv = process.argv.slice(2), {
   env = process.env, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), execute = spawnSync,
+  mirror = mirrorDesk, shadow,
 } = {}) {
   const { positionals } = parseArgs({ usage: 'Usage: node supervisor/request.mjs <identity> <text>', args: argv, allowPositionals: true });
   const [identity, text] = positionals;
@@ -46,6 +49,8 @@ export async function request(argv = process.argv.slice(2), {
   }
   if (!['idle', 'done', 'working'].includes(agent?.agent_status)) throw Error(`${name} did not become ready; desk retained, request not sent`);
   call(['agent', 'prompt', name, text]);
+  bestEffort(() => mirror({ id: randomUUID(), at: new Date().toISOString(), message: text, to: name,
+    target: { identity, cwd } }, { env, ...shadow }), shadow);
   return { identity, desk: name, workspace: workspace ?? agent.workspace_id, pane: agent.pane_id };
 }
 if (isMain(import.meta.url)) {

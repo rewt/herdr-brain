@@ -1,0 +1,373 @@
+TAP version 13
+# Subtest: message schema accepts the envelope, qualified refs, body and decision evidence
+ok 1 - message schema accepts the envelope, qualified refs, body and decision evidence
+  ---
+  duration_ms: 3.986208
+  ...
+# Subtest: message schema rejects invalid scope, bounds, addresses, kinds and references
+ok 2 - message schema rejects invalid scope, bounds, addresses, kinds and references
+  ---
+  duration_ms: 3.0945
+  ...
+# Subtest: duplicate JSON keys, including escaped keys in nested data, are rejected
+ok 3 - duplicate JSON keys, including escaped keys in nested data, are rejected
+  ---
+  duration_ms: 0.240458
+  ...
+# Subtest: bodies are bounded verified data, with changed bytes and symlink escapes rejected
+ok 4 - bodies are bounded verified data, with changed bytes and symlink escapes rejected
+  ---
+  duration_ms: 5.132334
+  ...
+# Subtest: every rendered watcher notice maps without changing any text
+ok 5 - every rendered watcher notice maps without changing any text
+  ---
+  duration_ms: 1.31525
+  ...
+# Subtest: routing distinguishes deferred scope, needs-work and verified unsupported-role skip
+ok 6 - routing distinguishes deferred scope, needs-work and verified unsupported-role skip
+  ---
+  duration_ms: 0.864291
+  ...
+# Subtest: all current promotion outcomes are operational triage notices
+ok 7 - all current promotion outcomes are operational triage notices
+  ---
+  duration_ms: 0.880167
+  ...
+# Subtest: journal fsyncs private entries and rebuilds both deduplication keys after restart
+ok 8 - journal fsyncs private entries and rebuilds both deduplication keys after restart
+  ---
+  duration_ms: 47.955375
+  ...
+# Subtest: the journal has one immediate writer lock per canonical project partition
+ok 9 - the journal has one immediate writer lock per canonical project partition
+  ---
+  duration_ms: 7.981833
+  ...
+# Subtest: torn tails are readable with explicit evidence, block append, and preserve all bytes
+ok 10 - torn tails are readable with explicit evidence, block append, and preserve all bytes
+  ---
+  duration_ms: 14.1415
+  ...
+# Subtest: journal refuses symlink and nonprivate storage without writing record events
+ok 11 - journal refuses symlink and nonprivate storage without writing record events
+  ---
+  duration_ms: 9.872916
+  ...
+# Subtest: report counts accepted kinds/paths/would-wakes and duplicate/conflict attempts stably
+ok 12 - report counts accepted kinds/paths/would-wakes and duplicate/conflict attempts stably
+  ---
+  duration_ms: 85.053375
+  ...
+# Subtest: the inbox mirror keeps stable IDs, exact immutable bodies and original delivery ownership
+ok 13 - the inbox mirror keeps stable IDs, exact immutable bodies and original delivery ownership
+  ---
+  duration_ms: 86.105833
+  ...
+# Subtest: mirror errors, pending mirror work and failing diagnostics cannot block enqueue
+ok 14 - mirror errors, pending mirror work and failing diagnostics cannot block enqueue
+  ---
+  duration_ms: 161.429416
+  ...
+# Subtest: desk shadow preserves explicit request kind and surfaces unresolved canonical recipients
+ok 15 - desk shadow preserves explicit request kind and surfaces unresolved canonical recipients
+  ---
+  duration_ms: 48.200583
+  ...
+# Subtest: copied product runtimes include the message module and can import the existing inbox
+not ok 16 - copied product runtimes include the message module and can import the existing inbox
+  ---
+  duration_ms: 110.328292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prompt-supervisor: usage: prompt-supervisor.mjs TARGET MESSAGE [--inbox FILE] [--id ID] | --drain
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/messages.test.mjs:251:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: canonical supervisor entry consumes a hint once without starting housekeeping
+ok 17 - canonical supervisor entry consumes a hint once without starting housekeeping
+  ---
+  duration_ms: 396.443708
+  ...
+# Subtest: repository does not track a Codex project hook that can interrupt unattended workers
+ok 18 - repository does not track a Codex project hook that can interrupt unattended workers
+  ---
+  duration_ms: 0.090791
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 19 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 1220.2765
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 20 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 374.157209
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 21 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 1292.581875
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 22 - entry respects {"enabled":false}
+  ---
+  duration_ms: 202.786583
+  ...
+# Subtest: entry respects {"resume":false}
+ok 23 - entry respects {"resume":false}
+  ---
+  duration_ms: 215.592791
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 24 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 140.186084
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 25 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 250.844
+  ...
+# Subtest: entry lock inspection includes retirement request, consume and recovery owners
+ok 26 - entry lock inspection includes retirement request, consume and recovery owners
+  ---
+  duration_ms: 115.931375
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 27 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 401.275334
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 28 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 573.7915
+  ...
+# Subtest: entry safely handles STOP
+ok 29 - entry safely handles STOP
+  ---
+  duration_ms: 301.026333
+  ...
+# Subtest: entry safely handles invalid-config
+ok 30 - entry safely handles invalid-config
+  ---
+  duration_ms: 444.768292
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 31 - entry safely handles invalid-pid
+  ---
+  duration_ms: 367.946125
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 32 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 437.181625
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 33 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 378.15575
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 34 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 225.05
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 35 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 207.239834
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 36 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 234.153209
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 37 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 244.231
+  ...
+# Subtest: watch recovery handles reused identity without blocking entry
+ok 38 - watch recovery handles reused identity without blocking entry
+  ---
+  duration_ms: 541.047875
+  ...
+# Subtest: watch recovery handles unreadable identity without blocking entry
+ok 39 - watch recovery handles unreadable identity without blocking entry
+  ---
+  duration_ms: 393.380542
+  ...
+# Subtest: watch recovery handles legacy-live identity without blocking entry
+ok 40 - watch recovery handles legacy-live identity without blocking entry
+  ---
+  duration_ms: 402.013625
+  ...
+# Subtest: watch recovery handles changed-during-entry identity without blocking entry
+ok 41 - watch recovery handles changed-during-entry identity without blocking entry
+  ---
+  duration_ms: 407.551042
+  ...
+# Subtest: empty supervisor environment and null dispatch recipient use the supervisor fallback
+ok 42 - empty supervisor environment and null dispatch recipient use the supervisor fallback
+  ---
+  duration_ms: 506.094959
+  ...
+# Subtest: housekeeping snapshot reports reused birth without changing the lock
+ok 43 - housekeeping snapshot reports reused birth without changing the lock
+  ---
+  duration_ms: 114.39
+  ...
+# Subtest: housekeeping snapshot reports unreadable birth without changing the lock
+ok 44 - housekeeping snapshot reports unreadable birth without changing the lock
+  ---
+  duration_ms: 124.213833
+  ...
+# Subtest: housekeeping snapshot reports legacy-live birth without changing the lock
+ok 45 - housekeeping snapshot reports legacy-live birth without changing the lock
+  ---
+  duration_ms: 121.802084
+  ...
+# Subtest: housekeeping resume replaces a reused PID without signaling the replacement process
+ok 46 - housekeeping resume replaces a reused PID without signaling the replacement process
+  ---
+  duration_ms: 905.978833
+  ...
+# Subtest: Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+ok 47 - Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+  ---
+  duration_ms: 998.844125
+  ...
+# Subtest: build gates the tagged partial snapshot once, then publishes a read-only immutable copy
+ok 48 - build gates the tagged partial snapshot once, then publishes a read-only immutable copy
+  ---
+  duration_ms: 1045.098625
+  ...
+# Subtest: a failed gate retains partial evidence and never makes an activatable release or reruns it
+ok 49 - a failed gate retains partial evidence and never makes an activatable release or reruns it
+  ---
+  duration_ms: 839.174542
+  ...
+# Subtest: the release gate queues for the host test slot by default; an explicit wait wins
+ok 50 - the release gate queues for the host test slot by default; an explicit wait wins
+  ---
+  duration_ms: 1617.046291
+  ...
+# Subtest: build uses the tagged release declaration instead of the npm fallback or working copy
+ok 51 - build uses the tagged release declaration instead of the npm fallback or working copy
+  ---
+  duration_ms: 727.159125
+  ...
+# Subtest: declared scalar and release-specific timeouts stop the gate once and retain the partial copy
+ok 52 - declared scalar and release-specific timeouts stop the gate once and retain the partial copy
+  ---
+  duration_ms: 2288.2195
+  ...
+# Subtest: an invalid release declaration refuses before running a gate
+ok 53 - an invalid release declaration refuses before running a gate
+  ---
+  duration_ms: 393.003666
+  ...
+# Subtest: --live is explicit, follows the offline gate, and a live failure prevents completion
+ok 54 - --live is explicit, follows the offline gate, and a live failure prevents completion
+  ---
+  duration_ms: 1410.571333
+  ...
+# Subtest: activation switches three launchers, retires the old plugin once, and rollback preserves previous on repeat
+ok 55 - activation switches three launchers, retires the old plugin once, and rollback preserves previous on repeat
+  ---
+  duration_ms: 1735.227792
+  ...
+# Subtest: a regular launcher refuses activation before any links switch
+ok 56 - a regular launcher refuses activation before any links switch
+  ---
+  duration_ms: 760.373917
+  ...
+# Subtest: activation retires the old Brain LaunchAgent plist by moving it aside, then switches links
+ok 57 - activation retires the old Brain LaunchAgent plist by moving it aside, then switches links
+  ---
+  duration_ms: 1012.171292
+  ...
+# Subtest: ship builds, activates and checks the installed launchers in one command
+ok 58 - ship builds, activates and checks the installed launchers in one command
+  ---
+  duration_ms: 1717.017708
+  ...
+# Subtest: ship rolls back to the previous release when the installed launchers fail their check
+ok 59 - ship rolls back to the previous release when the installed launchers fail their check
+  ---
+  duration_ms: 3451.295333
+  ...
+# Subtest: a failed first ship with no previous release says the tag stays active
+ok 60 - a failed first ship with no previous release says the tag stays active
+  ---
+  duration_ms: 1145.421084
+  ...
+# Subtest: a scratch HOME or an empty plist setting never reaches launchctl
+ok 61 - a scratch HOME or an empty plist setting never reaches launchctl
+  ---
+  duration_ms: 1547.819291
+  ...
+# Subtest: failed plugin unlink warns and leaves the launchers usable
+ok 62 - failed plugin unlink warns and leaves the launchers usable
+  ---
+  duration_ms: 1372.819625
+  ...
+# Subtest: distribution inventory retains bch-cloak launch dependencies
+ok 63 - distribution inventory retains bch-cloak launch dependencies
+  ---
+  duration_ms: 1.241375
+  ...
+# Subtest: installed release commands can inspect and switch launchers without Git metadata
+ok 64 - installed release commands can inspect and switch launchers without Git metadata
+  ---
+  duration_ms: 1846.921375
+  ...
+# Subtest: build refuses a tag missing the installed settle-watch dependency before spending a gate
+ok 65 - build refuses a tag missing the installed settle-watch dependency before spending a gate
+  ---
+  duration_ms: 357.463792
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: bch-cloak subcommands, output parsers, event fields and compatibility paths remain usable
+ok 66 - bch-cloak subcommands, output parsers, event fields and compatibility paths remain usable
+  ---
+  duration_ms: 2216.878542
+  ...
+# Subtest: old release events still fold and list, while release mutations are unavailable
+ok 67 - old release events still fold and list, while release mutations are unavailable
+  ---
+  duration_ms: 127.920541
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..67
+# tests 67
+# suites 0
+# pass 66
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 24025.635375
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

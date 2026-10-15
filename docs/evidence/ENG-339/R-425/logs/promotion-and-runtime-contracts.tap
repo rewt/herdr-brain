@@ -1,0 +1,564 @@
+TAP version 13
+# Subtest: wall timeout retains wait metrics and correction outcomes for 1 lane(s)
+ok 1 - wall timeout retains wait metrics and correction outcomes for 1 lane(s)
+  ---
+  duration_ms: 1274.376166
+  ...
+# Subtest: wall timeout retains wait metrics and correction outcomes for 2 lane(s)
+ok 2 - wall timeout retains wait metrics and correction outcomes for 2 lane(s)
+  ---
+  duration_ms: 1311.065875
+  ...
+# Subtest: idle timeout retains wait metrics and correction outcomes for 1 lane(s)
+not ok 3 - idle timeout retains wait metrics and correction outcomes for 1 lane(s)
+  ---
+  duration_ms: 859.168792
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'hookFailed'
+  error: 'failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/promote/test/helpers/conformance.mjs:38:14)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: unconfigured train retains slot grants, prepare clocks and command evidence in its receipt
+ok 4 - unconfigured train retains slot grants, prepare clocks and command evidence in its receipt
+  ---
+  duration_ms: 699.706375
+  ...
+# Subtest: preparation refusal closes its measured interval without inventing slot or gate time
+ok 5 - preparation refusal closes its measured interval without inventing slot or gate time
+  ---
+  duration_ms: 567.498709
+  ...
+# Subtest: all lanes refused during rebase have known zero batch and lane preparation with reasons
+not ok 6 - all lanes refused during rebase have known zero batch and lane preparation with reasons
+  ---
+  duration_ms: 325.931917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'hookFailed'
+  error: 'failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/promote/test/helpers/conformance.mjs:38:14)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: resuming preparation keeps prior intervals and the first slot grant
+ok 7 - resuming preparation keeps prior intervals and the first slot grant
+  ---
+  duration_ms: 990.306083
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: the three-argument planner output keeps the field set accepted by the main validator
+ok 8 - the three-argument planner output keeps the field set accepted by the main validator
+  ---
+  duration_ms: 133.684583
+  ...
+# Subtest: one-hop selection includes changed tests and direct literals without following re-exports or cycles
+ok 9 - one-hop selection includes changed tests and direct literals without following re-exports or cycles
+  ---
+  duration_ms: 3.554208
+  ...
+# Subtest: a core-module change selects bounded one-hop extras and defers the expensive lane file
+ok 10 - a core-module change selects bounded one-hop extras and defers the expensive lane file
+  ---
+  duration_ms: 438.304125
+  ...
+# Subtest: the planner CLI launched through a symlinked directory emits the same plan
+ok 11 - the planner CLI launched through a symlinked directory emits the same plan
+  ---
+  duration_ms: 230.525416
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 12 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 191.314292
+  ...
+# Subtest: a leaf change selects exactly its direct test
+ok 13 - a leaf change selects exactly its direct test
+  ---
+  duration_ms: 3.617166
+  ...
+# Subtest: time and file caps defer extras to release while bound requirements always run
+ok 14 - time and file caps defer extras to release while bound requirements always run
+  ---
+  duration_ms: 0.236791
+  ...
+# Subtest: the real planner forces required evidence beyond both caps and refuses missing required files
+ok 15 - the real planner forces required evidence beyond both caps and refuses missing required files
+  ---
+  duration_ms: 137.72725
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"1907b7276929de8d677079ccbb9237af8d8d0ef3ab8208c2b18d518d2175f931","action":"held"}
+# {"handled":false,"pending":true,"action":"held","reason":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","revision":4,"results":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"1907b7276929de8d677079ccbb9237af8d8d0ef3ab8208c2b18d518d2175f931","action":"held"}],"keep":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"1907b7276929de8d677079ccbb9237af8d8d0ef3ab8208c2b18d518d2175f931"}],"diagnostics":[]}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"1907b7276929de8d677079ccbb9237af8d8d0ef3ab8208c2b18d518d2175f931","action":"held"}
+# {"handled":false,"pending":true,"action":"held","reason":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","revision":4,"results":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"1907b7276929de8d677079ccbb9237af8d8d0ef3ab8208c2b18d518d2175f931","action":"held"}],"keep":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"1907b7276929de8d677079ccbb9237af8d8d0ef3ab8208c2b18d518d2175f931"}],"diagnostics":[]}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"dccbe228650ad0537e7c669f104be1aa869557ba8285c6a5db3d0a91e2ed47fc","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"8c7aa26a4249566077a3faa5d8733383f4da0778b9bd1d5b41e305408ec6c459","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"eff9f77c4dd688eaee27d75e106075a11c18221d2e55890d527b44624d53f3d1","action":"closed"}
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 16 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+  ---
+  duration_ms: 888.398875
+  ...
+# Subtest: retirement hold: file in the canonical checkout keeps every tab and receipt
+ok 17 - retirement hold: file in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2354.455959
+  ...
+# Subtest: retirement hold: directory in the canonical checkout keeps every tab and receipt
+ok 18 - retirement hold: directory in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2299.594292
+  ...
+# Subtest: retirement hold: symlink in the canonical checkout keeps every tab and receipt
+ok 19 - retirement hold: symlink in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2340.7285
+  ...
+# Subtest: retirement hold: appearing between plan and apply stops the stale close
+ok 20 - retirement hold: appearing between plan and apply stops the stale close
+  ---
+  duration_ms: 1114.982917
+  ...
+# Subtest: retirement hold: indeterminate lstat EACCES fails closed without reading contents
+ok 21 - retirement hold: indeterminate lstat EACCES fails closed without reading contents
+  ---
+  duration_ms: 885.334084
+  ...
+# Subtest: retirement hold: indeterminate lstat ENOTDIR fails closed without reading contents
+ok 22 - retirement hold: indeterminate lstat ENOTDIR fails closed without reading contents
+  ---
+  duration_ms: 1014.0655
+  ...
+# Subtest: retirement hold: indeterminate lstat EIO fails closed without reading contents
+ok 23 - retirement hold: indeterminate lstat EIO fails closed without reading contents
+  ---
+  duration_ms: 898.411584
+  ...
+# Subtest: retirement hold: rechecked after the final observation immediately before a close
+ok 24 - retirement hold: rechecked after the final observation immediately before a close
+  ---
+  duration_ms: 1495.705875
+  ...
+# Subtest: retirement hold: an empty workspace stays open and logs held before any close
+ok 25 - retirement hold: an empty workspace stays open and logs held before any close
+  ---
+  duration_ms: 1078.022042
+  ...
+# Subtest: only a canonical hold can brake retirement; a lane-local lookalike has no authority
+ok 26 - only a canonical hold can brake retirement; a lane-local lookalike has no authority
+  ---
+  duration_ms: 674.428792
+  ...
+# Subtest: retirement hold: tidy keeps tabs and logs the hold, then resumes
+ok 27 - retirement hold: tidy keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 2045.984417
+  ...
+# Subtest: retirement hold: housekeeping-fast keeps tabs and logs the hold, then resumes
+ok 28 - retirement hold: housekeeping-fast keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1091.932084
+  ...
+# Subtest: retirement hold: housekeeping-strict keeps tabs and logs the hold, then resumes
+ok 29 - retirement hold: housekeeping-strict keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 994.686333
+  ...
+# Subtest: retirement hold: plan keeps tabs and logs the hold, then resumes
+ok 30 - retirement hold: plan keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1665.502625
+  ...
+# Subtest: retirement hold: apply keeps tabs and logs the hold, then resumes
+ok 31 - retirement hold: apply keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 2140.575458
+  ...
+# Subtest: retirement hold: consume keeps tabs and logs the hold, then resumes
+ok 32 - retirement hold: consume keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 2104.07075
+  ...
+# Subtest: retirement hold: drain catch-up acknowledges ready first and leaves the hint pending at both boundaries
+ok 33 - retirement hold: drain catch-up acknowledges ready first and leaves the hint pending at both boundaries
+  ---
+  duration_ms: 1191.256625
+  ...
+# Subtest: retirement hold: promotion cleanup never invokes git-only close and stays promoted until bounded retry
+ok 34 - retirement hold: promotion cleanup never invokes git-only close and stays promoted until bounded retry
+  ---
+  duration_ms: 3198.604125
+  ...
+# Subtest: retirement hold: lane close normal retains worktree and branch before lifecycle mutations
+ok 35 - retirement hold: lane close normal retains worktree and branch before lifecycle mutations
+  ---
+  duration_ms: 5833.382625
+  ...
+# Subtest: retirement hold: lane close git-only retains worktree and branch before lifecycle mutations
+ok 36 - retirement hold: lane close git-only retains worktree and branch before lifecycle mutations
+  ---
+  duration_ms: 5014.70425
+  ...
+# Subtest: retirement hold: standalone settle-watch self-retirement preserves its tab and receipt
+ok 37 - retirement hold: standalone settle-watch self-retirement preserves its tab and receipt
+  ---
+  duration_ms: 5474.916709
+  ...
+# Subtest: retirement hold: settle-watch worker pruning keeps eligible workers then closes after release
+ok 38 - retirement hold: settle-watch worker pruning keeps eligible workers then closes after release
+  ---
+  duration_ms: 2400.217417
+  ...
+# Subtest: retirement hold: settle-watch pruneSessionTabs honors the brake during a real CLI handoff
+ok 39 - retirement hold: settle-watch pruneSessionTabs honors the brake during a real CLI handoff
+  ---
+  duration_ms: 7131.684542
+  ...
+# Subtest: retirement hold: settle-watch closeWorkerTab honors the brake during a real CLI handoff
+ok 40 - retirement hold: settle-watch closeWorkerTab honors the brake during a real CLI handoff
+  ---
+  duration_ms: 7261.946875
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 41 - lane close --git-only keeps the worktree beneath even an eligible pane
+  ---
+  duration_ms: 1849.143666
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 42 - lane close uses the executor then proves vacancy before Git and empty workspace close
+  ---
+  duration_ms: 2669.449958
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 43 - an empty unmerged lane retains its recoverable archive and immutable record
+  ---
+  duration_ms: 2205.89375
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 44 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+  ---
+  duration_ms: 2961.42275
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 45 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+  ---
+  duration_ms: 816.579125
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 46 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+  ---
+  duration_ms: 232.40275
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 47 - Git-only lane without a workspace still keeps queued lane and run references
+  ---
+  duration_ms: 847.403166
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 48 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+  ---
+  duration_ms: 688.184791
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 49 - installed settle-watch flags keep an ingested worker while its chain is open
+  ---
+  duration_ms: 724.267625
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 50 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+  ---
+  duration_ms: 928.518042
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 51 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+  ---
+  duration_ms: 255.206167
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 52 - promote drain consumes requests at both foreground boundaries without running a gate
+  ---
+  duration_ms: 1018.057084
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+ok 53 - promote sends its ready acknowledgment before observing a pending retirement hint
+  ---
+  duration_ms: 740.437667
+  ...
+# {"id":"job","topic":"topic","outcome":"refused","reason":"lane: fixture refusal","log":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-ziTxl1/repo/.git/promote/job.log","delivered":false,"inbox":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-ziTxl1/record/supervisor/inbox.log","queued":true,"owner_pid":75557,"message":"[promote-queue] id=job lane=topic outcome=refused reason=\\"lane: fixture refusal\\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-ziTxl1/repo/.git/promote/job.log","delivery_id":"promote:job"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"6024d6ba551e410918ddd9baa7a4c16c608ee7ba413d406da5dda49311314205","action":"closed"}
+# Subtest: a dequeued job is persisted before retirement catch-up and is never left current during it
+ok 54 - a dequeued job is persisted before retirement catch-up and is never left current during it
+  ---
+  duration_ms: 1122.995417
+  ...
+# Subtest: the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+ok 55 - the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+  ---
+  duration_ms: 1053.893916
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 56 - cleanup retries are capped with backoff, record the refusal, and reset on a new request
+  ---
+  duration_ms: 3134.690708
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 57 - lane close permits an absent Herdr executable and refuses an unreadable installed server
+  ---
+  duration_ms: 1923.824792
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 58 - tidy-tabs prunes an exited recorded watcher callback through the shared guard
+  ---
+  duration_ms: 1708.50475
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 59 - tidy-tabs prunes an exited recorded settle callback through the shared guard
+  ---
+  duration_ms: 1692.655417
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 60 - tidy-tabs prunes an exited recorded executive callback through the shared guard
+  ---
+  duration_ms: 1748.383333
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 61 - tidy-tabs prunes an exited recorded plan callback through the shared guard
+  ---
+  duration_ms: 1850.380333
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 62 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+  ---
+  duration_ms: 1085.65675
+  ...
+# Subtest: a concurrently pruned absent receipt does not abort remaining tab closes
+ok 63 - a concurrently pruned absent receipt does not abort remaining tab closes
+  ---
+  duration_ms: 1424.9715
+  ...
+# Subtest: post-close receipt pruning ENOENT preserves the successful close result
+ok 64 - post-close receipt pruning ENOENT preserves the successful close result
+  ---
+  duration_ms: 1841.414542
+  ...
+# Subtest: post-close receipt pruning EACCES preserves the successful close result
+ok 65 - post-close receipt pruning EACCES preserves the successful close result
+  ---
+  duration_ms: 1150.859792
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 66 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+  ---
+  duration_ms: 4922.532875
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 67 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+  ---
+  duration_ms: 885.727125
+  ...
+# Subtest: standalone contrib retires only its owned watcher with no supervisor directory
+ok 68 - standalone contrib retires only its owned watcher with no supervisor directory
+  ---
+  duration_ms: 5133.864958
+  ...
+# Subtest: composed promotion then native completion reconcile then cleanup: KEEP protects lane and evidence
+ok 69 - composed promotion then native completion reconcile then cleanup: KEEP protects lane and evidence
+  ---
+  duration_ms: 1652.258584
+  ...
+# Subtest: composed promotion then native completion reconcile then cleanup: release closes workspace after verified preservation
+ok 70 - composed promotion then native completion reconcile then cleanup: release closes workspace after verified preservation
+  ---
+  duration_ms: 3944.853375
+  ...
+# Subtest: workspace close failure retries only the empty workspace after Git removal
+ok 71 - workspace close failure retries only the empty workspace after Git removal
+  ---
+  duration_ms: 3172.296417
+  ...
+# Subtest: an occupied workspace retry retains its reason in the cleanup receipt after the lane is gone
+ok 72 - an occupied workspace retry retains its reason in the cleanup receipt after the lane is gone
+  ---
+  duration_ms: 3237.191417
+  ...
+# Subtest: a planner KEEP refuses git-only unmerged close before any evidence copy or tag
+ok 73 - a planner KEEP refuses git-only unmerged close before any evidence copy or tag
+  ---
+  duration_ms: 739.871459
+  ...
+# Subtest: a planner KEEP refuses normal unmerged close before any evidence copy or tag
+ok 74 - a planner KEEP refuses normal unmerged close before any evidence copy or tag
+  ---
+  duration_ms: 966.000625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: main comparison guard catches both operand orders and inequality early returns
+ok 75 - main comparison guard catches both operand orders and inequality early returns
+  ---
+  duration_ms: 3.276625
+  ...
+# Subtest: product scripts never compare a resolved argv launch path to a module path
+ok 76 - product scripts never compare a resolved argv launch path to a module path
+  ---
+  duration_ms: 47.793
+  ...
+# Subtest: promote/metrics.mjs executes through a directory symlink
+ok 77 - promote/metrics.mjs executes through a directory symlink
+  ---
+  duration_ms: 29.890375
+  ...
+# Subtest: promote/metrics.mjs executes through a file symlink
+ok 78 - promote/metrics.mjs executes through a file symlink
+  ---
+  duration_ms: 29.877041
+  ...
+# Subtest: promote/promote.mjs executes through a directory symlink
+ok 79 - promote/promote.mjs executes through a directory symlink
+  ---
+  duration_ms: 37.393541
+  ...
+# Subtest: promote/promote.mjs executes through a file symlink
+ok 80 - promote/promote.mjs executes through a file symlink
+  ---
+  duration_ms: 37.809083
+  ...
+# Subtest: supervisor/request.mjs executes through a directory symlink
+ok 81 - supervisor/request.mjs executes through a directory symlink
+  ---
+  duration_ms: 27.757583
+  ...
+# Subtest: supervisor/request.mjs executes through a file symlink
+ok 82 - supervisor/request.mjs executes through a file symlink
+  ---
+  duration_ms: 30.512292
+  ...
+# Subtest: supervisor/supervisor.mjs executes through a directory symlink
+ok 83 - supervisor/supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 41.719833
+  ...
+# Subtest: supervisor/supervisor.mjs executes through a file symlink
+ok 84 - supervisor/supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 43.303625
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs executes through a directory symlink
+ok 85 - supervisor/prompt-supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 39.82
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs executes through a file symlink
+ok 86 - supervisor/prompt-supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 39.965666
+  ...
+# Subtest: supervisor/tidy-tabs.mjs executes through a directory symlink
+ok 87 - supervisor/tidy-tabs.mjs executes through a directory symlink
+  ---
+  duration_ms: 38.8955
+  ...
+# Subtest: supervisor/tidy-tabs.mjs executes through a file symlink
+ok 88 - supervisor/tidy-tabs.mjs executes through a file symlink
+  ---
+  duration_ms: 31.324666
+  ...
+# Subtest: acceptance/run.mjs executes through a directory symlink
+ok 89 - acceptance/run.mjs executes through a directory symlink
+  ---
+  duration_ms: 35.534583
+  ...
+# Subtest: acceptance/run.mjs executes through a file symlink
+ok 90 - acceptance/run.mjs executes through a file symlink
+  ---
+  duration_ms: 40.014
+  ...
+# Subtest: acceptance/settle.mjs executes through a directory symlink
+ok 91 - acceptance/settle.mjs executes through a directory symlink
+  ---
+  duration_ms: 179.889458
+  ...
+# Subtest: acceptance/settle.mjs executes through a file symlink
+ok 92 - acceptance/settle.mjs executes through a file symlink
+  ---
+  duration_ms: 160.274916
+  ...
+# Subtest: acceptance/supervisor.mjs executes through a directory symlink
+ok 93 - acceptance/supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 151.444292
+  ...
+# Subtest: acceptance/supervisor.mjs executes through a file symlink
+ok 94 - acceptance/supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 153.404375
+  ...
+# Subtest: housekeeping/housekeeping.mjs executes through a directory symlink
+ok 95 - housekeeping/housekeeping.mjs executes through a directory symlink
+  ---
+  duration_ms: 36.451917
+  ...
+# Subtest: housekeeping/housekeeping.mjs executes through a file symlink
+ok 96 - housekeeping/housekeeping.mjs executes through a file symlink
+  ---
+  duration_ms: 39.78025
+  ...
+# Subtest: test-slot/test-slot.mjs executes through a directory symlink
+ok 97 - test-slot/test-slot.mjs executes through a directory symlink
+  ---
+  duration_ms: 26.086625
+  ...
+# Subtest: test-slot/test-slot.mjs executes through a file symlink
+ok 98 - test-slot/test-slot.mjs executes through a file symlink
+  ---
+  duration_ms: 27.036084
+  ...
+# Subtest: acceptance/focus.mjs executes through a directory symlink
+ok 99 - acceptance/focus.mjs executes through a directory symlink
+  ---
+  duration_ms: 26.363416
+  ...
+# Subtest: acceptance/focus.mjs executes through a file symlink
+ok 100 - acceptance/focus.mjs executes through a file symlink
+  ---
+  duration_ms: 27.365583
+  ...
+# Subtest: isMain resolves both paths and returns false for missing, dangling or different launchers
+ok 101 - isMain resolves both paths and returns false for missing, dangling or different launchers
+  ---
+  duration_ms: 24.440541
+  ...
+# Subtest: record loads settle, lanes and housekeeping views only when their command runs
+ok 102 - record loads settle, lanes and housekeeping views only when their command runs
+  ---
+  duration_ms: 0.575958
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..102
+# tests 102
+# suites 0
+# pass 100
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 124248.270292
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

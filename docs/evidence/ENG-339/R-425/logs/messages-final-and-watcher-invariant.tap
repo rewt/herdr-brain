@@ -1,0 +1,231 @@
+TAP version 13
+# Subtest: message schema accepts the envelope, qualified refs, body and decision evidence
+ok 1 - message schema accepts the envelope, qualified refs, body and decision evidence
+  ---
+  duration_ms: 3.759667
+  ...
+# Subtest: message schema rejects invalid scope, bounds, addresses, kinds and references
+ok 2 - message schema rejects invalid scope, bounds, addresses, kinds and references
+  ---
+  duration_ms: 3.388708
+  ...
+# Subtest: duplicate JSON keys, including escaped keys in nested data, are rejected
+ok 3 - duplicate JSON keys, including escaped keys in nested data, are rejected
+  ---
+  duration_ms: 0.34825
+  ...
+# Subtest: bodies are bounded verified data, with changed bytes and symlink escapes rejected
+ok 4 - bodies are bounded verified data, with changed bytes and symlink escapes rejected
+  ---
+  duration_ms: 4.404667
+  ...
+# Subtest: every rendered watcher notice maps without changing any text
+ok 5 - every rendered watcher notice maps without changing any text
+  ---
+  duration_ms: 1.165667
+  ...
+# Subtest: routing distinguishes deferred scope, needs-work and verified unsupported-role skip
+ok 6 - routing distinguishes deferred scope, needs-work and verified unsupported-role skip
+  ---
+  duration_ms: 0.844542
+  ...
+# Subtest: all current promotion outcomes are operational triage notices
+ok 7 - all current promotion outcomes are operational triage notices
+  ---
+  duration_ms: 0.912166
+  ...
+# Subtest: journal fsyncs private entries and rebuilds both deduplication keys after restart
+ok 8 - journal fsyncs private entries and rebuilds both deduplication keys after restart
+  ---
+  duration_ms: 47.247667
+  ...
+# Subtest: the journal has one immediate writer lock per canonical project partition
+ok 9 - the journal has one immediate writer lock per canonical project partition
+  ---
+  duration_ms: 7.686791
+  ...
+# Subtest: torn tails are readable with explicit evidence, block append, and preserve all bytes
+ok 10 - torn tails are readable with explicit evidence, block append, and preserve all bytes
+  ---
+  duration_ms: 8.756333
+  ...
+# Subtest: journal refuses symlink and nonprivate storage without writing record events
+ok 11 - journal refuses symlink and nonprivate storage without writing record events
+  ---
+  duration_ms: 26.204958
+  ...
+# Subtest: report counts accepted kinds/paths/would-wakes and duplicate/conflict attempts stably
+ok 12 - report counts accepted kinds/paths/would-wakes and duplicate/conflict attempts stably
+  ---
+  duration_ms: 74.1545
+  ...
+# Subtest: the inbox mirror keeps stable IDs, exact immutable bodies and original delivery ownership
+ok 13 - the inbox mirror keeps stable IDs, exact immutable bodies and original delivery ownership
+  ---
+  duration_ms: 92.854708
+  ...
+# Subtest: mirror errors, pending mirror work and failing diagnostics cannot block enqueue
+ok 14 - mirror errors, pending mirror work and failing diagnostics cannot block enqueue
+  ---
+  duration_ms: 154.065333
+  ...
+# Subtest: desk shadow preserves explicit request kind and surfaces unresolved canonical recipients
+ok 15 - desk shadow preserves explicit request kind and surfaces unresolved canonical recipients
+  ---
+  duration_ms: 45.249667
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: identity requests reuse a live desk and deliver literal request text
+ok 16 - identity requests reuse a live desk and deliver literal request text
+  ---
+  duration_ms: 359.004541
+  ...
+# Subtest: a missing desk creates an unfocused identity workspace and starts native Codex before prompting
+ok 17 - a missing desk creates an unfocused identity workspace and starts native Codex before prompting
+  ---
+  duration_ms: 311.088875
+  ...
+# Subtest: blocked desks retain their workspace and receive no request
+ok 18 - blocked desks retain their workspace and receive no request
+  ---
+  duration_ms: 395.14825
+  ...
+# Subtest: startup and readiness each get their own budget after slow provisioning
+ok 19 - startup and readiness each get their own budget after slow provisioning
+  ---
+  duration_ms: 589.304208
+  ...
+# Subtest: a desk that never becomes ready retains its workspace without delivery
+ok 20 - a desk that never becomes ready retains its workspace without delivery
+  ---
+  duration_ms: 387.915042
+  ...
+# Subtest: the fake Herdr rejects undeclared options
+ok 21 - the fake Herdr rejects undeclared options
+  ---
+  duration_ms: 169.274417
+  ...
+# Subtest: identity traversal and empty requests fail before contacting Herdr
+ok 22 - identity traversal and empty requests fail before contacting Herdr
+  ---
+  duration_ms: 0.925083
+  ...
+# message shadow: ENOENT: no such file or directory, realpath ''
+# Subtest: a failed or pending desk mirror leaves successful literal delivery byte-identical
+ok 23 - a failed or pending desk mirror leaves successful literal delivery byte-identical
+  ---
+  duration_ms: 419.799417
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: claude: captured ANSI empty, typed and placeholder composers
+ok 24 - claude: captured ANSI empty, typed and placeholder composers
+  ---
+  duration_ms: 1.264958
+  ...
+# Subtest: codex: captured ANSI empty, typed and placeholder composers
+ok 25 - codex: captured ANSI empty, typed and placeholder composers
+  ---
+  duration_ms: 0.407541
+  ...
+# Subtest: compound styles, wrapped typing, and normal text identical to a placeholder remain busy
+ok 26 - compound styles, wrapped typing, and normal text identical to a placeholder remain busy
+  ---
+  duration_ms: 0.202959
+  ...
+# Subtest: Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome
+ok 27 - Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome
+  ---
+  duration_ms: 0.334459
+  ...
+# Subtest: claude: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+ok 28 - claude: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+  ---
+  duration_ms: 926.804333
+  ...
+# Subtest: codex: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+ok 29 - codex: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+  ---
+  duration_ms: 602.899667
+  ...
+# Subtest: two quiet reads use the default three-second separation
+ok 30 - two quiet reads use the default three-second separation
+  ---
+  duration_ms: 3500.784333
+  ...
+# Subtest: typing between quiet reads restarts the confirmation window
+ok 31 - typing between quiet reads restarts the confirmation window
+  ---
+  duration_ms: 948.907708
+  ...
+# Subtest: the immediate final read catches a draft introduced after the confirmation pair
+ok 32 - the immediate final read catches a draft introduced after the confirmation pair
+  ---
+  duration_ms: 968.49175
+  ...
+# Subtest: non-idle status, unknown layout and failed reads retain capped notices
+ok 33 - non-idle status, unknown layout and failed reads retain capped notices
+  ---
+  duration_ms: 1987.278833
+  ...
+# Subtest: cap retains FIFO; a later caller drains older notices once, with stable-id deduplication
+ok 34 - cap retains FIFO; a later caller drains older notices once, with stable-id deduplication
+  ---
+  duration_ms: 872.189458
+  ...
+# Subtest: concurrent callers serialize notices without interleaving or duplicate prompts
+ok 35 - concurrent callers serialize notices without interleaving or duplicate prompts
+  ---
+  duration_ms: 1080.479958
+  ...
+# Subtest: a definite pre-input refusal retries through the empty-composer gate
+ok 36 - a definite pre-input refusal retries through the empty-composer gate
+  ---
+  duration_ms: 853.17275
+  ...
+# Subtest: lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate
+ok 37 - lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate
+  ---
+  duration_ms: 1247.041708
+  ...
+# Subtest: a lone capped notice delivers after its caller exits, without another enqueue or manual drain
+ok 38 - a lone capped notice delivers after its caller exits, without another enqueue or manual drain
+  ---
+  duration_ms: 579.056042
+  ...
+# Subtest: a dead sender before the prompt side effect replays pending intent with the same ID
+ok 39 - a dead sender before the prompt side effect replays pending intent with the same ID
+  ---
+  duration_ms: 1463.334916
+  ...
+# Subtest: a dead sender after the prompt side effect replays pending intent with the same ID
+ok 40 - a dead sender after the prompt side effect replays pending intent with the same ID
+  ---
+  duration_ms: 1468.624209
+  ...
+# Subtest: torn inbox tails fail closed and preserve their bytes
+ok 41 - torn inbox tails fail closed and preserve their bytes
+  ---
+  duration_ms: 9.79325
+  ...
+# Subtest: a mirror failure cannot change the quiet-gated prompt bytes or delivery result
+ok 42 - a mirror failure cannot change the quiet-gated prompt bytes or delivery result
+  ---
+  duration_ms: 557.796083
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: the supervisor arms the standalone watcher; contrib keeps the compatibility watcher
+ok 43 - the supervisor arms the standalone watcher; contrib keeps the compatibility watcher
+  ---
+  duration_ms: 2.991375
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..43
+# tests 43
+# suites 0
+# pass 43
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 17737.17775
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

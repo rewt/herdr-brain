@@ -428,6 +428,7 @@ async function deliver(job, result, queue) {
     // a busy composer. An explicitly configured caller wait remains supported.
     waitSeconds: process.env.SUPERVISOR_INPUT_WAIT_SECONDS ?? 0,
     id: `promote:${job.id}${suffix}`, title: 'Promotion notice undelivered',
+    shadowEvidence: { channel: 'promote-queue', validated: true, outcome: result.outcome },
     log: (line) => process.stderr.write(line + '\n'),
   });
   return { ...delivery, delivery_id: deliveryId };

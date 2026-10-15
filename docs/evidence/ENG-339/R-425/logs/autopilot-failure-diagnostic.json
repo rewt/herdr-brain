@@ -1,0 +1,53 @@
+{
+  "result": {
+    "disposition": "wake",
+    "receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-WbxabX/project/.org/supervisor/89d5fa835ea459baacdc/autopilot/0a61a42482db9d544e3c1eb5e4dfdf5c0202226add8672371ad852894c47c45c.json",
+    "summary": "[autopilot] ENG-1 landed; unblocks: Cut RC-11"
+  },
+  "receipt": {
+    "policy": "notice-autopilot/v1",
+    "key": "notice:promote:job",
+    "project": {
+      "repo": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-WbxabX/project",
+      "identity": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-WbxabX/project/.git",
+      "org": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-WbxabX/project/.org"
+    },
+    "notice": "[promote-queue] id=job lane=topic outcome=promoted",
+    "notice_id": "promote:job",
+    "actions": [
+      {
+        "name": "close promoted item",
+        "file": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-session-messages/supervisor/supervisor.mjs",
+        "args": [
+          "handle",
+          "--notice",
+          "[promote-queue] id=job lane=topic outcome=promoted",
+          "--repo",
+          "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-WbxabX/project",
+          "--org",
+          "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-WbxabX/project/.org",
+          "--role",
+          "supervisor",
+          "--to",
+          "supervisor-test"
+        ],
+        "phase": "acknowledged",
+        "at": "2026-10-15T23:01:58.320Z",
+        "exit_code": 0,
+        "stderr": "",
+        "signal": null,
+        "result": {
+          "result": "recorded_promotion",
+          "run": "R-1",
+          "item": "ENG-1"
+        },
+        "finished": "2026-10-15T23:01:58.407Z"
+      }
+    ],
+    "started": "2026-10-15T23:01:58.204Z",
+    "delivery_summary": "[autopilot] ENG-1 landed; unblocks: Cut RC-11",
+    "disposition": "wake",
+    "reason": "awaited item landed",
+    "finished": "2026-10-15T23:01:58.459Z"
+  }
+}

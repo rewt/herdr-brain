@@ -310,10 +310,18 @@ export function createRetirement({ cwd = process.cwd(), org, herdr = process.env
     catch (e) { if (e.code !== 'ENOENT') throw e; }
   };
   let diagnostics = [];
-  const apply = (planned = plan(), workspacePath) => {
+  const hasCallbackReceipts = () => {
+    if (!org) return false;
+    try { return fs.readdirSync(path.join(org, 'retirement/occupants')).length > 0; }
+    catch (e) { if (e.code === 'ENOENT') return false; throw e; }
+  };
+  const apply = (planned = plan(), workspacePath, pruningSnapshot) => {
     diagnostics = [];
-    let snapshot = observe(workspacePath);
-    for (const receipt of snapshot.callbackPruning.filter(receipt => receipt.absent)) pruneReceipt(receipt);
+    // Reuse a caller's current observation only for receipt garbage collection.
+    // Closing still requires the executor's fresh observation below. Avoid a
+    // bookkeeping scan when no receipts exist, especially during input recovery.
+    let snapshot = pruningSnapshot ?? (hasCallbackReceipts() ? observe(workspacePath) : null);
+    for (const receipt of snapshot?.callbackPruning.filter(receipt => receipt.absent) ?? []) pruneReceipt(receipt);
     return executeRetirement(planned, { observe: () => (snapshot = observe(workspacePath)), close: id => {
       invoke(herdr, ['tab', 'close', id]);
       for (const receipt of snapshot.callbackPruning.filter(row => row.receipt.tab === id)) try { pruneReceipt(receipt); }

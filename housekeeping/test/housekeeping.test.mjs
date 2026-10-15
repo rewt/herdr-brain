@@ -205,6 +205,22 @@ test('a record change after clearing composer suppresses the prompt', (t) => {
   assert.equal(f.logs.some((e) => e.action === 'skip-resume'), true);
 });
 
+test('receipt pruning preserves the input recovery record checks', t => {
+  const f = fixture(t, { reported: false }); let reads = 0;
+  const file = path.join(f.root, 'retirement/occupants/absent.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ schema: 'retirement-occupant/v1', kind: 'watcher',
+    common: f.common, cwd: f.lane, workspace: 'w', tab: 'absent', pane: 'absent:p',
+    shell: { pid: 1, identity: 'old-shell', command: '[zsh]' },
+    process: { pid: 2, identity: 'old-watcher', command: '[node]' } }));
+  f.before = exe => { if (exe === 'fake-record' && ++reads === 3) f.run.report = { outcome: 'done' }; };
+  f.runner().tick();
+  assert.deepEqual(f.actions.map(a => a[1]), ['send-keys']);
+  assert.equal(f.logs.some(e => e.action === 'skip-resume'), true);
+  assert.equal(reads, 3, 'observe, pre-input check, and post-clear check');
+  assert.equal(fs.existsSync(file), false, 'absent receipt was pruned without another record read');
+});
+
 test('incomplete or failed reads never authorize any action', (t) => {
   const f = fixture(t); const original = f.command;
   for (const failure of ['herdr', 'record', 'topology']) {

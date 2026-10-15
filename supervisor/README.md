@@ -55,6 +55,9 @@ a foreground watcher borrowing an ordinary operator tab leaves no receipt.
 Apply removes receipts after their tab closes or when the current inventory
 proves the tab absent. Preview skips absent-tab owner lookups and stays read-only.
 Scoped cleanup retains receipts for workspaces outside its observed scope.
+Housekeeping reuses its tick observation for receipt pruning, so bookkeeping adds
+no record or agent reads to input recovery. Every close still gets a fresh guarded
+observation. Other callers skip the pruning scan when no callback receipts exist.
 
 Live sources are `<git-common>/promote/queue.json` (pending, current, interrupted
 and reconciliation-pending jobs), the default trusted `verify-queue/v1` store

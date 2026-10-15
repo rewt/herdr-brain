@@ -304,6 +304,9 @@ function openSession({ mode, r }) {
   prepareSupervisorDir();
   takeTurn();
   const ledger = brakes();
+  // Refuse a missing canonical workspace before account lookup or retirement.
+  // newTab resolves it again at use time, since Herdr ids can change.
+  workspaceId();
   pruneSessionTabs();
   const { env, args: extra } = launchSettings();
   log(`launch env: ${env.map((e) => e.split('=')[0] === 'CLAUDE_CONFIG_DIR' || e.startsWith('AI_PERSONA') ? e : e.split('=')[0]).join(' ')}`);

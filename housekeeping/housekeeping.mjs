@@ -132,7 +132,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     for (const tab of plan.keep) log({ action: 'keep', ...tab, dryRun });
     for (const diagnostic of plan.diagnostics ?? []) log({ action: 'reference-diagnostic', ...diagnostic });
     if (dryRun) for (const tab of plan.close) log({ action: 'would-close', ...tab });
-    else retirement.apply(plan, workspacePath);
+    else retirement.apply(plan, workspacePath, snapshot);
     if (resume) for (const agent of snapshot.agents) {
       const run = candidate(snapshot, agent);
       if (!run || seen.has(resumeKey(run, agent))) continue;

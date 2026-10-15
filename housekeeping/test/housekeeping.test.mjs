@@ -87,9 +87,24 @@ test('the housekeeping CLI record reader loads confirmed handoffs and reserves t
   f.runs.push(newer); f.agents.push({ ...f.agent, name: 'successor', pane_id: 'w:q', tab_id: 'w:u', terminal_id: 'term-b' });
   f.tabs.push({ tab_id: 'w:u' }); f.panes.push({ pane_id: 'w:q', tab_id: 'w:u' });
   fs.writeFileSync(path.join(f.root, 'events.jsonl'), JSON.stringify({ type: 'retirement.handoff', from: 'R-1', to: 'R-2', confirmed: true, seq: 3 }) + '\n');
-  const plan = f.runner().tick({ resume: false });
+  let plan = f.runner().tick({ resume: false });
+  assert.deepEqual(plan.close, []);
+  assert.match(plan.keep.find(t => t.tab_id === 'w:t').why, /report is not ingested/);
+  assert.match(plan.keep.find(t => t.tab_id === 'w:u').why, /retained successor for handoff from R-1/);
+  assert.deepEqual(f.actions, []);
+
+  f.run.report = { seq: 4, outcome: 'done' };
+  newer.report = { seq: 5, outcome: 'done' };
+  plan = f.runner().tick({ resume: false });
+  assert.deepEqual(plan.close, []);
+  assert.match(plan.keep.find(t => t.tab_id === 'w:t').why, /chain is still open/);
+  assert.match(plan.keep.find(t => t.tab_id === 'w:u').why, /retained successor for handoff from R-1/);
+  assert.deepEqual(f.actions, []);
+
+  f.items[0].closed = { as: 'done', seq: 6 };
+  plan = f.runner().tick({ resume: false });
   assert.deepEqual(plan.close.map(t => t.tab_id), ['w:t']);
-  assert.match(plan.keep[0].why, /retained successor/);
+  assert.match(plan.keep.find(t => t.tab_id === 'w:u').why, /retained successor for handoff from R-1/);
   assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
 });
 

@@ -34,3 +34,21 @@ Final ordering recheck:
 > metadata before reading live authority. The deletion callback then rechecks
 > clean Git, the archive tag, and HOLD. No new finding from this ordering change;
 > no tests run.
+
+Packed-reference preflight recheck (`eae2cd4f`):
+
+> PASS remains for eae2cd4f. The helper safely recreates pruned loose-ref
+> directories, validates each directory before use, and refuses worktree metadata
+> locks before deletion. No new findings; read-only review, no tests run.
+
+Moved no-focus invariant recheck:
+
+> PASS. The invariant now recognizes both Git helper signatures and follows the
+> moved removal path. The whole-product scan and mutation negative still reject
+> Herdr worktree remove; no weakening found. No tests run.
+
+Final reference documentation recheck:
+
+> PASS. Both documentation updates match the implementation: shared guards, Git
+> worktree removal, guarded workspace closure, and tag, evidence, metadata, and
+> HOLD preconditions. No runtime changes reviewed or tests run.

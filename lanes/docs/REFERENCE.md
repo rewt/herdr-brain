@@ -640,11 +640,21 @@ configured integration branch.
 `lane close <topic>` requires a clean lane worktree. A merged branch is deleted. An
 unmerged branch is tagged as `archive/lane/<topic>` before deletion.
 
-Close first attempts Herdr-native worktree removal so its workspace retires too.
-If Herdr is unavailable or removal fails, it falls back to Git removal; a successful
-Git close can therefore leave a visible workspace. Verify the exact workspace and
-tab identities after close. Preserve required ignored artifacts outside the lane
-before removal; neither a commit nor an archive tag saves them.
+Every close mode uses the shared retirement planner and guarded executor. Git
+removes the worktree; the executor then closes its empty Herdr workspace with
+`workspace close`. Kept panes (including unrecorded shells), open chains and live
+references retain the lane, with the reason in promotion's receipt and notice.
+An empty-workspace close failure leaves cleanup pending and retries only cleanup.
+
+Before removal, close verifies the exact tip is integrated or freshly resolves
+its recoverable archive tag; a different existing tag target refuses. It probes
+the affected Git metadata writes and removal permissions and copies ignored and
+untracked contents to `GIT_COMMON_DIR/lane-archive/<topic>/<unique timestamp>/`,
+with a SHA-256 manifest verified against both copy and source. Failure retains
+the lane. Git status must be clean, and index flags that can hide local changes
+are refused. Recorded non-code and parked work needs explicit disposition; age
+never authorizes deletion. Canonical `HOLD-WORKER-TAB-CLOSE` stops every mode.
+See the [close preconditions](../README.md) for process, job and record guards.
 
 Only after those Git operations succeed, close writes done markers for every known
 session matching the canonical repository and exact topic. Dirty refusal or archive

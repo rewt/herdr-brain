@@ -155,8 +155,10 @@ Per-result retries wait one minute, then back off exponentially, capped at five
 attempts for unchanged record/request revisions. A changed record or request
 revision permits another attempt immediately; receipts retain the last refusal.
 `lane close --git-only` requires zero live panes before removing the worktree,
-even when a pane is eligible but not yet closed. Lane archival/evidence durability
-preflight remains the separate lane-removal work.
+even when a pane is eligible but not yet closed. Both close modes verify archive
+tags, preserve ignored evidence with verified hashes outside the worktree, and
+preflight Git metadata before deletion. Empty lane workspaces then close through
+the same guarded executor; workspace failures remain cleanup-pending.
 
 Supervisors and workers do not open blocking questions. They record each one
 with `record ask` (an action category, a safe recommendation and a reason),

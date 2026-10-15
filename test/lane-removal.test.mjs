@@ -156,3 +156,11 @@ test('branch-only close also goes through archive and metadata preflight', t => 
   assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
   assert.ok(r.stdout.includes('lane-removed'));
 });
+
+test('a Git index writer lock keeps the worktree, branch and lock intact', t => {
+  const f = fixture(t, { merged: true });
+  const metadata = f.git(['rev-parse', '--absolute-git-dir'], f.lane), lock = path.join(metadata, 'index.lock');
+  fs.writeFileSync(lock, 'busy index writer');
+  const r = f.close(); f.kept(r); assert.match(r.stderr, /locked Git metadata/);
+  assert.equal(fs.readFileSync(lock, 'utf8'), 'busy index writer');
+});

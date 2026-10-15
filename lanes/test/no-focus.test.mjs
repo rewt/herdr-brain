@@ -28,13 +28,16 @@ test("lane closure cannot invoke Herdr's parent-focusing worktree removal", () =
     .map(file => [file, readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')]));
   const removalIsGitOnly = (file, text) => {
     for (const match of text.matchAll(/\[\s*(['"])worktree\1\s*,\s*(['"])remove\2/g)) {
-      assert.match(text.slice(0, match.index), /\bgit\(\s*$/, `${file}: worktree removal must invoke Git, never Herdr`);
+      // The shared adapter's Git helper takes the canonical root first; the
+      // lane-local helper takes only argv. Both must remain direct Git calls.
+      assert.match(text.slice(0, match.index), /\bgit\(\s*(?:canonicalRoot,\s*)?$/, `${file}: worktree removal must invoke Git, never Herdr`);
     }
   };
   // Scan every shipped module, including every caller and the moved executor.
   for (const [file, text] of modules) removalIsGitOnly(file, text);
-  assert.match(source, /retirement\.closeEmptyWorkspace\(workspaceId, path\)/);
   const executor = modules.get('lib/retire-runtime.mjs');
+  assert.match(source, /retirement\.removeLane\(/);
+  assert.match(executor, /for \(const id of workspaces\) try \{ closeEmptyWorkspace\(id, lane\);/);
   assert.match(executor, /closeWorkspace: workspace => invoke\(herdr, \['workspace', 'close', workspace\]\)/);
   // Exercise the actual close call's forbidden replacement, not a vacuous scan.
   const unsafe = executor.replace("['workspace', 'close', workspace]", "['worktree', 'remove', '--workspace', workspace]");

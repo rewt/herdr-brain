@@ -1,0 +1,33 @@
+flowchart LR
+  Agents[Agents and tools]
+  Outbox[Producer outbox - stable event ID]
+  Collector[Herdr collector - events.subscribe]
+  Snapshot[session.snapshot - rebuild current observations]
+  Service[Identity-owned logging service - one append writer per project]
+  Store[(Durable sequenced event journal)]
+  Read[Read and replay API - cursor and retention floor]
+  Viewer[Logs tab - read-only viewer]
+  Sessions[Session subscribers - bounded filtered batches]
+  Rules[Deterministic notification rules]
+  Inbox[Existing durable supervisor inbox]
+  Supervisor[Supervisor session]
+  Reconciler[Session reconciler]
+  Record[Existing record CLI and fold]
+  Agents --> Outbox -->|retry until durable acknowledgement| Service
+  Collector -->|observations and explicit gaps| Service
+  Collector -->|loss or reconnect| Snapshot
+  Snapshot --> Collector
+  Service -->|append and fsync before ack| Store --> Read
+  Read --> Viewer
+  Read --> Sessions
+  Read --> Rules
+  Rules -->|coalesced exceptions; stable notice ID| Inbox
+  Inbox -->|same occupant, idle, empty composer| Supervisor
+  Read -->|invalidate observations, never authorize work| Reconciler
+  Reconciler -->|re-read authoritative facts| Record
+  Record -->|read-only selected event mirror| Service
+  Hold[STOP gates actions; close hold gates retirement]
+  Hold -.-> Reconciler
+  Hold -.-> Inbox
+  Note[Viewer exit does not stop storage; busy or missing subscribers retain cursors]
+  Note -.-> Read

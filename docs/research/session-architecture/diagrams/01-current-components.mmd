@@ -1,0 +1,42 @@
+flowchart TB
+  Operator[Operator]
+  Client[Herdr client UI]
+  ClientSocket[herdr-client.sock]
+  API[herdr.sock - NDJSON API]
+  Server[Herdr server 0.9.3 - owns PTYs and topology]
+  CLI[herdr CLI]
+  subgraph Topology[One Herdr session namespace]
+    Workspace[Workspace - canonical checkout binding]
+    Tab[Tab]
+    Pane[Pane and terminal identity]
+    Harness[Native Codex or Claude process]
+    Workspace --> Tab --> Pane --> Harness
+  end
+  Operator --> Client --> ClientSocket --> Server
+  CLI --> API --> Server --> Workspace
+  Hooks[Native SessionStart integration] -->|pane.report_agent_session| API
+  Harness --> Hooks
+  Detection[Agent detection TOML - not desired workloads] --> Server
+  DeadLink[Observed herdr.sock.agent is a dangling symlink]
+  subgraph Brain[Herdr Brain today]
+    Routes[Layered routes and native identity profiles]
+    Lane[lanes open and dispatch]
+    Dispatch[Dispatch journal and occupant evidence]
+    Watch[Report watcher and settle-watch]
+    Inbox[Durable supervisor inbox and quiet delivery]
+    Core[Record CLI - locked events.jsonl writer]
+    Fold[Record fold and briefs]
+    Memory[Lessons - handoffs - foreground brain digest]
+    Registry[Display-only session sidecars]
+    Routes --> Lane
+    Dispatch --> Lane
+    Dispatch --> Core --> Fold --> Memory
+    Lane --> Registry
+    Watch --> Inbox
+    Watch --> Core
+  end
+  Lane --> CLI
+  Watch -->|wait and get| CLI
+  Inbox -->|identity and idle gates then prompt| CLI
+  Dispatch --> Watch
+  Fold --> Dispatch

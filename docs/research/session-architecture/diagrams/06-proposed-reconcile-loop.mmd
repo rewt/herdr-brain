@@ -1,0 +1,28 @@
+flowchart TD
+  Wake[Manifest change, service event or bounded timer]
+  Lock[One canonical project controller lease]
+  Desired[Read adopted spec, frozen route and generation]
+  Facts[Read record fold, jobs, queue, holds and launch receipts]
+  Observe[Herdr snapshot plus exact agent observations]
+  Compare{Desired versus observed}
+  Standard{Protected standard slot or parked review chain?}
+  Keep[KEEP occupant; repair observations only]
+  Safe{Authorized transition, fresh evidence and no applicable hold?}
+  Action[One journaled action through existing adapters]
+  Result{Receipt and observed identity agree?}
+  Status[Write disposable status and structured event]
+  Ambiguous[Hold; no blind retry, reset or second occupant]
+  Wake --> Lock --> Desired --> Facts --> Observe --> Compare
+  Compare -->|already matched| Status
+  Compare -->|automatic reset or retirement considered| Standard
+  Standard -->|yes| Keep --> Status
+  Standard -->|no| Safe
+  Compare -->|authorized start, reuse, explicit rotation or recovery| Safe
+  Safe -->|no| Ambiguous --> Status
+  Safe -->|yes| Action --> Result
+  Result -->|yes| Status
+  Result -->|no| Ambiguous
+  Status --> Release[Release lease and wait]
+  Release -.-> Wake
+  Gap[Herdr events_lost or reconnect]
+  Gap -->|resubscribe and take snapshot; history gap remains explicit| Observe

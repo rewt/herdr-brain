@@ -1,0 +1,47 @@
+sequenceDiagram
+  actor O as Operator or authorized project supervisor
+  participant M as Markdown manifest and route layers
+  participant C as Session reconciler
+  participant R as Record, operation receipts and cold start
+  participant D as Existing dispatch and lane adapters
+  participant H as Herdr and native session
+  participant E as Structured log service
+  O->>M: Adopt desired workspace and workload generation
+  C->>M: Parse and validate; freeze route and context hashes
+  C->>R: Acquire project lease; inspect STOP and existing ownership
+  C->>H: Snapshot and observe exact occupant identity
+  alt Desired occupant already matches
+    C->>R: Refresh disposable observed status; no prompt
+  else No occupant and no ambiguous prior launch
+    C->>R: Journal launch intent
+    C->>D: Materialize through existing route and dispatch path
+    D->>H: Start native harness and verify readiness and identity
+    D->>R: Bind run, terminal and native session evidence
+    D->>H: Send initial brief once under delivery journal
+  else Occupant or prior delivery is ambiguous
+    C->>R: Hold for inspection; do not create a duplicate
+  end
+  H->>E: Structured progress and report-available event
+  C->>R: Re-read validated report and record facts
+  C->>R: Derive ParkedAwaitingReview; KEEP occupant
+  loop Review requests corrections on the same item
+    O->>R: Authorized correction request and brief
+    C->>D: dispatch --reuse R-prev
+    D->>H: Check unchanged occupant, route and quiet state
+    D->>R: New run, same session, new report path
+    D->>H: Correction prompt without clear or restart
+    H->>E: Correction report available
+    C->>R: Derive ParkedAwaitingReview again
+  end
+  O->>R: Landing or explicit disposition evidence
+  C->>R: Recheck review chain, references, holds and Git state
+  alt Worker workload complete
+    C->>H: Retire worker only through safe retirement
+  else Explicit fresh-cycle request for a retained standard session
+    C->>R: Persist handoff and reset intent; quiesce callbacks
+    C->>H: Approved native clear or restart operation
+    H-->>C: Observe new native ID and terminal binding
+    C->>D: Reapply manifest context; restore name only if lost
+    C->>R: New incarnation receipt; retain old run evidence
+  end
+  Note over C,H: Standard tab slots remain protected until explicit workspace withdrawal

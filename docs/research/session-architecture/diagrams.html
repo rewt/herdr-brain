@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Herdr Brain — session architecture · R-421</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --page: #f3f5f7; --surface: #ffffff; --ink: #15293c; --muted: #465d71;
+  --line: #c8d4df; --accent: #075f72; --accent-soft: #e3f1f2;
+  --diagram-fill: #e7eff7; --diagram-secondary: #edf4ed; --diagram-tertiary: #f9efd9;
+  --code: #f0f4f7; --focus: #b45200; --shadow: 0 4px 20px rgb(20 40 60 / .045);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #101923; --surface: #182532; --ink: #e6eef6; --muted: #b3c5d6;
+    --line: #536a7e; --accent: #83d2df; --accent-soft: #1b3c46;
+    --diagram-fill: #253d54; --diagram-secondary: #28443b; --diagram-tertiary: #51432a;
+    --code: #12202d; --focus: #ffc287; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, sans-serif; }
+header, main, footer { max-width: 1180px; margin: auto; padding: 1.5rem; }
+header { padding-top: 2.8rem; }
+.kicker { color: var(--accent); font-size: .8rem; letter-spacing: .08em; font-weight: 700; text-transform: uppercase; }
+h1 { font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1.13; margin: .6rem 0 1rem; letter-spacing: -.035em; }
+h2 { font-size: 1.25rem; line-height: 1.3; margin: 0; }
+p { margin: .65rem 0 1rem; max-width: 85ch; }
+a { color: var(--accent); text-underline-offset: .2em; overflow-wrap: anywhere; }
+nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem 1.2rem; margin: 1.5rem 0; }
+nav a { text-decoration: none; font-size: .94rem; padding: .35rem 0; }
+nav a:hover { text-decoration: underline; }
+.toolbar { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; padding: 1rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--surface); }
+.toolbar p { margin: 0; color: var(--muted); font-size: .9rem; }
+button { font: inherit; border: 1px solid var(--line); border-radius: .45rem; background: var(--accent-soft); color: var(--ink); padding: .55rem .85rem; cursor: pointer; min-height: 44px; }
+button[aria-pressed="true"] { border-color: var(--accent); font-weight: 650; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+main { padding-top: 0; }
+.figure { background: var(--surface); border: 1px solid var(--line); border-radius: .8rem; padding: 1.35rem; margin: 0 0 1.5rem; box-shadow: var(--shadow); scroll-margin-top: 1rem; min-width: 0; }
+.heading { display: flex; align-items: baseline; gap: .85rem; }
+.number { color: var(--accent); font: 600 .85rem ui-monospace, monospace; }
+.figure > p { color: var(--muted); }
+.canvas { overflow: auto; overscroll-behavior-x: contain; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); padding: 1rem; max-width: 100%; }
+.diagram { min-width: 0; }
+.diagram svg { display: block; width: 100%; max-width: 100% !important; height: auto; margin: 0 auto; }
+body.readable .diagram svg { width: var(--natural-width, 1000px); max-width: none !important; margin: 0; }
+.render-status { font-size: .82rem; }
+details { margin-top: .5rem; }
+summary { cursor: pointer; color: var(--accent); padding: .5rem 0; }
+pre { overflow: auto; background: var(--code); padding: 1rem; border-radius: .45rem; color: var(--ink); font: .82rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
+@media (max-width: 600px) {
+  header, main, footer { padding-left: .8rem; padding-right: .8rem; }
+  header { padding-top: 1.4rem; }
+  nav { grid-template-columns: 1fr; gap: .15rem; }
+  .figure { padding: .8rem; border-radius: .55rem; }
+  .canvas { padding: .45rem; }
+  .toolbar { padding: .7rem; gap: .5rem; }
+  .toolbar p { flex-basis: 100%; }
+}
+@media print { body { background: white; } nav, .toolbar, details { display: none; } .figure { break-inside: avoid; box-shadow: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">Research proposal · R-421 · 15 October 2026</div>
+  <h1>A standard session platform</h1>
+  <p>Desired sessions come from manifests. Workers stay warm through review and correction rounds. Durable logs live in a service; the logs tab only views them.</p>
+  <p><a href="REPORT.md">Read the evidence and proposal</a>. Figures 01–02 describe today; figures 03–06 describe proposed behavior.</p>
+  <nav aria-label="Diagram navigation"><a href="#01-current-components">01 · Today: components and boundaries</a>
+<a href="#02-current-dispatch-review">02 · Today: dispatch and warm review rounds</a>
+<a href="#03-proposed-materialization">03 · Proposal: manifest to session</a>
+<a href="#04-proposed-logging">04 · Proposal: durable logging service</a>
+<a href="#05-proposed-lifecycle">05 · Proposal: work-item session lifecycle</a>
+<a href="#06-proposed-reconcile-loop">06 · Proposal: the reconcile loop</a></nav>
+  <div class="toolbar" aria-label="Diagram display controls">
+    <button type="button" id="fit" aria-pressed="true">Fit width</button>
+    <button type="button" id="readable" aria-pressed="false">Readable size</button>
+    <p>On a phone, choose readable size and swipe inside a diagram. Tab to a diagram to scroll with the keyboard.</p>
+  </div>
+</header>
+<main><section class="figure" id="01-current-components" aria-labelledby="title-01-current-components">
+  <div class="heading"><span class="number">01</span><h2 id="title-01-current-components">Today: components and boundaries</h2></div>
+  <p>Measured endpoints and inspected source. Herdr owns terminal processes; Brain owns the work record and orchestration.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Today: components and boundaries"><div class="diagram" data-source="source-01-current-components"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-01-current-components">flowchart TB
+  Operator[Operator]
+  Client[Herdr client UI]
+  ClientSocket[herdr-client.sock]
+  API[herdr.sock - NDJSON API]
+  Server[Herdr server 0.9.3 - owns PTYs and topology]
+  CLI[herdr CLI]
+  subgraph Topology[One Herdr session namespace]
+    Workspace[Workspace - canonical checkout binding]
+    Tab[Tab]
+    Pane[Pane and terminal identity]
+    Harness[Native Codex or Claude process]
+    Workspace --&gt; Tab --&gt; Pane --&gt; Harness
+  end
+  Operator --&gt; Client --&gt; ClientSocket --&gt; Server
+  CLI --&gt; API --&gt; Server --&gt; Workspace
+  Hooks[Native SessionStart integration] --&gt;|pane.report_agent_session| API
+  Harness --&gt; Hooks
+  Detection[Agent detection TOML - not desired workloads] --&gt; Server
+  DeadLink[Observed herdr.sock.agent is a dangling symlink]
+  subgraph Brain[Herdr Brain today]
+    Routes[Layered routes and native identity profiles]
+    Lane[lanes open and dispatch]
+    Dispatch[Dispatch journal and occupant evidence]
+    Watch[Report watcher and settle-watch]
+    Inbox[Durable supervisor inbox and quiet delivery]
+    Core[Record CLI - locked events.jsonl writer]
+    Fold[Record fold and briefs]
+    Memory[Lessons - handoffs - foreground brain digest]
+    Registry[Display-only session sidecars]
+    Routes --&gt; Lane
+    Dispatch --&gt; Lane
+    Dispatch --&gt; Core --&gt; Fold --&gt; Memory
+    Lane --&gt; Registry
+    Watch --&gt; Inbox
+    Watch --&gt; Core
+  end
+  Lane --&gt; CLI
+  Watch --&gt;|wait and get| CLI
+  Inbox --&gt;|identity and idle gates then prompt| CLI
+  Dispatch --&gt; Watch
+  Fold --&gt; Dispatch
+</pre></details>
+</section>
+<section class="figure" id="02-current-dispatch-review" aria-labelledby="title-02-current-dispatch-review">
+  <div class="heading"><span class="number">02</span><h2 id="title-02-current-dispatch-review">Today: dispatch and warm review rounds</h2></div>
+  <p>A correction gets a new run and report but returns to the same native worker session.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Today: dispatch and warm review rounds"><div class="diagram" data-source="source-02-current-dispatch-review"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-02-current-dispatch-review">sequenceDiagram
+  actor S as Project supervisor
+  participant D as dispatch/dispatch.mjs
+  participant R as Record and dispatch journal
+  participant L as lanes/lane.mjs
+  participant H as Herdr server and native worker
+  participant W as Report watcher and inbox
+  S-&gt;&gt;D: Item, lane, route, brief
+  D-&gt;&gt;R: Freeze route, open run, render brief
+  D-&gt;&gt;L: Open checkout and dispatch
+  L-&gt;&gt;H: Reuse proven empty initial pane or create tab
+  L-&gt;&gt;H: agent.start with native model and effort args
+  H--&gt;&gt;L: Ready plus pane, terminal and session evidence
+  L--&gt;&gt;D: Verified occupant and display sidecar
+  D-&gt;&gt;R: Bind worker evidence
+  D-&gt;&gt;W: Register report watcher and wait for readiness
+  D-&gt;&gt;H: agent.prompt brief
+  Note over D,H: Ambiguous delivery is not replayed automatically
+  H-&gt;&gt;R: Write a run report file
+  H--&gt;&gt;H: Idle, keeping conversational context
+  W-&gt;&gt;R: Check report and observe process end
+  W-&gt;&gt;S: Durable notice, delivered when supervisor is quiet
+  S-&gt;&gt;R: Ingest and arrange review through existing workflow
+  loop Corrections while the same item remains open
+    S-&gt;&gt;D: dispatch --reuse R-prev with correction brief
+    D-&gt;&gt;R: Check prior run, same item, lane and frozen route
+    D-&gt;&gt;H: Verify same name, pane, terminal or native ID; require idle
+    D-&gt;&gt;R: Open a new run with a separate report path
+    D-&gt;&gt;W: Arm watcher for the new run
+    D-&gt;&gt;H: Prompt the SAME live session
+    H-&gt;&gt;R: Write correction report
+    H--&gt;&gt;H: Idle awaiting another review
+    W-&gt;&gt;S: Report notice through inbox
+  end
+  S-&gt;&gt;R: Land or explicitly dispose of the review chain
+  Note over S,H: Retirement still requires fresh identity, references, Git and hold checks
+</pre></details>
+</section>
+<section class="figure" id="03-proposed-materialization" aria-labelledby="title-03-proposed-materialization">
+  <div class="heading"><span class="number">03</span><h2 id="title-03-proposed-materialization">Proposal: manifest to session</h2></div>
+  <p>Convergence reuses a matching occupant. An ambiguous launch or prompt is held for inspection.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposal: manifest to session"><div class="diagram" data-source="source-03-proposed-materialization"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-03-proposed-materialization">sequenceDiagram
+  actor O as Operator or authorized project supervisor
+  participant M as Markdown manifest and route layers
+  participant C as Session reconciler
+  participant R as Record, operation receipts and cold start
+  participant D as Existing dispatch and lane adapters
+  participant H as Herdr and native session
+  participant E as Structured log service
+  O-&gt;&gt;M: Adopt desired workspace and workload generation
+  C-&gt;&gt;M: Parse and validate; freeze route and context hashes
+  C-&gt;&gt;R: Acquire project lease; inspect STOP and existing ownership
+  C-&gt;&gt;H: Snapshot and observe exact occupant identity
+  alt Desired occupant already matches
+    C-&gt;&gt;R: Refresh disposable observed status; no prompt
+  else No occupant and no ambiguous prior launch
+    C-&gt;&gt;R: Journal launch intent
+    C-&gt;&gt;D: Materialize through existing route and dispatch path
+    D-&gt;&gt;H: Start native harness and verify readiness and identity
+    D-&gt;&gt;R: Bind run, terminal and native session evidence
+    D-&gt;&gt;H: Send initial brief once under delivery journal
+  else Occupant or prior delivery is ambiguous
+    C-&gt;&gt;R: Hold for inspection; do not create a duplicate
+  end
+  H-&gt;&gt;E: Structured progress and report-available event
+  C-&gt;&gt;R: Re-read validated report and record facts
+  C-&gt;&gt;R: Derive ParkedAwaitingReview; KEEP occupant
+  loop Review requests corrections on the same item
+    O-&gt;&gt;R: Authorized correction request and brief
+    C-&gt;&gt;D: dispatch --reuse R-prev
+    D-&gt;&gt;H: Check unchanged occupant, route and quiet state
+    D-&gt;&gt;R: New run, same session, new report path
+    D-&gt;&gt;H: Correction prompt without clear or restart
+    H-&gt;&gt;E: Correction report available
+    C-&gt;&gt;R: Derive ParkedAwaitingReview again
+  end
+  O-&gt;&gt;R: Landing or explicit disposition evidence
+  C-&gt;&gt;R: Recheck review chain, references, holds and Git state
+  alt Worker workload complete
+    C-&gt;&gt;H: Retire worker only through safe retirement
+  else Explicit fresh-cycle request for a retained standard session
+    C-&gt;&gt;R: Persist handoff and reset intent; quiesce callbacks
+    C-&gt;&gt;H: Approved native clear or restart operation
+    H--&gt;&gt;C: Observe new native ID and terminal binding
+    C-&gt;&gt;D: Reapply manifest context; restore name only if lost
+    C-&gt;&gt;R: New incarnation receipt; retain old run evidence
+  end
+  Note over C,H: Standard tab slots remain protected until explicit workspace withdrawal
+</pre></details>
+</section>
+<section class="figure" id="04-proposed-logging" aria-labelledby="title-04-proposed-logging">
+  <div class="heading"><span class="number">04</span><h2 id="title-04-proposed-logging">Proposal: durable logging service</h2></div>
+  <p>The logs tab is a viewer. Producers, subscribers and deterministic notifications share a service-owned journal.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposal: durable logging service"><div class="diagram" data-source="source-04-proposed-logging"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-04-proposed-logging">flowchart LR
+  Agents[Agents and tools]
+  Outbox[Producer outbox - stable event ID]
+  Collector[Herdr collector - events.subscribe]
+  Snapshot[session.snapshot - rebuild current observations]
+  Service[Identity-owned logging service - one append writer per project]
+  Store[(Durable sequenced event journal)]
+  Read[Read and replay API - cursor and retention floor]
+  Viewer[Logs tab - read-only viewer]
+  Sessions[Session subscribers - bounded filtered batches]
+  Rules[Deterministic notification rules]
+  Inbox[Existing durable supervisor inbox]
+  Supervisor[Supervisor session]
+  Reconciler[Session reconciler]
+  Record[Existing record CLI and fold]
+  Agents --&gt; Outbox --&gt;|retry until durable acknowledgement| Service
+  Collector --&gt;|observations and explicit gaps| Service
+  Collector --&gt;|loss or reconnect| Snapshot
+  Snapshot --&gt; Collector
+  Service --&gt;|append and fsync before ack| Store --&gt; Read
+  Read --&gt; Viewer
+  Read --&gt; Sessions
+  Read --&gt; Rules
+  Rules --&gt;|coalesced exceptions; stable notice ID| Inbox
+  Inbox --&gt;|same occupant, idle, empty composer| Supervisor
+  Read --&gt;|invalidate observations, never authorize work| Reconciler
+  Reconciler --&gt;|re-read authoritative facts| Record
+  Record --&gt;|read-only selected event mirror| Service
+  Hold[STOP gates actions; close hold gates retirement]
+  Hold -.-&gt; Reconciler
+  Hold -.-&gt; Inbox
+  Note[Viewer exit does not stop storage; busy or missing subscribers retain cursors]
+  Note -.-&gt; Read
+</pre></details>
+</section>
+<section class="figure" id="05-proposed-lifecycle" aria-labelledby="title-05-proposed-lifecycle">
+  <div class="heading"><span class="number">05</span><h2 id="title-05-proposed-lifecycle">Proposal: work-item session lifecycle</h2></div>
+  <p>Parked workers keep their context through review. Standard slots stay protected until explicit withdrawal.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposal: work-item session lifecycle"><div class="diagram" data-source="source-05-proposed-lifecycle"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-05-proposed-lifecycle">stateDiagram-v2
+  [*] --&gt; Created: Adopt manifest generation
+  Created --&gt; Starting: Valid route, ownership, no STOP
+  Starting --&gt; Running: Ready and occupant bound; initial prompt recorded
+  Starting --&gt; Hold: Ambiguous launch or prompt, refusal or identity mismatch
+  Running --&gt; ParkedAwaitingReview: Report available and worker quiet
+  ParkedAwaitingReview --&gt; Running: Corrections via dispatch --reuse; same native session
+  ParkedAwaitingReview --&gt; ParkedAwaitingReview: Reviewer active, delayed, or asks another review
+  ParkedAwaitingReview --&gt; Eligible: Work landed or explicit disposition verified
+  Running --&gt; Eligible: Explicit disposition and quiescence verified
+  Eligible --&gt; Retired: Worker only; fresh safe-retirement checks and no hold
+  Eligible --&gt; Cleared: Explicit fresh-cycle intent, saved handoff, supported native clear
+  Cleared --&gt; Starting: Same pane if safe; observe new ID and rebind name
+  Running --&gt; RecoveryRequired: Confirmed process loss
+  ParkedAwaitingReview --&gt; RecoveryRequired: Crash; keep parked intent, never auto-clear
+  RecoveryRequired --&gt; Restarted: Manifest-authorized native resume or explicitly dispositioned reconstruction
+  Restarted --&gt; Running: Active work recovered
+  Restarted --&gt; ParkedAwaitingReview: Review hold recovered; do not redispatch work
+  RecoveryRequired --&gt; Hold: Missing resume evidence or any refusal
+  Eligible --&gt; Restarted: Explicit fresh-cycle restart with manifest and handoff
+  Hold --&gt; Starting: Authorized initial-launch resolution and fresh checks
+  Hold --&gt; ParkedAwaitingReview: Evidence resolved; retain parked occupant
+  Hold --&gt; Running: Delivery resolved; same active occupant
+  Retired --&gt; [*]
+  note right of ParkedAwaitingReview
+    Context stays warm across turns and runs.
+    Reconciler and retirement planner must KEEP.
+    Route changes wait for disposition.
+  end note
+  note right of Eligible
+    Standard chat, supervisor and logs slots are
+    excluded from automatic retirement.
+    Withdrawing a workspace is an explicit action.
+  end note
+</pre></details>
+</section>
+<section class="figure" id="06-proposed-reconcile-loop" aria-labelledby="title-06-proposed-reconcile-loop">
+  <div class="heading"><span class="number">06</span><h2 id="title-06-proposed-reconcile-loop">Proposal: the reconcile loop</h2></div>
+  <p>Read authoritative evidence, compare desired and observed state, then perform at most one authorized action.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposal: the reconcile loop"><div class="diagram" data-source="source-06-proposed-reconcile-loop"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-06-proposed-reconcile-loop">flowchart TD
+  Wake[Manifest change, service event or bounded timer]
+  Lock[One canonical project controller lease]
+  Desired[Read adopted spec, frozen route and generation]
+  Facts[Read record fold, jobs, queue, holds and launch receipts]
+  Observe[Herdr snapshot plus exact agent observations]
+  Compare{Desired versus observed}
+  Standard{Protected standard slot or parked review chain?}
+  Keep[KEEP occupant; repair observations only]
+  Safe{Authorized transition, fresh evidence and no applicable hold?}
+  Action[One journaled action through existing adapters]
+  Result{Receipt and observed identity agree?}
+  Status[Write disposable status and structured event]
+  Ambiguous[Hold; no blind retry, reset or second occupant]
+  Wake --&gt; Lock --&gt; Desired --&gt; Facts --&gt; Observe --&gt; Compare
+  Compare --&gt;|already matched| Status
+  Compare --&gt;|automatic reset or retirement considered| Standard
+  Standard --&gt;|yes| Keep --&gt; Status
+  Standard --&gt;|no| Safe
+  Compare --&gt;|authorized start, reuse, explicit rotation or recovery| Safe
+  Safe --&gt;|no| Ambiguous --&gt; Status
+  Safe --&gt;|yes| Action --&gt; Result
+  Result --&gt;|yes| Status
+  Result --&gt;|no| Ambiguous
+  Status --&gt; Release[Release lease and wait]
+  Release -.-&gt; Wake
+  Gap[Herdr events_lost or reconnect]
+  Gap --&gt;|resubscribe and take snapshot; history gap remains explicit| Observe
+</pre></details>
+</section></main>
+<footer>Proposal only. No live sessions are controlled by this page. Diagram rendering uses Mermaid 11.4.1 from the requested CDN; all source and styling are embedded.</footer>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+(() => {
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  const color = key => getComputedStyle(document.documentElement).getPropertyValue(key).trim();
+  let renderGeneration = 0;
+  async function renderAll() {
+    const generation = ++renderGeneration;
+    const nodes = [...document.querySelectorAll('.diagram')];
+    if (!window.mermaid) {
+      document.querySelectorAll('.render-status').forEach(node => {
+        node.textContent = 'The diagram library could not load. Open Mermaid source below to read this figure.';
+      });
+      return;
+    }
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base',
+      themeVariables: { darkMode: media.matches, background: color('--surface'), primaryColor: color('--diagram-fill'),
+        primaryTextColor: color('--ink'), primaryBorderColor: color('--line'), lineColor: color('--muted'),
+        secondaryColor: color('--diagram-secondary'), tertiaryColor: color('--diagram-tertiary'),
+        textColor: color('--ink'), mainBkg: color('--diagram-fill'), nodeBorder: color('--line'),
+        actorBkg: color('--diagram-fill'), actorBorder: color('--line'), actorTextColor: color('--ink'),
+        actorLineColor: color('--muted'), signalColor: color('--ink'), signalTextColor: color('--ink'),
+        labelBoxBkgColor: color('--surface'), labelBoxBorderColor: color('--line'), labelTextColor: color('--ink'),
+        loopTextColor: color('--ink'), noteBkgColor: color('--diagram-tertiary'), noteTextColor: color('--ink'),
+        noteBorderColor: color('--line'), activationBkgColor: color('--accent-soft'), activationBorderColor: color('--line'),
+        clusterBkg: color('--surface'), clusterBorder: color('--line'), edgeLabelBackground: color('--surface'),
+        fontFamily: 'system-ui, -apple-system, sans-serif', fontSize: '15px' },
+      flowchart: { useMaxWidth: true, htmlLabels: false, curve: 'linear' },
+      sequence: { useMaxWidth: true, wrap: true, mirrorActors: false },
+      state: { useMaxWidth: true }
+    });
+    for (let index = 0; index < nodes.length; index++) {
+      if (generation !== renderGeneration) return;
+      const node = nodes[index];
+      const status = node.closest('section').querySelector('.render-status');
+      try {
+        const source = document.getElementById(node.dataset.source).textContent;
+        const result = await mermaid.render('figure-' + generation + '-' + index, source);
+        if (generation !== renderGeneration) return;
+        node.innerHTML = result.svg;
+        const svg = node.querySelector('svg');
+        const naturalWidth = svg.viewBox.baseVal.width || 1000;
+        svg.style.setProperty('--natural-width', naturalWidth + 'px');
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', node.closest('section').querySelector('h2').textContent);
+        result.bindFunctions?.(node);
+        status.textContent = 'Rendered with Mermaid 11.4.1 · Source is available below.';
+      } catch (error) {
+        status.textContent = 'Diagram rendering failed; read the source below. ' + String(error.message || error);
+      }
+    }
+  }
+  for (const mode of ['fit', 'readable']) {
+    document.getElementById(mode).addEventListener('click', () => {
+      document.body.classList.toggle('readable', mode === 'readable');
+      for (const id of ['fit', 'readable']) document.getElementById(id).setAttribute('aria-pressed', String(id === mode));
+    });
+  }
+  media.addEventListener('change', renderAll);
+  renderAll();
+})();
+</script>
+</body>
+</html>

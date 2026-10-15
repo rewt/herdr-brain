@@ -1,0 +1,34 @@
+stateDiagram-v2
+  [*] --> Created: Adopt manifest generation
+  Created --> Starting: Valid route, ownership, no STOP
+  Starting --> Running: Ready and occupant bound; initial prompt recorded
+  Starting --> Hold: Ambiguous launch or prompt, refusal or identity mismatch
+  Running --> ParkedAwaitingReview: Report available and worker quiet
+  ParkedAwaitingReview --> Running: Corrections via dispatch --reuse; same native session
+  ParkedAwaitingReview --> ParkedAwaitingReview: Reviewer active, delayed, or asks another review
+  ParkedAwaitingReview --> Eligible: Work landed or explicit disposition verified
+  Running --> Eligible: Explicit disposition and quiescence verified
+  Eligible --> Retired: Worker only; fresh safe-retirement checks and no hold
+  Eligible --> Cleared: Explicit fresh-cycle intent, saved handoff, supported native clear
+  Cleared --> Starting: Same pane if safe; observe new ID and rebind name
+  Running --> RecoveryRequired: Confirmed process loss
+  ParkedAwaitingReview --> RecoveryRequired: Crash; keep parked intent, never auto-clear
+  RecoveryRequired --> Restarted: Manifest-authorized native resume or explicitly dispositioned reconstruction
+  Restarted --> Running: Active work recovered
+  Restarted --> ParkedAwaitingReview: Review hold recovered; do not redispatch work
+  RecoveryRequired --> Hold: Missing resume evidence or any refusal
+  Eligible --> Restarted: Explicit fresh-cycle restart with manifest and handoff
+  Hold --> Starting: Authorized initial-launch resolution and fresh checks
+  Hold --> ParkedAwaitingReview: Evidence resolved; retain parked occupant
+  Hold --> Running: Delivery resolved; same active occupant
+  Retired --> [*]
+  note right of ParkedAwaitingReview
+    Context stays warm across turns and runs.
+    Reconciler and retirement planner must KEEP.
+    Route changes wait for disposition.
+  end note
+  note right of Eligible
+    Standard chat, supervisor and logs slots are
+    excluded from automatic retirement.
+    Withdrawing a workspace is an explicit action.
+  end note

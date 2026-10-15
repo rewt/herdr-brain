@@ -1,0 +1,36 @@
+sequenceDiagram
+  actor S as Project supervisor
+  participant D as dispatch/dispatch.mjs
+  participant R as Record and dispatch journal
+  participant L as lanes/lane.mjs
+  participant H as Herdr server and native worker
+  participant W as Report watcher and inbox
+  S->>D: Item, lane, route, brief
+  D->>R: Freeze route, open run, render brief
+  D->>L: Open checkout and dispatch
+  L->>H: Reuse proven empty initial pane or create tab
+  L->>H: agent.start with native model and effort args
+  H-->>L: Ready plus pane, terminal and session evidence
+  L-->>D: Verified occupant and display sidecar
+  D->>R: Bind worker evidence
+  D->>W: Register report watcher and wait for readiness
+  D->>H: agent.prompt brief
+  Note over D,H: Ambiguous delivery is not replayed automatically
+  H->>R: Write a run report file
+  H-->>H: Idle, keeping conversational context
+  W->>R: Check report and observe process end
+  W->>S: Durable notice, delivered when supervisor is quiet
+  S->>R: Ingest and arrange review through existing workflow
+  loop Corrections while the same item remains open
+    S->>D: dispatch --reuse R-prev with correction brief
+    D->>R: Check prior run, same item, lane and frozen route
+    D->>H: Verify same name, pane, terminal or native ID; require idle
+    D->>R: Open a new run with a separate report path
+    D->>W: Arm watcher for the new run
+    D->>H: Prompt the SAME live session
+    H->>R: Write correction report
+    H-->>H: Idle awaiting another review
+    W->>S: Report notice through inbox
+  end
+  S->>R: Land or explicitly dispose of the review chain
+  Note over S,H: Retirement still requires fresh identity, references, Git and hold checks

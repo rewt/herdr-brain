@@ -38,12 +38,17 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   env.SUPERVISOR_INPUT_WAIT_SECONDS = '2';
   delete env.NODE_TEST_CONTEXT;
   fs.mkdirSync(env.HOME); fs.mkdirSync(env.XDG_CONFIG_HOME);
-  const watchers = new Map(), observed = new Set(), pending = [], tracker = createProcessTracker();
+  const watchers = new Map(), queueWorkers = new Map(), observed = new Set(), pending = [], tracker = createProcessTracker();
   const rememberWatchers = () => {
     const directory = path.join(repo, '.org/dispatch');
-    if (!fs.existsSync(directory)) return;
+    const hasDispatch = fs.existsSync(directory);
+    if (!hasDispatch && !fs.existsSync(path.join(repo, '.git/promote/queue.json'))) return;
     const current = tracker.snapshot();
     if (!current.ok) throw Error('Cannot confirm fixture watcher ownership');
+    const drain = [process.execPath, path.join(source, 'promote/promote.mjs'), '--drain', '--repo', repo].join(' ');
+    for (const row of current.value.values()) if (row.command === drain && !/^Z/.test(row.state))
+      queueWorkers.set(row.pid, { pid: row.pid, identity: row.identity, command: row.command });
+    if (!hasDispatch) return;
     for (const file of fs.readdirSync(directory).filter(x => x.endsWith('.json') && !x.endsWith('.routes.json'))) {
       const job = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
       if (!job.watcher?.pid || observed.has(file)) continue;
@@ -65,6 +70,22 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
     // bounded completion here before stopping watchers and deleting any files.
     // Failed/unconfirmed completion retains the directory for inspection.
     await Promise.all(pending);
+    rememberWatchers();
+    // The empty-queue handoff releases worker.lock before the finite process's
+    // final retirement catch-up. Await its pinned identity before deleting the
+    // fixture; lock disappearance alone does not establish process completion.
+    const queuesBy = Date.now() + loadTimeout(5000);
+    while (queueWorkers.size) {
+      const current = tracker.snapshot();
+      if (!current.ok) throw Error('Cannot confirm fixture queue shutdown');
+      for (const [pid, entry] of queueWorkers) {
+        const row = current.value.get(pid);
+        if (!row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command) queueWorkers.delete(pid);
+      }
+      if (!queueWorkers.size) break;
+      assert.ok(Date.now() < queuesBy, 'fixture queue worker did not finish');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
     for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
     const deadline = Date.now() + loadTimeout(2000);
     while (watchers.size && Date.now() < deadline) {
@@ -138,6 +159,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
 }
 const fake = `#!/usr/bin/env node
 import fs from 'node:fs'; import path from 'node:path'; import {execFileSync} from 'node:child_process';
+const {lookupProcess}=await import(path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'../lib/processes.mjs'));
 const root=process.env.SETTLE_TEST_ROOT, repo=path.join(root,'project'), cwd=path.join(root,'lane'), args=process.argv.slice(2);
 const file=path.join(root,'agents.json'); const agents=fs.existsSync(file)?JSON.parse(fs.readFileSync(file)):{};
 const save=()=>fs.writeFileSync(file,JSON.stringify(agents));
@@ -147,16 +169,33 @@ const ws={workspace_id:'w-lane',label:'topic',worktree:{checkout_path:cwd,is_lin
 if(args[0]==='workspace'&&args[1]==='list') out({workspaces:[ws,{workspace_id:'w-parent',label:'project',worktree:{checkout_path:repo,repo_key:path.join(repo,'.git'),repo_root:repo}}]});
 else if(args[0]==='worktree'&&args[1]==='list') out({source:{repo_key:path.join(repo,'.git'),repo_root:repo,source_checkout_path:repo},worktrees:[{path:cwd,branch:'lane/topic',open_workspace_id:'w-lane'},{path:repo,branch:'main',open_workspace_id:'w-parent'}]});
 else if(args[0]==='tab'&&args[1]==='create') {const n=Object.keys(agents).length+1;out({root_pane:{pane_id:'w-lane:p'+n},tab:{tab_id:'w-lane:t'+n}});}
+// Scripted reviewers belong to their real foreground lane-review process.
+// Keep their registrations through delivery verification, then report vacancy
+// only after that process has exited or its kernel birth has changed.
+else if(args[0]==='tab'&&args[1]==='list') out({tabs:[]});
+else if(args[0]==='pane'&&args[1]==='list') out({panes:[]});
 else if(args[0]==='pane'&&args[1]==='get') out({pane:{pane_id:args[2],foreground_cwd:cwd}});
 else if(args[0]==='pane'&&args[1]==='read') console.log(fs.existsSync(path.join(root,'supervisor-composer'))?fs.readFileSync(path.join(root,'supervisor-composer'),'utf8'):'────────────────────\\n❯ \\n────────────────────');
 else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:'w-lane',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle'};save();out({name:n,pane_id:pane});}
-else if(args[0]==='agent'&&args[1]==='list') out({agents:Object.values(agents)});
+else if(args[0]==='agent'&&args[1]==='list') out({agents:Object.values(agents).filter(agent=>{
+ if(!agent.review_owner)return true;
+ const owner=lookupProcess(agent.review_owner.pid,{identityOnly:true});
+ return !owner.ok||!!(owner.value&&owner.value.identity===agent.review_owner.identity&&!/^Z/.test(owner.value.state));
+})});
 else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent:'claude',agent_status:'idle',cwd,pane_id:'original:p',workspace_id:'w-lane'}});
 else if(args[0]==='agent'&&args[1]==='read') console.log('');
 else if(args[0]==='agent'&&args[1]==='wait') {await new Promise(r=>setTimeout(r,100));out({});}
 else if(args[0]==='agent'&&args[1]==='prompt') {
  const prompt=args[3];
  if(prompt.includes('Private record file: ')) {
+  const tree=lookupProcess(),lane=path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'../lanes/lane.mjs');
+  if(!tree.ok)throw Error('cannot confirm fixture reviewer owner');
+  let owner=tree.value.get(process.ppid);const seen=new Set();
+  while(owner&&!owner.command.startsWith(process.execPath+' '+lane+' review ')&&!seen.has(owner.pid)){
+   seen.add(owner.pid);owner=tree.value.get(owner.ppid);
+  }
+  if(!owner||seen.has(owner.pid))throw Error('fixture reviewer has no foreground lane owner');
+  agents[args[2]].review_owner={pid:owner.pid,identity:owner.identity};save();
   fs.writeFileSync(path.join(root,'review-prompt'),prompt);
   if(fs.existsSync(path.join(root,'review-fail'))) {console.error('injected uncertain review');process.exit(1);}
   const field=(label)=>prompt.split('\\n').find(x=>x.startsWith(label+': '))?.slice(label.length+2);

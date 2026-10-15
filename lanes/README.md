@@ -236,17 +236,25 @@ time.
 
 `close` removes the clean worktree and deletes a merged branch. An unmerged branch
 is first preserved as `archive/lane/<topic>` and freshly resolved to the exact tip.
-A different existing tag target refuses the close; a matching tag permits retry.
+A different existing tag target refuses an unmerged close; a matching tag permits
+retry. An integrated lane leaves any older archive tag untouched.
 Before deleting anything, close probes writes, renames and removal in the affected
 Git metadata directories and copies ignored/untracked evidence (including `.lane/`)
 to `GIT_COMMON_DIR/lane-archive/<topic>/<unique timestamp>/`. Its `sha256.json`
 manifest records file hashes and symlink targets. The copy and unchanged source
 are verified against that manifest before removal; any failure keeps the lane.
+Planner KEEP and process-cwd refusals run before tagging or copying. A size-only
+inventory also runs first: the default evidence budget is 256 MiB. Optional
+`LANE_EVIDENCE_MAX_BYTES` overrides it with a nonnegative integer byte count for
+the attempt. Content over that budget keeps the lane, copies nothing, and reports
+its size and the need for explicit disposition; it never permits an unverified sweep.
 Ordinary untracked changes still fail the clean Git requirement. Close refuses
 `assume-unchanged` and `skip-worktree` index flags because they can hide unique
 local bytes from Git status.
 After Git succeeds, matching session
-metadata is marked done; metadata errors never rewrite the Git result.
+metadata is marked done, including when workspace cleanup remains pending. Close
+then reports the pending workspace and exits nonzero; metadata errors never
+rewrite the Git result.
 
 Closure rechecks the shared retirement policy and requires zero occupants before
 Git removes a worktree, including with `--git-only`. This includes shell panes,

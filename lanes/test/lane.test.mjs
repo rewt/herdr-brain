@@ -377,6 +377,7 @@ if (args[0] === "workspace" && args[1] === "list") {
 } else if (args[0] === "worktree" && args[1] === "remove") {
   throw new Error("worktree.remove steals focus; use workspace.close and Git removal");
 } else if (args[0] === "workspace" && args[1] === "close") {
+  if (process.env.FAKE_HERDR_WORKSPACE_CLOSE_FAIL === "1") { process.stderr.write("injected workspace close failure\\n"); process.exit(1); }
   state.opened = false;
   save();
   result("cli:workspace:close", { type: "workspace_close", workspace_id: args[2] });
@@ -5065,4 +5066,27 @@ test("verify-agent mismatch control uses a fake Herdr", () => {
   } finally {
     fixture.cleanup();
   }
+});
+
+test('close marks matching sessions done even while empty workspace cleanup is pending', async () => {
+  const fixture = makeFixture({ main: 'main', validate: 'true', registry: '.lane/sessions.json' });
+  try {
+    ignoreLaneState(fixture); const path = openLane(fixture, 'pending-workspace');
+    commitFile(path, 'work.txt', 'unique work\n', 'work awaiting archive');
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: 'lane/pending-workspace', initiallyOpened: true });
+    assert.equal(lane(fixture, ['dispatch', 'pending-workspace', 'record this session']).status, 0);
+    const { loadRegistry } = await registryApi();
+    assert.ok(loadRegistry(fixture.repo).sessions.some(s => s.topic === 'pending-workspace' && !s.done));
+    const stateFile = join(fixture.root, 'herdr-state.json');
+    writeFileSync(stateFile, JSON.stringify({ ...JSON.parse(readFileSync(stateFile, 'utf8')), agent: null }));
+    fixture.env.FAKE_HERDR_WORKSPACE_CLOSE_FAIL = '1';
+    const closed = lane(fixture, ['close', 'pending-workspace']);
+    assert.equal(closed.status, 1); assert.match(closed.stderr, /lane closed; workspace cleanup pending:.*injected workspace close failure/);
+    assert.ok(!existsSync(path)); assert.ok(!refExists(fixture.repo, 'refs/heads/lane/pending-workspace'));
+    assert.ok(refExists(fixture.repo, 'refs/tags/archive/lane/pending-workspace'));
+    const sessions = loadRegistry(fixture.repo).sessions.filter(s => s.topic === 'pending-workspace');
+    assert.ok(sessions.length > 0 && sessions.every(s => s.done)); assert.equal(fake.state().opened, true);
+    assert.match(closed.stdout, /marked 1 session done/);
+    negativeControl('post-Git session completion despite pending workspace cleanup');
+  } finally { fixture.cleanup(); }
 });

@@ -647,7 +647,13 @@ references retain the lane, with the reason in promotion's receipt and notice.
 An empty-workspace close failure leaves cleanup pending and retries only cleanup.
 
 Before removal, close verifies the exact tip is integrated or freshly resolves
-its recoverable archive tag; a different existing tag target refuses. It probes
+its recoverable archive tag; a different existing tag target refuses only when
+the lane is unmerged and needs that archive. Integrated lanes preserve older
+archive tags unchanged. Planner KEEP and process-cwd checks precede any tag or
+copy. A size-only inventory measures ignored/untracked content before mutation;
+the default budget is 256 MiB, optionally overridden by the nonnegative integer
+byte count `LANE_EVIDENCE_MAX_BYTES`. Over-budget content retains the lane without
+a copy or tag and reports the size and required explicit disposition. Close probes
 the affected Git metadata writes and removal permissions and copies ignored and
 untracked contents to `GIT_COMMON_DIR/lane-archive/<topic>/<unique timestamp>/`,
 with a SHA-256 manifest verified against both copy and source. Failure retains
@@ -657,7 +663,9 @@ never authorizes deletion. Canonical `HOLD-WORKER-TAB-CLOSE` stops every mode.
 See the [close preconditions](../README.md) for process, job and record guards.
 
 Only after those Git operations succeed, close writes done markers for every known
-session matching the canonical repository and exact topic. Dirty refusal or archive
+session matching the canonical repository and exact topic, even when workspace
+cleanup is pending. After marking sessions, it reports that pending workspace and
+exits nonzero. Dirty refusal or archive
 failure leaves completion unchanged; promotion alone never marks done. With no
 registry state, close remains Git-only and creates no metadata. A post-close marker
 write error exits nonzero with `lane closed; metadata update failed` and does not

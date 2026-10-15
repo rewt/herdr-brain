@@ -34,7 +34,7 @@ function fixture(t, { merged = false } = {}) {
   fs.writeFileSync(herdr, `#!${process.execPath}\nconsole.log(JSON.stringify({result:{workspaces:[],agents:[],panes:[],tabs:[]}}));\n`, { mode: 0o755 });
   env.HERDR_RETIRE_HERDR = herdr;
   fs.writeFileSync(path.join(org, 'events.jsonl'), '');
-  const config = path.join(root, 'lane.json'); fs.writeFileSync(config, JSON.stringify({ main: 'main', worktree_root: root })); env.LANE_CONFIG = config;
+  const config = path.join(root, 'lane.json'); fs.writeFileSync(config, JSON.stringify({ main: 'main', validate: 'true', worktree_root: root })); env.LANE_CONFIG = config;
   const close = ({ preload, gitOnly = true } = {}) => spawnSync(process.execPath,
     [...(preload ? ['--import', preload] : []), cli, 'close', 'topic', ...(gitOnly ? ['--git-only'] : [])], { cwd: repo, env, encoding: 'utf8' });
   const kept = r => { assert.notEqual(r.status, 0, r.stdout); assert.ok(fs.existsSync(lane)); assert.equal(git(['rev-parse', 'lane/topic']), head); assert.match(git(['worktree', 'list', '--porcelain']), /branch refs\/heads\/lane\/topic/); };
@@ -102,11 +102,13 @@ for (const operation of ['openSync', 'unlinkSync', 'rmdirSync']) test(`Git metad
 });
 
 test('a process outside Herdr with a cwd below the lane prevents removal', async t => {
-  const f = fixture(t, { merged: true }); fs.mkdirSync(path.join(f.lane, '.lane')); const ready = path.join(f.root, 'ready');
+  const f = fixture(t); fs.mkdirSync(path.join(f.lane, '.lane')); const ready = path.join(f.root, 'ready');
   const child = spawnChild(t, process.execPath, ['-e', `require('node:fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000);`], { cwd: path.join(f.lane, '.lane'), env: f.env });
   const deadline = Date.now() + 10000;
   while (!fs.existsSync(ready)) { assert.ok(Date.now() < deadline); await new Promise(r => setTimeout(r, 20)); }
   const r = f.close(); f.kept(r); assert.match(r.stderr, /process cwd reference/);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+  assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
   child.kill(); await waitForExit(child);
 });
 
@@ -163,4 +165,52 @@ test('a Git index writer lock keeps the worktree, branch and lock intact', t => 
   fs.writeFileSync(lock, 'busy index writer');
   const r = f.close(); f.kept(r); assert.match(r.stderr, /locked Git metadata/);
   assert.equal(fs.readFileSync(lock, 'utf8'), 'busy index writer');
+});
+
+test('resuming an archived lane, promoting and closing preserves the old tag byte for byte', t => {
+  const f = fixture(t), first = f.close(); assert.equal(first.status, 0, first.stdout + first.stderr);
+  f.git(['tag', '-f', '-a', 'archive/lane/topic', '-m', 'Original recoverable archive', f.head]);
+  const tagFile = path.join(f.common, 'refs/tags/archive/lane/topic'), tagBytes = fs.readFileSync(tagFile);
+  const tagObject = f.git(['cat-file', '-p', 'archive/lane/topic']);
+  const run = args => {
+    const r = spawnSync(process.execPath, [cli, ...args], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stdout + r.stderr); return r;
+  };
+  f.env.LANE_WORKTREE_ROOT = f.root;
+  run(['open', 'topic', 'archive/lane/topic', '--git-only']);
+  const resumed = path.join(f.root, 'lane-topic'); assert.equal(f.git(['rev-parse', 'HEAD'], resumed), f.head);
+  fs.writeFileSync(path.join(resumed, 'tracked'), 'resumed work'); f.git(['commit', '-am', 'resume archived lane'], resumed);
+  const tip = f.git(['rev-parse', 'HEAD'], resumed); assert.notEqual(tip, f.head);
+  run(['promote', 'topic']); assert.equal(f.git(['rev-parse', 'main']), tip);
+  run(['close', 'topic', '--git-only', '--expected-tip', tip]);
+  assert.equal(fs.existsSync(resumed), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+  assert.deepEqual(fs.readFileSync(tagFile), tagBytes); assert.equal(f.git(['cat-file', '-p', 'archive/lane/topic']), tagObject);
+});
+
+test('the default evidence budget refuses oversized content before payload reads, copying or Git changes', t => {
+  const f = fixture(t), size = 256 * 1024 * 1024 + 1;
+  fs.mkdirSync(path.join(f.lane, '.lane')); const large = path.join(f.lane, '.lane/large-output');
+  fs.writeFileSync(large, ''); fs.truncateSync(large, size);
+  const refs = f.git(['for-each-ref', '--format=%(refname) %(objectname)']);
+  const registration = f.git(['worktree', 'list', '--porcelain']);
+  const preload = path.join(f.root, 'no-large-read.mjs');
+  fs.writeFileSync(preload, `import fs from 'node:fs';const read=fs.readFileSync,open=fs.openSync;fs.openSync=(file,...args)=>{if(file===${JSON.stringify(large)})throw Error('oversized evidence payload must not be read');return open(file,...args);};fs.readFileSync=(file,...args)=>{if(file===${JSON.stringify(large)})throw Error('oversized evidence payload must not be read');return read(file,...args);};\n`);
+  const r = f.close({ preload }); f.kept(r);
+  assert.match(r.stderr, /evidence size 268435457 bytes exceeds budget 268435456 bytes; explicit disposition is required/);
+  assert.ok(r.stdout.split('\n').filter(l => l.startsWith('{')).map(JSON.parse).some(row => row.action === 'keep' && /explicit disposition/.test(row.why)));
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+  assert.equal(f.git(['for-each-ref', '--format=%(refname) %(objectname)']), refs);
+  assert.equal(f.git(['worktree', 'list', '--porcelain']), registration); assert.equal(fs.statSync(large).size, size);
+});
+
+test('the optional evidence budget measures the total and allows a verified copy at the exact limit', t => {
+  const f = fixture(t); fs.mkdirSync(path.join(f.lane, '.lane'));
+  fs.writeFileSync(path.join(f.lane, '.lane/first'), Buffer.alloc(20, 1)); fs.writeFileSync(path.join(f.lane, '.lane/second'), Buffer.alloc(20, 2));
+  f.env.LANE_EVIDENCE_MAX_BYTES = '32'; const refs = f.git(['for-each-ref', '--format=%(refname) %(objectname)']);
+  const kept = f.close(); f.kept(kept); assert.match(kept.stderr, /evidence size 40 bytes exceeds budget 32 bytes; explicit disposition is required/);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false); assert.equal(f.git(['for-each-ref', '--format=%(refname) %(objectname)']), refs);
+  f.env.LANE_EVIDENCE_MAX_BYTES = '40'; const closed = f.close(); assert.equal(closed.status, 0, closed.stdout + closed.stderr);
+  const saved = path.join(f.receipt(closed).evidence.directory, 'files/.lane');
+  assert.deepEqual(fs.readFileSync(path.join(saved, 'first')), Buffer.alloc(20, 1)); assert.deepEqual(fs.readFileSync(path.join(saved, 'second')), Buffer.alloc(20, 2));
+  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head); assert.equal(fs.existsSync(f.lane), false);
 });

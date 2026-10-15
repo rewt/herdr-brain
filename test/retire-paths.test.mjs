@@ -665,3 +665,15 @@ test('an occupied workspace retry retains its reason in the cleanup receipt afte
   const receipt = fs.readFileSync(path.join(queue.directory, 'job-cleanup.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(receipt.some(r => r.action === 'keep' && r.workspace_id === 'w' && /occupied lane/.test(r.why)));
 });
+
+for (const gitOnly of [true, false]) test(`a planner KEEP refuses ${gitOnly ? 'git-only' : 'normal'} unmerged close before any evidence copy or tag`, t => {
+  const f = fixture(t, { merged: false });
+  fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n.lane/\n');
+  fs.mkdirSync(path.join(f.lane, '.lane')); fs.writeFileSync(path.join(f.lane, '.lane/scratch'), 'unique scratch');
+  f.state.agents[0].agent_status = 'working'; f.save();
+  const refs = f.git(['for-each-ref', '--format=%(refname) %(objectname)']);
+  const result = f.close(gitOnly); assert.notEqual(result.status, 0); assert.match(result.stderr, /occupant worker is working/);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+  assert.equal(f.git(['for-each-ref', '--format=%(refname) %(objectname)']), refs);
+  assert.equal(fs.readFileSync(path.join(f.lane, '.lane/scratch'), 'utf8'), 'unique scratch'); assertNoRemoval(f);
+});

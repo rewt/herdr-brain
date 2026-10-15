@@ -2490,7 +2490,6 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
   if (lane !== undefined) process.stdout.write(`removed worktree ${lane}\n`);
   if (result.integrated) process.stdout.write(`deleted merged branch ${branch}\n`);
   else process.stdout.write(`archived unmerged lane as tag ${result.archiveTag}, then deleted branch\n`);
-  if (result.pending.length) fail(`lane closed; workspace cleanup pending: ${result.pending.join('; ')}`);
   const configuredRegistry = registryPathFor(REPO_ROOT, CONFIG);
   if (existsSync(configuredRegistry) || existsSync(registryDirectoryFor(configuredRegistry))) {
     try {
@@ -2510,6 +2509,7 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
       }
     }
   }
+  if (result.pending.length) fail(`lane closed; workspace cleanup pending: ${result.pending.join('; ')}`);
 }
 
 const [command, topic, ...rest] = process.argv.slice(2);

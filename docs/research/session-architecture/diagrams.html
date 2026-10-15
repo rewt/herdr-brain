@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Herdr Brain — session architecture · R-421 + R-422</title>
+<title>Herdr Brain — adopted session architecture · R-421–R-423</title>
 <style>
 :root {
   color-scheme: light dark;
@@ -66,20 +66,20 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 </head>
 <body>
 <header>
-  <div class="kicker">Research proposal · R-421 + R-422 · 15 October 2026</div>
+  <div class="kicker">Adopted design · R-421–R-423 · 15 October 2026</div>
   <h1>A standard session platform</h1>
-  <p>Desired sessions come from manifests. Workers stay warm through review and correction rounds. Durable logs live in a service; the logs tab only views them. Addressed events carry questions, decisions and control receipts between sessions.</p>
-  <p><a href="REPORT.md">Read the evidence and proposal</a>. Figures 01–02 describe today; figures 03–11 describe proposed behavior, including five session-protocol flows. Eligible context resets close and respawn from a manifest and handoff; warm review workers stay intact.</p>
+  <p>Manifests create standard workspace tabs and preserve warm review workers. The model-free logging service routes decisions directly, control kinds to rules, and remaining operational traffic to a project triage session beside the logs viewer. All model work runs in Herdr sessions on the subscription.</p>
+  <p><a href="REPORT.md">Read the evidence and adopted plan</a>. Figures 01–02 describe today; figures 03–11 describe the adopted, not yet implemented design, including five session-protocol flows. Eligible context resets close and respawn from a manifest and handoff; warm review workers stay intact.</p>
   <nav aria-label="Diagram navigation"><a href="#01-current-components">01 · Today: components and boundaries</a>
 <a href="#02-current-dispatch-review">02 · Today: dispatch and warm review rounds</a>
-<a href="#03-proposed-materialization">03 · Proposal: manifest to session</a>
-<a href="#04-proposed-logging">04 · Proposal: durable logging service</a>
-<a href="#05-proposed-lifecycle">05 · Proposal: work-item session lifecycle</a>
-<a href="#06-proposed-reconcile-loop">06 · Proposal: the reconcile loop</a>
+<a href="#03-proposed-materialization">03 · Adopted design: manifest to session</a>
+<a href="#04-proposed-logging">04 · Adopted design: logging, detectors and triage</a>
+<a href="#05-proposed-lifecycle">05 · Adopted design: work-item session lifecycle</a>
+<a href="#06-proposed-reconcile-loop">06 · Adopted design: the reconcile loop</a>
 <a href="#07-protocol-worker-question">07 · Protocol: worker question and warm reply</a>
 <a href="#08-protocol-host-hold-release">08 · Protocol: host hold and release without model wakes</a>
 <a href="#09-protocol-decision-fanout">09 · Protocol: targeted coordinator decision</a>
-<a href="#10-protocol-digester-finding">10 · Protocol: optional digester finding</a>
+<a href="#10-protocol-triage-session">10 · Protocol: triage batches and supervisor handoff</a>
 <a href="#11-protocol-operator-chat">11 · Protocol: operator question through chat</a></nav>
   <div class="toolbar" aria-label="Diagram display controls">
     <button type="button" id="fit" aria-pressed="true">Fit width</button>
@@ -138,7 +138,7 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 </section>
 <section class="figure" id="02-current-dispatch-review" aria-labelledby="title-02-current-dispatch-review">
   <div class="heading"><span class="number">02</span><h2 id="title-02-current-dispatch-review">Today: dispatch and warm review rounds</h2></div>
-  <p>A correction gets a new run and report but returns to the same native worker session.</p>
+  <p>Existing dispatch journals delivery and keeps the same worker available for review corrections through dispatch --reuse.</p>
   <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Today: dispatch and warm review rounds"><div class="diagram" data-source="source-02-current-dispatch-review"></div></div>
   <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
   <details><summary>Mermaid source</summary><pre id="source-02-current-dispatch-review">sequenceDiagram
@@ -180,9 +180,9 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 </pre></details>
 </section>
 <section class="figure" id="03-proposed-materialization" aria-labelledby="title-03-proposed-materialization">
-  <div class="heading"><span class="number">03</span><h2 id="title-03-proposed-materialization">Proposal: manifest to session</h2></div>
-  <p>Convergence reuses a matching occupant. An ambiguous launch or prompt is held for inspection.</p>
-  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposal: manifest to session"><div class="diagram" data-source="source-03-proposed-materialization"></div></div>
+  <div class="heading"><span class="number">03</span><h2 id="title-03-proposed-materialization">Adopted design: manifest to session</h2></div>
+  <p>Materialize once from canonical evidence. Review corrections reuse the same warm session; eligible standard and triage batch boundaries close and respawn the declared layout from handoff or cursor.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Adopted design: manifest to session"><div class="diagram" data-source="source-03-proposed-materialization"></div></div>
   <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
   <details><summary>Mermaid source</summary><pre id="source-03-proposed-materialization">sequenceDiagram
   actor O as Operator or authorized project supervisor
@@ -223,63 +223,79 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   C-&gt;&gt;R: Recheck review chain, references, holds and Git state
   alt Worker workload complete
     C-&gt;&gt;H: Retire worker only through safe retirement
-  else Explicit fresh-cycle request for a retained standard session
-    C-&gt;&gt;R: Persist Markdown handoff, inbox cursor and reset intent
+  else Declared standard-session or triage batch boundary
+    C-&gt;&gt;R: Persist handoff or committed triage cursor, inbox refs and reset intent
     C-&gt;&gt;R: Quiesce callbacks; verify every pane in the owned tab
     C-&gt;&gt;H: Guarded close of exact eligible tab
     H--&gt;&gt;C: Observe old tab gone; hold if uncertain
     C-&gt;&gt;D: Respawn from manifest and handoff
-    D-&gt;&gt;H: Create replacement tab and native session once
+    D-&gt;&gt;H: Recreate declared tab/pane layout and native session once
     H--&gt;&gt;C: Observe new tab, terminal and native ID
     C-&gt;&gt;R: New incarnation receipt; retain old run evidence
   end
-  Note over C,H: No reset of warm review workers; standard slots survive occupant replacement
+  Note over C,H: No reset of warm review workers; one project triage session; logs service survives tab replacement
 </pre></details>
 </section>
 <section class="figure" id="04-proposed-logging" aria-labelledby="title-04-proposed-logging">
-  <div class="heading"><span class="number">04</span><h2 id="title-04-proposed-logging">Proposal: durable logging service</h2></div>
-  <p>The logs tab is a viewer. Producers, subscribers and deterministic notifications share a service-owned journal.</p>
-  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposal: durable logging service"><div class="diagram" data-source="source-04-proposed-logging"></div></div>
+  <div class="heading"><span class="number">04</span><h2 id="title-04-proposed-logging">Adopted design: logging, detectors and triage</h2></div>
+  <p>The durable service stays model-free. Detectors run on every event; decisions go direct, control kinds go to rules, and remaining operational notices are batched to one project triage session beside the viewer. Every batch yields a supervisor summary.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Adopted design: logging, detectors and triage"><div class="diagram" data-source="source-04-proposed-logging"></div></div>
   <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
-  <details><summary>Mermaid source</summary><pre id="source-04-proposed-logging">flowchart LR
-  Agents[Agents and tools]
+  <details><summary>Mermaid source</summary><pre id="source-04-proposed-logging">flowchart TB
+  Traffic[Existing watch, queue, auto-review, slot, peer and relay traffic]
   Outbox[Producer outbox - stable event ID]
-  Collector[Herdr collector - events.subscribe]
-  Snapshot[session.snapshot - rebuild current observations]
-  Service[Identity-owned logging service - one append writer per project]
-  Store[(Durable sequenced event journal)]
-  Read[Read and replay API - cursor and retention floor]
-  Viewer[Logs tab - read-only viewer]
-  Sessions[Session subscribers - bounded filtered batches]
-  Rules[Deterministic notification rules]
-  Inbox[Existing durable supervisor inbox]
-  Supervisor[Supervisor session]
-  Reconciler[Session reconciler]
-  Record[Existing record CLI and fold]
-  Agents --&gt; Outbox --&gt;|retry until durable acknowledgement| Service
-  Collector --&gt;|observations and explicit gaps| Service
-  Collector --&gt;|loss or reconnect| Snapshot
-  Snapshot --&gt; Collector
-  Service --&gt;|append and fsync before ack| Store --&gt; Read
+  Observe[Herdr observations and controller lifecycle - explicit source gaps]
+  Record[Canonical record and cited reports - read-only evidence]
+  subgraph Service[Model-free logging service - no model API or API keys]
+    Writer[One append writer per project - fsync before ack]
+    Store[(Durable journal, inbox receipts and cursors)]
+    Read[Scoped replay reader]
+    Detect[Model-free detectors on every event]
+    Route{Validated source and detector result}
+    Rules[Rules consume controls and platform telemetry]
+    Batch[Remaining operational traffic and selected interpretation evidence - N events or M minutes]
+    TInbox[Quiet-gated triage inbox and bounded input loader]
+    Commit[Coverage validator and summary/cursor commit - deterministic failure fallback]
+    SInbox[Quiet-gated durable supervisor inbox]
+  end
+  subgraph Logs[Canonical project logs tab - two panes]
+    Viewer[Viewer pane - no model]
+    Triage[Triage pane - one project Herdr Session on subscription]
+  end
+  Other[Other workspace logs panes - viewer and model-free triage status/reference]
+  Supervisor[Supervisor Herdr Session - subscription; judgment and dispatch]
+  Controller[Model-free manifest controller - boundary resets only]
+  Traffic --&gt; Outbox --&gt; Writer --&gt; Store --&gt; Read
+  Observe --&gt; Writer
+  Record --&gt;|selected authoritative mirrors| Writer
   Read --&gt; Viewer
-  Read --&gt; Sessions
-  Read --&gt; Rules
-  Rules --&gt;|coalesced exceptions; stable notice ID| Inbox
-  Inbox --&gt;|same occupant, idle, empty composer| Supervisor
-  Read --&gt;|invalidate observations, never authorize work| Reconciler
-  Reconciler --&gt;|re-read authoritative facts| Record
-  Record --&gt;|read-only selected event mirror| Service
-  Hold[STOP gates actions; close hold gates retirement]
-  Hold -.-&gt; Reconciler
-  Hold -.-&gt; Inbox
-  Note[Viewer exit does not stop storage; busy or missing subscribers retain cursors]
-  Note -.-&gt; Read
+  Read --&gt; Other
+  Read --&gt; Detect --&gt; Route
+  Route --&gt;|decision traffic or obvious hit; no intermediate model| SInbox
+  Route --&gt;|fyi, ack, hold, release and new platform telemetry| Rules
+  Route --&gt;|remaining operational notices or interpretation candidate| Batch
+  Rules --&gt; Viewer
+  Batch --&gt; TInbox
+  Record --&gt;|permitted cited files; no transcripts or panes| TInbox
+  TInbox --&gt;|one batch pointer and scoped native input; never per event| Triage
+  Triage --&gt;|own output only - summary, findings, handoff draft| Commit
+  TInbox --&gt;|failed or uncertain batch retained for next summary| Commit
+  Commit --&gt;|atomic output and cursor coverage| Writer
+  Commit --&gt;|after durable receipt; one line for every batch| SInbox
+  SInbox --&gt;|exact binding and empty composer| Supervisor
+  Supervisor --&gt;|handoff boundary request| Batch
+  Commit --&gt;|since-last-handoff draft and cursor receipt| Controller
+  Controller -.-&gt;|close/respawn owned logs tab only at committed boundary| Logs
+  Note[New telemetry and output receipts stay with rules/viewer; no raw model stream or feedback loop]
+  Note -.-&gt; Route
+  Safety[Service survives tab closure; warm review workers always kept; STOP and holds still apply]
+  Safety -.-&gt; Controller
 </pre></details>
 </section>
 <section class="figure" id="05-proposed-lifecycle" aria-labelledby="title-05-proposed-lifecycle">
-  <div class="heading"><span class="number">05</span><h2 id="title-05-proposed-lifecycle">Proposal: work-item session lifecycle</h2></div>
-  <p>Parked workers keep their context through review. Standard slots stay protected until explicit withdrawal.</p>
-  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposal: work-item session lifecycle"><div class="diagram" data-source="source-05-proposed-lifecycle"></div></div>
+  <div class="heading"><span class="number">05</span><h2 id="title-05-proposed-lifecycle">Adopted design: work-item session lifecycle</h2></div>
+  <p>Parked workers retain their context through review. Standard slots stay protected; the separate triage batch boundary permits cursor-based rotation without resetting review workers.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Adopted design: work-item session lifecycle"><div class="diagram" data-source="source-05-proposed-lifecycle"></div></div>
   <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
   <details><summary>Mermaid source</summary><pre id="source-05-proposed-lifecycle">stateDiagram-v2
   [*] --&gt; Created: Adopt manifest generation
@@ -295,11 +311,11 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   ParkedAwaitingReview --&gt; Running: Corrections via dispatch --reuse; same native session
   ParkedAwaitingReview --&gt; ParkedAwaitingReview: Reviewer active, delayed, or asks another review
   ParkedAwaitingReview --&gt; Eligible: Work landed or explicit disposition verified
-  Running --&gt; Eligible: Explicit disposition and quiescence verified
+  Running --&gt; Eligible: Explicit work disposition or declared standard/batch boundary; quiescent
   Eligible --&gt; Retired: Worker only; fresh safe-retirement checks and no hold
-  Eligible --&gt; ResetPrepared: Standard-session boundary; handoff and inbox cursor saved
+  Eligible --&gt; ResetPrepared: Standard-session boundary; handoff or committed triage cursor saved
   ResetPrepared --&gt; ClosedForReset: No live references; every pane owned; exact tab closed
-  ClosedForReset --&gt; Starting: Respawn once from manifest and handoff; new incarnation
+  ClosedForReset --&gt; Starting: Respawn declared panes from manifests and handoff/cursor; new incarnation
   ResetPrepared --&gt; Hold: Close refused or outcome uncertain
   ClosedForReset --&gt; Hold: Replacement launch uncertain
   Running --&gt; RecoveryRequired: Confirmed process loss
@@ -326,9 +342,9 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 </pre></details>
 </section>
 <section class="figure" id="06-proposed-reconcile-loop" aria-labelledby="title-06-proposed-reconcile-loop">
-  <div class="heading"><span class="number">06</span><h2 id="title-06-proposed-reconcile-loop">Proposal: the reconcile loop</h2></div>
-  <p>Read authoritative evidence, compare desired and observed state, then perform at most one authorized action.</p>
-  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposal: the reconcile loop"><div class="diagram" data-source="source-06-proposed-reconcile-loop"></div></div>
+  <div class="heading"><span class="number">06</span><h2 id="title-06-proposed-reconcile-loop">Adopted design: the reconcile loop</h2></div>
+  <p>Read authoritative evidence, compare desired and observed state, then perform at most one authorized action. Declared batch-boundary rotation never overrides an open review chain.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Adopted design: the reconcile loop"><div class="diagram" data-source="source-06-proposed-reconcile-loop"></div></div>
   <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
   <details><summary>Mermaid source</summary><pre id="source-06-proposed-reconcile-loop">flowchart TD
   Wake[Manifest change, service event or bounded timer]
@@ -346,10 +362,10 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   Ambiguous[Hold; no blind retry, reset or second occupant]
   Wake --&gt; Lock --&gt; Desired --&gt; Facts --&gt; Observe --&gt; Compare
   Compare --&gt;|already matched| Status
-  Compare --&gt;|automatic reset or retirement considered| Standard
+  Compare --&gt;|unrequested reset or automatic retirement considered| Standard
   Standard --&gt;|yes| Keep --&gt; Status
   Standard --&gt;|no| Safe
-  Compare --&gt;|authorized start, reuse, explicit rotation or recovery| Safe
+  Compare --&gt;|authorized start, reuse, declared boundary rotation or recovery| Safe
   Safe --&gt;|no| Ambiguous --&gt; Status
   Safe --&gt;|yes| Action --&gt; Result
   Result --&gt;|yes| Status
@@ -464,37 +480,51 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   Note over C,D: Unlisted supervisors receive nothing; message is evidence, not authority
 </pre></details>
 </section>
-<section class="figure" id="10-protocol-digester-finding" aria-labelledby="title-10-protocol-digester-finding">
-  <div class="heading"><span class="number">10</span><h2 id="title-10-protocol-digester-finding">Protocol: optional digester finding</h2></div>
-  <p>If this logging path is adopted, a bounded model session reads from a durable cursor and returns one evidence-backed finding. Its adapter commits the result and cursor; only the supervisor decides what to do.</p>
-  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Protocol: optional digester finding"><div class="diagram" data-source="source-10-protocol-digester-finding"></div></div>
+<section class="figure" id="10-protocol-triage-session" aria-labelledby="title-10-protocol-triage-session">
+  <div class="heading"><span class="number">10</span><h2 id="title-10-protocol-triage-session">Protocol: triage batches and supervisor handoff</h2></div>
+  <p>The required Herdr subscription session reads bounded supplied input and writes output only. Every batch yields one supervisor line, including failure or uncertainty; its committed cursor enables safe rotation, and it drafts since-last-handoff text.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Protocol: triage batches and supervisor handoff"><div class="diagram" data-source="source-10-protocol-triage-session"></div></div>
   <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
-  <details><summary>Mermaid source</summary><pre id="source-10-protocol-digester-finding">sequenceDiagram
-  participant L as Structured log service
-  participant A as Deterministic batch adapter
-  participant D as Optional short-lived digester session
+  <details><summary>Mermaid source</summary><pre id="source-10-protocol-triage-session">sequenceDiagram
+  participant C as Model-free manifest controller
+  participant L as Durable model-free log service
+  participant A as Batch, quiet-delivery and input adapter
+  participant T as Project triage Herdr session in logs pane
   participant I as Supervisor durable inbox
   participant S as Canonical supervisor
-  Note over L,S: Proposed logging path; requires adoption
-  A-&gt;&gt;L: Read committed cursor and claim bounded range
-  L--&gt;&gt;A: Event IDs, scoped bodies, retention and gap evidence
-  A-&gt;&gt;D: Start from manifest, cursor and bounded evidence
-  D-&gt;&gt;D: Analyze cross-event pattern; no worker communication
-  alt One novel finding requiring judgment
-    D-&gt;&gt;A: Finding with evidence IDs, hypothesis and uncertainty
-    A-&gt;&gt;L: Commit finding and cursor together under stable batch ID
-    L-&gt;&gt;I: Project one correlated finding notice
-    I-&gt;&gt;S: When quiet, one line plus pointer
-    S-&gt;&gt;L: Read finding and cited primary events
-    S-&gt;&gt;S: Judge within existing authority
-  else No finding
-    D-&gt;&gt;A: No-finding result for claimed range
-    A-&gt;&gt;L: Commit completed cursor; no supervisor wake
-  else Session failure before commit
-    A-&gt;&gt;L: Keep cursor unchanged; retain failure receipt
+  Note over C,T: Adopted design; model work uses manifest sessions on the subscription, no API keys
+  C-&gt;&gt;T: Maintain one project session from monitor-route manifest and cursor
+  A-&gt;&gt;L: At N events or M minutes with pending input, claim bounded batch
+  L--&gt;&gt;A: Batch file, event IDs, cited report refs and gap evidence
+  A-&gt;&gt;A: Materialize scoped read-only input; no transcripts or panes
+  A-&gt;&gt;T: Quiet-gated batch pointer plus preloaded native input
+  alt Valid summary and findings, including no-finding batches
+    T-&gt;&gt;A: Write own output only; one summary line and coverage IDs
+  else Uncertain, failed, missing or malformed output
+    A-&gt;&gt;L: Retain affected IDs and explicit uncertainty or failure
+    A-&gt;&gt;A: Prepare next scheduled fallback summary and carry-forward refs
   end
-  A-&gt;&gt;A: End batch session; next incarnation resumes committed cursor
-  Note over D,S: Digester never dispatches, answers workers or promotes findings to decisions
+  A-&gt;&gt;L: Validate full coverage; atomically commit output, cursor and unresolved refs
+  L--&gt;&gt;A: Durable batch receipt; repeated commit returns same receipt
+  A-&gt;&gt;I: One summary line per batch plus findings pointer
+  I-&gt;&gt;S: Deliver when exact recipient is quiet
+  S-&gt;&gt;L: Read evidence; decisions use existing authority
+  opt Supervisor reaches a handoff or reset boundary
+    S-&gt;&gt;L: Request since-last-handoff draft with cursor and cutoff
+    L-&gt;&gt;A: Claim bounded handoff batch and canonical references
+    A-&gt;&gt;T: Quiet pointer and scoped input
+    T-&gt;&gt;A: Write draft to own output; never edit supervisor state
+    A-&gt;&gt;A: Validate, or mark draft unavailable with source/pending refs
+    A-&gt;&gt;L: Commit boundary batch summary, draft and cursor coverage
+    A-&gt;&gt;I: Boundary batch summary line and draft pointer
+    A-&gt;&gt;C: Draft or explicit fallback plus authoritative handoff refs
+  end
+  opt Committed batch boundary and no in-flight prompt
+    C-&gt;&gt;L: Verify cursor, output receipts and layout ownership
+    C-&gt;&gt;T: Close owned logs tab and respawn both panes from manifests
+    C-&gt;&gt;L: Rebind sole triage incarnation; restore cursor and viewer position
+  end
+  Note over T,S: Triage may summarize, group or escalate; never suppress, downgrade or take workflow actions
 </pre></details>
 </section>
 <section class="figure" id="11-protocol-operator-chat" aria-labelledby="title-11-protocol-operator-chat">
@@ -532,7 +562,7 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   Note over C,S: Acks, FYIs and resource receipts stay out of chat; native approval stays native
 </pre></details>
 </section></main>
-<footer>Proposal only. No live sessions are controlled by this page. Diagram rendering uses Mermaid 11.4.1 from the requested CDN; all source and styling are embedded.</footer>
+<footer>Adopted architecture; documentation only, not installed behavior. No live sessions are controlled by this page. Diagram rendering uses Mermaid 11.4.1 from the requested CDN; all source and styling are embedded.</footer>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
 <script>
 (() => {

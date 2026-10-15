@@ -1,33 +1,49 @@
-flowchart LR
-  Agents[Agents and tools]
+flowchart TB
+  Traffic[Existing watch, queue, auto-review, slot, peer and relay traffic]
   Outbox[Producer outbox - stable event ID]
-  Collector[Herdr collector - events.subscribe]
-  Snapshot[session.snapshot - rebuild current observations]
-  Service[Identity-owned logging service - one append writer per project]
-  Store[(Durable sequenced event journal)]
-  Read[Read and replay API - cursor and retention floor]
-  Viewer[Logs tab - read-only viewer]
-  Sessions[Session subscribers - bounded filtered batches]
-  Rules[Deterministic notification rules]
-  Inbox[Existing durable supervisor inbox]
-  Supervisor[Supervisor session]
-  Reconciler[Session reconciler]
-  Record[Existing record CLI and fold]
-  Agents --> Outbox -->|retry until durable acknowledgement| Service
-  Collector -->|observations and explicit gaps| Service
-  Collector -->|loss or reconnect| Snapshot
-  Snapshot --> Collector
-  Service -->|append and fsync before ack| Store --> Read
+  Observe[Herdr observations and controller lifecycle - explicit source gaps]
+  Record[Canonical record and cited reports - read-only evidence]
+  subgraph Service[Model-free logging service - no model API or API keys]
+    Writer[One append writer per project - fsync before ack]
+    Store[(Durable journal, inbox receipts and cursors)]
+    Read[Scoped replay reader]
+    Detect[Model-free detectors on every event]
+    Route{Validated source and detector result}
+    Rules[Rules consume controls and platform telemetry]
+    Batch[Remaining operational traffic and selected interpretation evidence - N events or M minutes]
+    TInbox[Quiet-gated triage inbox and bounded input loader]
+    Commit[Coverage validator and summary/cursor commit - deterministic failure fallback]
+    SInbox[Quiet-gated durable supervisor inbox]
+  end
+  subgraph Logs[Canonical project logs tab - two panes]
+    Viewer[Viewer pane - no model]
+    Triage[Triage pane - one project Herdr Session on subscription]
+  end
+  Other[Other workspace logs panes - viewer and model-free triage status/reference]
+  Supervisor[Supervisor Herdr Session - subscription; judgment and dispatch]
+  Controller[Model-free manifest controller - boundary resets only]
+  Traffic --> Outbox --> Writer --> Store --> Read
+  Observe --> Writer
+  Record -->|selected authoritative mirrors| Writer
   Read --> Viewer
-  Read --> Sessions
-  Read --> Rules
-  Rules -->|coalesced exceptions; stable notice ID| Inbox
-  Inbox -->|same occupant, idle, empty composer| Supervisor
-  Read -->|invalidate observations, never authorize work| Reconciler
-  Reconciler -->|re-read authoritative facts| Record
-  Record -->|read-only selected event mirror| Service
-  Hold[STOP gates actions; close hold gates retirement]
-  Hold -.-> Reconciler
-  Hold -.-> Inbox
-  Note[Viewer exit does not stop storage; busy or missing subscribers retain cursors]
-  Note -.-> Read
+  Read --> Other
+  Read --> Detect --> Route
+  Route -->|decision traffic or obvious hit; no intermediate model| SInbox
+  Route -->|fyi, ack, hold, release and new platform telemetry| Rules
+  Route -->|remaining operational notices or interpretation candidate| Batch
+  Rules --> Viewer
+  Batch --> TInbox
+  Record -->|permitted cited files; no transcripts or panes| TInbox
+  TInbox -->|one batch pointer and scoped native input; never per event| Triage
+  Triage -->|own output only - summary, findings, handoff draft| Commit
+  TInbox -->|failed or uncertain batch retained for next summary| Commit
+  Commit -->|atomic output and cursor coverage| Writer
+  Commit -->|after durable receipt; one line for every batch| SInbox
+  SInbox -->|exact binding and empty composer| Supervisor
+  Supervisor -->|handoff boundary request| Batch
+  Commit -->|since-last-handoff draft and cursor receipt| Controller
+  Controller -.->|close/respawn owned logs tab only at committed boundary| Logs
+  Note[New telemetry and output receipts stay with rules/viewer; no raw model stream or feedback loop]
+  Note -.-> Route
+  Safety[Service survives tab closure; warm review workers always kept; STOP and holds still apply]
+  Safety -.-> Controller

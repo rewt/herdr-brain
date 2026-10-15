@@ -12,11 +12,11 @@ stateDiagram-v2
   ParkedAwaitingReview --> Running: Corrections via dispatch --reuse; same native session
   ParkedAwaitingReview --> ParkedAwaitingReview: Reviewer active, delayed, or asks another review
   ParkedAwaitingReview --> Eligible: Work landed or explicit disposition verified
-  Running --> Eligible: Explicit disposition and quiescence verified
+  Running --> Eligible: Explicit work disposition or declared standard/batch boundary; quiescent
   Eligible --> Retired: Worker only; fresh safe-retirement checks and no hold
-  Eligible --> ResetPrepared: Standard-session boundary; handoff and inbox cursor saved
+  Eligible --> ResetPrepared: Standard-session boundary; handoff or committed triage cursor saved
   ResetPrepared --> ClosedForReset: No live references; every pane owned; exact tab closed
-  ClosedForReset --> Starting: Respawn once from manifest and handoff; new incarnation
+  ClosedForReset --> Starting: Respawn declared panes from manifests and handoff/cursor; new incarnation
   ResetPrepared --> Hold: Close refused or outcome uncertain
   ClosedForReset --> Hold: Replacement launch uncertain
   Running --> RecoveryRequired: Confirmed process loss

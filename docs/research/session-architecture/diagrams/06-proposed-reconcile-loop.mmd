@@ -14,10 +14,10 @@ flowchart TD
   Ambiguous[Hold; no blind retry, reset or second occupant]
   Wake --> Lock --> Desired --> Facts --> Observe --> Compare
   Compare -->|already matched| Status
-  Compare -->|automatic reset or retirement considered| Standard
+  Compare -->|unrequested reset or automatic retirement considered| Standard
   Standard -->|yes| Keep --> Status
   Standard -->|no| Safe
-  Compare -->|authorized start, reuse, explicit rotation or recovery| Safe
+  Compare -->|authorized start, reuse, declared boundary rotation or recovery| Safe
   Safe -->|no| Ambiguous --> Status
   Safe -->|yes| Action --> Result
   Result -->|yes| Status

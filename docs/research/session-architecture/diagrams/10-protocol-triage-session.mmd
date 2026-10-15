@@ -1,0 +1,40 @@
+sequenceDiagram
+  participant C as Model-free manifest controller
+  participant L as Durable model-free log service
+  participant A as Batch, quiet-delivery and input adapter
+  participant T as Project triage Herdr session in logs pane
+  participant I as Supervisor durable inbox
+  participant S as Canonical supervisor
+  Note over C,T: Adopted design; model work uses manifest sessions on the subscription, no API keys
+  C->>T: Maintain one project session from monitor-route manifest and cursor
+  A->>L: At N events or M minutes with pending input, claim bounded batch
+  L-->>A: Batch file, event IDs, cited report refs and gap evidence
+  A->>A: Materialize scoped read-only input; no transcripts or panes
+  A->>T: Quiet-gated batch pointer plus preloaded native input
+  alt Valid summary and findings, including no-finding batches
+    T->>A: Write own output only; one summary line and coverage IDs
+  else Uncertain, failed, missing or malformed output
+    A->>L: Retain affected IDs and explicit uncertainty or failure
+    A->>A: Prepare next scheduled fallback summary and carry-forward refs
+  end
+  A->>L: Validate full coverage; atomically commit output, cursor and unresolved refs
+  L-->>A: Durable batch receipt; repeated commit returns same receipt
+  A->>I: One summary line per batch plus findings pointer
+  I->>S: Deliver when exact recipient is quiet
+  S->>L: Read evidence; decisions use existing authority
+  opt Supervisor reaches a handoff or reset boundary
+    S->>L: Request since-last-handoff draft with cursor and cutoff
+    L->>A: Claim bounded handoff batch and canonical references
+    A->>T: Quiet pointer and scoped input
+    T->>A: Write draft to own output; never edit supervisor state
+    A->>A: Validate, or mark draft unavailable with source/pending refs
+    A->>L: Commit boundary batch summary, draft and cursor coverage
+    A->>I: Boundary batch summary line and draft pointer
+    A->>C: Draft or explicit fallback plus authoritative handoff refs
+  end
+  opt Committed batch boundary and no in-flight prompt
+    C->>L: Verify cursor, output receipts and layout ownership
+    C->>T: Close owned logs tab and respawn both panes from manifests
+    C->>L: Rebind sole triage incarnation; restore cursor and viewer position
+  end
+  Note over T,S: Triage may summarize, group or escalate; never suppress, downgrade or take workflow actions

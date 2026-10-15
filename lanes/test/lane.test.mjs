@@ -783,6 +783,9 @@ test("promote waits before the lock and completes fast-forward if memory pressur
     const pressure = { available: 128 * 1024 ** 2, swap_used: 0 };
     writeFileSync(memory, JSON.stringify(pressure));
     fixture.env.TEST_MEMORY_FILE = memory;
+    // Plain node --test must load the same native-input adapter as the runner.
+    const memoryAdapter = new URL('../../test/helpers/memory-fixture.mjs', import.meta.url).href;
+    fixture.env.NODE_OPTIONS = `${fixture.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(memoryAdapter)}`;
     const script = join(fixture.root, 'validate-memory.cjs');
     writeFileSync(script, `const fs = require('fs');
 fs.writeFileSync(${JSON.stringify(validated)}, 'validated');

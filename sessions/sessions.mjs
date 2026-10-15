@@ -7,24 +7,44 @@ import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
-import { canonicalProject, safeProjectPath } from './project.mjs';
+import { canonicalProject } from './project.mjs';
 import { parseManifest, validateManifest, validateSet } from './manifest.mjs';
 
 const templates = fileURLToPath(new URL('./templates/', import.meta.url));
-function read(file) {
+function read({ file, committed }, project) {
+  if (committed) {
+    if (!['100644', '100755'].includes(committed.mode)) throw Error('committed manifest must be a regular file');
+    return parseManifest(execFileSync('git', ['-C', project.root, 'show', `${committed.head}:${committed.relative}`], { encoding: 'utf8', maxBuffer: 1024 * 1024 + 1 }));
+  }
   const stat = fs.statSync(file);
   if (!stat.isFile() || stat.size > 1024 * 1024) throw Error('manifest must be a regular file of at most 1 MiB');
   return parseManifest(fs.readFileSync(file, 'utf8'));
 }
 
-export function discoverManifests(project, workspace = 'home') {
+export function discoverManifests(project, workspace = 'home', diagnostics = []) {
   const names = ['chat.md', 'supervisor.md', 'logs-viewer.md', workspace === 'home' ? 'logs-triage.md' : 'triage-status.md'];
   const files = new Map(names.map(name => [name, { file: path.join(templates, name), template: true }]));
-  // Only tracked project documents override/add defaults, always from the
-  // canonical checkout. Untracked lane files and display sidecars do nothing.
-  const tracked = execFileSync('git', ['-C', project.root, 'ls-files', '-z', '--', '.sessions/'], { encoding: 'utf8' });
-  for (const relative of tracked.split('\0').filter(file => /^\.sessions\/[^/]+\.md$/u.test(file))) {
-    files.set(path.basename(relative), { file: safeProjectPath(project.root, relative), template: false });
+  const git = args => execFileSync('git', ['-C', project.root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  // Freeze canonical HEAD once. Neither working-tree nor index bytes are
+  // desired configuration, even if a discovered file is edited or removed.
+  let head;
+  try { head = git(['rev-parse', '--verify', '-q', 'HEAD^{commit}']).trim(); }
+  catch (error) { if (error.status !== 1) throw error; } // An unborn project has no committed overrides.
+  const isManifest = file => /^\.sessions\/[^/]+\.md$/u.test(file);
+  const tracked = head ? git(['ls-tree', '-r', '-z', '--full-tree', head, '--', '.sessions/']) : '';
+  for (const row of tracked.split('\0').filter(Boolean)) {
+    const tab = row.indexOf('\t'), relative = row.slice(tab + 1), mode = row.slice(0, tab).split(' ')[0];
+    if (isManifest(relative)) files.set(path.basename(relative), { file: path.join(project.root, relative), template: false, committed: { head, relative, mode } });
+  }
+  const diffArgs = ['--name-only', '-z', '--no-ext-diff', '--no-textconv', '--no-renames'];
+  const changed = new Set([
+    ...git(['diff', ...diffArgs, '--', '.sessions/']).split('\0'),
+    ...git(['diff', '--cached', ...diffArgs, ...(head ? [head] : []), '--', '.sessions/']).split('\0'),
+  ].filter(isManifest));
+  for (const relative of [...changed].sort()) diagnostics.push({ file: path.join(project.root, relative), level: 'warning', message: `uncommitted manifest ignored: ${relative}; inspection uses committed HEAD` });
+  const untracked = git(['ls-files', '--others', '-z', '--', '.sessions/']).split('\0').filter(isManifest);
+  for (const relative of untracked.sort()) {
+    if (!changed.has(relative)) diagnostics.push({ file: path.join(project.root, relative), level: 'warning', message: `untracked manifest ignored: ${relative}; inspection uses committed HEAD` });
   }
   return [...files.values()];
 }
@@ -32,11 +52,11 @@ export function discoverManifests(project, workspace = 'home') {
 export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', env = process.env } = {}) {
   const project = canonicalProject(cwd);
   const routes = loadDiscoveredRoutes({ cwd: project.root, env });
-  const inputs = files.length ? files.map(file => ({ file: path.resolve(file), template: false })) : discoverManifests(project, workspace);
   const entries = [], diagnostics = [];
+  const inputs = files.length ? files.map(file => ({ file: path.resolve(file), template: false })) : discoverManifests(project, workspace, diagnostics);
   for (const input of inputs) {
     try {
-      const manifest = read(input.file);
+      const manifest = read(input, project);
       if (input.template) {
         manifest.spec.workspaceRef = workspace;
         manifest.metadata.uid = `default-${manifest.spec.role}-${createHash('sha256').update(JSON.stringify([project.common, workspace])).digest('hex').slice(0, 16)}`;

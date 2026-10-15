@@ -24,8 +24,10 @@ evaluates Markdown prose, reads native conversations, or invokes Herdr.
 ## Format and ownership
 
 One UTF-8 Markdown document contains one `## Manifest` heading and exactly one
-`json` fenced block within that section (backticks or tildes). Other prose is
-opaque. The root has only `apiVersion: brain.herdr.dev/v1alpha1`, `kind`,
+fenced block within that section (backticks or tildes), labelled exactly `json`.
+Additional fences of any kind in that section are rejected, including `JSON`,
+`jsonc` and unlabelled fences. Other prose is opaque.
+The root has only `apiVersion: brain.herdr.dev/v1alpha1`, `kind`,
 `metadata` and `spec`. JSON documents are limited to 1 MiB and nesting to 64.
 Duplicate decoded keys, including escaped equivalents, are rejected before
 `JSON.parse`; object scopes have independent key sets.
@@ -63,6 +65,8 @@ fields are invalid. `spec` declares:
   expansion syntax, dangling symlinks and symlink escapes are rejected, even
   for optional files. Required missing files fail; optional missing files
   produce visible diagnostics. The inspector checks file presence/type only.
+  Calling the validator without a canonical project for a path produces an
+  explicit validation error.
   Symbolic sources, bounded materialization/hashes and
   native identity/memory readiness require later context/enrollment adapters.
 - `memory`: record-lesson and handoff intent, an optional `claudeMem` domain
@@ -112,12 +116,19 @@ from canonical common-directory identity plus workspace reference and role;
 they are stable across linked-lane invocations. Explicit files are inspected
 as written, with no interpolation or UID replacement.
 
-Projects may track `.sessions/*.md` in the **canonical checkout**. Matching
-template filenames override defaults, and other tracked filenames add desired
-objects. For a non-home selection, override `triage-status.md` rather than
-`logs-triage.md`. All project files are validated as written; a project that
+Projects may commit `.sessions/*.md` in the **canonical checkout**. Discovery
+uses `git ls-tree` and reads blobs with `git show` from a fixed snapshot of that
+checkout's committed `HEAD`. Matching template filenames override defaults, and
+other committed filenames add desired objects. For a non-home selection,
+override `triage-status.md` rather than `logs-triage.md`.
+All project files are validated as written; a project that
 declares multiple workspace layouts supplies their distinct references/UIDs.
-Untracked files and a linked lane's copies do not affect discovery. No user
+Working-tree edits and index changes are ignored, including staged new files or
+deletions. Each affected path receives a warning diagnostic. Untracked
+`.sessions/*.md` files are also ignored with a warning naming the path.
+A linked lane's copies do not affect discovery; only canonical `HEAD` supplies
+project manifests. A project without a first commit uses the shipped defaults.
+Explicit `FILE` arguments remain file previews read as written. No user
 configuration is needed. Canonical ownership comes from Git common-directory
 identity and the primary worktree, never a basename, remote or display label.
 The engineer-worker template is an example for one authorized item, not an

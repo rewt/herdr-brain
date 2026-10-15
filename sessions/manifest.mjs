@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { parseUniqueJson } from './json.mjs';
 import { safeProjectPath } from './project.mjs';
 import { resolveLaunchRoute } from '../lanes/routes.mjs';
@@ -36,7 +37,10 @@ export function parseManifest(markdown) {
       continue;
     }
     const open = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/u);
-    if (open) { fence = { char: open[1][0], size: open[1].length, json: open[2].trim() === 'json', section }; continue; }
+    if (open) {
+      if (section && open[2].trim() !== 'json') fail('Manifest section requires exactly one fenced block labelled json');
+      fence = { char: open[1][0], size: open[1].length, json: open[2].trim() === 'json', section }; continue;
+    }
     if (/^## Manifest\s*$/u.test(line)) { section = true; headings++; }
     else if (/^#{1,2}\s/u.test(line)) section = false;
   }
@@ -78,6 +82,7 @@ export function validateManifest(manifest, { config, project } = {}) {
     choice(c.source, sources, 'context.source'); bool(c.required, 'context.required'); optional(c.limit, positive, 'context.limit');
     if (c.source === 'file' && c.path === undefined) fail('file context requires path');
     if (c.path !== undefined) {
+      if (typeof project?.root !== 'string' || !isAbsolute(project.root)) fail('context path validation requires a canonical project');
       const file = safeProjectPath(project.root, c.path);
       try { if (!fs.statSync(file).isFile()) fail(`context is not a regular file: ${c.path}`); }
       catch (error) {

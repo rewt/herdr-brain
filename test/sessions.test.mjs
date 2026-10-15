@@ -56,6 +56,22 @@ test('Markdown fences and duplicate decoded keys are parsed without evaluating p
   assert.throws(() => parseUniqueJson('['.repeat(66) + '0' + ']'.repeat(66)), /nesting/);
 });
 
+for (const info of ['JSON', 'jsonc', '', 'text']) test(`Manifest section rejects an extra ${info || 'unlabelled'} fence`, () => {
+  const valid = document(fixture('chat'));
+  assert.throws(() => parseManifest(`${valid}\n~~~${info}\n{}\n~~~\n`), /exactly one fenced block labelled json/);
+});
+
+test('context paths require an explicit canonical project diagnostic instead of a TypeError', () => {
+  const m = fixture('chat');
+  assert.deepEqual(validateManifest(m, { config: ROUTE_PRESET }).diagnostics, [], 'symbolic context does not require project paths');
+  for (const required of [true, false]) {
+    m.spec.context = [{ source: 'file', required, path: 'context.md' }];
+    const diagnostic = error => error instanceof Error && !(error instanceof TypeError) && error.message === 'context path validation requires a canonical project';
+    assert.throws(() => validateManifest(m), diagnostic);
+    for (const project of [undefined, null, {}, { root: 123 }, { root: 'relative' }]) assert.throws(() => validateManifest(m, { config: ROUTE_PRESET, project }), diagnostic);
+  }
+});
+
 test('required/optional paths are bounded to the canonical project, including missing and dangling symlinks', t => {
   const f = repo(t), m = fixture('chat');
   const set = (p, required = false) => { m.spec.context = [{ source: 'file', path: p, required }]; return () => validate(m, f.project); };
@@ -101,7 +117,7 @@ test('worker inspection checks item existence in the read-only folded record and
   fs.appendFileSync(log, '{'); assert.match(run().diagnostics[0].message, /complete record tail/);
 });
 
-test('default templates ship, follow canonical tracked overrides, and select model-free non-home status', t => {
+test('default templates ship, follow canonical committed overrides, and select model-free non-home status', t => {
   const f = repo(t), before = f.git('status', '--porcelain');
   const home = inspect({ cwd: f.lane, env: f.env }); assert.equal(home.valid, true, JSON.stringify(home.diagnostics)); assert.equal(home.entries.length, 4);
   assert.equal(home.project.common, path.join(f.main, '.git')); assert.equal(home.project.root, f.main);
@@ -111,9 +127,16 @@ test('default templates ship, follow canonical tracked overrides, and select mod
   assert.notEqual(home.entries[0].manifest.metadata.uid, away.entries[0].manifest.metadata.uid);
   fs.mkdirSync(path.join(f.main, '.sessions')); const chat = fixture('chat'); chat.metadata.name = 'project-chat'; delete chat.spec.launch;
   fs.writeFileSync(path.join(f.main, '.sessions/chat.md'), document(chat));
-  assert.equal(inspect({ cwd: f.lane, env: f.env }).entries[0].manifest.metadata.name, 'workspace-chat', 'untracked ignored');
+  const untracked = inspect({ cwd: f.lane, env: f.env });
+  assert.equal(untracked.entries[0].manifest.metadata.name, 'workspace-chat', 'untracked ignored');
+  assert.equal(untracked.diagnostics[0].level, 'warning'); assert.match(untracked.diagnostics[0].message, /untracked.*\.sessions\/chat.md/);
   f.git('add', '.sessions/chat.md');
+  const staged = inspect({ cwd: f.lane, env: f.env });
+  assert.equal(staged.entries[0].manifest.metadata.name, 'workspace-chat', 'index-only override ignored');
+  assert.equal(staged.diagnostics[0].level, 'warning'); assert.match(staged.diagnostics[0].message, /uncommitted.*\.sessions\/chat.md/);
+  f.git('commit', '-qm', 'Committed session override');
   const overridden = inspect({ cwd: f.lane, env: f.env }); assert.equal(overridden.entries[0].manifest.metadata.name, 'project-chat');
+  assert.deepEqual(overridden.diagnostics, []);
   fs.mkdirSync(path.join(f.lane, '.sessions')); fs.writeFileSync(path.join(f.lane, '.sessions/chat.md'), 'invalid lane override');
   assert.equal(inspect({ cwd: f.lane, env: f.env }).valid, true);
   const cli = spawnSync(process.execPath, [path.join(root, 'sessions/sessions.mjs'), 'inspect', '--project', f.lane], { env: f.env, encoding: 'utf8' });
@@ -123,6 +146,38 @@ test('default templates ship, follow canonical tracked overrides, and select mod
   assert.ok(productFiles(root).includes('sessions/templates/logs-triage.md'));
   const copy = spawnSync(process.execPath, [path.join(installed, 'sessions/sessions.mjs'), 'inspect', '--project', f.main], { env: f.env, encoding: 'utf8' });
   assert.equal(copy.status, 0, copy.stderr);
+});
+
+test('canonical HEAD manifest bytes survive working-tree edits, staged replacements and missing files with warnings', t => {
+  const f = repo(t), file = path.join(f.main, '.sessions/chat.md'), chat = fixture('chat');
+  fs.mkdirSync(path.dirname(file)); chat.metadata.name = 'committed-chat'; delete chat.spec.launch;
+  const committed = document(chat); fs.writeFileSync(file, committed);
+  f.git('add', '.sessions/chat.md'); f.git('commit', '-qm', 'Desired session');
+  const check = () => {
+    const result = inspect({ cwd: f.lane, env: f.env });
+    assert.equal(result.valid, true, JSON.stringify(result.diagnostics)); assert.equal(result.entries.length, 4);
+    assert.equal(result.entries[0].manifest.metadata.name, 'committed-chat');
+    const warning = result.diagnostics.find(d => d.file === file);
+    assert.equal(warning.level, 'warning'); assert.match(warning.message, /uncommitted.*\.sessions\/chat.md/);
+    return result;
+  };
+  fs.writeFileSync(file, 'invalid uncommitted manifest'); check();
+  f.git('add', '.sessions/chat.md'); fs.writeFileSync(file, committed);
+  check(); // Working tree equals HEAD, but the index still contains different bytes.
+  const added = path.join(f.main, '.sessions/additional.md'); fs.writeFileSync(added, 'invalid new manifest');
+  let result = check();
+  assert.match(result.diagnostics.find(d => d.file === added).message, /untracked/);
+  f.git('add', '.sessions/additional.md'); result = check();
+  assert.match(result.diagnostics.find(d => d.file === added).message, /uncommitted/);
+  fs.unlinkSync(file); check();
+});
+
+test('an unborn canonical project uses defaults and warns about uncommitted manifests', t => {
+  const f = repo(t); f.git('checkout', '--orphan', 'fresh');
+  fs.mkdirSync(path.join(f.main, '.sessions')); fs.writeFileSync(path.join(f.main, '.sessions/chat.md'), 'uncommitted');
+  const result = inspect({ cwd: f.main, env: f.env });
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics)); assert.equal(result.entries[0].manifest.metadata.name, 'workspace-chat');
+  assert.match(result.diagnostics[0].message, /untracked.*\.sessions\/chat.md/);
 });
 
 test('canonical receipt history adopts and explicitly withdraws slots across linked lanes without live actions', t => {

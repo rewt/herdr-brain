@@ -1,0 +1,164 @@
+TAP version 13
+# Subtest: shadow isolation supplies private defaults and child environments: fresh
+ok 1 - shadow isolation supplies private defaults and child environments: fresh
+  ---
+  duration_ms: 171.398375
+  ...
+# Subtest: shadow isolation supplies private defaults and child environments: inherited
+ok 2 - shadow isolation supplies private defaults and child environments: inherited
+  ---
+  duration_ms: 166.8255
+  ...
+# Subtest: shadow isolation supplies private defaults and child environments: explicit
+ok 3 - shadow isolation supplies private defaults and child environments: explicit
+  ---
+  duration_ms: 179.513541
+  ...
+# Subtest: watch, request and promotion suites mirror fixtures without writing the default home root
+ok 4 - watch, request and promotion suites mirror fixtures without writing the default home root
+  ---
+  duration_ms: 3988.5515
+  ...
+# Subtest: offline boundary shields an inherited operator CLI, socket and pane IDs, but permits fixture fakes
+ok 5 - offline boundary shields an inherited operator CLI, socket and pane IDs, but permits fixture fakes
+  ---
+  duration_ms: 1042.803334
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: message schema accepts the envelope, qualified refs, body and decision evidence
+ok 6 - message schema accepts the envelope, qualified refs, body and decision evidence
+  ---
+  duration_ms: 4.65075
+  ...
+# Subtest: message schema rejects invalid scope, bounds, addresses, kinds and references
+ok 7 - message schema rejects invalid scope, bounds, addresses, kinds and references
+  ---
+  duration_ms: 3.293958
+  ...
+# Subtest: duplicate JSON keys, including escaped keys in nested data, are rejected
+ok 8 - duplicate JSON keys, including escaped keys in nested data, are rejected
+  ---
+  duration_ms: 0.235167
+  ...
+# Subtest: bodies are bounded verified data, with changed bytes and symlink escapes rejected
+ok 9 - bodies are bounded verified data, with changed bytes and symlink escapes rejected
+  ---
+  duration_ms: 4.549166
+  ...
+# Subtest: every rendered watcher notice maps without changing any text
+ok 10 - every rendered watcher notice maps without changing any text
+  ---
+  duration_ms: 1.248875
+  ...
+# Subtest: routing distinguishes deferred scope, needs-work and verified unsupported-role skip
+ok 11 - routing distinguishes deferred scope, needs-work and verified unsupported-role skip
+  ---
+  duration_ms: 0.893083
+  ...
+# Subtest: all current promotion outcomes are operational triage notices
+ok 12 - all current promotion outcomes are operational triage notices
+  ---
+  duration_ms: 0.847666
+  ...
+# Subtest: journal fsyncs private entries and rebuilds both deduplication keys after restart
+ok 13 - journal fsyncs private entries and rebuilds both deduplication keys after restart
+  ---
+  duration_ms: 51.506208
+  ...
+# Subtest: the journal has one immediate writer lock per canonical project partition
+ok 14 - the journal has one immediate writer lock per canonical project partition
+  ---
+  duration_ms: 8.027167
+  ...
+# Subtest: torn tails are readable with explicit evidence, block append, and preserve all bytes
+ok 15 - torn tails are readable with explicit evidence, block append, and preserve all bytes
+  ---
+  duration_ms: 12.706042
+  ...
+# Subtest: journal refuses symlink and nonprivate storage without writing record events
+ok 16 - journal refuses symlink and nonprivate storage without writing record events
+  ---
+  duration_ms: 13.005666
+  ...
+# Subtest: report counts accepted kinds/paths/would-wakes and duplicate/conflict attempts stably
+ok 17 - report counts accepted kinds/paths/would-wakes and duplicate/conflict attempts stably
+  ---
+  duration_ms: 114.65475
+  ...
+# Subtest: the inbox mirror keeps stable IDs, exact immutable bodies and original delivery ownership
+ok 18 - the inbox mirror keeps stable IDs, exact immutable bodies and original delivery ownership
+  ---
+  duration_ms: 83.798584
+  ...
+# Subtest: mirror errors, pending mirror work and failing diagnostics cannot block enqueue
+ok 19 - mirror errors, pending mirror work and failing diagnostics cannot block enqueue
+  ---
+  duration_ms: 173.827042
+  ...
+# Subtest: desk shadow resolves a marked identity root without Git and preserves unmarked targets as unknown
+ok 20 - desk shadow resolves a marked identity root without Git and preserves unmarked targets as unknown
+  ---
+  duration_ms: 59.050417
+  ...
+# Subtest: copied product runtimes include the message module and can import the existing inbox
+ok 21 - copied product runtimes include the message module and can import the existing inbox
+  ---
+  duration_ms: 154.840792
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: identity requests reuse a live desk and deliver literal request text
+ok 22 - identity requests reuse a live desk and deliver literal request text
+  ---
+  duration_ms: 1065.094
+  ...
+# Subtest: a delivered identity request mirrors its marked non-Git desk on the supervisor path
+ok 23 - a delivered identity request mirrors its marked non-Git desk on the supervisor path
+  ---
+  duration_ms: 913.621083
+  ...
+# Subtest: a missing desk creates an unfocused identity workspace and starts native Codex before prompting
+ok 24 - a missing desk creates an unfocused identity workspace and starts native Codex before prompting
+  ---
+  duration_ms: 826.785083
+  ...
+# Subtest: blocked desks retain their workspace and receive no request
+ok 25 - blocked desks retain their workspace and receive no request
+  ---
+  duration_ms: 287.590625
+  ...
+# Subtest: startup and readiness each get their own budget after slow provisioning
+ok 26 - startup and readiness each get their own budget after slow provisioning
+  ---
+  duration_ms: 472.426458
+  ...
+# Subtest: a desk that never becomes ready retains its workspace without delivery
+ok 27 - a desk that never becomes ready retains its workspace without delivery
+  ---
+  duration_ms: 444.080583
+  ...
+# Subtest: the fake Herdr rejects undeclared options
+ok 28 - the fake Herdr rejects undeclared options
+  ---
+  duration_ms: 563.76425
+  ...
+# Subtest: identity traversal and empty requests fail before contacting Herdr
+ok 29 - identity traversal and empty requests fail before contacting Herdr
+  ---
+  duration_ms: 3.541667
+  ...
+# Subtest: a failed or pending desk mirror leaves successful literal delivery byte-identical
+ok 30 - a failed or pending desk mirror leaves successful literal delivery byte-identical
+  ---
+  duration_ms: 529.781833
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..30
+# tests 30
+# suites 0
+# pass 30
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5977.939959
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

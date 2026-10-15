@@ -62,11 +62,17 @@ collected. Producer redaction remains the producer's responsibility.
 `legacy-shadow:<hash>` role bindings are **observational keys**, explicitly
 marked `unverified-legacy-binding`. They do not claim enrolled or authenticated
 occupants and can never be used to deliver. Identity comes from `BRAIN_IDENTITY`
-or an ancestor `.identity-root`; project identity comes from the existing inbox
-binding or read-only Git discovery, never a workspace label. For a desk whose
-canonical target project cannot be discovered, a `legacy.message.unresolved`
-observation preserves the intended target and classifies unknown; no target
-project is guessed. Enrolled authority/recipient validation belongs to stage 8.
+or an ancestor `.identity-root`; the sender's project identity comes from the
+existing inbox binding or read-only Git discovery, never a workspace label.
+An identity-desk recipient uses the canonical identity root supplied by the
+request helper (`~/development/<identity>`, carrying a regular `.identity-root`
+marker) as its observational `projectRef`. This directory need not be a Git
+checkout. Explicit requests to a marked desk classify on the supervisor path.
+If the target directory or marker is missing/unreadable, or the marker is not a
+regular file, a `legacy.message.unresolved` observation preserves the intended
+target with path `unknown` and `wouldWake: null`; no recipient scope is guessed.
+The marker is a local scope hint, not authentication or an enrolled binding.
+Enrolled authority/recipient validation belongs to stage 8.
 
 | Path | Classification only |
 | --- | --- |
@@ -136,7 +142,7 @@ inspection; delivery callers never invoke it.
 | Pasted chat relays | Actual relayer as from; original question/decision in a scoped body; correlation/reply_to for answers; separately verified origin and decision_ref. Untyped relay stays unknown, never fyi by inference. A claimed operator origin is not authentication. |
 | `[org-report]`, `[watch-*]`, `[promote-queue]`, literal `[watch]` | Preserve tags/text byte-for-byte. Attach original notice ID/source and org-qualified refs out of band, validated report/review evidence for classification. Brain-owned paths are mirrored here; BCH literal watch is documentation only. |
 | BCH `[auto-review]` and legacy `.msg` outbox | BCH-owned: **no BCH files or daemon are touched**. Future read-only mirror maps stable file identity/digest before original-owner removal/ack. Keep unsupported-role distinct from deferred scope and other skips. Its text delivery log is not Brain JSONL. Preserve PAUSED/backoff; never implicitly start a second daemon. |
-| Identity desks | Existing `request.mjs <identity> <text>` retained. Request to the receiving identity's canonically enrolled desk, response correlated to request. Receiving identity owns its record, files, lanes and reviews. Current helper still owns readiness, delivery and uncertainty. |
+| Identity desks | Existing `request.mjs <identity> <text>` retained. Stage 7 resolves the recipient scope from the canonical directory carrying `.identity-root`; a missing marker stays unresolved. Canonically enrolled desk bindings and correlated responses belong to future transport. Receiving identity owns its record, files, lanes and reviews. Current helper still owns readiness, delivery and uncertainty. |
 | Coordinator memos | Scoped body_ref plus decision_ref (record, sequence, author/delegation) and bounded recipients. Verify independently supplied hash/origin; a newly computed hash authenticates nobody. Retain permitted bytes before future transport acceptance. |
 | Slot locks, tickets, wait files | Hold/release/ack describe advisory intent for resource+epoch+issuer+hold_id; preserve the owner-bound real lock and ticket protocol. Messages neither grant admission nor prove cleanup. Release tombstones and scope enforcement are future stage 9, not a shadow effect. |
 | Record notes | Reference canonical org/item/run/decision sequence as evidence. Material dispositions still use the existing record CLI; record notes are not inbox deliveries. No transport events, routine ack notes or stored status are added to events.jsonl. |

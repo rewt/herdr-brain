@@ -1,0 +1,36 @@
+TAP version 13
+# Subtest: shadow isolation supplies private defaults and child environments: fresh
+ok 1 - shadow isolation supplies private defaults and child environments: fresh
+  ---
+  duration_ms: 159.674917
+  ...
+# Subtest: shadow isolation supplies private defaults and child environments: inherited
+ok 2 - shadow isolation supplies private defaults and child environments: inherited
+  ---
+  duration_ms: 164.109333
+  ...
+# Subtest: shadow isolation supplies private defaults and child environments: explicit
+ok 3 - shadow isolation supplies private defaults and child environments: explicit
+  ---
+  duration_ms: 164.647917
+  ...
+# Subtest: watch, request and promotion suites mirror fixtures without writing the default home root
+ok 4 - watch, request and promotion suites mirror fixtures without writing the default home root
+  ---
+  duration_ms: 3739.655708
+  ...
+# Subtest: offline boundary shields an inherited operator CLI, socket and pane IDs, but permits fixture fakes
+ok 5 - offline boundary shields an inherited operator CLI, socket and pane IDs, but permits fixture fakes
+  ---
+  duration_ms: 671.5245
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5001.665334

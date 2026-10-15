@@ -62,8 +62,11 @@ async function mirror({ id, at, sequence, message, to, source, cwd, project, evi
     const channel = evidence?.channel ?? noticeEvidence(message).channel;
     let recipient = role(identity, commonDir, 'project-supervisor', `${source}:${to}`), unresolved;
     if (target) {
-      try { recipient = role(target.identity, await commonDirectory(target.cwd), 'identity-desk', `${target.identity}:${to}`); }
-      catch { unresolved = 'recipient canonical project unavailable; legacy target preserved without guessing'; }
+      try {
+        const identityRoot = await fs.realpath(target.cwd);
+        if (!(await fs.stat(path.join(identityRoot, '.identity-root'))).isFile()) throw Error('recipient identity-root marker missing');
+        recipient = role(target.identity, identityRoot, 'identity-desk', `${target.identity}:${to}`);
+      } catch { unresolved = 'recipient identity root unavailable or unmarked; legacy target preserved without guessing'; }
     }
     const refs = [];
     const run = /(?:^| )run=(R-\d+)(?: |$)/.exec(message)?.[1];

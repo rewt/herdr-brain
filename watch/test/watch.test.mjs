@@ -22,7 +22,7 @@ import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { gitProject } from '../../lib/project.mjs';
 
-const TEST_ENV = { ...process.env, ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
+const TEST_ENV = { ...process.env, BRAIN_SHADOW_ROOT: process.env.BRAIN_SHADOW_ROOT || path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'), ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
 
 function executable(file, body) {

@@ -226,20 +226,33 @@ test('mirror errors, pending mirror work and failing diagnostics cannot block en
   assert.equal(readInbox(inbox)[2].message, 'disk-failure bytes'); assert.equal(fs.readFileSync(blockedRoot, 'utf8'), 'retained');
 });
 
-test('desk shadow preserves explicit request kind and surfaces unresolved canonical recipients', async t => {
+test('desk shadow resolves a marked identity root without Git and preserves unmarked targets as unknown', async t => {
   const f = fixture(t), base = { id: 'request-1', at: '2026-10-15T18:00:00Z', message: 'Please review this scoped artifact', to: 'desk-peer', target: { identity: 'peer', cwd: path.join(f.root, 'missing') } };
   await mirrorDesk(base, f.scope);
   const entry = (await readJournal(f.journal.directory)).entries[0];
   assert.equal(entry.type, 'legacy.message.unresolved'); assert.equal(entry.shadow.path, 'unknown');
+  assert.equal(entry.shadow.wouldWake, null);
   assert.equal(entry.payload.kind, 'request'); assert.equal(entry.payload.legacy.to, 'desk-peer');
   assert.equal(entry.payload.to, undefined, 'an unavailable canonical recipient is never fabricated');
   assert.equal(fs.existsSync(base.target.cwd), false);
   const repo = path.join(f.root, 'peer'); fs.mkdirSync(repo);
   assert.equal(spawnSync('git', ['-C', repo, 'init', '-q'], { encoding: 'utf8' }).status, 0);
   await mirrorDesk({ ...base, id: 'request-2', target: { identity: 'peer', cwd: repo } }, f.scope);
-  const known = (await readJournal(f.journal.directory)).entries[1];
-  assert.equal(known.shadow.path, 'supervisor'); assert.equal(known.payload.to[0].identity, 'peer');
-  assert.equal(known.payload.to[0].projectRef, fs.realpathSync(path.join(repo, '.git')));
+  assert.equal((await readJournal(f.journal.directory)).entries[1].type, 'legacy.message.unresolved', 'Git alone is not a desk identity root');
+  const desk = path.join(f.root, 'development/peer'); fs.mkdirSync(desk, { recursive: true });
+  fs.writeFileSync(path.join(desk, '.identity-root'), '');
+  const alias = path.join(f.root, 'desk-alias'); fs.symlinkSync(desk, alias, 'dir');
+  await mirrorDesk({ ...base, id: 'request-3', target: { identity: 'peer', cwd: alias } }, f.scope);
+  const known = (await readJournal(f.journal.directory)).entries[2];
+  assert.equal(known.type, 'session.message.v1'); assert.equal(known.payload.kind, 'request');
+  assert.equal(known.shadow.path, 'supervisor'); assert.equal(known.shadow.wouldWake, true);
+  assert.equal(known.payload.to[0].identity, 'peer');
+  assert.equal(known.payload.to[0].projectRef, fs.realpathSync(desk));
+  assert.equal(known.payload.to[0].role.name, 'identity-desk');
+  assert.equal(fs.existsSync(path.join(desk, '.git')), false, 'real identity desks need no Git checkout');
+  fs.unlinkSync(path.join(desk, '.identity-root')); fs.mkdirSync(path.join(desk, '.identity-root'));
+  await mirrorDesk({ ...base, id: 'request-4', target: { identity: 'peer', cwd: desk } }, f.scope);
+  assert.equal((await readJournal(f.journal.directory)).entries[3].shadow.wouldWake, null, 'a non-file marker stays unresolved');
 });
 
 test('copied product runtimes include the message module and can import the existing inbox', t => {

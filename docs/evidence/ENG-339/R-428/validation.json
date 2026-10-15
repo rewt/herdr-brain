@@ -1,0 +1,77 @@
+{
+  "schema": "eng-339-review-fix-validation/v1",
+  "run": "R-428",
+  "reviewedCommit": "f61563d86108d24548288f36f41eb445924b7cf2",
+  "review": "docs/reviews/session-messages/f61563d-r1.md",
+  "reviewId": "lr-35532c5e49f16e0f3971c01d199e88d7",
+  "result": "Both review findings fixed; focused checks green; ready for independent re-review.",
+  "fixes": {
+    "major": "Shared offline helper defaults an unset/empty BRAIN_SHADOW_ROOT to private temporary state; watcher TEST_ENV is explicit and both child containment paths propagate the default into minimal environments while respecting explicit overrides.",
+    "minor": "Identity-desk recipients use the canonical directory carrying the .identity-root file; a Git checkout is not required. Unavailable or unmarked targets remain unknown. Documentation updated."
+  },
+  "regressionEvidence": [
+    "Fresh/inherited helper defaults and explicit root overrides exercised in subprocesses, with inherited and minimal synchronous/asynchronous child environments.",
+    "Selected pre-existing watcher and promotion fixtures plus the real desk request helper actually append shadow entries under temporary state while the fixture HOME default state root stays absent.",
+    "Request fixture teardown flushes mirrors before checking its own fake HOME state root and removing files.",
+    "Marked non-Git and symlinked identity roots resolve to supervisor/wouldWake=true; missing roots, Git-only unmarked targets and non-file markers remain unknown/wouldWake=null.",
+    "Original request and quiet-gated prompt text and delivery results remain byte-identical; checked watcher evidence still classifies correctly."
+  ],
+  "sourceSha256": {
+    "messages/README.md": "5758ebae469cae3750ad11b5bbc2600c52ab61d80630a23f37742d82f45ecb99",
+    "messages/mirror.mjs": "52af85c79552b7af1ac09700c5d2cf790bd08d8272398382aaad8091db7f8755",
+    "supervisor/test/request.test.mjs": "b1ee4ead2bddcc6164d38b98596c3d539e5206803195cbeab305564348870ab7",
+    "test/helpers/fixture-lifetime.mjs": "07bb916e1db7686bc3fb8cdbbd6a2ba604eac6e3975a311e25c401a11fa65ef1",
+    "test/helpers/fixture-policy.mjs": "2c31086898a7c09027bb6f760b75c57227d00f8c03f6a6dae663b614e776e0be",
+    "test/helpers/offline-herdr.mjs": "90322258f389ca2b726ae7e30bcf172b9cc5e0ce7cc2edda1939fd526b3a3c2c",
+    "test/messages.test.mjs": "048a6426aa2829d16172161b15326bdcbbc491bf7c921cbe0da00fa2976e3c2d",
+    "test/offline-herdr.test.mjs": "ab57646f98bf98c174a671fbf7a1c9cae3a998f00f5f44f18c222c6e8fd78d74",
+    "watch/test/watch.test.mjs": "40b81cc61cf5300761b286bf70535807ddb667c521635da2667b1ec714038dc2"
+  },
+  "runs": [
+    {
+      "name": "focused",
+      "command": "node test/helpers/run.mjs test/offline-herdr.test.mjs test/messages.test.mjs supervisor/test/request.test.mjs",
+      "log": "logs/focused.tap",
+      "exitCode": 0,
+      "tests": 30,
+      "pass": 30,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "sha256": "109195f063d2134f85d35f53ec1fc47e12356638fcc405c752c4fe7d774f1204"
+    },
+    {
+      "name": "producer-compatibility",
+      "command": "node test/helpers/run.mjs --test-name-pattern='^(watch shadow uses the checked review verdict and scope while preserving the final tag|a mirror failure cannot change the quiet-gated prompt bytes or delivery result)$' watch/test/watch.test.mjs supervisor/test/delivery.test.mjs",
+      "log": "logs/producer-compatibility.tap",
+      "exitCode": 0,
+      "tests": 45,
+      "pass": 2,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 43,
+      "note": "43 cases excluded by the focused name filter, not environmental skips.",
+      "sha256": "e0d2520ba5f9f2a41a1c79c0fd85dddbaa3f3a857963b60cfbd020c25e208569"
+    },
+    {
+      "name": "direct-helper",
+      "command": "node --test test/offline-herdr.test.mjs",
+      "log": "logs/direct-helper.tap",
+      "exitCode": 0,
+      "tests": 5,
+      "pass": 5,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "note": "Proves direct file execution retains isolation without the bounded runner preload.",
+      "sha256": "8b1facf1f2055b70c3f92f70c541d040115e13feae5ef2a1b78eb38d01914b66"
+    }
+  ],
+  "executedPassingChecks": 37,
+  "nestedChecks": "The isolation regression also executes three selected watcher/request/promotion tests; these are evidence inside each helper run, not added to the outer count.",
+  "staticCheck": "git diff --check passed",
+  "priorValidation": "../R-427/validation.json",
+  "priorValidationScope": "Historical supervisor reproduction remains evidence for the earlier implementation only; the four broad groups were not rerun in this correction.",
+  "validationLog": "R-427.validation.log states that the promotion tier runs on the integration batch; no promotion suite was run here.",
+  "boundaries": "No access to the real home shadow root or quarantine; no live Herdr work, housekeeping, promotion, push or release. All new regression HOME/default-state checks use temporary directories."
+}

@@ -5,6 +5,80 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+function shadowFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'offline-shadow-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const home = path.join(root, 'home'), offline = path.join(root, 'offline');
+  fs.mkdirSync(home); fs.mkdirSync(offline, { mode: 0o700 });
+  return { root, home, offline };
+}
+
+for (const mode of ['fresh', 'inherited', 'explicit']) test(`shadow isolation supplies private defaults and child environments: ${mode}`, t => {
+  const f = shadowFixture(t), helper = path.resolve(import.meta.dirname, 'helpers/offline-herdr.mjs');
+  // Clear the inherited root inside the child, after test-only preloads have
+  // propagated containment. This exercises a genuinely unset shared default.
+  const code = `
+    import assert from 'node:assert/strict'; import fs from 'node:fs'; import path from 'node:path';
+    import {spawn, spawnSync} from 'node:child_process';
+    import {offlineHerdr} from ${JSON.stringify(helper)};
+    delete process.env.BRAIN_SHADOW_ROOT;
+    if (${JSON.stringify(mode)} === 'fresh') delete process.env.HERDR_TEST_OFFLINE_ROOT;
+    else process.env.HERDR_TEST_OFFLINE_ROOT = ${JSON.stringify(f.offline)};
+    if (${JSON.stringify(mode)} === 'explicit') process.env.BRAIN_SHADOW_ROOT = ${JSON.stringify(path.join(f.root, 'explicit'))};
+    const cleanup = offlineHerdr(), root = process.env.BRAIN_SHADOW_ROOT;
+    assert.equal(root, ${JSON.stringify(mode)} === 'explicit' ? ${JSON.stringify(path.join(f.root, 'explicit'))} : path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'));
+    assert.equal(fs.statSync(process.env.HERDR_TEST_OFFLINE_ROOT).mode & 0o077, 0);
+    const args = ['-e', 'process.stdout.write(process.env.BRAIN_SHADOW_ROOT || "missing")'];
+    // Minimal envs and ordinary inherited envs must both retain isolation.
+    for (const env of [undefined, {HOME: process.env.HOME, PATH: process.env.PATH}]) {
+      const sync = spawnSync(process.execPath, args, {env, encoding: 'utf8'});
+      assert.equal(sync.status, 0, sync.stderr); assert.equal(sync.stdout, root);
+      const child = spawn(process.execPath, args, {env, stdio: ['ignore', 'pipe', 'pipe']});
+      let out = '', err = ''; child.stdout.on('data', b => out += b); child.stderr.on('data', b => err += b);
+      const status = await new Promise((resolve, reject) => {child.on('error', reject); child.on('close', resolve);});
+      assert.equal(status, 0, err); assert.equal(out, root);
+    }
+    const override = spawnSync(process.execPath, args, {env: {...process.env, BRAIN_SHADOW_ROOT: ${JSON.stringify(path.join(f.root, 'child-override'))}}, encoding: 'utf8'});
+    assert.equal(override.status, 0, override.stderr); assert.equal(override.stdout, ${JSON.stringify(path.join(f.root, 'child-override'))});
+    cleanup();
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: f.home }, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.existsSync(path.join(f.home, '.local/state/herdr-brain/logs')), false);
+});
+
+test('watch, request and promotion suites mirror fixtures without writing the default home root', t => {
+  const f = shadowFixture(t);
+  const files = ['watch/test/watch.test.mjs', 'supervisor/test/request.test.mjs', 'promote/test/promote.test.mjs'];
+  const pattern = '^(a valid report is checked and delivered without Herdr being present|a delivered identity request mirrors its marked non-Git desk on the supervisor path|idle supervisor receives a default queued promotion notice without a false alert)$';
+  const code = `
+    import {spawnSync} from 'node:child_process';
+    delete process.env.BRAIN_SHADOW_ROOT; delete process.env.NODE_TEST_CONTEXT;
+    process.env.HERDR_TEST_OFFLINE_ROOT = ${JSON.stringify(f.offline)};
+    const result = spawnSync(process.execPath, ['--test', ${JSON.stringify(`--test-name-pattern=${pattern}`)}, ...${JSON.stringify(files)}], {env: process.env, encoding: 'utf8'});
+    process.stdout.write(result.stdout); process.stderr.write(result.stderr);
+    process.exitCode = result.status ?? 1;
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+    cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, HOME: f.home, BRAIN_IDENTITY: 'fixture' }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /# pass 3\b/);
+  assert.equal(fs.existsSync(path.join(f.home, '.local/state/herdr-brain/logs')), false, 'suite notices must never reach the default home state root');
+  const entries = [];
+  function journals(directory) {
+    for (const name of fs.readdirSync(directory)) {
+      const file = path.join(directory, name);
+      if (fs.statSync(file).isDirectory()) journals(file);
+      else if (name === 'shadow.jsonl') entries.push(...fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse));
+    }
+  }
+  journals(path.join(f.offline, 'shadow'));
+  assert.ok(entries.some(entry => entry.payload?.legacy?.id === 'watch:R-7:final'), 'pre-existing watcher fixture actually mirrored');
+  assert.ok(entries.some(entry => entry.payload?.kind === 'request' && entry.shadow.path === 'supervisor'), 'real request helper actually mirrored');
+  assert.ok(entries.some(entry => entry.payload?.legacy?.id.startsWith('promote:')), 'pre-existing promotion fixture actually mirrored');
+});
+
 test('offline boundary shields an inherited operator CLI, socket and pane IDs, but permits fixture fakes', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'offline-herdr-control-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

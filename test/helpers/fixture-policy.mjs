@@ -13,6 +13,7 @@ function containedEnv(env = process.env, command, args) {
   const result = { ...env };
   result.MONITOR_GATE_HISTORY_ROOT ??= process.env.MONITOR_GATE_HISTORY_ROOT;
   result.MONITOR_GATE_HISTORY_ORIGIN ??= process.env.MONITOR_GATE_HISTORY_ORIGIN;
+  if (process.env.BRAIN_SHADOW_ROOT) result.BRAIN_SHADOW_ROOT ||= process.env.BRAIN_SHADOW_ROOT;
   if (command === process.execPath && args?.[0] === detachedFixture) {
     // This fixed, bounded entrypoint puts a native alarm on every detached
     // descendant before exec. Those deadlines survive suite cancellation.

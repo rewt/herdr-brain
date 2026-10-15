@@ -1,0 +1,238 @@
+TAP version 13
+# Subtest: retirement hold: native watcher closes its tab from a non-Git cwd
+ok 1 - retirement hold: native watcher closes its tab from a non-Git cwd # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.576166
+  ...
+# Subtest: retirement hold: native watcher self-retirement keeps its tab from a linked cwd
+ok 2 - retirement hold: native watcher self-retirement keeps its tab from a linked cwd # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044959
+  ...
+# Subtest: retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer
+ok 3 - retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040083
+  ...
+# Subtest: retirement hold: native watcher keeps its tab on an indeterminate canonical lookup inside Git
+ok 4 - retirement hold: native watcher keeps its tab on an indeterminate canonical lookup inside Git # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.070416
+  ...
+# Subtest: retirement hold: native watcher keeps its tab on an indeterminate hold lookup inside Git
+ok 5 - retirement hold: native watcher keeps its tab on an indeterminate hold lookup inside Git # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03525
+  ...
+# Subtest: every terminal condition has a distinct, compact supervisor notice
+ok 6 - every terminal condition has a distinct, compact supervisor notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028625
+  ...
+# Subtest: spawn resolves the cwd workspace when it is run outside a Herdr pane
+ok 7 - spawn resolves the cwd workspace when it is run outside a Herdr pane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030583
+  ...
+# Subtest: a valid report is checked and delivered without Herdr being present
+ok 8 - a valid report is checked and delivered without Herdr being present # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032708
+  ...
+# Subtest: watch shadow uses the checked review verdict and scope while preserving the final tag
+ok 9 - watch shadow uses the checked review verdict and scope while preserving the final tag
+  ---
+  duration_ms: 5506.134375
+  ...
+# Subtest: final watch notice waits for fake operator typing, then sends once across watcher restart
+ok 10 - final watch notice waits for fake operator typing, then sends once across watcher restart # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.139542
+  ...
+# Subtest: a capped final watcher exits while its owned notice later delivers without another watcher
+ok 11 - a capped final watcher exits while its owned notice later delivers without another watcher # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.095459
+  ...
+# Subtest: a report landing wakes the watcher without polling Herdr
+ok 12 - a report landing wakes the watcher without polling Herdr # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03275
+  ...
+# Subtest: a valid report also waits while the worker state is unknown
+ok 13 - a valid report also waits while the worker state is unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022125
+  ...
+# Subtest: a mismatched report is invalid even when org check passes
+ok 14 - a mismatched report is invalid even when org check passes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021917
+  ...
+# Subtest: a vanished worker delivers exited-without-report and stops
+ok 15 - a vanished worker delivers exited-without-report and stops # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049417
+  ...
+# Subtest: an initially idle worker is not terminal until it has worked
+ok 16 - an initially idle worker is not terminal until it has worked # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022959
+  ...
+# Subtest: idle grace waits for a late report before sending a no-report notice
+ok 17 - idle grace waits for a late report before sending a no-report notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02075
+  ...
+# Subtest: idle grace does not start before the worker has been seen working
+ok 18 - idle grace does not start before the worker has been seen working # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032
+  ...
+# Subtest: idle grace notices a blocked worker immediately and keeps watching
+ok 19 - idle grace notices a blocked worker immediately and keeps watching # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023917
+  ...
+# Subtest: idle, working, idle without a report delivers both stop notices
+ok 20 - idle, working, idle without a report delivers both stop notices # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023625
+  ...
+# Subtest: a blocked worker delivers its distinct notice
+ok 21 - a blocked worker delivers its distinct notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0215
+  ...
+# Subtest: a valid report stays intermediate while blocked and is final only after idle
+ok 22 - a valid report stays intermediate while blocked and is final only after idle # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02025
+  ...
+# Subtest: a refused intermediate delivery stays first in the inbox and recovers before the final report
+ok 23 - a refused intermediate delivery stays first in the inbox and recovers before the final report # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030667
+  ...
+# Subtest: a still-working worker delivers the long-running notice
+ok 24 - a still-working worker delivers the long-running notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019083
+  ...
+# Subtest: a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+ok 25 - a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018166
+  ...
+# Subtest: a Herdr outage is delivered after Herdr recovers, never reported as gone
+ok 26 - a Herdr outage is delivered after Herdr recovers, never reported as gone # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018167
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: claude: captured ANSI empty, typed and placeholder composers
+ok 27 - claude: captured ANSI empty, typed and placeholder composers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.575167
+  ...
+# Subtest: codex: captured ANSI empty, typed and placeholder composers
+ok 28 - codex: captured ANSI empty, typed and placeholder composers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.04925
+  ...
+# Subtest: compound styles, wrapped typing, and normal text identical to a placeholder remain busy
+ok 29 - compound styles, wrapped typing, and normal text identical to a placeholder remain busy # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034375
+  ...
+# Subtest: Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome
+ok 30 - Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.070958
+  ...
+# Subtest: claude: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+ok 31 - claude: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042709
+  ...
+# Subtest: codex: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+ok 32 - codex: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034333
+  ...
+# Subtest: two quiet reads use the default three-second separation
+ok 33 - two quiet reads use the default three-second separation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030625
+  ...
+# Subtest: typing between quiet reads restarts the confirmation window
+ok 34 - typing between quiet reads restarts the confirmation window # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0395
+  ...
+# Subtest: the immediate final read catches a draft introduced after the confirmation pair
+ok 35 - the immediate final read catches a draft introduced after the confirmation pair # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.118042
+  ...
+# Subtest: non-idle status, unknown layout and failed reads retain capped notices
+ok 36 - non-idle status, unknown layout and failed reads retain capped notices # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.082625
+  ...
+# Subtest: cap retains FIFO; a later caller drains older notices once, with stable-id deduplication
+ok 37 - cap retains FIFO; a later caller drains older notices once, with stable-id deduplication # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.076834
+  ...
+# Subtest: concurrent callers serialize notices without interleaving or duplicate prompts
+ok 38 - concurrent callers serialize notices without interleaving or duplicate prompts # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03225
+  ...
+# Subtest: a definite pre-input refusal retries through the empty-composer gate
+ok 39 - a definite pre-input refusal retries through the empty-composer gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.429292
+  ...
+# Subtest: lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate
+ok 40 - lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.16925
+  ...
+# Subtest: a lone capped notice delivers after its caller exits, without another enqueue or manual drain
+ok 41 - a lone capped notice delivers after its caller exits, without another enqueue or manual drain # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.06675
+  ...
+# Subtest: a dead sender before the prompt side effect replays pending intent with the same ID
+ok 42 - a dead sender before the prompt side effect replays pending intent with the same ID # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.084833
+  ...
+# Subtest: a dead sender after the prompt side effect replays pending intent with the same ID
+ok 43 - a dead sender after the prompt side effect replays pending intent with the same ID # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038
+  ...
+# Subtest: torn inbox tails fail closed and preserve their bytes
+ok 44 - torn inbox tails fail closed and preserve their bytes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.125
+  ...
+# Subtest: a mirror failure cannot change the quiet-gated prompt bytes or delivery result
+ok 45 - a mirror failure cannot change the quiet-gated prompt bytes or delivery result
+  ---
+  duration_ms: 882.781833
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..45
+# tests 45
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 43
+# todo 0
+# duration_ms 5629.142625
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

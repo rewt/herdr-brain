@@ -22,12 +22,16 @@ export function offlineHerdr() {
   if (process.env.HERDR_TEST_OFFLINE_ROOT) {
     // Each test file gets its own machine registry; product children inherit it.
     process.env.HERDR_MONITOR_FLEET = path.join(process.env.HERDR_TEST_OFFLINE_ROOT, `f${process.pid}`);
+    process.env.BRAIN_SHADOW_ROOT ||= path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow');
     return () => {};
   }
   const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'oh-'));
   fs.writeFileSync(path.join(root, 'herdr'), '#!/bin/sh\necho "offline tests: provide a fake Herdr CLI" >&2\nexit 1\n', { mode: 0o755 });
   for (const name of Object.keys(process.env)) if (name.startsWith('HERDR_') && !name.startsWith('HERDR_TEST_')) delete process.env[name];
   process.env.HERDR_TEST_OFFLINE_ROOT = root;
+  // All test files and their product children must keep fixture observations
+  // out of the operator's per-user journal, including linked Git worktrees.
+  process.env.BRAIN_SHADOW_ROOT ||= path.join(root, 'shadow');
   process.env.HERDR_MONITOR_FLEET = path.join(root, `f${process.pid}`);
   process.env.HERDR_SOCKET_PATH = path.join(root, 'absent.sock');
   process.env.PATH = `${root}:${process.env.PATH ?? ''}`;

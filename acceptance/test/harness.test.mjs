@@ -97,13 +97,25 @@ test('harness cleanup stops only verified inbox owners under its scratch root an
 
 test('product tidy preserves a focused finished tab while closing the same tab in the background', async () => {
   const { planTidy } = await import('../../supervisor/tidy-tabs.mjs');
-  const snapshot = { tabs: [{ tab_id: 'worker', workspace_id: 'lane', lane: true, label: 'finished' }],
-    panes: [{ pane_id: 'worker:pane', tab_id: 'worker', workspace_id: 'lane', shellOnly: true, focused: true }],
-    agents: [{ name: 'lane-worker', status: 'idle', pane_id: 'worker:pane', tab_id: 'worker', workspace_id: 'lane' }],
+  const snapshot = { common: '/repo/.git',
+    workspaces: [{ workspace_id: 'lane', worktree: { checkout_path: '/repo/lane', repo_key: '/repo/.git', is_linked_worktree: true } }],
+    git: [{ path: '/repo/lane', common: '/repo/.git', head: 'head', clean: true, integrated: true, lane: 'topic' }],
+    record: { items: [{ id: 'ENG-1', role: 'engineer', closed: { as: 'done' } }],
+      runs: [{ id: 'R-1', item: 'ENG-1', started: { seq: 1 }, workspace: '/repo/lane',
+        meta: { agent: 'lane-worker', pane: 'worker:pane', worker_workspace: 'lane', terminal_id: 'terminal', lane: 'topic' },
+        report: { seq: 2, outcome: 'done' } }] },
+    tabs: [{ tab_id: 'worker', workspace_id: 'lane', lane: true, label: 'finished' }],
+    panes: [{ pane_id: 'worker:pane', tab_id: 'worker', workspace_id: 'lane', shellOnly: true, focused: true,
+      process_info: { shell_pid: 1, foreground_processes: [{ pid: 1, name: 'zsh' }], process_tree_complete: true,
+        process_tree: [{ pid: 1, identity: 'shell', state: 'S', command: '[zsh]' }] } }],
+    agents: [{ name: 'lane-worker', status: 'idle', pane_id: 'worker:pane', tab_id: 'worker', workspace_id: 'lane',
+      cwd: '/repo/lane', terminal_id: 'terminal' }],
     reportedAgents: new Set(['lane-worker']) };
   assert.deepEqual(planTidy(snapshot).close, []);
   snapshot.panes[0].focused = false;
   assert.equal(planTidy(snapshot).close.length, 1);
+  snapshot.record.runs[0].report = null;
+  assert.deepEqual(planTidy(snapshot).close, [], 'the legacy name set never substitutes for ingestion');
 });
 
 for (const phase of ['cwd', 'registration']) test(`the real adapter bounds a slow ${phase} native read by the polling deadline`, t => {

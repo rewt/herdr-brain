@@ -336,6 +336,9 @@ tabs stay, while Git-only lane removal still requires the shared vacancy guard.
 It does not create a cleanup retry. A completed result awaiting delivery resumes
 that saved outcome without repeating cleanup or promotion; actual cleanup refusals
 continue through the bounded, revision-checked cleanup-only retry path.
+Recovery persists a verified lane-head replacement in the current queue member
+before invoking cleanup, so the shared reader observes that replacement work
+has ended. The older pending results remain historical evidence.
 
 `queue.lock` serializes atomic queue replacements; `worker.lock` owns the drain;
 `GIT_COMMON_DIR/lane-promote.lock` excludes overlapping gates, fast-forwards and

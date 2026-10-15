@@ -359,7 +359,17 @@ function finishBatchJob(job, result, queue) {
         main: git(queue.project.canonical, ['symbolic-ref', '--short', 'HEAD']),
         mainHead: git(queue.project.canonical, ['rev-parse', 'HEAD']),
       })], { cwd: queue.project.canonical });
-      result = { ...result, replacement_pending: false, warnings: [], reason: 'green batch fast-forward; lane replacement recovered' };
+      const replaced = { ...result, replacement_pending: false, warnings: [], reason: 'green batch fast-forward; lane replacement recovered' };
+      // The retirement reader must observe the verified replacement checkpoint
+      // before cleanup. A local-only update still looks like live replacement
+      // work to the shared guard, including the child Git-only lane close.
+      queue.transaction(data => {
+        const member = data.current?.results?.find(entry => entry.job.id === job.id);
+        if (!member || member.result.tip !== result.tip || member.result.receipt !== result.receipt)
+          throw Error('current replacement checkpoint changed');
+        member.result = replaced;
+      });
+      result = replaced;
     } catch (error) { return { ...result, reason: `lane replacement pending: ${error.message}` }; }
     finally { release?.(); }
   }

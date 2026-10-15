@@ -1,0 +1,152 @@
+import test from './helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { parseManifest, validateManifest, validateSet } from '../sessions/manifest.mjs';
+import { parseUniqueJson } from '../sessions/json.mjs';
+import { canonicalProject } from '../sessions/project.mjs';
+import { inspect } from '../sessions/sessions.mjs';
+import { readStandardSlots, recordStandardSlot, slotReceiptFile } from '../sessions/receipts.mjs';
+import { ROUTE_PRESET } from '../lanes/preset.mjs';
+import { copyProduct, productFiles } from '../lib/product-files.mjs';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const fixture = name => parseManifest(fs.readFileSync(path.join(root, `test/fixtures/sessions/${name}.md`), 'utf8'));
+const document = value => `# prose\n\n## Manifest\n\n\`\`\`json\n${JSON.stringify(value)}\n\`\`\`\n`;
+const validate = (m, project = { root: fs.realpathSync(os.tmpdir()) }, config = ROUTE_PRESET) => validateManifest(m, { config, project });
+function repo(t) {
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sessions-')));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const main = path.join(scratch, 'repo'), lane = path.join(scratch, 'lane'); fs.mkdirSync(main);
+  const git = (...args) => execFileSync('git', ['-C', main, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  git('init', '-q', '-b', 'main'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid');
+  fs.writeFileSync(path.join(main, '.lane.json'), '{}'); git('add', '.'); git('commit', '-qm', 'init'); git('worktree', 'add', '-b', 'lane/topic', lane);
+  return { scratch, main, lane, git, project: canonicalProject(lane), env: { ...process.env, HERDR_MONITOR_FLEET: path.join(scratch, 'no-fleet'), LANE_CONFIG: undefined } };
+}
+function modify(m, key, value, remove = false) {
+  const parts = key.split('.'), last = parts.pop(); let target = m;
+  for (const part of parts) target = target[part];
+  if (remove) delete target[last]; else target[last] = value;
+}
+
+for (const name of ['chat', 'supervisor', 'engineer-worker', 'logs-viewer', 'logs-triage']) test(`adopted example: ${name}`, () => {
+  const m = fixture(name), result = validate(m);
+  assert.equal(result.manifest, m); assert.deepEqual(result.diagnostics, []);
+  if (m.kind === 'Session') assert.equal(result.resolvedSpec.resolvedRoute.route, m.spec.route);
+});
+const negatives = JSON.parse(fs.readFileSync(path.join(root, 'test/fixtures/sessions/negative.json'), 'utf8'));
+for (const negative of negatives) test(`manifest rejects ${negative.name}`, () => {
+  const m = fixture(negative.base);
+  for (const [key, value] of Object.entries(negative.set ?? {})) modify(m, key, value);
+  for (const key of negative.delete ?? []) modify(m, key, undefined, true);
+  assert.throws(() => validate(parseManifest(document(m))), new RegExp(negative.error));
+});
+
+test('Markdown fences and duplicate decoded keys are parsed without evaluating prose', () => {
+  const m = fixture('chat'), valid = document(m);
+  assert.deepEqual(parseManifest('$(touch no)\n' + valid + '\n## Notes\n```json\n{}\n```'), m);
+  for (const text of ['', '```json\n{}\n```', '## Manifest\n', valid + '\n```json\n{}\n```', valid + '\n## Manifest\n', '## Manifest\n```json\n{}']) assert.throws(() => parseManifest(text));
+  assert.throws(() => parseManifest('## Manifest\n```json\n{"x":1,"\\u0078":2}\n```'), /duplicate JSON key/);
+  assert.throws(() => parseUniqueJson('{"a":{"x":1,"x":2}}'), /duplicate/);
+  assert.deepEqual(parseUniqueJson('{"a":{"x":1},"b":{"x":2},"c":["a\\\"b",true,null,-2.3e2]}'), { a: { x: 1 }, b: { x: 2 }, c: ['a"b', true, null, -230] });
+  for (const invalid of ['{"x":1,}', '{"x":01}', '{"x":true false}', '[1 2]', '{} trailing']) assert.throws(() => parseUniqueJson(invalid));
+  assert.throws(() => parseUniqueJson('['.repeat(66) + '0' + ']'.repeat(66)), /nesting/);
+});
+
+test('required/optional paths are bounded to the canonical project, including missing and dangling symlinks', t => {
+  const f = repo(t), m = fixture('chat');
+  const set = (p, required = false) => { m.spec.context = [{ source: 'file', path: p, required }]; return () => validate(m, f.project); };
+  fs.writeFileSync(path.join(f.main, 'context.md'), 'context data');
+  assert.deepEqual(set('context.md', true)().diagnostics, []);
+  assert.match(set('missing')().diagnostics[0].message, /optional context absent/);
+  assert.throws(set('missing', true), /required context missing/);
+  fs.symlinkSync(f.scratch, path.join(f.main, 'escape'));
+  fs.symlinkSync('missing', path.join(f.main, 'dangling'));
+  assert.throws(set('escape/no-file'), /escapes project/);
+  assert.throws(set('dangling'), /dangling symlink/);
+  assert.throws(set('context.md/child'), /ENOTDIR/);
+});
+
+test('set validation rejects a second project triage across namespaces, duplicate UID and duplicate pane positions', () => {
+  const a = validate(fixture('logs-triage')), b = validate(fixture('logs-triage'));
+  b.manifest.metadata.namespace = 'other/namespace';
+  assert.deepEqual(validateSet([a, b]).map(d => d.message), ['duplicate uid example-project-logs-triage', 'duplicate standard tab/pane position', 'second logs-triage session for canonical project']);
+});
+
+test('layered route assertions and hygiene aliases validate resolved settings without model hard-coding', t => {
+  const f = repo(t), config = structuredClone(ROUTE_PRESET), m = fixture('logs-triage');
+  config.routes['future-replay'] = { kind: 'claude', model: 'future-candidate', effort: 'low' };
+  m.spec.route = 'future-replay'; m.spec.launch = { harness: 'claude', model: 'future-candidate', effort: 'low' };
+  assert.equal(validate(m, f.project, config).resolvedSpec.resolvedRoute.model, 'future-candidate');
+  config.routes.alias = { ...config.routes.triage }; m.spec.route = 'alias'; delete m.spec.launch;
+  assert.throws(() => validate(m, f.project, config), /preset triage/);
+  fs.writeFileSync(path.join(f.scratch, '.lane.json'), JSON.stringify({ routes: { executive: { kind: 'codex', model: 'parent-model', effort: 'low' } } }));
+  fs.writeFileSync(path.join(f.main, '.lane.json'), JSON.stringify({ routes: { executive: { kind: 'codex', model: 'project-model', effort: 'high' } } }));
+  const file = path.join(f.scratch, 'chat.md'), chat = fixture('chat'); chat.spec.launch = { model: 'project-model', harness: 'codex', effort: 'high' }; fs.writeFileSync(file, document(chat));
+  const result = inspect({ files: [file], cwd: f.lane, env: f.env });
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics)); assert.equal(result.routeFiles.length, 2);
+});
+
+test('worker inspection checks item existence in the read-only folded record and holds a torn tail', t => {
+  const f = repo(t), file = path.join(f.scratch, 'worker.md'), org = path.join(f.scratch, 'record');
+  fs.mkdirSync(org); fs.writeFileSync(file, document(fixture('engineer-worker')));
+  const log = path.join(org, 'events.jsonl'); fs.writeFileSync(log, '');
+  const run = () => inspect({ files: [file], cwd: f.lane, env: { ...f.env, ORG_DIR: org } });
+  assert.match(run().diagnostics[0].message, /unknown work item/);
+  const bytes = JSON.stringify({ type: 'item.added', id: 'ENG-232', kind: 'work', role: 'engineer', seq: 1 }) + '\n';
+  fs.writeFileSync(log, bytes); assert.equal(run().valid, true); assert.equal(fs.readFileSync(log, 'utf8'), bytes);
+  fs.appendFileSync(log, '{'); assert.match(run().diagnostics[0].message, /complete record tail/);
+});
+
+test('default templates ship, follow canonical tracked overrides, and select model-free non-home status', t => {
+  const f = repo(t), before = f.git('status', '--porcelain');
+  const home = inspect({ cwd: f.lane, env: f.env }); assert.equal(home.valid, true, JSON.stringify(home.diagnostics)); assert.equal(home.entries.length, 4);
+  assert.equal(home.project.common, path.join(f.main, '.git')); assert.equal(home.project.root, f.main);
+  const away = inspect({ cwd: f.lane, workspace: 'lane/another', env: f.env });
+  assert.equal(away.valid, true, JSON.stringify(away.diagnostics)); assert.equal(away.entries.filter(e => e.manifest.spec.role === 'logs-triage').length, 0);
+  assert.equal(away.entries.find(e => e.manifest.spec.role === 'triage-status').manifest.kind, 'LogViewer');
+  assert.notEqual(home.entries[0].manifest.metadata.uid, away.entries[0].manifest.metadata.uid);
+  fs.mkdirSync(path.join(f.main, '.sessions')); const chat = fixture('chat'); chat.metadata.name = 'project-chat'; delete chat.spec.launch;
+  fs.writeFileSync(path.join(f.main, '.sessions/chat.md'), document(chat));
+  assert.equal(inspect({ cwd: f.lane, env: f.env }).entries[0].manifest.metadata.name, 'workspace-chat', 'untracked ignored');
+  f.git('add', '.sessions/chat.md');
+  const overridden = inspect({ cwd: f.lane, env: f.env }); assert.equal(overridden.entries[0].manifest.metadata.name, 'project-chat');
+  fs.mkdirSync(path.join(f.lane, '.sessions')); fs.writeFileSync(path.join(f.lane, '.sessions/chat.md'), 'invalid lane override');
+  assert.equal(inspect({ cwd: f.lane, env: f.env }).valid, true);
+  const cli = spawnSync(process.execPath, [path.join(root, 'sessions/sessions.mjs'), 'inspect', '--project', f.lane], { env: f.env, encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr); assert.equal(JSON.parse(cli.stdout).valid, true);
+  assert.equal(before, ''); assert.equal(fs.existsSync(path.join(f.main, '.git/sessions')), false, 'inspector never enrolls');
+  const installed = path.join(f.scratch, 'installed'); copyProduct(root, installed);
+  assert.ok(productFiles(root).includes('sessions/templates/logs-triage.md'));
+  const copy = spawnSync(process.execPath, [path.join(installed, 'sessions/sessions.mjs'), 'inspect', '--project', f.main], { env: f.env, encoding: 'utf8' });
+  assert.equal(copy.status, 0, copy.stderr);
+});
+
+test('canonical receipt history adopts and explicitly withdraws slots across linked lanes without live actions', t => {
+  const f = repo(t), slot = { server: 'default', workspace: 'w', checkout: f.lane, tab: 'w:t', standardSlot: 'logs', panes: [{ pane: 'w:p', paneSlot: 'viewer' }, { pane: 'w:q', paneSlot: 'triage' }] };
+  assert.deepEqual(readStandardSlots(f.project.common).slots, []);
+  const op = recordStandardSlot({ cwd: f.lane, action: 'adopt', uid: 'logs', actor: 'fixture', why: 'proven offline binding', slot });
+  assert.equal(op.seq, 1); assert.equal(readStandardSlots(f.project.common).slots[0].common, f.project.common);
+  assert.throws(() => recordStandardSlot({ cwd: f.main, action: 'adopt', uid: 'other', actor: 'fixture', why: 'duplicate', slot }), /duplicate/);
+  assert.throws(() => recordStandardSlot({ cwd: f.main, action: 'adopt', uid: 'foreign', actor: 'fixture', why: 'wrong checkout', slot: { ...slot, checkout: f.scratch } }));
+  recordStandardSlot({ cwd: f.main, action: 'withdraw', uid: 'logs', actor: 'fixture', why: 'explicit disposition with handoff' });
+  assert.deepEqual(readStandardSlots(f.project.common).slots, []);
+  const history = JSON.parse(fs.readFileSync(slotReceiptFile(f.project.common), 'utf8'));
+  assert.deepEqual(history.operations.map(o => o.action), ['adopt', 'withdraw']);
+  assert.throws(() => recordStandardSlot({ cwd: f.main, action: 'withdraw', uid: 'missing', actor: 'fixture', why: 'unknown' }), /adopted/);
+  assert.equal(f.git('status', '--porcelain'), '');
+});
+
+test('unknown, unreadable, duplicate-key and mismatched canonical receipts fail closed', t => {
+  const f = repo(t), file = slotReceiptFile(f.project.common); fs.mkdirSync(path.dirname(file));
+  for (const value of ['{', '{"schema":"future/v2"}', JSON.stringify({ schema: 'standard-slot-history/v1', common: '/foreign/.git', operations: [] }), '{"schema":1,"schema":2}']) {
+    fs.writeFileSync(file, value); assert.match(readStandardSlots(f.project.common).errors[0], /project kept/);
+  }
+  fs.unlinkSync(file); fs.mkdirSync(file); assert.match(readStandardSlots(f.project.common).errors[0], /regular file/);
+  fs.rmdirSync(file); fs.symlinkSync('missing', file); assert.match(readStandardSlots(f.project.common).errors[0], /regular file/);
+  fs.unlinkSync(file); fs.mkdirSync(path.join(path.dirname(file), 'standard-slots.lock'));
+  assert.match(readStandardSlots(f.project.common).errors[0], /lock unresolved/);
+});

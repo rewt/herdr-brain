@@ -40,6 +40,26 @@ review/correction/integration chain; a file or verdict notification cannot
 release a pane. Git must be clean and integrated (or a verified archived tip).
 Historical report/evidence links are retained but do not create live holds.
 
+Adopted standard slots add a KEEP input from canonical
+`<git-common-dir>/sessions/standard-slots.json`, independent of manifests,
+tab labels and `.lane/sessions.json.d`. The history binds common directory,
+server, workspace, checkout, tab and every declared pane. Chat/supervisor have
+one primary pane; logs has viewer and triage. These tabs and their enclosing
+workspace/lane stay until explicit recorded withdrawal, even after their panes
+disappear. Unknown or unreadable protection evidence keeps the project. No
+receipt preserves prior behavior. The [sessions guide](../sessions/README.md)
+defines the schema and offline `recordStandardSlot` adopt/withdraw helper;
+this stage performs no live enrollment. Withdrawal preserves history and
+removes only this KEEP input, leaving every other guard intact.
+
+Warm work-item sessions also stay while their review/correction/integration
+chain remains open, **including with a confirmed successor**. Ingested reports,
+failed reviews, correction gaps and needs-human outcomes remain protected until
+the record supplies terminal evidence/disposition under the ordinary checks.
+The shared executor re-reads both the record chain and canonical slot receipts
+immediately before each tab/workspace/lane action. These inputs only add KEEP;
+they never authorize closing or changing a session.
+
 Shared record, Git, native-process and Herdr IO lives in
 [lib/retire-runtime.mjs](../lib/retire-runtime.mjs). All close-path consumers,
 including standalone contrib, import that library. `supervisor/retire.mjs` retains
@@ -58,7 +78,9 @@ names a newer run on the same item with a different launch identity. At
 execution the successor must still occupy its recorded pane. It is reserved while
 the predecessor pane exists, including when its own report is ingested; a later
 observation can release it after the predecessor is gone and its chain is terminal.
-Reusing the same session for a new run always keeps that session. Handoff never
+An open review/correction chain keeps the predecessor too; a handoff cannot
+release parked warm context before record disposition. Reusing the same session
+for a new run always keeps that session. Handoff never
 overrides an active process, unknown identity, or pending live reference. Reports
 are immutable; the fold's shape and exports are unchanged and older folds ignore
 the handoff event. A live native session needs its recorded launch session id;

@@ -8,6 +8,7 @@ import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
 import { readDeclaredReferences, readLiveReferences } from '../supervisor/retire.mjs';
 import { retirementDeadline } from '../lib/retire-lock.mjs';
+import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
 
 function fixture() {
   const events = [
@@ -149,15 +150,66 @@ test('same native session new run keeps even after a rename and with immutable o
   assert.match(kept(s), /not ingested/); assert.equal(old.report.sha256, 'immutable');
 });
 
-test('confirmed supersession releases an older round only with a retained different successor', () => {
+test('confirmed successor never releases a warm open chain; disposition still needs the retained identity', () => {
   const s = fixture(), old = s.record.runs.get('R-1'); old.report = null; s.record.items.get('ENG-1').closed = null;
   const newer = { ...old, id: 'R-2', started: { seq: 10 }, meta: { ...old.meta, agent: 'successor', pane: 'w:q', terminal_id: 'new-term', agent_session_id: 'new-session' } };
   s.record.runs.set(newer.id, newer);
   s.tabs.push({ tab_id: 'w:u', workspace_id: 'w' }); s.panes.push({ ...s.panes[0], pane_id: 'w:q', tab_id: 'w:u' });
   s.agents.push({ ...s.agents[0], name: 'successor', pane_id: 'w:q', tab_id: 'w:u', terminal_id: 'new-term', agent_session: { value: 'new-session' }, agent_status: 'working' });
   s.handoffs.push({ from: 'R-1', to: 'R-2', seq: 11, confirmed: true });
+  assert.equal(planRetirement(s).close.length, 0, 'delayed ingestion keeps even with a successor');
+  old.report = { seq: 12, outcome: 'done' }; newer.report = { seq: 13, outcome: 'done' };
+  assert.equal(planRetirement(s).close.length, 0, 'unreviewed chain keeps even with a successor');
+  s.record.items.get('ENG-1').closed = { seq: 14, as: 'done' };
   assert.deepEqual(planRetirement(s).close.map(t => t.tab_id), ['w:t']);
   s.agents.pop(); assert.equal(planRetirement(s).close.length, 0);
+});
+
+function standardSlots(s) {
+  return { schema: 'standard-slot-history/v1', errors: [], slots: [{ uid: 'adopted-logs', common: s.common, server: 'default', workspace: 'w', checkout: '/repo/lane', tab: 'w:t', standardSlot: 'logs', panes: [{ pane: 'w:p', paneSlot: 'viewer' }, { pane: 'w:q', paneSlot: 'triage' }] }] };
+}
+test('adopted standard tabs and both logs panes KEEP in a linked lane; display labels cannot change it', () => {
+  const s = fixture(); s.standardSlots = standardSlots(s); s.tabs[0].label = 'ordinary worker';
+  s.panes.push({ ...s.panes[0], pane_id: 'w:q' });
+  const plan = planRetirement(s); assert.match(plan.keep[0].why, /adopted standard slot/);
+  assert.equal(plan.panes.length, 2); assert.ok(plan.panes.every(p => p.decision === 'keep'));
+  s.tabs = []; s.panes = []; s.agents = [];
+  assert.match(laneRemovalReason(s, '/repo/lane'), /explicit withdrawal/);
+  const workspacePlan = { close: [], workspaceClose: [{ workspace_id: 'w', cwd: '/repo/lane', token: planRetirement(s).token }] };
+  const result = executeRetirement(workspacePlan, { observe: () => s, closeWorkspace: () => assert.fail('protected workspace') });
+  assert.equal(result[0].action, 'skip-close'); assert.match(result[0].why, /adopted/);
+  const mismatchedPath = { close: [], workspaceClose: [{ workspace_id: 'w', cwd: '/another', token: planRetirement(s).token }] };
+  assert.match(executeRetirement(mismatchedPath, { observe: () => s, closeWorkspace: () => assert.fail('protected id') })[0].why, /adopted/);
+  s.standardSlots.slots = []; assert.equal(laneRemovalReason(s, '/repo/lane'), null);
+});
+for (const evidence of [null, {}, { schema: 'future/v2', slots: [], errors: [] }, { schema: 'standard-slot-history/v1', slots: [null], errors: [] },
+  { schema: 'standard-slot-history/v1', slots: [], errors: ['unreadable protection; project kept'] }]) test(`unknown standard-slot evidence keeps: ${JSON.stringify(evidence)}`, () => {
+  const s = fixture(), plan = planRetirement(s); s.standardSlots = evidence;
+  assert.match(kept(s), /protection|standard-slot/);
+  const result = executeRetirement(plan, { observe: () => s, close: () => assert.fail('unknown protection') });
+  assert.equal(result[0].action, 'skip-close');
+});
+test('execution freshly rechecks receipt adoption and warm review corrections', () => {
+  for (const change of ['adoption', 'review', 'correction']) {
+    const s = fixture(), plan = planRetirement(s);
+    if (change === 'adoption') s.standardSlots = standardSlots(s);
+    if (change === 'review') s.record.items.set('REV-1', { id: 'REV-1', role: 'reviewer', parent: 'ENG-1' });
+    if (change === 'correction') s.record.runs.set('R-2', { id: 'R-2', item: 'ENG-1', started: { seq: 20 }, report: null });
+    const result = executeRetirement(plan, { observe: () => s, close: () => assert.fail(change) });
+    assert.equal(result[0].action, 'skip-close');
+  }
+});
+
+test('unreadable canonical hold lookup fails closed before execution', t => {
+  const s = fixture(), plan = planRetirement(s);
+  const original = fs.lstatSync;
+  t.mock.method(fs, 'lstatSync', function(file, ...args) {
+    if (String(file).endsWith('HOLD-WORKER-TAB-CLOSE')) throw Object.assign(Error('fixture denied'), { code: 'EACCES' });
+    return original.call(this, file, ...args);
+  });
+  assert.equal(retirementHold('/repo'), RETIREMENT_HOLD_REASON);
+  const result = executeRetirement(plan, { hold: () => retirementHold('/repo'), observe: () => assert.fail('hold must veto'), close: () => assert.fail('unreadable hold') });
+  assert.equal(result[0].action, 'held');
 });
 
 test('all tab occupants must be independently eligible; metadata never releases', () => {

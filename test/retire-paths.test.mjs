@@ -15,6 +15,7 @@ import { requestRetirement, consumeRetirement } from '../lib/retire-trigger.mjs'
 import { retirementDeadline } from '../lib/retire-lock.mjs';
 import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
+import { recordStandardSlot, slotReceiptFile } from '../sessions/receipts.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
@@ -105,6 +106,40 @@ else {console.error('unexpected fixture command '+a.join(' '));process.exit(1);}
     eventFile, eventBytes, read: () => JSON.parse(fs.readFileSync(file)), queue: () => queueFor(repo),
     traceGit, gitCalls: () => fs.existsSync(gitLog) ? fs.readFileSync(gitLog, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [] };
 }
+
+function adoptStandard(f) {
+  return recordStandardSlot({ cwd: f.lane, action: 'adopt', uid: 'fixture-chat', actor: 'fixture', why: 'offline proven binding',
+    slot: { server: 'default', workspace: 'w', checkout: f.lane, tab: 'w:t', standardSlot: 'chat', panes: [{ pane: 'w:p', paneSlot: 'primary' }] } });
+}
+test('standard-slot runtime rechecks canonical lane receipts before tab, workspace and guarded lane removal', t => {
+  const f = fixture(t), retirement = f.retirement(), plan = retirement.plan(); assert.equal(plan.close.length, 1);
+  adoptStandard(f);
+  const blocked = retirement.apply(plan); assert.equal(blocked[0].action, 'skip-close'); assert.match(blocked[0].why, /adopted standard slot/);
+  assert.match(createRetirement({ cwd: f.lane, org: f.org, herdr: f.job.herdr, env: f.env }).plan(f.lane).keep[0].why, /adopted/);
+  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', expectedTip: f.head }), /adopted/);
+  assertNoRemoval(f);
+  recordStandardSlot({ cwd: f.repo, action: 'withdraw', uid: 'fixture-chat', actor: 'fixture', why: 'explicit offline disposition' });
+  assert.equal(retirement.apply(retirement.plan())[0].action, 'closed');
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});
+test('standard-slot runtime preserves an enclosing workspace after tabs disappear and keeps unreadable evidence', t => {
+  const f = fixture(t, { occupied: false }), retirement = f.retirement(); adoptStandard(f);
+  assert.throws(() => retirement.assertVacant(f.lane), /adopted/);
+  for (const bytes of ['{', JSON.stringify({ schema: 'standard-slot-history/v1', common: '/foreign/.git', operations: [] })]) {
+    fs.writeFileSync(slotReceiptFile(f.common), bytes);
+    assert.throws(() => retirement.assertVacant(f.lane), /protection evidence unreadable/);
+  }
+  assertNoRemoval(f);
+});
+test('STOP during an unreviewed or needs-human chain retains the warm worker without launching anything', t => {
+  const f = fixture(t); fs.mkdirSync(path.join(f.repo, '.lane/supervisor'), { recursive: true }); fs.writeFileSync(path.join(f.repo, '.lane/supervisor/STOP'), 'stop dispatch');
+  const events = loadEvents(f.org).events.filter(e => e.type !== 'item.closed');
+  fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
+  assert.match(f.retirement().plan().keep[0].why, /chain is still open/);
+  events.find(e => e.type === 'report.ingested').report.outcome = 'needs_human';
+  fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
+  assert.match(f.retirement().plan().keep[0].why, /disposition/); assertNoRemoval(f);
+});
 
 test('CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement', t => {
   const f = fixture(t), retirement = f.retirement(), plan = retirement.plan(); assert.equal(plan.close.length,1);

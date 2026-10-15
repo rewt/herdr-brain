@@ -1,0 +1,137 @@
+TAP version 13
+# Subtest: retirement hold: native watcher closes its tab from a non-Git cwd
+ok 1 - retirement hold: native watcher closes its tab from a non-Git cwd
+  ---
+  duration_ms: 337.776334
+  ...
+# Subtest: retirement hold: native watcher self-retirement keeps its tab from a linked cwd
+ok 2 - retirement hold: native watcher self-retirement keeps its tab from a linked cwd
+  ---
+  duration_ms: 560.265167
+  ...
+# Subtest: retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer
+ok 3 - retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer
+  ---
+  duration_ms: 292.413625
+  ...
+# Subtest: retirement hold: native watcher keeps its tab on an indeterminate canonical lookup inside Git
+ok 4 - retirement hold: native watcher keeps its tab on an indeterminate canonical lookup inside Git
+  ---
+  duration_ms: 314.373416
+  ...
+# Subtest: retirement hold: native watcher keeps its tab on an indeterminate hold lookup inside Git
+ok 5 - retirement hold: native watcher keeps its tab on an indeterminate hold lookup inside Git
+  ---
+  duration_ms: 205.97025
+  ...
+# Subtest: every terminal condition has a distinct, compact supervisor notice
+ok 6 - every terminal condition has a distinct, compact supervisor notice
+  ---
+  duration_ms: 0.314
+  ...
+# Subtest: spawn resolves the cwd workspace when it is run outside a Herdr pane
+ok 7 - spawn resolves the cwd workspace when it is run outside a Herdr pane
+  ---
+  duration_ms: 162.251583
+  ...
+# Subtest: a valid report is checked and delivered without Herdr being present
+ok 8 - a valid report is checked and delivered without Herdr being present
+  ---
+  duration_ms: 807.921167
+  ...
+# Subtest: final watch notice waits for fake operator typing, then sends once across watcher restart
+ok 9 - final watch notice waits for fake operator typing, then sends once across watcher restart
+  ---
+  duration_ms: 951.146875
+  ...
+# Subtest: a capped final watcher exits while its owned notice later delivers without another watcher
+ok 10 - a capped final watcher exits while its owned notice later delivers without another watcher
+  ---
+  duration_ms: 804.781166
+  ...
+# Subtest: a report landing wakes the watcher without polling Herdr
+ok 11 - a report landing wakes the watcher without polling Herdr
+  ---
+  duration_ms: 696.575041
+  ...
+# Subtest: a valid report also waits while the worker state is unknown
+ok 12 - a valid report also waits while the worker state is unknown
+  ---
+  duration_ms: 762.562708
+  ...
+# Subtest: a mismatched report is invalid even when org check passes
+ok 13 - a mismatched report is invalid even when org check passes
+  ---
+  duration_ms: 1066.303166
+  ...
+# Subtest: a vanished worker delivers exited-without-report and stops
+ok 14 - a vanished worker delivers exited-without-report and stops
+  ---
+  duration_ms: 544.626917
+  ...
+# Subtest: an initially idle worker is not terminal until it has worked
+ok 15 - an initially idle worker is not terminal until it has worked
+  ---
+  duration_ms: 1099.979125
+  ...
+# Subtest: idle grace waits for a late report before sending a no-report notice
+ok 16 - idle grace waits for a late report before sending a no-report notice
+  ---
+  duration_ms: 750.88325
+  ...
+# Subtest: idle grace does not start before the worker has been seen working
+ok 17 - idle grace does not start before the worker has been seen working
+  ---
+  duration_ms: 1096.7125
+  ...
+# Subtest: idle grace notices a blocked worker immediately and keeps watching
+ok 18 - idle grace notices a blocked worker immediately and keeps watching
+  ---
+  duration_ms: 1003.132125
+  ...
+# Subtest: idle, working, idle without a report delivers both stop notices
+ok 19 - idle, working, idle without a report delivers both stop notices
+  ---
+  duration_ms: 1250.689916
+  ...
+# Subtest: a blocked worker delivers its distinct notice
+ok 20 - a blocked worker delivers its distinct notice
+  ---
+  duration_ms: 1039.199209
+  ...
+# Subtest: a valid report stays intermediate while blocked and is final only after idle
+ok 21 - a valid report stays intermediate while blocked and is final only after idle
+  ---
+  duration_ms: 855.822583
+  ...
+# Subtest: a refused intermediate delivery stays first in the inbox and recovers before the final report
+ok 22 - a refused intermediate delivery stays first in the inbox and recovers before the final report
+  ---
+  duration_ms: 1138.268042
+  ...
+# Subtest: a still-working worker delivers the long-running notice
+ok 23 - a still-working worker delivers the long-running notice
+  ---
+  duration_ms: 990.995375
+  ...
+# Subtest: a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+ok 24 - a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+  ---
+  duration_ms: 1262.6915
+  ...
+# Subtest: a Herdr outage is delivered after Herdr recovers, never reported as gone
+ok 25 - a Herdr outage is delivered after Herdr recovers, never reported as gone
+  ---
+  duration_ms: 1098.203792
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..25
+# tests 25
+# suites 0
+# pass 25
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 19197.857666
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

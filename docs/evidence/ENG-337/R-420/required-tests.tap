@@ -1,0 +1,579 @@
+TAP version 13
+# Subtest: spawn freezes supplied bindings once and preserves the other arguments
+ok 1 - spawn freezes supplied bindings once and preserves the other arguments
+  ---
+  duration_ms: 44.345708
+  ...
+# Subtest: spawn freezes repeated bindings once and preserves the other arguments
+ok 2 - spawn freezes repeated bindings once and preserves the other arguments
+  ---
+  duration_ms: 35.875
+  ...
+# Subtest: spawn freezes discovered bindings once and preserves the other arguments
+ok 3 - spawn freezes discovered bindings once and preserves the other arguments
+  ---
+  duration_ms: 35.154416
+  ...
+# Subtest: detach carries supplied bindings once into the real child
+ok 4 - detach carries supplied bindings once into the real child
+  ---
+  duration_ms: 282.612
+  ...
+# Subtest: detach carries repeated bindings once into the real child
+ok 5 - detach carries repeated bindings once into the real child
+  ---
+  duration_ms: 508.096959
+  ...
+# Subtest: detach carries discovered bindings once into the real child
+ok 6 - detach carries discovered bindings once into the real child
+  ---
+  duration_ms: 238.044917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: an existing project autopilots a done notice with a busy supervisor from a foreign caller and detached arm
+ok 7 - an existing project autopilots a done notice with a busy supervisor from a foreign caller and detached arm
+  ---
+  duration_ms: 1380.067875
+  ...
+# Subtest: an existing project exception reaches its named supervisor through its own record inbox
+ok 8 - an existing project exception reaches its named supervisor through its own record inbox
+  ---
+  duration_ms: 1024.21275
+  ...
+# Subtest: arming discovers the caller record and adapter recipient and dry-runs detached settings
+ok 9 - arming discovers the caller record and adapter recipient and dry-runs detached settings
+  ---
+  duration_ms: 481.905625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: watcher lock handles reused process identity
+ok 10 - watcher lock handles reused process identity
+  ---
+  duration_ms: 3.186
+  ...
+# Subtest: watcher lock handles dead process identity
+ok 11 - watcher lock handles dead process identity
+  ---
+  duration_ms: 1.275042
+  ...
+# Subtest: watcher lock handles legacy-dead process identity
+ok 12 - watcher lock handles legacy-dead process identity
+  ---
+  duration_ms: 1.010416
+  ...
+# Subtest: watcher lock handles unreadable process identity
+ok 13 - watcher lock handles unreadable process identity
+  ---
+  duration_ms: 0.74175
+  ...
+# Subtest: watcher lock handles legacy-live process identity
+ok 14 - watcher lock handles legacy-live process identity
+  ---
+  duration_ms: 0.633291
+  ...
+# Subtest: watcher lock handles live process identity
+ok 15 - watcher lock handles live process identity
+  ---
+  duration_ms: 0.735875
+  ...
+# Subtest: watcher lock handles malformed process identity
+ok 16 - watcher lock handles malformed process identity
+  ---
+  duration_ms: 1.151666
+  ...
+# Subtest: retirement hold: native watcher closes its tab from a non-Git cwd
+ok 17 - retirement hold: native watcher closes its tab from a non-Git cwd
+  ---
+  duration_ms: 456.283584
+  ...
+# Subtest: retirement hold: native watcher self-retirement keeps its tab from a linked cwd
+ok 18 - retirement hold: native watcher self-retirement keeps its tab from a linked cwd
+  ---
+  duration_ms: 746.700708
+  ...
+# Subtest: retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer
+ok 19 - retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer
+  ---
+  duration_ms: 272.81375
+  ...
+# Subtest: retirement hold: native watcher keeps its tab on an indeterminate canonical lookup inside Git
+ok 20 - retirement hold: native watcher keeps its tab on an indeterminate canonical lookup inside Git
+  ---
+  duration_ms: 306.9885
+  ...
+# Subtest: retirement hold: native watcher keeps its tab on an indeterminate hold lookup inside Git
+ok 21 - retirement hold: native watcher keeps its tab on an indeterminate hold lookup inside Git
+  ---
+  duration_ms: 316.299125
+  ...
+# Subtest: every terminal condition has a distinct, compact supervisor notice
+ok 22 - every terminal condition has a distinct, compact supervisor notice
+  ---
+  duration_ms: 0.294458
+  ...
+# Subtest: spawn resolves the cwd workspace when it is run outside a Herdr pane
+ok 23 - spawn resolves the cwd workspace when it is run outside a Herdr pane
+  ---
+  duration_ms: 274.609042
+  ...
+# Subtest: a valid report is checked and delivered without Herdr being present
+ok 24 - a valid report is checked and delivered without Herdr being present
+  ---
+  duration_ms: 558.453708
+  ...
+# Subtest: final watch notice waits for fake operator typing, then sends once across watcher restart
+not ok 25 - final watch notice waits for fake operator typing, then sends once across watcher restart
+  ---
+  duration_ms: 10.374208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-non-git-hold/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a capped final watcher exits while its owned notice later delivers without another watcher
+not ok 26 - a capped final watcher exits while its owned notice later delivers without another watcher
+  ---
+  duration_ms: 721.40925
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-non-git-hold/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a report landing wakes the watcher without polling Herdr
+ok 27 - a report landing wakes the watcher without polling Herdr # SKIP filesystem notifications unavailable: EMFILE
+  ---
+  duration_ms: 1.007083
+  ...
+# Subtest: a valid report also waits while the worker state is unknown
+not ok 28 - a valid report also waits while the worker state is unknown
+  ---
+  duration_ms: 6.036083
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-non-git-hold/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a mismatched report is invalid even when org check passes
+ok 29 - a mismatched report is invalid even when org check passes
+  ---
+  duration_ms: 1010.708292
+  ...
+# Subtest: a vanished worker delivers exited-without-report and stops
+ok 30 - a vanished worker delivers exited-without-report and stops
+  ---
+  duration_ms: 541.41525
+  ...
+# Subtest: an initially idle worker is not terminal until it has worked
+ok 31 - an initially idle worker is not terminal until it has worked
+  ---
+  duration_ms: 1091.661834
+  ...
+# Subtest: idle grace waits for a late report before sending a no-report notice
+not ok 32 - idle grace waits for a late report before sending a no-report notice
+  ---
+  duration_ms: 6.661917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-non-git-hold/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: idle grace does not start before the worker has been seen working
+ok 33 - idle grace does not start before the worker has been seen working
+  ---
+  duration_ms: 978.765875
+  ...
+# Subtest: idle grace notices a blocked worker immediately and keeps watching
+not ok 34 - idle grace notices a blocked worker immediately and keeps watching
+  ---
+  duration_ms: 8.7945
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-non-git-hold/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: idle, working, idle without a report delivers both stop notices
+ok 35 - idle, working, idle without a report delivers both stop notices
+  ---
+  duration_ms: 1385.244125
+  ...
+# Subtest: a blocked worker delivers its distinct notice
+ok 36 - a blocked worker delivers its distinct notice
+  ---
+  duration_ms: 971.124416
+  ...
+# Subtest: a valid report stays intermediate while blocked and is final only after idle
+not ok 37 - a valid report stays intermediate while blocked and is final only after idle
+  ---
+  duration_ms: 6.919459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-non-git-hold/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a refused intermediate delivery stays first in the inbox and recovers before the final report
+ok 38 - a refused intermediate delivery stays first in the inbox and recovers before the final report
+  ---
+  duration_ms: 1024.630375
+  ...
+# Subtest: a still-working worker delivers the long-running notice
+ok 39 - a still-working worker delivers the long-running notice
+  ---
+  duration_ms: 1174.602959
+  ...
+# Subtest: a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+not ok 40 - a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+  ---
+  duration_ms: 1115.051
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-non-git-hold/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a Herdr outage is delivered after Herdr recovers, never reported as gone
+ok 41 - a Herdr outage is delivered after Herdr recovers, never reported as gone
+  ---
+  duration_ms: 1032.549333
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: the supervisor arms the standalone watcher; contrib keeps the compatibility watcher
+ok 42 - the supervisor arms the standalone watcher; contrib keeps the compatibility watcher
+  ---
+  duration_ms: 1.027917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"7d513c59977309ebf3b38051b2414c11fa6b3cd84d279daa9289b5b2ef14817b","action":"held"}
+# {"handled":false,"pending":true,"action":"held","reason":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","revision":4,"results":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"7d513c59977309ebf3b38051b2414c11fa6b3cd84d279daa9289b5b2ef14817b","action":"held"}],"keep":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"7d513c59977309ebf3b38051b2414c11fa6b3cd84d279daa9289b5b2ef14817b"}],"diagnostics":[]}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"7d513c59977309ebf3b38051b2414c11fa6b3cd84d279daa9289b5b2ef14817b","action":"held"}
+# {"handled":false,"pending":true,"action":"held","reason":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","revision":4,"results":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"7d513c59977309ebf3b38051b2414c11fa6b3cd84d279daa9289b5b2ef14817b","action":"held"}],"keep":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"7d513c59977309ebf3b38051b2414c11fa6b3cd84d279daa9289b5b2ef14817b"}],"diagnostics":[]}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"5f9d5db578bb7bd16baf52188666869e087e03f676eef07dae99a8c102c9ea07","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"aaab08828834791afbb5720d3157b704db008c895616750894a6d53df1521fee","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"afcd3d319120bb206cdd13de885d18aff96af1c6af7a86a4e77d79598777fe3b","action":"closed"}
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 43 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+  ---
+  duration_ms: 1018.187291
+  ...
+# Subtest: retirement hold: file in the canonical checkout keeps every tab and receipt
+ok 44 - retirement hold: file in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2013.877083
+  ...
+# Subtest: retirement hold: directory in the canonical checkout keeps every tab and receipt
+ok 45 - retirement hold: directory in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2105.478208
+  ...
+# Subtest: retirement hold: symlink in the canonical checkout keeps every tab and receipt
+ok 46 - retirement hold: symlink in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2082.809292
+  ...
+# Subtest: retirement hold: appearing between plan and apply stops the stale close
+ok 47 - retirement hold: appearing between plan and apply stops the stale close
+  ---
+  duration_ms: 1003.401666
+  ...
+# Subtest: retirement hold: indeterminate lstat EACCES fails closed without reading contents
+ok 48 - retirement hold: indeterminate lstat EACCES fails closed without reading contents
+  ---
+  duration_ms: 769.103541
+  ...
+# Subtest: retirement hold: indeterminate lstat ENOTDIR fails closed without reading contents
+ok 49 - retirement hold: indeterminate lstat ENOTDIR fails closed without reading contents
+  ---
+  duration_ms: 874.237333
+  ...
+# Subtest: retirement hold: indeterminate lstat EIO fails closed without reading contents
+ok 50 - retirement hold: indeterminate lstat EIO fails closed without reading contents
+  ---
+  duration_ms: 753.736292
+  ...
+# Subtest: retirement hold: rechecked after the final observation immediately before a close
+ok 51 - retirement hold: rechecked after the final observation immediately before a close
+  ---
+  duration_ms: 1487.384542
+  ...
+# Subtest: retirement hold: an empty workspace stays open and logs held before any close
+ok 52 - retirement hold: an empty workspace stays open and logs held before any close
+  ---
+  duration_ms: 855.577
+  ...
+# Subtest: only a canonical hold can brake retirement; a lane-local lookalike has no authority
+ok 53 - only a canonical hold can brake retirement; a lane-local lookalike has no authority
+  ---
+  duration_ms: 766.773667
+  ...
+# Subtest: retirement hold: tidy keeps tabs and logs the hold, then resumes
+ok 54 - retirement hold: tidy keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1799.568375
+  ...
+# Subtest: retirement hold: housekeeping-fast keeps tabs and logs the hold, then resumes
+ok 55 - retirement hold: housekeeping-fast keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 926.937958
+  ...
+# Subtest: retirement hold: housekeeping-strict keeps tabs and logs the hold, then resumes
+ok 56 - retirement hold: housekeeping-strict keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 888.311333
+  ...
+# Subtest: retirement hold: plan keeps tabs and logs the hold, then resumes
+ok 57 - retirement hold: plan keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1705.2615
+  ...
+# Subtest: retirement hold: apply keeps tabs and logs the hold, then resumes
+ok 58 - retirement hold: apply keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1944.094833
+  ...
+# Subtest: retirement hold: consume keeps tabs and logs the hold, then resumes
+ok 59 - retirement hold: consume keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1928.948167
+  ...
+# Subtest: retirement hold: drain catch-up acknowledges ready first and leaves the hint pending at both boundaries
+ok 60 - retirement hold: drain catch-up acknowledges ready first and leaves the hint pending at both boundaries
+  ---
+  duration_ms: 1064.384583
+  ...
+# Subtest: retirement hold: promotion cleanup never invokes git-only close and stays promoted until bounded retry
+ok 61 - retirement hold: promotion cleanup never invokes git-only close and stays promoted until bounded retry
+  ---
+  duration_ms: 2484.5735
+  ...
+# Subtest: retirement hold: lane close normal retains worktree and branch before lifecycle mutations
+ok 62 - retirement hold: lane close normal retains worktree and branch before lifecycle mutations
+  ---
+  duration_ms: 5644.994542
+  ...
+# Subtest: retirement hold: lane close git-only retains worktree and branch before lifecycle mutations
+ok 63 - retirement hold: lane close git-only retains worktree and branch before lifecycle mutations
+  ---
+  duration_ms: 4772.963917
+  ...
+# Subtest: retirement hold: standalone settle-watch self-retirement preserves its tab and receipt
+ok 64 - retirement hold: standalone settle-watch self-retirement preserves its tab and receipt
+  ---
+  duration_ms: 5079.399291
+  ...
+# Subtest: retirement hold: settle-watch worker pruning keeps eligible workers then closes after release
+ok 65 - retirement hold: settle-watch worker pruning keeps eligible workers then closes after release
+  ---
+  duration_ms: 2138.224916
+  ...
+# Subtest: retirement hold: settle-watch pruneSessionTabs honors the brake during a real CLI handoff
+ok 66 - retirement hold: settle-watch pruneSessionTabs honors the brake during a real CLI handoff
+  ---
+  duration_ms: 6914.796125
+  ...
+# Subtest: retirement hold: settle-watch closeWorkerTab honors the brake during a real CLI handoff
+ok 67 - retirement hold: settle-watch closeWorkerTab honors the brake during a real CLI handoff
+  ---
+  duration_ms: 6975.473958
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 68 - lane close --git-only keeps the worktree beneath even an eligible pane
+  ---
+  duration_ms: 1623.881375
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 69 - lane close uses the executor then proves vacancy before Git and empty workspace close
+  ---
+  duration_ms: 2499.735375
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 70 - an empty unmerged lane retains its recoverable archive and immutable record
+  ---
+  duration_ms: 2108.921959
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 71 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+  ---
+  duration_ms: 2691.0695
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 72 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+  ---
+  duration_ms: 709.377459
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 73 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+  ---
+  duration_ms: 189.265833
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 74 - Git-only lane without a workspace still keeps queued lane and run references
+  ---
+  duration_ms: 678.201583
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 75 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+  ---
+  duration_ms: 482.760167
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 76 - installed settle-watch flags keep an ingested worker while its chain is open
+  ---
+  duration_ms: 583.892459
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 77 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+  ---
+  duration_ms: 891.485542
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 78 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+  ---
+  duration_ms: 230.123167
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 79 - promote drain consumes requests at both foreground boundaries without running a gate
+  ---
+  duration_ms: 859.351375
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+ok 80 - promote sends its ready acknowledgment before observing a pending retirement hint
+  ---
+  duration_ms: 645.28975
+  ...
+# {"id":"job","topic":"topic","outcome":"refused","reason":"lane: fixture refusal","log":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-3N0K5f/repo/.git/promote/job.log","delivered":false,"inbox":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-3N0K5f/record/supervisor/inbox.log","queued":true,"owner_pid":68166,"message":"[promote-queue] id=job lane=topic outcome=refused reason=\\"lane: fixture refusal\\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-3N0K5f/repo/.git/promote/job.log","delivery_id":"promote:job"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"0d117eb62f9a929c04a1c4efdc8a055e1a5aeac16cb5b8e475bfd35b665937b8","action":"closed"}
+# Subtest: a dequeued job is persisted before retirement catch-up and is never left current during it
+ok 81 - a dequeued job is persisted before retirement catch-up and is never left current during it
+  ---
+  duration_ms: 899.522709
+  ...
+# Subtest: the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+ok 82 - the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+  ---
+  duration_ms: 965.70875
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 83 - cleanup retries are capped with backoff, record the refusal, and reset on a new request
+  ---
+  duration_ms: 2862.765916
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 84 - lane close permits an absent Herdr executable and refuses an unreadable installed server
+  ---
+  duration_ms: 1315.357875
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 85 - tidy-tabs prunes an exited recorded watcher callback through the shared guard
+  ---
+  duration_ms: 1530.586375
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 86 - tidy-tabs prunes an exited recorded settle callback through the shared guard
+  ---
+  duration_ms: 1520.547084
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 87 - tidy-tabs prunes an exited recorded executive callback through the shared guard
+  ---
+  duration_ms: 1627.643667
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 88 - tidy-tabs prunes an exited recorded plan callback through the shared guard
+  ---
+  duration_ms: 1535.77975
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 89 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+  ---
+  duration_ms: 906.012666
+  ...
+# Subtest: a concurrently pruned absent receipt does not abort remaining tab closes
+ok 90 - a concurrently pruned absent receipt does not abort remaining tab closes
+  ---
+  duration_ms: 999.818042
+  ...
+# Subtest: post-close receipt pruning ENOENT preserves the successful close result
+ok 91 - post-close receipt pruning ENOENT preserves the successful close result
+  ---
+  duration_ms: 968.966458
+  ...
+# Subtest: post-close receipt pruning EACCES preserves the successful close result
+ok 92 - post-close receipt pruning EACCES preserves the successful close result
+  ---
+  duration_ms: 979.961
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 93 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+  ---
+  duration_ms: 4705.614125
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 94 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+  ---
+  duration_ms: 723.722042
+  ...
+# Subtest: standalone contrib retires only its owned watcher with no supervisor directory
+ok 95 - standalone contrib retires only its owned watcher with no supervisor directory
+  ---
+  duration_ms: 4937.312333
+  ...
+# Subtest: composed promotion then native completion reconcile then cleanup: KEEP protects lane and evidence
+ok 96 - composed promotion then native completion reconcile then cleanup: KEEP protects lane and evidence
+  ---
+  duration_ms: 1344.170125
+  ...
+# Subtest: composed promotion then native completion reconcile then cleanup: release closes workspace after verified preservation
+ok 97 - composed promotion then native completion reconcile then cleanup: release closes workspace after verified preservation
+  ---
+  duration_ms: 2954.667833
+  ...
+# Subtest: workspace close failure retries only the empty workspace after Git removal
+ok 98 - workspace close failure retries only the empty workspace after Git removal
+  ---
+  duration_ms: 2650.963375
+  ...
+# Subtest: an occupied workspace retry retains its reason in the cleanup receipt after the lane is gone
+ok 99 - an occupied workspace retry retains its reason in the cleanup receipt after the lane is gone
+  ---
+  duration_ms: 2505.521625
+  ...
+# Subtest: a planner KEEP refuses git-only unmerged close before any evidence copy or tag
+ok 100 - a planner KEEP refuses git-only unmerged close before any evidence copy or tag
+  ---
+  duration_ms: 640.298625
+  ...
+# Subtest: a planner KEEP refuses normal unmerged close before any evidence copy or tag
+ok 101 - a planner KEEP refuses normal unmerged close before any evidence copy or tag
+  ---
+  duration_ms: 599.232875
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..101
+# tests 101
+# suites 0
+# pass 93
+# fail 7
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 109571.259708
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

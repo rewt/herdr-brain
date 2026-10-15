@@ -330,10 +330,21 @@ function acquireLock() {
   return release;
 }
 
+function ownTabRetirementHold() {
+  // Only an explicit non-repository result at the starting cwd can bypass
+  // canonical discovery. Later Git or hold lookup failures must keep the tab.
+  const probe = run('git', ['-C', opt.cwd, 'rev-parse', '--show-toplevel'], { env: { LC_ALL: 'C' } });
+  if (!probe.error && probe.status === 128 &&
+      /^fatal: not a git repository \(or any (?:of the parent directories|parent up to mount point\b)/.test(probe.stderr)) return null;
+  if (probe.error) throw probe.error;
+  if (probe.status !== 0) throw new Error(probe.stderr.trim() || `Git checkout lookup exited ${probe.status}`);
+  return retirementHold(gitProject(opt.cwd).canonical);
+}
+
 function closeOwnTab() {
   if (dry || !opt['close-tab-on-exit'] || !process.env.HERDR_TAB_ID) return;
   try {
-    const held = retirementHold(gitProject(opt.cwd).canonical);
+    const held = ownTabRetirementHold();
     if (held) { log(JSON.stringify({ action: 'held', tab_id: process.env.HERDR_TAB_ID, why: held })); return; }
   } catch (error) {
     log(JSON.stringify({ action: 'held', tab_id: process.env.HERDR_TAB_ID, why: RETIREMENT_HOLD_REASON, error: error.message }));

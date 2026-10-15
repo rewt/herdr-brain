@@ -66,23 +66,98 @@ function startWatcher(t, args) {
   return spawnChild(t, process.execPath, args, { env: TEST_ENV });
 }
 
+function retiringWatcherFixture(t, run) {
+  const f = watcherFixture(run);
+  t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  executable(f.org, `printf '%s\\n' '{"id":"${run}","item":"ENG-9","meta":{"agent":"lane-nine"},"abandoned":{"note":"fixture complete"},"report_path":"${f.report}"}'`);
+  executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'; echo '{"result":{}}'`);
+  return { ...f, retire: async (cwd, preloads = []) => {
+    const child = spawnChild(t, process.execPath, [...preloads, ...f.args, '--cwd', cwd, '--close-tab-on-exit'], {
+      env: { ...TEST_ENV, HERDR_TAB_ID: 'watch-tab' },
+    });
+    const result = await waitForExit(child);
+    assert.equal(result.code, 0, result.stderr);
+    return result;
+  } };
+}
+
+async function waitForTabClose(f) {
+  const deadline = Date.now() + loadTimeout(5000);
+  while (!fs.existsSync(f.calls) || !/tab close watch-tab/.test(fs.readFileSync(f.calls, 'utf8'))) {
+    assert.ok(Date.now() < deadline, 'watcher did not close its tab');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+}
+
+test('retirement hold: native watcher closes its tab from a non-Git cwd', async t => {
+  const f = retiringWatcherFixture(t, 'R-902');
+  const probe = spawnSync('git', ['-C', f.root, 'rev-parse', '--show-toplevel'], {
+    encoding: 'utf8', env: { ...TEST_ENV, LC_ALL: 'C' },
+  });
+  assert.equal(probe.status, 128, probe.stderr);
+  assert.match(probe.stderr, /^fatal: not a git repository/);
+  const result = await f.retire(f.root);
+  assert.doesNotMatch(result.stdout, /"action":"held"/);
+  await waitForTabClose(f);
+});
+
 test('retirement hold: native watcher self-retirement keeps its tab from a linked cwd', async t => {
-  const f = watcherFixture('R-901'); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  const f = retiringWatcherFixture(t, 'R-901');
   const repo = path.join(f.root, 'repo'), lane = path.join(f.root, 'lane'); fs.mkdirSync(repo);
   for (const args of [['init', '-q', '-b', 'main'], ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-qm', 'base'], ['worktree', 'add', '-b', 'lane/held', lane]]) {
     const r = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
   }
   const hold = path.join(repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'); fs.mkdirSync(path.dirname(hold), { recursive: true }); fs.writeFileSync(hold, 'hold');
-  executable(f.org, `printf '%s\\n' '{"id":"R-901","item":"ENG-9","meta":{"agent":"lane-nine"},"abandoned":{"note":"fixture complete"},"report_path":"${f.report}"}'`);
-  executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'; echo '{"result":{}}'`);
-  const run = async () => { const child = spawnChild(t, process.execPath, [...f.args, '--cwd', lane, '--close-tab-on-exit'], { env: { ...TEST_ENV, HERDR_TAB_ID: 'watch-tab' } }); const result = await waitForExit(child); assert.equal(result.code, 0, result.stderr); return result; };
-  const held = await run(); assert.ok(!fs.existsSync(f.calls) || !/tab close|workspace close|worktree remove/.test(fs.readFileSync(f.calls, 'utf8'))); assert.match(held.stdout, /held/);
-  fs.unlinkSync(hold); await run();
-  const deadline = Date.now() + loadTimeout(5000);
-  while (!fs.existsSync(f.calls) || !/tab close watch-tab/.test(fs.readFileSync(f.calls, 'utf8'))) {
-    assert.ok(Date.now() < deadline, 'watcher did not close its tab after the hold was removed');
-    await new Promise(resolve => setTimeout(resolve, 20));
+  const held = await f.retire(lane); assert.ok(!fs.existsSync(f.calls) || !/tab close|workspace close|worktree remove/.test(fs.readFileSync(f.calls, 'utf8'))); assert.match(held.stdout, /held/);
+  fs.unlinkSync(hold); await f.retire(lane);
+  await waitForTabClose(f);
+});
+
+test('retirement hold: native watcher keeps its tab when the cwd has a broken Git pointer', async t => {
+  const f = retiringWatcherFixture(t, 'R-905');
+  fs.writeFileSync(path.join(f.root, '.git'), 'gitdir: missing-git-directory\n');
+  const probe = spawnSync('git', ['-C', f.root, 'rev-parse', '--show-toplevel'], {
+    encoding: 'utf8', env: { ...TEST_ENV, LC_ALL: 'C' },
+  });
+  assert.equal(probe.status, 128, probe.stderr);
+  assert.match(probe.stderr, /^fatal: not a git repository: /);
+  const held = await f.retire(f.root);
+  assert.match(held.stdout, /"action":"held"/);
+  assert.ok(!fs.existsSync(f.calls) || !/tab close|workspace close|worktree remove/.test(fs.readFileSync(f.calls, 'utf8')));
+});
+
+for (const fault of ['canonical', 'hold']) test(`retirement hold: native watcher keeps its tab on an indeterminate ${fault} lookup inside Git`, async t => {
+  const f = retiringWatcherFixture(t, fault === 'canonical' ? 'R-903' : 'R-904');
+  const repo = path.join(f.root, 'repo'); fs.mkdirSync(repo);
+  const init = spawnSync('git', ['-C', repo, 'init', '-q', '-b', 'main'], { encoding: 'utf8' });
+  assert.equal(init.status, 0, init.stderr);
+  const preload = path.join(f.root, 'fault.mjs'), reached = path.join(f.root, 'fault-reached');
+  fs.writeFileSync(preload, `import fs from 'node:fs';
+import cp from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+const fault = ${JSON.stringify(fault)}, marker = ${JSON.stringify(reached)};
+const exec = cp.execFileSync, lstat = fs.lstatSync;
+cp.execFileSync = function(command, args, ...rest) {
+  if (fault === 'canonical' && command === 'git' && args.at(-1) === '--git-common-dir') {
+    fs.writeFileSync(marker, 'canonical');
+    throw Object.assign(Error('injected canonical lookup failure'), { status: 128,
+      stderr: 'fatal: not a git repository (or any of the parent directories): .git\\n' });
   }
+  return exec.call(this, command, args, ...rest);
+};
+fs.lstatSync = function(target, ...rest) {
+  if (fault === 'hold' && target === ${JSON.stringify(path.join(fs.realpathSync(repo), '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'))}) {
+    fs.writeFileSync(marker, 'hold');
+    throw Object.assign(Error('injected hold lookup failure'), { code: 'EACCES' });
+  }
+  return lstat.call(this, target, ...rest);
+};
+syncBuiltinESMExports();
+`);
+  const held = await f.retire(repo, ['--import', preload]);
+  assert.equal(fs.readFileSync(reached, 'utf8'), fault, 'the indeterminate lookup must be exercised');
+  assert.match(held.stdout, /"action":"held"/);
+  assert.ok(!fs.existsSync(f.calls) || !/tab close|workspace close|worktree remove/.test(fs.readFileSync(f.calls, 'utf8')));
 });
 
 function waitForText(file, pattern, timeoutMs = 10_000) {

@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const [root, mode] = process.argv.slice(2);
-const watchdog = ['gate-pgid', 'gate-leftover-pipes', 'gate-leftover-ignore'].includes(mode);
+const watchdog = ['gate-pgid', 'gate-leftover-pipes', 'gate-leftover-ignore', 'gate-identity'].includes(mode);
 if (mode !== 'inbox' && !watchdog) throw Error('unknown detached fixture');
 const executable = path.join(root, 'fixture-deadline');
 const source = fileURLToPath(new URL('./fixture-deadline.c', import.meta.url));

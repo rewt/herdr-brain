@@ -258,26 +258,8 @@ for (const status of [0, 1, 124]) test(`printed descendant timeout marker follow
   assert.equal(receipt.gate_timeout?.descendant ?? false, status === 124);
 });
 
-test('failed descendant identity source stops the owned hung group and retains the slot', t => {
-  const s = scratch(t), preload = path.join(s.root, 'deny.mjs');
-  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
-const execute=cp.spawnSync,read=fs.readFileSync,list=fs.readdirSync;
-cp.spawnSync=(file,argv,...args)=>String(file).includes('process-source-')&&!argv.includes(String(process.pid))?{error:Error('injected source failure')}:execute(file,argv,...args);
-fs.readFileSync=(file,...args)=>String(file).startsWith('/proc/')&&Number.isInteger(Number(String(file).split('/')[2]))&&!String(file).startsWith('/proc/'+process.pid+'/')?(()=>{throw Error('injected source failure');})():read(file,...args);
-fs.readdirSync=(file,...args)=>String(file)==='/proc'?(()=>{throw Error('injected source failure');})():list(file,...args);syncBuiltinESMExports();`);
-  s.env.NODE_OPTIONS = `--import=${preload}`;
-  const r = s.run(['--timeout-seconds', '.3'], [process.execPath, '-e', "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"]);
-  assert.equal(r.status, 124, r.stderr);
-  assert.match(r.stderr, /GATE_TIMEOUT_CLEANUP_FAILED: cannot snapshot gate descendants: .*injected source failure.*slot retained/);
-  const receipt = JSON.parse(fs.readFileSync(s.result));
-  assert.equal(receipt.gate_timeout.kind, 'wall');
-  assert.match(receipt.cleanup_error, /cannot snapshot gate descendants: .*injected source failure/);
-  assert.ok(receipt.duration_s < 5);
-  assert.throws(() => process.kill(-receipt.command_pid, 0), { code: 'ESRCH' });
-  const holder = JSON.parse(fs.readFileSync(s.lock));
-  assert.equal(holder.pgid, receipt.command_pid);
-  assert.equal(holder.groupStart, null, 'the injected child start lookup also failed');
-});
+test('failed descendant identity source stops the owned hung group and retains the slot',
+  t => nativeGroupScenario(t, 'gate-identity'));
 
 test('planned train file lists record and resolve one declared command history', t => {
   const f = fixture(t);

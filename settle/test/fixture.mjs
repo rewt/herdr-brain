@@ -164,12 +164,23 @@ const root=process.env.SETTLE_TEST_ROOT, repo=path.join(root,'project'), cwd=pat
 const file=path.join(root,'agents.json'); const agents=fs.existsSync(file)?JSON.parse(fs.readFileSync(file)):{};
 const save=()=>fs.writeFileSync(file,JSON.stringify(agents));
 const out=(result)=>console.log(JSON.stringify({result}));
+const clientOwner=(relative,operation='')=>{
+ const tree=lookupProcess(),program=path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'..',relative);
+ if(!tree.ok)throw Error('cannot confirm fixture client owner');
+ const prefix=process.execPath+' '+program+(operation?' '+operation:'')+' ';
+ let owner=tree.value.get(process.ppid);const seen=new Set();
+ while(owner&&!owner.command.startsWith(prefix)&&!seen.has(owner.pid)){
+  seen.add(owner.pid);owner=tree.value.get(owner.ppid);
+ }
+ if(!owner||seen.has(owner.pid))throw Error('fixture client has no foreground owner');
+ return {pid:owner.pid,identity:owner.identity};
+};
 fs.appendFileSync(path.join(root,'calls'),JSON.stringify(args)+'\\n');
 const ws={workspace_id:'w-lane',label:'topic',worktree:{checkout_path:cwd,is_linked_worktree:true,repo_key:path.join(repo,'.git'),repo_root:repo}};
 if(args[0]==='workspace'&&args[1]==='list') out({workspaces:[ws,{workspace_id:'w-parent',label:'project',worktree:{checkout_path:repo,repo_key:path.join(repo,'.git'),repo_root:repo}}]});
 else if(args[0]==='worktree'&&args[1]==='list') out({source:{repo_key:path.join(repo,'.git'),repo_root:repo,source_checkout_path:repo},worktrees:[{path:cwd,branch:'lane/topic',open_workspace_id:'w-lane'},{path:repo,branch:'main',open_workspace_id:'w-parent'}]});
 else if(args[0]==='tab'&&args[1]==='create') {const n=Object.keys(agents).length+1;out({root_pane:{pane_id:'w-lane:p'+n},tab:{tab_id:'w-lane:t'+n}});}
-// Scripted reviewers belong to their real foreground lane-review process.
+// Scripted clients belong to their real foreground review/dispatch process.
 // Keep their registrations through delivery verification, then report vacancy
 // only after that process has exited or its kernel birth has changed.
 else if(args[0]==='tab'&&args[1]==='list') out({tabs:[]});
@@ -178,9 +189,9 @@ else if(args[0]==='pane'&&args[1]==='get') out({pane:{pane_id:args[2],foreground
 else if(args[0]==='pane'&&args[1]==='read') console.log(fs.existsSync(path.join(root,'supervisor-composer'))?fs.readFileSync(path.join(root,'supervisor-composer'),'utf8'):'────────────────────\\n❯ \\n────────────────────');
 else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:'w-lane',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle'};save();out({name:n,pane_id:pane});}
 else if(args[0]==='agent'&&args[1]==='list') out({agents:Object.values(agents).filter(agent=>{
- if(!agent.review_owner)return true;
- const owner=lookupProcess(agent.review_owner.pid,{identityOnly:true});
- return !owner.ok||!!(owner.value&&owner.value.identity===agent.review_owner.identity&&!/^Z/.test(owner.value.state));
+ if(!agent.client_owner)return true;
+ const owner=lookupProcess(agent.client_owner.pid,{identityOnly:true});
+ return !owner.ok||!!(owner.value&&owner.value.identity===agent.client_owner.identity&&!/^Z/.test(owner.value.state));
 })});
 else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent:'claude',agent_status:'idle',cwd,pane_id:'original:p',workspace_id:'w-lane'}});
 else if(args[0]==='agent'&&args[1]==='read') console.log('');
@@ -188,14 +199,7 @@ else if(args[0]==='agent'&&args[1]==='wait') {await new Promise(r=>setTimeout(r,
 else if(args[0]==='agent'&&args[1]==='prompt') {
  const prompt=args[3];
  if(prompt.includes('Private record file: ')) {
-  const tree=lookupProcess(),lane=path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'../lanes/lane.mjs');
-  if(!tree.ok)throw Error('cannot confirm fixture reviewer owner');
-  let owner=tree.value.get(process.ppid);const seen=new Set();
-  while(owner&&!owner.command.startsWith(process.execPath+' '+lane+' review ')&&!seen.has(owner.pid)){
-   seen.add(owner.pid);owner=tree.value.get(owner.ppid);
-  }
-  if(!owner||seen.has(owner.pid))throw Error('fixture reviewer has no foreground lane owner');
-  agents[args[2]].review_owner={pid:owner.pid,identity:owner.identity};save();
+  agents[args[2]].client_owner=clientOwner('lanes/lane.mjs','review');save();
   fs.writeFileSync(path.join(root,'review-prompt'),prompt);
   if(fs.existsSync(path.join(root,'review-fail'))) {console.error('injected uncertain review');process.exit(1);}
   const field=(label)=>prompt.split('\\n').find(x=>x.startsWith(label+': '))?.slice(label.length+2);
@@ -225,6 +229,7 @@ else if(args[0]==='agent'&&args[1]==='prompt') {
   const lines=['**'+verdict+'**','Schema: lane-review/v1','Reviewed commit: '+reviewed,'Topic: '+field('Topic'),'Round: '+field('Round'),'Review ID: '+field('Review ID'),'Base branch: '+field('Base branch'),'Base commit: '+field('Base commit'),'','## Findings',findings,'','## Re-executed','~~~json','[]','~~~','','## Non-claims',nonclaims,'','## Unverified',unverified,'','## Private identifiers','~~~json','[]','~~~','','## Analysis','Scripted independent claim check.','','<!-- lane-review-complete -->',''];
   const dest=field('Private record file');fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,lines.join('\\n').replaceAll('~~~',String.fromCharCode(96).repeat(3)));
  } else if(prompt.startsWith('You are run ')) {
+  agents[args[2]].client_owner=clientOwner('dispatch/dispatch.mjs');save();
   const [,run,report]=prompt.match(/You are run (R-\\d+).*Write the report to ([^;]+);/);
   if(fs.existsSync(path.join(root,'prompt-fail'))) {console.error('injected uncertain delivery');process.exit(1);}
   agents[args[2]].agent_status='working';save();

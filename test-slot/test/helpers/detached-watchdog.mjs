@@ -1,0 +1,66 @@
+// Fixed native-group scenarios, invoked only by detached-fixture.mjs. Their
+// original process-group assertions require real detachment, while the normal
+// test runner deliberately contains arbitrary product children in its group.
+import test from '../../../test/helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { spawnChild, waitForExit } from '../../../test/helpers/child.mjs';
+import { testSlotEnvironment } from '../../../test/helpers/test-slot-env.mjs';
+import { lookupProcess } from '../../../lib/processes.mjs';
+import { stopGateGroup } from '../../watchdog.mjs';
+import { healthyHistory } from '../../limits.mjs';
+
+const [root, mode] = process.argv.slice(2);
+const cli = fileURLToPath(new URL('../../test-slot.mjs', import.meta.url));
+const preload = fileURLToPath(new URL('../../../test/helpers/native-group-fixture.mjs', import.meta.url));
+const lock = path.join(root, 'slot'), result = path.join(root, 'result.json');
+const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
+  HERDR_NATIVE_GROUP_FIXTURE_ROOT: root, NODE_OPTIONS: `--import=${JSON.stringify(preload)}` };
+const run = (args, command) => spawnSync(process.execPath,
+  [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command],
+  { cwd: root, env, encoding: 'utf8', timeout: 15000 });
+async function until(predicate) {
+  const deadline = Date.now() + 5000;
+  while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(predicate(), 'fixture became ready');
+}
+
+if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid after both wrappers die', { timeout: 10000 }, async t => {
+  const ready = path.join(root, 'ready');
+  let holder;
+  t.after(async () => { if (holder) await stopGateGroup(holder.pgid); });
+  const owner = spawnChild(t, process.execPath, [cli, 'run', 'outer', '--project-common', root, '--', process.execPath, cli, 'run', 'inner', '--project-common', root, '--', process.execPath, '-e',
+    `require('fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`], { cwd: root, env });
+  await until(() => fs.existsSync(ready));
+  holder = JSON.parse(fs.readFileSync(lock));
+  const leaf = Number(fs.readFileSync(ready));
+  assert.equal(lookupProcess(leaf, { identityOnly: true }).value.pgid, holder.pgid);
+  owner.kill('SIGKILL');
+  process.kill(holder.pgid, 'SIGKILL'); // Inner wrapper only, never its shared group.
+  await until(() => lookupProcess(holder.pgid, { identityOnly: true }).value === null);
+  assert.doesNotThrow(() => process.kill(-holder.pgid, 0), 'legacy PGID stays live');
+  const outcome = run([], [process.execPath, '-e', '']);
+  assert.equal(outcome.status, 75, outcome.stderr); assert.match(outcome.stderr, /TEST_SLOT_HELD/);
+  assert.ok(lookupProcess(leaf, { identityOnly: true }).value, 'nested command still lives');
+  await stopGateGroup(holder.pgid); await waitForExit(owner);
+  holder = null;
+});
+
+if (['gate-leftover-pipes', 'gate-leftover-ignore'].includes(mode)) {
+  const inheritedPipes = mode === 'gate-leftover-pipes';
+  test(`leftover group fails distinctly after bounded grace (inherited pipes=${inheritedPipes})`, { timeout: 10000 }, () => {
+    const ready = path.join(root, 'leftover.pid');
+    const script = `const cp=require('child_process');const child=cp.spawn(process.execPath,['-e',"setInterval(()=>{},1000)"],{stdio:${inheritedPipes ? "'inherit'" : "'ignore'"}});require('fs').writeFileSync(${JSON.stringify(ready)},String(child.pid));child.unref();setTimeout(()=>process.exit(0),250);`;
+    const outcome = run(['--timeout-seconds', '60', '--retry-timeout-under-load'], [process.execPath, '-e', script]);
+    assert.equal(outcome.status, 123, outcome.stderr); assert.match(outcome.stderr, /GATE_LEFTOVER_GROUP:/);
+    assert.doesNotMatch(outcome.stderr, /GATE_TIMEOUT:|TEST_SLOT_TIMEOUT_RETRY/);
+    const receipt = JSON.parse(fs.readFileSync(result));
+    assert.equal(receipt.gate_timeout, null); assert.equal(receipt.attempts, 1); assert.ok(receipt.duration_s < 5);
+    assert.equal(fs.existsSync(lock), false);
+    assert.equal(lookupProcess(Number(fs.readFileSync(ready)), { identityOnly: true }).value, null);
+    assert.equal(healthyHistory(root, 'promotion', [process.execPath, '-e', script]).length, 0);
+  });
+}

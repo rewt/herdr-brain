@@ -7,6 +7,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveGateLimits, recordHealthyGate, healthyHistory, historyFile, gateHistoryKey, HISTORY_FILES, WALL_DEFAULT_SECONDS, projectCommon, sampleFloorSeconds, wallFloorSeconds } from '../limits.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
 import { gateHistories } from '../../test/helpers/gate-history.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { shouldRetryTimeout, acquireTestSlot, HOLDER_UNKNOWN_CODE } from '../test-slot.mjs';
@@ -197,26 +198,16 @@ test('slot waiting consumes none of a short command deadline', { timeout: 10000 
   const receipt = JSON.parse(fs.readFileSync(s.result)); assert.ok(receipt.duration_s < .3);
   assert.equal(receipt.gate_timeout, null); assert.equal(fs.existsSync(s.lock), false);
 });
-test('nested gates preserve the legacy holder pgid after both wrappers die', { timeout: 10000 }, async t => {
-  const s = scratch(t), ready = path.join(s.root, 'ready');
-  let holder;
-  t.after(async () => { if (holder) await stopGateGroup(holder.pgid); });
-  const owner = spawnChild(t, process.execPath, [cli, 'run', 'outer', '--project-common', s.root, '--', process.execPath, cli, 'run', 'inner', '--project-common', s.root, '--', process.execPath, '-e',
-    `require('fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`], { cwd: s.root, env: s.env });
-  await until(() => fs.existsSync(ready));
-  holder = JSON.parse(fs.readFileSync(s.lock));
-  const leaf = Number(fs.readFileSync(ready));
-  assert.equal(lookupProcess(leaf, { identityOnly: true }).value.pgid, holder.pgid);
-  owner.kill('SIGKILL');
-  process.kill(holder.pgid, 'SIGKILL'); // Inner wrapper only, never its shared group.
-  await until(() => lookupProcess(holder.pgid, { identityOnly: true }).value === null);
-  assert.doesNotThrow(() => process.kill(-holder.pgid, 0), 'legacy PGID stays live');
-  const result = s.run([], [process.execPath, '-e', '']);
-  assert.equal(result.status, 75, result.stderr); assert.match(result.stderr, /TEST_SLOT_HELD/);
-  assert.ok(lookupProcess(leaf, { identityOnly: true }).value, 'nested command still lives');
-  await stopGateGroup(holder.pgid); await waitForExit(owner);
-  holder = null;
-});
+async function nativeGroupScenario(t, mode) {
+  const { child } = spawnDetachedFixture(t, mode);
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^# tests 1$/m, 'the original native scenario ran');
+  assert.match(result.stdout, /^# pass 1$/m);
+  assert.match(result.stdout, /^# fail 0$/m);
+}
+test('nested gates preserve the legacy holder pgid after both wrappers die', { timeout: 10000 },
+  t => nativeGroupScenario(t, 'gate-pgid'));
 
 test('dead groups-lock owners recover and live or unknown owners fail with a coded path', async t => {
   const s = scratch(t), slot = await acquireTestSlot('guard', { lockPath: s.lock, env: s.env });
@@ -235,18 +226,8 @@ test('dead groups-lock owners recover and live or unknown owners fail with a cod
   }
 });
 
-for (const inheritedPipes of [true, false]) test(`leftover group fails distinctly after bounded grace (inherited pipes=${inheritedPipes})`, { timeout: 10000 }, t => {
-  const s = scratch(t), ready = path.join(s.root, 'leftover.pid');
-  const script = `const cp=require('child_process');const child=cp.spawn(process.execPath,['-e',"setInterval(()=>{},1000)"],{stdio:${inheritedPipes ? "'inherit'" : "'ignore'"}});require('fs').writeFileSync(${JSON.stringify(ready)},String(child.pid));child.unref();setTimeout(()=>process.exit(0),250);`;
-  const r = s.run(['--timeout-seconds', '60', '--retry-timeout-under-load'], [process.execPath, '-e', script]);
-  assert.equal(r.status, 123, r.stderr); assert.match(r.stderr, /GATE_LEFTOVER_GROUP:/);
-  assert.doesNotMatch(r.stderr, /GATE_TIMEOUT:|TEST_SLOT_TIMEOUT_RETRY/);
-  const receipt = JSON.parse(fs.readFileSync(s.result));
-  assert.equal(receipt.gate_timeout, null); assert.equal(receipt.attempts, 1); assert.ok(receipt.duration_s < 5);
-  assert.equal(fs.existsSync(s.lock), false);
-  assert.equal(lookupProcess(Number(fs.readFileSync(ready)), { identityOnly: true }).value, null);
-  assert.equal(healthyHistory(s.root, 'promotion', [process.execPath, '-e', script]).length, 0);
-});
+for (const inheritedPipes of [true, false]) test(`leftover group fails distinctly after bounded grace (inherited pipes=${inheritedPipes})`, { timeout: 10000 },
+  t => nativeGroupScenario(t, inheritedPipes ? 'gate-leftover-pipes' : 'gate-leftover-ignore'));
 
 test('canonical validation includes layered lane-only wall and idle settings for both envelopes', t => {
   const f = fixture(t); fixtureFleet(t, f.root);

@@ -1,0 +1,24 @@
+sequenceDiagram
+  participant C as Authorized coordinator
+  participant R as Canonical decision record and memo
+  participant B as Owned services and recipient inboxes
+  participant A as Selected supervisor A
+  participant D as Selected supervisor B
+  C->>R: Record scoped decision under existing delegation
+  R-->>C: Decision reference, scope and immutable body digest
+  C->>B: One decision ID with explicit recipient set A and B
+  B->>B: Validate origin; persist per-recipient acceptance receipts
+  B->>A: Quiet-gated one line plus pointer
+  A->>R: Verify decision evidence, authority and current scope
+  A->>A: Apply through own authorized record/workflow
+  A->>B: Consumed or disposition receipt; no chat relay
+  alt B is busy or its binding is uncertain
+    B->>B: Keep B pending; A progress is independent
+  else B is quiet with exact current role binding
+    B->>D: One line plus pointer
+    D->>R: Verify scope and superseding decisions
+    D->>D: Apply through own authorized record/workflow
+    D->>B: Consumed or disposition receipt
+  end
+  B-->>C: Adapter reads recipient receipts; no ack model wake
+  Note over C,D: Unlisted supervisors receive nothing; message is evidence, not authority

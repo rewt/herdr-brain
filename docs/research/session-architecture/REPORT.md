@@ -1,12 +1,14 @@
 # A standard session platform for Herdr Brain
 
-Research run **R-421**, item **RES-3**, 2026-10-15. Proposal only, based on lane source at `2c488614b16bb9a28f22530853208f274952c26c` and the installed Herdr **0.9.3**. The operator's corrections take precedence over the older run acceptance text: structured logging is a **service**, the logs tab is a **viewer**, and worker sessions survive review and correction rounds. No wallet architecture comparison is included.
+Research **R-421**, extended by **R-422**, item **RES-3**, 2026-10-15. Proposal only, based on lane source at `2c488614b16bb9a28f22530853208f274952c26c`, the R-421 document commit `b943075b42a2eb04f02bfed17fce1c56faf081de`, and installed Herdr **0.9.3**. The operator's corrections take precedence over the older run acceptance text: structured logging is a **service**, the logs tab is a **viewer**, and worker sessions survive review and correction rounds. No wallet architecture comparison is included.
+
+**R-422 decision update:** the operator supports a controller comparing desired manifests with running sessions, default control-tab manifests in every workspace, and a supervisor tab handling dispatch and job monitoring. Context reset means **close the tab and respawn from its manifest with a Markdown handoff**, at an eligible boundary. Warm review workers are never reset. Sections 3, 5 and 6 now reflect that choice; section 1's native-clear description remains historical capability evidence. The supervisor's proposed three logging paths—direct judgment, routine rules, and an optional short-lived model digester—remain under consideration. Section 7 specifies session messaging without treating that proposal as adopted. Sources: ARCH-33 decisions seq 5837/5850 and the R-422 addendum.
 
 **Recommendation [P]:** use a small, model-free session controller above existing route, dispatch, watch and retirement code. A Markdown manifest describes desired work and context; the record, handoffs and memory retain durable knowledge. Preserve the same live worker from initial dispatch through review and corrections. Reconstruct a session only after a confirmed failure or an explicit fresh-cycle decision. Adopt three protected tab slots—chat, supervisor and logs—per enrolled workspace. Keep logging independent of every tab and every model session.
 
 The closest Kubernetes analogy is **a controller-owned pod retained until its work item's review chain ends**, with a Job-like completion condition outside the process. A reported result or an idle prompt is not workload completion. Kubernetes itself is not a proposed dependency or deployment requirement.
 
-Evidence notation applies to each tagged paragraph or table row: **[M]** observed with read-only commands/files during this run; **[D]** documented in inspected local or upstream source, not exercised here; **[I]** inference with its limits stated; **[P]** proposed behavior, not implemented. All of sections 3–4 and proposed diagrams are [P] except explicitly tagged observations. Local source links are relative to this checkout. Upstream code links pin v0.9.3's commit, `7b116c05bfda646af39d2524c54e70c751f57ee8`; a matching version string does not prove a reproducible match between that source and the installed binary.
+Evidence notation applies to each tagged paragraph or table row: **[M]** observed with read-only commands/files during the named run; **[D]** documented in inspected local or upstream source, not exercised here; **[I]** inference with its limits stated; **[P]** proposed behavior, not implemented. Sections 1–2 retain R-421 observations; section 7 identifies R-422 evidence. All of sections 3–4 and proposed diagrams are [P] except explicitly tagged observations. Local source links are relative to this checkout. Upstream code links pin v0.9.3's commit, `7b116c05bfda646af39d2524c54e70c751f57ee8`; a matching version string does not prove a reproducible match between that source and the installed binary.
 
 ## 1. How Herdr works today, measured
 
@@ -243,7 +245,7 @@ The main-workspace examples share a proposed service reference `rewt/logs/herdr-
     "lifecycle": {
       "scope": "operator-conversation",
       "automaticRetirement": "never",
-      "clear": "explicit-safe-boundary-only",
+      "reset": "close-and-respawn-at-safe-boundary",
       "restartPolicy": "on-confirmed-exit-with-context-evidence",
       "recovery": { "knownNativeSession": "resume", "freshContext": "declared-safe-boundary-with-handoff", "missingEvidence": "hold" },
       "onRefusal": "hold"
@@ -287,7 +289,7 @@ The main-workspace examples share a proposed service reference `rewt/logs/herdr-
     "lifecycle": {
       "scope": "supervisor-decision-cycle",
       "automaticRetirement": "never",
-      "clear": "explicit-safe-boundary-only",
+      "reset": "close-and-respawn-at-safe-boundary",
       "restartPolicy": "on-confirmed-exit-with-context-evidence",
       "recovery": { "knownNativeSession": "resume", "freshContext": "declared-safe-boundary-with-handoff", "missingEvidence": "hold" },
       "onRefusal": "hold",
@@ -336,11 +338,11 @@ Creating the same supervisor slot in a lane workspace does **not** create anothe
       "afterReport": "park-awaiting-review",
       "corrections": "reuse-same-session",
       "retainUntil": "landed-or-explicit-disposition",
-      "clearWhileParked": false,
+      "resetWhileParked": false,
       "automaticRetirement": "safe-planner-after-disposition",
       "restartPolicy": "on-confirmed-exit-resume-known-session",
       "recovery": { "freshContextWhileItemOpen": "explicit-recovery-disposition-only", "missingEvidence": "hold" },
-      "clear": "explicit-safe-boundary-only",
+      "reset": "never-while-work-item-open",
       "onRefusal": "hold"
     }
   }
@@ -402,7 +404,7 @@ Desired Markdown is versioned with the project. Keep generated status in ignored
 
 Every field above is disposable and recomputable from canonical spec, live evidence, record fold and existing operation receipts. `phase`, readiness and `ReadyForCorrection` are observations, not permission. A correction requires a new authorized dispatch and fresh occupant checks. A new operation journal may retain launch/reset intent and acknowledgement uncertainty, as dispatch journals already do; that is delivery/ownership evidence, not stored item status. Losing the cache triggers observation, never a second launch. Losing ownership receipts leaves an unknown occupant to keep pending adoption, not an invitation to infer ownership from labels or sidecars.
 
-### Materialization, reuse, clear and restart
+### Materialization, reuse, close-and-respawn reset and recovery
 
 1. **Resolve and validate.** Select canonical project/identity/server; parse one object; resolve workspace enrollment and route through existing layers; freeze hashes and bounded context references. Acquire a canonical per-project controller lock. The core record remains foreground; an optional external supervisor-owned loop invokes this controller, never the core itself.
 2. **Observe before acting.** Read STOP/close hold, record/review chain, dispatch/watch receipts and queue references; take a Herdr snapshot and `agent get` evidence. Compare canonical checkout, pane, terminal, native ID and name. Unknown, duplicate or mismatched ownership is `Hold`. Existing unmanaged tabs are not adopted or closed merely because their labels match.
@@ -410,7 +412,7 @@ Every field above is disposable and recomputable from canonical spec, live evide
 4. **Converge without repeatedly prompting.** A matching live incarnation is a no-op even if idle. An unchanged spec must not replay its brief on each reconcile. A manifest edit while work/review is open becomes a pending generation, not a clear, model change or replacement. Freeze native route and personality across the warm chain.
 5. **Park after reports.** As soon as a report is available and the worker is quiet, retain it through ingestion and review. Ingestion delay, failed review, needs-human outcome, open correction or queued integration is a keep condition. Derive `ParkedAwaitingReview` from report/run/chain evidence; even a malformed report with unclear ownership must retain, not count as completion. A correction uses `dispatch --reuse R-prev`, a new run and new report, and the same live native session/terminal. Reuse failure holds; it does not silently substitute a fresh worker.
 6. **Retire after final disposition.** Worker eligibility requires landed or explicit disposition evidence plus all existing safe-retirement gates. The new controller should require explicit work-item disposition, rather than using the existing confirmed-successor escape hatch to silently replace a parked worker. Standard slots remain outside automatic retirement. Closing their enclosing workspace requires an explicit withdrawal procedure described below.
-7. **Clear only at an explicit safe boundary.** Persist the handoff and record references, prove no active review/work or old delivery callbacks remain, record reset intent, then use a native clear operation only if its installed-harness contract is known. Observe the resulting native ID before starting another run. If the name survives, keep it; if lost, rebind/rename only the already-proven pane, with no name collision. Missing hooks/new-ID evidence hold the reset. Screen clearing is not context clearing. Never rewrite the prior run's historical binding.
+7. **Reset by closing and respawning at an explicit safe boundary.** Persist and verify the Markdown handoff, record references, unresolved message IDs and inbox cursor. Quiesce callbacks, prove no open work/review or in-flight delivery depends on the old incarnation, and journal reset intent. The controller closes the exact owned tab through a guarded adapter, observes that it is gone, and creates its replacement from the same adopted manifest and handoff. A tab containing another owner or an unrelated pane must hold for disposition; ownership of one pane is insufficient to close the tab. Bind the replacement tab/pane/terminal/native session as a new incarnation before delivering pending messages. An uncertain close or create acknowledgement requires observation, never a second spawn. This is the operator's selected reset mechanism; it does not send `/clear` or reuse an old pane as evidence of fresh context. Never rewrite an earlier run's historical binding. A worker's open review chain is an unconditional reset veto, including idle periods.
 8. **Recover rather than pretend a crash preserved warmth.** Detect confirmed process loss separately from transient disconnect/unknown readiness. First determine whether Herdr's native restore is already pending or has resumed the known reference. Exactly one layer owns the spawn. The adopted manifest preauthorizes the reconciler to resume a known native session after confirmed exit, subject to ownership, route/context evidence, STOP and backoff; it does not require a new permission question for each routine restart. A successful native resume gets a new process/incarnation receipt and rechecked model/context claims, while retaining the parked intent if review is pending. Missing references, repeated failures or any refusal hold the transition. Fresh reconstruction from manifest, brief, report and handoff is explicitly labeled context loss: for an open work item it requires explicit recovery disposition, and for a standard session it requires its declared safe boundary and completed handoff. Never claim reconstruction preserved the same warm process. The viewer may restart with backoff without native context evidence.
 
 For a chat/supervisor slot, the work unit is an operator conversation or decision cycle. Keep that session until a declared handoff boundary; it need not be discarded after each response. Once that boundary is satisfied and the current process is quiescent, the reconciler starts the next fresh incarnation from the same manifest and saved handoff. An authorized next-item dispatch gets a new workload UID using the same worker template. A new incarnation of an existing workload is a restart, not a different item or overwrite of old evidence. Thus the platform actually restores desired sessions; observation alone or a report arriving never licenses context loss.
@@ -427,7 +429,7 @@ Validate route assertions against `resolveLaunchRoute`, reserved args, item exis
 
 The target is exactly one **chat**, **supervisor** and **logs** slot in every enrolled workspace, including lane workspaces. The three desired objects share its canonical enrollment identity. Their current occupants may be replaced at a safe boundary; the slots themselves persist. Keep existing independent worker/reviewer tabs. Enrollment is staged across the fleet, not an unsolicited rewrite of other identities' live workspaces.
 
-Chat retains the operator conversation. Supervisor receives bounded exceptions and authorized coordination work. Logs renders the service stream and has no model. Default filters are workspace-specific; an authorized operator can widen a viewer to project scope without widening its writer capabilities. Labels make the slots discoverable, but immutable enrollment and launch receipts establish ownership. No-focus creation should be retained in the existing adapters. Ordinary reconciliation must not move panes or steal focus to make the screen resemble a template.
+Chat retains the operator conversation. The supervisor tab handles dispatch and job monitoring within its existing delegation, and receives exceptions requiring judgment. A lane's supervisor slot delegates project-wide scheduling to the one canonical project supervisor; standard tabs do not multiply that authority. Logs renders the service stream and has no model. Default filters are workspace-specific; an authorized operator can widen a viewer to project scope without widening its writer capabilities. Labels make the slots discoverable, but immutable enrollment and launch receipts establish ownership. No-focus creation should be retained in the existing adapters. Ordinary reconciliation must not move panes or steal focus to make the screen resemble a template.
 
 **[D-local] Current retirement is conservative, but it does not yet guarantee protection for all three new slots.** `planRetirement()` keeps non-linked/persistent/operator/lab workspaces, focus/self, unknown shells, ambiguous processes and open chains. In a lane workspace, there is no general `chat|supervisor|logs` slot rule. A viewer may currently survive as an unknown shell; that is not a durable product guarantee. Inspection of [`lib/retire.mjs`](../../../lib/retire.mjs) and [`lib/retire-runtime.mjs`](../../../lib/retire-runtime.mjs) found no standard-slot enrollment input. The planner was not run and no live close was attempted.
 
@@ -499,7 +501,7 @@ Notification rules are deterministic, scoped, debounced and idempotent by source
 | Existing surface | Proposed treatment |
 | --- | --- |
 | `watch/watch.mjs` report readiness and process observation | Initially unchanged. Add an event-emitting adapter while retaining it as the sole report-ready transport owner for that run. A later service subscriber may replace polling only after reproducing report validation, identity, process-end and uncertain-delivery behavior. Cut over ownership explicitly; never run two independent ingesters/prompters. |
-| `contrib/settle-watch.mjs` | Keep installed path, flags and behavior. Emit/mirror structured events first. Do not launch additional model sessions just to summarize logs. Any future compatibility adapter must preserve `--model`/`--effort`, holds and launch settings. |
+| `contrib/settle-watch.mjs` | Keep installed path, flags and behavior. Emit/mirror structured events first. A mirror must not implicitly launch model sessions. The separate, optional pattern digester in section 7 requires adoption of that proposed logging path. Any compatibility adapter must preserve `--model`/`--effort`, holds and launch settings. |
 | `supervisor/prompt-supervisor.mjs` inbox | Reuse its durable notice and quiet-delivery path; do not introduce a second direct prompt channel. Existing at-least-once transport limits remain visible. |
 | Native hooks and `.agent` | Preserve native Herdr hooks for session identity. The measured `.agent` link is not a logging backend or notification contract. No new Brain SessionStart hook or wrapper is needed. |
 | `.org/STOP` | Controller may observe, log and render diagnostics, but it must not start/reuse/clear/restart/retire sessions or deliver action-triggering prompts while stopped. Respect the existing canonical STOP resolution. No restarting through STOP; no loss of queued events merely because execution is held. |
@@ -648,7 +650,7 @@ sequenceDiagram
     C->>D: dispatch --reuse R-prev
     D->>H: Check unchanged occupant, route and quiet state
     D->>R: New run, same session, new report path
-    D->>H: Correction prompt without clear or restart
+    D->>H: Correction prompt to the same warm session
     H->>E: Correction report available
     C->>R: Derive ParkedAwaitingReview again
   end
@@ -657,13 +659,16 @@ sequenceDiagram
   alt Worker workload complete
     C->>H: Retire worker only through safe retirement
   else Explicit fresh-cycle request for a retained standard session
-    C->>R: Persist handoff and reset intent; quiesce callbacks
-    C->>H: Approved native clear or restart operation
-    H-->>C: Observe new native ID and terminal binding
-    C->>D: Reapply manifest context; restore name only if lost
+    C->>R: Persist Markdown handoff, inbox cursor and reset intent
+    C->>R: Quiesce callbacks; verify every pane in the owned tab
+    C->>H: Guarded close of exact eligible tab
+    H-->>C: Observe old tab gone; hold if uncertain
+    C->>D: Respawn from manifest and handoff
+    D->>H: Create replacement tab and native session once
+    H-->>C: Observe new tab, terminal and native ID
     C->>R: New incarnation receipt; retain old run evidence
   end
-  Note over C,H: Standard tab slots remain protected until explicit workspace withdrawal
+  Note over C,H: No reset of warm review workers; standard slots survive occupant replacement
 ```
 
 ### Proposal: durable logging service
@@ -720,21 +725,29 @@ stateDiagram-v2
   Created --> Starting: Valid route, ownership, no STOP
   Starting --> Running: Ready and occupant bound; initial prompt recorded
   Starting --> Hold: Ambiguous launch or prompt, refusal or identity mismatch
+  Running --> AwaitingAnswer: Question published; keep exact warm session
+  AwaitingAnswer --> Running: Scoped reply; open run or authorized reuse in same session
+  AwaitingAnswer --> ParkedAwaitingReview: Report sealed; keep pending question and warm context
+  AwaitingAnswer --> Eligible: Explicit disposition; resolve question and quiesce
+  AwaitingAnswer --> RecoveryRequired: Confirmed process loss; retain pending question
   Running --> ParkedAwaitingReview: Report available and worker quiet
   ParkedAwaitingReview --> Running: Corrections via dispatch --reuse; same native session
   ParkedAwaitingReview --> ParkedAwaitingReview: Reviewer active, delayed, or asks another review
   ParkedAwaitingReview --> Eligible: Work landed or explicit disposition verified
   Running --> Eligible: Explicit disposition and quiescence verified
   Eligible --> Retired: Worker only; fresh safe-retirement checks and no hold
-  Eligible --> Cleared: Explicit fresh-cycle intent, saved handoff, supported native clear
-  Cleared --> Starting: Same pane if safe; observe new ID and rebind name
+  Eligible --> ResetPrepared: Standard-session boundary; handoff and inbox cursor saved
+  ResetPrepared --> ClosedForReset: No live references; every pane owned; exact tab closed
+  ClosedForReset --> Starting: Respawn once from manifest and handoff; new incarnation
+  ResetPrepared --> Hold: Close refused or outcome uncertain
+  ClosedForReset --> Hold: Replacement launch uncertain
   Running --> RecoveryRequired: Confirmed process loss
-  ParkedAwaitingReview --> RecoveryRequired: Crash; keep parked intent, never auto-clear
+  ParkedAwaitingReview --> RecoveryRequired: Crash; preserve review hold, never reset
   RecoveryRequired --> Restarted: Manifest-authorized native resume or explicitly dispositioned reconstruction
   Restarted --> Running: Active work recovered
   Restarted --> ParkedAwaitingReview: Review hold recovered; do not redispatch work
+  Restarted --> AwaitingAnswer: Pending question recovered; no duplicate request
   RecoveryRequired --> Hold: Missing resume evidence or any refusal
-  Eligible --> Restarted: Explicit fresh-cycle restart with manifest and handoff
   Hold --> Starting: Authorized initial-launch resolution and fresh checks
   Hold --> ParkedAwaitingReview: Evidence resolved; retain parked occupant
   Hold --> Running: Delivery resolved; same active occupant
@@ -767,7 +780,7 @@ flowchart TD
   Compare{Desired versus observed}
   Standard{Protected standard slot or parked review chain?}
   Keep[KEEP occupant; repair observations only]
-  Safe{Authorized transition, fresh evidence and no applicable hold?}
+  Safe{Authorized transition, fresh evidence, no hold and no reset of an open review chain?}
   Action[One journaled action through existing adapters]
   Result{Receipt and observed identity agree?}
   Status[Write disposable status and structured event]
@@ -801,6 +814,8 @@ flowchart TD
 | Canonical ownership receipts, reconciliation lock, operation journal and explicit uncertain-state behavior | Item priorities, authorized correction decisions, landing/disposition and permitted fresh-context boundaries |
 | Warm review retention and standard-slot keep checks, integrated with the existing planner | Retention holds, operator/lab protections and workspace withdrawal decisions |
 | Event schema, append writer, bounded replay, filtering and notification/inbox adapter | Log retention/volume choices, subscription policy and optional memory domain |
+| Addressed `brain.log/v1` envelopes, per-recipient inbox receipts, deduplication and quiet delivery | Approved recipient bindings, delegations, decision references, reply deadlines and operator-chat wake preferences |
+| Deterministic classification and hold/release receipt rules; optional digester cursor/output contract | Adoption of the three logging paths, digester route and scope, and each project's actual host-resource admission policy |
 | Read-only current-state collector and surfaced source gaps | Which cross-workspace summaries the operator requests; no unsolicited cross-identity collection |
 
 The controller belongs above the existing CLI/modules; the core stays model-free, foreground and provider-agnostic. Harness-specific launch adaptation already exists at the edge and remains there. Model and session metadata stay opaque to the record core. A service or loop is explicitly installed/owned outside the core by the canonical supervisor, not started as a side effect of reading a manifest or by a lane worker.
@@ -820,6 +835,9 @@ The controller belongs above the existing CLI/modules; the core stays model-free
 | A second “supervisor” schedules work | Distinguish a per-workspace conversation slot from canonical project authority. One project controller/queue owner; delegation requires the existing authorized path. |
 | Log data injects commands or exposes secrets | Validate bounded typed payloads and scope, treat messages as untrusted data, use references/hashes, redact at producers, keep credentials/transcripts out by default. No action solely because an event asks for it. |
 | Service overload loses key state | Keep authoritative work/report paths independent. Explicit gaps, retained critical outboxes, visible storage failures and bounded replay. Do not call transient Herdr observations a complete historical log. |
+| Transport acknowledgement mistaken for authority or understanding | Distinguish accepted, offered to harness, consumed and answered. A hash proves byte identity, not who authorized the action. Match replies to pending questions and validate decisions against their canonical record/delegation. |
+| Routine coordination wakes models or releases the wrong hold | `fyi`, `ack`, `hold` and `release` go only to deterministic rules. Match hold issuer, resource epoch and hold ID; never lift native, operator, STOP or retirement holds through a message. |
+| Two legacy/new delivery owners duplicate prompts | Shadow first, then transfer ownership with an inbox fence and durable watermark. Preserve unsettled IDs and receipts on rollback. No simultaneous native-send, direct-pane and service delivery for one message. |
 | Adoption revives removed infrastructure | No console/MCP dependency module, capture/steward, permission wrapper or product-installed SessionStart hook. Optional generic service/controller is a new reviewed edge component, not a resurrected hidden authority layer. |
 
 **Stable BCH surfaces [D-local requirement, P preservation]:** leave installed `~/.local/share/herdr-monitor/current/contrib/settle-watch.mjs`, its `--model`/`--effort` behavior, and checkout `supervisor/reconcile.mjs` on every promotion intact. Keep shipping `contrib/` and `lib/cli-help.mjs`. Continue honoring BCH's canonical `HOLD-WORKER-TAB-CLOSE` in retirement and lane cleanup. These are the compatibility obligations in [`AGENTS.md`](../../../AGENTS.md), not permission to migrate that project or change its record. No such change was made.
@@ -830,21 +848,25 @@ Estimates are rough engineering effort for one implementer with existing modules
 
 | Stage | Size | Acceptance evidence in a future authorized implementation | Reverse it |
 | --- | --- | --- | --- |
-| 1. Agree contract and add an offline inspector | Small, 1–2 days | Parse four fixtures; reject duplicate keys/route mismatch/unsafe context refs; resolve actual route layers without launches; explain pending desired generation and absent context. | Remove opt-in inspector/template references; leave record and routes intact. |
+| 1. Specify the approved controller direction; add an offline inspector | Small, 1–2 days | Controller/default-tab/close-and-respawn direction is recorded; resolve remaining schema choices under ARCH-33. Parse four fixtures; reject duplicate keys/route mismatch/unsafe context refs; resolve route layers without launches. | Remove opt-in inspector/template references; leave record and routes intact. |
 | 2. Integrate warm-chain and default-slot protections | Medium, 2–4 days | Focused offline planner/reuse fixtures: unreviewed report, failed review, corrections, delayed ingestion, successor, needs-human, STOP, unreadable hold, ID mismatch, standard slots in linked lane and unknown process all keep appropriately. Terminal chain plus explicit disposition can proceed through existing checks. | Disable defaults adoption; preserve canonical keep receipts until explicit withdrawal. Do not remove protections while adopted slots or open chains remain. |
 | 3. Foreground manifest reconciliation and inspect-only rollout | Medium, 3–5 days | Fake Herdr/record adapters prove idempotent no-op, lost-start acknowledgement, changed occupant, no blind prompt replay, pending spec edit, and repeated review→reuse→park. Human approves one isolated disposable workspace experiment only after review. | Stop invoking reconciler. Existing sessions and records continue; preserve journals for uncertain operations. No automatic teardown. |
-| 4. Explicit reset/recovery and context handoff | Medium, 2–4 days | Native-version-specific experiment records `/clear`, name retention/rebind, resumed native IDs, process/terminal changes and parked crash recovery. Reproduce refusal/unknown-reference holds offline; confirm no second spawn during Herdr restore. | Disable reset/recovery adapter; use current manually supervised dispatch/resume. Preserve handoffs and incarnation evidence. |
+| 4. Close-and-respawn reset, recovery and context handoff | Medium, 2–4 days | Guarded exact-tab close, observed absence, manifest/handoff respawn, new binding and inbox transfer; multi-owner tab refuses close. Crash/unknown acknowledgement holds and no second spawn during Herdr restore. Warm review workers never enter reset. | Disable reset/recovery adapter; use existing supervised dispatch/resume. Preserve handoffs, pending inbox entries and incarnation evidence. |
 | 5. Structured log service and viewer | Medium/large, 4–6 days | Focused storage/adapter checks: fsync-before-ack, duplicate-key conflict, crash/torn-tail handling, disk-full, replay horizon, retention gap, source overflow, busy/gone subscribers and viewer-only restart. Measure volume without model calls. | Stop emit/mirror adapters and optional service; retain/export service journal, keep existing watchers/inbox operating. Viewer closure never deletes logs. |
-| 6. Standard tabs and optional reconcile loop | Medium, 2–3 days | Start in one explicitly enrolled identity/project; ensure exactly three protected slots per workspace, no duplicate supervisor authority, no focus stealing, explicit lane withdrawal, no parked clear. Supervisor alone opts into bounded event/timer reconciliation. | Disable loop/enrollment expansion, keep protected live tabs; withdraw explicitly with handoff and normal retirement checks. |
-| 7. Watch transport consolidation and fleet adoption | Medium, 2–4 days plus project-specific review | Compare old/new event/report semantics; one owner per run; busy-supervisor delivery, uncertain prompt recovery, holds and BCH stable CLI paths remain equivalent. Adopt each identity via its own desk/record. | Revert subscriber ownership to existing watches; replay cursors without duplicate actions. Keep compatibility entrypoints. |
+| 6. Default-tab manifests and controller loop | Medium, 2–3 days | Start in one enrolled identity/project; exactly three protected slots per workspace, supervisor dispatch/job monitoring within delegation, no duplicate scheduling authority or focus stealing, explicit withdrawal, no parked reset. Canonical supervisor owns the bounded loop. | Disable loop/enrollment expansion, keep protected live tabs; withdraw explicitly with handoff and normal retirement checks. |
+| 7. Envelope and legacy adapters in shadow mode | Small/medium, 2–3 days | Map every channel in section 7.8. Stable IDs and provenance; old text/tags unchanged; classify blocked/deferred/unsupported-role outcomes from validated evidence. Compare counts, unknowns and would-wake decisions without sending anything new. | Disable mirrors; preserve shadow journal for analysis. Existing transports remain sole delivery owners throughout. |
+| 8. One per-recipient durable transport, first project | Medium, 3–5 days | Transfer inbox ownership with a fence/watermark. Fsync-before-ack, replay, body integrity, sender scope, same-ID conflict, composer busy, occupant change, refused delivery, lost acknowledgement, reply correlation and warm `--reuse` all retain correct receipts. No exactly-once model claim. | Freeze new sends, transfer pending IDs/receipts to the old owner, then resume only that owner. Hold uncertain entries for inspection; never replay all as fresh prompts. |
+| 9. Adopt routing rules and host coordination | Medium, 2–4 days | Decide the still-proposed three-path split. Prove no model wake for fyi/ack/hold/release; direct judgment bypasses digest batching. Two issuers' holds, release-before-hold, late release, STOP, BCH PAUSED and queue/lock ownership remain safe. Observe wake counts per class. | Disable new action rules while retaining active hold receipts; map or explicitly dispose each hold before withdrawing its owner. Restore old notice route with the stage-8 fence, not dual sending. |
+| 10. Targeted decisions, chat relay and optional digester | Medium, 3–5 days | Receiver validates delegation and memo hash; fanout has independent receipts. Chat pull/push preference explicit. If adopted, bounded digester emits one evidence-backed finding and commits its cursor without dispatch/worker replies; failed batch never advances. | Stop new batches and new relay ingress; retain cursors/findings, unresolved operator questions and decision receipts. Revert to supervisor reading files and the existing authorized relay. |
+| 11. Watch consolidation and fleet adoption | Medium, 2–4 days plus each identity's review | One report/notice owner per run, unchanged BCH stable paths/flags/tags, native refusal holds, all host holds retained. Each identity adopts its own adapter through its desk/record; compare pending-age, delivery duplicates and judgment latency before expansion. | Reassign subscriber/transport ownership by receipt, keep compatibility entrypoints and durable state. Each identity reverses its own enrollment; no cross-identity cleanup. |
 
-Future focused checks above must use the repository's lane/promotion/release rules and host test-slot policy. This proposal does not schedule them or claim they pass. Separate decisions should adopt the contract and sequence before any implementation task changes live behavior.
+Future focused checks above must use the repository's lane/promotion/release rules and host test-slot policy. This proposal does not schedule them or claim they pass. ARCH-33 already owns adoption/staging, and ARCH-31's relay question is incorporated in section 7.7; no duplicate follow-on item is needed. Controller direction is decided, but schemas, rollout and the proposed logging split still need the applicable design decisions before changing live behavior. Sizes are incremental effort, not a promised calendar schedule.
 
 ### Exact future experiments requiring supervisor authorization
 
 These steps are **not executed**. Use an isolated disposable test workspace and a throwaway native conversation, never this worker or an open review chain. Record version/route/identity tuple before and after every step; preserve timestamps and source receipts.
 
-1. **Clear/name contract:** start through the existing authorized lane adapter; capture `herdr agent get NAME --json` and pane topology; send one harmless native prompt through `herdr agent prompt`; wait for a report/quiet state; explicitly authorize the fresh boundary; invoke the installed harness's supported `/clear`; capture new native ID, terminal ID, managed name and hook source/sequence. If name is absent, first prove pane/terminal ownership and no collision, then test the documented rename operation. Do not assume a Codex and Claude clear behave alike.
+1. **Close-and-respawn contract:** materialize a disposable standard session through the existing authorized adapter; capture its complete tab/pane/terminal/native binding. At an adopted safe boundary, save and hash a Markdown handoff plus unresolved inbox IDs/cursor; quiesce old callbacks; close only the fully owned tab and observe its absence. Respawn once from its manifest/handoff, bind the new identities and recover the same logical role inbox. Inspect model/route assertions and handoff consumption. A multi-owner tab or uncertain close/create must hold. Do not use native `/clear`, and never run this experiment on a parked worker.
 2. **Warm review contract:** complete a fixture item, leave the worker idle, submit review corrections through `dispatch/dispatch.mjs ITEM --org ORG --lane TOPIC --route ROUTE --brief CORRECTION --reuse R-prev`; capture that the new run/report is distinct but native ID/name/pane/terminal remain the same. Repeat one correction; inspect the planner's keep reason before landing. Only after explicit fixture landing/disposition inspect retirement eligibility. Do not create an unrelated successor to evade retention.
 3. **Exit/recovery contract:** determine the installed harness's supported exit command from its own help; exit only the fixture. Observe process/agent evidence without retrying work. Resume the known native reference through one designated adapter, then inspect pending parked intent and new process binding. A failed resume should hold, not start a fresh context implicitly.
 4. **Duplicate report isolation:** first reproduce offline against a disposable server fixture if upstream permits it; otherwise obtain separate authorization for two throwaway panes in a separate named server. Capture both `pane.report_agent_session` inputs and outputs with the same synthetic reference, then list/get/restore observations. Do not inject a fabricated reference into any current pane. This tests acceptance behavior, not the historical incident's cause.
@@ -856,6 +878,422 @@ The architecture is a proposal. No session controller, manifest loader, logging 
 
 The 2026-10-14 duplicate-ID incident remains unproven and unexplained by retained evidence. No native clear/exit/restart/rename, prompt consumption, server handoff, restoration of model/effort/personality, memory-service operation, subscriber overflow, durable-service throughput or native sandbox enforcement was tested. No live model selection/availability was verified beyond declared route and process metadata. Upstream documentation is current web documentation and may evolve; pinned source evidence is the v0.9.3 code, not a guarantee about every installed binary path. The rejected bare `herdr server` invocation is disclosed in section 1.
 
-The only committed changes for this run belong under `docs/research/session-architecture/`. Artifact inspection and the run-report parser result are recorded in the separate R-421 run report. The viewer embeds the exact standalone Mermaid sources, loads only the requested Mermaid 11.4.1 CDN script, defines light/dark color tokens and provides fit/readable-size controls for narrow screens. It is self-contained apart from that explicitly required CDN dependency; its source text remains readable if the CDN is unavailable.
+The only committed changes for both runs belong under `docs/research/session-architecture/`. Artifact inspection and run-report parser results are recorded in their separate R-421 and R-422 run reports. The viewer embeds all eleven standalone Mermaid sources, loads only the requested Mermaid 11.4.1 CDN script, defines light/dark color tokens and provides fit/readable-size controls for narrow screens. It is self-contained apart from that explicitly required CDN dependency; its source text remains readable if the CDN is unavailable.
 
 **[M] Rendered appearance remains unverified.** Browser preview of this local `diagrams.html` was refused: `Browser Use rejected this action due to browser security policy. Reason: The browser URL policy blocks this action. Browser use cannot visit the requested page because its URL is blocked by the Browser use URL policy.` The tool also forbade alternate surfaces or indirect workarounds. The preview action stopped, its unused tab was closed, and no alternate browser, localhost proxy or renderer was used to evade the refusal. Static artifact inspection is separate from rendered Mermaid, phone-width and dark-mode verification; those visual checks remain for the supervisor's permitted viewer.
+
+## 7. Session-to-session protocol
+
+**Recommendation [P]: make a message an addressed log event, with a durable inbox for each canonical recipient and one quiet-gated delivery owner.** Claude and Codex use the same envelope, receipt states and filesystem/service adapter. Native messaging and pane prompting become optional delivery edges, not competing sources of truth. Replies travel through the same transport; routine acknowledgements and host-resource coordination never enter a model conversation. This section is a design, not a newly installed messaging service or authority policy.
+
+### 7.1 Motivation and read-only evidence
+
+**[D-record]** ARCH-33 seq 5838 records the supervisor's count of incoming BCH messages from **2026-10-14 18:45 to 2026-10-15 13:59 CDT**. The note says the pane had no retained scrollback and the supervisor counted its own transcript, recording types only. R-422 read that note; it did not read or independently recount the transcript.
+
+| Supplied category | Count | Proposed handling, subject to adoption |
+| --- | ---: | --- |
+| Worker reports | 40 | 19 blocked and 3 needs-work directly to supervisor judgment; the other 18 done/PASS through validation and existing standing rules, with exceptions routed to judgment. |
+| Messages from supervisor-herdr | 24 | Acks and scoped hold/release receipts to rules; a slot question needing a new priority agreement to judgment. Counts do not distinguish those subtypes. |
+| Coordinator or chat relays | 23 | Direct judgment by default; a verified routine acknowledgement remains a control event. |
+| Auto-review notices | 13 | 8 reported pure unsupported-role skips are routine; 5 scope-deferred notices require judgment. Do not suppress every message containing “skipped.” |
+| Background-task completions | 9 | Validated routine outcomes to rules/log; failures or missing evidence to judgment. |
+| Operator relays | 8 | Direct judgment, preserving original question, provenance and scope. |
+| Worker stopped without report | 4 | Direct judgment after existing watcher checks. |
+| **Sum of listed categories** | **121** | **Four messages remain unclassified relative to the stated total of 125.** |
+
+The supervisor's “about half needed judgment” is an assessment, not a reproducible percentage from these overlapping semantic categories. The note's 1.36M assistant output tokens likewise cannot establish how many tokens these notices caused or how much the proposal would save. Preserve the four-message discrepancy; future adapters should count accepted messages, unique IDs, rule outcomes, model wakes and unresolved questions separately. The motivation is supported without manufacturing an exact savings estimate.
+
+**[M, R-422] Additional bounded observations:**
+
+- Installed `claude --version` returned **2.1.300 (Claude Code)**. Its resolved entry was a native executable; no readable implementation of `SendMessage` was established from that installation. No native cross-session tool was exercised, and this Codex session did not expose Claude's native `SendMessage` tool. A version string alone does not verify every current documentation feature.
+- The rewt record's `.org/supervisor/inbox.log` contained 485 `notice`, 431 `sending`, 431 `sent`, 325 `autopilot-started` and 325 `autopilot` records at the snapshot. These are overlapping journal event types, **not** the BCH count, 485 independent conversations, or a delivery success denominator. Only types/counts were extracted, not message bodies.
+- Read-only R-422 run metadata retained R-421's recorded worker name, pane `w3AP:p1` and terminal `term_65de4ccccfc7f1ab`. This supports the observed continuation/reuse workflow; it is not a new live native-ID verification or a reset experiment.
+- Coordinator memo references occur in rewt record notes, including seq 5810's `/tmp/BCH-C1-PARALLEL-START-DECISION-20261015.md`. At inspection it was 4,744 bytes, SHA-256 `cc0d6609057543378206aab3ff029dfa8092786f4e716aa5f7333d6307570050`. The inspected reference note did not itself carry a comparison hash. This measured digest identifies current bytes, not proof of the coordinator's authorship or original commitment. Memo contents are not reproduced here.
+- The default `/private/tmp/bch-cloak-test-slot.lock` was absent and its default queue had no ticket files at inspection. This says nothing about all configured slot paths or subsequent occupancy. No slot was acquired and no test ran.
+
+### 7.2 Inventory: current channels and their actual guarantees
+
+**[D-local unless marked otherwise]** Read-only source references below identify the implementation inspected. Delivery means different things at different layers; none of these channels proves a model understood an instruction or performed it once.
+
+| Channel and evidence | Payload and users | Guarantee and failure modes |
+| --- | --- | --- |
+| Claude native cross-session `ListAgents` / `SendMessage` [D-upstream] | Claude sessions exchange text over local Unix sockets; Windows uses named pipes. A human can ask a Claude session to send. This is not a shared Codex API. | Current official docs describe busy delivery between tool calls, idle delivery starting a turn, inbound accept/hold/refuse modes, bounded queues/rate limits and limited duplicate protection. They do not establish this proposal's durable inbox guarantee. Native checks still apply; refusal is not a reason to switch transport. [Official contract](https://code.claude.com/docs/en/cross-session-messaging). |
+| `herdr agent prompt`, lower pane text/key APIs | Either harness, authorized shell automation or a human; text is submitted through the terminal composer. See section 1 and [`lanes/lane.mjs`](../../../lanes/lane.mjs). | A successful CLI response is a terminal-delivery acknowledgement, not a native message/read receipt. Direct callers can collide with typing or a busy pane; wrong/reused names are dangerous. Unknown prompt outcome can mean already working. Brain dispatch journals that ambiguity and holds it for inspected recovery. Full pasted text consumes context. |
+| Brain watcher and promotion notices: [`watch/notice.mjs`](../../../watch/notice.mjs), [`watch/watch.mjs`](../../../watch/watch.mjs), [`promote/promote.mjs`](../../../promote/promote.mjs), [`supervisor/prompt-supervisor.mjs`](../../../supervisor/prompt-supervisor.mjs) | Model-free producers send `[org-report]`, `[watch-*]` and `[promote-queue]` text to a supervisor on either harness. Watch IDs include run/sequence/digest; queue notices derive IDs from the job and relevant completion/reconciliation state. | JSONL `notice` is persisted under lock before delivery; duplicate same-ID/same-target/text is a no-op, conflicting content is an error. FIFO quiet checks compare pane/terminal/native identity, require idle/done readiness and an empty composer, then recheck before prompt. Uncertain notices can retry with the same ID. Bounded attempts/wait and unknown layouts can leave a pending/capped notice; there is no unconditional eventual-delivery promise. Lost acknowledgement can duplicate a notice. |
+| BCH legacy `[auto-review]`, `[org-report]`, literal `[watch]` outbox | Local shell producers, either harness recipient. Inspected read-only: [`auto-review.sh`](/Users/rewt/development/bastian/bch-cloak/.lane/supervisor/auto-review.sh), [`notify-watch.sh`](/Users/rewt/development/bastian/bch-cloak/.lane/supervisor/notify-watch.sh), [`supervisor-events.mjs`](/Users/rewt/development/bastian/bch-cloak/.lane/supervisor/supervisor-events.mjs). | Producers atomically rename `.msg` files into an outbox; the existing daemon sorts files, checks the supervisor's composer and calls `agent prompt`. Its text `inbox.log` records delivery, unlike Brain's JSONL transport journal. Failure backs off/parks; crash after prompt but before removal may duplicate. Random file names are not end-to-end deduplication IDs. Its PAUSED control holds worker wakes/gate answers, not notification delivery. Thus the brief's statement that every tag uses the Brain inbox is not literally true for these inspected BCH paths. No daemon was started/imported. |
+| Pasted operator-chat relay | Human or explicitly authorized chat agent copies a question, answer, decision or FYI to either harness. [`supervisor/chats.mjs`](../../../supervisor/chats.mjs) manages chat enrollment; enrollment is not message provenance. | Human observation may confirm arrival, but there is no universal ID, durable transport receipt, correlation or typing gate. A repeated paste may be interpreted as a new request. Narrative and control noise enter both conversations; paraphrase can lose scope/authority. A claimed “operator says” line is not itself operator authorization. |
+| Identity-desk request, [`supervisor/request.mjs`](../../../supervisor/request.mjs) | An authorized agent/helper requests work from another identity's own desk; that desk uses its own record, lane, review and native policy. Native Codex desk is created if missing by the current helper. | Current helper locates `desk-<identity>` by name and prompts directly after readiness handling; it allows working recipients and does not use the durable supervisor inbox/composer gate. On uncertain error it retains the desk and asks for inspection. Desk-name discovery is weaker than the canonical binding proposed below. Invocation was not part of this research. |
+| Coordinator memo files plus record references | Human, coordinator or permitted session writes/reads a Markdown decision by path, sometimes with an advertised SHA-256. Both harnesses can read permitted files. | Durable bytes while the file exists; hash compares content only when an independently supplied digest is available. `/tmp` can disappear, a path can be overwritten, and file presence does not notify anyone. No read/answer receipt or identity proof. A blocked file read must not be laundered through another session. |
+| Host slot lock, tickets and wait files | Model-free admission/release helpers, invoked under existing authority by either harness/human. [`test-slot/test-slot.mjs`](../../../test-slot/test-slot.mjs), [`test-slot/ticket-queue.mjs`](../../../test-slot/ticket-queue.mjs), [`promote/host-gate.mjs`](../../../promote/host-gate.mjs). | Actual lock/process ownership and queue protocol govern admission. Unknown owner evidence holds; release is owner-bound. Tickets support ordering, but documented legacy pollers can bypass the ticket queue. Files are coordination state, not message/read receipts. Text “released” does not prove process-group cleanup or grant the lock. BCH's legacy wait-file wake path is also distinct from its notification loop. No admission/wake operation was executed. |
+| Record notes and decisions, [`bin/org.mjs`](../../../bin/org.mjs), [`lib/store.mjs`](../../../lib/store.mjs), [`lib/state.mjs`](../../../lib/state.mjs) | Authorized human/session writes evidence or a scoped decision through the record CLI; both harnesses read it. | Locked append/fold gives durable ordered record events. A note is not delivered to a recipient, and a repeated note command need not deduplicate by message ID. Its text is not permission. Record mutations can have lifecycle consequences, so the record must not become a high-volume transport queue. |
+
+[`supervisor/composer.mjs`](../../../supervisor/composer.mjs) has Claude/Codex terminal-layout heuristics and treats unknown layout as busy. A final read followed by a terminal prompt still has a race with human typing; there is no measured atomic compare-and-send API. Quiet gating reduces risk, not eliminates it. Native Claude agent-team JSON mailboxes are a separate feature from cross-session sockets; do not mistake one for a universal fleet transport. [Agent-team documentation](https://code.claude.com/docs/en/agent-teams).
+
+### 7.3 One envelope: an addressed `brain.log/v1` event [P]
+
+Use `type: session.message.v1` in section 4's event format. **`eventId` is the message ID**; there is no second independent message identifier. The service supplies `cursor`, `receivedAt` and validated scope on acceptance. The following is an illustrative stored question; `example-*`, digests and sequence numbers are placeholders, not existing ownership receipts or a live request.
+
+```json
+{
+  "schema": "brain.log/v1",
+  "eventId": "example-worker:epoch-1:42",
+  "producer": { "id": "example-worker", "epoch": "epoch-1", "sequence": 42 },
+  "stream": "rewt/herdr-brain",
+  "cursor": { "epoch": "journal-1", "sequence": 9201 },
+  "occurredAt": "2026-10-15T19:20:00Z",
+  "receivedAt": "2026-10-15T19:20:00.120Z",
+  "type": "session.message.v1",
+  "level": "info",
+  "identity": "rewt",
+  "project": { "commonDir": "/Users/rewt/development/rewt/herdr-brain/.git" },
+  "sessionUid": "example-eng-232-worker",
+  "incarnation": "incarnation-1",
+  "item": "ENG-232",
+  "run": "R-example",
+  "correlationId": "question-example-1",
+  "source": { "kind": "session-outbox", "ref": "example-outbox-receipt" },
+  "payload": {
+    "from": {
+      "identity": "rewt",
+      "projectRef": "/Users/rewt/development/rewt/herdr-brain/.git",
+      "session": { "uid": "example-eng-232-worker", "incarnation": "incarnation-1" }
+    },
+    "to": [{
+      "identity": "rewt",
+      "projectRef": "/Users/rewt/development/rewt/herdr-brain/.git",
+      "role": { "name": "project-supervisor", "bindingRef": "example-canonical-supervisor" }
+    }],
+    "kind": "question",
+    "refs": [
+      { "orgRef": "/Users/rewt/development/rewt/.org", "item": "ENG-232", "run": "R-example" }
+    ],
+    "reply_to": null,
+    "priority": "normal",
+    "reply_by": "2026-10-15T20:00:00Z",
+    "summary": "Review scope needs a supervisor decision before the correction continues.",
+    "body_ref": {
+      "path": "/Users/rewt/development/rewt/.org/message-bodies/example-question.md",
+      "sha256": "<64-lowercase-hex-digits>",
+      "bytes": 1600,
+      "mediaType": "text/markdown"
+    },
+    "decision_ref": null
+  }
+}
+```
+
+`from` is one address; `to` is a nonempty, bounded list of concrete recipient addresses, usually one. Each address contains an enrolled identity, canonical project reference, and **exactly one** role binding or workload/session UID plus incarnation. A role's `bindingRef` is a stable enrollment UID, resolved through its canonical delegation receipt to one active occupant; `project-supervisor` is an enum plus receipt, not a lookup by tab label. Each delivery attempt records the current binding generation separately, so a safe role respawn does not create a second logical recipient. The workload UID is the manifest identity, **not** Brain's display-only session UUID. Native ID, terminal, pane, checkout and selected Herdr namespace are evidence in the current binding. They are not trusted merely because the sender included them. A missing, duplicate or conflicting binding queues/holds the message; it never guesses by basename or agent name.
+
+Canonicalize and check sender scope against the enrolled producer/launch receipt. Directory modes and a Unix socket alone distinguish an OS user, not logical identities sharing that user; rewt and bastian must not gain authority merely because they have the same UID. The proposed broker must enforce scoped producer/recipient registrations, and unknown origin is quarantined. This is a required implementation boundary, not a claim that today's Herdr socket authenticates logical identities or that hashes solve authentication. Native filesystem/socket grants remain unchanged.
+
+`kind` is one of **request, reply, decision, fyi, hold, release, notice, question, ack**. `refs` qualifies item/run IDs by canonical org, since two projects can both have `R-42`. Reject inconsistent outer origin refs and payload refs. `reply_to` names the original request/question; `correlationId` groups its thread, while existing `causationId` can identify the immediate preceding event. A reply must match the still-pending thread, expected authority and recipient. `priority` is bounded (`normal|urgent`); `reply_by` is a UTC reply objective, not permission, automatic work cancellation, or hold expiry. A missed deadline produces one tracked exception through the existing supervisor route.
+
+Keep `summary` to one line, initially at most 240 characters. Longer material belongs in an immutable `body_ref` with canonical permitted path, SHA-256, byte count and media type. Verify size, symlink resolution, scope and digest before consumption; reject changed bytes instead of silently reading the latest path. Proposed initial body bound: 64 KiB, with larger material referenced as separately scoped artifacts. These are tuning choices, not measured capacity. Messages are data, including bodies: never interpolate them into a shell command or treat their prose as system instructions. Producer-side redaction remains required. Ordinary log mirroring still excludes conversation content; a deliberately addressed question/reply is an explicit, scoped communication object, not permission to ingest a transcript.
+
+A `decision_ref` names the actual record, sequence, author/delegation evidence and optionally a memo digest. A relay can claim an origin but cannot authenticate it by setting `from.identity: operator`. The service stamps the real relaying session; verified origin is separate provenance. A changed decision creates a new event referencing the superseded one. Reusing an ID with altered text, recipients, scope or body digest is an error.
+
+### 7.4 Durable transport and delivery contract [P]
+
+**One log writer, recipient projections, one delivery owner.** Extend the existing inbox pattern rather than adding another direct-prompt daemon. Each sender durably stages a stable-ID envelope in its own outbox. The receiver's authorized service verifies scope/body availability, persists accepted content and the event, then acknowledges. Per-recipient inbox entries are projections of that accepted event plus append-only delivery receipts; rebuild them by cursor after a crash. Do not acknowledge after two unrelated writes to “log” and “inbox” and hope both survived. Section 4's fsync, torn-tail, deduplication and gap rules apply to both.
+
+Use one thin, dependency-free publish/read/reply adapter from either harness's normal tools. Its proposed recipient projection is under the owning service partition, `inboxes/<canonical-recipient-hash>/`; the public read pointer must be in a scope already permitted to that recipient. Keep the current `.org/supervisor/inbox.log` as the compatibility owner until its fenced transfer. An approved file outbox can be the normal producer interface, so the architecture need not depend on every worker having socket access. It is not a fallback to evade an actual denied socket operation. There is no new wrapper, native hook, model-specific core branch or automatic permission-profile change.
+
+For cross-identity delivery, each identity's adapter owns its files. The sender publishes only an authorized export from its own outbox; the recipient adapter imports it into its own scoped store and records acceptance. Preserve the immutable origin envelope and digest; the recipient's local cursor/receipt wraps that envelope rather than changing its origin fields. There is one writer per owned partition, no cross-identity atomic commit or global order. No agent writes another identity's inbox, handoff or configuration. A body under `/tmp` must be retained in authorized durable storage before acceptance, or acceptance is withheld; an imported local body path is a receipt mapping to the same digest, not an edit to the origin envelope. This import never copies a file that the originating harness refused to read; report that refusal through the operator's existing path. Shared pointers are sufficient only while their permitted lifetime and availability are guaranteed.
+
+| Receipt/observation | Exact meaning |
+| --- | --- |
+| `accepted` | Receiver durably stored the envelope and required body reference/content; sender may stop retransmitting to that receiver. |
+| `pending` / `rule-consumed` | Awaiting delivery, or a deterministic rule recorded its result. Neither says a model read it. |
+| `wake-attempt` / `offered` | Intent before terminal delivery, then a CLI acknowledgement if obtained. Lost acknowledgement remains explicit. |
+| `consumed` | Recipient reader verified and exposed the addressed content, with a durable receipt. It does not prove understanding or authorize an effect. |
+| `answered` / `resolved` | A correlated reply or explicit disposition exists; an authorized action's own record/queue receipt is separate. |
+
+These are message-operation receipts, not stored business status. Item/run/review status continues to come from the record fold. Transport acks are generated by the adapter, correlated to the original ID, and consumed by sender rules; **never send an ack for an ack** or turn successful delivery into a chat message. Unresolved critical messages, bodies, deduplication keys and hold/release tombstones are pinned beyond routine log retention until resolution plus the adopted replay/audit horizon. A storage limit must expose backpressure, never age-delete an unanswered operator question or active hold.
+
+**Quiet delivery.** Preserve current idle/done, interactive-readiness, empty-composer and repeated exact-occupant checks from `prompt-supervisor.mjs`, generalized to both harnesses and all enrolled recipients. Hold on a busy/missing/unknown/blocked recipient or native refusal; do not force Enter, clear the composer, switch providers or fall back to another transport after refusal. A worker awaiting an answer remains warm; a sealed run report requires the next authorized correction run through `dispatch --reuse`. Receipt of a reply cannot reopen/edit an old report or authorize a new run on its own.
+
+A wake carries only an escaped one-line summary and an own-scope pointer, for example:
+
+```text
+[brain-message] id=example-worker:epoch-1:42 kind=question summary="Review scope needs a decision" envelope=/own-scope/inbox/9201.json sha256=<envelope-digest>
+```
+
+The recipient uses its normal permitted file/CLI tools to verify the envelope/body, inspect cited evidence, and publish a structured reply. No human chat is required in that round trip. The envelope digest is carried in the delivery pointer/receipt, not self-hashed inside its own bytes. A consumed but unanswered question remains unresolved and pinned; recovery handoffs include it, and must not treat a read receipt as completion. A new role incarnation reads unresolved IDs from its handoff/inbox; a reply addressed to an exact worker incarnation is **never automatically redirected to a fresh worker**. If manifest-authorized crash recovery proves a resume of the same native conversation, a controller receipt may explicitly transfer the old binding to the recovered incarnation. Missing or incompatible context holds the reply for resolution; no silent address rewrite.
+
+**Ordering and retries.** Reuse `(producer, epoch, sequence)` as stable identity; duplicate identical submissions return the original acceptance receipt. Do not deduplicate distinct questions by matching their text. A recipient has a durable acceptance sequence; FIFO is the default within a conversation, not a global order across senders/projects. Independent routine/control messages may be processed while a model is busy. Priority may advance an independent decision but cannot make a reply precede its question or violate a resource dependency. Fanout resolves an explicit recipient set at publication and tracks `(message ID, logical recipient address)` separately; one busy target never blocks every other target. That address is the stable role enrollment or exact session incarnation, independent of an attempt's current pane binding.
+
+Retry unacknowledged durable transport submissions with bounded backoff and the **same ID**. Existing informational notice wake retries may still be at least once, after fresh quiet/identity gates; a recipient reader skips IDs already consumed and can return the existing reply. This reduces duplicate work but cannot undo a duplicate model wake. An uncertain **work-dispatch prompt** still follows existing inspected `--accept-delivered`/`--resend` handling, never this notice retry rule. Keep bounded delivery attempts and visible pending/capped entries rather than promising liveness under permanent failure. A reply/correction handoff has one delivery owner: either its inbox wake or inclusion in the journaled reuse brief, never both.
+
+### 7.5 Routing, authority and the optional digester [P]
+
+The following implements the **proposed** three logging paths if adopted. Judgment bypasses digest batching. Routine input is retained and handled by fixed rules. A separate optional model session detects patterns across events. The record core, logging service, collector and existing `brain/` signal digest remain model-free.
+
+| Kind or validated event | Consumer and model-wake rule |
+| --- | --- |
+| `question`, `request` requiring a choice; blocked/needs-work report; deferred review scope; stalled/stopped-without-report worker | Direct supervisor inbox, wake once eligible and quiet. Re-read report/record first. A pending question is never hidden by batching, a digest window or an advisory budget. |
+| Coordinator/operator substantive message, including `decision` | Targeted responsible supervisor/chat role, with verified provenance and existing authority. Direct judgment by default. Untyped relays must not silently become FYI. |
+| `reply` | Only the expected pending thread and exact warm recipient, or authorized reuse brief. Wake only if the answer still needs consumption; stale/duplicate replies are logged. |
+| `notice` for routine done/PASS, supported skip, completion or progress | Log/rules only when a validated standing rule completely handles it. A failed rule, missing scope or unknown classification becomes one tracked judgment exception. Do not infer PASS from an unvalidated tag. |
+| **`fyi`, `ack`, `hold`, `release`** | **Never wake a model.** Rules persist/resolve them. A hold/release only changes its own admitted control scope; it cannot grant test-slot admission or release another hold. If judgment is required, the authorized sender issues a separate correlated question, not a disguised control wake. |
+| Digester finding | One structured `notice` to the supervisor only when it presents a novel, evidence-backed decision need. Otherwise store it for on-demand reading. Never send findings directly to workers. |
+
+“Anything from operator/coordinator goes direct” means their substantive requests and decisions; it cannot override the explicit never-wake rule for protocol acks or resource receipts. The ingress adapter must preserve that distinction visibly, not demote a decision to FYI to reduce wake counts. `autopilot.mjs` already applies standing rules and records receipts; extend its validated classification at the edge, retaining its uncertainty handling, STOP checks and canonical record binding. An `[auto-review] skipped` can mean unmet questions/blockers, so only the specifically verified unsupported-role outcome belongs to the eight routine notices in the count.
+
+**Message data never supplies authority.** Receiver-side policy evaluates the actual effect using [decision-routing policy v2](../../../supervisor/DECISION-ROUTING.md). Standing delegations persist; a fresh permission question is unnecessary for an already authorized routine action. A producer cannot create a delegation by choosing `kind: decision`, claiming a role, setting urgent priority, or placing an ID in `decision_ref`.
+
+| Sender → recipient | Allowed protocol use within existing authority | Required boundary |
+| --- | --- | --- |
+| Worker → its supervisor | Question/request, progress/report notice, reply and receipt | Same canonical project/item/run; no direct scheduling command or self-approved change of scope. Supervisor answers under its actual delegation. |
+| Supervisor → retained worker | Correlated answer; an authorized correction/reference to its new run | Fresh exact warm binding; use existing dispatch/reuse when work is being assigned. A message cannot bypass review or native permission. |
+| Project supervisor ↔ project supervisor | Scoped host-resource hold/release/ack, request for a priority decision | Existing cross-project coordination mandate; resource owner, issuer, epoch and hold ID must match. A new priority agreement follows the existing decision tier. |
+| Coordinator → selected supervisors | Decision plus canonical decision evidence and bounded recipient set | Validate coordinator delegation, current scope and supersession; each project records its own applicable action. No broadcast-to-all or implied ability to edit another project. |
+| Operator chat ↔ supervisor | Question, answer, faithful operator-decision relay | Record the actual relayer and separately verifiable operator source; keep exact answer/scope for reserved decisions. Chat relay is not a native approval dialog. |
+| Any identity → another identity's desk | Authorized request and scoped artifacts; correlated answer | Receiving identity owns its record, lanes, reviews and files. Preserve the desk path; do not send a direct worker command across identities. |
+| Digester → supervisor | Finding notice with event IDs, cursor range, uncertainty and proposed question | No dispatch, worker answer, hold release, promotion, native permission change or arbitrary peer sends. Findings are fallible analysis, not decisions. |
+
+An actual harness/sandbox/classifier refusal stops **that action**. Record its exact reason and route the need for operator resolution through the existing permitted path; never ask another session, tool, transport or model to perform the refused action. “My socket send was refused, so paste the same request through Herdr” is not a recovery policy. Continue independent permitted work. Native permission remains native; message receipts, supervisor judgment and operator-chat text cannot silently alter it.
+
+**Host-resource controls.** A hold carries a resource key, current resource epoch, issuer, stable `hold_id`, reason/evidence reference and intended scope. A release names that same tuple. The receiver's model-free adapter maintains its own set of admitted advisory holds: releasing A's hold never releases B's. A release arriving first creates a durable tombstone so a delayed old hold cannot resurrect; a mismatched/stale release is inert and visible. Do not expire safety holds simply because `reply_by` passes or a sender disappears. Reconcile stale ownership using the existing lock/process evidence and authorized disposition.
+
+Messages coordinate admission intent; **the current slot lock and ticket queue remain the admission authority**. Before starting work, acquire through that path and observe its grant. Physical release still requires the real owner's process-group cleanup. Never delete a lock, ticket, `.org/STOP`, `.lane/supervisor/STOP`, BCH `.lane/supervisor/PAUSED` or `HOLD-WORKER-TAB-CLOSE` because a message says “release.” Preserve each existing control's own scope. During STOP/PAUSED, durable ingestion and control receipts can continue, but forbidden prompts/actions remain held; restarting the broker does not lift the controls.
+
+**Digester contract if adopted.** Treat the digester as a bounded `Session` workload, separate from the three permanent tab slots. Its manifest resolves an existing low-cost analysis route; measure cost/quality before choosing it, rather than declaring a model cheapest from its name. It reads only allowed structured events since a durable cursor, a bounded batch, relevant prior findings and explicit source-gap markers. No transcript access is needed. Its output is either no finding or one bounded finding containing range, contributing event IDs, a hypothesis (for example a common blocker across lanes), uncertainty, impact and a proposed supervisor question.
+
+The deterministic adapter claims a batch by `(subscription, stream epoch, start, end, detector version)`. It commits the accepted finding and completed cursor in one journal operation, publishing that finding under a stable ID. If it crashes after commit, replay returns the receipt; it must not regenerate a different finding under the same ID. Failure before commit does not advance the cursor. No-finding completion still records the range. A gap triggers a labeled incomplete-evidence result/rebuild, never an invented trend. Exclude the digester's own notices/acks from primary input evidence to prevent a feedback loop. A scoped finding fingerprint and existing open-finding receipt suppress repeated wakes about the same pattern; materially changed evidence can produce a linked update. Direct worker/operator questions bypass that suppression.
+
+The short-lived analysis session ends after its batch's recorded disposition; its next incarnation resumes from the cursor and declared context. It has no dispatch or worker-reply tools/route, and no permission to amend the record except through its authorized supervisor. This is distinct from existing foreground, model-free [`brain/`](../../../brain/README.md) lesson distillation. Batch lifetime does not change the work-item retention rule for engineers or reviewers.
+
+### 7.6 Five concrete flows [P]
+
+All five figures below are proposed sequences. Rule/service arrows denote deterministic processing, not hidden model calls. Every mutation remains subject to the authority and native-permission checks above. Standalone sources and identical embedded copies are in the [viewer](diagrams.html).
+
+<!-- PROTOCOL_DIAGRAMS_START -->
+
+#### Protocol: worker question and warm reply
+
+A question stays bound to the same worker. If its report is already sealed, an authorized correction uses a new run through dispatch --reuse, with one delivery owner. The review loop returns to ParkedAwaitingReview.
+
+Source: [`07-protocol-worker-question.mmd`](diagrams/07-protocol-worker-question.mmd).
+
+```mermaid
+sequenceDiagram
+  participant W as Same warm worker
+  participant B as Owned outbox and durable inbox service
+  participant Q as Quiet delivery and rules
+  participant S as Canonical supervisor
+  participant R as Record and existing dispatch
+  W->>B: Publish question ID, item/run, evidence body digest
+  B->>B: Validate sender; persist before acceptance
+  B-->>W: Stored receipt handled by adapter; no model wake
+  Q->>B: Read pending supervisor question
+  Q->>S: When quiet and exact binding matches, one line and pointer
+  S->>B: Read and verify question and evidence
+  S->>R: Check scope and existing delegation; record material decision
+  S->>B: Publish reply with reply_to and decision reference
+  B->>Q: Pending reply for exact worker incarnation
+  Q->>R: Check run state, same occupant and delivery owner
+  alt Original run still open and answer expected
+    Q->>W: Quiet-gated reply pointer once
+    W->>B: Read reply; persist consumed receipt
+    W->>W: Continue authorized work in same context
+  else Prior run report is sealed; authorized correction needed
+    S->>R: New correction run via dispatch --reuse R-prev
+    R->>B: Claim reply for inclusion in reuse brief
+    R->>W: One journaled correction brief plus reply pointer
+    Note over Q,W: Inbox does not send a second prompt for the same reply
+  end
+  W->>R: Submit new report when work is complete
+  R->>R: Derive ParkedAwaitingReview; KEEP worker
+  loop Further review corrections
+    S->>R: Authorized dispatch --reuse; new run and report path
+    R->>W: Same warm native session receives corrections
+    W->>R: Report; park again pending review
+  end
+  Note over W,R: No context reset or retirement before landing or explicit disposition
+```
+
+#### Protocol: host hold and release without model wakes
+
+Two projects exchange scoped control receipts under an existing agreement. Rules handle every message; the current lock and queue still decide admission, and a release removes only its matching hold.
+
+Source: [`08-protocol-host-hold-release.mmd`](diagrams/08-protocol-host-hold-release.mmd).
+
+```mermaid
+sequenceDiagram
+  participant A as Project A supervisor rules
+  participant K as Existing host slot lock and queue
+  participant B as Durable addressed event service
+  participant C as Project B supervisor rules
+  Note over A,C: Standing coordination policy; zero model wakes in this flow
+  A->>K: Existing authorized admission path
+  K-->>A: Actual ownership receipt after lock grant
+  A->>B: hold with resource epoch, issuer and hold_id
+  B->>B: Persist envelope; route only to control rules
+  B->>C: Apply scoped advisory hold to B admission intent
+  C->>C: Persist independent hold set; do not prompt supervisor
+  C->>B: Correlated ack receipt
+  B-->>A: Adapter consumes ack without a model turn
+  A->>K: Existing owner cleanup and physical release
+  K-->>A: Release evidence
+  A->>B: release naming same resource, issuer, epoch and hold_id
+  B->>C: Persist release and route to rules
+  C->>C: Remove only matching hold; retain release tombstone
+  Note over B,C: Duplicate or late events are idempotent; other holds remain
+  opt B already has authorized queued work and no other hold
+    C->>K: Request admission through existing queue and lock
+    K-->>C: Grant only when actual resource is available
+  end
+  Note over A,C: No message deletes a lock, lifts STOP/PAUSED or closes a worker
+```
+
+#### Protocol: targeted coordinator decision
+
+A fixed recipient set gets one decision reference with independent delivery receipts. Each supervisor verifies authority and applies it through its own project workflow; a busy target does not stop the others.
+
+Source: [`09-protocol-decision-fanout.mmd`](diagrams/09-protocol-decision-fanout.mmd).
+
+```mermaid
+sequenceDiagram
+  participant C as Authorized coordinator
+  participant R as Canonical decision record and memo
+  participant B as Owned services and recipient inboxes
+  participant A as Selected supervisor A
+  participant D as Selected supervisor B
+  C->>R: Record scoped decision under existing delegation
+  R-->>C: Decision reference, scope and immutable body digest
+  C->>B: One decision ID with explicit recipient set A and B
+  B->>B: Validate origin; persist per-recipient acceptance receipts
+  B->>A: Quiet-gated one line plus pointer
+  A->>R: Verify decision evidence, authority and current scope
+  A->>A: Apply through own authorized record/workflow
+  A->>B: Consumed or disposition receipt; no chat relay
+  alt B is busy or its binding is uncertain
+    B->>B: Keep B pending; A progress is independent
+  else B is quiet with exact current role binding
+    B->>D: One line plus pointer
+    D->>R: Verify scope and superseding decisions
+    D->>D: Apply through own authorized record/workflow
+    D->>B: Consumed or disposition receipt
+  end
+  B-->>C: Adapter reads recipient receipts; no ack model wake
+  Note over C,D: Unlisted supervisors receive nothing; message is evidence, not authority
+```
+
+#### Protocol: optional digester finding
+
+If this logging path is adopted, a bounded model session reads from a durable cursor and returns one evidence-backed finding. Its adapter commits the result and cursor; only the supervisor decides what to do.
+
+Source: [`10-protocol-digester-finding.mmd`](diagrams/10-protocol-digester-finding.mmd).
+
+```mermaid
+sequenceDiagram
+  participant L as Structured log service
+  participant A as Deterministic batch adapter
+  participant D as Optional short-lived digester session
+  participant I as Supervisor durable inbox
+  participant S as Canonical supervisor
+  Note over L,S: Proposed logging path; requires adoption
+  A->>L: Read committed cursor and claim bounded range
+  L-->>A: Event IDs, scoped bodies, retention and gap evidence
+  A->>D: Start from manifest, cursor and bounded evidence
+  D->>D: Analyze cross-event pattern; no worker communication
+  alt One novel finding requiring judgment
+    D->>A: Finding with evidence IDs, hypothesis and uncertainty
+    A->>L: Commit finding and cursor together under stable batch ID
+    L->>I: Project one correlated finding notice
+    I->>S: When quiet, one line plus pointer
+    S->>L: Read finding and cited primary events
+    S->>S: Judge within existing authority
+  else No finding
+    D->>A: No-finding result for claimed range
+    A->>L: Commit completed cursor; no supervisor wake
+  else Session failure before commit
+    A->>L: Keep cursor unchanged; retain failure receipt
+  end
+  A->>A: End batch session; next incarnation resumes committed cursor
+  Note over D,S: Digester never dispatches, answers workers or promotes findings to decisions
+```
+
+#### Protocol: operator question through chat
+
+The operator sees a concise answer or decision question. Pull-only chat avoids unsolicited protocol entries; opting into timely attention adds one pointer. Acks and routine control traffic stay in the service.
+
+Source: [`11-protocol-operator-chat.mmd`](diagrams/11-protocol-operator-chat.mmd).
+
+```mermaid
+sequenceDiagram
+  actor O as Operator
+  participant C as Enrolled chat and relay adapter
+  participant B as Durable inbox service and rules
+  participant S as Responsible supervisor
+  participant R as Canonical record and evidence
+  O->>C: Ask project question
+  C->>B: Publish question; actual relay identity and original body
+  B-->>C: Adapter consumes acceptance ack; no chat message
+  B->>S: Quiet-gated question pointer; direct judgment path
+  S->>R: Read evidence and authority; formulate answer or decision question
+  S->>B: Correlated reply with concise narrative and body digest
+  alt Chat uses pull-only preference
+    B->>B: Keep reply pending without model wake
+    O->>C: Next operator interaction
+    C->>B: Read pending reply and record consumed receipt
+  else Timely notification explicitly enabled
+    B->>C: When quiet, one answer-ready pointer
+    C->>B: Read verified reply and record consumed receipt
+  end
+  C-->>O: Present answer or question with recommendation and evidence link
+  opt Operator gives a scoped decision
+    O->>C: Exact answer and scope
+    C->>B: Decision relay with verifiable operator provenance
+    B->>S: Quiet-gated pointer
+    S->>R: Bind answer to existing authority and decision record
+  end
+  Note over C,S: Acks, FYIs and resource receipts stay out of chat; native approval stays native
+```
+
+<!-- PROTOCOL_DIAGRAMS_END -->
+
+### 7.7 ARCH-31: can transcript noise be avoided entirely?
+
+**For routine coordination, yes: keep it entirely in the service, rules and logs viewer. For timely unsolicited questions inside today's model conversations, not entirely.** A chat that only reads an inbox on the operator's next turn can have zero unsolicited protocol messages, at the cost of delaying attention. A timely automatic answer/question needs a minimal wake or an external human-facing notification; model file reads and the eventual answer still consume context. Polling from a model also adds tool traffic, so it is not a zero-noise solution.
+
+The recommended chat policy is explicit: **pull on the next operator interaction by default; opt into one pointer for an unresolved decision needing timely attention**. Once read, present one concise narrative with the question, recommendation and evidence link. Keep delivery retries, acks, holds, routine reports and digester progress out of chat. This preference affects presentation and latency, not whether a substantive operator request reaches the supervisor directly. A separate deterministic UI badge would avoid a model wake, but such a new UI capability is not implemented or verified here.
+
+Claude's documented cross-session preview displays a short notice while the full message remains available to the model; it is not evidence that text becomes token-free or disappears from the transcript. Its native remote-delivery option is also outside this local proposal. No cross-session or remote-control mechanism was exercised. [Claude cross-session messaging](https://code.claude.com/docs/en/cross-session-messaging).
+
+**[D-record]** ARCH-31 seq 5849 folds this question into RES-3/ARCH-33 and says the older October 9 exploration left no recorded conclusion. This section supplies the tradeoff, not a claim that the old relay was evaluated successfully. Measure unsolicited chat lines, model wakes, time-to-question/answer and unanswered-message age in a future opt-in implementation; do not optimize transcript quietness by losing operator questions.
+
+### 7.8 Compatibility mapping and rollout [P]
+
+| Existing channel | Protocol mapping and transition obligation |
+| --- | --- |
+| Claude `SendMessage` | Adopted sessions publish through the common adapter. A future native edge is optional only if it preserves durable acceptance, quiet gating and IDs; otherwise keep native free-text traffic outside the protocol's guarantee. Never send fyi/ack/hold/release through an edge that wakes a model. Do not send one event through native messaging and Herdr independently. Native holds/refusals remain binding; no default remote transport. |
+| Herdr direct prompt | Keep as the common Claude/Codex delivery edge behind the existing quiet/identity gate. Wrapper callers submit an envelope; only the delivery owner prompts. Existing dispatch keeps its separate uncertain-work receipt semantics. No new product SessionStart hook. |
+| Pasted chat relays | Typed relay with actual sender provenance, original question/decision as scoped body, and correlated reply. Manual paste remains a compatibility entry point with weaker provenance explicitly marked; it does not manufacture operator authority. Chat displays the narrative, not the control transcript. |
+| `[org-report]`, `[promote-queue]`, `[watch-*]`, literal `[watch]` | Preserve exact legacy tag/text rendering and downstream parsing. New adapter attaches IDs/provenance out of band and points to validated report/job evidence. Shadow copies cannot wake or act. Cut over once per producer/recipient with a receipt fence. |
+| BCH `[auto-review]` and legacy `.msg` outbox | Keep current entrypoints/outcomes, including unsupported-role versus deferred scope. Build a read-only mirror first; at transfer, durably map existing file identities/digests to message IDs before acknowledging/removing via the original owner. BCH text delivery log is not parsed as Brain JSONL. Retain PAUSED/backoff behavior and never start another daemon implicitly. |
+| Identity-desk requests | Keep `supervisor/request.mjs <identity> ...` as the compatibility interface. Receiving owner enrolls its desk canonically, adds durable request/reply receipts and quiet delivery. Preserve its own record/review workflow and current uncertain-delivery hold. No other identity's files are changed by a sender. |
+| Coordinator memo plus SHA-256 | Body reference plus canonical decision reference and scoped recipient list. Verify advertised hash and origin; if no trusted expected hash exists, record that gap instead of treating a newly computed hash as authentication. Preserve/import permitted memo bytes durably before acceptance. |
+| Slot locks, tickets and wait files | Keep current admission/release implementation. Envelope holds/releases describe scoped control intent and receipts; adapters never acquire by merely reading a “grant” message. Preserve old and new queue participants until each owner adopts the protocol; do not promise strict fleet FIFO while legacy pollers remain. |
+| Record notes | Decision/evidence source and occasional material disposition, written only through existing CLI. Mirror references into envelopes; no inbox entries appended directly to `events.jsonl`, no new stored item status, and no note for every routine ack. |
+
+Section 6 stages 7–11 give incremental sizes, future acceptance evidence and reversals. Before transferring any delivery owner, stop its intake or fence it at a durable watermark, drain or classify in-flight attempts, transfer the pending IDs/receipts, and enable exactly one replacement. Do not “roll back” by deleting the new journal and replaying all old files. Keep read compatibility until outstanding messages, retained body references and active holds have been reconciled; uncertain work remains held for inspection in either version.
+
+The protocol cannot retroactively silence direct native free text or arbitrary human pastes. Its guarantees apply to enrolled producers using the common adapter. Shadow observation should identify remaining direct callers, and their owners migrate them explicitly; claiming universal delivery or zero control wakes while those paths remain active would be false.
+
+**BCH compatibility remains mandatory:** installed `~/.local/share/herdr-monitor/current/contrib/settle-watch.mjs` and its `--model`/`--effort` behavior; checkout `supervisor/reconcile.mjs` on every promotion; shipped `contrib/` and `lib/cli-help.mjs`; canonical close-hold enforcement in retirement/cleanup. Today's tag formats, outcome distinctions and desk entrypoint remain accepted during migration. This report proposes no migration of BCH files and performed none.
+
+### 7.9 Prior art and limits of verification
+
+| Primary source | Useful pattern and limit |
+| --- | --- |
+| [Gas Town repository](https://github.com/gastownhall/gastown) and [architecture document](https://raw.githubusercontent.com/gastownhall/gastown/main/docs/design/architecture.md) | Separate durable work/identity from replaceable sessions; use addressed mail and persistent work hooks. Its town/rig topology and runtime-specific hook/nudge paths are informative, not a dependency choice. Brain should borrow durable-addressing and handoff concepts while preserving its existing record and no-wrapper/no-product-SessionStart-hook constraints. Repository/docs read only; no install, operational recovery or delivery guarantee was verified. |
+| [Erlang process reference](https://www.erlang.org/doc/system/ref_man_processes.html) | Explicit recipient mailboxes, asynchronous messages and correlated replies. Signal ordering between one sender/receiver is not a global order; priority-message behavior can change mailbox order, and distribution failure can lose signals. Brain needs its own durable journals, deduplication and recovery rather than borrowing an in-memory mailbox guarantee. No Erlang runtime experiment. |
+| [Hewitt, Actor Model of Computation](https://arxiv.org/abs/1008.1459) | Addressed asynchronous communication and local behavior help separate the recipient from the calling thread. An actor name is neither authorization nor proof of durable/exactly-once delivery. This is a conceptual analogy, not a formal correctness claim for the proposed protocol; abstract consulted, no actor system implemented. |
+| [Prometheus Alertmanager](https://prometheus.io/docs/alerting/latest/alertmanager/) | Separate grouping, deduplication and recipient routing from underlying event retention; inhibition/silencing can reduce repeated attention requests. Apply that idea to bounded supervisor wakes, preserving unanswered questions and decisions. Do not equate suppressed notification with resolved work or deleted evidence. Documentation only; no Alertmanager installation or load test. |
+
+### 7.10 Non-claims and review boundary
+
+R-422 performed bounded source/record/file inspection and primary-document research only. No native cross-session send, Herdr prompt/key/close/reset, desk request, daemon/service launch, test suite or slot acquisition occurred. The native Claude contract is documented, not experimentally verified in this installation. Logical-identity authentication, race-free terminal delivery, exactly-once model consumption, durable-service throughput and actual model/token savings remain unproven. The supplied count discrepancy is retained rather than resolved by reading private transcripts.
+
+All five protocol sequences, the envelope, classification, digester and migration are proposals. The operator's controller/default-tab/close-and-respawn direction is reflected without resetting this warm worker or silently adopting the still-open logging split. Existing report/decision authority and native permissions remain the implementation boundary. Static document/source consistency checks are reported with R-422; the prior browser URL-policy refusal still leaves rendered Mermaid, dark-mode and phone-layout appearance unverified.

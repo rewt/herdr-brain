@@ -3,21 +3,29 @@ stateDiagram-v2
   Created --> Starting: Valid route, ownership, no STOP
   Starting --> Running: Ready and occupant bound; initial prompt recorded
   Starting --> Hold: Ambiguous launch or prompt, refusal or identity mismatch
+  Running --> AwaitingAnswer: Question published; keep exact warm session
+  AwaitingAnswer --> Running: Scoped reply; open run or authorized reuse in same session
+  AwaitingAnswer --> ParkedAwaitingReview: Report sealed; keep pending question and warm context
+  AwaitingAnswer --> Eligible: Explicit disposition; resolve question and quiesce
+  AwaitingAnswer --> RecoveryRequired: Confirmed process loss; retain pending question
   Running --> ParkedAwaitingReview: Report available and worker quiet
   ParkedAwaitingReview --> Running: Corrections via dispatch --reuse; same native session
   ParkedAwaitingReview --> ParkedAwaitingReview: Reviewer active, delayed, or asks another review
   ParkedAwaitingReview --> Eligible: Work landed or explicit disposition verified
   Running --> Eligible: Explicit disposition and quiescence verified
   Eligible --> Retired: Worker only; fresh safe-retirement checks and no hold
-  Eligible --> Cleared: Explicit fresh-cycle intent, saved handoff, supported native clear
-  Cleared --> Starting: Same pane if safe; observe new ID and rebind name
+  Eligible --> ResetPrepared: Standard-session boundary; handoff and inbox cursor saved
+  ResetPrepared --> ClosedForReset: No live references; every pane owned; exact tab closed
+  ClosedForReset --> Starting: Respawn once from manifest and handoff; new incarnation
+  ResetPrepared --> Hold: Close refused or outcome uncertain
+  ClosedForReset --> Hold: Replacement launch uncertain
   Running --> RecoveryRequired: Confirmed process loss
-  ParkedAwaitingReview --> RecoveryRequired: Crash; keep parked intent, never auto-clear
+  ParkedAwaitingReview --> RecoveryRequired: Crash; preserve review hold, never reset
   RecoveryRequired --> Restarted: Manifest-authorized native resume or explicitly dispositioned reconstruction
   Restarted --> Running: Active work recovered
   Restarted --> ParkedAwaitingReview: Review hold recovered; do not redispatch work
+  Restarted --> AwaitingAnswer: Pending question recovered; no duplicate request
   RecoveryRequired --> Hold: Missing resume evidence or any refusal
-  Eligible --> Restarted: Explicit fresh-cycle restart with manifest and handoff
   Hold --> Starting: Authorized initial-launch resolution and fresh checks
   Hold --> ParkedAwaitingReview: Evidence resolved; retain parked occupant
   Hold --> Running: Delivery resolved; same active occupant

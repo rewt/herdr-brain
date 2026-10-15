@@ -1,0 +1,28 @@
+sequenceDiagram
+  actor O as Operator
+  participant C as Enrolled chat and relay adapter
+  participant B as Durable inbox service and rules
+  participant S as Responsible supervisor
+  participant R as Canonical record and evidence
+  O->>C: Ask project question
+  C->>B: Publish question; actual relay identity and original body
+  B-->>C: Adapter consumes acceptance ack; no chat message
+  B->>S: Quiet-gated question pointer; direct judgment path
+  S->>R: Read evidence and authority; formulate answer or decision question
+  S->>B: Correlated reply with concise narrative and body digest
+  alt Chat uses pull-only preference
+    B->>B: Keep reply pending without model wake
+    O->>C: Next operator interaction
+    C->>B: Read pending reply and record consumed receipt
+  else Timely notification explicitly enabled
+    B->>C: When quiet, one answer-ready pointer
+    C->>B: Read verified reply and record consumed receipt
+  end
+  C-->>O: Present answer or question with recommendation and evidence link
+  opt Operator gives a scoped decision
+    O->>C: Exact answer and scope
+    C->>B: Decision relay with verifiable operator provenance
+    B->>S: Quiet-gated pointer
+    S->>R: Bind answer to existing authority and decision record
+  end
+  Note over C,S: Acks, FYIs and resource receipts stay out of chat; native approval stays native

@@ -29,7 +29,7 @@ sequenceDiagram
     C->>D: dispatch --reuse R-prev
     D->>H: Check unchanged occupant, route and quiet state
     D->>R: New run, same session, new report path
-    D->>H: Correction prompt without clear or restart
+    D->>H: Correction prompt to the same warm session
     H->>E: Correction report available
     C->>R: Derive ParkedAwaitingReview again
   end
@@ -38,10 +38,13 @@ sequenceDiagram
   alt Worker workload complete
     C->>H: Retire worker only through safe retirement
   else Explicit fresh-cycle request for a retained standard session
-    C->>R: Persist handoff and reset intent; quiesce callbacks
-    C->>H: Approved native clear or restart operation
-    H-->>C: Observe new native ID and terminal binding
-    C->>D: Reapply manifest context; restore name only if lost
+    C->>R: Persist Markdown handoff, inbox cursor and reset intent
+    C->>R: Quiesce callbacks; verify every pane in the owned tab
+    C->>H: Guarded close of exact eligible tab
+    H-->>C: Observe old tab gone; hold if uncertain
+    C->>D: Respawn from manifest and handoff
+    D->>H: Create replacement tab and native session once
+    H-->>C: Observe new tab, terminal and native ID
     C->>R: New incarnation receipt; retain old run evidence
   end
-  Note over C,H: Standard tab slots remain protected until explicit workspace withdrawal
+  Note over C,H: No reset of warm review workers; standard slots survive occupant replacement

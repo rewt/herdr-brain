@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Herdr Brain — session architecture · R-421</title>
+<title>Herdr Brain — session architecture · R-421 + R-422</title>
 <style>
 :root {
   color-scheme: light dark;
@@ -66,16 +66,21 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 </head>
 <body>
 <header>
-  <div class="kicker">Research proposal · R-421 · 15 October 2026</div>
+  <div class="kicker">Research proposal · R-421 + R-422 · 15 October 2026</div>
   <h1>A standard session platform</h1>
-  <p>Desired sessions come from manifests. Workers stay warm through review and correction rounds. Durable logs live in a service; the logs tab only views them.</p>
-  <p><a href="REPORT.md">Read the evidence and proposal</a>. Figures 01–02 describe today; figures 03–06 describe proposed behavior.</p>
+  <p>Desired sessions come from manifests. Workers stay warm through review and correction rounds. Durable logs live in a service; the logs tab only views them. Addressed events carry questions, decisions and control receipts between sessions.</p>
+  <p><a href="REPORT.md">Read the evidence and proposal</a>. Figures 01–02 describe today; figures 03–11 describe proposed behavior, including five session-protocol flows. Eligible context resets close and respawn from a manifest and handoff; warm review workers stay intact.</p>
   <nav aria-label="Diagram navigation"><a href="#01-current-components">01 · Today: components and boundaries</a>
 <a href="#02-current-dispatch-review">02 · Today: dispatch and warm review rounds</a>
 <a href="#03-proposed-materialization">03 · Proposal: manifest to session</a>
 <a href="#04-proposed-logging">04 · Proposal: durable logging service</a>
 <a href="#05-proposed-lifecycle">05 · Proposal: work-item session lifecycle</a>
-<a href="#06-proposed-reconcile-loop">06 · Proposal: the reconcile loop</a></nav>
+<a href="#06-proposed-reconcile-loop">06 · Proposal: the reconcile loop</a>
+<a href="#07-protocol-worker-question">07 · Protocol: worker question and warm reply</a>
+<a href="#08-protocol-host-hold-release">08 · Protocol: host hold and release without model wakes</a>
+<a href="#09-protocol-decision-fanout">09 · Protocol: targeted coordinator decision</a>
+<a href="#10-protocol-digester-finding">10 · Protocol: optional digester finding</a>
+<a href="#11-protocol-operator-chat">11 · Protocol: operator question through chat</a></nav>
   <div class="toolbar" aria-label="Diagram display controls">
     <button type="button" id="fit" aria-pressed="true">Fit width</button>
     <button type="button" id="readable" aria-pressed="false">Readable size</button>
@@ -210,7 +215,7 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
     C-&gt;&gt;D: dispatch --reuse R-prev
     D-&gt;&gt;H: Check unchanged occupant, route and quiet state
     D-&gt;&gt;R: New run, same session, new report path
-    D-&gt;&gt;H: Correction prompt without clear or restart
+    D-&gt;&gt;H: Correction prompt to the same warm session
     H-&gt;&gt;E: Correction report available
     C-&gt;&gt;R: Derive ParkedAwaitingReview again
   end
@@ -219,13 +224,16 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   alt Worker workload complete
     C-&gt;&gt;H: Retire worker only through safe retirement
   else Explicit fresh-cycle request for a retained standard session
-    C-&gt;&gt;R: Persist handoff and reset intent; quiesce callbacks
-    C-&gt;&gt;H: Approved native clear or restart operation
-    H--&gt;&gt;C: Observe new native ID and terminal binding
-    C-&gt;&gt;D: Reapply manifest context; restore name only if lost
+    C-&gt;&gt;R: Persist Markdown handoff, inbox cursor and reset intent
+    C-&gt;&gt;R: Quiesce callbacks; verify every pane in the owned tab
+    C-&gt;&gt;H: Guarded close of exact eligible tab
+    H--&gt;&gt;C: Observe old tab gone; hold if uncertain
+    C-&gt;&gt;D: Respawn from manifest and handoff
+    D-&gt;&gt;H: Create replacement tab and native session once
+    H--&gt;&gt;C: Observe new tab, terminal and native ID
     C-&gt;&gt;R: New incarnation receipt; retain old run evidence
   end
-  Note over C,H: Standard tab slots remain protected until explicit workspace withdrawal
+  Note over C,H: No reset of warm review workers; standard slots survive occupant replacement
 </pre></details>
 </section>
 <section class="figure" id="04-proposed-logging" aria-labelledby="title-04-proposed-logging">
@@ -278,21 +286,29 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   Created --&gt; Starting: Valid route, ownership, no STOP
   Starting --&gt; Running: Ready and occupant bound; initial prompt recorded
   Starting --&gt; Hold: Ambiguous launch or prompt, refusal or identity mismatch
+  Running --&gt; AwaitingAnswer: Question published; keep exact warm session
+  AwaitingAnswer --&gt; Running: Scoped reply; open run or authorized reuse in same session
+  AwaitingAnswer --&gt; ParkedAwaitingReview: Report sealed; keep pending question and warm context
+  AwaitingAnswer --&gt; Eligible: Explicit disposition; resolve question and quiesce
+  AwaitingAnswer --&gt; RecoveryRequired: Confirmed process loss; retain pending question
   Running --&gt; ParkedAwaitingReview: Report available and worker quiet
   ParkedAwaitingReview --&gt; Running: Corrections via dispatch --reuse; same native session
   ParkedAwaitingReview --&gt; ParkedAwaitingReview: Reviewer active, delayed, or asks another review
   ParkedAwaitingReview --&gt; Eligible: Work landed or explicit disposition verified
   Running --&gt; Eligible: Explicit disposition and quiescence verified
   Eligible --&gt; Retired: Worker only; fresh safe-retirement checks and no hold
-  Eligible --&gt; Cleared: Explicit fresh-cycle intent, saved handoff, supported native clear
-  Cleared --&gt; Starting: Same pane if safe; observe new ID and rebind name
+  Eligible --&gt; ResetPrepared: Standard-session boundary; handoff and inbox cursor saved
+  ResetPrepared --&gt; ClosedForReset: No live references; every pane owned; exact tab closed
+  ClosedForReset --&gt; Starting: Respawn once from manifest and handoff; new incarnation
+  ResetPrepared --&gt; Hold: Close refused or outcome uncertain
+  ClosedForReset --&gt; Hold: Replacement launch uncertain
   Running --&gt; RecoveryRequired: Confirmed process loss
-  ParkedAwaitingReview --&gt; RecoveryRequired: Crash; keep parked intent, never auto-clear
+  ParkedAwaitingReview --&gt; RecoveryRequired: Crash; preserve review hold, never reset
   RecoveryRequired --&gt; Restarted: Manifest-authorized native resume or explicitly dispositioned reconstruction
   Restarted --&gt; Running: Active work recovered
   Restarted --&gt; ParkedAwaitingReview: Review hold recovered; do not redispatch work
+  Restarted --&gt; AwaitingAnswer: Pending question recovered; no duplicate request
   RecoveryRequired --&gt; Hold: Missing resume evidence or any refusal
-  Eligible --&gt; Restarted: Explicit fresh-cycle restart with manifest and handoff
   Hold --&gt; Starting: Authorized initial-launch resolution and fresh checks
   Hold --&gt; ParkedAwaitingReview: Evidence resolved; retain parked occupant
   Hold --&gt; Running: Delivery resolved; same active occupant
@@ -323,7 +339,7 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   Compare{Desired versus observed}
   Standard{Protected standard slot or parked review chain?}
   Keep[KEEP occupant; repair observations only]
-  Safe{Authorized transition, fresh evidence and no applicable hold?}
+  Safe{Authorized transition, fresh evidence, no hold and no reset of an open review chain?}
   Action[One journaled action through existing adapters]
   Result{Receipt and observed identity agree?}
   Status[Write disposable status and structured event]
@@ -342,6 +358,178 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   Release -.-&gt; Wake
   Gap[Herdr events_lost or reconnect]
   Gap --&gt;|resubscribe and take snapshot; history gap remains explicit| Observe
+</pre></details>
+</section>
+<section class="figure" id="07-protocol-worker-question" aria-labelledby="title-07-protocol-worker-question">
+  <div class="heading"><span class="number">07</span><h2 id="title-07-protocol-worker-question">Protocol: worker question and warm reply</h2></div>
+  <p>A question stays bound to the same worker. If its report is already sealed, an authorized correction uses a new run through dispatch --reuse, with one delivery owner. The review loop returns to ParkedAwaitingReview.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Protocol: worker question and warm reply"><div class="diagram" data-source="source-07-protocol-worker-question"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-07-protocol-worker-question">sequenceDiagram
+  participant W as Same warm worker
+  participant B as Owned outbox and durable inbox service
+  participant Q as Quiet delivery and rules
+  participant S as Canonical supervisor
+  participant R as Record and existing dispatch
+  W-&gt;&gt;B: Publish question ID, item/run, evidence body digest
+  B-&gt;&gt;B: Validate sender; persist before acceptance
+  B--&gt;&gt;W: Stored receipt handled by adapter; no model wake
+  Q-&gt;&gt;B: Read pending supervisor question
+  Q-&gt;&gt;S: When quiet and exact binding matches, one line and pointer
+  S-&gt;&gt;B: Read and verify question and evidence
+  S-&gt;&gt;R: Check scope and existing delegation; record material decision
+  S-&gt;&gt;B: Publish reply with reply_to and decision reference
+  B-&gt;&gt;Q: Pending reply for exact worker incarnation
+  Q-&gt;&gt;R: Check run state, same occupant and delivery owner
+  alt Original run still open and answer expected
+    Q-&gt;&gt;W: Quiet-gated reply pointer once
+    W-&gt;&gt;B: Read reply; persist consumed receipt
+    W-&gt;&gt;W: Continue authorized work in same context
+  else Prior run report is sealed; authorized correction needed
+    S-&gt;&gt;R: New correction run via dispatch --reuse R-prev
+    R-&gt;&gt;B: Claim reply for inclusion in reuse brief
+    R-&gt;&gt;W: One journaled correction brief plus reply pointer
+    Note over Q,W: Inbox does not send a second prompt for the same reply
+  end
+  W-&gt;&gt;R: Submit new report when work is complete
+  R-&gt;&gt;R: Derive ParkedAwaitingReview; KEEP worker
+  loop Further review corrections
+    S-&gt;&gt;R: Authorized dispatch --reuse; new run and report path
+    R-&gt;&gt;W: Same warm native session receives corrections
+    W-&gt;&gt;R: Report; park again pending review
+  end
+  Note over W,R: No context reset or retirement before landing or explicit disposition
+</pre></details>
+</section>
+<section class="figure" id="08-protocol-host-hold-release" aria-labelledby="title-08-protocol-host-hold-release">
+  <div class="heading"><span class="number">08</span><h2 id="title-08-protocol-host-hold-release">Protocol: host hold and release without model wakes</h2></div>
+  <p>Two projects exchange scoped control receipts under an existing agreement. Rules handle every message; the current lock and queue still decide admission, and a release removes only its matching hold.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Protocol: host hold and release without model wakes"><div class="diagram" data-source="source-08-protocol-host-hold-release"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-08-protocol-host-hold-release">sequenceDiagram
+  participant A as Project A supervisor rules
+  participant K as Existing host slot lock and queue
+  participant B as Durable addressed event service
+  participant C as Project B supervisor rules
+  Note over A,C: Standing coordination policy; zero model wakes in this flow
+  A-&gt;&gt;K: Existing authorized admission path
+  K--&gt;&gt;A: Actual ownership receipt after lock grant
+  A-&gt;&gt;B: hold with resource epoch, issuer and hold_id
+  B-&gt;&gt;B: Persist envelope; route only to control rules
+  B-&gt;&gt;C: Apply scoped advisory hold to B admission intent
+  C-&gt;&gt;C: Persist independent hold set; do not prompt supervisor
+  C-&gt;&gt;B: Correlated ack receipt
+  B--&gt;&gt;A: Adapter consumes ack without a model turn
+  A-&gt;&gt;K: Existing owner cleanup and physical release
+  K--&gt;&gt;A: Release evidence
+  A-&gt;&gt;B: release naming same resource, issuer, epoch and hold_id
+  B-&gt;&gt;C: Persist release and route to rules
+  C-&gt;&gt;C: Remove only matching hold; retain release tombstone
+  Note over B,C: Duplicate or late events are idempotent; other holds remain
+  opt B already has authorized queued work and no other hold
+    C-&gt;&gt;K: Request admission through existing queue and lock
+    K--&gt;&gt;C: Grant only when actual resource is available
+  end
+  Note over A,C: No message deletes a lock, lifts STOP/PAUSED or closes a worker
+</pre></details>
+</section>
+<section class="figure" id="09-protocol-decision-fanout" aria-labelledby="title-09-protocol-decision-fanout">
+  <div class="heading"><span class="number">09</span><h2 id="title-09-protocol-decision-fanout">Protocol: targeted coordinator decision</h2></div>
+  <p>A fixed recipient set gets one decision reference with independent delivery receipts. Each supervisor verifies authority and applies it through its own project workflow; a busy target does not stop the others.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Protocol: targeted coordinator decision"><div class="diagram" data-source="source-09-protocol-decision-fanout"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-09-protocol-decision-fanout">sequenceDiagram
+  participant C as Authorized coordinator
+  participant R as Canonical decision record and memo
+  participant B as Owned services and recipient inboxes
+  participant A as Selected supervisor A
+  participant D as Selected supervisor B
+  C-&gt;&gt;R: Record scoped decision under existing delegation
+  R--&gt;&gt;C: Decision reference, scope and immutable body digest
+  C-&gt;&gt;B: One decision ID with explicit recipient set A and B
+  B-&gt;&gt;B: Validate origin; persist per-recipient acceptance receipts
+  B-&gt;&gt;A: Quiet-gated one line plus pointer
+  A-&gt;&gt;R: Verify decision evidence, authority and current scope
+  A-&gt;&gt;A: Apply through own authorized record/workflow
+  A-&gt;&gt;B: Consumed or disposition receipt; no chat relay
+  alt B is busy or its binding is uncertain
+    B-&gt;&gt;B: Keep B pending; A progress is independent
+  else B is quiet with exact current role binding
+    B-&gt;&gt;D: One line plus pointer
+    D-&gt;&gt;R: Verify scope and superseding decisions
+    D-&gt;&gt;D: Apply through own authorized record/workflow
+    D-&gt;&gt;B: Consumed or disposition receipt
+  end
+  B--&gt;&gt;C: Adapter reads recipient receipts; no ack model wake
+  Note over C,D: Unlisted supervisors receive nothing; message is evidence, not authority
+</pre></details>
+</section>
+<section class="figure" id="10-protocol-digester-finding" aria-labelledby="title-10-protocol-digester-finding">
+  <div class="heading"><span class="number">10</span><h2 id="title-10-protocol-digester-finding">Protocol: optional digester finding</h2></div>
+  <p>If this logging path is adopted, a bounded model session reads from a durable cursor and returns one evidence-backed finding. Its adapter commits the result and cursor; only the supervisor decides what to do.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Protocol: optional digester finding"><div class="diagram" data-source="source-10-protocol-digester-finding"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-10-protocol-digester-finding">sequenceDiagram
+  participant L as Structured log service
+  participant A as Deterministic batch adapter
+  participant D as Optional short-lived digester session
+  participant I as Supervisor durable inbox
+  participant S as Canonical supervisor
+  Note over L,S: Proposed logging path; requires adoption
+  A-&gt;&gt;L: Read committed cursor and claim bounded range
+  L--&gt;&gt;A: Event IDs, scoped bodies, retention and gap evidence
+  A-&gt;&gt;D: Start from manifest, cursor and bounded evidence
+  D-&gt;&gt;D: Analyze cross-event pattern; no worker communication
+  alt One novel finding requiring judgment
+    D-&gt;&gt;A: Finding with evidence IDs, hypothesis and uncertainty
+    A-&gt;&gt;L: Commit finding and cursor together under stable batch ID
+    L-&gt;&gt;I: Project one correlated finding notice
+    I-&gt;&gt;S: When quiet, one line plus pointer
+    S-&gt;&gt;L: Read finding and cited primary events
+    S-&gt;&gt;S: Judge within existing authority
+  else No finding
+    D-&gt;&gt;A: No-finding result for claimed range
+    A-&gt;&gt;L: Commit completed cursor; no supervisor wake
+  else Session failure before commit
+    A-&gt;&gt;L: Keep cursor unchanged; retain failure receipt
+  end
+  A-&gt;&gt;A: End batch session; next incarnation resumes committed cursor
+  Note over D,S: Digester never dispatches, answers workers or promotes findings to decisions
+</pre></details>
+</section>
+<section class="figure" id="11-protocol-operator-chat" aria-labelledby="title-11-protocol-operator-chat">
+  <div class="heading"><span class="number">11</span><h2 id="title-11-protocol-operator-chat">Protocol: operator question through chat</h2></div>
+  <p>The operator sees a concise answer or decision question. Pull-only chat avoids unsolicited protocol entries; opting into timely attention adds one pointer. Acks and routine control traffic stay in the service.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Protocol: operator question through chat"><div class="diagram" data-source="source-11-protocol-operator-chat"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-11-protocol-operator-chat">sequenceDiagram
+  actor O as Operator
+  participant C as Enrolled chat and relay adapter
+  participant B as Durable inbox service and rules
+  participant S as Responsible supervisor
+  participant R as Canonical record and evidence
+  O-&gt;&gt;C: Ask project question
+  C-&gt;&gt;B: Publish question; actual relay identity and original body
+  B--&gt;&gt;C: Adapter consumes acceptance ack; no chat message
+  B-&gt;&gt;S: Quiet-gated question pointer; direct judgment path
+  S-&gt;&gt;R: Read evidence and authority; formulate answer or decision question
+  S-&gt;&gt;B: Correlated reply with concise narrative and body digest
+  alt Chat uses pull-only preference
+    B-&gt;&gt;B: Keep reply pending without model wake
+    O-&gt;&gt;C: Next operator interaction
+    C-&gt;&gt;B: Read pending reply and record consumed receipt
+  else Timely notification explicitly enabled
+    B-&gt;&gt;C: When quiet, one answer-ready pointer
+    C-&gt;&gt;B: Read verified reply and record consumed receipt
+  end
+  C--&gt;&gt;O: Present answer or question with recommendation and evidence link
+  opt Operator gives a scoped decision
+    O-&gt;&gt;C: Exact answer and scope
+    C-&gt;&gt;B: Decision relay with verifiable operator provenance
+    B-&gt;&gt;S: Quiet-gated pointer
+    S-&gt;&gt;R: Bind answer to existing authority and decision record
+  end
+  Note over C,S: Acks, FYIs and resource receipts stay out of chat; native approval stays native
 </pre></details>
 </section></main>
 <footer>Proposal only. No live sessions are controlled by this page. Diagram rendering uses Mermaid 11.4.1 from the requested CDN; all source and styling are embedded.</footer>

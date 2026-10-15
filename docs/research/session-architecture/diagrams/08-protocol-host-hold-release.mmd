@@ -1,0 +1,25 @@
+sequenceDiagram
+  participant A as Project A supervisor rules
+  participant K as Existing host slot lock and queue
+  participant B as Durable addressed event service
+  participant C as Project B supervisor rules
+  Note over A,C: Standing coordination policy; zero model wakes in this flow
+  A->>K: Existing authorized admission path
+  K-->>A: Actual ownership receipt after lock grant
+  A->>B: hold with resource epoch, issuer and hold_id
+  B->>B: Persist envelope; route only to control rules
+  B->>C: Apply scoped advisory hold to B admission intent
+  C->>C: Persist independent hold set; do not prompt supervisor
+  C->>B: Correlated ack receipt
+  B-->>A: Adapter consumes ack without a model turn
+  A->>K: Existing owner cleanup and physical release
+  K-->>A: Release evidence
+  A->>B: release naming same resource, issuer, epoch and hold_id
+  B->>C: Persist release and route to rules
+  C->>C: Remove only matching hold; retain release tombstone
+  Note over B,C: Duplicate or late events are idempotent; other holds remain
+  opt B already has authorized queued work and no other hold
+    C->>K: Request admission through existing queue and lock
+    K-->>C: Grant only when actual resource is available
+  end
+  Note over A,C: No message deletes a lock, lifts STOP/PAUSED or closes a worker

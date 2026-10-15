@@ -1,0 +1,34 @@
+sequenceDiagram
+  participant W as Same warm worker
+  participant B as Owned outbox and durable inbox service
+  participant Q as Quiet delivery and rules
+  participant S as Canonical supervisor
+  participant R as Record and existing dispatch
+  W->>B: Publish question ID, item/run, evidence body digest
+  B->>B: Validate sender; persist before acceptance
+  B-->>W: Stored receipt handled by adapter; no model wake
+  Q->>B: Read pending supervisor question
+  Q->>S: When quiet and exact binding matches, one line and pointer
+  S->>B: Read and verify question and evidence
+  S->>R: Check scope and existing delegation; record material decision
+  S->>B: Publish reply with reply_to and decision reference
+  B->>Q: Pending reply for exact worker incarnation
+  Q->>R: Check run state, same occupant and delivery owner
+  alt Original run still open and answer expected
+    Q->>W: Quiet-gated reply pointer once
+    W->>B: Read reply; persist consumed receipt
+    W->>W: Continue authorized work in same context
+  else Prior run report is sealed; authorized correction needed
+    S->>R: New correction run via dispatch --reuse R-prev
+    R->>B: Claim reply for inclusion in reuse brief
+    R->>W: One journaled correction brief plus reply pointer
+    Note over Q,W: Inbox does not send a second prompt for the same reply
+  end
+  W->>R: Submit new report when work is complete
+  R->>R: Derive ParkedAwaitingReview; KEEP worker
+  loop Further review corrections
+    S->>R: Authorized dispatch --reuse; new run and report path
+    R->>W: Same warm native session receives corrections
+    W->>R: Report; park again pending review
+  end
+  Note over W,R: No context reset or retirement before landing or explicit disposition

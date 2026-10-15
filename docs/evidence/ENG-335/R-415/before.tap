@@ -1,0 +1,496 @@
+TAP version 13
+# Subtest: terminal integrated worker tabs close while working, blocked, unnamed and operator tabs stay
+ok 1 - terminal integrated worker tabs close while working, blocked, unnamed and operator tabs stay # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.565667
+  ...
+# Subtest: dry-run previews finished tabs and never closes, including through housekeeping --once
+ok 2 - dry-run previews finished tabs and never closes, including through housekeeping --once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.045375
+  ...
+# Subtest: a working or blocked change at the final recheck preserves the finished tab
+ok 3 - a working or blocked change at the final recheck preserves the finished tab # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033
+  ...
+# Subtest: new occupants revealed after the final pane list preserve their tab
+not ok 4 - new occupants revealed after the final pane list preserve their tab
+  ---
+  duration_ms: 1033.097417
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    the new occupant appears only in the final observation
+
+    3 !== 2
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 3
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/housekeeping/test/auto-tidy.test.mjs:121:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+ok 5 - conflicting agent tab/workspace and duplicate pane topology cannot authorize a close # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068875
+  ...
+# Subtest: housekeeping --once preserves waiting reports, blocking items and missing item evidence
+ok 6 - housekeeping --once preserves waiting reports, blocking items and missing item evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.101666
+  ...
+# Subtest: automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+ok 7 - automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.090167
+  ...
+# Subtest: replacement identity and a waiting report at the final observation prevent closing
+not ok 8 - replacement identity and a waiting report at the final observation prevent closing
+  ---
+  duration_ms: 1017.604125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    3 !== 2
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 3
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/housekeeping/test/auto-tidy.test.mjs:198:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a reused worker name with a newer open run and an extra unnamed occupant never close
+ok 9 - a reused worker name with a newer open run and an extra unnamed occupant never close # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.147166
+  ...
+# Subtest: a matching worker cannot authorize another occupant reusing its name
+ok 10 - a matching worker cannot authorize another occupant reusing its name # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.057916
+  ...
+# Subtest: only this Git project is tidied and the caller tab is preserved
+ok 11 - only this Git project is tidied and the caller tab is preserved # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033459
+  ...
+# Subtest: review files and session display metadata do not authorize retirement
+ok 12 - review files and session display metadata do not authorize retirement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.082459
+  ...
+# Subtest: a working correction round preserves the lane and review files never release unrecorded panes
+ok 13 - a working correction round preserves the lane and review files never release unrecorded panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03225
+  ...
+# Subtest: supported review routes need a matching topic verdict newer than their session
+ok 14 - supported review routes need a matching topic verdict newer than their session # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078542
+  ...
+# Subtest: automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+ok 15 - automatic review tidy preserves missing or mismatched occupant evidence without worker runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032375
+  ...
+# Subtest: replacement reviewers at the final observation keep their tabs without worker runs
+ok 16 - replacement reviewers at the final observation keep their tabs without worker runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.093417
+  ...
+# Subtest: review evidence cannot override a recorded worker waiting on a blocker
+ok 17 - review evidence cannot override a recorded worker waiting on a blocker # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034917
+  ...
+# Subtest: failed and incomplete reads close nothing and are logged without stopping housekeeping
+ok 18 - failed and incomplete reads close nothing and are logged without stopping housekeeping # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0635
+  ...
+# Subtest: every tick tidies despite the ten-minute cleanup interval and a tidy failure
+ok 19 - every tick tidies despite the ten-minute cleanup interval and a tidy failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.071875
+  ...
+# Subtest: auto-tidy preserves a focused finished worker at initial and final observation
+ok 20 - auto-tidy preserves a focused finished worker at initial and final observation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027208
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: interruption requires the current banner and an exclusively wheel-junk composer
+ok 21 - interruption requires the current banner and an exclusively wheel-junk composer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.549542
+  ...
+# Subtest: recorded promoted workers close through the shared tidy planner
+ok 22 - recorded promoted workers close through the shared tidy planner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043708
+  ...
+# Subtest: the housekeeping CLI record reader loads confirmed handoffs and reserves the successor
+ok 23 - the housekeeping CLI record reader loads confirmed handoffs and reserves the successor # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035167
+  ...
+# Subtest: abandonment alone never substitutes for ingestion
+ok 24 - abandonment alone never substitutes for ingestion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.071833
+  ...
+# Subtest: a removed checkout with an archive stays unknown without an exact observed head
+ok 25 - a removed checkout with an archive stays unknown without an exact observed head # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035
+  ...
+# Subtest: preserves open workers/tabs
+ok 26 - preserves open workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030333
+  ...
+# Subtest: preserves unpromoted workers/tabs
+ok 27 - preserves unpromoted workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02775
+  ...
+# Subtest: preserves dirty workers/tabs
+ok 28 - preserves dirty workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031958
+  ...
+# Subtest: preserves blocked workers/tabs
+ok 29 - preserves blocked workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.117542
+  ...
+# Subtest: preserves working workers/tabs
+ok 30 - preserves working workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.079917
+  ...
+# Subtest: preserves unknown workers/tabs
+ok 31 - preserves unknown workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.074333
+  ...
+# Subtest: preserves unnamed workers/tabs
+ok 32 - preserves unnamed workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042792
+  ...
+# Subtest: preserves unrecorded workers/tabs
+ok 33 - preserves unrecorded workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02825
+  ...
+# Subtest: preserves replaced workers/tabs
+ok 34 - preserves replaced workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.063083
+  ...
+# Subtest: preserves waiting workers/tabs
+ok 35 - preserves waiting workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027791
+  ...
+# Subtest: preserves report-blocked workers/tabs
+ok 36 - preserves report-blocked workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066042
+  ...
+# Subtest: preserves report-needs-human workers/tabs
+ok 37 - preserves report-needs-human workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.328083
+  ...
+# Subtest: preserves new-open-run workers/tabs
+ok 38 - preserves new-open-run workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.161625
+  ...
+# Subtest: preserves declined workers/tabs
+ok 39 - preserves declined workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.086125
+  ...
+# Subtest: preserves wrong-repo workers/tabs
+ok 40 - preserves wrong-repo workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034667
+  ...
+# Subtest: preserves mixed-pane workers/tabs
+ok 41 - preserves mixed-pane workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.054375
+  ...
+# Subtest: preserves running-shell workers/tabs
+ok 42 - preserves running-shell workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039042
+  ...
+# Subtest: preserves session-done workers/tabs
+ok 43 - preserves session-done workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0225
+  ...
+# Subtest: preserves review-file workers/tabs
+ok 44 - preserves review-file workers/tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0195
+  ...
+# Subtest: latest open fix round defeats an older reported run using the same worker name
+ok 45 - latest open fix round defeats an older reported run using the same worker name # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01975
+  ...
+# Subtest: unknown finished sessions and unrecorded watcher shells stay
+ok 46 - unknown finished sessions and unrecorded watcher shells stay # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019125
+  ...
+# Subtest: never closes or resumes its own tab
+ok 47 - never closes or resumes its own tab # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018541
+  ...
+# Subtest: an interrupted open worker resumes once, and durable attempts survive a new runner
+ok 48 - an interrupted open worker resumes once, and durable attempts survive a new runner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018625
+  ...
+# Subtest: failed prompt is logged and never replayed at the same state sequence
+ok 49 - failed prompt is logged and never replayed at the same state sequence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017958
+  ...
+# Subtest: unrecorded disk report, human words, other harness and absent identity prevent resume
+ok 50 - unrecorded disk report, human words, other harness and absent identity prevent resume # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018334
+  ...
+# Subtest: dry run reports close/resume plans and persists no attempts or live actions
+ok 51 - dry run reports close/resume plans and persists no attempts or live actions # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018584
+  ...
+# Subtest: fresh state or record changes prevent deletion
+ok 52 - fresh state or record changes prevent deletion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060666
+  ...
+# Subtest: a run completed during the pre-input recheck receives no resume input
+ok 53 - a run completed during the pre-input recheck receives no resume input # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067792
+  ...
+# Subtest: a record change after clearing composer suppresses the prompt
+not ok 54 - a record change after clearing composer suppresses the prompt
+  ---
+  duration_ms: 231.708042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+    + []
+    - [
+    -   'send-keys'
+    - ]
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'send-keys'
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/housekeeping/test/housekeeping.test.mjs:204:29
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-safe-retirement/test/helpers/bounded-test.mjs:50:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: incomplete or failed reads never authorize any action
+ok 55 - incomplete or failed reads never authorize any action # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060125
+  ...
+# Subtest: one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+ok 56 - one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0475
+  ...
+# Subtest: the loop rereads opt-in and shuts down with its lock removed
+ok 57 - the loop rereads opt-in and shuts down with its lock removed # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026083
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a canonical checkout
+ok 58 - no configuration defaults on and project record/main are discovered from a canonical checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024625
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a linked preview
+ok 59 - no configuration defaults on and project record/main are discovered from a linked preview # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023625
+  ...
+# Subtest: no record and no Git project are quiet no-ops
+ok 60 - no record and no Git project are quiet no-ops # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02325
+  ...
+# Subtest: an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+ok 61 - an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022291
+  ...
+# Subtest: housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+ok 62 - housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022791
+  ...
+# Subtest: canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 63 - canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022375
+  ...
+# Subtest: installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 64 - installed copy startup assertion failure stops a real schedule before removing a symlinked fixture # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0255
+  ...
+# Subtest: canonical checkout start stays idempotent after a lane is removed
+ok 65 - canonical checkout start stays idempotent after a lane is removed # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021625
+  ...
+# Subtest: installed copy start stays idempotent after a lane is removed
+ok 66 - installed copy start stays idempotent after a lane is removed # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023834
+  ...
+# Subtest: dry-run start leaves no timer process
+ok 67 - dry-run start leaves no timer process # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021208
+  ...
+# Subtest: old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+ok 68 - old interruption with forty blank rows and a final reply is rejected within a bounded subprocess # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02175
+  ...
+# Subtest: lane code cannot --once live housekeeping even with the canonical target
+ok 69 - lane code cannot --once live housekeeping even with the canonical target # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022709
+  ...
+# Subtest: canonical code cannot --once live housekeeping from a linked target
+ok 70 - canonical code cannot --once live housekeeping from a linked target # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021916
+  ...
+# Subtest: lane code cannot --start live housekeeping even with the canonical target
+ok 71 - lane code cannot --start live housekeeping even with the canonical target # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023875
+  ...
+# Subtest: canonical code cannot --start live housekeeping from a linked target
+ok 72 - canonical code cannot --start live housekeeping from a linked target # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031042
+  ...
+# Subtest: lane code cannot --loop live housekeeping even with the canonical target
+ok 73 - lane code cannot --loop live housekeeping even with the canonical target # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02325
+  ...
+# Subtest: canonical code cannot --loop live housekeeping from a linked target
+ok 74 - canonical code cannot --loop live housekeeping from a linked target # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022542
+  ...
+# Subtest: a record CLI override in a lane cannot pin a live schedule to removable code
+ok 75 - a record CLI override in a lane cannot pin a live schedule to removable code # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030959
+  ...
+# Subtest: linked code remains usable for isolated dry-run previews
+ok 76 - linked code remains usable for isolated dry-run previews # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022583
+  ...
+# Subtest: an existing different-script owner never reports already-running or alters the old lock
+ok 77 - an existing different-script owner never reports already-running or alters the old lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021791
+  ...
+# Subtest: an existing different-record owner never reports already-running or alters the old lock
+ok 78 - an existing different-record owner never reports already-running or alters the old lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023041
+  ...
+# Subtest: an existing missing-script owner never reports already-running or alters the old lock
+ok 79 - an existing missing-script owner never reports already-running or alters the old lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023125
+  ...
+# Subtest: an existing missing-record owner never reports already-running or alters the old lock
+ok 80 - an existing missing-record owner never reports already-running or alters the old lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022375
+  ...
+# Subtest: an existing legacy owner never reports already-running or alters the old lock
+ok 81 - an existing legacy owner never reports already-running or alters the old lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033041
+  ...
+# Subtest: promotion cleanup inspects and closes only the requested lane workspace
+ok 82 - promotion cleanup inspects and closes only the requested lane workspace # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021834
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..82
+# tests 82
+# suites 0
+# pass 0
+# fail 3
+# cancelled 0
+# skipped 79
+# todo 0
+# duration_ms 2200.907333
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -1,0 +1,305 @@
+TAP version 13
+# Subtest: fixture cleanup ignores an ambient record inbox owner
+ok 1 - fixture cleanup ignores an ambient record inbox owner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.536042
+  ...
+# Subtest: busy supervisor does not hold completed queue accounting by default
+ok 2 - busy supervisor does not hold completed queue accounting by default # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042166
+  ...
+# Subtest: idle supervisor receives a default queued promotion notice without a false alert
+ok 3 - idle supervisor receives a default queued promotion notice without a false alert # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031583
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 4 - queued promotion waits before validation under low-memory pressure and proceeds when cleared # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068417
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 5 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034041
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 6 - promotion notice queues during typing and delivers after clearing without repeating promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 7 - queue refuses a lane changed while pending behind another job before validation or integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039584
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 8 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03175
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 9 - expected head refuses an automatic rebase and post-preparation tip changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.120667
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 10 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078333
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 11 - dirty refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075542
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 12 - red refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037958
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 13 - conflict refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028375
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 14 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062917
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 15 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028208
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 16 - project override selects supervisor and duplicate pending lanes do not repeat # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.072625
+  ...
+# Subtest: a drain owner this caller may not signal still counts as running
+ok 17 - a drain owner this caller may not signal still counts as running # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034583
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 18 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.104333
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 19 - enqueue during the empty-worker handoff always starts a new drain # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062583
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 20 - interrupted attempt emits a notice without retrying a gate or deleting its lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.056125
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 21 - stale worker lock refuses startup while keeping the queued request # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.073083
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 22 - green gate that modifies its worktree is refused before fast-forward # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0245
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 23 - recorded completed outcome resumes delivery without repeating promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021541
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 24 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4314.996625
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 25 - recovery: a failed velocity note still closes the finished tab and promoted lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.088125
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 26 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033084
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 27 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02075
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 28 - conditional close rechecks the promoted tip and base before any removal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038667
+  ...
+# Subtest: only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+ok 29 - only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.055875
+  ...
+# Subtest: an unborn canonical branch has no gate profile, whatever its working tree holds
+ok 30 - an unborn canonical branch has no gate profile, whatever its working tree holds # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026958
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 31 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.543292
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 32 - lane close --git-only keeps the worktree beneath even an eligible pane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043584
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 33 - lane close uses the executor then proves vacancy before Git and empty workspace close # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032667
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 34 - an empty unmerged lane retains its recoverable archive and immutable record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066791
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 35 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035459
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 36 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027166
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 37 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0305
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 38 - Git-only lane without a workspace still keeps queued lane and run references # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032042
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 39 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.113375
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 40 - installed settle-watch flags keep an ingested worker while its chain is open # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.077083
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 41 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075042
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 42 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028791
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 43 - promote drain consumes requests at both foreground boundaries without running a gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031167
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+ok 44 - promote sends its ready acknowledgment before observing a pending retirement hint # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060708
+  ...
+# {"id":"job","topic":"topic","outcome":"refused","reason":"lane: fixture refusal","log":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-t0bkpL/repo/.git/promote/job.log","delivered":false,"inbox":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-t0bkpL/record/supervisor/inbox.log","queued":true,"owner_pid":82352,"message":"[promote-queue] id=job lane=topic outcome=refused reason=\\"lane: fixture refusal\\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-t0bkpL/repo/.git/promote/job.log","delivery_id":"promote:job"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"4faaa5e3ef1ebc05b31fe26df6d083dc450e4c73c12466d717a95dd1f4144deb","action":"closed"}
+# Subtest: a dequeued job is persisted before retirement catch-up and is never left current during it
+ok 45 - a dequeued job is persisted before retirement catch-up and is never left current during it
+  ---
+  duration_ms: 958.696541
+  ...
+# Subtest: the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+ok 46 - the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078875
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 47 - cleanup retries are capped with backoff, record the refusal, and reset on a new request # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.077958
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 48 - lane close permits an absent Herdr executable and refuses an unreadable installed server # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0735
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 49 - tidy-tabs prunes an exited recorded watcher callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040292
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 50 - tidy-tabs prunes an exited recorded settle callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042417
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 51 - tidy-tabs prunes an exited recorded executive callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.065708
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 52 - tidy-tabs prunes an exited recorded plan callback through the shared guard # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024458
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 53 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032875
+  ...
+# Subtest: a concurrently pruned absent receipt does not abort remaining tab closes
+ok 54 - a concurrently pruned absent receipt does not abort remaining tab closes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028083
+  ...
+# Subtest: post-close receipt pruning ENOENT preserves the successful close result
+ok 55 - post-close receipt pruning ENOENT preserves the successful close result # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016791
+  ...
+# Subtest: post-close receipt pruning EACCES preserves the successful close result
+ok 56 - post-close receipt pruning EACCES preserves the successful close result # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016542
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 57 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015459
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 58 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016084
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..58
+# tests 58
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 56
+# todo 0
+# duration_ms 4428.904958
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

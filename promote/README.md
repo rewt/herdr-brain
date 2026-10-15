@@ -233,6 +233,10 @@ Explicitly enqueue again after the holder clears. Resuming an interrupted
 execution reacquires the guards before using the existing train checkpoints;
 a capped wait on a resume retains those checkpoints and stays interrupted,
 since the earlier attempt may already have integrated.
+When the confirmed host timeout interrupts preparation, the queue classifies
+that last interrupted attempt as timed out even if cancellation let it save a
+preparation refusal first. Earlier completed outcomes remain intact. A signaled
+preparation without a host timeout remains an ordinary refusal.
 Unconfigured trains also wait for the host slot with a 7200-second default;
 explicit Monitor or legacy slot wait settings retain precedence.
 

@@ -225,10 +225,16 @@ function performBatch(batch, queue, settings) {
     if (host.phase === 'timeout') {
       const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
       train.results ??= {};
+      // The host's TERM can unblock spawnSync before it terminates the train.
+      // That last preparation may checkpoint a refusal during cancellation;
+      // the confirmed host timeout owns only those interrupted members.
+      const last = train.attempts?.at(-1);
+      const cancelled = new Set(last?.phase === 'invalid' && last.prepare?.failure?.signal ? last.ids : []);
       const limit = host.gate_timeout?.kind === 'idle' ? 'no-output' : 'wall-clock';
       const reason = `gate ${limit} limit exceeded; ${batch.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`;
       for (const job of batch.jobs) {
-        train.results[job.id] ??= { outcome: 'timeout', reason, batch: batch.id, host_receipt: hostFile };
+        if (!train.results[job.id] || (train.results[job.id].outcome === 'refused' && cancelled.has(job.id)))
+          train.results[job.id] = { outcome: 'timeout', reason, batch: batch.id, host_receipt: hostFile };
         if (['timeout', 'refused'].includes(train.results[job.id].outcome)) accountUncapturedMember(train, job);
       }
       train.phase = 'complete'; train.groups = [];

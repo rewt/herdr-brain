@@ -220,7 +220,10 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       for (const step of prepare) {
         if (step.unless !== undefined && fs.existsSync(path.join(attempt.scratch, step.unless))) continue;
         const r = spawnSync(step.run, { cwd: attempt.scratch, env, shell: '/bin/sh', stdio: 'inherit' });
-        if (r.error || r.status !== 0) throw new Error(`train preparation failed: ${step.run}`);
+        if (r.error || r.status !== 0) {
+          attempt.prepare.failure = { exit_code: r.status, signal: r.signal ?? null, error: r.error?.code ?? null };
+          throw new Error(`train preparation failed: ${step.run}`);
+        }
       }
       if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch tip or branch changed during preparation');
       const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))];

@@ -473,3 +473,40 @@ test('two-lane host envelope timeout returns batch re-enqueue wording', t => {
   }
   assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(fs.existsSync(f.slot), false);
 });
+
+test('a signaled preparation without a host timeout remains a refusal', t => {
+  const f = fixture(t, { prepare: [{ run: 'kill -TERM $$' }] });
+  f.run();
+  const train = JSON.parse(fs.readFileSync(f.receipt));
+  assert.equal(train.results.job.outcome, 'refused');
+  assert.equal(train.attempts[0].prepare.failure.signal, 'SIGTERM');
+  assert.equal(f.saved().gate_timeout, undefined);
+  assert.equal(f.git(['rev-parse', 'main']), f.before);
+});
+
+test('host timeout preserves an earlier preparation refusal while classifying its interrupted member', t => {
+  const f = fixture(t, { prepare: [{ run: `node -e 'const fs=require("fs"),p=process.env.PROFILE_EVIDENCE+".prepare";if(!fs.existsSync(p)){fs.writeFileSync(p,"first refused");process.exit(7);}setInterval(()=>{},1000)'` }] });
+  const other = path.join(f.root, 'other'); f.git(['worktree', 'add', '-qb', 'lane/other', other]);
+  fs.writeFileSync(path.join(other, 'other'), 'other'); f.git(['add', '.'], other); f.git(['commit', '-qm', 'Other'], other);
+  const preload = path.join(f.root, 'split-host.mjs');
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){args=[...args];args[args.indexOf('--timeout-seconds')+1]='${loadTimeout(3000) / 1000}';}return run(cmd,args,opts);};syncBuiltinESMExports();`);
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
+  const herdr = path.join(f.root, 'herdr'); fs.writeFileSync(herdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const queue = queueFor(f.repo);
+  enqueue(queue, ['profile', 'other'], { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null,
+    to: 'offline', attempts: 1, retry: 0, herdr });
+  const jobs = queue.load().pending;
+  const id = 'split-timeout', directory = path.join(queue.directory, 'batches', id); fs.mkdirSync(directory);
+  fs.writeFileSync(path.join(directory, 'train.json'), JSON.stringify({ schema: 'promotion-train/v1', id,
+    identity: queue.project.identity, jobs, phase: 'pending', groups: jobs.map(job => [job.id]) }));
+  queue.transaction(data => { data.pending = []; data.current = { id, phase: 'batching', jobs }; });
+  f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '0';
+  const r = spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'],
+    { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: loadTimeout(15000) });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const results = queue.load().results;
+  assert.deepEqual(results.map(result => result.outcome), ['refused', 'timeout']);
+  assert.match(results[0].reason, /train preparation failed/);
+  assert.equal(results[1].reason, 'gate wall-clock limit exceeded; batch timed out; re-enqueue lanes individually');
+  assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(fs.existsSync(f.slot), false);
+});

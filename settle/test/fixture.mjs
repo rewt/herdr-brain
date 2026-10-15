@@ -199,7 +199,6 @@ else if(args[0]==='agent'&&args[1]==='wait') {await new Promise(r=>setTimeout(r,
 else if(args[0]==='agent'&&args[1]==='prompt') {
  const prompt=args[3];
  if(prompt.includes('Private record file: ')) {
-  agents[args[2]].client_owner=clientOwner('lanes/lane.mjs','review');save();
   fs.writeFileSync(path.join(root,'review-prompt'),prompt);
   if(fs.existsSync(path.join(root,'review-fail'))) {console.error('injected uncertain review');process.exit(1);}
   const field=(label)=>prompt.split('\\n').find(x=>x.startsWith(label+': '))?.slice(label.length+2);
@@ -228,14 +227,14 @@ else if(args[0]==='agent'&&args[1]==='prompt') {
   const reviewed=fs.existsSync(path.join(root,'wrong-head'))?'0'.repeat(40):field('Reviewed commit');
   const lines=['**'+verdict+'**','Schema: lane-review/v1','Reviewed commit: '+reviewed,'Topic: '+field('Topic'),'Round: '+field('Round'),'Review ID: '+field('Review ID'),'Base branch: '+field('Base branch'),'Base commit: '+field('Base commit'),'','## Findings',findings,'','## Re-executed','~~~json','[]','~~~','','## Non-claims',nonclaims,'','## Unverified',unverified,'','## Private identifiers','~~~json','[]','~~~','','## Analysis','Scripted independent claim check.','','<!-- lane-review-complete -->',''];
   const dest=field('Private record file');fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,lines.join('\\n').replaceAll('~~~',String.fromCharCode(96).repeat(3)));
+  agents[args[2]].client_owner=clientOwner('lanes/lane.mjs','review');save();
  } else if(prompt.startsWith('You are run ')) {
-  agents[args[2]].client_owner=clientOwner('dispatch/dispatch.mjs');save();
   const [,run,report]=prompt.match(/You are run (R-\\d+).*Write the report to ([^;]+);/);
   if(fs.existsSync(path.join(root,'prompt-fail'))) {console.error('injected uncertain delivery');process.exit(1);}
   agents[args[2]].agent_status='working';save();
   fs.writeFileSync(path.join(cwd,'work.txt'),'correct\\n');execFileSync('git',['-C',cwd,'add','work.txt']);execFileSync('git',['-C',cwd,'commit','--allow-empty','-qm','Correct the independent finding']);
   fs.mkdirSync(path.dirname(report),{recursive:true});fs.writeFileSync(report,'---\\nrun: '+run+'\\noutcome: done\\nsummary: Corrected the independent finding.\\nheadline: The finding is fixed\\nblockers: []\\nproposals: []\\nartifacts: ["work.txt"]\\n---\\n\\nClaim: work.txt contains correct.\\n');
-  agents[args[2]].agent_status='idle';save();
+  agents[args[2]].agent_status='idle';agents[args[2]].client_owner=clientOwner('dispatch/dispatch.mjs');save();
  }
  out({});
 } else out({});

@@ -1,0 +1,154 @@
+{
+  "schema": "eng-339-validation-reconciliation/v1",
+  "run": "R-427",
+  "implementationCommit": "2a34c9ac88c5ce2021cbab1886bfadf20fb912f3",
+  "result": "Validation blockers resolved; ready for independent review",
+  "codeChanged": false,
+  "testsReexecutedInThisRun": false,
+  "historicalValidation": "../R-425/validation.json",
+  "supervisorReproduction": {
+    "executor": "supervisor-herdr",
+    "context": "Clean clone outside the Seatbelt sandbox, as recorded in the source README",
+    "evidenceDirectory": "/Users/rewt/development/rewt/.org/evidence/ENG-339-R425-SUPERVISOR-REPRO-20261015",
+    "manifest": "/Users/rewt/development/rewt/.org/evidence/ENG-339-R425-SUPERVISOR-REPRO-20261015/SHA256SUMS",
+    "verifiedHashes": {
+      "contracts.tap": "c220c8c30db735aec3a54f6b2bf07b98100f4e0799efdc530f1ba15a5ff7026c",
+      "policy.tap": "7899ab6df2117eaa8d4a6846513019340ad2f0e9486d549647d785d43ce63c18",
+      "support.tap": "56c8ab408fa648ca5dd900129e9d9ec7eb5f763d645a49761dcb245e21e91028",
+      "watch.tap": "742268020bd33ba2f645a590cd7ad81da5143fc9177e02580e23688b0d4bc878",
+      "README.md": "2cdfc0f2f0af6fb4f4092cf6af7cf8a77f20835d7f01e7a0fd615748e715bb9f"
+    },
+    "runner": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 FILE...",
+    "groups": [
+      {
+        "log": "/Users/rewt/development/rewt/.org/evidence/ENG-339-R425-SUPERVISOR-REPRO-20261015/watch.tap",
+        "sha256": "742268020bd33ba2f645a590cd7ad81da5143fc9177e02580e23688b0d4bc878",
+        "files": [
+          "watch/test/args.test.mjs",
+          "watch/test/watch.test.mjs",
+          "watch/test/existing-project.test.mjs",
+          "watch/test/lock.test.mjs"
+        ],
+        "totals": {
+          "tests": 42,
+          "pass": 42,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        }
+      },
+      {
+        "log": "/Users/rewt/development/rewt/.org/evidence/ENG-339-R425-SUPERVISOR-REPRO-20261015/policy.tap",
+        "sha256": "7899ab6df2117eaa8d4a6846513019340ad2f0e9486d549647d785d43ce63c18",
+        "files": [
+          "supervisor/test/status.test.mjs",
+          "supervisor/test/supervisor.test.mjs",
+          "supervisor/test/chats.test.mjs",
+          "supervisor/test/autopilot.test.mjs"
+        ],
+        "totals": {
+          "tests": 146,
+          "pass": 146,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        }
+      },
+      {
+        "log": "/Users/rewt/development/rewt/.org/evidence/ENG-339-R425-SUPERVISOR-REPRO-20261015/support.tap",
+        "sha256": "56c8ab408fa648ca5dd900129e9d9ec7eb5f763d645a49761dcb245e21e91028",
+        "files": [
+          "promote/test/memory-gate.test.mjs",
+          "promote/test/metrics.test.mjs",
+          "promote/test/conformance.test.mjs",
+          "promote/test/metrics-profile.test.mjs"
+        ],
+        "totals": {
+          "tests": 39,
+          "pass": 39,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        }
+      },
+      {
+        "log": "/Users/rewt/development/rewt/.org/evidence/ENG-339-R425-SUPERVISOR-REPRO-20261015/contracts.tap",
+        "sha256": "c220c8c30db735aec3a54f6b2bf07b98100f4e0799efdc530f1ba15a5ff7026c",
+        "files": [
+          "promote/test/wait-timing.test.mjs",
+          "promote/test/affected-tests.test.mjs",
+          "test/retire-paths.test.mjs",
+          "test/main-module.test.mjs"
+        ],
+        "totals": {
+          "tests": 102,
+          "pass": 102,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        }
+      }
+    ],
+    "totals": {
+      "tests": 329,
+      "pass": 329,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  "priorPassingEvidence": [
+    {
+      "log": "../R-425/logs/messages-final-and-watcher-invariant.tap",
+      "files": [
+        "test/messages.test.mjs",
+        "supervisor/test/request.test.mjs",
+        "supervisor/test/delivery.test.mjs",
+        "test/one-watcher.test.mjs"
+      ],
+      "totals": {
+        "tests": 43,
+        "pass": 43,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "log": "../R-425/logs/promote-core.tap",
+      "files": [
+        "promote/test/promote.test.mjs",
+        "promote/test/train.test.mjs",
+        "promote/test/workflow-train.test.mjs",
+        "promote/test/completion.test.mjs"
+      ],
+      "totals": {
+        "tests": 145,
+        "pass": 145,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "log": "../R-425/logs/messages-watch-final-and-diagnostics.tap",
+      "files": [
+        "test/messages.test.mjs"
+      ],
+      "totals": {
+        "tests": 16,
+        "pass": 16,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "scope": "First 16 cases only; the historical combined run contains sandbox-limited watcher failures covered by the supervisor reproduction."
+    }
+  ],
+  "requiredInvariants": {
+    "test/one-watcher.test.mjs": "pass",
+    "test/bch-cloak-contract.test.mjs": "pass",
+    "promote/test/train.test.mjs": "pass"
+  },
+  "disposition": "The supervisor reproduction resolves the R-425 sandbox blockers, including the two scripted-review failures and awaited-summary mismatch. Historical reports and logs remain unchanged. Independent review and promotion remain separate."
+}

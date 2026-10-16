@@ -6,7 +6,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { joinFleet } from '../../lib/fleet.mjs';
-import { openProjectChat } from '../chats.mjs';
+import { openProjectChat, openStandardSession, herdrCommand } from '../chats.mjs';
 
 const client = new URL('../../discovery/client.mjs', import.meta.url).pathname;
 const fake = `#!${process.execPath}
@@ -361,4 +361,31 @@ test('unknown and stale fleet projects fail before Herdr mutations while retired
   fs.writeFileSync(file, JSON.stringify(raw));
   fs.writeFileSync(path.join(p.checkout, '.lane.json'), JSON.stringify({ entry: { enabled: false }, chat: false, always_args: 'retired' }));
   assert.equal(f.open().available, true);
+});
+
+test('standard supervisor and chat argv are byte-identical with disabled, enabled or invalid hook config', t => {
+  const f = fixture(t), project = f.projects[0], file = path.join(project.checkout, '.hook-pull.json');
+  f.change(s => s.spaces.push({ workspace_id: 'standard', label: 'Standard' }));
+  for (const role of ['supervisor', 'chat']) {
+    let expected;
+    for (const config of [undefined, '{"enabled":false}', '{"enabled":true}', '{broken']) {
+      if (config === undefined) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, config);
+      openStandardSession({ target: { workspace: 'standard', checkout: project.checkout }, create: true,
+        launch: { kind: 'claude', args: ['--settings', 'owner settings'], env: [], model: 'model', effort: 'high' },
+        name: 'standard-conversation', role, record: project.record, instructions: 'Conversation',
+        env: f.env, herdr: herdrCommand(f.env), startupMs: 1000 });
+      const args = f.state().launches.at(-1).args;
+      expected ??= JSON.stringify(args); assert.equal(JSON.stringify(args), expected);
+      assert.deepEqual(args, ['--settings', 'owner settings', '--model', 'model', '--effort', 'high', '--append-system-prompt', 'Conversation']);
+    }
+  }
+  assert.equal(fs.existsSync(path.join(project.identity, 'sessions/hook-pull')), false);
+});
+
+test('standard launch argument failure occurs before tab creation', t => {
+  const f = fixture(t), project = f.projects[0];
+  assert.throws(() => openStandardSession({ target: { workspace: 'standard', checkout: project.checkout }, create: true,
+    launch: { kind: 'claude', args: null, env: [] }, name: 'standard-conversation', role: 'supervisor',
+    record: project.record, instructions: 'Conversation', env: f.env, herdr: herdrCommand(f.env) }), TypeError);
+  assert.deepEqual(f.state().calls, []);
 });

@@ -1141,6 +1141,29 @@ function dispatch(topic, promptText, options = {}) {
   const resolved = resolveDispatch(options);
   const path = worktreeFor(branch);
   if (path === undefined) fail(`lane ${branch} has no worktree; open it first`);
+  // Dispatch is model-agnostic: the tier policy is the operator's, and the
+  // operator-owned role->agent mappings live in .lane.json "routes". A named
+  // route owns kind/model/effort; extra agent-CLI arguments are launch plumbing
+  // passed through via --arg. No config: kind falls back to
+  // claude, no model argument is sent.
+  let agentArgs = [...resolved.args];
+  if (resolved.model !== undefined) agentArgs.push("--model", resolved.model);
+  const hasEffort = resolved.kind === "codex"
+    ? resolved.args.some((arg, index) => {
+      const expression = ["-c", "--config"].includes(arg) ? resolved.args[index + 1] :
+        arg.startsWith("--config=") ? arg.slice(9) : arg.startsWith("-c") ? arg.slice(2) : undefined;
+      return /^=?\s*model_reasoning_effort\s*=/u.test(expression ?? "");
+    })
+    : resolved.args.some((arg) => arg === "--effort" || arg.startsWith("--effort="));
+  if (resolved.effort !== undefined && (resolved.effortConfigured || !hasEffort)) {
+    if (resolved.kind === "codex") agentArgs.push("-c", `model_reasoning_effort=${resolved.effort}`);
+    else agentArgs.push("--effort", resolved.effort);
+  }
+  agentArgs = hookLaunchArguments({ cwd: path, kind: resolved.kind,
+    role: IS_REVIEW_COMMAND ? 'reviewer' : 'worker', args: agentArgs,
+    env: { ...process.env, ...Object.fromEntries(resolved.env.map(pair => {
+      const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
+    })) } });
   let registryPath;
   try {
     registryPath = preflightRegistryAutomation();
@@ -1238,26 +1261,6 @@ function dispatch(topic, promptText, options = {}) {
     (herdrJson(["agent", "list"], { deadline: options.deadline })?.agents ?? []).map((agent) => agent.name),
   );
   let agentName = newAgentName(topic, liveAgentNames);
-  // Dispatch is model-agnostic: the tier policy is the operator's, and the
-  // operator-owned role->agent mappings live in .lane.json "routes". A named
-  // route owns kind/model/effort; extra agent-CLI arguments are launch plumbing
-  // passed through via --arg. No config: kind falls back to
-  // claude, no model argument is sent.
-  let agentArgs = [...resolved.args];
-  if (resolved.model !== undefined) agentArgs.push("--model", resolved.model);
-  const hasEffort = resolved.kind === "codex"
-    ? resolved.args.some((arg, index) => {
-      const expression = ["-c", "--config"].includes(arg) ? resolved.args[index + 1] :
-        arg.startsWith("--config=") ? arg.slice(9) : arg.startsWith("-c") ? arg.slice(2) : undefined;
-      return /^=?\s*model_reasoning_effort\s*=/u.test(expression ?? "");
-    })
-    : resolved.args.some((arg) => arg === "--effort" || arg.startsWith("--effort="));
-  if (resolved.effort !== undefined && (resolved.effortConfigured || !hasEffort)) {
-    if (resolved.kind === "codex") agentArgs.push("-c", `model_reasoning_effort=${resolved.effort}`);
-    else agentArgs.push("--effort", resolved.effort);
-  }
-  agentArgs = hookLaunchArguments({ cwd: path, kind: resolved.kind,
-    role: IS_REVIEW_COMMAND ? 'reviewer' : 'worker', args: agentArgs });
   const startArgsFor = (name) => {
     const args = ["agent", "start", name, "--kind", resolved.kind, "--pane", pane];
     if (agentArgs.length > 0) args.push("--", ...agentArgs);

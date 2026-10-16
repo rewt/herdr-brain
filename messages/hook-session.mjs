@@ -9,22 +9,28 @@ import { quote } from '../lib/shell.mjs';
 import { addressKey } from './receiver.mjs';
 
 const script = fileURLToPath(new URL('./hook-pull.mjs', import.meta.url));
-export function hookLaunchArguments({ cwd, kind, role, args }) {
+export function hookLaunchArguments({ cwd, kind, role, args, env = process.env }) {
+  // Only non-human Claude sessions can opt in. Other launch paths do no discovery.
+  if (kind !== 'claude' || !['worker', 'reviewer'].includes(role)) return args;
   // Only the canonical project's own file opts in. No parent/global config.
-  const project = gitProject(cwd), file = path.join(project.canonical, '.hook-pull.json');
+  let project;
+  try { project = gitProject(cwd); }
+  catch { return args; } // Failed discovery cannot enable hooks or break legacy dispatch.
+  const file = path.join(project.canonical, '.hook-pull.json');
   let config;
   try { config = JSON.parse(readPlainFile(file)); }
   catch (e) { if (e.code === 'ENOENT') return args; throw e; }
-  if (config.enabled !== true) return args;
+  if (config?.enabled !== true) return args;
   if (Object.keys(config).some(k => !['enabled', 'rendering'].includes(k)) ||
       config.rendering !== undefined && !['plain', 'teammate'].includes(config.rendering)) throw Error('invalid hook-pull project config');
-  // Codex trust is keyed by absolute source path. Leave its lane argv alone.
-  if (kind !== 'claude' || role === 'chat') return args;
   if (args.some(a => a === '--settings' || a.startsWith('--settings='))) throw Error('hook-pull cannot replace existing Claude --settings');
+  // Match the record writer's actor name in the effective launch environment.
+  const identity = env.ORG_ACTOR || 'human';
+  if (typeof identity !== 'string' || identity.length > 128 || /[\p{Cc}\u2028\u2029]/u.test(identity)) throw Error('invalid hook-pull launch identity');
   const token = randomUUID(), directory = path.join(project.identity, 'sessions/hook-pull', token);
   plainDirectory(directory);
   const sessionFile = path.join(directory, 'session.json'), settings = path.join(directory, 'claude-settings.json');
-  const address = { identity: project.identity, projectRef: project.identity, session: { uid: token, incarnation: token } };
+  const address = { identity, projectRef: project.identity, session: { uid: token, incarnation: token } };
   const session = { schema: 'brain.hook-session/v1', root: path.join(project.identity, 'sessions/receiver'),
     common: project.identity, cwd: project.checkout, kind, role, humanTyped: ['chat', 'supervisor'].includes(role),
     recipient: addressKey(address), address, consumer: token, rendering: config.rendering ?? 'plain' };

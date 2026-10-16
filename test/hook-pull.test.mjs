@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { Receiver, addressKey, transportStatus } from '../messages/receiver.mjs';
-import { digest } from '../messages/schema.mjs';
+import { digest, validateEvent } from '../messages/schema.mjs';
 import { hookOutput, hookHandoff, renderHookMessage, NUDGE } from '../messages/hook-pull.mjs';
 import { hookLaunchArguments, readHookSession } from '../messages/hook-session.mjs';
 import { nudgeHookSession } from '../messages/hook-nudge.mjs';
@@ -52,6 +52,19 @@ test('hook claims the oldest once, verifies retained bytes, preserves decisions 
   assert.equal(state.entries[0].receipts[1].transport, 'hook-pull/v1');
   assert.equal(state.entries[0].receipts[1].session, 'native-1');
   assert.equal(transportStatus(f.root).pending.length, 1);
+});
+
+for (const hook of ['Stop', 'UserPromptSubmit']) test(`${hook}: leading controls cannot hide the next request`, async t => {
+  const f = await fixture(t);
+  for (const kind of ['fyi', 'ack', 'hold', 'release']) await f.accept(f.event(kind));
+  const request = f.event(); await f.accept(request);
+  const output = JSON.parse(await hookOutput(f.input(hook, { prompt: NUDGE }), f.session));
+  const text = hook === 'Stop' ? output.reason : output.hookSpecificOutput.additionalContext;
+  assert.match(text, new RegExp(request.eventId)); assert.doesNotMatch(text, /inbox empty/);
+  if (hook === 'Stop') assert.equal(output.decision, 'block');
+  const entries = f.receiver.state().entries;
+  assert.deepEqual(entries.map(e => e.state), ['consumed', 'consumed', 'consumed', 'consumed', 'delivered']);
+  assert.ok(entries.every(e => e.receipts.length === 2), 'one disposition per acceptance');
 });
 
 test('Stop continuation guard, exact nudge and session cwd guard never consume pending work', async t => {
@@ -165,16 +178,18 @@ for (const kind of ['claude', 'codex']) test(`${kind}: nudge uses only fixed tex
 });
 
 test('canonical project opt-in preserves disabled argv bytes and generates private per-session Claude settings only', t => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hook-project-')));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hook-project-')));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const root = path.join(scratch, 'long-common-directory-'.repeat(7)); fs.mkdirSync(root);
   const git = args => { const r = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); };
   git(['init', '-q']); git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'fixture']);
   const file = path.join(root, '.hook-pull.json'), args = ['--model', 'opus', '--effort', 'high', '--append-system-prompt', 'literal $()\ntext'];
-  const launch = (kind = 'claude', role = 'worker') => hookLaunchArguments({ cwd: root, kind, role, args });
+  const launch = (kind = 'claude', role = 'worker') => hookLaunchArguments({ cwd: root, kind, role, args, env: { ORG_ACTOR: 'launch-identity' } });
   assert.equal(launch(), args); assert.equal(fs.existsSync(path.join(root, '.git/sessions')), false);
   fs.writeFileSync(file, '{"enabled":false}'); assert.equal(Buffer.from(JSON.stringify(launch())).compare(Buffer.from(JSON.stringify(args))), 0);
   fs.writeFileSync(file, '{"enabled":true,"rendering":"teammate"}');
-  assert.equal(launch('codex'), args); assert.equal(launch('claude', 'chat'), args);
+  assert.equal(launch('codex'), args);
+  for (const role of ['chat', 'supervisor']) assert.equal(launch('claude', role), args);
   const enabled = launch(); assert.deepEqual(enabled.slice(0, -2), args); assert.equal(enabled.at(-2), '--settings');
   const settings = JSON.parse(fs.readFileSync(enabled.at(-1))), directory = path.dirname(enabled.at(-1));
   assert.ok(directory.startsWith(path.join(root, '.git/sessions/hook-pull/')));
@@ -182,7 +197,36 @@ test('canonical project opt-in preserves disabled argv bytes and generates priva
   assert.match(settings.hooks.Stop[0].hooks[0].command, /messages\/hook-pull.mjs/);
   assert.equal(settings.hooks.Stop[0].hooks[0].command, settings.hooks.UserPromptSubmit[0].hooks[0].command);
   const session = readHookSession(path.join(directory, 'session.json')); assert.equal(session.rendering, 'teammate');
+  assert.ok(session.common.length > 128); assert.equal(session.address.identity, 'launch-identity');
+  assert.equal(session.address.projectRef, session.common);
+  const from = { identity: 'launch-identity', projectRef: session.common, role: { name: 'supervisor', bindingRef: 'launch' } };
+  const event = validateEvent({ schema: 'brain.log/v1', eventId: 'request:1', producer: { id: 'sender', epoch: 'one', sequence: 1 },
+    occurredAt: '2026-10-16T18:00:00Z', type: 'session.message.v1', level: 'info', identity: from.identity, project: { commonDir: session.common },
+    payload: { from, to: [session.address], kind: 'request', refs: [], reply_to: null, priority: 'normal', reply_by: null,
+      summary: 'A normally addressed request', body_ref: null, decision_ref: null } });
+  assert.equal(addressKey(event.payload.to[0]), session.recipient);
   assert.notEqual(launch().at(-1), enabled.at(-1), 'each launch has its own session');
   assert.equal(fs.existsSync(path.join(root, '.codex/hooks.json')), false);
   assert.throws(() => hookLaunchArguments({ cwd: root, kind: 'claude', role: 'worker', args: ['--settings', 'owned'] }), /cannot replace/);
+});
+
+test('failed project lookup with no opt-in preserves argv and cannot throw', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-no-project-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const args = ['--settings', 'owned', '--append-system-prompt', 'literal $()\ntext'];
+  const output = hookLaunchArguments({ cwd: path.join(root, 'missing'), kind: 'claude', role: 'worker', args });
+  assert.equal(output, args); assert.equal(JSON.stringify(output), JSON.stringify(args));
+  assert.deepEqual(fs.readdirSync(root), []);
+});
+
+test('Codex pinned template documents its single-session limitation', () => {
+  const template = JSON.parse(fs.readFileSync(new URL('../messages/codex-hooks.template.json', import.meta.url)));
+  for (const event of ['Stop', 'UserPromptSubmit']) assert.match(template.hooks[event][0].hooks[0].command, /--session \/ABSOLUTE\/SESSION\/session.json$/);
+  const readme = fs.readFileSync(new URL('../messages/README.md', import.meta.url), 'utf8');
+  assert.match(readme, /template is single-session only/);
+});
+
+test('stage-7 direct-prompt compatibility references the scoped hook-pull adapter', () => {
+  const readme = fs.readFileSync(new URL('../messages/README.md', import.meta.url), 'utf8');
+  assert.match(readme.split('\n').find(line => line.startsWith('| Herdr direct prompts |')), /opt-in stage-8 hook-pull adapter/);
 });

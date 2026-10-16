@@ -12,7 +12,6 @@ import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { entryPolicy } from '../discovery/policy.mjs';
 import { fileURLToPath } from 'node:url';
 import { gitProject } from '../lib/project.mjs';
-import { hookLaunchArguments } from '../messages/hook-session.mjs';
 
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -233,6 +232,8 @@ export function openStandardSession({ target, launch, name, instructions, resume
   }));
   Object.assign(pairs, { ORG_DIR: record, ORG_ACTOR: name, HERDR_AGENT_NAME: name, MONITOR_SESSION_ROLE: role });
   if (role === 'supervisor') pairs.MONITOR_SUPERVISOR_AGENT = name;
+  // Both standard roles are human-typed conversations and never receive hooks.
+  const native = nativeArguments(launch, instructions, resume);
   let receipt = { workspace: target.workspace, tab: target.tab, pane: target.pane, terminalId: target.terminalId };
   if (create) {
     beforeMutation();
@@ -244,8 +245,6 @@ export function openStandardSession({ target, launch, name, instructions, resume
         made.root_pane.tab_id !== receipt.tab) throw Error('created layout identity changed; inspect before retry');
   }
   waitForShell(herdr, receipt, { checkout: target.checkout }, { now, sleep, startupMs, beforeInput: beforeMutation });
-  const native = hookLaunchArguments({ cwd: target.checkout, kind: launch.kind, role,
-    args: nativeArguments(launch, instructions, resume) });
   beforeMutation(receipt);
   herdr(['agent', 'start', name, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs),
     '--', ...native], { env: { ...env, ...pairs }, timeout: startupMs + 10000 });

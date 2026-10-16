@@ -5094,7 +5094,7 @@ test('close marks matching sessions done even while empty workspace cleanup is p
 test('hook-pull opt-in adds per-session settings to Claude worker and reviewer launches; disabled argv stays identical', () => {
   for (const enabled of [undefined, false, true]) {
     const fixture = makeFixture({ main: 'main', validate: 'true', registry: '.lane/sessions.json',
-      routes: { engineer: { kind: 'claude', model: 'worker-model', effort: 'high' } } });
+      routes: { engineer: { kind: 'claude', model: 'worker-model', effort: 'high', env: ['ORG_ACTOR=fixture-worker'] } } });
     try {
       ignoreLaneState(fixture);
       const path = openLane(fixture, 'hook-pull');
@@ -5111,6 +5111,8 @@ test('hook-pull opt-in adds per-session settings to Claude worker and reviewer l
         const settings = JSON.parse(readFileSync(native.at(-1), 'utf8'));
         assert.match(settings.hooks.Stop[0].hooks[0].command, /messages\/hook-pull.mjs/);
         assert.ok(native.at(-1).startsWith(join(repositoryIdentity(fixture.repo), 'sessions/hook-pull/')));
+        const descriptor = JSON.parse(readFileSync(join(dirname(native.at(-1)), 'session.json'), 'utf8'));
+        assert.equal(descriptor.address.identity, 'fixture-worker');
       }
     } finally { fixture.cleanup(); }
   }
@@ -5128,4 +5130,18 @@ test('hook-pull Claude reviewer uses the same opt-in launch owner', () => {
     assert.equal(descriptor.role, 'reviewer');
     assert.equal(descriptor.humanTyped, false);
   } finally { review.fixture.cleanup(); }
+});
+
+test('invalid enabled hook config is refused before creating a dispatch workspace or tab', () => {
+  const fixture = makeFixture({ main: 'main', validate: 'true', registry: '.lane/sessions.json' });
+  try {
+    ignoreLaneState(fixture); const path = openLane(fixture, 'hook-invalid');
+    writeFileSync(join(fixture.repo, '.hook-pull.json'), '{"enabled":true,"rendering":"invalid"}');
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: 'lane/hook-invalid', initiallyOpened: false });
+    const result = lane(fixture, ['dispatch', 'hook-invalid']);
+    assert.equal(result.status, 1); assert.match(result.stderr, /invalid hook-pull project config/);
+    assert.equal(fake.calls().some(a => ['workspace', 'tab'].includes(a[0]) && a[1] === 'create'), false);
+    assert.equal(fake.calls().some(a => a[0] === 'agent' && a[1] === 'start'), false);
+    assert.equal(fake.state().opened, false);
+  } finally { fixture.cleanup(); }
 });

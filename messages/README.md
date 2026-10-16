@@ -150,7 +150,7 @@ inspection; delivery callers never invoke it.
 | Channel | Envelope mapping and boundary |
 | --- | --- |
 | Claude `SendMessage` | Future common adapter publishes typed envelope with actual sender and explicit recipient. Native free text remains outside these guarantees; preserve native holds/refusals. Never duplicate a send through two edges or use a model-waking edge for control kinds. No native adapter is installed here. |
-| Herdr direct prompts | Future envelope delivery owner alone uses the existing quiet/occupant gates for either harness. Work dispatch retains its inspected uncertain-prompt recovery and authorized reuse. No hook, wrapper or direct-prompt daemon is added. |
+| Herdr direct prompts | Future envelope delivery owner alone uses the existing quiet/occupant gates for either harness. Work dispatch retains its inspected uncertain-prompt recovery and authorized reuse. The opt-in stage-8 hook-pull adapter below serves only Brain-launched non-human workers/reviewers; no wrapper or direct-prompt daemon is added. |
 | Pasted chat relays | Actual relayer as from; original question/decision in a scoped body; correlation/reply_to for answers; separately verified origin and decision_ref. Untyped relay stays unknown, never fyi by inference. A claimed operator origin is not authentication. |
 | `[org-report]`, `[watch-*]`, `[promote-queue]`, literal `[watch]` | Preserve tags/text byte-for-byte. Attach original notice ID/source and org-qualified refs out of band, validated report/review evidence for classification. Brain-owned paths are mirrored here; BCH literal watch is documentation only. |
 | BCH `[auto-review]` and legacy `.msg` outbox | BCH-owned: **no BCH files or daemon are touched**. Future read-only mirror maps stable file identity/digest before original-owner removal/ack. Keep unsupported-role distinct from deferred scope and other skips. Its text delivery log is not Brain JSONL. Preserve PAUSED/backoff; never implicitly start a second daemon. |
@@ -350,9 +350,11 @@ A project's owner can opt Claude launches in with its canonical checkout's
 `.hook-pull.json` containing `{"enabled":true,"rendering":"plain"}`. Absence or
 `enabled:false` leaves native argv unchanged, including installed lane/settle
 consumers. Parent/identity/machine config cannot enable it. Dispatch workers and
-lane reviewers share the lane launch owner; A2 standard supervisor launches use
-the same helper through `supervisor/chats.mjs`. Human chat slots remain pull-only.
+lane reviewers share the lane launch owner. Human-typed A2 standard supervisor
+and chat slots never receive hooks, including when the project opts in.
 The configuration is read from the canonical checkout even for linked lanes.
+Unavailable project discovery leaves argv unchanged; enabled configuration errors
+are raised before creating any workspace or tab.
 No config is added to this repository by this change.
 
 Each enabled Claude launch generates private `session.json` and
@@ -361,7 +363,9 @@ Each enabled Claude launch generates private `session.json` and
 `--settings <absolute settings path>`. Both hook commands reference the absolute
 product script and absolute session descriptor with shell quoting. Existing
 explicit `--settings` is refused rather than silently replaced. The descriptor
-contains the exact recipient address, consumer launch token, checkout, rendering,
+contains the exact recipient address (identity from the effective launch
+`ORG_ACTOR`, matching the record writer, or its `human` default; Git common
+directory only in `projectRef`), consumer launch token, checkout, rendering,
 and default receiver location `<common>/sessions/receiver`. The receiver's
 trusted enrollment must match this address and consumer; an envelope cannot
 supply its own enrollment. Runtime files are retained for handoff/inspection,
@@ -374,7 +378,8 @@ The hook verifies retained body/memo bytes and constructs all JSON before the
 single `delivered` receipt append, then returns `{decision:"block",reason:...}`.
 The receipt includes event ID, consumer, native session ID, hook event and the
 `hook-pull/v1` transport. Acceptance deduplication and producer tuples are
-unchanged. Controls remain rule-consumed; fences, refused/uncertain holds and
+unchanged. Leading controls are rule-consumed in the same transaction until a
+renderable message or the end of the eligible inbox; fences, refused/uncertain holds and
 transport-pinned inspected retries are respected.
 
 UserPromptSubmit acts only when the prompt is **exactly** `inbox`. It returns a
@@ -442,7 +447,12 @@ the Claude project opt-in is enabled. No `.codex/hooks.json` is installed or
 committed at the project root, no review dialog is accepted, no trust state is
 copied, and no trust-bypass flag is used. Existing hook-review refusal remains.
 
-Minimal proposed owner step for a future explicitly authorized stable checkout:
+**The supplied template is single-session only.** Both commands pin one enrolled
+descriptor; it is not a shared configuration for concurrent or replacement
+sessions. Per-launch descriptor resolution is required before multi-session
+Codex adoption. Codex launch integration remains disabled.
+
+Minimal proposed owner step for one future explicitly authorized session in a stable checkout:
 review the two commands in the template, materialize them with absolute product
 and enrolled session paths in that project's committed `.codex/hooks.json`, then
 have its owner review and trust those two entries in Codex's native review UI.

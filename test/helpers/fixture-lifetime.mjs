@@ -41,9 +41,9 @@ function nativeGuard(root) {
 export function ownFixtureLifetime() {
   if (lifetime) return;
   const standalone = !process.env.HERDR_TEST_OFFLINE_ROOT;
+  // A shared offline root can outlive a PID; never reuse its previous FIFO.
   const root = standalone ? fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'fixture-lifetime-')) :
-    path.join(process.env.HERDR_TEST_OFFLINE_ROOT, `lifetime-${process.pid}`);
-  fs.mkdirSync(root, { recursive: true });
+    fs.mkdtempSync(path.join(process.env.HERDR_TEST_OFFLINE_ROOT, `lifetime-${process.pid}-`));
   const executable = nativeGuard(standalone ? root : process.env.HERDR_TEST_OFFLINE_ROOT);
   const fifo = path.join(root, 'alive');
   const env = { PATH: '/usr/bin:/bin', TMPDIR: root };

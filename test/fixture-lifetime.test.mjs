@@ -30,6 +30,38 @@ const alive = entries => {
   });
 };
 
+test('a stale PID-named FIFO in the shared offline root does not block a new lifetime owner', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-lifetime-pid-reuse-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const script = `import assert from 'node:assert/strict';
+import fs from 'node:fs'; import path from 'node:path'; import {spawnSync} from 'node:child_process';
+import {ownFixtureLifetime} from ${JSON.stringify(local('./helpers/fixture-lifetime.mjs'))};
+const root=process.env.HERDR_TEST_OFFLINE_ROOT;
+const stale=path.join(root,'lifetime-'+process.pid,'alive');
+fs.mkdirSync(path.dirname(stale));
+const made=spawnSync('/usr/bin/mkfifo',[stale],{encoding:'utf8'});
+assert.equal(made.status,0,made.stderr);
+const before=fs.statSync(stale);
+ownFixtureLifetime();
+const fifo=process.env.HERDR_FIXTURE_LIFETIME_FIFO;
+assert.notEqual(fifo,stale);
+assert.equal(path.dirname(path.dirname(fifo)),fs.realpathSync(root));
+assert.ok(fs.statSync(fifo).isFIFO());
+assert.ok(fs.statSync(stale).isFIFO());
+assert.equal(fs.statSync(stale).ino,before.ino,'stale evidence must not be replaced');
+const keys=['HERDR_FIXTURE_LIFETIME_EXECUTABLE','HERDR_FIXTURE_LIFETIME_FIFO','HERDR_FIXTURE_LIFETIME_SECONDS'];
+const expected=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+ownFixtureLifetime();
+assert.equal(process.env.HERDR_FIXTURE_LIFETIME_FIFO,fifo,'ownership stays idempotent in one process');
+const child=spawnSync(process.execPath,['-e','console.log(JSON.stringify(Object.fromEntries('+JSON.stringify(keys)+'.map(key=>[key,process.env[key]]))))'],{env:{PATH:process.env.PATH},encoding:'utf8'});
+assert.equal(child.status,0,child.stderr);
+assert.deepEqual(JSON.parse(child.stdout),expected,'minimal-env children inherit the new owner contract');`;
+  const child = spawnChild(t, process.execPath, ['--input-type=module', '-e', script],
+    { env: { ...process.env, HERDR_TEST_OFFLINE_ROOT: fs.realpathSync(root) } });
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stderr);
+});
+
 test('concurrent lifetime owners reuse one source-digest cached guard and keep separate writers', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-lifetime-cache-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

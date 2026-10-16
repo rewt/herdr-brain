@@ -1,0 +1,118 @@
+TAP version 13
+# Subtest: a stale PID-named FIFO in the shared offline root does not block a new lifetime owner
+ok 1 - a stale PID-named FIFO in the shared offline root does not block a new lifetime owner
+  ---
+  duration_ms: 110.023167
+  ...
+# Subtest: concurrent lifetime owners reuse one source-digest cached guard and keep separate writers
+ok 2 - concurrent lifetime owners reuse one source-digest cached guard and keep separate writers
+  ---
+  duration_ms: 126.033083
+  ...
+# Subtest: watch guard whose spawning parent exits immediately never adopts or signals the reaper
+ok 3 - watch guard whose spawning parent exits immediately never adopts or signals the reaper
+  ---
+  duration_ms: 265.627875
+  ...
+# Subtest: native lifetime guard observes EOF and its finite deadline with the caller still alive
+ok 4 - native lifetime guard observes EOF and its finite deadline with the caller still alive
+  ---
+  duration_ms: 544.566292
+  ...
+# Subtest: SIGKILL of an enclosing suite leaves no settle inbox or gate-profile fixture
+ok 5 - SIGKILL of an enclosing suite leaves no settle inbox or gate-profile fixture
+  ---
+  duration_ms: 1448.722625
+  ...
+# Subtest: suite timeout of an enclosing suite leaves no settle inbox or gate-profile fixture
+ok 6 - suite timeout of an enclosing suite leaves no settle inbox or gate-profile fixture
+  ---
+  duration_ms: 8206.026666
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: run brief omits Lessons when no active lesson matches, including retired and superseded claims
+ok 7 - run brief omits Lessons when no active lesson matches, including retired and superseded claims
+  ---
+  duration_ms: 2.008583
+  ...
+# Subtest: run brief selects broad, literal path/module and item/ancestor evidence matches deterministically
+ok 8 - run brief selects broad, literal path/module and item/ancestor evidence matches deterministically
+  ---
+  duration_ms: 3.027208
+  ...
+# Subtest: run brief matches acceptance, reason and recorded ask notes but respects selector boundaries
+ok 9 - run brief matches acceptance, reason and recorded ask notes but respects selector boundaries
+  ---
+  duration_ms: 2.453917
+  ...
+# Subtest: run brief bounds five claims and metadata and points to the remaining lessons
+ok 10 - run brief bounds five claims and metadata and points to the remaining lessons
+  ---
+  duration_ms: 0.702083
+  ...
+# Subtest: record start writes lessons into the saved brief for arbitrary harness metadata
+ok 11 - record start writes lessons into the saved brief for arbitrary harness metadata
+  ---
+  duration_ms: 260.792917
+  ...
+# Subtest: lesson fold retains facts and derives proposal, activation, retirement and supersession
+ok 12 - lesson fold retains facts and derives proposal, activation, retirement and supersession
+  ---
+  duration_ms: 0.15975
+  ...
+# Subtest: frozen older fold ignores actual lesson event types through its unknown-type path
+ok 13 - frozen older fold ignores actual lesson event types through its unknown-type path
+  ---
+  duration_ms: 0.405
+  ...
+# Subtest: lesson CLI stores bounded claims, targets, evidence and proposer in the single event log
+ok 14 - lesson CLI stores bounded claims, targets, evidence and proposer in the single event log
+  ---
+  duration_ms: 473.059834
+  ...
+# Subtest: invalid lesson data and unknown evidence refuse atomically without consuming IDs
+ok 15 - invalid lesson data and unknown evidence refuse atomically without consuming IDs
+  ---
+  duration_ms: 717.944208
+  ...
+# Subtest: matching is literal, normalized, boundary-aware, exact for modules and deterministically ranked
+ok 16 - matching is literal, normalized, boundary-aware, exact for modules and deterministically ranked
+  ---
+  duration_ms: 0.739334
+  ...
+# Subtest: lessons CLI filters path, scope, module and derived state without model or filesystem lookup
+ok 17 - lessons CLI filters path, scope, module and derived state without model or filesystem lookup
+  ---
+  duration_ms: 695.490541
+  ...
+# Subtest: bounded rendering shows the relevant five and remaining count while JSON returns all evidence
+ok 18 - bounded rendering shows the relevant five and remaining count while JSON returns all evidence
+  ---
+  duration_ms: 0.47
+  ...
+# Subtest: default CLI text is bounded and JSON preserves every matching lesson
+ok 19 - default CLI text is bounded and JSON preserves every matching lesson
+  ---
+  duration_ms: 711.48625
+  ...
+# Subtest: supersession is atomic, evidence-preserving and refuses unknown IDs, self-links and transitive cycles
+ok 20 - supersession is atomic, evidence-preserving and refuses unknown IDs, self-links and transitive cycles
+  ---
+  duration_ms: 654.765084
+  ...
+# Subtest: lesson allocation avoids existing item IDs and later item allocation avoids lesson IDs
+ok 21 - lesson allocation avoids existing item IDs and later item allocation avoids lesson IDs
+  ---
+  duration_ms: 237.862333
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10802.536167
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

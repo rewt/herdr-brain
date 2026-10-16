@@ -1,0 +1,58 @@
+{
+  "schema": "eng-339-fifo-correction-validation/v1",
+  "run": "R-431",
+  "baseCommit": "0ec9256a0378386244d6e4fd28c8f158de788365",
+  "gateEvidence": "/Users/rewt/development/rewt/.org/evidence/ENG-339-GATE-d6086b84-RED-20261015.txt",
+  "result": "PID-reuse FIFO collision fixed; both permitted files green.",
+  "fix": "Allocate each shared-root lifetime owner with mkdtempSync(lifetime-<pid>-). FIFO creation/opening, native guard cache, exported environment variables, inherited ownership and standalone cleanup remain unchanged.",
+  "regression": "A subprocess creates a real stale lifetime-<its-current-pid>/alive FIFO before acquiring ownership. It verifies a separate live FIFO under the shared root, preservation of the old FIFO inode, idempotent ownership, and inheritance of executable/FIFO/seconds by a minimal-env child.",
+  "sourceSha256": {
+    "test/helpers/fixture-lifetime.mjs": "ad649bdb2884298dc4f29b46c0449093084f6ee8829ef19a8ccf39f5df155bef",
+    "test/fixture-lifetime.test.mjs": "ec117b88b1f17856c66a7b5ea0a966f65a79ac629a364bd2ed3401a7e3ac27a1"
+  },
+  "runs": [
+    {
+      "phase": "negative-control-before-helper-fix",
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 --test-name-pattern='^a stale PID-named FIFO in the shared offline root does not block a new lifetime owner$' test/fixture-lifetime.test.mjs",
+      "log": "logs/fifo-negative-control.tap",
+      "exitCode": 1,
+      "totals": {
+        "tests": 6,
+        "pass": 0,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 5
+      },
+      "expectedFailure": "The new regression fails at ownFixtureLifetime with mkfifo: File exists against the unchanged pre-fix helper; five unrelated cases are excluded by name.",
+      "sha256": "f0b2bfd30ce0c36f3ca49840c4ccc5d6113509d72c626684e3daa570cf4e894b",
+      "rawCaptureSha256": "3c4b977498365255181d360834bf50d38891f2cf88e1ddc48c2a2dd356a48321",
+      "formatting": "Trailing whitespace removed from the committed TAP evidence; original capture is /tmp/R-431-fifo-negative.tap. No tests were rerun."
+    },
+    {
+      "phase": "final",
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/fixture-lifetime.test.mjs test/lessons.test.mjs",
+      "log": "logs/fixture-lifetime-and-lessons.tap",
+      "exitCode": 0,
+      "totals": {
+        "tests": 21,
+        "pass": 21,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "files": {
+        "test/fixture-lifetime.test.mjs": 6,
+        "test/lessons.test.mjs": 15
+      },
+      "sha256": "07f3ef0d54b44375d3bb6bccb8588cdc874a2c414188decc5ccd0a0486d3f43b"
+    }
+  ],
+  "hostHold": {
+    "testingDeadline": "2026-10-15T20:00:00-05:00",
+    "completionObservedAt": "2026-10-15T19:42:35-05:00",
+    "disposition": "All tests finished before the deadline. No further test runs in this session."
+  },
+  "mirrorProcessChurn": "No mirror code changed. mirror() already prefers project.identity supplied by the inbox before commonDirectory() can spawn git. Legacy unbound notices and desk sender discovery retain that fallback; adding a cache is outside this minimal FIFO fix.",
+  "staticCheck": "git diff --check passed",
+  "boundaries": "Only the two permitted test files were executed; no full gate, review, live Herdr work, housekeeping, promotion, push or release."
+}

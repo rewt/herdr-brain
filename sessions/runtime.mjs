@@ -20,7 +20,8 @@ export function readControllerJournal(common) {
   catch (error) { if (error.code === 'ENOENT') return emptyJournal(common); throw error; }
   if (journal.schema !== 'session-controller-journal/v1' || journal.common !== common ||
       !Array.isArray(journal.operations) || !Array.isArray(journal.bindings) ||
-      journal.operations.some(op => !op.id || !op.uid || !op.specDigest || !op.target || !['intent', 'acknowledged'].includes(op.state)) ||
+      journal.operations.some(op => !op.id || !op.uid || !op.specDigest || !op.target || !['intent', 'acknowledged', 'withheld'].includes(op.state) ||
+        (op.state === 'withheld' && (typeof op.reason !== 'string' || !op.reason.trim()))) ||
       new Set(journal.operations.map(op => op.id)).size !== journal.operations.length ||
       journal.bindings.some(b => !b.uid || !b.specDigest || !b.binding || !Number.isSafeInteger(b.generation)) ||
       new Set(journal.bindings.map(b => b.uid)).size !== journal.bindings.length) throw Error('invalid controller journal; hold');

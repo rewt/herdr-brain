@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { herdrSocketPath } from '../lanes/board/herdr-client.mjs';
 import { inspect } from './sessions.mjs';
 import { canonicalProject } from './project.mjs';
 import { readStandardSlots } from './receipts.mjs';
@@ -24,7 +25,7 @@ export async function plan({ files = [], cwd = process.cwd(), workspace = 'home'
   try { journal = readControllerJournal(project.common); leaseHeld = present(runtimePaths(project.common).lease); }
   catch (error) { facts.errors.push(`controller evidence: ${error.message}`); }
   const owned = !observer;
-  observer ??= createHerdrObserver();
+  observer ??= createHerdrObserver({ socketPath: herdrSocketPath(env) });
   try { return planSessions({ inspection, enrollment, facts, observation: await observer.observe(), journal, leaseHeld }); }
   finally { if (owned) observer.close(); }
 }

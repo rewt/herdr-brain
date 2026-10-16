@@ -4,8 +4,8 @@ import net from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export function herdrSocketPath() {
-  return process.env.HERDR_SOCKET_PATH ?? join(homedir(), ".config", "herdr", "herdr.sock");
+export function herdrSocketPath(env = process.env) {
+  return env.HERDR_SOCKET_PATH ?? join(homedir(), ".config", "herdr", "herdr.sock");
 }
 
 export class HerdrClient extends EventEmitter {

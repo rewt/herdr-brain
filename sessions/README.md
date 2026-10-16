@@ -192,7 +192,8 @@ compares pane, terminal, tab, workspace, name, native ID and checkout between
 the two reads; a race or incomplete snapshot holds. It reads no pane content,
 native conversation or credentials, and subscribes to no events. The server
 identity is the exact socket path (`HERDR_SOCKET_PATH`, otherwise the existing
-client default); an endpoint label is not an alias granting ownership.
+client default); `plan({env})` applies that resolution to its supplied environment,
+including the default observer. An endpoint label is not an alias granting ownership.
 
 Enrollment is exclusively the active canonical standard-slot history. `home`
 means its canonical checkout. Other workspace references resolve to an exact
@@ -218,7 +219,9 @@ mutation. The status cache is not read at all.
 | Exact live standard incarnation, including idle | `KEEP`; no brief/prompt replay |
 | Missing occupant in an existing adopted chat/supervisor pane, confirmed empty with no prior intent | At most one `WouldStart`; later candidates defer |
 | Missing tab/pane, prior incarnation gone, or uncertain launch | `Hold`; layout reset/recovery belongs to stage 4 |
+| Start withheld after intent because evidence changed; delegate never invoked | `Hold` with the durable withholding reason; stage 4 recovery must resolve it |
 | Missing viewer/triage occupant | `KEEP`; activation belongs to later service/rollout stages |
+| Work item with no recorded run or an abandoned latest run | `Undispatched` / `Observe`; leave unrelated authorized slot starts available |
 | Matching live work-item run/dispatch | `NoOp` while running; observation only |
 | Report available and quiet worker, including ingestion delay or malformed report | `ParkedAwaitingReview` / `KEEP`; show folded review/correction/integration chain |
 | Supervisor `dispatch --reuse`, new run/report, same item/native ID/terminal/checkout/route | Observe running correction, then re-park after its report |
@@ -251,7 +254,7 @@ checkouts, next to the earlier slot receipts:
 | Path relative to common directory | Purpose |
 | --- | --- |
 | `sessions/controller.lock/owner.json` | One project lease; contention or abandoned ownership holds, with no automatic stale-owner reclamation |
-| `sessions/controller-journal.json` | Durable start intents, exact acknowledged receipts, and first proven work-item/spec observation bindings |
+| `sessions/controller-journal.json` | Durable start intents, withheld starts with reasons, exact acknowledged receipts, and first proven work-item/spec observation bindings |
 | `sessions/controller-status.json` | Disposable recomputed projection; only the offline reconciler writes it in this stage |
 
 The runner holds the lease for one pass, re-observes before intent and after
@@ -263,6 +266,14 @@ target appears empty; ambiguity fences other starts too. Each pass invokes the
 delegate at most once. Status loss/corruption cannot launch or grant ownership:
 it triggers ordinary observation from manifests, receipts and record facts.
 Journal loss with a live occupant yields unknown ownership and holds.
+
+Operation states are `intent` (invocation/acknowledgement may be uncertain),
+`acknowledged` (fresh exact receipt and binding agree), and `withheld` (the final
+evidence check prevented delegate invocation). A withheld start is fsynced with
+its reason before returning and surfaces that reason in subsequent plans. It
+still holds, even if later evidence changes; stage 4 decides recovery, and this
+stage never clears or retries it. An undispatched work item has no ambiguous
+incarnation and does not engage the project-wide ownership/launch hold fence.
 
 The first exact work-item observation freezes its spec in the operation
 journal; it does not dispatch or adopt a new worker. The record and dispatch

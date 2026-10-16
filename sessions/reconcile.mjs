@@ -61,15 +61,17 @@ function worker(entry, input, slots) {
   const { observation: o, facts, journal } = input, item = entry.manifest.spec.intent.item;
   const runs = facts.record.runs.filter(r => r.item === item).sort((a, b) => b.started.seq - a.started.seq);
   const latest = runs[0];
-  if (!latest || latest.abandoned) return row(entry, 'Hold', 'Hold', 'work-item observation only; no active recorded dispatch');
+  if (!latest || latest.abandoned) return row(entry, 'Undispatched', 'Observe', 'work-item observation only; no active recorded dispatch');
   const candidates = o.agents.filter(a => a.name === latest.meta?.agent || a.pane_id === latest.meta?.pane ||
     (latest.meta?.agent_session_id && (a.agent_session?.value ?? a.agent_session_id) === latest.meta.agent_session_id));
   const a = candidates[0], run = a && matchingRun(a, facts.record.runs);
   if (candidates.length !== 1 || run?.id !== latest.id || !a.terminal_id || !latest.meta?.terminal_id || !latest.meta.agent_session_id) return row(entry, 'Hold', 'Hold', 'unknown, missing or mismatched work-item occupant; never substitute a worker');
   const pane = o.panes.find(p => p.pane_id === a.pane_id), tab = o.tabs.find(t => t.tab_id === pane?.tab_id);
   const binding = agentBinding(a, o.server, pane?.tab_id);
+  const recordedBinding = { server: o.server, tab: pane?.tab_id, workspace: run.meta.worker_workspace, pane: run.meta.pane,
+    terminalId: run.meta.terminal_id, agentName: run.meta.agent, nativeSessionId: run.meta.agent_session_id, checkout: run.workspace };
   const workspace = o.workspaces.find(w => w.workspace_id === a.workspace_id);
-  if (!sameBinding(binding, binding) || !pane || pane.terminal_id !== a.terminal_id || pane.workspace_id !== a.workspace_id ||
+  if (!sameBinding(binding, recordedBinding) || !pane || pane.terminal_id !== a.terminal_id || pane.workspace_id !== a.workspace_id ||
       pane.tab_id !== binding.tab || tab?.workspace_id !== a.workspace_id ||
       !slots.some(s => s.workspace === a.workspace_id && s.checkout === a.cwd) ||
       workspace?.worktree?.repo_key !== input.inspection.project.common || workspace.worktree.checkout_path !== a.cwd) return row(entry, 'Hold', 'Hold', 'work-item topology disagrees with enrolled checkout');
@@ -148,7 +150,9 @@ export function planSessions(input) {
       const claims = op ? (o.receipts ?? []).filter(r => r.operationId === op.id) : [];
       const receipts = claims.filter(r => receiptMatches(r, op));
       const receipt = op?.receipt ?? (receipts.length === 1 ? receipts[0] : null);
-      if (a) {
+      if (op?.state === 'withheld') decision = row(entry, 'Hold', 'Hold', `start withheld, delegate never invoked: ${op.reason}; stage 4 recovery required`, {
+        observed: { operationId: op.id, operationState: op.state, withheldReason: op.reason } });
+      else if (a) {
         if (!op || !receipt || claims.length > 1 || (claims.length && (receipts.length !== 1 || !sameBinding(claims[0].binding, receipt.binding))) || !sameBinding(receipt.binding, binding) || pane.terminal_id !== binding.terminalId ||
             !targetMatches(binding, target) || !['working', 'idle', 'done'].includes(a.agent_status ?? a.status)) return row(entry, 'Hold', 'Hold', 'unknown or changed standard-slot occupant; never adopt or close');
         decision = row(entry, 'Running', 'KEEP', 'matching live incarnation; protected standard slot; no prompt replay', {
@@ -208,7 +212,11 @@ export async function reconcileOffline({ inspection, read, actions }) {
         let failure;
         const final = planSessions({ inspection, ...await read(), journal: { ...journal, operations: journal.operations.filter(candidate => candidate.id !== op.id) } });
         if (JSON.stringify(final.action) !== JSON.stringify(plan.action) ||
-            JSON.stringify(final.decisions.find(d => d.action)?.observed) !== JSON.stringify(plan.decisions.find(d => d.action)?.observed)) failure = 'evidence changed after intent; start withheld';
+            JSON.stringify(final.decisions.find(d => d.action)?.observed) !== JSON.stringify(plan.decisions.find(d => d.action)?.observed)) {
+          failure = 'evidence changed after intent; start withheld';
+          Object.assign(op, { state: 'withheld', reason: failure });
+          durableWrite(paths.journal, journal);
+        }
         else try { await actions.start(op); } catch (error) { failure = error.message; }
         // The returned acknowledgement alone is insufficient. Only exact
         // receipt evidence in a new observation can acknowledge an intent.

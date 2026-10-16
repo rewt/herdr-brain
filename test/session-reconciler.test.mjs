@@ -145,10 +145,22 @@ for (const brake of ['stopped', 'closeHold']) test(`${brake} is observe-only, in
   assert.equal(decision(await f.run()).decision, 'Observe'); assert.equal(f.calls.length, 0);
   f.facts[brake] = false;
   const read = f.read; let reads = 0;
-  f.read = async () => { if (++reads === 3) f.facts[brake] = true; return read(); };
-  assert.equal(decision(await f.run()).decision, 'Observe'); assert.equal(f.calls.length, 0);
+  f.read = async () => {
+    if (++reads === 3) f.facts[brake] = true;
+    if (reads === 4) assert.equal(readControllerJournal(f.project.common).operations[0].state, 'withheld', 'withholding durable before re-observation');
+    return read();
+  };
+  const withheld = await f.run();
+  assert.equal(decision(withheld).decision, 'Observe'); assert.equal(f.calls.length, 0);
+  const operation = readControllerJournal(f.project.common).operations[0];
+  assert.equal(operation.state, 'withheld'); assert.match(operation.reason, /evidence changed after intent/);
+  assert.match(decision(withheld).reason, /delegate never invoked/);
   f.facts[brake] = false; f.read = read;
-  assert.equal(decision(await f.run()).decision, 'Hold', 'uncertain intent never retried');
+  const held = decision(await f.run());
+  assert.equal(held.decision, 'Hold', 'withheld start never retried');
+  assert.equal(held.observed.operationState, 'withheld'); assert.equal(held.observed.withheldReason, operation.reason);
+  assert.match(held.reason, /delegate never invoked/); assert.equal(f.calls.length, 0);
+  assert.deepEqual(readControllerJournal(f.project.common).operations, [operation]);
 });
 
 test('canonical lease contention across linked checkouts holds without writes or starts', async t => {
@@ -211,6 +223,25 @@ function withWorker(f) {
   }
   return { a, addRun };
 }
+
+for (const abandoned of [false, true]) test(`an ${abandoned ? 'abandoned' : 'undispatched'} work item does not fence a missing chat slot`, async t => {
+  const f = fixture(t), m = example('engineer-worker'); m.spec.workspaceRef = 'home';
+  f.inspection.entries.push(validateManifest(m, { project: f.project, config: ROUTE_PRESET }));
+  f.facts.record.items.push({ id: 'ENG-232', role: 'engineer', runs: abandoned ? ['R-1'] : [] });
+  if (abandoned) f.facts.record.runs.push({ id: 'R-1', item: 'ENG-232', started: { seq: 1 }, abandoned: { seq: 2 } });
+  const p = await f.preview();
+  assert.equal(p.decisions[0].decision, 'WouldStart'); assert.equal(p.action.uid, f.inspection.entries[0].manifest.metadata.uid);
+  assert.equal(p.decisions[1].decision, 'Observe'); assert.match(p.decisions[1].reason, /no active recorded dispatch/);
+  await f.run(); assert.equal(f.calls.length, 1); assert.equal(f.calls[0].uid, p.action.uid);
+});
+
+test('a work-item ownership mismatch still fences a missing chat slot', async t => {
+  const f = fixture(t), chat = f.inspection.entries[0], { a, addRun } = withWorker(f); addRun('R-1', 1);
+  f.inspection.entries.unshift(chat); a.terminal_id = 'unexpected-occupant';
+  const p = await f.preview();
+  assert.equal(p.decisions[1].decision, 'Hold'); assert.equal(p.decisions[0].decision, 'Hold'); assert.equal(p.action, null);
+  await f.run(); assert.equal(f.calls.length, 0);
+});
 
 test('report, repeated failed/delayed review, dispatch reuse, new report, then park in same native session', async t => {
   const f = fixture(t), { a, addRun } = withWorker(f);
@@ -308,7 +339,7 @@ test('read-only live adapter uses only snapshot and exact agent.get; mismatch an
   delete snapshot.tabs; assert.match((await observer.observe()).errors[0], /incomplete Herdr snapshot/);
 });
 
-test('plan API and CLI use scratch socket/record only and leave every file unchanged; --apply rejected', async t => {
+test('plan default observer honours supplied fixture env; API and CLI leave files unchanged and reject --apply', async t => {
   const f = fixture(t), rpc = [], sockets = new Set();
   const server = net.createServer(socket => {
     sockets.add(socket); socket.on('close', () => sockets.delete(socket)); let pending = '';
@@ -321,10 +352,17 @@ test('plan API and CLI use scratch socket/record only and leave every file uncha
   });
   await new Promise(resolve => server.listen(f.env.HERDR_SOCKET_PATH, resolve));
   t.after(async () => { for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve)); });
+  const connect = net.createConnection, contacted = [];
+  assert.notEqual(f.env.HERDR_SOCKET_PATH, process.env.HERDR_SOCKET_PATH);
+  t.mock.method(net, 'createConnection', (socketPath, ...args) => {
+    contacted.push(socketPath);
+    assert.equal(socketPath, f.env.HERDR_SOCKET_PATH, 'never contact ambient or live socket');
+    return connect.call(net, socketPath, ...args);
+  });
   const before = digestTree(f.scratch);
-  const api = await plan({ cwd: f.cwd, env: f.env, observer: createHerdrObserver({ socketPath: f.env.HERDR_SOCKET_PATH }),
-    readFacts: options => readSessionFacts(options) });
+  const api = await plan({ cwd: f.cwd, env: f.env });
   assert.equal(api.valid, true); // Default UIDs have no matching incarnation; no enrollment guessing.
+  assert.deepEqual(api.errors, []); assert.deepEqual(contacted, [f.env.HERDR_SOCKET_PATH]);
   const result = await child([path.join(root, 'sessions/sessions.mjs'), 'plan', '--project', f.cwd], f.env);
   assert.equal(result.code, 0, result.stderr); assert.equal(JSON.parse(result.stdout).apiVersion, 'session-plan/v1');
   assert.ok(rpc.length >= 2); assert.deepEqual(digestTree(f.scratch), before);

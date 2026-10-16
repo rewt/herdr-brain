@@ -1,0 +1,264 @@
+TAP version 13
+# Subtest: measured load expands internal allowances without shorter, infinite or overflowing timers
+ok 1 - measured load expands internal allowances without shorter, infinite or overflowing timers
+  ---
+  duration_ms: 0.899
+  ...
+# Subtest: a loaded native lookup receives time to answer and timeout retries back off with fresh output
+ok 2 - a loaded native lookup receives time to answer and timeout retries back off with fresh output
+  ---
+  duration_ms: 1.802083
+  ...
+# Subtest: the default native executor under the bounded helper scales each response allowance once
+ok 3 - the default native executor under the bounded helper scales each response allowance once
+  ---
+  duration_ms: 42.101208
+  ...
+# Subtest: the record lock waits past ten seconds for a live holder under load before appending
+ok 4 - the record lock waits past ten seconds for a live holder under load before appending
+  ---
+  duration_ms: 21.978958
+  ...
+# Subtest: exhausted record-lock waits preserve live, refused and initializing owners and log bytes
+ok 5 - exhausted record-lock waits preserve live, refused and initializing owners and log bytes
+  ---
+  duration_ms: 185.785208
+  ...
+# Subtest: exhausted, refused and malformed lookups never authorize a signal, including after timeout
+ok 6 - exhausted, refused and malformed lookups never authorize a signal, including after timeout
+  ---
+  duration_ms: 3.691209
+  ...
+# Subtest: a replacement PID discovered after a retry remains unauthorized
+ok 7 - a replacement PID discovered after a retry remains unauthorized
+  ---
+  duration_ms: 0.78625
+  ...
+# Subtest: slow Herdr transport responds within a loaded allowance; refusals stay refusals
+ok 8 - slow Herdr transport responds within a loaded allowance; refusals stay refusals
+  ---
+  duration_ms: 102.90525
+  ...
+# Subtest: housekeeping gives each evidence read a loaded response allowance and preserves refusals
+ok 9 - housekeeping gives each evidence read a loaded response allowance and preserves refusals
+  ---
+  duration_ms: 18.75225
+  ...
+# Subtest: queue and notice locks wait through loaded contention and never remove a live lock
+ok 10 - queue and notice locks wait through loaded contention and never remove a live lock
+  ---
+  duration_ms: 9.554708
+  ...
+# Subtest: inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner
+ok 11 - inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner
+  ---
+  duration_ms: 398.767958
+  ...
+# Subtest: owned inbox teardown allows loaded stop confirmation before clearing its processes
+ok 12 - owned inbox teardown allows loaded stop confirmation before clearing its processes
+  ---
+  duration_ms: 23.074209
+  ...
+# Subtest: owned inbox teardown allows loaded shutdown confirmation before clearing its processes
+ok 13 - owned inbox teardown allows loaded shutdown confirmation before clearing its processes
+  ---
+  duration_ms: 21.658584
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: focus sampling continues while the acceptance parent blocks and spans cleanup
+ok 14 - focus sampling continues while the acceptance parent blocks and spans cleanup
+  ---
+  duration_ms: 703.676125
+  ...
+# Subtest: native pane_focused events catch a transient change between unchanged samples and name both calls
+ok 15 - native pane_focused events catch a transient change between unchanged samples and name both calls
+  ---
+  duration_ms: 600.805042
+  ...
+# Subtest: native startup replay settles before the baseline and subsequent transient owned moves still fail
+ok 16 - native startup replay settles before the baseline and subsequent transient owned moves still fail
+  ---
+  duration_ms: 809.772875
+  ...
+# Subtest: continuous operator focus starts without silence and an immediate transient harness move still fails
+ok 17 - continuous operator focus starts without silence and an immediate transient harness move still fails
+  ---
+  duration_ms: 6672.217542
+  ...
+# Subtest: continuous operator activity alone passes after bounded replay
+ok 18 - continuous operator activity alone passes after bounded replay
+  ---
+  duration_ms: 763.842791
+  ...
+# Subtest: a busy stream from an unknown server never assumes the verified replay bound
+ok 19 - a busy stream from an unknown server never assumes the verified replay bound
+  ---
+  duration_ms: 636.920584
+  ...
+# Subtest: owned changes need no correlated call and incomplete monitoring never passes
+ok 20 - owned changes need no correlated call and incomplete monitoring never passes
+  ---
+  duration_ms: 0.223125
+  ...
+# Subtest: external sampled and transient event moves are recorded and re-baseline without failing
+ok 21 - external sampled and transient event moves are recorded and re-baseline without failing
+  ---
+  duration_ms: 720.654
+  ...
+# Subtest: an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+ok 22 - an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+  ---
+  duration_ms: 723.375916
+  ...
+# Subtest: external moves during unrelated active and completed calls re-baseline without failing
+ok 23 - external moves during unrelated active and completed calls re-baseline without failing
+  ---
+  duration_ms: 855.19625
+  ...
+# Subtest: a move to the pane targeted by a concurrent call fails after an external re-baseline
+ok 24 - a move to the pane targeted by a concurrent call fails after an external re-baseline
+  ---
+  duration_ms: 728.325959
+  ...
+# Subtest: workspace destinations correlate only with their matching call despite a newer unrelated completion
+ok 25 - workspace destinations correlate only with their matching call despite a newer unrelated completion
+  ---
+  duration_ms: 596.5215
+  ...
+# Subtest: a resolved agent target receipt correlates a named call without guessing pane IDs
+ok 26 - a resolved agent target receipt correlates a named call without guessing pane IDs
+  ---
+  duration_ms: 598.958292
+  ...
+# Subtest: a creation receipt attributes a transient move before ownership is registered
+ok 27 - a creation receipt attributes a transient move before ownership is registered
+  ---
+  duration_ms: 608.208042
+  ...
+# Subtest: a focus event after a slow completed call names that call using its completion time
+ok 28 - a focus event after a slow completed call names that call using its completion time
+  ---
+  duration_ms: 1720.3555
+  ...
+# Subtest: an unreachable read-only focus socket is an explicit harness limitation
+ok 29 - an unreachable read-only focus socket is an explicit harness limitation
+  ---
+  duration_ms: 26.120458
+  ...
+# Subtest: the monitor retains forbidden attempts even when every sample remains unchanged
+ok 30 - the monitor retains forbidden attempts even when every sample remains unchanged
+  ---
+  duration_ms: 469.439
+  ...
+# Subtest: unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+ok 31 - unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+  ---
+  duration_ms: 599.2545
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: native adapter pins the original socket despite an isolated HOME or caller override
+ok 32 - native adapter pins the original socket despite an isolated HOME or caller override
+  ---
+  duration_ms: 221.186833
+  ...
+# Subtest: foreign pane/workspace targets and symlink escapes never reach mutation APIs
+ok 33 - foreign pane/workspace targets and symlink escapes never reach mutation APIs
+  ---
+  duration_ms: 387.379625
+  ...
+# Subtest: model launch requests are always replaced by the scratch worker script
+ok 34 - model launch requests are always replaced by the scratch worker script
+  ---
+  duration_ms: 372.833375
+  ...
+# Subtest: entry canary launch is confined to its fixed worker path and owned pane
+ok 35 - entry canary launch is confined to its fixed worker path and owned pane
+  ---
+  duration_ms: 361.644875
+  ...
+# Subtest: parent-focusing worktree removal is refused before any native mutation
+ok 36 - parent-focusing worktree removal is refused before any native mutation
+  ---
+  duration_ms: 33.3165
+  ...
+# Subtest: the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+ok 37 - the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+  ---
+  duration_ms: 109.788625
+  ...
+# Subtest: creation receipts grant the only new targets and force no-focus
+ok 38 - creation receipts grant the only new targets and force no-focus
+  ---
+  duration_ms: 652.911916
+  ...
+# Subtest: explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+ok 39 - explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+  ---
+  duration_ms: 104.434792
+  ...
+# Subtest: agent send-keys requires an owned target and checks its live cwd
+ok 40 - agent send-keys requires an owned target and checks its live cwd
+  ---
+  duration_ms: 10951.199
+  ...
+# Subtest: named-agent mutation receipts retain the pane resolved by native identity lookup
+ok 41 - named-agent mutation receipts retain the pane resolved by native identity lookup
+  ---
+  duration_ms: 274.942875
+  ...
+# Subtest: late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+ok 42 - late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+  ---
+  duration_ms: 438.483875
+  ...
+# Subtest: non-zero native Herdr replies are harness failures through both body and forwarding paths
+ok 43 - non-zero native Herdr replies are harness failures through both body and forwarding paths
+  ---
+  duration_ms: 615.887083
+  ...
+# Subtest: stand-in registration timeout is harness pending without a safety marker
+ok 44 - stand-in registration timeout is harness pending without a safety marker
+  ---
+  duration_ms: 14045.070333
+  ...
+# Subtest: scripted PTY acknowledgement timeout is harness pending without a safety marker
+ok 45 - scripted PTY acknowledgement timeout is harness pending without a safety marker
+  ---
+  duration_ms: 22236.037208
+  ...
+# Subtest: actual capability refusals stay product FAIL even when wrapped by cleanup
+ok 46 - actual capability refusals stay product FAIL even when wrapped by cleanup
+  ---
+  duration_ms: 10309.432042
+  ...
+# Subtest: missing live pane cwd receipt is a harness limit, not a candidate capability violation
+ok 47 - missing live pane cwd receipt is a harness limit, not a candidate capability violation
+  ---
+  duration_ms: 270.598834
+  ...
+# Subtest: native transport pins the original socket when copied HOME changes
+ok 48 - native transport pins the original socket when copied HOME changes
+  ---
+  duration_ms: 180.330792
+  ...
+# Subtest: final tab rename is allowed only for receipt-owned tabs
+ok 49 - final tab rename is allowed only for receipt-owned tabs
+  ---
+  duration_ms: 292.135334
+  ...
+# Subtest: private lane environment preparation reaches only an owned pane with a live scratch cwd
+ok 50 - private lane environment preparation reaches only an owned pane with a live scratch cwd
+  ---
+  duration_ms: 10767.739375
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..50
+# tests 50
+# suites 0
+# pass 50
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 91487.475541
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

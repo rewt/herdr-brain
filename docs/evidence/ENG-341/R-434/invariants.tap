@@ -1,0 +1,358 @@
+TAP version 13
+# Subtest: lane never moves Herdr focus when it creates or opens a workspace, worktree or tab
+ok 1 - lane never moves Herdr focus when it creates or opens a workspace, worktree or tab
+  ---
+  duration_ms: 0.698291
+  ...
+# Subtest: lane closure cannot invoke Herdr's parent-focusing worktree removal
+ok 2 - lane closure cannot invoke Herdr's parent-focusing worktree removal
+  ---
+  duration_ms: 13.372917
+  ...
+# Subtest: the supervisor arms the standalone watcher; contrib keeps the compatibility watcher
+ok 3 - the supervisor arms the standalone watcher; contrib keeps the compatibility watcher
+  ---
+  duration_ms: 1.069334
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: bch-cloak subcommands, output parsers, event fields and compatibility paths remain usable
+ok 4 - bch-cloak subcommands, output parsers, event fields and compatibility paths remain usable
+  ---
+  duration_ms: 1889.707625
+  ...
+# Subtest: old release events still fold and list, while release mutations are unavailable
+ok 5 - old release events still fold and list, while release mutations are unavailable
+  ---
+  duration_ms: 124.900584
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"702e9f7900cbe3aabf6955eac9976e53a024fefad5b5e56b0f868f0f2b4640e4","action":"held"}
+# {"handled":false,"pending":true,"action":"held","reason":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","revision":4,"results":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"702e9f7900cbe3aabf6955eac9976e53a024fefad5b5e56b0f868f0f2b4640e4","action":"held"}],"keep":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"702e9f7900cbe3aabf6955eac9976e53a024fefad5b5e56b0f868f0f2b4640e4"}],"diagnostics":[]}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"702e9f7900cbe3aabf6955eac9976e53a024fefad5b5e56b0f868f0f2b4640e4","action":"held"}
+# {"handled":false,"pending":true,"action":"held","reason":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","revision":4,"results":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"702e9f7900cbe3aabf6955eac9976e53a024fefad5b5e56b0f868f0f2b4640e4","action":"held"}],"keep":[{"tab_id":"w:t","workspace_id":"w","label":"","decision":"keep","why":"retirement held: .lane/supervisor/HOLD-WORKER-TAB-CLOSE","token":"702e9f7900cbe3aabf6955eac9976e53a024fefad5b5e56b0f868f0f2b4640e4"}],"diagnostics":[]}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"1a9858cf157bee69f6658994e871709001d0e4836901fdb54532e67604c95606","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"68f7bb988b475c02b1b2049983a76677c9922dc32a1229538f9a3ee534334681","action":"closed"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"8aeb079b35560e5ec1597ee94526027e272398a7e6a07b3339ad0e4748943529","action":"closed"}
+# Subtest: standard-slot runtime rechecks canonical lane receipts before tab, workspace and guarded lane removal
+ok 6 - standard-slot runtime rechecks canonical lane receipts before tab, workspace and guarded lane removal
+  ---
+  duration_ms: 1653.360584
+  ...
+# Subtest: standard-slot runtime preserves an enclosing workspace after tabs disappear and keeps unreadable evidence
+ok 7 - standard-slot runtime preserves an enclosing workspace after tabs disappear and keeps unreadable evidence
+  ---
+  duration_ms: 802.475375
+  ...
+# Subtest: STOP during an unreviewed or needs-human chain retains the warm worker without launching anything
+ok 8 - STOP during an unreviewed or needs-human chain retains the warm worker without launching anything
+  ---
+  duration_ms: 664.768416
+  ...
+# Subtest: CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+ok 9 - CLI dry plan reads the fold and shared executor refuses a concurrent native-session replacement
+  ---
+  duration_ms: 857.685791
+  ...
+# Subtest: retirement hold: file in the canonical checkout keeps every tab and receipt
+ok 10 - retirement hold: file in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2244.93225
+  ...
+# Subtest: retirement hold: directory in the canonical checkout keeps every tab and receipt
+ok 11 - retirement hold: directory in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2290.599041
+  ...
+# Subtest: retirement hold: symlink in the canonical checkout keeps every tab and receipt
+ok 12 - retirement hold: symlink in the canonical checkout keeps every tab and receipt
+  ---
+  duration_ms: 2214.6705
+  ...
+# Subtest: retirement hold: appearing between plan and apply stops the stale close
+ok 13 - retirement hold: appearing between plan and apply stops the stale close
+  ---
+  duration_ms: 988.219084
+  ...
+# Subtest: retirement hold: indeterminate lstat EACCES fails closed without reading contents
+ok 14 - retirement hold: indeterminate lstat EACCES fails closed without reading contents
+  ---
+  duration_ms: 819.012167
+  ...
+# Subtest: retirement hold: indeterminate lstat ENOTDIR fails closed without reading contents
+ok 15 - retirement hold: indeterminate lstat ENOTDIR fails closed without reading contents
+  ---
+  duration_ms: 840.765833
+  ...
+# Subtest: retirement hold: indeterminate lstat EIO fails closed without reading contents
+ok 16 - retirement hold: indeterminate lstat EIO fails closed without reading contents
+  ---
+  duration_ms: 832.470125
+  ...
+# Subtest: retirement hold: rechecked after the final observation immediately before a close
+ok 17 - retirement hold: rechecked after the final observation immediately before a close
+  ---
+  duration_ms: 1396.113917
+  ...
+# Subtest: retirement hold: an empty workspace stays open and logs held before any close
+ok 18 - retirement hold: an empty workspace stays open and logs held before any close
+  ---
+  duration_ms: 974.892459
+  ...
+# Subtest: only a canonical hold can brake retirement; a lane-local lookalike has no authority
+ok 19 - only a canonical hold can brake retirement; a lane-local lookalike has no authority
+  ---
+  duration_ms: 673.35975
+  ...
+# Subtest: retirement hold: tidy keeps tabs and logs the hold, then resumes
+ok 20 - retirement hold: tidy keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1966.734708
+  ...
+# Subtest: retirement hold: housekeeping-fast keeps tabs and logs the hold, then resumes
+ok 21 - retirement hold: housekeeping-fast keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 968.592667
+  ...
+# Subtest: retirement hold: housekeeping-strict keeps tabs and logs the hold, then resumes
+ok 22 - retirement hold: housekeeping-strict keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 977.609458
+  ...
+# Subtest: retirement hold: plan keeps tabs and logs the hold, then resumes
+ok 23 - retirement hold: plan keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1568.089417
+  ...
+# Subtest: retirement hold: apply keeps tabs and logs the hold, then resumes
+ok 24 - retirement hold: apply keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 1931.332416
+  ...
+# Subtest: retirement hold: consume keeps tabs and logs the hold, then resumes
+ok 25 - retirement hold: consume keeps tabs and logs the hold, then resumes
+  ---
+  duration_ms: 2004.617125
+  ...
+# Subtest: retirement hold: drain catch-up acknowledges ready first and leaves the hint pending at both boundaries
+ok 26 - retirement hold: drain catch-up acknowledges ready first and leaves the hint pending at both boundaries
+  ---
+  duration_ms: 1129.659375
+  ...
+# Subtest: retirement hold: promotion cleanup never invokes git-only close and stays promoted until bounded retry
+ok 27 - retirement hold: promotion cleanup never invokes git-only close and stays promoted until bounded retry
+  ---
+  duration_ms: 2691.809334
+  ...
+# Subtest: retirement hold: lane close normal retains worktree and branch before lifecycle mutations
+ok 28 - retirement hold: lane close normal retains worktree and branch before lifecycle mutations
+  ---
+  duration_ms: 6023.523083
+  ...
+# Subtest: retirement hold: lane close git-only retains worktree and branch before lifecycle mutations
+ok 29 - retirement hold: lane close git-only retains worktree and branch before lifecycle mutations
+  ---
+  duration_ms: 5063.042
+  ...
+# Subtest: retirement hold: standalone settle-watch self-retirement preserves its tab and receipt
+ok 30 - retirement hold: standalone settle-watch self-retirement preserves its tab and receipt
+  ---
+  duration_ms: 5409.950292
+  ...
+# Subtest: retirement hold: settle-watch worker pruning keeps eligible workers then closes after release
+ok 31 - retirement hold: settle-watch worker pruning keeps eligible workers then closes after release
+  ---
+  duration_ms: 2258.487459
+  ...
+# Subtest: retirement hold: settle-watch pruneSessionTabs honors the brake during a real CLI handoff
+ok 32 - retirement hold: settle-watch pruneSessionTabs honors the brake during a real CLI handoff
+  ---
+  duration_ms: 7412.930583
+  ...
+# Subtest: retirement hold: settle-watch closeWorkerTab honors the brake during a real CLI handoff
+ok 33 - retirement hold: settle-watch closeWorkerTab honors the brake during a real CLI handoff
+  ---
+  duration_ms: 6811.821708
+  ...
+# Subtest: lane close --git-only keeps the worktree beneath even an eligible pane
+ok 34 - lane close --git-only keeps the worktree beneath even an eligible pane
+  ---
+  duration_ms: 1932.719042
+  ...
+# Subtest: lane close uses the executor then proves vacancy before Git and empty workspace close
+ok 35 - lane close uses the executor then proves vacancy before Git and empty workspace close
+  ---
+  duration_ms: 2708.107708
+  ...
+# Subtest: an empty unmerged lane retains its recoverable archive and immutable record
+ok 36 - an empty unmerged lane retains its recoverable archive and immutable record
+  ---
+  duration_ms: 2116.22875
+  ...
+# Subtest: promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+ok 37 - promotion keeps integrated success on a live reference and retries cleanup only after it disappears
+  ---
+  duration_ms: 2881.442542
+  ...
+# Subtest: a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+ok 38 - a tab-close failure stays cleanup-pending and never turns promotion into a gate failure
+  ---
+  duration_ms: 706.391458
+  ...
+# Subtest: record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+ok 39 - record handoff is confirmed, idempotent, ignored by older fold, and never rewrites reports
+  ---
+  duration_ms: 220.11175
+  ...
+# Subtest: Git-only lane without a workspace still keeps queued lane and run references
+ok 40 - Git-only lane without a workspace still keeps queued lane and run references
+  ---
+  duration_ms: 811.963041
+  ...
+# Subtest: installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+ok 41 - installed distribution ships the adoption CLI and compatibility surfaces with no dependencies
+  ---
+  duration_ms: 583.866083
+  ...
+# Subtest: installed settle-watch flags keep an ingested worker while its chain is open
+ok 42 - installed settle-watch flags keep an ingested worker while its chain is open
+  ---
+  duration_ms: 737.508333
+  ...
+# Subtest: a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+ok 43 - a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op
+  ---
+  duration_ms: 905.641042
+  ...
+# Subtest: the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+ok 44 - the consume CLI reaches its own deadline cleanly, retaining the hint and releasing its lock
+  ---
+  duration_ms: 233.777791
+  ...
+# Subtest: promote drain consumes requests at both foreground boundaries without running a gate
+ok 45 - promote drain consumes requests at both foreground boundaries without running a gate
+  ---
+  duration_ms: 831.59375
+  ...
+# Subtest: promote sends its ready acknowledgment before observing a pending retirement hint
+ok 46 - promote sends its ready acknowledgment before observing a pending retirement hint
+  ---
+  duration_ms: 723.955709
+  ...
+# {"id":"job","topic":"topic","outcome":"refused","reason":"lane: fixture refusal","log":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-Vi3rw5/repo/.git/promote/job.log","delivered":false,"inbox":"/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-Vi3rw5/record/supervisor/inbox.log","queued":true,"owner_pid":59880,"message":"[promote-queue] id=job lane=topic outcome=refused reason=\\"lane: fixture refusal\\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/retire-path-Vi3rw5/repo/.git/promote/job.log","delivery_id":"promote:job"}
+# {"tab_id":"w:t","workspace_id":"w","label":"","decision":"release","why":"R-1: ingested report and terminal chain, or confirmed retained successor","token":"407b0fad3723f80ff61ef41df3bdbd3fc44814780e22cb43e6f7b0ec67be414e","action":"closed"}
+# Subtest: a dequeued job is persisted before retirement catch-up and is never left current during it
+ok 47 - a dequeued job is persisted before retirement catch-up and is never left current during it
+  ---
+  duration_ms: 1139.526292
+  ...
+# Subtest: the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+ok 48 - the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending
+  ---
+  duration_ms: 969.00175
+  ...
+# Subtest: cleanup retries are capped with backoff, record the refusal, and reset on a new request
+ok 49 - cleanup retries are capped with backoff, record the refusal, and reset on a new request
+  ---
+  duration_ms: 2952.883875
+  ...
+# Subtest: lane close permits an absent Herdr executable and refuses an unreadable installed server
+ok 50 - lane close permits an absent Herdr executable and refuses an unreadable installed server
+  ---
+  duration_ms: 1499.283458
+  ...
+# Subtest: tidy-tabs prunes an exited recorded watcher callback through the shared guard
+ok 51 - tidy-tabs prunes an exited recorded watcher callback through the shared guard
+  ---
+  duration_ms: 1579.409083
+  ...
+# Subtest: tidy-tabs prunes an exited recorded settle callback through the shared guard
+ok 52 - tidy-tabs prunes an exited recorded settle callback through the shared guard
+  ---
+  duration_ms: 1550.738125
+  ...
+# Subtest: tidy-tabs prunes an exited recorded executive callback through the shared guard
+ok 53 - tidy-tabs prunes an exited recorded executive callback through the shared guard
+  ---
+  duration_ms: 1627.049333
+  ...
+# Subtest: tidy-tabs prunes an exited recorded plan callback through the shared guard
+ok 54 - tidy-tabs prunes an exited recorded plan callback through the shared guard
+  ---
+  duration_ms: 1631.818333
+  ...
+# Subtest: apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+ok 55 - apply prunes an absent callback receipt without reading its owner; scoped reads retain other workspaces
+  ---
+  duration_ms: 1026.377958
+  ...
+# Subtest: a concurrently pruned absent receipt does not abort remaining tab closes
+ok 56 - a concurrently pruned absent receipt does not abort remaining tab closes
+  ---
+  duration_ms: 1205.602708
+  ...
+# Subtest: post-close receipt pruning ENOENT preserves the successful close result
+ok 57 - post-close receipt pruning ENOENT preserves the successful close result
+  ---
+  duration_ms: 1065.916583
+  ...
+# Subtest: post-close receipt pruning EACCES preserves the successful close result
+ok 58 - post-close receipt pruning EACCES preserves the successful close result
+  ---
+  duration_ms: 1013.610333
+  ...
+# Subtest: settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+ok 59 - settle-watch --spawn keeps its flags and narrowly retires its own tab after ingestion
+  ---
+  duration_ms: 5000.638
+  ...
+# Subtest: a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+ok 60 - a foreground watcher without close-tab-on-exit never adopts an ordinary operator tab
+  ---
+  duration_ms: 1095.668292
+  ...
+# Subtest: standalone contrib retires only its owned watcher with no supervisor directory
+ok 61 - standalone contrib retires only its owned watcher with no supervisor directory
+  ---
+  duration_ms: 5029.561375
+  ...
+# Subtest: composed promotion then native completion reconcile then cleanup: KEEP protects lane and evidence
+ok 62 - composed promotion then native completion reconcile then cleanup: KEEP protects lane and evidence
+  ---
+  duration_ms: 1353.060083
+  ...
+# Subtest: composed promotion then native completion reconcile then cleanup: release closes workspace after verified preservation
+ok 63 - composed promotion then native completion reconcile then cleanup: release closes workspace after verified preservation
+  ---
+  duration_ms: 3228.520791
+  ...
+# Subtest: workspace close failure retries only the empty workspace after Git removal
+ok 64 - workspace close failure retries only the empty workspace after Git removal
+  ---
+  duration_ms: 2874.3765
+  ...
+# Subtest: an occupied workspace retry retains its reason in the cleanup receipt after the lane is gone
+ok 65 - an occupied workspace retry retains its reason in the cleanup receipt after the lane is gone
+  ---
+  duration_ms: 2763.508083
+  ...
+# Subtest: a planner KEEP refuses git-only unmerged close before any evidence copy or tag
+ok 66 - a planner KEEP refuses git-only unmerged close before any evidence copy or tag
+  ---
+  duration_ms: 618.869
+  ...
+# Subtest: a planner KEEP refuses normal unmerged close before any evidence copy or tag
+ok 67 - a planner KEEP refuses normal unmerged close before any evidence copy or tag
+  ---
+  duration_ms: 649.913917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..67
+# tests 67
+# suites 0
+# pass 67
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 118915.501917
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

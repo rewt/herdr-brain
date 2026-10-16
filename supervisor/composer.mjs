@@ -36,6 +36,8 @@ function typedText(text) {
 }
 
 export function composerEmpty(raw, harness) {
+  // Callers must preserve ANSI styles (pane read --format ansi). Plain text
+  // cannot distinguish a placeholder from an identical typed draft.
   if (typeof raw !== 'string' || !raw.trim()) return false;
   const lines = raw.replace(/\r/g, '').split('\n');
   const visible = lines.map(plain);

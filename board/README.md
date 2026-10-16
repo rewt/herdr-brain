@@ -40,7 +40,8 @@ Brain phase mapping:
 | --- | --- |
 | pending request | queued |
 | batching/promoting; pending train; preparing/prepared/rebasing attempt | admission |
-| unfinished validation gate | stage 1 of 1 |
+| unfinished gate waiting for its slot, without a command-start receipt | admission |
+| unfinished validation gate with command start (or older gate without slot metadata) | stage 1 of 1 |
 | validated/integrated/complete attempt; batch-delivering/completed queue state | reconcile |
 | promoted result (reconciliation complete or absent for older results) | landed |
 | promoted result with incomplete reconciliation | reconcile |
@@ -50,7 +51,8 @@ Brain phase mapping:
 
 Results take precedence over intermediate states. Stage 1 of 1 means the whole
 validation gate: Brain receipts do not publish a finer stage count. A receipt
-with matching key, head and tree supplies gate timing. Only the integrated
+with matching key, head and tree supplies gate timing. A matching execution
+sidecar supplies the command start, so a slot wait stays admission. Only the integrated
 `tip` of a promoted result supplies main; `source_head`/`expectedHead` supplies
 candidate. Job/batch logs contribute only numeric TAP/Vitest clocks through
 `parseLog`, never phase or completion. Item and pane come from targeted record

@@ -37,6 +37,12 @@ test('board ticks never write, open for write, prune, rename or unlink the slot 
     object[method] = wrapper(original); undo.push(() => { object[method] = original; });
   }
   for (const object of [fs, fs.promises]) {
+    for (const method of ['readFile', 'readFileSync', 'createReadStream']) intercept(object, method, original => function(file, options, ...args) {
+      // Node's optimized readFileSync can bypass the public openSync hook.
+      const flags = typeof options === 'object' ? options?.flag ?? options?.flags ?? 'r' : 'r';
+      if (protectedPath(file) && flags !== 'r' && flags !== fs.constants.O_RDONLY) { mutations++; throw Error('intercepted writable read'); }
+      return original.call(this, file, options, ...args);
+    });
     for (const method of ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'rename', 'renameSync', 'unlink', 'unlinkSync', 'rm', 'rmSync', 'rmdir', 'rmdirSync', 'mkdir', 'mkdirSync', 'truncate', 'truncateSync', 'link', 'linkSync', 'symlink', 'symlinkSync', 'createWriteStream', 'copyFile', 'copyFileSync', 'chmod', 'chmodSync', 'chown', 'chownSync', 'utimes', 'utimesSync']) intercept(object, method, original => function(...args) {
       if (args.slice(0, 2).some(protectedPath)) { mutations++; throw Error('intercepted slot mutation'); }
       return original.apply(this, args);

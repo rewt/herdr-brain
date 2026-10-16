@@ -21,6 +21,16 @@ test('Brain reads sanitized real queue/train/log shapes and matching receipts; q
   f.receipt.head = 'e'.repeat(40); f.save();
   const unmatched = await brainSource(f.project, { now: f.now, show: f.show });
   assert.equal(unmatched.rows.find(r => r.id === 'job-active').phaseAt, f.train.attempts[0].gate.started_at);
+  const gate = f.train.attempts[0].gate;
+  gate.log = f.project.identity + '/lane-validation/live.log'; gate.execution_receipt = gate.log + '.execution.json';
+  gate.slot_receipt = f.project.identity + '/lane-validation/slot-waits/live.json'; f.save();
+  assert.equal((await brainSource(f.project, { now: f.now, show: f.show })).rows.find(r => r.id === 'job-active').phase, 'admission');
+  f.write('common/lane-validation/live.log.execution.json', { command_started: true, started_at: '2026-10-16T12:05:00Z' });
+  const started = (await brainSource(f.project, { now: f.now, show: f.show })).rows.find(r => r.id === 'job-active');
+  assert.equal(started.phase, 'stage'); assert.equal(started.phaseAt, '2026-10-16T12:05:00Z'); assert.equal(started.result.main, null);
+  gate.execution_receipt = f.project.identity + '/lane-validation/foreign.execution.json'; f.save();
+  f.write('common/lane-validation/foreign.execution.json', { command_started: true, started_at: '2026-10-16T12:05:00Z' });
+  assert.equal((await brainSource(f.project, { now: f.now, show: f.show })).rows.find(r => r.id === 'job-active').phase, 'admission');
 });
 test('Brain maps every actual queue and attempt phase, results win, and candidate never supplies main', async t => {
   const f = brainFixture(t);

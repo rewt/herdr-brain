@@ -39,7 +39,7 @@ export function brainPhase({ job, result, train, attempt, gate }) {
   if (['refused', 'failed'].includes(result?.outcome)) return 'failed';
   if (job.phase === 'pending') return 'queued';
   if (['batch-delivering', 'completed'].includes(job.phase) || ['validated', 'integrated', 'complete'].includes(attempt?.phase)) return 'reconcile';
-  if (gate && !gate.finished_at) return 'stage';
+  if (gate && !gate.finished_at) return gate.slot_receipt && !gate.command_started_at ? 'admission' : 'stage';
   if (['red', 'invalid'].includes(attempt?.phase)) return 'failed';
   if (['interrupted', 'timeout'].includes(attempt?.phase)) return 'interrupted';
   if (['batching', 'promoting'].includes(job.phase) || train?.phase === 'pending' || ['preparing', 'prepared', 'rebasing'].includes(attempt?.phase)) return 'admission';
@@ -72,6 +72,10 @@ export async function brainSource(project, { now = Date.now(), recentMs = 864000
       if (gate?.key && /^[a-f0-9]{64}$/.test(gate.key)) {
         const receipt = localJSON(path.join(common, 'lane-validation', `${gate.key}.json`), common);
         if (receipt?.schema === 'lane-validation/v1' && receipt.key === gate.key && receipt.tree === gate.tree && receipt.head === gate.head) gate = { ...gate, ...receipt };
+      }
+      if (gate?.execution_receipt && gate.execution_receipt === `${gate.log}.execution.json`) {
+        const execution = localJSON(gate.execution_receipt, common);
+        if (execution?.command_started === true) gate = { ...gate, command_started_at: execution.started_at };
       }
       const run = await get(job, job.run);
       const item = run?.item ? await get(job, run.item) : null;

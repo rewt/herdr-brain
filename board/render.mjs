@@ -5,7 +5,7 @@ export function duration(seconds) {
   seconds = Math.max(0, Math.floor(seconds));
   return seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m${seconds % 60}s` : `${Math.floor(seconds / 3600)}h${Math.floor(seconds % 3600 / 60)}m`;
 }
-const elapsed = (row, now) => row.startedAt && row.startedAt !== WITHHELD ? duration(((row.endedAt && row.endedAt !== WITHHELD ? Date.parse(row.endedAt) : now) - Date.parse(row.startedAt)) / 1000) : '?';
+const elapsed = (row, now) => row.startedAt === WITHHELD || row.endedAt === WITHHELD ? WITHHELD : row.startedAt ? duration(((row.endedAt ? Date.parse(row.endedAt) : now) - Date.parse(row.startedAt)) / 1000) : '?';
 const cell = (value, width) => {
   const text = String(value ?? '');
   return (text.length > width ? text.slice(0, Math.max(0, width - 1)) + '~' : text).padEnd(width);
@@ -19,7 +19,7 @@ export function render(snapshot, { width = 120, height = Infinity, now = Date.no
     clip(`Slot ${slot.state}${slot.label ? `: ${slot.label}` : ''}${slot.project ? ` (${slot.project})` : ''} | held ${duration(slot.heldSeconds)} | queue ${slot.queueLength}`)];
   const columns = [
     { title: 'ITEM / LANE', min: 12, max: 28, value: r => [r.item, r.lane].filter(Boolean).join(' ') || r.id },
-    { title: 'PHASE', min: 12, max: 16, value: r => r.phase === 'stage' && r.stage !== WITHHELD ? `stage ${r.stage.n} of ${r.stage.m}` : r.phase },
+    { title: 'PHASE', min: 12, max: 16, value: r => r.phase === 'stage' ? r.stage === WITHHELD ? `stage ${WITHHELD}` : `stage ${r.stage.n} of ${r.stage.m}` : r.phase },
     { title: 'ELAPSED', min: 7, max: 9, value: r => elapsed(r, now) },
     { title: 'SLOT', min: 11, max: 11, value: r => r.slot },
     { title: 'STATUS', min: 10, max: 28, value: r => r.status.text },
@@ -29,7 +29,7 @@ export function render(snapshot, { width = 120, height = Infinity, now = Date.no
       const log = r.where.log;
       return log.length > width ? '...' + log.slice(-(width - 3)) : log;
     } },
-    { title: 'CLOCKS', min: 12, max: 60, value: r => Array.isArray(r.clocks) ? r.clocks.map(c => `${c.label} ${c.seconds === WITHHELD ? WITHHELD : duration(c.seconds)}${c.legacy === true ? ' legacy' : ''}`).join('; ') : WITHHELD },
+    { title: 'CLOCKS', min: 12, max: 60, value: r => Array.isArray(r.clocks) ? r.clocks.map(c => `${c.label} ${c.seconds === WITHHELD ? WITHHELD : duration(c.seconds)}${c.legacy === true ? ' legacy' : c.legacy === WITHHELD ? ` ${WITHHELD}` : ''}`).join('; ') : WITHHELD },
   ];
   const cost = cols => cols.reduce((n, c) => n + c.min, 0) + Math.max(0, cols.length - 1) * 2;
   while (columns.length > 1 && cost(columns) > width) columns.pop();

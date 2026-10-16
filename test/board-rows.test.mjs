@@ -21,6 +21,11 @@ test('board validator accepts the contract example, nullables, bounds and ignore
   for (const phase of ['queued', 'admission', 'stage', 'reconcile', 'landed', 'failed', 'interrupted', 'unknown']) assert.equal(validateRow({ ...raw, phase }, f.options).phase, phase);
   assert.equal(validateRow({ ...raw, stage: { n: 999, m: 999 } }, f.options).stage.m, 999);
   assert.equal(validateRow({ ...raw, clocks: [] }, f.options).clocks.length, 0);
+  for (const [field, value] of Object.entries({ id: 'x'.repeat(80), lane: 'a'.repeat(81), 'status.code': 'a'.repeat(40), 'status.text': 'a'.repeat(96).replaceAll('a', 'z'), 'clocks.0.label': 'a'.repeat(32), 'clocks.0.seconds': 0, 'clocks.0.legacy': true })) {
+    const row = f.row(); set(row, field, value); assert.equal(get(validateRow(row, f.options), field), value, field);
+  }
+  assert.equal(validateDocument({ ...f.document(), project: 'a'.repeat(40) }, f.options).project, 'a'.repeat(40));
+  assert.equal(validateRow({ ...raw, clocks: Array.from({ length: 4 }, () => ({ label: 'gate', seconds: 0, legacy: false })) }, f.options).clocks.length, 4);
   assert.equal(validateDocument(f.document(), f.options).generatedAt, f.document().generatedAt);
   assert.equal(safeStatus('secrecy 15 hex abcdef012345678'), 'secrecy 15 hex abcdef012345678');
 });
@@ -34,7 +39,7 @@ test('board validator withholds every rule violation and close lookalike without
     clocks: [new Array(5).fill({ label: 'gate', seconds: 1, legacy: false }), {}],
     'clocks.0.label': ['', 'Gate', 'x'.repeat(33), 'gate/clock'], 'clocks.0.seconds': [-1, 1.5, '1'], 'clocks.0.legacy': ['false', null],
     'status.code': ['', 'Running', 'x'.repeat(41), 'stage running'],
-    'status.text': ['x'.repeat(97), '/tmp/path', '~/path', 'abcdef0123456789', 'PLANTED_secret_123', 'value!'],
+    'status.text': ['x'.repeat(97), '/tmp/path', '~/path', 'abcdef0123456789', 'f'.repeat(40), 'PLANTED_secret_123', 'value!'],
     'result.exit': [-1, 256, 1.5, '0'], 'result.main': ['a'.repeat(39), 'a'.repeat(41), 'g'.repeat(40)],
     'result.candidate': ['a'.repeat(39), 'g'.repeat(40)],
     'where.pane': ['w2XS:p4x', 'w2XS:t4', 'w:p4', 'w2XS:p4\n'], worktree: ['relative', f.log],
@@ -46,6 +51,7 @@ test('board validator withholds every rule violation and close lookalike without
     assert.equal(get(safe.rows[0], field), WITHHELD, `${field}: ${JSON.stringify(value)}`);
   }
   for (const project of ['BCH', 'x'.repeat(41), 'bch/cloak', 'a\n', '']) assert.equal(validateDocument({ ...f.document(), project }, f.options).project, WITHHELD);
+  assert.equal(validateDocument({ ...f.document(), generatedAt: '2026-10-16T12:00:00Z\x1b' }, f.options).generatedAt, WITHHELD);
   for (const code of ['secret', 'token', 'passw', 'mnemonic', 'seed', 'private', 'witness', 'bearer', 'auth', 'cookie', 'key=']) {
     assert.equal(safeStatus(`stage ${code}PLANTED`), WITHHELD);
   }

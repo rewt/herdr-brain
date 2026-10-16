@@ -63,7 +63,8 @@ for (const mode of ['fresh', 'inherited', 'explicit']) test(`shadow isolation su
     assert.equal(root, ${JSON.stringify(mode)} === 'explicit' ? ${JSON.stringify(path.join(f.root, 'explicit'))} : path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'));
     assert.equal(fs.statSync(process.env.HERDR_TEST_OFFLINE_ROOT).mode & 0o077, 0);
     const {LogJournal} = await import(${JSON.stringify(new URL('../logs/journal.mjs', import.meta.url).href)});
-    const commonDir = ${JSON.stringify(gitProject(path.resolve(import.meta.dirname, '..')).identity)};
+    const commonDir = path.join(${JSON.stringify(f.root)}, 'project/.git');
+    fs.mkdirSync(commonDir, {recursive:true});
     const journal = new LogJournal({identity:'fixture',commonDir});
     assert.ok(journal.directory.startsWith(root + path.sep));
     await journal.append({schema:'brain.log/v1',eventId:'isolation',producer:{id:'fixture',epoch:'isolation',sequence:1},occurredAt:'2026-10-16T00:00:00Z',type:'herdr.observation',level:'info',identity:'fixture',project:{commonDir},payload:{}});

@@ -5,6 +5,7 @@ import io from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { LogJournal, LIMITS } from '../logs/journal.mjs';
+import { canonical, MAX_EVENT_BYTES } from '../messages/schema.mjs';
 import { sourceGap } from '../logs/inputs.mjs';
 import { logFixture, AT, at } from './helpers/log-fixture.mjs';
 
@@ -138,6 +139,97 @@ test('age retention and source loss are visible durable observations', async t =
   const event = sourceGap({ source: 'fixture-feed', reason: 'events_lost', count: 12, sequenceRanges: [[3, 14]] }, old, AT);
   await old.append(event); await old.append(event);
   assert.equal((await old.read()).entries.filter(e => e.type === 'service.source.gap').length, 1);
+});
+
+test('retention checkpoints more producers than fit one control and keeps making progress after restart', async t => {
+  const f = logFixture(t, { limits: { segmentBytes: 1, retentionBytes: 2400 } }), producers = [];
+  for (let n = 1; n <= 260; n++) {
+    const event = { ...f.event(n), producer: { id: `fixture-${n}-${'x'.repeat(64)}`, epoch: 'y'.repeat(64), sequence: 1 } };
+    producers.push(event); await f.journal.appendRaw(event);
+  }
+  const first = await f.journal.retain(), state = await f.journal.read();
+  assert.ok(first.payload.watermarkCheckpoint.bytes > MAX_EVENT_BYTES);
+  assert.ok(Buffer.byteLength(canonical(first)) <= MAX_EVENT_BYTES);
+  assert.equal(Object.keys(state.watermarks).length, first.payload.count);
+  assert.ok(Object.keys(state.watermarks).length >= 250);
+  assert.ok(state.segments.reduce((n, s) => n + s.bytes, 0) <= 2400);
+  const checkpointFile = path.join(f.journal.directory, `watermarks-${state.checkpoint.sha256}.jsonl`);
+  assert.equal(fs.statSync(checkpointFile).mode & 0o077, 0);
+  for (const row of fs.readFileSync(checkpointFile, 'utf8').trim().split('\n')) assert.ok(Buffer.byteLength(row) <= MAX_EVENT_BYTES);
+  const restarted = new LogJournal(f.scope);
+  await assert.rejects(restarted.append(producers[0]), /replay horizon/);
+  for (let n = 261; n <= 266; n++) {
+    const result = await restarted.append({ ...f.event(n), producer: { id: `new-${n}`, epoch: 'new', sequence: 1 } });
+    assert.equal(result.disposition, 'accepted'); assert.equal(result.followUp, undefined);
+  }
+  const after = await restarted.read(); assert.ok(Object.keys(after.watermarks).length >= 260);
+  assert.ok(after.segments.reduce((n, s) => n + s.bytes, 0) <= 2400);
+  assert.equal(fs.readdirSync(f.journal.directory).filter(n => n.startsWith('watermarks-')).length, 1);
+  assert.ok(after.floor.sequence > state.floor.sequence);
+});
+
+test('checkpoint bytes alone are not a retention commit; committed checkpoints are verified and preserved', async t => {
+  const f = logFixture(t, { limits: { segmentBytes: 1, retentionBytes: 2000 } });
+  for (let n = 1; n <= 6; n++) await f.journal.appendRaw(f.event(n));
+  f.journal.io = { ...io, open: async (file, ...args) => {
+    const handle = await io.open(file, ...args);
+    if (path.basename(file).startsWith('watermarks-') && file.endsWith('.tmp')) handle.writeFile = async bytes => {
+      await handle.write(bytes.subarray(0, 9)); await handle.sync(); throw Error('fixture partial checkpoint write');
+    };
+    return handle;
+  } };
+  await assert.rejects(f.journal.retain(), /partial checkpoint write/);
+  assert.equal((await f.journal.read()).floor.sequence, 1);
+  assert.ok(fs.readdirSync(f.journal.directory).some(n => n.endsWith('.tmp')));
+  f.journal.io = io;
+  const write = f.journal.write;
+  f.journal.write = async () => { throw Error('fixture before retention commit'); };
+  await assert.rejects(f.journal.retain(), /before retention commit/);
+  let state = await f.journal.read(); assert.equal(state.floor.sequence, 1); assert.deepEqual(state.watermarks, {});
+  assert.equal(state.entries.length, 6); assert.ok(fs.readdirSync(f.journal.directory).some(n => n.startsWith('watermarks-')));
+  f.journal.write = write;
+  await f.journal.retain(); state = await f.journal.read();
+  const file = path.join(f.journal.directory, `watermarks-${state.checkpoint.sha256}.jsonl`), bytes = fs.readFileSync(file);
+  fs.writeFileSync(file, 'corrupt\n'); await assert.rejects(f.journal.read(), /checkpoint digest\/size/);
+  fs.writeFileSync(file, bytes);
+  fs.renameSync(file, file + '.saved'); fs.symlinkSync(file + '.saved', file);
+  await assert.rejects(f.journal.read(), /ELOOP/);
+});
+
+test('a committed append returns its cursor when detector or retention follow-up fails, then reconciles', async t => {
+  const f = logFixture(t), event = f.event(1, 'worker.observation', { validated: true, process: 'stopped', report: 'absent' }, { run: 'R-1' });
+  const reconcile = f.journal.reconcileDetectors, retain = f.journal.retain;
+  let retained = false;
+  f.journal.reconcileDetectors = async () => {
+    // Simulate an unlocked observation seeing another writer's partial line.
+    throw Error('torn log tail observed during concurrent append');
+  };
+  f.journal.retain = async () => { retained = true; };
+  const result = await f.journal.append(event);
+  assert.equal(result.disposition, 'accepted'); assert.deepEqual(result.cursor, (await f.journal.read()).entries[0].cursor);
+  assert.deepEqual(result.followUp, [{ phase: 'detectors', error: 'torn log tail observed during concurrent append' }]);
+  assert.equal(retained, false, 'retain source evidence for the next detector pass');
+  f.journal.reconcileDetectors = reconcile;
+  f.journal.retain = async () => { throw Error('log writer locked'); };
+  const retry = await f.journal.append(event);
+  assert.equal(retry.disposition, 'duplicate'); assert.deepEqual(retry.cursor, result.cursor);
+  assert.deepEqual(retry.followUp, [{ phase: 'retention', error: 'log writer locked' }]);
+  f.journal.retain = retain;
+  const recovered = await f.journal.append(event); assert.equal(recovered.followUp, undefined);
+  assert.equal((await f.journal.read()).entries.filter(e => e.type === 'detector.hit').length, 1);
+  const appendRaw = f.journal.appendRaw.bind(f.journal), lock = path.join(f.journal.directory, 'log-writer.lock');
+  f.journal.appendRaw = async (input, internal) => {
+    const result = await appendRaw(input, internal);
+    if (!internal) fs.writeFileSync(lock, 'fixture concurrent writer', { mode: 0o600 });
+    return result;
+  };
+  const next = { ...f.event(2, 'worker.observation', event.payload, { run: 'R-2' }) };
+  const contended = await f.journal.append(next);
+  assert.equal(contended.disposition, 'accepted'); assert.equal(contended.followUp[0].phase, 'detectors');
+  assert.match(contended.followUp[0].error, /writer locked/);
+  assert.equal(fs.readFileSync(lock, 'utf8'), 'fixture concurrent writer');
+  fs.unlinkSync(lock); f.journal.appendRaw = appendRaw;
+  const retryNext = await f.journal.append(next); assert.deepEqual(retryNext.cursor, contended.cursor); assert.equal(retryNext.followUp, undefined);
 });
 
 test('private resolver and all owned files refuse symlinks, nonprivate files and replaced roots', async t => {

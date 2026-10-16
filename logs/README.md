@@ -70,6 +70,12 @@ cursor; changed content under either key fails. A complete line left by a
 failed fsync is synced again before a retry is acknowledged. There is no
 separate mutable deduplication index.
 
+`append()` returns its durable commit result and cursor even if the later
+detector or retention pass fails. Such errors appear in `followUp` as
+`{phase, error}` entries; they do not undo acceptance or require a new producer
+key. A retry returns the original cursor and retries maintenance. A detector
+failure postpones retention too, preserving its source evidence for recovery.
+
 A trailing incomplete line is reported with file, byte offset, length and
 SHA-256. Appends refuse it and preserve all bytes. Invalid complete records,
 middle tails, missing segments above the retention floor, duplicate keys and
@@ -87,23 +93,46 @@ explicitly removing it; no product command guesses that a lock is stale.
 100 events/64 KiB per subscriber batch, and five-second progress windows.
 Retention runs after append/replay and can also run explicitly. It removes
 whole oldest segments. A new fsynced `service.retention` control records the
-floor, removed sequence ranges/count/bytes and cumulative producer watermarks
+floor, removed sequence ranges/count/bytes and a producer-watermark checkpoint
 **before** deletion. Interrupted deletion is completed from that control on
-the next retention transaction. File creation/control overhead is retained;
+the next retention transaction. The checkpoint has bounded JSONL rows in a
+private, immutable, content-addressed file; it is fsynced before the journal
+control commits its digest, byte size and producer count. Orphan checkpoint
+bytes alone are never a commit. Reads verify the latest committed checkpoint;
+retention preserves it and reclaims superseded checkpoints only after the new
+control is durable. Legacy inline watermark controls remain readable. This
+keeps every control within the 16 KiB envelope bound regardless of producer
+cardinality, and retention can continue through producer/session churn.
+Failed checkpoint writes leave private temporary evidence; publication uses a
+fully fsynced file, so an incomplete temporary cannot block a later retry.
+
+File creation/control overhead is retained;
 the byte ceiling is enforced by deleting whole segments and reserving space for
 the new control, not by truncating an event. It counts segment bytes only;
-shadow data, subscriber cursors and preserved repair evidence are separate.
-An oversized
-control/watermark set fails before deleting its evidence. Retention never
+shadow data, subscriber cursors, watermark checkpoint metadata and preserved
+repair evidence are separate. The checkpoint's total size grows with retired
+producer cardinality; it is not constrained to one envelope or counted as event
+history. An impossibly small byte ceiling still reports a maintenance error
+before committing deletion. Retention never
 touches authoritative reports, outboxes, holds or record state.
 
 Deduplication is supported within retained history. Removed producer sequence
-high-water marks survive in the controls. An old producer at/below its mark
+high-water marks survive in the committed checkpoint. An old producer at/below its mark
 gets `reconciliation required`, rather than silently appending a duplicate.
 Out-of-order keys below a pruned high-water mark also require reconciliation.
 This is not an indefinite event-ID index. A consumer cannot reconstruct lost
 history from a current snapshot; retention explicitly bounds detector evidence
 as well. Keep canonical source records for recovery.
+
+This implementation is explicitly **offline only**: every append rebuilds keys
+by reading and parsing the whole retained journal under the writer lock, and
+the detector and retention passes repeat full reads. Checkpoint metadata is
+also read/rebuilt in full; blocker/refusal scans can be quadratic in event count.
+At the 256 MiB target, one append can therefore parse hundreds of MiB several
+times. These are correctness/replay limits, not service throughput claims.
+Before any separately authorized service step, add an incremental index/cache
+revalidated against segment identity and size, with crash-safe checkpoint/commit
+recovery and measured metadata/storage costs.
 
 `subscribe(id, {cursor, acknowledge, limit})` returns bounded entries, next
 cursor and floor. Cursors are `(epoch, sequence)`; a zero sequence means before
@@ -176,10 +205,24 @@ delivered and no batch/model is created here.
 Shadow replay imports accepted entries only, stripping writer/shadow metadata
 while preserving the original producer key. Duplicate and conflict attempts
 are not imported. Record replay uses the existing `loadEvents` reader and
-`fold` read-only. It selects run-start dispatch receipts, ingested report
-availability/outcomes/verdicts, and typed dispatch/watch/review receipts. It
-copies only named typed evidence and references, not notes, prompts or report
-prose. Historical record types that never had such receipts cannot be invented.
+`fold` read-only in event order. It selects `run.started` dispatch receipts,
+`report.ingested` availability/outcomes and typed evidence from `report.extra`,
+and the `process_end`/`dispatch_waits` fields in `run.updated.meta`. Verdicts use
+the record fold's trim/uppercase normalization; `review_scope` maps to
+`reviewScope`. Review role/verdict evidence identifies the review chain and
+round for loop detection. It never selects nonexistent record receipt types.
+
+Timing metadata is parsed with the existing `timingEvent` allowlist and matched
+to the current run/item/lane. Stable timing IDs avoid repeats when an update
+contains earlier receipts. Invalid/mismatched timing metadata stays explicitly
+unknown. Process-end evidence retains idle/done/gone, with report presence only
+when already ingested at that point in the record; lack of ingestion is
+**unknown**, not proof of a missing report file. Wait metadata retains memory
+gate entry/granted/stopped/failed outcomes. A generic failed gate carries no
+specific admission refusal/cause key, so it cannot establish a resource-refusal
+hit. Those stronger facts still need explicit typed source evidence, such as
+the accepted shadow notices. No note, prompt, arbitrary metadata, report prose,
+or referenced report/body file is read into the mirror.
 Known source loss, including a source reader's torn tail, becomes a stable
 `service.source.gap`; no source is repaired. The `sourceGap()` helper also
 accepts explicit source loss/range/count observations for offline adapters.

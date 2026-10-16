@@ -2,9 +2,11 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { loadEvents } from '../lib/store.mjs';
-import { fold } from '../lib/state.mjs';
+import { fold, extendFold } from '../lib/state.mjs';
+import { roleIs } from '../lib/roles.mjs';
+import { timingEvent, waitKinds } from '../lib/run-timing.mjs';
 import { stateDirectory, readJournal } from '../messages/journal.mjs';
-import { digest, canonical } from '../messages/schema.mjs';
+import { digest, canonical, parseJSON, MAX_BODY_BYTES } from '../messages/schema.mjs';
 import { inputOf } from './journal.mjs';
 
 export async function shadowInput(scope) {
@@ -25,30 +27,66 @@ const fields = ['outcome', 'verdict', 'reviewScope', 'lane', 'causeKey', 'review
   'process', 'report', 'openRun', 'idleSince', 'parkedReview', 'state', 'attempt', 'expectedHold', 'holdOwner',
   'admission', 'resource', 'requestId', 'jobId', 'queueState', 'pendingSince', 'channel', 'route'];
 const select = data => Object.fromEntries(fields.filter(k => ['string', 'number', 'boolean'].includes(typeof data?.[k])).map(k => [k, data[k]]));
-const receipts = new Map([['dispatch.receipt', 'record.dispatch.receipt'], ['watch.receipt', 'record.watch.receipt'],
-  ['dispatch.delivery.receipt', 'record.dispatch.receipt'], ['watch.observation', 'record.watch.receipt'], ['review.verdict', 'review.verdict']]);
-
 export async function recordInput({ org, identity, commonDir }) {
   org = await fs.realpath(org);
-  const { events: record, tornTail } = loadEvents(org), state = fold(record), events = [];
+  const { events: record, tornTail } = loadEvents(org), state = fold([]), events = [], seenTiming = new Set();
   const epoch = digest(org);
   for (const source of record) {
+    extendFold(state, [source]);
     const runId = source.run ?? (source.type.startsWith('run.') ? source.id : null), run = state.runs.get(runId);
     const itemId = source.item ?? run?.item, item = state.items.get(itemId);
+    const envelope = (type, payload, id = String(source.seq), occurredAt = source.at) => ({
+      schema: 'brain.log/v1', eventId: `record:${epoch}:${id}`,
+      producer: id === String(source.seq) ? { id: 'record-mirror', epoch, sequence: source.seq }
+        : { id: 'record-timing', epoch: digest(`${epoch}:${id}`), sequence: 1 },
+      occurredAt, type, level: 'info', identity, project: { commonDir }, run: runId, item: itemId, orgRef: org,
+      source: { kind: 'record', ref: `${path.join(org, 'events.jsonl')}#${source.seq}` }, payload: { validated: true, ...payload } });
     let type, payload;
     if (source.type === 'report.ingested' && run && item) {
       type = 'run.report.available';
-      payload = { ...select(source.report), reportRef: source.file ?? run.report_path ?? null, reportDigest: source.sha256 ?? null };
-      if (source.report?.verdict) payload.verdict = source.report.verdict;
+      const extra = source.report?.extra ?? {};
+      payload = { ...select(source.report), ...select(extra), reportRef: source.file ?? run.report_path ?? null, reportDigest: source.sha256 ?? null };
+      if (extra.verdict !== undefined) payload.verdict = extra.verdict === null || ['string', 'number', 'boolean'].includes(typeof extra.verdict) ? String(extra.verdict).trim().toUpperCase() : 'UNKNOWN';
+      const scope = extra.review_scope ?? extra.reviewScope;
+      if (typeof scope === 'string') payload.reviewScope = scope.trim().toLowerCase();
+      if (roleIs(item, 'REV') || extra.verdict !== undefined) {
+        payload.channel = 'auto-review';
+        payload.reviewChain ??= item.parent ?? item.id;
+        payload.round ??= item.runs.indexOf(runId) + 1;
+      }
     } else if (source.type === 'run.started' && run && item) {
       type = 'record.dispatch.receipt'; payload = { outcome: 'started', ...select(source.meta), reportRef: source.report_path ?? null };
-    } else if (receipts.has(source.type) && run && item) {
-      type = receipts.get(source.type); payload = { ...select(source), ...select(source.receipt) };
+    } else if (source.type === 'run.updated' && run && item) {
+      for (const metadata of ['process_end', 'dispatch_waits']) if (Object.hasOwn(source.meta ?? {}, metadata)) {
+        let observations;
+        try {
+          const value = parseJSON(source.meta[metadata], MAX_BODY_BYTES);
+          observations = (metadata === 'process_end' ? [value] : value).map(timingEvent);
+          if (!observations.every(e => e.run === runId && e.item === itemId && e.lane === (run.meta.lane ?? null) &&
+            (metadata === 'process_end' ? e.kind === 'process_end' : waitKinds.includes(e.kind)))) throw Error('foreign timing metadata');
+        } catch {
+          events.push(envelope('record.watch.receipt', { metadata, status: 'unknown', reason: 'invalid or mismatched timing metadata' }, `invalid-${source.seq}-${metadata}`));
+          continue;
+        }
+        for (const observation of observations) {
+          const id = `timing-${digest(canonical(observation))}`;
+          if (seenTiming.has(id)) continue;
+          seenTiming.add(id);
+          const payload = { metadata, kind: observation.kind, outcome: observation.outcome, lane: observation.lane };
+          if (metadata === 'process_end') Object.assign(payload, { process: observation.outcome === 'idle' ? 'idle' : 'stopped',
+            // A process-end receipt does not record the watcher's report-file
+            // check. No ingested report is not proof that its file is absent.
+            report: run.report ? 'present' : 'unknown', openRun: !run.report && !run.abandoned,
+            ...(observation.outcome === 'idle' ? { idleSince: observation.at } : {}) });
+          else Object.assign(payload, { resource: 'memory', admission: observation.outcome === 'entry' ? 'pending' : observation.outcome === 'granted' ? 'granted' : 'unknown' });
+          // Generic failed/stopped waits carry no refusal cause. Keep the
+          // result, but do not invent cause keys or admission-refusal hits.
+          events.push(envelope('record.watch.receipt', payload, id, observation.at));
+        }
+      }
+      continue;
     } else continue;
-    events.push({ schema: 'brain.log/v1', eventId: `record:${epoch}:${source.seq}`,
-      producer: { id: 'record-mirror', epoch, sequence: source.seq }, occurredAt: source.at,
-      type, level: 'info', identity, project: { commonDir }, run: runId, item: itemId, orgRef: org,
-      source: { kind: 'record', ref: `${path.join(org, 'events.jsonl')}#${source.seq}` }, payload: { validated: true, ...payload } });
+    events.push(envelope(type, payload));
   }
   return { events, gaps: tornTail ? [{ source: path.join(org, 'events.jsonl'), reason: 'record reader reports torn tail; authoritative source unchanged' }] : [] };
 }

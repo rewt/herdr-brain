@@ -12,6 +12,7 @@ export const LIMITS = Object.freeze({ version: 'log-storage/v1', segmentBytes: 1
 const segmentName = sequence => `segment-${String(sequence).padStart(16, '0')}.jsonl`;
 const key = event => canonical([event.producer.id, event.producer.epoch, event.producer.sequence]);
 const producer = event => canonical([event.producer.id, event.producer.epoch]);
+const checkpointName = hash => `watermarks-${hash}.jsonl`;
 export function inputOf(event) { const { stream, cursor, receivedAt, ...input } = event; return input; }
 const privateFile = stat => { if (!stat.isFile() || stat.mode & 0o077) throw Error('log file must be a private regular file'); };
 
@@ -46,6 +47,47 @@ export class LogJournal {
     try { privateFile(await handle.stat()); await handle.sync(); } finally { await handle.close(); }
     await this.syncDirectory();
   }
+  watermarkCheckpoint(watermarks) {
+    // Bounded JSONL rows, never one event-sized object containing every key.
+    const rows = Object.entries(watermarks).sort(([a], [b]) => a.localeCompare(b));
+    const bytes = Buffer.from(rows.map(row => canonical(row) + '\n').join(''));
+    return { bytes, ref: { sha256: digest(bytes), bytes: bytes.length, producers: rows.length } };
+  }
+  async saveCheckpoint({ bytes, ref }) {
+    const file = path.join(this.directory, checkpointName(ref.sha256));
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    const handle = await this.io.open(temporary, 'wx', 0o600);
+    // A failed write leaves only an uncommitted temporary as evidence. It
+    // cannot poison the immutable digest path or block the next retention.
+    try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+    try { await this.io.link(temporary, file); }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      if (!(await this.readFile(file)).equals(bytes)) throw Error('watermark checkpoint changed');
+      const saved = await this.io.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try { await saved.sync(); } finally { await saved.close(); }
+    }
+    await this.io.unlink(temporary);
+    await this.syncDirectory();
+  }
+  async loadCheckpoint(ref) {
+    const bytes = await this.readFile(path.join(this.directory, checkpointName(ref.sha256)));
+    if (bytes.length !== ref.bytes || digest(bytes) !== ref.sha256) throw Error('corrupt watermark checkpoint digest/size');
+    const watermarks = {};
+    const lines = new TextDecoder('utf-8', { fatal: true }).decode(bytes).split('\n');
+    if (lines.pop() !== '') throw Error('corrupt watermark checkpoint tail');
+    for (const line of lines) {
+      const row = parseJSON(line), parts = Array.isArray(row) && typeof row[0] === 'string' ? parseJSON(row[0]) : null;
+      if (!Array.isArray(row) || row.length !== 2 || !Array.isArray(parts) || parts.length !== 2 || !parts.every(p => typeof p === 'string') || canonical(parts) !== row[0] || !Number.isSafeInteger(row[1]) || row[1] < 1 || Object.hasOwn(watermarks, row[0])) throw Error('corrupt watermark checkpoint row');
+      watermarks[row[0]] = row[1];
+    }
+    if (lines.length !== ref.producers) throw Error('corrupt watermark checkpoint count');
+    return watermarks;
+  }
+  async cleanCheckpoints(current) {
+    if (!current) return;
+    for (const name of await this.io.readdir(this.directory)) if (/^watermarks-[a-f0-9]{64}\.jsonl$/.test(name) && name !== checkpointName(current.sha256)) await this.io.unlink(path.join(this.directory, name));
+  }
   async read() {
     // Resolution is read-only, and also refuses replaced storage components.
     const check = new ShadowJournal(this.locationOptions);
@@ -75,16 +117,24 @@ export class LogJournal {
       segments.push({ name, bytes: bytes.length, entries: rows });
     }
     const epoch = entries[0]?.cursor.epoch;
-    let floorSequence = 1, watermarks = {};
+    let floorSequence = 1, watermarks = {}, checkpoint = null;
     for (const event of entries) if (event.type === 'service.retention' && event.producer.id === 'logs-control') {
       const p = event.payload;
-      if (!Number.isSafeInteger(p.floor) || p.floor < floorSequence || p.floor > event.cursor.sequence || !p.watermarks || typeof p.watermarks !== 'object' || Array.isArray(p.watermarks)) throw Error('corrupt retention control');
-      for (const [id, seq] of Object.entries(p.watermarks)) {
+      if (!Number.isSafeInteger(p.floor) || p.floor < floorSequence || p.floor > event.cursor.sequence || Boolean(p.watermarks) === Boolean(p.watermarkCheckpoint)) throw Error('corrupt retention control');
+      if (p.watermarkCheckpoint) {
+        const ref = p.watermarkCheckpoint;
+        if (!/^[a-f0-9]{64}$/.test(ref.sha256) || !Number.isSafeInteger(ref.bytes) || ref.bytes < 0 || !Number.isSafeInteger(ref.producers) || ref.producers < 0) throw Error('corrupt watermark checkpoint reference');
+        checkpoint = ref; watermarks = {};
+      } else if (typeof p.watermarks !== 'object' || Array.isArray(p.watermarks)) throw Error('corrupt retention watermarks');
+      // Legacy inline controls remain readable; only the latest committed
+      // checkpoint is needed, so superseded checkpoints can be reclaimed.
+      for (const [id, seq] of Object.entries(p.watermarks ?? {})) {
         if (!Number.isSafeInteger(seq) || seq < 1) throw Error('corrupt retention watermark');
         watermarks[id] = Math.max(watermarks[id] ?? 0, seq);
       }
       floorSequence = p.floor;
     }
+    if (checkpoint) watermarks = { ...await this.loadCheckpoint(checkpoint), ...watermarks };
     let previous = 0; const ids = new Set(), keys = new Set();
     for (const event of entries) {
       const seq = event.cursor.sequence;
@@ -92,7 +142,7 @@ export class LogJournal {
       if (ids.has(event.eventId) || keys.has(key(event))) throw Error('corrupt duplicate log key');
       ids.add(event.eventId); keys.add(key(event)); previous = seq;
     }
-    return { entries, segments, tornTail, floor: epoch ? { epoch, sequence: floorSequence } : null, watermarks };
+    return { entries, segments, tornTail, floor: epoch ? { epoch, sequence: floorSequence } : null, watermarks, checkpoint };
   }
   async locked(fn) {
     await this.scope.prepareDirectory();
@@ -162,9 +212,12 @@ export class LogJournal {
   async append(input) {
     const result = await this.appendRaw(input);
     // No detector evaluation, model or consumer holds the writer critical section.
-    await this.reconcileDetectors();
-    await this.retain();
-    return result;
+    const followUp = [];
+    for (const [phase, action] of [['detectors', () => this.reconcileDetectors()], ['retention', () => this.retain()]]) {
+      try { await action(); }
+      catch (error) { followUp.push({ phase, error: error.message }); break; }
+    }
+    return followUp.length ? { ...result, followUp } : result;
   }
   async retain() {
     return this.locked(async () => {
@@ -187,13 +240,14 @@ export class LogJournal {
       // Rotate a single over-age/over-size segment too; keep the new control.
       const last = segments.at(-1);
       if (last && remove.length === segments.length - 1 && (bytes > this.limits.retentionBytes || last.entries.every(e => Date.parse(e.receivedAt) < cutoff))) remove.push(last);
-      if (!remove.length) { await this.syncDirectory(); return null; }
-      let control;
+      if (!remove.length) { await this.cleanCheckpoints(state.checkpoint); await this.syncDirectory(); return null; }
+      let control, checkpoint;
       for (;;) {
         const removed = remove.flatMap(s => s.entries), watermarks = { ...state.watermarks };
         for (const event of removed) if (!event.producer.id.startsWith('logs-')) watermarks[producer(event)] = Math.max(watermarks[producer(event)] ?? 0, event.producer.sequence);
         const floor = removed.at(-1).cursor.sequence + 1, removedBytes = remove.reduce((n, s) => n + s.bytes, 0);
-        control = this.control('service.retention', { floor, watermarks,
+        checkpoint = this.watermarkCheckpoint(watermarks);
+        control = this.control('service.retention', { floor, watermarkCheckpoint: checkpoint.ref,
           sequenceRanges: [[removed[0].cursor.sequence, floor - 1]], count: removed.length, bytes: removedBytes });
         const stored = { ...control, stream: `${this.identity}/${digest(this.commonDir)}`, receivedAt: this.clock(),
           cursor: { epoch: state.floor.epoch, sequence: state.entries.at(-1).cursor.sequence + 1 } };
@@ -203,9 +257,12 @@ export class LogJournal {
         if (remove.length === segments.length) throw Error('retention control exceeds byte ceiling; evidence preserved for explicit reconciliation');
         remove.push(segments[remove.length]);
       }
+      // The checkpoint is journal-derived and immutable. It becomes committed
+      // only when the fsynced control names its digest, before source deletion.
+      await this.saveCheckpoint(checkpoint);
       const entry = await this.write(control, state, { rotate: true });
-      // Oversized control/watermark sets fail visibly before deleting evidence.
       for (const s of remove) await this.io.unlink(path.join(this.directory, s.name));
+      await this.cleanCheckpoints(checkpoint.ref);
       await this.syncDirectory();
       return entry;
     });

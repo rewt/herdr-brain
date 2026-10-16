@@ -27,7 +27,7 @@ export function route(event) {
   const classified = classify(event);
   if (classified.path !== 'unknown') return classified.path === 'supervisor' ? 'direct' : classified.path;
   const p = evidence(event);
-  if (p && (['blocked', 'needs_human', 'needs-work', 'needs_work', 'failed'].includes(p.outcome) || ['NEEDS-WORK', 'FAIL'].includes(p.verdict) || p.reviewScope === 'deferred' || ['watch-no-report', 'watch-blocked', 'watch-invalid-report'].includes(p.channel))) return 'direct';
+  if (p && (['blocked', 'needs_human', 'needs-work', 'needs_work', 'failed'].includes(p.outcome) || ['NEEDS-WORK', 'FAIL'].includes(p.verdict) || (p.channel === 'auto-review' && p.verdict !== undefined && p.verdict !== 'PASS') || p.reviewScope === 'deferred' || ['watch-no-report', 'watch-blocked', 'watch-invalid-report'].includes(p.channel))) return 'direct';
   if (p && ['run.report.available', 'review.verdict', 'record.dispatch.receipt', 'record.watch.receipt', 'queue.receipt'].includes(event.type)) return 'triage';
   // Uncertain inputs remain visible. New platform telemetry never becomes a
   // stream of model inputs, even if someone adds an inert kind/evidence field.

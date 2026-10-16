@@ -7,6 +7,7 @@ import { ShadowJournal } from '../messages/journal.mjs';
 import { shadowInput, recordInput, replay } from '../logs/inputs.mjs';
 import { measure, selectEntries, render, coalesce } from '../logs/view.mjs';
 import { LogJournal } from '../logs/journal.mjs';
+import { route, detect } from '../logs/rules.mjs';
 import { productFiles } from '../lib/product-files.mjs';
 import { logFixture, AT, at } from './helpers/log-fixture.mjs';
 
@@ -18,11 +19,13 @@ function recordFixture(f) {
   const org = path.join(f.root, 'record'); fs.mkdirSync(org);
   const lines = [
     { seq: 1, at: AT, by: 'fixture', type: 'item.added', id: 'ENG-1', title: 'Synthetic', role: 'engineer' },
-    { seq: 2, at: AT, by: 'fixture', type: 'run.started', id: 'R-1', item: 'ENG-1', report_path: '/does/not/exist/report.md', brief_path: '/does/not/exist/brief.md' },
+    { seq: 2, at: AT, by: 'fixture', type: 'run.started', id: 'R-1', item: 'ENG-1', meta: { lane: 'fixture-lane' }, report_path: '/does/not/exist/report.md', brief_path: '/does/not/exist/brief.md' },
     { seq: 3, at: AT, by: 'fixture', type: 'note.added', id: 'ENG-1', text: 'Unselected private note must never enter the mirror' },
     { seq: 4, at: AT, by: 'fixture', type: 'report.ingested', run: 'R-1', file: '/does/not/exist/report.md', sha256: 'a'.repeat(64), report: { run: 'R-1', outcome: 'blocked', summary: 'Do not copy record prose', blockers: ['not copied'] } },
-    { seq: 5, at: AT, by: 'fixture', type: 'watch.receipt', run: 'R-1', item: 'ENG-1', receipt: { channel: 'watch-no-report', process: 'stopped', report: 'absent' } },
-    { seq: 6, at: AT, by: 'fixture', type: 'review.verdict', run: 'R-1', item: 'ENG-1', verdict: 'NEEDS-WORK' },
+    { seq: 5, at: AT, by: 'fixture', type: 'run.updated', id: 'R-1', meta: { process_end: JSON.stringify({ at: AT, run: 'R-1', item: 'ENG-1', lane: 'fixture-lane', kind: 'process_end', outcome: 'done' }) } },
+    { seq: 6, at: AT, by: 'fixture', type: 'item.added', id: 'REV-1', parent: 'ENG-1', title: 'Synthetic review', role: 'reviewer' },
+    { seq: 7, at: AT, by: 'fixture', type: 'run.started', id: 'R-3', item: 'REV-1' },
+    { seq: 8, at: AT, by: 'fixture', type: 'report.ingested', run: 'R-3', report: { run: 'R-3', outcome: 'done', extra: { verdict: ' needs-work ', review_scope: ' deferred ', round: 3 } } },
   ];
   const file = path.join(org, 'events.jsonl'); fs.writeFileSync(file, lines.map(JSON.stringify).join('\n') + '\n');
   return { org, file, before: fs.readFileSync(file) };
@@ -39,9 +42,9 @@ test('foreground replay reads accepted shadow entries and selected folded record
   const args = ['replay', '--root', f.scope.root, '--from-shadow', '--shadow-root', shadowRoot, '--from-record', '--org', record.org, '--json'];
   const first = run(f, args); assert.equal(first.status, 0, first.stderr);
   const summary = JSON.parse(first.stdout);
-  assert.equal(summary.schema, 'brain.logs-report/v1'); assert.equal(summary.events, 7);
-  assert.equal(summary.byType['detector.hit'], 1); assert.equal(summary.directShadowLines, 1);
-  assert.equal(summary.wouldRoute.direct, 4); assert.equal(summary.wouldRoute.telemetry, 2);
+  assert.equal(summary.schema, 'brain.logs-report/v1'); assert.equal(summary.events, 8);
+  assert.equal(summary.byType['detector.hit'], 1); assert.equal(summary.directShadowLines, 0);
+  assert.equal(summary.wouldRoute.direct, 3); assert.equal(summary.wouldRoute.telemetry, 2);
   assert.equal(summary.byType['session.message.v1'], 1);
   const second = run(f, args); assert.equal(second.status, 0, second.stderr); assert.equal(second.stdout, first.stdout);
   assert.deepEqual(fs.readFileSync(record.file), record.before); assert.deepEqual(fs.readFileSync(path.join(shadow.directory, 'shadow.jsonl')), sourceBefore);
@@ -49,11 +52,58 @@ test('foreground replay reads accepted shadow entries and selected folded record
   assert.equal(events.some(e => JSON.stringify(e).includes('Do not copy')), false);
   assert.equal(events.some(e => JSON.stringify(e).includes('Unselected private')), false);
   assert.ok(events.some(e => e.payload.reportRef === '/does/not/exist/report.md'));
+  const review = events.find(e => e.run === 'R-3' && e.type === 'run.report.available');
+  assert.equal(review.payload.verdict, 'NEEDS-WORK'); assert.equal(review.payload.reviewScope, 'deferred');
+  assert.equal(route(review), 'direct'); assert.equal(events.find(e => e.type === 'detector.hit').payload.rule, 'review-loop');
   assert.equal(fs.existsSync('/does/not/exist/report.md'), false);
   const third = run(f, args.filter(a => a !== '--json')); assert.equal(third.status, 0, third.stderr);
-  assert.equal(third.stdout.split('\n').filter(line => line.startsWith('[log-shadow]')).length, 1);
+  assert.equal(third.stdout.split('\n').filter(line => line.startsWith('[log-shadow]')).length, 0);
   assert.ok(productFiles(path.resolve(import.meta.dirname, '..')).includes('logs/logs.mjs'));
 });
+
+test('real report extra verdicts and returning review findings route directly and reach review-loop detection', async t => {
+  const f = logFixture(t), record = recordFixture(f);
+  const lines = fs.readFileSync(record.file, 'utf8').trim().split('\n').map(JSON.parse);
+  lines.at(-1).report.extra = { verdict: ' fail ', findingKey: 'fixture-finding' };
+  lines.push({ seq: 9, at: at(1), by: 'fixture', type: 'run.started', id: 'R-4', item: 'REV-1' },
+    { seq: 10, at: at(1), by: 'fixture', type: 'report.ingested', run: 'R-4', report: { run: 'R-4', outcome: 'done', extra: { verdict: ' needs-work ', findingKey: 'fixture-finding' } } });
+  fs.writeFileSync(record.file, lines.map(JSON.stringify).join('\n') + '\n');
+  const input = await recordInput({ ...f.scope, org: record.org }), reviews = input.events.filter(e => e.payload.channel === 'auto-review');
+  assert.deepEqual(reviews.map(e => e.payload.verdict), ['FAIL', 'NEEDS-WORK']);
+  assert.ok(reviews.every(e => route(e) === 'direct'));
+  const hits = detect(input.events); assert.ok(hits.some(h => h.rule === 'review-loop' && h.detail.includes('finding returned')));
+});
+
+test('run.updated mirrors allowlisted timing metadata once and preserves missing report/refusal cause as unknown', async t => {
+  const f = logFixture(t), record = recordFixture(f);
+  const lines = fs.readFileSync(record.file, 'utf8').trim().split('\n').map(JSON.parse).slice(0, 3);
+  const timing = (kind, outcome, atTime = AT) => ({ at: atTime, run: 'R-1', item: 'ENG-1', lane: 'fixture-lane', kind, outcome });
+  const waits = [timing('memory_worker', 'entry'), timing('memory_worker', 'failed', at(1))];
+  const updates = [
+    { dispatch_waits: JSON.stringify(waits) },
+    { process_end: JSON.stringify(timing('process_end', 'idle')) },
+    { dispatch_waits: JSON.stringify(waits) },
+    { dispatch_waits: JSON.stringify([timing('memory_open', 'granted'), { ...timing('memory_open', 'entry'), run: 'R-99' }]) },
+    { process_end: 'not JSON, synthetic private data' },
+    { dispatch_waits: JSON.stringify([{ ...timing('memory_open', 'granted'), prompt: 'private synthetic field' }]) },
+    { unrelated: 'must not mirror arbitrary metadata' },
+  ];
+  updates.forEach((meta, i) => lines.push({ seq: i + 4, at: at(i + 1), by: 'fixture', type: 'run.updated', id: 'R-1', meta }));
+  fs.writeFileSync(record.file, lines.map(JSON.stringify).join('\n') + '\n');
+  const before = fs.readFileSync(record.file), input = await recordInput({ ...f.scope, org: record.org });
+  const watch = input.events.filter(e => e.type === 'record.watch.receipt');
+  assert.equal(watch.length, 6); assert.equal(watch.filter(e => e.payload.outcome === 'failed').length, 1);
+  const end = watch.find(e => e.payload.metadata === 'process_end' && e.payload.status !== 'unknown');
+  assert.equal(end.payload.process, 'idle'); assert.equal(end.payload.report, 'unknown');
+  const failure = watch.find(e => e.payload.outcome === 'failed'); assert.equal(failure.payload.admission, 'unknown'); assert.equal(failure.payload.causeKey, undefined);
+  assert.equal(watch.filter(e => e.payload.status === 'unknown').length, 2);
+  assert.equal(detect(input.events).some(h => h.rule === 'resource-refusal'), false);
+  const encoded = JSON.stringify(input);
+  for (const excluded of ['synthetic private data', 'private synthetic field', 'arbitrary metadata']) assert.ok(!encoded.includes(excluded));
+  await replay(f.journal, [input]); const again = await replay(f.journal, [await recordInput({ ...f.scope, org: record.org })]);
+  assert.equal(again.accepted, 0); assert.deepEqual(fs.readFileSync(record.file), before);
+});
+
 
 test('replay reports source loss once without changing a torn input or following body paths', async t => {
   const f = logFixture(t), shadowRoot = path.join(f.root, 'shadow'), shadow = new ShadowJournal({ ...f.scope, root: shadowRoot });

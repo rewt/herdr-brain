@@ -2,6 +2,7 @@
 // Foreground gate adapter for project pins, locks, memory and validation.
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { resolveResource } from '../test-slot/resources.mjs';
@@ -113,7 +114,7 @@ async function execute(profile, memoryOptions) {
   const resource = declaredResource ? { ...declaredResource, id: `${declaredResource.id}/train`, command,
     recipe: { command: declared.command, prepare: profile.prepare, gate_fingerprint: profile.fingerprint,
       batch_inputs: { identity: plan.identity, jobs: plan.jobs.map(job => ({ id: job.id, topic: job.topic, expected_head: job.expectedHead })) } } } : undefined;
-  const executionReceipt = path.join(path.dirname(receipt), 'host-gate.execution.json');
+  const executionReceipt = path.join(path.dirname(receipt), `host-gate.${randomUUID()}.execution.json`);
   update({ execution_receipt: executionReceipt });
   const result = runTestSlotSync(`train ${canonical}`, command,
     { cwd: canonical, env: profile.env, resource, executionReceipt, common, tier: 'promotion-host', timeoutSeconds: envelopeSeconds, idleTimeoutSeconds: 0, waitSeconds: profile.waitSeconds, waitReceipt: slotFile, retryTimeout: false, stdio: 'inherit' });

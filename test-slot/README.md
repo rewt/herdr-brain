@@ -288,8 +288,9 @@ exclusive command results, timeout retries, or cleanup. No memory breach policy
 is enabled in this step. A measurement never supplies a review PASS.
 
 Explicit `--result-path` / adapter `executionReceipt` paths retain the existing
-receipt contract. The train retains `host-gate.execution.json` next to its existing
-host receipt. Direct profiled CLI holders, including `test:release`, automatically
+receipt contract. The train retains `host-gate.<uuid>.execution.json` next to its existing
+host receipt. Each attempt gets a unique sidecar, so a refused retry cannot read
+prior execution metadata and prior evidence remains immutable. Direct profiled CLI holders, including `test:release`, automatically
 retain unique receipts in `GIT_COMMON_DIR/gate-watchdog/executions/` (or the existing
 scratch history override). Git archives without a common directory use
 `.test-slot-executions/` inside the snapshot. Each receipt has a sibling

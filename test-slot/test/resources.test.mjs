@@ -181,7 +181,7 @@ test('promotion host retains the exact train profile and measurement beside its 
   const f = fixture(t), marker = path.join(f.root, 'marker.mjs'), plan = path.join(f.root, 'train.json');
   const git = args => { const r = spawnSync('git', ['-C', f.root, '-c', 'user.name=Resource', '-c', 'user.email=resource@example.invalid', ...args], { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); };
   git(['init', '-qb', 'main']);
-  fs.writeFileSync(path.join(f.root, '.promote.json'), JSON.stringify({ gate: { resource: resourceStanza('fixture/host', null) } }));
+  fs.writeFileSync(path.join(f.root, '.promote.json'), JSON.stringify({ gate: { wait_seconds: 0, resource: resourceStanza('fixture/host', null) } }));
   fs.writeFileSync(path.join(f.root, '.lane.validation.json'), JSON.stringify({ promotion: 'node check.cjs' }));
   fs.writeFileSync(marker, 'console.log("train workload marker");');
   git(['add', '.promote.json', '.lane.validation.json', 'marker.mjs']); git(['commit', '-qm', 'resource fixture']);
@@ -192,7 +192,23 @@ test('promotion host retains the exact train profile and measurement beside its 
   const saved = JSON.parse(fs.readFileSync(path.join(f.root, 'host-gate.json')));
   assert.equal(saved.resource.profile.id, 'fixture/host/train');
   assert.deepEqual(saved.resource.profile.recipe.prepare, []);
-  const execution = JSON.parse(fs.readFileSync(saved.execution_receipt));
+  const originalBytes = fs.readFileSync(saved.execution_receipt, 'utf8');
+  const execution = JSON.parse(originalBytes);
   assert.equal(execution.resource.profile.id, saved.resource.profile.id); assert.ok(execution.measurement.samples > 0);
   assert.equal(fs.existsSync(f.lock), false);
+  // A resumed batch can be refused after an earlier execution. Its immutable
+  // evidence must survive, and must never be mistaken for this refusal's run.
+  const other = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { env: f.env, stdio: 'ignore' });
+  t.after(() => other.kill('SIGKILL'));
+  const identity = processStartRecord(other.pid);
+  const holderBytes = JSON.stringify({ pid: other.pid, token: 'other-holder', pgid: null, label: 'other holder', processStart: identity.start, processBirth: identity.birth })+'\n';
+  fs.writeFileSync(f.lock, holderBytes);
+  const refused = spawnSync(process.execPath, [host, f.root, plan, marker], { cwd: f.root, env: f.env, encoding: 'utf8', timeout: loadTimeout(15000) });
+  assert.equal(refused.status, 75, refused.stderr); assert.doesNotMatch(refused.stdout, /train workload marker/);
+  const retry = JSON.parse(fs.readFileSync(path.join(f.root, 'host-gate.json')));
+  assert.equal(retry.phase, 'refused'); assert.equal(retry.resource, undefined); assert.equal(retry.measurement, undefined);
+  assert.notEqual(retry.execution_receipt, saved.execution_receipt);
+  assert.equal(fs.existsSync(retry.execution_receipt), false, 'refusal creates no execution receipt');
+  assert.equal(fs.readFileSync(saved.execution_receipt, 'utf8'), originalBytes, 'prior execution evidence remains immutable');
+  assert.equal(fs.readFileSync(f.lock, 'utf8'), holderBytes, 'refusal never releases the other holder');
 });

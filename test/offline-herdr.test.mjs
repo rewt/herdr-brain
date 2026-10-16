@@ -9,8 +9,13 @@ import { identityRootAt } from '../messages/journal.mjs';
 import { digest } from '../messages/schema.mjs';
 
 const fixtureIdentity = 'fixture';
+const checkout = path.resolve(import.meta.dirname, '..');
+const hasGitCheckout = !!fs.lstatSync(path.join(checkout, '.git'), { throwIfNoEntry: false });
 function identityPartitionGuard() {
-  const commonDir = gitProject(path.resolve(import.meta.dirname, '..')).identity;
+  // Release snapshots have no Git identity; the fixture-HOME fallback
+  // assertions below remain their isolation guard.
+  if (!hasGitCheckout) return () => {};
+  const commonDir = gitProject(checkout).identity;
   const identityRoot = identityRootAt(commonDir);
   // Unmarked checkouts have no identity-local default; the fixture HOME
   // fallback assertions below remain their isolation guard.
@@ -95,7 +100,9 @@ test('watch, request and promotion suites mirror fixtures without writing defaul
     }
   }
   journals(path.join(f.offline, 'shadow'));
-  assert.ok(entries.some(entry => entry.payload?.legacy?.id === 'watch:R-7:final'), 'pre-existing watcher fixture actually mirrored');
+  // This watcher resolves its project from the product checkout's Git;
+  // request and promotion fixtures supply their own project identities.
+  if (hasGitCheckout) assert.ok(entries.some(entry => entry.payload?.legacy?.id === 'watch:R-7:final'), 'pre-existing watcher fixture actually mirrored');
   assert.ok(entries.some(entry => entry.payload?.kind === 'request' && entry.shadow.path === 'supervisor'), 'real request helper actually mirrored');
   assert.ok(entries.some(entry => entry.payload?.legacy?.id.startsWith('promote:')), 'pre-existing promotion fixture actually mirrored');
 });

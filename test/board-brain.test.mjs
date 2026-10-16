@@ -67,6 +67,28 @@ test('Brain caps recent results, deduplicates resumed jobs, rejects foreign queu
   fs.writeFileSync(f.queueFile, '{'); assert.equal((await brainSource(f.project)).rows[0].status.code, 'source-read');
   fs.unlinkSync(f.queueFile); assert.equal(await brainSource(f.project), null);
 });
+test('Brain keeps bisected or replanned members waiting until they have a failed result', async t => {
+  const f = brainFixture(t), waiting = { id: 'job-waiting', topic: 'waiting', run: 'R-4' };
+  f.queue.current.jobs.push(waiting); f.train.jobs.push(waiting);
+  const attempt = f.train.attempts[0];
+  attempt.ids.push(waiting.id); attempt.gate.finished_at = '2026-10-16T12:10:00Z'; attempt.gate.exit_code = 1;
+  f.train.groups = [['job-active'], ['job-waiting']];
+  f.queue.results[0].outcome = 'refused';
+  for (const phase of ['red', 'invalid']) {
+    attempt.phase = phase;
+    for (const trainPhase of ['validating', 'complete']) {
+      f.train.phase = trainPhase; f.save();
+      const rows = (await brainSource(f.project, { now: f.now, show: f.show })).rows;
+      assert.equal(rows.find(r => r.id === waiting.id).phase, 'admission', `${phase} with remaining groups`);
+      assert.equal(rows.find(r => r.id === 'job-done').phase, 'failed', 'durable failed result takes precedence');
+    }
+    f.train.phase = 'preparing'; f.train.groups = []; f.save();
+    assert.equal((await brainSource(f.project, { now: f.now, show: f.show })).rows.find(r => r.id === waiting.id).phase, 'admission', 'incomplete train remains waiting');
+    f.train.phase = 'complete'; f.save();
+    assert.equal((await brainSource(f.project, { now: f.now, show: f.show })).rows.find(r => r.id === waiting.id).phase, 'failed', 'finished train without remaining groups');
+    f.train.groups = [['job-active'], ['job-waiting']];
+  }
+});
 test('discovery uses canonical common-directory identity when repository metadata is present', t => {
   if (!fs.existsSync(new URL('../.git', import.meta.url))) { t.skip('git-archive snapshot has no repository metadata'); return; }
   const project = discoverProject(process.cwd());

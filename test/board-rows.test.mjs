@@ -73,3 +73,15 @@ test('board rejects terminal controls in every string field and rejects unsafe l
   assert.equal(safeLog(f.log, [f.root]), f.log);
   assert.equal(validateRow(f.row(), { ...f.options, panes: new Set() }).where.pane, WITHHELD);
 });
+test('board optional clocks and legacy default only when absent, and null stage stays null', t => {
+  const f = boardFixture(t), row = f.row();
+  delete row.clocks; row.stage = null;
+  const absent = validateRow(row, f.options);
+  assert.deepEqual(absent.clocks, []); assert.equal(absent.stage, null);
+  for (const clocks of [null, undefined, false, '', {}]) assert.equal(validateRow({ ...row, clocks }, f.options).clocks, WITHHELD);
+  for (const stage of [undefined, false, '', [], {}, { n: 0, m: 1 }]) assert.equal(validateRow({ ...row, stage }, f.options).stage, WITHHELD);
+  const clock = { label: 'gate', seconds: 0 };
+  assert.deepEqual(validateRow({ ...row, clocks: [clock] }, f.options).clocks, [{ ...clock, legacy: false }]);
+  for (const legacy of [false, true]) assert.equal(validateRow({ ...row, clocks: [{ ...clock, legacy }] }, f.options).clocks[0].legacy, legacy);
+  for (const legacy of [null, undefined, 0, 'false', {}]) assert.equal(validateRow({ ...row, clocks: [{ ...clock, legacy }] }, f.options).clocks[0].legacy, WITHHELD);
+});

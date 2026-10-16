@@ -17,6 +17,9 @@ function localJSON(file, common) {
 }
 export function discoverProject(cwd) {
   const project = gitProject(cwd, { timeoutMs: 3000 });
+  return { ...project, name: path.basename(project.canonical), paths: [project.canonical, project.checkout], worktrees: [] };
+}
+export function refreshProject(project) {
   const r = spawnSync('git', ['-C', project.canonical, 'worktree', 'list', '--porcelain'], { encoding: 'utf8', timeout: 3000, maxBuffer: 1024 * 1024 });
   const worktrees = r.status === 0 ? r.stdout.split('\n\n').map(entry => ({
     cwd: entry.split('\n').find(l => l.startsWith('worktree '))?.slice(9),
@@ -40,12 +43,15 @@ export function brainPhase({ job, result, train, attempt, gate }) {
   if (job.phase === 'pending') return 'queued';
   if (['batch-delivering', 'completed'].includes(job.phase) || ['validated', 'integrated', 'complete'].includes(attempt?.phase)) return 'reconcile';
   if (gate && !gate.finished_at) return gate.slot_receipt && !gate.command_started_at ? 'admission' : 'stage';
-  if (['red', 'invalid'].includes(attempt?.phase)) return 'failed';
+  if (['red', 'invalid'].includes(attempt?.phase)) {
+    const waiting = !result && train && (train.phase !== 'complete' || train.groups?.some(group => group.includes(job.id)));
+    return waiting ? 'admission' : 'failed';
+  }
   if (['interrupted', 'timeout'].includes(attempt?.phase)) return 'interrupted';
   if (['batching', 'promoting'].includes(job.phase) || train?.phase === 'pending' || ['preparing', 'prepared', 'rebasing'].includes(attempt?.phase)) return 'admission';
   return 'unknown';
 }
-export async function brainSource(project, { now = Date.now(), recentMs = 86400000, limit = 20, show = recordShow } = {}) {
+export async function brainSource(project, { now = Date.now(), recentMs = 86400000, limit = 20, show = recordShow, records = new Map() } = {}) {
   const common = project.identity, directory = path.join(common, 'promote'), queuePath = path.join(directory, 'queue.json');
   if (!fs.existsSync(queuePath)) return null;
   try {
@@ -57,10 +63,20 @@ export async function brainSource(project, { now = Date.now(), recentMs = 864000
     const recent = queue.results.filter(j => Date.parse(j.finished) >= now - recentMs).slice(-limit);
     for (const j of [...recent, ...(queue.interrupted ?? []).flatMap(members), ...members(queue.current), ...queue.pending.map(j => ({ ...j, phase: 'pending' }))]) jobs.set(j.id, j);
     const rows = [];
-    const records = new Map();
-    const get = async (job, key) => {
-      if (!records.has(key)) records.set(key, show(project, job, key));
-      return records.get(key);
+    const retained = new Set();
+    const get = (job, key, finished) => {
+      const cacheKey = JSON.stringify([project.identity, job.org ?? null, job.id, key]);
+      retained.add(cacheKey);
+      let entry = records.get(cacheKey);
+      if (!entry || entry.finished !== finished || (!entry.finished && now - entry.at >= 5000)) {
+        // Keep only the record fields used by rows, not notes, reports or tokens.
+        const value = Promise.resolve(show(project, job, key)).then(data => data ? {
+          id: data.id, item: data.item, workspace: data.workspace, meta: { pane: data.meta?.pane },
+        } : null);
+        entry = { value, at: now, finished };
+        records.set(cacheKey, entry);
+      }
+      return entry.value;
     };
     for (const job of jobs.values()) {
       const batch = id(job.batch) ? path.join(directory, 'batches', job.batch) : null;
@@ -77,9 +93,10 @@ export async function brainSource(project, { now = Date.now(), recentMs = 864000
         const execution = localJSON(gate.execution_receipt, common);
         if (execution?.command_started === true) gate = { ...gate, command_started_at: execution.started_at };
       }
-      const run = await get(job, job.run);
-      const item = run?.item ? await get(job, run.item) : null;
       const phase = brainPhase({ job, result, train, attempt, gate });
+      const finished = ['landed', 'failed', 'interrupted'].includes(phase) && Boolean(result);
+      const run = await get(job, job.run, finished);
+      const item = run?.item ? await get(job, run.item, finished) : null;
       const log = result?.log ?? (batch ? path.join(batch, 'train.log') : id(job.id) ? path.join(directory, `${job.id}.log`) : null);
       const clocks = [];
       if (Number.isFinite(result?.report_to_main_s) && result.report_to_main_s >= 0) clocks.push({ label: 'report to main', seconds: Math.floor(result.report_to_main_s), legacy: false });
@@ -108,6 +125,7 @@ export async function brainSource(project, { now = Date.now(), recentMs = 864000
         worktree: result?.workspace ?? attempt?.scratch ?? run?.workspace ?? project.worktrees?.find(w => w.topic === job.topic)?.cwd ?? null,
       });
     }
+    for (const key of records.keys()) if (!retained.has(key)) records.delete(key);
     return { schema: 'board-rows/v1', project: project.name, generatedAt: new Date(now).toISOString(), rows };
   } catch { return errorDocument(project.name, 'source-read'); }
 }

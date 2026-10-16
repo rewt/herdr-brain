@@ -42,10 +42,10 @@ export function safeWorktree(value) {
 export function validateRow(raw, { project, roots = [], panes = new Set() } = {}) {
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const stage = r.stage;
-  const clocks = Array.isArray(r.clocks) && r.clocks.length <= 4 ? r.clocks.map(c => ({
+  const clocks = !Object.hasOwn(r, 'clocks') ? [] : Array.isArray(r.clocks) && r.clocks.length <= 4 ? r.clocks.map(c => ({
     label: checked(c?.label, matches(c?.label, /^[a-z0-9 ._>-]{1,32}$/)),
     seconds: checked(c?.seconds, integer(c?.seconds)),
-    legacy: checked(c?.legacy, typeof c?.legacy === 'boolean'),
+    legacy: c && typeof c === 'object' && !Array.isArray(c) && !Object.hasOwn(c, 'legacy') ? false : checked(c?.legacy, typeof c?.legacy === 'boolean'),
   })) : WITHHELD;
   return {
     project: safeProject(project),
@@ -53,7 +53,7 @@ export function validateRow(raw, { project, roots = [], panes = new Set() } = {}
     item: nullable(r.item, v => matches(v, /^[A-Z][A-Z0-9]*-[0-9]+$/)),
     lane: nullable(r.lane, v => matches(v, /^[a-z0-9][a-z0-9._/-]{0,80}$/)),
     kind: checked(r.kind, kinds.includes(r.kind)), phase: checked(r.phase, phases.includes(r.phase)),
-    stage: stage && Number.isInteger(stage.n) && Number.isInteger(stage.m) && stage.n >= 1 && stage.n <= stage.m && stage.m <= 999
+    stage: stage === null ? null : stage && Number.isInteger(stage.n) && Number.isInteger(stage.m) && stage.n >= 1 && stage.n <= stage.m && stage.m <= 999
       ? { n: stage.n, m: stage.m } : WITHHELD,
     startedAt: safeTime(r.startedAt), phaseAt: safeTime(r.phaseAt), endedAt: safeTime(r.endedAt), clocks,
     status: { code: checked(r.status?.code, matches(r.status?.code, /^[a-z0-9._-]{1,40}$/)), text: safeStatus(r.status?.text) },

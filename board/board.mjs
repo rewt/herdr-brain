@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { isMain } from '../lib/cli-help.mjs';
-import { discoverProject, brainSource } from './brain.mjs';
+import { discoverProject, refreshProject, brainSource } from './brain.mjs';
 import { scriptSource } from './source.mjs';
 import { validateDocument, errorDocument } from './rows.mjs';
 import { availableMemory, paneState, readSlot, rowSlot } from './facts.mjs';
@@ -31,7 +31,7 @@ export function parseOptions(argv) {
   if (!options.projects.length) options.projects.push(process.cwd());
   return options;
 }
-export function createBoard(options, { memory = availableMemory, panes = paneState, slot = readSlot, brain = brainSource, discover = discoverProject } = {}) {
+export function createBoard(options, { memory = availableMemory, panes = paneState, slot = readSlot, brain = brainSource, discover = discoverProject, refresh = refreshProject } = {}) {
   const projects = [], failures = [];
   for (const cwd of options.projects) {
     try {
@@ -40,11 +40,13 @@ export function createBoard(options, { memory = availableMemory, panes = paneSta
     } catch { failures.push(errorDocument(path.basename(cwd), 'source-read')); }
   }
   const scripts = options.sources.map(source => scriptSource(source));
+  const records = new Map(projects.map(p => [p.identity, new Map()]));
   return async () => {
+    const currentProjects = projects.map(p => refresh(p));
     const [memoryBytes, paneInfo, documents] = await Promise.all([
-      memory(), panes(), Promise.all([...projects.map(p => brain(p)), ...scripts.map(s => s.read())]),
+      memory(), panes(), Promise.all([...currentProjects.map(p => brain(p, { records: records.get(p.identity) })), ...scripts.map(s => s.read())]),
     ]);
-    const slotInfo = slot({ projects });
+    const slotInfo = slot({ projects: currentProjects });
     const roots = [...options.roots, ...projects.map(p => p.identity)];
     const rows = [...documents.filter(Boolean), ...failures].flatMap(doc => validateDocument(doc, { project: doc.project, roots, panes: paneInfo.panes }).rows)
       .map(row => { const { worktree, ...display } = row; return { ...display, slot: rowSlot(worktree, slotInfo) }; });
@@ -64,6 +66,6 @@ export async function main(argv = process.argv.slice(2)) {
   const collect = createBoard(options);
   if (options.json) process.stdout.write(JSON.stringify(await collect(), null, 2) + '\n');
   else if (options.once || !process.stdout.isTTY) process.stdout.write(render(await collect(), { width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 120) }) + '\n');
-  else await live({ collect, interval: options.interval });
+  else await live({ collect, interval: options.interval, exit: () => process.exit(0) });
 }
 if (isMain(import.meta.url)) main().catch(() => { process.stderr.write('board: read failed (use --help for options)\n'); process.exitCode = 1; });

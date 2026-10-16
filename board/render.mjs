@@ -19,7 +19,7 @@ export function render(snapshot, { width = 120, height = Infinity, now = Date.no
     clip(`Slot ${slot.state}${slot.label ? `: ${slot.label}` : ''}${slot.project ? ` (${slot.project})` : ''} | held ${duration(slot.heldSeconds)} | queue ${slot.queueLength}`)];
   const columns = [
     { title: 'ITEM / LANE', min: 12, max: 28, value: r => [r.item, r.lane].filter(Boolean).join(' ') || r.id },
-    { title: 'PHASE', min: 12, max: 16, value: r => r.phase === 'stage' ? r.stage === WITHHELD ? `stage ${WITHHELD}` : `stage ${r.stage.n} of ${r.stage.m}` : r.phase },
+    { title: 'PHASE', min: 12, max: 16, value: r => r.phase === 'stage' ? r.stage === null ? 'stage' : r.stage === WITHHELD ? `stage ${WITHHELD}` : `stage ${r.stage.n} of ${r.stage.m}` : r.phase },
     { title: 'ELAPSED', min: 7, max: 9, value: r => elapsed(r, now) },
     { title: 'SLOT', min: 11, max: 11, value: r => r.slot },
     { title: 'STATUS', min: 10, max: 28, value: r => r.status.text },
@@ -50,19 +50,28 @@ export function render(snapshot, { width = 120, height = Infinity, now = Date.no
 }
 
 // An injected output and EventEmitter make terminal cleanup testable without a live pane.
-export async function live({ collect, output = process.stdout, signals = process, interval = 2000, noColor = 'NO_COLOR' in process.env }) {
+export async function live({ collect, output = process.stdout, signals = process, interval = 2000, noColor = 'NO_COLOR' in process.env, exit = () => {} }) {
   const ansi = output.isTTY && !noColor;
-  let stopped = false, previous, timer, wake;
-  const restore = () => { if (stopped) return; stopped = true; clearTimeout(timer); wake?.(); if (ansi) output.write('\x1b[?25h\x1b[?1049l'); };
+  let stopped = false, previous, timer, stop;
+  const cancelled = new Promise(resolve => { stop = resolve; });
   const names = ['SIGINT', 'SIGTERM', 'SIGHUP'];
-  for (const name of names) signals.on(name, restore);
+  const restore = () => {
+    if (stopped) return;
+    stopped = true; clearTimeout(timer);
+    for (const name of names) signals.removeListener(name, onSignal);
+    if (ansi) output.write('\x1b[?25h\x1b[?1049l');
+    stop();
+  };
+  const onSignal = () => { restore(); exit(); };
+  for (const name of names) signals.on(name, onSignal);
   if (ansi) output.write('\x1b[?1049h\x1b[?25l');
   try {
     while (!stopped) {
-      const frame = render(await collect(), { width: output.columns ?? 120, height: output.rows ?? Infinity });
+      const snapshot = await Promise.race([collect(), cancelled]);
       if (stopped) break;
+      const frame = render(snapshot, { width: output.columns ?? 120, height: output.rows ?? Infinity });
       if (frame !== previous) { output.write(ansi ? `\x1b[H\x1b[2J${frame}` : frame + '\n'); previous = frame; }
-      await new Promise(resolve => { wake = resolve; timer = setTimeout(resolve, interval); });
+      await Promise.race([new Promise(resolve => { timer = setTimeout(resolve, interval); }), cancelled]);
     }
-  } finally { restore(); for (const name of names) signals.removeListener(name, restore); }
+  } finally { restore(); }
 }

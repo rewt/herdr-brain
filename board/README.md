@@ -27,8 +27,13 @@ the cursor and screen on SIGINT, SIGTERM or SIGHUP. `NO_COLOR` uses plain frames
 without escapes. Narrow panes elide columns from the right; `--json` preserves
 all validated fields. Rows group by project, then active, queued and newest
 finished. The recent Brain window is 24 hours, capped at 20 finished requests.
-Closing the pane loses no state. Only script refresh timing and the previous
-source/frame are kept in memory; all Brain files and host facts are read anew.
+Closing the pane loses no state. Script refresh timing, the previous source/frame
+and minimal record metadata are kept in memory. Finished rows read their record
+metadata once; queued and active rows refresh it at most once every 5 seconds.
+The cache belongs to this board and retains only visible jobs. Brain files, host
+facts and the worktree/lane inventory are read anew each tick; only Git identity
+resolution is static. Signals restore the terminal, remove the board's handlers
+immediately and exit without waiting for a pending collection.
 
 The immutable slice-1 contract is
 `/Users/rewt/development/rewt/.org/evidence/PROMOTION-BOARD-SOURCE-CONTRACT-20261016.md`
@@ -45,7 +50,8 @@ Brain phase mapping:
 | validated/integrated/complete attempt; batch-delivering/completed queue state | reconcile |
 | promoted result (reconciliation complete or absent for older results) | landed |
 | promoted result with incomplete reconciliation | reconcile |
-| refused/failed result; red/invalid attempt | failed |
+| no result, older red/invalid attempt, job still in remaining groups or train incomplete | admission |
+| refused/failed result; terminal red/invalid attempt without remaining work | failed |
 | interrupted/timeout result or attempt | interrupted |
 | unrecognized state | unknown |
 
@@ -59,7 +65,8 @@ candidate. Job/batch logs contribute only numeric TAP/Vitest clocks through
 `show <id> --json` reads. No whole-record status read occurs.
 
 Every source passes through `rows.mjs`. Failed fields become `withheld`; unknown
-keys disappear. Status text rejects controls, paths, long hex and the contract's
+keys disappear. Absent clocks default to an empty list, absent clock legacy to
+false, and a null stage stays null; malformed values remain withheld. Status text rejects controls, paths, long hex and the contract's
 secret blocklist. No raw log, stderr, exception, notes, report or dispatch token
 reaches the renderer. Logs must be regular files under explicit roots (Brain's
 Git common directory is automatic), with no symlinks, `..`, controls or

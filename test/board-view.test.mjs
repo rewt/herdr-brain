@@ -8,6 +8,7 @@ import { createBoard, parseOptions } from '../board/board.mjs';
 import { parseMemory, readSlot, rowSlot, paneState } from '../board/facts.mjs';
 import { render, live } from '../board/render.mjs';
 import { validateDocument } from '../board/rows.mjs';
+import { brainSource, discoverProject } from '../board/brain.mjs';
 import { brainFixture, boardFixture } from './helpers/board-fixture.mjs';
 
 const emptySlot = () => ({ state: 'free', label: null, project: null, heldSeconds: null, queueLength: 0, holderWorktree: null, queueWorktrees: [] });
@@ -64,7 +65,7 @@ test('board ticks never write, open for write, prune, rename or unlink the slot 
     // Positive control proves the interceptor fires before an actual mutation.
     assert.throws(() => fs.openSync(lockPath, 'a'), /intercepted/); assert.equal(mutations, 1); mutations = 0;
     const collect = createBoard({ projects: [f.root], roots: [], sources: [] }, {
-      discover: () => f.project, brain: p => import('../board/brain.mjs').then(m => m.brainSource(p, { now, show: f.show })),
+      discover: () => f.project, refresh: p => p, brain: p => import('../board/brain.mjs').then(m => m.brainSource(p, { now, show: f.show })),
       memory: async () => null, panes: async () => ({ state: 'unavailable', panes: new Set() }), slot: ({ projects }) => readSlot({ lockPath, projects, now }),
     });
     const a = await collect(), b = await collect(); assert.deepEqual(a, b);
@@ -97,6 +98,62 @@ test('renderer fits 80 and 160 columns, preserves fields at wide widths, and res
     assert.equal(signals.listenerCount(signal), 0);
   }
   assert.ok(render(data, { height: 3 }).split('\n').length <= 3);
+  assert.ok(render({ ...data, rows: [{ ...data.rows[0], stage: null }] }).includes('stage'));
+});
+test('a signal exits a fake TTY promptly even with a never-resolving collection and restores default signal handling', async () => {
+  for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    const signals = new EventEmitter(), chunks = []; let entered, exits = 0, deadline;
+    const started = new Promise(resolve => { entered = resolve; });
+    const output = { isTTY: true, columns: 80, rows: 24, write: text => chunks.push(text) };
+    const pending = live({ output, signals, noColor: false, collect: () => { entered(); return new Promise(() => {}); }, exit: () => { exits++; } });
+    await started;
+    signals.emit(name);
+    assert.equal(exits, 1);
+    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) assert.equal(signals.listenerCount(signal), 0, 'handlers removed during restoration');
+    assert.equal(signals.emit(name), false, 'repeated signal has no board handler');
+    assert.equal(exits, 1); assert.ok(chunks.join('').endsWith('\x1b[?25h\x1b[?1049l'));
+    try { await Promise.race([pending, new Promise((_, reject) => { deadline = setTimeout(() => reject(Error('signal waited for collect')), 1000); })]); }
+    finally { clearTimeout(deadline); }
+  }
+});
+test('board-scoped record cache reads finished rows once and refreshes active rows no faster than five seconds', async t => {
+  const f = brainFixture(t), calls = []; let now = f.now;
+  const options = { projects: [f.root], sources: [], roots: [] };
+  const dependencies = { discover: () => f.project, refresh: p => p, memory: async () => null,
+    panes: async () => ({ state: 'available', panes: f.options.panes }), slot: emptySlot,
+    brain: (p, cache) => brainSource(p, { ...cache, now, show: async (...args) => { calls.push(args[2]); return f.show(...args); } }) };
+  const collect = createBoard(options, dependencies);
+  await collect(); assert.deepEqual(calls.slice().sort(), ['ENG-1', 'ENG-2', 'ENG-3', 'R-1', 'R-2', 'R-3']);
+  const first = calls.length;
+  await collect(); now += 4999; await collect(); assert.equal(calls.length, first, 'unchanged second ticks perform no record reads');
+  now++; await collect(); assert.deepEqual(calls.slice(first).sort(), ['ENG-1', 'ENG-3', 'R-1', 'R-3']);
+  now += 50000; await collect(); assert.equal(calls.filter(id => id === 'R-2').length, 1, 'finished run remains cached');
+  assert.equal(calls.filter(id => id === 'ENG-2').length, 1, 'finished item remains cached');
+  const queued = f.queue.pending.pop(); f.queue.results.push({ ...queued, outcome: 'refused', finished: new Date(now).toISOString() }); f.save();
+  const beforeFinish = calls.filter(id => id === 'R-3').length;
+  assert.equal((await collect()).rows.find(r => r.id === queued.id).phase, 'failed');
+  assert.equal(calls.filter(id => id === 'R-3').length, beforeFinish + 1, 'terminal transition is captured once');
+  now += 5000; await collect(); assert.equal(calls.filter(id => id === 'R-3').length, beforeFinish + 1);
+  await createBoard(options, dependencies)(); assert.equal(calls.filter(id => id === 'R-2').length, 2, 'a different board owns a fresh cache');
+});
+test('a worktree created after board startup joins row and project slot matching on the next tick', async t => {
+  const f = boardFixture(t), repo = path.join(f.root, 'repo'), late = path.join(f.root, 'lane-late');
+  fs.mkdirSync(repo);
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', timeout: 10000 });
+  git('init', '-qb', 'main'); git('config', 'user.name', 'Board fixture'); git('config', 'user.email', 'board@example.invalid'); git('config', 'commit.gpgsign', 'false');
+  f.write('repo/README', 'fixture'); git('add', 'README'); git('commit', '-qm', 'fixture');
+  const common = fs.realpathSync(path.join(repo, '.git'));
+  f.write('repo/.git/promote/queue.json', { identity: common, pending: [{ id: 'late', topic: 'late' }], results: [] });
+  const lockPath = f.write('late-slot.lock', { pid: process.pid, pgid: null, token: 'PLANTED', cwd: late, label: 'fixture gate' });
+  let resolutions = 0;
+  const collect = createBoard({ projects: [repo], sources: [], roots: [] }, {
+    discover: cwd => { resolutions++; return discoverProject(cwd); }, memory: async () => null,
+    panes: async () => ({ state: 'unavailable', panes: new Set() }), slot: ({ projects }) => readSlot({ lockPath, projects }),
+  });
+  const before = await collect(); assert.equal(before.rows[0].slot, ''); assert.equal(before.slot.project, null);
+  git('worktree', 'add', '-qb', 'lane/late', late);
+  const after = await collect(); assert.equal(after.rows[0].slot, 'holder'); assert.equal(after.slot.project, 'repo');
+  assert.equal(resolutions, 1, 'identity resolution remains static');
 });
 test('CLI validates options, independent snapshots survive closure, and all sources pass through the privacy filter', async t => {
   const f = boardFixture(t), raw = f.document(); raw.rows[0].status.text = 'PLANTED_token_123'; raw.rows[0].where.pane = 'wGone:p9';
@@ -112,7 +169,7 @@ test('CLI validates options, independent snapshots survive closure, and all sour
   assert.deepEqual(JSON.parse(a.stdout).rows, JSON.parse(b.stdout).rows);
   const row = JSON.parse(a.stdout).rows.find(r => r.project === 'bch-cloak');
   assert.equal(row.status.text, 'withheld'); assert.equal(row.where.pane, 'withheld'); assert.equal(row.where.log, f.log); assert.equal('worktree' in row, false);
-  const collect = createBoard({ projects: [f.root], sources: [], roots: [f.root] }, { discover: () => ({ identity: f.root, paths: [f.root] }), brain: async () => raw,
+  const collect = createBoard({ projects: [f.root], sources: [], roots: [f.root] }, { discover: () => ({ identity: f.root, paths: [f.root] }), refresh: p => p, brain: async () => raw,
     memory: async () => null, panes: async () => ({ state: 'unavailable', panes: new Set() }), slot: emptySlot });
   assert.equal((await collect()).rows[0].status.text, 'withheld');
   assert.ok(render({ ...snapshot(f), rows: [row] }, { width: 240 }).includes('job.log'));

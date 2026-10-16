@@ -4,7 +4,7 @@
 import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
@@ -14,6 +14,8 @@ import { noticeLock, ownerPid } from './notice-lock.mjs';
 import { composerEmpty } from './composer.mjs';
 import { autopilotNotice } from './autopilot.mjs';
 import { bestEffort, mirrorNotice } from '../messages/mirror.mjs';
+import { invokeHerdr as invoke } from './herdr-edge.mjs';
+import { fixtureInboxEnrolled } from '../messages/fixture.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -85,6 +87,7 @@ const snapshot = (file) => transaction(file, (entries) => entries);
 
 function applyPolicy(file, id, options) {
   const entry = transaction(file, (entries, append) => {
+    if (fixtureInboxEnrolled(file)) return null;
     const entry = entries.find(candidate => candidate.id === id);
     if (!entry || entry.autopilot || !entry.project || entry.state !== 'pending') return entry;
     if (entry.autopilot_owner) {
@@ -103,28 +106,43 @@ function applyPolicy(file, id, options) {
   return true;
 }
 
-function invoke(herdr, args) {
-  const result = spawnSync(herdr, args, { encoding: 'utf8', timeout: loadTimeout(10000), maxBuffer: 4 * 1024 * 1024 });
-  if (result.error || result.status !== 0) {
-    const error = new Error((result.stderr || result.stdout || result.error?.message || `Herdr exited ${result.status}`).trim());
-    // Lost acknowledgements retry with the same delivered notice ID.
-    try { error.code = JSON.parse(result.stderr || result.stdout).error?.code; } catch {}
-    throw error;
-  }
-  return result.stdout;
-}
-
-function quiet(entry) {
+function quiet(entry, binding, call = invoke) {
   try {
     const occupant = (agent) => JSON.stringify([agent.pane_id, agent.terminal_id, agent.agent_session]);
-    const agent = JSON.parse(invoke(entry.herdr, ['agent', 'get', entry.to])).result?.agent;
+    const agent = JSON.parse(call(entry.herdr, ['agent', 'get', entry.to])).result?.agent;
     if (!agent?.pane_id || agent.interactive_ready === false || !['idle', 'done'].includes(agent.agent_status)) return null;
-    const screen = invoke(entry.herdr, ['pane', 'read', agent.pane_id, '--lines', '14', '--format', 'ansi']);
+    if (binding && (agent.name !== binding.name || agent.pane_id !== binding.pane || agent.terminal_id !== binding.terminal ||
+        agent.agent_session?.value !== binding.nativeSession || agent.workspace_id !== binding.workspace || agent.cwd !== binding.cwd)) return null;
+    const screen = call(entry.herdr, ['pane', 'read', agent.pane_id, '--lines', '14', '--format', 'ansi']);
     if (!composerEmpty(screen, agent.agent)) return null;
     // Keep pane read last: on the final check, prompt follows immediately.
     // Screen-based gating still has an inherent read-to-input race.
     return occupant(agent);
   } catch { return null; }
+}
+
+// Single attempt, shared quiet gate. Intent is durable before the final read.
+// The receiver owns retries and holds; an uncertain offer is never replayed here.
+export async function offerQuiet({ text, binding, beforePrompt }, { call = invoke, confirmSeconds = 3 } = {}) {
+  if (!binding || ['name', 'pane', 'terminal', 'nativeSession', 'workspace', 'cwd', 'generation', 'herdr'].some(k => typeof binding[k] !== 'string' || !binding[k]))
+    return { state: 'pending', reason: 'recipient binding needs re-resolution' };
+  const entry = { herdr: binding.herdr, to: binding.name };
+  const first = quiet(entry, binding, call);
+  if (!first) return { state: 'pending', reason: 'recipient unavailable, changed or composer nonempty; re-resolve binding' };
+  await delay(seconds(confirmSeconds, 3, 'confirmation seconds') * 1000);
+  if (quiet(entry, binding, call) !== first) return { state: 'pending', reason: 'recipient changed during quiet confirmation' };
+  beforePrompt();
+  if (quiet(entry, binding, call) !== first) return { state: 'pending', reason: 'recipient changed before prompt; no input attempted' };
+  try {
+    const reply = JSON.parse(call(entry.herdr, ['agent', 'prompt', entry.to, text]));
+    if (reply.error || reply.ok === false) {
+      if (['agent_blocked', 'agent_not_found'].includes(reply.error?.code)) return { state: 'refused', reason: JSON.stringify(reply.error) };
+      return { state: 'uncertain', reason: 'prompt returned an unrecognized negative acknowledgement' };
+    }
+    return { state: 'delivered', reason: 'Herdr acknowledged input; model consumption unknown' };
+  } catch (error) {
+    return { state: ['agent_blocked', 'agent_not_found'].includes(error.code) ? 'refused' : 'uncertain', reason: error.message };
+  }
 }
 
 function notify(file, entry, error) {
@@ -143,6 +161,7 @@ function seconds(value, fallback, name) {
 }
 
 export async function drainInbox(file, options = {}) {
+  if (fixtureInboxEnrolled(file)) return { delivered: false, queued: true, id: options.id, inbox: file, delivery_error: 'offline fixture intake is fenced; use its foreground transport owner' };
   const cap = seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'SUPERVISOR_INPUT_WAIT_SECONDS') * 1000;
   const confirm = seconds(options.confirmSeconds ?? process.env.SUPERVISOR_INPUT_CONFIRM_SECONDS, 3, 'SUPERVISOR_INPUT_CONFIRM_SECONDS') * 1000;
   const retry = seconds(options.pollSeconds ?? process.env.SUPERVISOR_INPUT_POLL_SECONDS, 10, 'SUPERVISOR_INPUT_POLL_SECONDS') * 1000;
@@ -167,6 +186,8 @@ export async function drainInbox(file, options = {}) {
     }
   }
   try {
+    // Enrollment may have won while this caller waited for the drain lock.
+    if (fixtureInboxEnrolled(file)) return result('offline fixture intake is fenced; use its foreground transport owner');
     for (;;) {
       const entry = snapshot(file).find((candidate) => !complete(candidate));
       if (!entry) return { ...result(), delivered: options.id ? complete(own()) : true, queued: false };
@@ -283,6 +304,7 @@ export function enqueueSupervisor(to, message, options = {}) {
 
 export async function promptSupervisor(to, message, options = {}) {
   const { id, inbox: file } = enqueueSupervisor(to, message, options);
+  if (fixtureInboxEnrolled(file)) return { delivered: complete(readInbox(file).find(entry => entry.id === id)), queued: !complete(readInbox(file).find(entry => entry.id === id)), id, inbox: file, message };
   const retrySeconds = seconds(options.retrySeconds, 10, 'retry seconds');
   // Acknowledged ownership precedes input. The worker survives this caller,
   // including a crash between the prompt side effect and its acknowledgement.
@@ -307,6 +329,7 @@ export async function promptSupervisor(to, message, options = {}) {
 // Housekeeping's existing tick and every sender call this recovery entry point.
 export async function resumeInbox(file, options = {}) {
   file = path.resolve(file);
+  if (fixtureInboxEnrolled(file)) return null;
   if (!fs.existsSync(file) || snapshot(file).every(complete)) return null;
   const pid = ownerPid(`${file}.owner.lock`);
   if (pid) {
@@ -348,6 +371,7 @@ async function ownInbox(file, options) {
     process.send?.({ ready: true, pid }); return;
   }
   try {
+    if (fixtureInboxEnrolled(file)) { process.send?.({ ready: true, pid: null }); return; }
     transaction(file, (entries, append) => {
       for (const entry of entries.filter((entry) => !complete(entry))) append({ type: 'owned', id: entry.id, pid: process.pid });
     });

@@ -169,3 +169,143 @@ operator through an already permitted path and continue independent work.
 Stages 8–10 must fence/watermark and reconcile in-flight IDs before changing a
 delivery owner. Shadow data cannot authorize such a transfer. To reverse stage
 7, disable mirror calls and preserve its journal; existing delivery stays intact.
+
+## Stage 8: offline receiver and swappable transport
+
+Stage 7 above remains the installed, shadow-only behavior. Stage 8 adds a
+**fixture-only**, foreground receiver and supervisor-inbox transfer rehearsal.
+It neither activates a real inbox nor changes dispatch, desk requests, routing,
+triage, record events, native permissions, or the retained review/reuse/park loop.
+A real canary switch still requires separate review, gate, release and authority.
+There is no transport daemon, plugin registry or default writable transport root.
+
+`receiver.mjs::Receiver` owns the meaning and durable receipts;
+`transport.mjs::quietTransport()` is the one transport implementation;
+`supervisor/herdr-edge.mjs::invokeHerdr()` is its physical Herdr seam. The
+compatibility supervisor uses that same seam. Other modules' Herdr calls remain
+outside this slice (ENG-351). The adapter contract is:
+
+```js
+await adapter.deliver(pointer, resolvedBinding, { beforePrompt });
+// -> { state: 'pending' | 'delivered' | 'refused' | 'uncertain', reason }
+```
+
+The pointer identifies an immutable envelope projection by canonical path and
+SHA-256, plus ID, kind and one-line summary. `beforePrompt()` must synchronously
+commit intent before input. The adapter reuses `prompt-supervisor.mjs`'s composer
+and quiet gates, with repeated exact name, pane, terminal, native session,
+workspace and checkout checks against an independently resolved binding generation.
+It performs one attempt. Changed occupants require re-resolution. Busy, absent,
+unknown, noninteractive or nonempty-composer recipients remain pending. Binding
+receipts come from the receiver/controller's trusted resolver, never from an
+untrusted message. A role respawn changes the attempt binding, not the recipient
+key; exact session incarnations remain distinct recipients.
+
+The canonical acceptance journal is `ROOT/transport.jsonl`, separate from the
+stage-7 `shadow.jsonl`. Each acceptance commits the original envelope, recipient,
+body/memo bytes and receipt **in one append**, fsyncs the file and directory, then
+acknowledges. Its cursor is a receiver acceptance ordinal, not record ordering.
+Private `bodies/` and `envelopes/` files are rebuildable projections; acceptance
+does not depend on a second independent inbox write. Origin envelope fields and
+body digests never change. Retained body references map to the same digest within
+the local store, so deleting a temporary source does not erase an accepted body.
+Consumption verifies the retained body with `verifyBody` before exposing bytes.
+Read content remains data and cannot supply system instructions or authority.
+
+Each recipient deduplicates by event ID **and** producer ID/epoch/sequence.
+Identical retries return the original acceptance receipt. Changed bytes under
+either key are a retained conflict/refusal; identical text under distinct keys
+is separate work. Explicit per-recipient acceptance supports local fanout. Unknown
+message types cannot become deliveries. Unknown journal event types stay inert.
+The journal retains acceptance, intent, delivered, consumed, refused and uncertain
+receipts. A delivered receipt proves a Herdr acknowledgement; consumed proves
+verified exposure to the recipient, neither understanding nor authorized effect.
+Any conforming at-least-once transport may replace the adapter. There is **no
+exactly-once model-consumption claim**.
+
+Fixture enrollment supplies the actual producer launch receipt, exact sender
+address and epoch, allowed local recipients and canonical permitted body roots.
+`accept(event, {sender, recipient})` checks these independent inputs before
+acceptance. A role label or a stage-7 `legacy-shadow:` address is not enrollment.
+Human-origin claims are refused: this slice supplies no human authentication or
+cross-identity broker. Fixture receipt strings are test authority inputs, not a
+production authentication mechanism. Decision references remain evidence for the
+recipient to check through existing authority rules. No decision is executed by
+this module. A reply must name an accepted pending question/request, its exact
+correlation, references, expected sender and original recipient; a second different
+reply conflicts. Consumed but unanswered threads stay open across transfers.
+
+Control kinds `fyi`, `ack`, `hold`, `release` are retained and rule-consumed without
+a binding lookup, adapter call, model wake, or ack-for-ack. This is no new routing
+or admission policy: no control message changes a lock, STOP, PAUSED or hold file.
+A refusal holds the action even if a caller supplies another adapter. An unknown
+prompt result, lost acknowledgement, or abandoned durable intent is uncertain;
+restarting or changing owners cannot replay it. `resolveUncertain` requires an
+explicit inspected disposition and evidence; only verified non-delivery can make
+the same ID pending again. Dispatch's separate `--accept-delivered`/`--resend`
+recovery and authorized `--reuse` remain unchanged.
+
+### Offline transfer runbook
+
+This is text for a rehearsal, **not a live activation procedure**. Only a private,
+canonical, disposable `os.tmpdir()/brain-transport-*` root with a regular `FIXTURE`
+file containing `brain.transport-fixture/v1` plus newline can mutate state. There
+is no environment-variable or live-path bypass. Tests create this root and explicit
+local enrollments with `Receiver.initialize`. All body roots must be within it.
+The absence of a new default root keeps `offline-herdr`'s existing containment
+intact; tests also prove missing/foreign roots cannot create transport state.
+
+1. Initialize the fixture receiver with its supervisor enrollment and a scoped
+   legacy-inbox importer, referencing only `ROOT/inbox.log`. Do not use shadow
+   observations as delivery/authority evidence.
+2. `SupervisorTransfer.enroll()` acquires the original inbox's owner, drain and
+   journal locks. A live/unidentified owner blocks enrollment. It durably fences
+   the compatibility delivery entrypoints with an explicit fixture marker and
+   imports notices with stable source/notice IDs and original ordinal. Import
+   commits known sent/handled or uncertain/refused dispositions atomically with
+   acceptance; an unresolved autopilot owner also imports as uncertain.
+3. After enrollment, compatibility enqueue still durably appends original notice
+   bytes. Its policy, resume and direct drain paths cannot send. The foreground
+   fixture controller is the sole dispatcher for both owner phases, using the
+   same adapter. `syncIntake()` projects newly spooled notices into the receiver;
+   it neither acknowledges/removes originals nor creates fresh IDs on retries.
+4. `switch` fences intake under the original inbox lock at a durable receiver and
+   legacy watermark. Later arrivals spool durably, in either accepted receiver
+   entries or the compatibility log. The old owner can drain only entries through
+   that watermark; new arrivals cannot be sent by either owner during the drain.
+5. Call the foreground fixture controller's `drain(adapter, resolveBinding)` until
+   old work has known delivered/consumed receipts. Pending, refused or uncertain
+   old work holds cutover. An active offer excludes owner commits with the separate
+   delivery lock. Acceptance can continue during an in-flight offer.
+6. Retry `switch`. It commits exactly one replacement owner only after the drain.
+   The replacement reads the same journal, then can deliver spooled work. Repair
+   compatibility sent projections from receiver receipts; never reverse that
+   evidence direction or reset a hold from an old pending entry.
+7. `reverse` repeats the fence, spool and drain, returning to the legacy **fixture
+   controller** phase on the same journal. It does not remove the fixture fence or
+   reactivate the old automatic retry worker. Open threads, exact IDs, bodies,
+   dedup state, recipient incarnations, authority evidence and holds are retained.
+   This intentionally bounds the rehearsal; enabling the real compatibility or
+   replacement worker is the later live adoption step.
+
+```sh
+node messages/messages.mjs status --root /private/tmp/brain-transport-FIXTURE --json
+node messages/messages.mjs switch --root /private/tmp/brain-transport-FIXTURE --json
+node messages/messages.mjs reverse --root /private/tmp/brain-transport-FIXTURE --json
+```
+
+`status` is inspect-only (owner, last watermark, active fence, pending/spooled,
+uncertain, refused, open threads and retained receipts). `switch`/`reverse` never
+invoke Herdr or drain implicitly; they return held IDs until the explicit fixture
+drain has completed. Repeating a completed direction is idempotent. These commands
+require an explicit root; `shadow-report` and its default roots are unchanged.
+Legacy wake text is the original bytes plus its existing ` notice-id=...` suffix,
+including multiline notices. New wakes contain an escaped one-line summary and
+permitted pointer only. Neither renderer reinterprets body text.
+
+Crash recovery is inspect-first: a torn journal tail blocks reads/mutations without
+truncating bytes; an exclusive writer/delivery lock left by a crash is never
+stolen. Inspect ownership and archive evidence before explicitly repairing a tail
+or removing a stale fixture lock. A crash after intent without a result holds
+uncertain even if no input happened. No compaction, expiration, automatic repair,
+retention deletion, alternate-transport retry or live importer is installed.

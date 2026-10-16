@@ -1,0 +1,45 @@
+sequenceDiagram
+  actor O as Operator
+  participant F as Fleet chat and own durable adapter
+  participant RI as rewt import and export adapter
+  participant RS as Herdr Brain supervisor and own record
+  participant BI as bastian import and export adapter
+  participant BS as BCH supervisor and own record
+  O->>F: Ask one question about both projects
+  F->>F: Retain exact scoped question and real relayer provenance
+  F->>F: Freeze two recipients, event Q and correlation C
+  par Herdr Brain request
+    F->>RI: Authorized export Q for rewt project-supervisor
+    RI->>RI: Verify scope and body; persist before acceptance
+    RI->>RS: Quiet-gated pointer when eligible
+    RS->>RS: Read own record and check existing delegation
+    RS->>RI: Reply R1 with reply_to Q and correlation C
+    RI-->>F: Reply export; own adapter imports R1
+  and BCH request
+    F->>BI: Authorized export Q for bastian project-supervisor
+    BI->>BI: Verify scope and body; persist before acceptance
+    BI->>BS: Quiet-gated pointer when eligible
+    BS->>BS: Read own record and check existing delegation
+    BS->>BI: Reply R2 with reply_to Q and correlation C
+    BI-->>F: Reply export; own adapter imports R2
+  end
+  F->>F: Retain replies and separate pending targets; no chat wake
+  O->>F: Next interaction - retrieve available answers
+  F-->>O: One sourced answer; show missing, stale or conflicting replies
+  opt Operator gives a decision with explicit project scope
+    O->>F: Exact answer and limits
+    F->>F: Preserve verified human origin and actual relayer; new event D
+    F->>RI: D with provenance and decision reference
+    RI->>RS: Direct pointer; validate authority and supersession
+    RS->>RS: Record exact applicable answer under own writer lock
+    F->>BI: Same D for second selected recipient
+    BI->>BS: Direct pointer; validate authority and supersession
+    BS->>BS: Record exact applicable answer under own writer lock
+    RS-->>RI: Local decision reference or explicit hold
+    BS-->>BI: Local decision reference or explicit hold
+    RI-->>F: Correlated result for rewt
+    BI-->>F: Correlated result for bastian
+  end
+  Note over F,BS: No cross-project atomic commit; one acceptance is not a fleet decision
+  Note over F,BS: Native refusals stop that action; report the reason only through a permitted operator path
+  Note over F,BS: Acks, FYIs, holds and releases never wake models; warm review sessions stay parked

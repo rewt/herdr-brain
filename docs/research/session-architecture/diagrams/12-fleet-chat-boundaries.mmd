@@ -1,0 +1,52 @@
+flowchart TB
+  O[Machine operator]
+  subgraph Fleet[Proposed operator identity - non-repository root]
+    F[One fleet chat - native subscription session]
+    A[Model-free scoped read and message adapter]
+    R[Own record - exact operator answers and thread references]
+    L[Own logs partition and model-free fleet viewer]
+    F --> A
+    F --> R
+    A --> L
+  end
+  subgraph Rewt[rewt identity - Herdr Brain]
+    RI[Owner import and export adapter]
+    RS[Canonical project supervisor]
+    RR[Own record - lanes - reviews - Git identity]
+    RP[Approved status and logs-viewer projection]
+    RC[Project chat - supervisor - logs slots retained]
+    RI -->|quiet addressed question| RS
+    RS --> RR
+    RR -->|allowlisted owner export| RP
+    RS -->|scoped reply| RI
+    RC -.-> RS
+  end
+  subgraph Bastian[bastian identity - BCH Cloak]
+    BI[Owner import and export adapter]
+    BS[Canonical project supervisor]
+    BR[Own record - lanes - reviews - GitHub identity]
+    BP[Approved status and logs-viewer projection]
+    BC[Project chat - supervisor - logs slots retained]
+    BI -->|quiet addressed question| BS
+    BS --> BR
+    BR -->|allowlisted owner export| BP
+    BS -->|scoped reply| BI
+    BC -.-> BS
+  end
+  O -->|question or exact scoped answer| F
+  A -->|authorized envelope export| RI
+  A -->|authorized envelope export| BI
+  RI -->|reply export - operator adapter imports| A
+  BI -->|reply export - operator adapter imports| A
+  RP -->|scoped read only after approval| A
+  BP -->|scoped read only after approval| A
+  C[Existing coordinator - T2 only within recorded delegation]
+  F -.->|bounded technical escalation| C
+  C -.->|decision evidence via owner imports| RI
+  C -.->|decision evidence via owner imports| BI
+  W[chats workspace is a layout container - no shared authority]
+  W -.-> F
+  W -.-> RC
+  W -.-> BC
+  N[No fleet writes to project files - no raw transcript access - no refusal forwarding]
+  A --- N

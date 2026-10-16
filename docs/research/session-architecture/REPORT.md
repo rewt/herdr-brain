@@ -1,16 +1,18 @@
 # A standard session platform for Herdr Brain
 
-Research **R-421**, extended by **R-422** and locked to the adopted design by **R-423**, item **RES-3**, 2026-10-15. Documentation only; the architecture is adopted but not implemented by these runs. Evidence starts from lane source `2c488614b16bb9a28f22530853208f274952c26c`, R-421 document commit `b943075b42a2eb04f02bfed17fce1c56faf081de`, R-422 commit `6c0d9dc3020657426ee29bfb7908352b64eebf60`, and installed Herdr **0.9.3**. Structured logging remains a **model-free service**; the logs tab now pairs a **model-free viewer pane with a triage-session pane**. Worker sessions survive review and correction rounds. No wallet architecture comparison is included.
+Research **R-421**, extended by **R-422**, locked to the adopted design by **R-423**, and extended with the **R-443 fleet-chat proposal**, item **RES-3**, 2026-10-15–16. Documentation only; the platform is adopted, while section 8's operator fleet chat is a recommendation awaiting adoption. Evidence starts from lane source `2c488614b16bb9a28f22530853208f274952c26c`, document commits `b943075b`, `6c0d9dc3` and `a28bf36d`, and installed Herdr **0.9.3**. R-443 separately inspects main at `7896ee8b576edeb49fec0acdda5797e7a9c6d307`. Structured logging remains a **model-free service**; the logs tab pairs a **model-free viewer pane with a triage-session pane**. Worker sessions survive review and correction rounds. No wallet architecture comparison is included.
 
 **Adopted [A]:** ARCH-33 records the operator's adoption on **2026-10-15 at 15:17 CDT**, followed by the 15:19 instruction to lock this text before engineering starts. The controller compares manifests with running sessions; every workspace has chat, supervisor and logs tabs; the supervisor handles dispatch and job monitoring. Reset means **close and respawn from the manifest and handoff**, at an eligible boundary. Warm review workers are never reset. Logging has three paths: decisions directly to the supervisor; `fyi`, `ack`, `hold` and `release` to rules without model wakes; all remaining operational traffic batched to a required project triage session. Model-free detectors run first on every event. **All model work runs in manifest-declared Herdr sessions on the subscription; the service and controller call no model API and hold no API keys.** This supersedes the earlier digester option.
 
 **Implementation direction [A]:** build the small, model-free controller above existing route, dispatch, watch and retirement code, and one addressed-event protocol for Claude and Codex. Markdown manifests describe desired sessions; the record, handoffs and cursor-backed service retain durable knowledge. Preserve the same worker through review and corrections. The logs tab owns presentation and the triage session, never log durability. The operator's priorities are **automating workspace tab creation** and **standardizing agent-to-agent communication**. Cost is not the driver. Moving existing notice traffic into this design should reduce aggregate model reasoning load; that is an estimate, unmeasured until replay.
 
-**Still open:** the replay-selected triage model (existing `monitor` route versus a new Claude Haiku 5.5 route), batch count/time settings, detector tuning and route-usage baselines, and implementation details of the illustrative schema/native input-output confinement. These do not reopen the adopted topology or routing. ARCH-33 names ENG-338 for stages 1–2 and ENG-339 for stage 7; its lock-in note says neither starts until R-423 lands and the operator confirms the text. Live rollout waits for those prerequisites. This document does not dispatch either lane.
+**Implementation update [D-main, R-443]:** main contains stages 1–2 (ENG-338, manifests and KEEP receipts), stage 3 (ENG-341, an inspect-only live planner with no apply), and stage 7 (ENG-339, envelopes and shadow mirrors). ENG-342 places shadow journals inside their identity root. These are source-landed slices, not proof of release activation or working durable transport. The supplied R-443 brief places ENG-344's initial log-service slice and ENG-346's reviewer template in correction rounds. Section 8.1 records the evidence and limits; this research starts none of them.
+
+**Still open:** the replay-selected triage model (existing `monitor` route versus a new Claude Haiku 5.5 route), batch count/time settings, detector tuning, route-usage baselines and native input-output confinement. Section 3's examples remain design references; main's closed manifest schema is now the implementation authority. Section 8 additionally proposes a non-repository operator identity, scoped read contracts and fleet enrollment. Those additions are not implied by the earlier adoption or by a shared Herdr workspace.
 
 The closest Kubernetes analogy is **a controller-owned pod retained until its work item's review chain ends**, with a Job-like completion condition outside the process. A reported result or an idle prompt is not workload completion. Kubernetes itself is not a proposed dependency or deployment requirement.
 
-Evidence notation applies to each tagged paragraph or table row: **[M]** observed with read-only commands/files during the named run; **[D]** documented in inspected local or upstream source, not exercised here; **[I]** inference with its limits stated; **[A]** adopted architectural requirement, not proof of implementation; **[P]** illustrative implementation detail or parameter still to validate. Sections 1–2 retain R-421 observations; section 7 identifies R-422 evidence and its R-423 correction. Sections 3–4, 6–7 and design figures implement the adopted contract on paper; schema spellings and tuning values remain illustrative. Local source links are relative to this checkout. Upstream code links pin v0.9.3's commit, `7b116c05bfda646af39d2524c54e70c751f57ee8`; a matching version string does not prove a reproducible match between that source and the installed binary.
+Evidence notation applies to each tagged paragraph or table row: **[M]** observed with read-only commands/files during the named run; **[D]** documented in inspected local or upstream source, not exercised here; **[I]** inference with its limits stated; **[A]** adopted architectural requirement, not proof of implementation; **[P]** proposal or illustrative implementation detail still to validate. Sections 1–2 retain R-421 observations; section 7 identifies R-422 evidence and its R-423 correction. Sections 3–4, 6–7 and figures 03–11 implement the adopted contract on paper. Section 8 and figures 12–13 are the R-443 proposal, with explicit main/source updates where relevant. Local source links are relative to this checkout unless marked main. Upstream code links pin v0.9.3's commit, `7b116c05bfda646af39d2524c54e70c751f57ee8`; a matching version string does not prove a reproducible match between that source and the installed binary.
 
 ## 1. How Herdr works today, measured
 
@@ -495,9 +497,11 @@ The adopted layout is exactly one **chat**, **supervisor** and **logs** tab in e
 
 Chat retains the operator conversation. The supervisor tab handles dispatch and job monitoring within its existing delegation, and receives exceptions requiring judgment. A lane's supervisor slot delegates project-wide scheduling to the one canonical project supervisor. The viewer renders events without a model; the adjacent triage session handles bounded batches on the subscription. Defaults therefore multiply neither scheduling authority nor project triage sessions. Viewer filters are workspace-specific; an authorized operator can widen them to project scope without widening writer capabilities. Labels aid discovery, but canonical receipts establish ownership. Preserve no-focus creation; reconciliation must not move unrelated panes or steal focus.
 
-**[D-local] Current retirement is conservative, but it does not yet guarantee protection for all three new slots.** `planRetirement()` keeps non-linked/persistent/operator/lab workspaces, focus/self, unknown shells, ambiguous processes and open chains. In a lane workspace, there is no general `chat|supervisor|logs` slot rule. A viewer may currently survive as an unknown shell; that is not a durable product guarantee. Inspection of [`lib/retire.mjs`](../../../lib/retire.mjs) and [`lib/retire-runtime.mjs`](../../../lib/retire-runtime.mjs) found no standard-slot enrollment input. The planner was not run and no live close was attempted.
+**[P, R-443]** Section 8 adds a fleet conversation above these project chats. Each project keeps its own slot and ownership. The fleet can aggregate only explicitly exported read projections; it gains no access from being in the same Herdr workspace. A non-repository operator workspace needs a separately reviewed enrollment contract before the project reconciler can manage it.
 
-**Prerequisite to rolling out defaults:** extend the planner/observation contract with canonical adopted-slot receipts that can only add `KEEP`, including both logs panes and their enclosing workspace. Add an explicit warm-chain keep rule before any successor-based release: `ParkedAwaitingReview` remains protected until landing/explicit disposition. Source facts must come from the record and actual ownership receipts, not `.lane/sessions.json.d`, user-editable phase strings or tab names. Recheck protections immediately before retirement. Unknown/unreadable evidence keeps. A controller's declared batch-boundary replacement is a journaled layout transition, not automatic retirement. This is required implementation work, not a claim that today's planner already supports it.
+**[D-local, R-421 historical finding; D-main, R-443 update]** R-421 found conservative retirement but no general standard-slot enrollment input in this lane's older [`lib/retire.mjs`](../../../lib/retire.mjs) and [`lib/retire-runtime.mjs`](../../../lib/retire-runtime.mjs). ENG-338 has since landed canonical KEEP-only slot receipts and warm-chain protections on main. Main's `sessions/README.md` specifies that active receipts protect both logs panes and the enclosing workspace, uncertainty keeps, and withdrawal removes only that KEEP input. There is no live enrollment CLI in the inspected stages. Source availability is not evidence that these particular live tabs are enrolled. No retirement planner or live close was run here.
+
+**Prerequisite to live defaults:** establish those canonical KEEP receipts through a future authorized enrollment and prove the installed consumer honors them. `ParkedAwaitingReview` remains protected until landing/explicit disposition. Source facts must come from the record and actual ownership receipts, not `.lane/sessions.json.d`, user-editable phase strings or tab names. Recheck protections immediately before retirement. Unknown/unreadable evidence keeps. A controller's declared batch-boundary replacement is a journaled layout transition, not automatic retirement. Main's inspect-only stage does not supply live enrollment or reset.
 
 To remove a completed lane workspace, the authorized supervisor first withdraws that workspace's desired standard slots and pauses their recreation, persists needed chat/supervisor handoffs, drains or disposes outstanding references, and records the explicit disposition. Only then can the existing retirement path assess exact occupants and Git state. This prevents both immortal finished lanes and a controller that resurrects tabs during explicit cleanup. A close hold still vetoes this procedure; withdrawing a manifest is not a bypass.
 
@@ -538,7 +542,7 @@ One triage session per project uses the existing `monitor` route (`gpt-5.6-luna`
 
 Run one explicitly installed **identity-owned logging service**, with isolated project partitions and exactly one append writer/lock per partition. It is outside the dependency-free record core and outside model sessions. A built-in Node filesystem/socket implementation is sufficient to explore; no datastore/framework dependency is justified yet. The service owns its own journal, not `.org/events.jsonl`. A model-free collector mirrors selected authoritative record events read-only and observes Herdr; emitters use bounded structured messages. Storage survives closing every logs tab. This follows the useful Kubernetes separation of workload and log backend without adopting its container runtime. [Cluster logging](https://kubernetes.io/docs/concepts/cluster-administration/logging/).
 
-Suggested storage: `~/.local/state/herdr-brain/logs/<identity>/<canonical-project-hash>/`, directory `0700`, journal/socket files `0600`, with sequenced segments, service epoch/retention metadata and subscriber cursors. Canonical identity mapping belongs to the service's approved enrollment. Do not merge another identity's files or give a cross-identity viewer write access. A separately scoped read interface is required implementation work; Herdr's present API itself does not provide a read-only role.
+**[D-main, R-443]** ENG-342 supersedes the earlier global-root suggestion for shadow capture: its default is `<identity-root>/.herdr-brain/logs/<identity>/<sha256(canonical-common-dir)>/`. Unmarked projects alone retain the documented global fallback; no old journal is migrated or deleted. **[P]** Use that identity-local storage boundary for the future service, with directory `0700`, journal/socket files `0600`, sequenced segments, service epoch/retention metadata and subscriber cursors. Canonical identity mapping belongs to the service's approved enrollment. Do not merge another identity's files or give a cross-identity viewer write access. The separately scoped read interface remains implementation work; section 8.4 defines its proposed fleet contract. Herdr's present API itself does not provide a read-only role, and directory modes do not distinguish logical identities sharing an OS user.
 
 Illustrative stored event, with service-assigned fields distinguished below:
 
@@ -959,7 +963,7 @@ The controller belongs above the existing CLI/modules; the core stays model-free
 
 ### Staged recommendation
 
-Estimates are rough engineering effort for one implementer with existing modules available, excluding review, host-slot waiting and release time. They are planning estimates, not measured performance. Stages incrementally implement the adopted design and have explicit reversals; none is implemented by this research run. ARCH-33 selects stages 1–2 (ENG-338) and 7 (ENG-339) first, after this text lands and the operator confirms it. Live rollout follows those prerequisites.
+Estimates below are the original rough engineering effort for one implementer, excluding review, host-slot waiting and release time. They are not measured performance or new estimates for fleet chat. None of these stages is implemented by this research. **R-443 source update:** stages 1–2, inspect-only stage 3 and shadow-only stage 7 have landed on main; stage 5's first slice is in correction rounds according to the supplied brief. Live activation, stage 8 transport and the remaining gates are distinct. Section 8.8 adds a proposed fleet-chat sequence at stage 11, dependent on stage 8 and scoped-read/enrollment review; it does not reactivate the obsolete pre-engineering wait for R-423.
 
 | Stage | Size | Acceptance evidence in a future authorized implementation | Reverse it |
 | --- | --- | --- | --- |
@@ -973,7 +977,7 @@ Estimates are rough engineering effort for one implementer with existing modules
 | 8. One per-recipient durable transport, first project | Medium, 3–5 days | Transfer inbox ownership with a fence/watermark. Fsync-before-ack, replay, body integrity, sender scope, same-ID conflict, composer busy, occupant change, refused delivery, lost acknowledgement, reply correlation and warm `--reuse` all retain correct receipts. No exactly-once model claim. | Freeze new sends, transfer pending IDs/receipts to the old owner, then resume only that owner. Hold uncertain entries for inspection; never replay all as fresh prompts. |
 | 9. Implement adopted routing and host coordination | Medium, 3–5 days | Direct decisions bypass triage; fyi/ack/hold/release have zero model wakes. Everything else operational is selected for batches, with detector interpretation evidence and no raw telemetry/model feedback loop. Preserve independent holds, late releases, STOP, BCH PAUSED and real lock/queue ownership. Until stage 10 accepts batches, retain the old routine delivery owner; no cutover gap. | Fence back to the old transport owner, preserving pending IDs and active hold receipts. Map/dispose holds under their existing authority; never drop batch candidates while disabling rules. |
 | 10. Required subscription triage, replay selection, handoff and relays | Medium/large, 5–8 days plus approved replay time | One manifest-declared Herdr triage session in the logs pane; output-only tools, preloaded scoped inputs, N/M cadence, one summary per batch, complete coverage/failure carry-forward, atomic cursor receipts and safe tab reconstruction. Draft since-last-handoff text. **Replay the same approved real traffic through monitor/Luna low and a new Haiku 5.5 route; measure missed decisions, false alarms, tokens/cost evidence and shared subscription quota, then retain the winner.** Validate targeted fanout and chat policy too. No service/controller API calls. | Stop new model batches/relay ingress; retain cursors, outputs, carry-forward items and handoff evidence. Deterministic failure summaries keep pending work visible; restore legacy delivery with the stage-8 fence. Withdraw only the triage occupant at a safe boundary; keep service/viewer and warm workers. |
-| 11. Watch consolidation and fleet adoption | Medium, 2–4 days plus each identity's review | One report/notice owner per run, unchanged BCH stable paths/flags/tags, native refusal holds, all host holds retained. Each identity adopts its own adapter through its desk/record; compare pending-age, delivery duplicates and judgment latency before expansion. | Reassign subscriber/transport ownership by receipt, keep compatibility entrypoints and durable state. Each identity reverses its own enrollment; no cross-identity cleanup. |
+| 11. Watch consolidation and fleet adoption | Original scope: medium, 2–4 days plus each identity's review; fleet-chat addition unestimated | One report/notice owner per run, unchanged BCH stable paths/flags/tags, native refusal holds, all host holds retained. Each identity adopts its own adapter through its desk/record; compare pending-age, delivery duplicates and judgment latency. Proposed operator fleet chat additionally follows section 8.8's read-scope, non-repository enrollment and stage-8 transport gates. | Reassign subscriber/transport ownership by receipt, keep compatibility entrypoints and durable state. Each identity reverses its own enrollment; no cross-identity cleanup. Disable fleet subscriptions without deleting unresolved operator threads or project chats. |
 
 Future focused checks use the repository's lane/promotion/release and host-slot rules. This document does not schedule them or claim they pass. The real-model replay is a separately authorized evaluation in isolated Herdr sessions, **not a repository offline test suite**; product tests remain offline and never call a model. ARCH-33 has adopted the platform and three logging paths; schema details, model/cadence selection and rollout evidence remain to implement. ARCH-31 is incorporated in section 7.7, and ENG-338/ENG-339 already cover the first work, so no duplicate follow-on item is needed. Sizes are incremental effort, not a calendar promise.
 
@@ -991,11 +995,11 @@ These steps are **not executed**. Use an isolated disposable test workspace and 
 
 ### Explicit non-claims and completed artifact checks
 
-The architecture and logging paths are **adopted, not implemented by this research**. No session controller, manifest loader, logging service, triage session, slot protection or new native adapter has been installed. No product source, configuration or test was changed. No suite, model replay, build, promotion, release, `verify` command or housekeeping ran. Current retirement conclusions come from source reading; required protection is not falsely reported as already present.
+The architecture and logging paths are **adopted, not implemented by this research**. These research runs installed no controller, manifest loader, logging service, triage session, slot protection or native adapter. R-443's separate main inspection found the source-landed slices identified above; it does not establish live activation. No product source, configuration or test was changed here. No suite, model replay, build, promotion, release, `verify` command or housekeeping ran. Retirement conclusions come from source reading, not a live planner or enrollment exercise.
 
 The 2026-10-14 duplicate-ID incident remains unproven and unexplained by retained evidence. No native clear/exit/restart/rename, prompt consumption, server handoff, restoration of model/effort/personality, memory-service operation, subscriber overflow, durable-service throughput or native sandbox enforcement was tested. No live model selection/availability was verified beyond declared route and process metadata. Upstream documentation is current web documentation and may evolve; pinned source evidence is the v0.9.3 code, not a guarantee about every installed binary path. The rejected bare `herdr server` invocation is disclosed in section 1.
 
-The only committed changes for all three runs belong under `docs/research/session-architecture/`. Artifact inspection and run-report parser results are recorded in their separate R-421, R-422 and R-423 run reports; earlier reports remain unchanged. The viewer embeds all eleven standalone Mermaid sources, loads only the requested Mermaid 11.4.1 CDN script, defines light/dark color tokens and provides fit/readable-size controls for narrow screens. It is self-contained apart from that explicitly required CDN dependency; its source text remains readable if the CDN is unavailable.
+The only committed changes for all four research runs belong under `docs/research/session-architecture/`. Artifact inspection and run-report parser results are recorded in their separate R-421, R-422, R-423 and R-443 run reports; earlier reports remain unchanged. The viewer embeds all thirteen standalone Mermaid sources, loads only the requested Mermaid 11.4.1 CDN script, defines light/dark color tokens and provides fit/readable-size controls for narrow screens. It is self-contained apart from that explicitly required CDN dependency; its source text remains readable if the CDN is unavailable.
 
 **[M] Rendered appearance remains unverified.** Browser preview of this local `diagrams.html` was refused: `Browser Use rejected this action due to browser security policy. Reason: The browser URL policy blocks this action. Browser use cannot visit the requested page because its URL is blocked by the Browser use URL policy.` The tool also forbade alternate surfaces or indirect workarounds. The preview action stopped, its unused tab was closed, and no alternate browser, localhost proxy or renderer was used to evade the refusal. Static artifact inspection is separate from rendered Mermaid, phone-width and dark-mode verification; those visual checks remain for the supervisor's permitted viewer.
 
@@ -1119,6 +1123,8 @@ A `decision_ref` names the actual record, sequence, author/delegation evidence a
 Use one thin, dependency-free publish/read/reply adapter from either harness's normal tools. Its proposed recipient projection is under the owning service partition, `inboxes/<canonical-recipient-hash>/`; the public read pointer must be in a scope already permitted to that recipient. Keep the current `.org/supervisor/inbox.log` as the compatibility owner until its fenced transfer. An approved file outbox can be the normal producer interface, so the architecture need not depend on every worker having socket access. It is not a fallback to evade an actual denied socket operation. There is no new wrapper, native hook, model-specific core branch or automatic permission-profile change.
 
 For cross-identity delivery, each identity's adapter owns its files. The sender publishes only an authorized export from its own outbox; the recipient adapter imports it into its own scoped store and records acceptance. Preserve the immutable origin envelope and digest; the recipient's local cursor/receipt wraps that envelope rather than changing its origin fields. There is one writer per owned partition, no cross-identity atomic commit or global order. No agent writes another identity's inbox, handoff or configuration. A body under `/tmp` must be retained in authorized durable storage before acceptance, or acceptance is withheld; an imported local body path is a receipt mapping to the same digest, not an edit to the origin envelope. This import never copies a file that the originating harness refused to read; report that refusal through the operator's existing path. Shared pointers are sufficient only while their permitted lifetime and availability are guaranteed.
+
+**[P, R-443]** Section 8 applies this same boundary to operator-origin messages: the actual chat/coordinator session remains the relayer, and separately verified human provenance supplies the claimed origin. A fleet conversation does not become another identity's writer. Main's stage-7 mirrors are observational only; neither identity-desk shadow capture nor `openProjectChat` implements this import/export transport.
 
 | Receipt/observation | Exact meaning |
 | --- | --- |
@@ -1357,7 +1363,7 @@ sequenceDiagram
 
 #### Protocol: operator question through chat
 
-The operator sees a concise answer or decision question. Pull-only chat avoids unsolicited protocol entries; opting into timely attention adds one pointer. Acks and routine control traffic stay in the service.
+The operator sees a concise answer or decision question. This flow is for one project chat; section 8 and figure 13 extend it to a two-project fleet question. Pull-only chat avoids unsolicited protocol entries; opting into timely attention adds one pointer. Acks and routine control traffic stay in the service.
 
 Source: [`11-protocol-operator-chat.mmd`](diagrams/11-protocol-operator-chat.mmd).
 
@@ -1438,3 +1444,279 @@ The protocol cannot retroactively silence direct native free text or arbitrary h
 R-422 performed bounded source/record/file inspection and primary-document research; R-423 read the adopted ARCH-33 notes, the new brief and the existing monitor-route declaration. No native cross-session send, Herdr prompt/key/close/reset, desk request, daemon/service launch, test suite, model replay or slot acquisition occurred in either addendum. The native Claude contract is documented, not experimentally verified in this installation. Logical-identity authentication, race-free terminal delivery, exactly-once model consumption, durable-service throughput, triage confinement, candidate subscription availability and actual model/token savings remain unproven. R-423 reconciles the count using the supervisor's correction, without reading private transcripts or traffic bodies.
 
 The session platform, standard protocol and three-path logging design are **adopted under ARCH-33**. The required triage session replaces the earlier digester option; model selection and calibration remain measured implementation choices. No engineering lane was dispatched or live behavior changed by this document update. Existing report/decision authority, warm-review retention and native permissions remain the boundary. Static document/source consistency checks are reported with R-423; the prior browser URL-policy refusal still leaves rendered Mermaid, dark-mode and phone-layout appearance unverified.
+
+## 8. Operator fleet chat across identities
+
+**Recommendation [P, R-443]: give the machine operator one conversation in a dedicated, non-repository operator identity, above the existing project chats.** Each project continues to own its supervisor, record, lanes, Git/GitHub identity and three standard slots. The fleet chat submits addressed questions and faithful decision relays through each owner's import adapter. It reads only owner-approved projections through a separately scoped interface. The existing coordinator is a useful interim entry point and can retain its bounded T2 role; neither a workspace nor a chat becomes a global project supervisor.
+
+This is the 2026-10-16 fleet-chat addendum to the adopted platform, **not an adopted expansion of access or authority**. No operator root, adapter, permission, chat or record has been created. The operator can already discuss both projects in one existing conversation using explicitly supplied material; durable federation and non-repository enrollment require further implementation and authority.
+
+### 8.1 What exists, and what the shared workspace does not provide
+
+**[M, 2026-10-16 approximately 11:46 CDT]** Read-only `herdr workspace list` and `herdr agent list` returned 53 workspaces and 46 recognized agents. The following selected metadata confirms the brief's mixed-identity layout. These two inventories are not an atomic snapshot, proof of a native permission set, or a grant to operate any listed pane.
+
+| Workspace / pane | Observed harness and working directory | Meaning and limit |
+| --- | --- | --- |
+| `chats` (`w2XS`), `w2XS:p2` | Claude, `/Users/rewt/development/bastian/bch-cloak` | A project conversation in the bastian checkout. |
+| `chats`, `w2XS:p5` | Claude, `/Users/rewt/development/rewt/herdr-brain` | A separate project conversation in the rewt checkout. |
+| `chats`, `w2XS:pH` | Codex, `/Users/rewt/development/bastian/bch-cloak` | Another bastian-scoped conversation; no shared conversation state follows from the workspace label. |
+| `herdr-brain` (`w34E`), `w34E:pD` | Codex, `/Users/rewt/development/rewt/herdr-brain` | The brief identifies this as coordinator Astra. Inventory confirms the occupant kind/path, not its delegation. |
+| `herdr-brain`, `w34E:p1`; `bch-cloak` (`wFN`), `wFN:pY6` | Named Claude agents `supervisor-herdr` and `supervisor-opus`, in their respective checkouts | Separate project supervisors. Names are observations, not authenticated role bindings. |
+
+**[D-main]** Source was inspected at main `7896ee8b576edeb49fec0acdda5797e7a9c6d307`; the relevant working-tree files had no local diff. The evidence is bounded to documentation and source, not execution of those modules:
+
+| Source | What it establishes |
+| --- | --- |
+| [Main: sessions/README.md](/Users/rewt/development/rewt/herdr-brain/sessions/README.md), blob `38b03ad4247c00cbb0c05ee165a6e34a27ffb7db` | Stages 1–3 are inspection and KEEP protections. Desired projects use canonical Git ownership; live planning has no apply or enrollment. Warm reports yield `ParkedAwaitingReview` and corrections observe the same-session `dispatch --reuse` contract. |
+| [Main: messages/README.md](/Users/rewt/development/rewt/herdr-brain/messages/README.md), blob `7770559bc2ff6aee703ea2d6b78104094d97527c` | Stage 7 validates envelopes and records best-effort shadow observations. It neither delivers nor authenticates cross-identity roles. ENG-342's identity-local root is `<identity-root>/.herdr-brain/logs/<identity>/<sha256(common)>/`; it is not a fleet read API. |
+| [Main: supervisor/chats.mjs](/Users/rewt/development/rewt/herdr-brain/supervisor/chats.mjs), `openProjectChat`, blob `7329777df262973e50253d62fcdca1a9df5905dc` | The launcher can put project chats in the shared `chats` workspace, but resolves each project's checkout, record and routes independently. It reuses exact receipts and sets that project's record/ops recipient. Its comment explicitly says chats have full Herdr access; removed read/scoped modes are not a current security boundary. No launcher was invoked here. |
+| [Main: supervisor/request.mjs](/Users/rewt/development/rewt/herdr-brain/supervisor/request.mjs), blob `c275b63aa72236cbd8ebbc87020e7f24340c99fe` | Existing identity-desk requests prompt the receiving desk and only then mirror an observation. That compatibility helper does not implement section 7.4's durable import/export or quiet inbox. It was read, not called. |
+| Main `git log` | ENG-338's manifest/KEEP work culminates at `5a0e99af`; ENG-339's stage-7 batch at `fd64c1cd`; stage-3 fixes at `a4ec51e0`; identity-local shadow fix at `b104806c` with its guard at `2ddbf49e`. The inspected main has later offline-snapshot work. Source landing is distinct from release/activation. |
+
+The R-443 record brief reports a **build-only** release window and activation still held at its recorded 11:13 update. No installed-release state was probed in this run; this is historical record context, not a claim about the current deployment. Its note calling ENG-338 “stage 6” does not prove the default-tab controller loop landed: the shipped README and this report's stage numbering identify stages 1–2 and inspect-only stage 3.
+
+**[D-brief / earlier source evidence]** The supervisors currently coordinate using Claude cross-session UDS messages, Astra's delegated technical decisions, `/tmp` memos with advertised hashes that each owner republishes, operator-pasted relays and identity desks. These are existing channels, with section 7.2's differing guarantees. R-443 did not read message or transcript bodies, inspect another identity's private evidence directory, re-read memo contents, or exercise any channel. A measured digest or an “operator says” prefix cannot authenticate the human source.
+
+**[M/D-launcher]** Both `/Users/rewt/development/rewt` and `/Users/rewt/development/bastian` carry regular `.identity-root` markers, `.codex/config.toml` and `.claude/settings.identity.json`. Only file names/types and launcher selection structure were inspected; no settings contents or credentials were read. `~/bin/ai` selects the interactive Claude identity settings by its starting directory; its source documents Codex's marker-based config discovery. Git read-only discovery confirms the separate common directories `/Users/rewt/development/rewt/herdr-brain/.git` and `/Users/rewt/development/bastian/bch-cloak/.git`. A profile path, logical identity and Git common directory are different concepts. In particular `lib/fleet.mjs` calls a Git common-directory path `project.identity`; that field must not be mistaken for the logical account name `rewt` or `bastian`.
+
+### 8.2 Conversation home: compare the three choices
+
+| Option | Benefit | Cost / boundary | Recommendation |
+| --- | --- | --- | --- |
+| Dedicated non-repository operator root, e.g. `~/development/operator` with `.identity-root`, own record and logs | A stable human-facing home independent of either project's instructions, Git account and lifecycle. Its handoff can track all selected conversations without copying project records. | New identity enrollment, native profile and scoped exports need explicit review/permission. Current project-oriented manifests/transport cannot simply treat it as a Git checkout. | **Target.** One operator conversation, independently scoped, with no project-writing or publishing capability. |
+| Grow the existing coordinator into fleet chat | Immediately useful conversation and existing T2 context; no new identity is needed to discuss owner-supplied material. | It currently runs in the rewt project. Its cwd, inherited configuration and delegated judgment can be mistaken for fleet ownership or operator authority. A coordinator relaying an operator answer must distinguish that from its own decision. | **Interim entry point.** Retain current identity and delegation; do not expand permissions or silently rename it into an operator identity. |
+| Federate per-project chats through a fleet view | Preserves project permissions and contexts; a model-free view can show scoped summaries and pending questions. | Multiple conversations remain; without an operator inbox and correlation it still requires the operator to connect replies. A view alone neither authenticates relays nor grants cross-identity reads. | **Supporting read model and reversible fallback.** Keep project chats even after the single conversation is available. |
+
+**[P]** The operator root owns its own conversation handoff, `.org` record and identity-local log partition. Its record stores material operator decisions, delegation references and thread dispositions through the ordinary record writer; routine delivery receipts stay in its log service. Project work status remains derived from each project's own events. Do not duplicate their event logs or treat the operator record as an override writer. The chat runs with its **own native identity profile**, in Herdr on the existing authorized subscription, from its own manifest once supported. It receives no GitHub credential, repository write root, signing tool or automatic account switch by virtue of that role. It never commits or pushes project work; project owners use their own lanes and Git/GitHub identities. No new subscription or credential handling is assumed.
+
+**An explicit implementation gap:** today's session inspector discovers a canonical Git project; its closed schema does not contain fleet roles or identity-scoped context sources. The message schema requires an absolute `project.commonDir`, and its shadow writer verifies the actual Git project. A non-Git identity-root address is already used for an *observational desk recipient*, but that does not implement a non-Git producer or enrolled fleet controller. Do not create a fake `.git`, substitute another project's common directory, or assert that a new manifest works today.
+
+The proposed extension is a **typed identity control scope**, with an owner-enrolled UID, canonical root and separate storage key. Project recipients still use their actual Git common directories. For the operator role, the logical `projectRef` denotes the canonical operator control root and must resolve through that typed enrollment, never through Git inference. A versioned origin-scope extension must represent this explicitly instead of pretending the root is `project.commonDir`; older adapters must retain it as unsupported/inert and never deliver it. Review exact schema/version, non-Git discovery and native readiness before implementation. Its logs can use `<operator-root>/.herdr-brain/logs/operator/<scope-hash>/`, where the hash covers the typed enrolled scope, not a fabricated Git identity. All of this is proposed, with no presently valid fleet manifest claimed.
+
+### 8.3 Authority: human origin, actual relayer, local decisions
+
+**[A boundary, P fleet application]** The authority rule is [decision-routing policy v2](../../../supervisor/DECISION-ROUTING.md). The operator conversation is an entry point to that policy, not a new decider tier. Preserve standing authorizations across sessions and ask only where the effect or missing delegation requires it.
+
+1. **Capture the intended communication.** Retain the operator's exact selected question/answer and scope as a bounded communication body, separate from the whole conversation. The real relaying session is `payload.from`. Proposed provenance records human-origin evidence, capture method, original ID/time/body digest, every relayer, intended projects, and whether that origin has been verified. Imported copies preserve these bytes and their digest. A paraphrase is labeled a paraphrase and cannot become the exact T3 answer.
+2. **Verify origin separately.** A future operator input adapter must bind a human-origin receipt to the operator's trusted entry point and approved scope. Merely setting `identity: operator`, using its cwd, holding the same OS UID or hashing text is insufficient. Until that ingress is reviewed, use an already accepted direct operator answer / canonical decision reference, or have the receiving supervisor verify the relay through its existing operator path. Unverified paste remains a claim awaiting validation. No new trust pin or authentication mechanism is installed here.
+3. **Import under the recipient owner.** The sender exports the permitted envelope/body from its own store. The target identity's adapter verifies origin, recipient, permitted body and scope, imports into its own partition, and quiet-delivers to its canonical project supervisor. Transport acceptance says only that the message is durable; it does not accept the decision's authority. Unknown or changed delegation, ambiguous scope or superseded evidence holds the dependent action.
+4. **Record the applicable decision locally.** Each supervisor validates effect/category, existing delegation and current holds, then writes the exact applicable operator answer and scope to its own record through the normal CLI/lock, using the relevant existing decision/HUM item where appropriate. The note cites the origin event/digest, relayer provenance and operator decision reference. A correlated reply supplies that project's decision sequence or an explicit pending/declined/out-of-scope result. Deduplicate by origin decision plus local scope; a retry must not create a second disposition.
+5. **Act through the existing owner.** Local T1 application still uses dispatch/reuse, review, promotion and release paths. A question about readiness is not permission to activate a release. If a decision affects two projects, their two notes and effects remain separate; report partial acceptance and disagreement. There is no cross-record transaction, global ordering or automatic rollback of an already executed effect. The fleet chat cannot report fleet-wide approval from one project's receipt.
+
+| Actual decider / effect | Placement |
+| --- | --- |
+| T0 implementation or T1 application of a standing rule | Remains with the engineer/reviewer or project supervisor. The fleet need not approve routine dispatch or same-session corrections. |
+| Astra / another recorded T2 delegate | May decide the bounded technical contract, unresolved evidence dispute or new cross-project priority agreement already within its delegation. Preserve the real decider, scope, limits/expiry, evidence and unknowns in a concise local decision note in each affected project. A T2 decision is neither an operator quote nor an independent review PASS. |
+| Human operator / T3 | Reserved effects or delegation changes use the actual scoped operator answer; bind it in each affected record. A general “handle it” or a conversation in `chats` does not expand native permissions or account authority. |
+| Adapter, fleet view, triage or message field | No authority to create a delegation, approve missing evidence, lift a reserved hold, choose release scope or perform the effect. |
+
+The reserved effects remain: funds/mainnet/purchases/account authority beyond granted scope; external disclosure/publication/deployment beyond standing authority; trust anchors/frozen cryptographic or semantic material; privacy/custody/mission guarantees; native permissions and actual harness/classifier refusals; sensitive operator state/destructive loss; new product direction/external commitments; and changes to authority policy or specifically reserved holds. Native approvals still use the native harness. A chat answer is decision evidence, not a permission-setting API. If the coordinator's actor binding moves to a new identity, validate its existing delegation against that new binding; a pane move or copied handoff does not transfer authority automatically. No new delegation is needed simply to keep applying a valid unchanged one.
+
+**Refusals are never forwarded for execution.** On an actual native refusal, stop that action, preserve its reason and tell the operator through an already permitted path. The fleet may present the refusal fact without collecting the refused content. It must not relay the refused task to the other supervisor, desk, provider or an import adapter to accomplish it there. Continue unrelated work. The same rule prevents an export adapter from fetching a document that the requesting harness was refused permission to read.
+
+### 8.4 The separately scoped read interface
+
+**[P]** The fleet reads **owner-produced projections**, not each identity's filesystem or general Herdr socket. Each owning identity operates its own deterministic exporter/query adapter. It reads its own permitted sources, applies its approved field/filter policy, and exposes only the selected view to an enrolled fleet reader. The operator adapter caches permitted copies only in the operator root. The logs tab is a viewer of that interface, never the service or a second record writer. This is an explicit data-sharing contract, not an inferred consequence of a read-only tool label.
+
+| Exported view, if individually authorized | Allowed initial fields | Excluded / caveat |
+| --- | --- | --- |
+| Record status and today | Project/scope ID, source record sequence/time, approved item IDs and redacted titles, derived status, current priorities, blockers/decision-needed summaries, approved evidence references | No raw `events.jsonl`, unfiltered `show` output, private note/report bodies, whole TODAY files or automatic recursive evidence traversal. Even titles and blocker summaries need owner filtering. |
+| Logs-viewer projection | Approved event types and one-line summaries, aggregate counts, source cursor/epoch, explicit gaps, selected triage findings with permitted citations | No raw shadow bodies, terminal text, full message stream, arbitrary `body_ref` reads or cross-identity triage-input feed. A hidden source stays visibly unavailable; a link is not permission to fetch it. |
+| Release state | Candidate/tag and source revision when shareable, build/validation/activation states separately, observed time, owner-stated hold and evidence references | No execution of a release command, inferred activation from a tag/build, key material, unpublished construction detail or secret environment. Unknown state remains unknown. |
+| Thread/decision projection | Selected operator question IDs, per-project pending/answered state, permitted decision references and exact authorized answer scope | No unrelated human correspondence or transcript history. Imported questions are scoped messages, not blanket conversation access. |
+
+The read contract binds **caller role/enrollment + owner identity + canonical project/scope + view/version + allowlisted fields and filters + bounds**. The owner enforces this combination; client-side filtering does not enforce privacy. Return source sequence/cursor, generated-at/as-of times, projection version, export ID/digest, completeness/retention floor and any stale, denied, redacted or unavailable condition. Cross-project snapshots carry separate source cutoffs; the fleet must not imply a transactionally consistent “now.” Refresh is a read request within that same scope, not a task to scan more files. Exported references are opaque IDs until a separately permitted bounded read resolves them.
+
+An identity-local export file and a scoped query endpoint are possible transports. Either requires an approved, enforceable read path at both ends before enabling it. No arbitrary-path endpoint, shell command parameter, general MCP filesystem server, generic Herdr proxy, or service-held model key is needed. Exact endpoint authorization remains stage-8 work: the identities share one OS user, so socket mode `0600` alone does not authenticate a logical reader. A provider/account or `.identity-root` selector alone does not constrain file access. If native enforcement cannot support the proposed limited view, retain the manual step instead of widening roots automatically.
+
+**Never read:** secrets, tokens, keys/keychains, auth files, environment dumps, native transcripts or pane buffers, the other identity's private evidence directory, private BCH round material, unpublished restricted construction, or arbitrary code/docs reached through a message path. Do not merge native memory stores or share Claude/Codex conversation directories. Owner projections may expose only already authorized information; exclusion applies even when a process technically has broad host reads. Later approved disclosure must name the scope and respect the project's mission/publication policy, not treat the fleet as a universal exception.
+
+Enrollment removal stops future export/read capability and freezes its local pending cursor. Existing permitted copies, decision evidence and unresolved threads retain their provenance under the agreed retention policy; withdrawal cannot make already seen bytes unseen. Deleting unique evidence is a separate authority decision. A denied/stale source is shown as denied/stale, never an empty success. This makes reversibility honest without inventing a fleet cleanup engine.
+
+### 8.5 Workspaces, tabs and warm sessions
+
+**[P]** A fleet workspace is an additional operator control workspace, sitting above and aggregating selected project chats. Each enrolled project and lane retains section 4's chat/supervisor/logs slots. The fleet does not replace them, move their cwd, inherit their Git identity, or nominate another project-wide queue owner.
+
+Once the non-repository scope is supported, its own standard **chat / supervisor / logs** layout follows the adopted lifecycle rules. The chat slot contains the one operator conversation. The supervisor slot is the operator scope's coordination/handoff role: an existing coordinator may occupy it only with validated delegated authority; otherwise it has no T2 or project-scheduling power. The logs viewer displays authorized fleet/thread projections. Its second logs position is a **model-free reference to the enrolled projects' exported triage status**, analogous to a non-home project's triage reference. It does not create a second triage session for every project or feed their summaries into another model. This identity-scope layout is part of the proposed schema extension, not something today's home-project validator accepts.
+
+Project direct questions/decisions still go straight to their supervisor; `fyi`, `ack`, `hold`, `release` stay rule-only; the remaining project operational traffic stays in each project's required triage batch. Mandatory triage lines remain supervisor inputs, not fleet-chat inputs. Fleet delivery/read telemetry goes to rules and its viewer. Any model synthesis occurs when the operator actually interacts with the fleet chat, on the subscription, without a new periodic model or service API call.
+
+Keep the current mixed `chats` workspace intact. Its existing panes are project-bound conversations and are **not automatically enrolled or relabeled** as an operator identity. A later authorized choice can add an operator-owned tab there, or use a separate fleet workspace; a label does not merge ownership. Prefer a separate operator workspace initially so its boundary is visible. Never close a mixed-ownership tab as part of fleet reset. Record exact scope/workspace/tab/pane/terminal/native bindings and KEEP receipts; unknown ownership or a close hold keeps the entire affected layout.
+
+Fleet chat reset, when separately implemented, uses its own manifest and Markdown handoff with unresolved thread IDs, per-owner reply cursors, operator decisions and verified delegation references. It follows close-and-respawn only at a safe boundary. A lost fleet conversation does not invalidate project records or recreate questions with fresh IDs. Project workers still park after reporting; review corrections return through **`dispatch --reuse` to the same warm session**. The reconciler and retirement planner never clear `ParkedAwaitingReview`. No fleet timeout, stale projection, context budget or withdrawn subscription can retire a worker before landing or explicit disposition.
+
+### 8.6 Addressing, fanout, replies and pull-only attention
+
+**[P]** Retain section 7's `{identity, projectRef, role}` address and stable binding receipt. Examples below are logical destinations, not current authenticated bindings:
+
+| Destination | Identity and canonical project/scope | Role |
+| --- | --- | --- |
+| Herdr Brain supervisor | `rewt`, `/Users/rewt/development/rewt/herdr-brain/.git` | `project-supervisor`, its own enrollment `bindingRef` |
+| BCH supervisor | `bastian`, `/Users/rewt/development/bastian/bch-cloak/.git` | `project-supervisor`, its own enrollment `bindingRef` |
+| Future fleet reply inbox | `operator`, `/Users/rewt/development/operator` **with explicit identity-control scope** | Proposed `operator-chat`, its enrollment `bindingRef`; unsupported until the scope extension lands |
+| Interim coordinator reply inbox | `rewt`, the actual Herdr Brain common directory | Its explicitly enrolled coordinator role once transport exists; never impersonate the future operator root |
+
+For one question concerning two projects, persist one exact bounded question as event **Q**, correlation **C**, and a fixed list of the two recipients. Publish only to those recipients under the authorized export contract; do not broadcast to every workspace, Git remote or identically named project. Recipient-specific bodies, narrower disclosures or later additions are new derived events with their own IDs and `causationId: Q`, retaining C. A single envelope with two recipients is appropriate only when **both may receive the full envelope, body and recipient list**; do not leak one project's private detail through the common question. The UI can still present these derived requests as one operator thread.
+
+Each receiving adapter imports/fsyncs independently and maintains `(event ID, logical recipient)` receipts. One busy or unavailable supervisor does not block the other. Expected replies use new event IDs, `reply_to: Q` (or the corresponding derived request), C, and their own project-qualified evidence. The fleet validates sender binding and expected pending target before presenting them. Track accepted, unanswered, answered, declined/held and explicitly disposed targets separately as a derived thread view; transport acceptance/consumption does not mean a decision was made. Do not collapse conflicting answers or use first-reply-wins.
+
+The operator can retrieve available answers in the same active interaction or on the **next operator interaction**. If only one answer exists, say which one is missing and its last known state; do not invent consensus. A missed reply objective creates one tracked exception via the existing authorized route, not a permission change, silent cancellation or repeated prompt storm. Late replies join the original thread; an amended operator answer creates a new event with explicit supersession. Restart preserves pending IDs, bodies and receipts, and must not reissue an uncertain action as a fresh request.
+
+Section 7.7's **pull-only default applies to fleet and project chats**. Incoming replies and supervisor decision requests accumulate durably without waking the chat model. An operator may opt into one quiet-gated pointer for an unresolved decision needing timely attention; no ack, FYI, hold, release, routine report or triage batch is promoted into that exception. An urgency flag cannot override native refusal, STOP or the chosen attention policy. Project decision traffic still bypasses triage regardless of how often the operator opens fleet chat. Repeated pulls expose pending work without generating repeated model-side requests or receipt messages.
+
+<!-- FLEET_DIAGRAMS_START -->
+
+### 8.7 Fleet boundaries and a two-project conversation [P]
+
+The figures distinguish logical ownership from visual placement. Every import/export is conditional on a permitted, enrolled transport; none is installed by this proposal.
+
+#### Proposed fleet: identities and read boundaries
+
+The fleet owns its conversation and references. Each identity owns its import, record and project work; only approved projections cross the read boundary.
+
+Source: [`12-fleet-chat-boundaries.mmd`](diagrams/12-fleet-chat-boundaries.mmd).
+
+```mermaid
+flowchart TB
+  O[Machine operator]
+  subgraph Fleet[Proposed operator identity - non-repository root]
+    F[One fleet chat - native subscription session]
+    A[Model-free scoped read and message adapter]
+    R[Own record - exact operator answers and thread references]
+    L[Own logs partition and model-free fleet viewer]
+    F --> A
+    F --> R
+    A --> L
+  end
+  subgraph Rewt[rewt identity - Herdr Brain]
+    RI[Owner import and export adapter]
+    RS[Canonical project supervisor]
+    RR[Own record - lanes - reviews - Git identity]
+    RP[Approved status and logs-viewer projection]
+    RC[Project chat - supervisor - logs slots retained]
+    RI -->|quiet addressed question| RS
+    RS --> RR
+    RR -->|allowlisted owner export| RP
+    RS -->|scoped reply| RI
+    RC -.-> RS
+  end
+  subgraph Bastian[bastian identity - BCH Cloak]
+    BI[Owner import and export adapter]
+    BS[Canonical project supervisor]
+    BR[Own record - lanes - reviews - GitHub identity]
+    BP[Approved status and logs-viewer projection]
+    BC[Project chat - supervisor - logs slots retained]
+    BI -->|quiet addressed question| BS
+    BS --> BR
+    BR -->|allowlisted owner export| BP
+    BS -->|scoped reply| BI
+    BC -.-> BS
+  end
+  O -->|question or exact scoped answer| F
+  A -->|authorized envelope export| RI
+  A -->|authorized envelope export| BI
+  RI -->|reply export - operator adapter imports| A
+  BI -->|reply export - operator adapter imports| A
+  RP -->|scoped read only after approval| A
+  BP -->|scoped read only after approval| A
+  C[Existing coordinator - T2 only within recorded delegation]
+  F -.->|bounded technical escalation| C
+  C -.->|decision evidence via owner imports| RI
+  C -.->|decision evidence via owner imports| BI
+  W[chats workspace is a layout container - no shared authority]
+  W -.-> F
+  W -.-> RC
+  W -.-> BC
+  N[No fleet writes to project files - no raw transcript access - no refusal forwarding]
+  A --- N
+```
+
+#### Proposed fleet: question, replies and scoped decision
+
+One authorized question fans out independently. The operator reads available replies on demand; each supervisor validates and records an applicable decision in its own record. Missing provenance or a refusal holds the affected action.
+
+Source: [`13-fleet-chat-question.mmd`](diagrams/13-fleet-chat-question.mmd).
+
+```mermaid
+sequenceDiagram
+  actor O as Operator
+  participant F as Fleet chat and own durable adapter
+  participant RI as rewt import and export adapter
+  participant RS as Herdr Brain supervisor and own record
+  participant BI as bastian import and export adapter
+  participant BS as BCH supervisor and own record
+  O->>F: Ask one question about both projects
+  F->>F: Retain exact scoped question and real relayer provenance
+  F->>F: Freeze two recipients, event Q and correlation C
+  par Herdr Brain request
+    F->>RI: Authorized export Q for rewt project-supervisor
+    RI->>RI: Verify scope and body; persist before acceptance
+    RI->>RS: Quiet-gated pointer when eligible
+    RS->>RS: Read own record and check existing delegation
+    RS->>RI: Reply R1 with reply_to Q and correlation C
+    RI-->>F: Reply export; own adapter imports R1
+  and BCH request
+    F->>BI: Authorized export Q for bastian project-supervisor
+    BI->>BI: Verify scope and body; persist before acceptance
+    BI->>BS: Quiet-gated pointer when eligible
+    BS->>BS: Read own record and check existing delegation
+    BS->>BI: Reply R2 with reply_to Q and correlation C
+    BI-->>F: Reply export; own adapter imports R2
+  end
+  F->>F: Retain replies and separate pending targets; no chat wake
+  O->>F: Next interaction - retrieve available answers
+  F-->>O: One sourced answer; show missing, stale or conflicting replies
+  opt Operator gives a decision with explicit project scope
+    O->>F: Exact answer and limits
+    F->>F: Preserve verified human origin and actual relayer; new event D
+    F->>RI: D with provenance and decision reference
+    RI->>RS: Direct pointer; validate authority and supersession
+    RS->>RS: Record exact applicable answer under own writer lock
+    F->>BI: Same D for second selected recipient
+    BI->>BS: Direct pointer; validate authority and supersession
+    BS->>BS: Record exact applicable answer under own writer lock
+    RS-->>RI: Local decision reference or explicit hold
+    BS-->>BI: Local decision reference or explicit hold
+    RI-->>F: Correlated result for rewt
+    BI-->>F: Correlated result for bastian
+  end
+  Note over F,BS: No cross-project atomic commit; one acceptance is not a fleet decision
+  Note over F,BS: Native refusals stop that action; report the reason only through a permitted operator path
+  Note over F,BS: Acks, FYIs, holds and releases never wake models; warm review sessions stay parked
+```
+
+<!-- FLEET_DIAGRAMS_END -->
+
+### 8.8 Permissions, staging and reversals
+
+**Existing per-identity permissions suffice** for an owner to read its own already permitted record/source, prepare an authorized redacted reply in its own storage, and use an already authorized coordination path. The interim coordinator can read material the operator explicitly supplies in its existing permitted conversation and write its own allowed handoff. This does not authorize new automated subscriptions, new cross-identity roots or sending messages during this research run. No repeated approval is needed for a valid standing scope; verify that it actually covers the intended data and effect.
+
+**An operator security decision is required before** creating/changing native identity profiles or filesystem/socket access; granting the operator identity new reads of another identity's export endpoint/root; enrolling new logical producer/reader trust; changing account selectors/credentials; or widening what private information can cross identities. Request only exact projection/endpoint scope, never blanket sibling-root access. The owner implements its own approved adapter/profile, and the native harness still owns enforcement. No `.identity-root`, manifest, view filter, review PASS, T2 technical decision or service restart automatically changes permission. After an actual refusal, stop the dependent operation and seek its native/operator resolution rather than constructing a new export route for it.
+
+| Step and placement in section 6 | Smallest useful behavior / required evidence | Reversal |
+| --- | --- | --- |
+| **Now: manual fleet conversation, no new permissions** | Operator uses the existing coordinator chat and supplies selected owner-published status/decision excerpts with source IDs/digests and as-of times. Coordinator produces one cross-project answer and a local thread/handoff summary within its present scope. Owners continue to republish applicable decisions in their own records through existing authorized paths. No new root, background polling, automated message, private-directory read or import service. This is a recommended next use, not an action taken by R-443. | Return to per-project chats. Retain local pending-thread references; no workspace, identity or project state is deleted. |
+| **Contract preparation alongside stages 5, 7 and 8** | Specify the four read projections, approved field sets and stale/gap semantics; add origin/relayer evidence and typed identity-control enrollment to the reviewed contract. Reuse the existing shadow phase to observe would-route behavior only. Threat/contract review precedes code that changes the trust boundary. No new permission is needed to draft the contract. | Leave current project schemas/owners active; retain draft/shadow evidence. Unknown fleet envelopes stay inert. |
+| **Stage 8 prerequisite: one transport owner, then each identity's import/export** | Prove local durable acceptance, scoped producer/reader validation, body integrity, per-recipient dedup, quiet delivery and provenance. Enroll each participating identity through its own owner and approved permissions. A transport that cannot enforce the scoped read boundary remains unenabled. Do not infer delivery from stage-7 shadow capture. | Fence sends, transfer pending IDs/receipts to the previous owner and resume only that owner; hold uncertain sends. Keep journals and exact decision evidence. |
+| **Stage 11: opt-in operator root and two-project pilot** | After the required operator choices, support non-Git manifests/records/log partition, verify native identity readiness, enroll one fleet conversation and only the two named projects. Add read projections incrementally; keep project chats, supervisors, triage singletons and warm sessions. Check zero fleet writes into project trees, truthful partial answers, denied-read behavior and per-project decision binding before broader adoption. | Disable fleet ingress/subscriptions, revoke future scoped reads through the owning native settings, and retain local evidence/pending threads. Resume manual/coordinator entry or project chats. Withdraw only explicitly owned fleet slots through normal guarded lifecycle paths. |
+
+Future acceptance should cover same text with distinct question IDs, retries with the same ID, wrong/unknown logical sender, forged human origin, stale delegation, out-of-scope recipient, a forbidden body reference, a conflicting reply, one unavailable supervisor, one project accepting a decision while the other holds it, and a fleet restart while replies are pending. It must also show a native refusal is **not resent through the other identity**, a revoked read returns an explicit denied/stale result, all control kinds cause zero model wakes, and the review→same-session reuse→park loop is unaffected. These are proposed evidence cases, **not tests or live experiments run by R-443**. Retain section 7.8's single-owner fence and BCH PAUSED/STOP distinctions throughout.
+
+### 8.9 Operator decisions to make before rollout
+
+These choices are concrete recommendations for later adoption, not unanswered permission requests blocking this documentation. The first useful manual step above can stay within existing authority. Categories follow the effect being authorized; a technical implementation does not turn a permission expansion into ordinary design.
+
+| Decision | Recommendation and alternatives | What waits / authority |
+| --- | --- | --- |
+| **F1. Adopt the fleet conversation's home and native identity.** | Adopt the dedicated non-repository `operator` root as the target; use the existing coordinator only as the interim entry. Keep per-project chats in either case. Choose the initial native account/profile explicitly, without copying credentials or project write grants. | New-root materialization/profile setup waits. Product-home choice is design; native permission/account changes are **security, T3**. This proposal grants neither. |
+| **F2. Authorize exactly which project views cross the boundary.** | Begin with owner-redacted record/today and release summaries; add selected logs-viewer projections only when their fields and endpoint can be enforced. Alternative: remain with operator-supplied excerpts and no automated reads. Never grant blanket sibling-root or transcript access. | Each new data scope, endpoint and native read grant waits for its **security, T3** decision. Existing permitted exchanges continue; owners implement their own sides. |
+| **F3. Decide whether the new fleet identity is a relay only or also receives coordinator delegation.** | Start relay-only; Astra keeps its current bounded T2 role. Transfer/rebind a delegate only with explicit actor, projects, decision classes, limits and expiry, and preserve the authoritative references in both records. Do not ask again for an unchanged valid delegation. | Any expansion or unestablished transfer of authority waits for the operator under the reserved authority-policy rule (**security, T3**). A mere fleet role name confers nothing. |
+| **F4. Select the adoption window and visible workspace.** | After stage-8 acceptance and each owner's readiness, pilot two projects in a separate operator workspace; later reuse of `chats` is optional and must preserve its existing panes. Pull-only is the default; timely decision pointers are opt-in. Alternative: defer the pilot and keep manual federation. | New cross-project commitments follow **priorities** routing; T2 may agree within existing delegation, otherwise the operator decides. Actual release/publication and native actions retain their own standing/reserved permissions; this is not a release grant. |
+
+No fresh operator decision is required merely to retain warm review sessions, keep standard slots, leave project Git identities alone or respect existing holds: those are already mandatory. Exact schema names, bounded projection sizes and transport mechanics are T0/T2 implementation/design work within the approved contract, with appropriate independent boundary review; do not route every field spelling to the operator.
+
+### 8.10 Compatibility and non-claims
+
+Section 7.8 remains the compatibility contract. Keep the installed `~/.local/share/herdr-monitor/current/contrib/settle-watch.mjs`, its `--model`/`--effort` behavior, checkout `supervisor/reconcile.mjs` on every promotion, shipped `contrib/` and `lib/cli-help.mjs`, existing notice tags/outcome distinctions, identity-desk entrypoint and canonical `HOLD-WORKER-TAB-CLOSE`. No new fleet queue, janitor, supervisor daemon, release path, wrapper, dependency-bearing console/MCP module or product SessionStart hook is proposed. Each identity owns its changes and its record; this research opened no lane for another identity and sent no messages.
+
+R-443 inspected bounded main source/history, names and structure of identity configuration, Git common-directory metadata and two permitted Herdr inventories. It did not verify GitHub authentication, effective native sandbox isolation, live cross-session delivery, operator-source authentication or installed release activation. It read no transcript bodies, credentials, environment dumps or other identity's private evidence directory. No product code/config/tests changed; no suite, build, release, promotion, model replay, test-slot use, live Herdr mutation or permission change ran. The operator root and scoped reader are proposals. Figures 12–13 are included as Mermaid sources, report figures and embedded HTML figures; the earlier browser refusal still prevents claiming verified rendered appearance. Static correspondence and run-report validation are recorded in R-443's report.

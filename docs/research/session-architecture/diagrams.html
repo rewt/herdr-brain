@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Herdr Brain — adopted session architecture · R-421–R-423</title>
+<title>Herdr Brain — session architecture and fleet-chat proposal · R-443</title>
 <style>
 :root {
   color-scheme: light dark;
@@ -66,10 +66,10 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 </head>
 <body>
 <header>
-  <div class="kicker">Adopted design · R-421–R-423 · 15 October 2026</div>
-  <h1>A standard session platform</h1>
+  <div class="kicker">Adopted platform + proposed fleet chat · R-443 · 16 October 2026</div>
+  <h1>A standard session platform and one fleet conversation</h1>
   <p>Manifests create standard workspace tabs and preserve warm review workers. The model-free logging service routes decisions directly, control kinds to rules, and remaining operational traffic to a project triage session beside the logs viewer. All model work runs in Herdr sessions on the subscription.</p>
-  <p><a href="REPORT.md">Read the evidence and adopted plan</a>. Figures 01–02 describe today; figures 03–11 describe the adopted, not yet implemented design, including five session-protocol flows. Eligible context resets close and respawn from a manifest and handoff; warm review workers stay intact.</p>
+  <p><a href="REPORT.md">Read the evidence, adopted plan and fleet proposal</a>. Figures 01–02 retain the 15 October observations; figures 03–11 describe the adopted design. Some inspection and shadow-capture slices have since landed on main. Figures 12–13 propose an operator conversation across identities; this extension is not adopted or installed. Eligible context resets close and respawn from a manifest and handoff; warm review workers stay intact.</p>
   <nav aria-label="Diagram navigation"><a href="#01-current-components">01 · Today: components and boundaries</a>
 <a href="#02-current-dispatch-review">02 · Today: dispatch and warm review rounds</a>
 <a href="#03-proposed-materialization">03 · Adopted design: manifest to session</a>
@@ -80,7 +80,9 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 <a href="#08-protocol-host-hold-release">08 · Protocol: host hold and release without model wakes</a>
 <a href="#09-protocol-decision-fanout">09 · Protocol: targeted coordinator decision</a>
 <a href="#10-protocol-triage-session">10 · Protocol: triage batches and supervisor handoff</a>
-<a href="#11-protocol-operator-chat">11 · Protocol: operator question through chat</a></nav>
+<a href="#11-protocol-operator-chat">11 · Protocol: operator question through chat</a>
+<a href="#12-fleet-chat-boundaries">12 · Proposed fleet: identities and read boundaries</a>
+<a href="#13-fleet-chat-question">13 · Proposed fleet: question, replies and scoped decision</a></nav>
   <div class="toolbar" aria-label="Diagram display controls">
     <button type="button" id="fit" aria-pressed="true">Fit width</button>
     <button type="button" id="readable" aria-pressed="false">Readable size</button>
@@ -561,8 +563,119 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   end
   Note over C,S: Acks, FYIs and resource receipts stay out of chat; native approval stays native
 </pre></details>
+</section>
+<section class="figure" id="12-fleet-chat-boundaries" aria-labelledby="title-12-fleet-chat-boundaries">
+  <div class="heading"><span class="number">12</span><h2 id="title-12-fleet-chat-boundaries">Proposed fleet: identities and read boundaries</h2></div>
+  <p>The fleet owns its conversation and references. Each identity owns its import, record and project work; only approved projections cross the read boundary.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposed fleet: identities and read boundaries"><div class="diagram" data-source="source-12-fleet-chat-boundaries"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-12-fleet-chat-boundaries">flowchart TB
+  O[Machine operator]
+  subgraph Fleet[Proposed operator identity - non-repository root]
+    F[One fleet chat - native subscription session]
+    A[Model-free scoped read and message adapter]
+    R[Own record - exact operator answers and thread references]
+    L[Own logs partition and model-free fleet viewer]
+    F --&gt; A
+    F --&gt; R
+    A --&gt; L
+  end
+  subgraph Rewt[rewt identity - Herdr Brain]
+    RI[Owner import and export adapter]
+    RS[Canonical project supervisor]
+    RR[Own record - lanes - reviews - Git identity]
+    RP[Approved status and logs-viewer projection]
+    RC[Project chat - supervisor - logs slots retained]
+    RI --&gt;|quiet addressed question| RS
+    RS --&gt; RR
+    RR --&gt;|allowlisted owner export| RP
+    RS --&gt;|scoped reply| RI
+    RC -.-&gt; RS
+  end
+  subgraph Bastian[bastian identity - BCH Cloak]
+    BI[Owner import and export adapter]
+    BS[Canonical project supervisor]
+    BR[Own record - lanes - reviews - GitHub identity]
+    BP[Approved status and logs-viewer projection]
+    BC[Project chat - supervisor - logs slots retained]
+    BI --&gt;|quiet addressed question| BS
+    BS --&gt; BR
+    BR --&gt;|allowlisted owner export| BP
+    BS --&gt;|scoped reply| BI
+    BC -.-&gt; BS
+  end
+  O --&gt;|question or exact scoped answer| F
+  A --&gt;|authorized envelope export| RI
+  A --&gt;|authorized envelope export| BI
+  RI --&gt;|reply export - operator adapter imports| A
+  BI --&gt;|reply export - operator adapter imports| A
+  RP --&gt;|scoped read only after approval| A
+  BP --&gt;|scoped read only after approval| A
+  C[Existing coordinator - T2 only within recorded delegation]
+  F -.-&gt;|bounded technical escalation| C
+  C -.-&gt;|decision evidence via owner imports| RI
+  C -.-&gt;|decision evidence via owner imports| BI
+  W[chats workspace is a layout container - no shared authority]
+  W -.-&gt; F
+  W -.-&gt; RC
+  W -.-&gt; BC
+  N[No fleet writes to project files - no raw transcript access - no refusal forwarding]
+  A --- N
+</pre></details>
+</section>
+<section class="figure" id="13-fleet-chat-question" aria-labelledby="title-13-fleet-chat-question">
+  <div class="heading"><span class="number">13</span><h2 id="title-13-fleet-chat-question">Proposed fleet: question, replies and scoped decision</h2></div>
+  <p>One question fans out independently. Replies wait for the operator to pull; each supervisor validates and records its own applicable decision.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposed fleet: question, replies and scoped decision"><div class="diagram" data-source="source-13-fleet-chat-question"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-13-fleet-chat-question">sequenceDiagram
+  actor O as Operator
+  participant F as Fleet chat and own durable adapter
+  participant RI as rewt import and export adapter
+  participant RS as Herdr Brain supervisor and own record
+  participant BI as bastian import and export adapter
+  participant BS as BCH supervisor and own record
+  O-&gt;&gt;F: Ask one question about both projects
+  F-&gt;&gt;F: Retain exact scoped question and real relayer provenance
+  F-&gt;&gt;F: Freeze two recipients, event Q and correlation C
+  par Herdr Brain request
+    F-&gt;&gt;RI: Authorized export Q for rewt project-supervisor
+    RI-&gt;&gt;RI: Verify scope and body; persist before acceptance
+    RI-&gt;&gt;RS: Quiet-gated pointer when eligible
+    RS-&gt;&gt;RS: Read own record and check existing delegation
+    RS-&gt;&gt;RI: Reply R1 with reply_to Q and correlation C
+    RI--&gt;&gt;F: Reply export; own adapter imports R1
+  and BCH request
+    F-&gt;&gt;BI: Authorized export Q for bastian project-supervisor
+    BI-&gt;&gt;BI: Verify scope and body; persist before acceptance
+    BI-&gt;&gt;BS: Quiet-gated pointer when eligible
+    BS-&gt;&gt;BS: Read own record and check existing delegation
+    BS-&gt;&gt;BI: Reply R2 with reply_to Q and correlation C
+    BI--&gt;&gt;F: Reply export; own adapter imports R2
+  end
+  F-&gt;&gt;F: Retain replies and separate pending targets; no chat wake
+  O-&gt;&gt;F: Next interaction - retrieve available answers
+  F--&gt;&gt;O: One sourced answer; show missing, stale or conflicting replies
+  opt Operator gives a decision with explicit project scope
+    O-&gt;&gt;F: Exact answer and limits
+    F-&gt;&gt;F: Preserve verified human origin and actual relayer; new event D
+    F-&gt;&gt;RI: D with provenance and decision reference
+    RI-&gt;&gt;RS: Direct pointer; validate authority and supersession
+    RS-&gt;&gt;RS: Record exact applicable answer under own writer lock
+    F-&gt;&gt;BI: Same D for second selected recipient
+    BI-&gt;&gt;BS: Direct pointer; validate authority and supersession
+    BS-&gt;&gt;BS: Record exact applicable answer under own writer lock
+    RS--&gt;&gt;RI: Local decision reference or explicit hold
+    BS--&gt;&gt;BI: Local decision reference or explicit hold
+    RI--&gt;&gt;F: Correlated result for rewt
+    BI--&gt;&gt;F: Correlated result for bastian
+  end
+  Note over F,BS: No cross-project atomic commit; one acceptance is not a fleet decision
+  Note over F,BS: Native refusals stop that action; report the reason only through a permitted operator path
+  Note over F,BS: Acks, FYIs, holds and releases never wake models; warm review sessions stay parked
+</pre></details>
 </section></main>
-<footer>Adopted architecture; documentation only, not installed behavior. No live sessions are controlled by this page. Diagram rendering uses Mermaid 11.4.1 from the requested CDN; all source and styling are embedded.</footer>
+<footer>Adopted platform and proposed fleet chat; documentation only. Main-source progress is distinguished from live activation in the report. No live sessions are controlled by this page. Diagram rendering uses Mermaid 11.4.1 from the requested CDN; all source and styling are embedded.</footer>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
 <script>
 (() => {

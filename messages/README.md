@@ -256,7 +256,8 @@ The absence of a new default root keeps `offline-herdr`'s existing containment
 intact; tests also prove missing/foreign roots cannot create transport state.
 
 1. Initialize the fixture receiver with its supervisor enrollment and a scoped
-   legacy-inbox importer, referencing only `ROOT/inbox.log`. Do not use shadow
+   legacy-inbox importer with an explicit target name, referencing only
+   `ROOT/inbox.log`. Do not use shadow
    observations as delivery/authority evidence.
 2. `SupervisorTransfer.enroll()` acquires the original inbox's owner, drain and
    journal locks. A live/unidentified owner blocks enrollment. It durably fences
@@ -288,10 +289,13 @@ intact; tests also prove missing/foreign roots cannot create transport state.
    This intentionally bounds the rehearsal; enabling the real compatibility or
    replacement worker is the later live adoption step.
 
+Use the canonical root returned by the test fixture setup as
+`transport_fixture_root` (the temporary directory varies by host):
+
 ```sh
-node messages/messages.mjs status --root /private/tmp/brain-transport-FIXTURE --json
-node messages/messages.mjs switch --root /private/tmp/brain-transport-FIXTURE --json
-node messages/messages.mjs reverse --root /private/tmp/brain-transport-FIXTURE --json
+node messages/messages.mjs status --root "$transport_fixture_root" --json
+node messages/messages.mjs switch --root "$transport_fixture_root" --json
+node messages/messages.mjs reverse --root "$transport_fixture_root" --json
 ```
 
 `status` is inspect-only (owner, last watermark, active fence, pending/spooled,
@@ -299,8 +303,8 @@ uncertain, refused, open threads and retained receipts). `switch`/`reverse` neve
 invoke Herdr or drain implicitly; they return held IDs until the explicit fixture
 drain has completed. Repeating a completed direction is idempotent. These commands
 require an explicit root; `shadow-report` and its default roots are unchanged.
-Legacy wake text is the original bytes plus its existing ` notice-id=...` suffix,
-including multiline notices. New wakes contain an escaped one-line summary and
+Legacy wake text is the original bytes (or its already-recorded policy escalation
+summary) plus its existing ` notice-id=...` suffix, including multiline notices. New wakes contain an escaped one-line summary and
 permitted pointer only. Neither renderer reinterprets body text.
 
 Crash recovery is inspect-first: a torn journal tail blocks reads/mutations without

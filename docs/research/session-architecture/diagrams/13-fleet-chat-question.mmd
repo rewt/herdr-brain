@@ -1,6 +1,6 @@
 sequenceDiagram
   actor O as Operator
-  participant F as Fleet chat and own durable adapter
+  participant F as Relay-first fleet chat and own durable adapter
   participant RI as rewt import and export adapter
   participant RS as Herdr Brain supervisor and own record
   participant BI as bastian import and export adapter
@@ -41,5 +41,6 @@ sequenceDiagram
     BI-->>F: Correlated result for bastian
   end
   Note over F,BS: No cross-project atomic commit; one acceptance is not a fleet decision
+  Note over F,BS: Fleet runs under its own operator profile and root; management needs later bounded delegation
   Note over F,BS: Native refusals stop that action; report the reason only through a permitted operator path
   Note over F,BS: Acks, FYIs, holds and releases never wake models; warm review sessions stay parked

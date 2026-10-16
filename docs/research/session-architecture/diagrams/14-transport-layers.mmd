@@ -1,0 +1,26 @@
+flowchart TB
+  O[Operator]
+  Entry[Standalone entrypoints - operator chat - logs - status]
+  Plugin[Optional thin Herdr plugin front door]
+  O --> Entry
+  Plugin -.->|opens existing entrypoints| Entry
+  subgraph Brain[Herdr Brain - standalone control plane requiring Herdr]
+    Meaning[Envelope and meaning - addresses - identity - authority - record]
+    Receiver[Durable inbox and receiver dedupe - eventId and producer epoch sequence]
+    Seam[One narrow transport seam]
+    Adapter[One active swappable adapter - existing quiet-gated delivery first]
+    Meaning <--> Receiver
+    Meaning --> Seam --> Adapter
+  end
+  Entry --> Meaning
+  subgraph Runtime[Herdr - physical runtime]
+    Physical[Panes - agent state - input - events]
+  end
+  Adapter -->|exact runtime binding and permitted envelope pointer| Physical
+  Physical -->|receipt states precisely what was delivered| Adapter
+  Future[Later upstream proposal - deliver to agent X when idle and return a receipt]
+  Future -.->|would replace the delivery edge| Physical
+  Swap[Fence intake - spool arrivals - drain in-flight delivery - retain IDs and receipts - reverse the same way]
+  Swap --- Seam
+  Guard[Refusal holds that action - no automatic adapter fallback - no exactly-once model claim]
+  Guard --- Adapter

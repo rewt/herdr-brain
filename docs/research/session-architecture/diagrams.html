@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Herdr Brain — session architecture and fleet-chat proposal · R-443</title>
+<title>Herdr Brain — adopted control center and transport · R-446</title>
 <style>
 :root {
   color-scheme: light dark;
@@ -66,10 +66,11 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 </head>
 <body>
 <header>
-  <div class="kicker">Adopted platform + proposed fleet chat · R-443 · 16 October 2026</div>
+  <div class="kicker">Adopted control center and transport · R-446 · 16 October 2026</div>
   <h1>A standard session platform and one fleet conversation</h1>
+  <p>Brain is the standalone control plane; Herdr is the required runtime. An optional thin Herdr plugin opens chat, logs and status. The core never depends on that front door.</p>
   <p>Manifests create standard workspace tabs and preserve warm review workers. The model-free logging service routes decisions directly, control kinds to rules, and remaining operational traffic to a project triage session beside the logs viewer. All model work runs in Herdr sessions on the subscription.</p>
-  <p><a href="REPORT.md">Read the evidence, adopted plan and fleet proposal</a>. Figures 01–02 retain the 15 October observations; figures 03–11 describe the adopted design. Some inspection and shadow-capture slices have since landed on main. Figures 12–13 propose an operator conversation across identities; this extension is not adopted or installed. Eligible context resets close and respawn from a manifest and handoff; warm review workers stay intact.</p>
+  <p><a href="REPORT.md">Read the evidence and adopted plan</a>. Figures 01–02 retain the 15 October observations; figures 03–11 describe the adopted design. Some inspection and shadow-capture slices have since landed on main. Figures 12–14 apply the 16 October operator decisions: an own identity, owner-published summaries first, relay first and one swappable transport adapter. Native setup and transport implementation remain future work; the pilot timing/workspace is a recommended default. Eligible context resets close and respawn from a manifest and handoff; warm review workers stay intact.</p>
   <nav aria-label="Diagram navigation"><a href="#01-current-components">01 · Today: components and boundaries</a>
 <a href="#02-current-dispatch-review">02 · Today: dispatch and warm review rounds</a>
 <a href="#03-proposed-materialization">03 · Adopted design: manifest to session</a>
@@ -81,8 +82,9 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 <a href="#09-protocol-decision-fanout">09 · Protocol: targeted coordinator decision</a>
 <a href="#10-protocol-triage-session">10 · Protocol: triage batches and supervisor handoff</a>
 <a href="#11-protocol-operator-chat">11 · Protocol: operator question through chat</a>
-<a href="#12-fleet-chat-boundaries">12 · Proposed fleet: identities and read boundaries</a>
-<a href="#13-fleet-chat-question">13 · Proposed fleet: question, replies and scoped decision</a></nav>
+<a href="#12-fleet-chat-boundaries">12 · Adopted fleet target: identities and read boundaries</a>
+<a href="#13-fleet-chat-question">13 · Fleet protocol: question, replies and scoped decision</a>
+<a href="#14-transport-layers">14 · Adopted stage 8: one transport seam above Herdr</a></nav>
   <div class="toolbar" aria-label="Diagram display controls">
     <button type="button" id="fit" aria-pressed="true">Fit width</button>
     <button type="button" id="readable" aria-pressed="false">Readable size</button>
@@ -565,14 +567,14 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
 </pre></details>
 </section>
 <section class="figure" id="12-fleet-chat-boundaries" aria-labelledby="title-12-fleet-chat-boundaries">
-  <div class="heading"><span class="number">12</span><h2 id="title-12-fleet-chat-boundaries">Proposed fleet: identities and read boundaries</h2></div>
-  <p>The fleet owns its conversation and references. Each identity owns its import, record and project work; only approved projections cross the read boundary.</p>
-  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposed fleet: identities and read boundaries"><div class="diagram" data-source="source-12-fleet-chat-boundaries"></div></div>
+  <div class="heading"><span class="number">12</span><h2 id="title-12-fleet-chat-boundaries">Adopted fleet target: identities and read boundaries</h2></div>
+  <p>The fleet relays first under its own operator identity. Owner-published summaries come first; scoped log views wait for proven enforcement and grants. The existing coordinator remains inside rewt.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Adopted fleet target: identities and read boundaries"><div class="diagram" data-source="source-12-fleet-chat-boundaries"></div></div>
   <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
   <details><summary>Mermaid source</summary><pre id="source-12-fleet-chat-boundaries">flowchart TB
   O[Machine operator]
-  subgraph Fleet[Proposed operator identity - non-repository root]
-    F[One fleet chat - native subscription session]
+  subgraph Fleet[Adopted operator target - own non-repository identity]
+    F[One fleet chat - relay first - native subscription session]
     A[Model-free scoped read and message adapter]
     R[Own record - exact operator answers and thread references]
     L[Own logs partition and model-free fleet viewer]
@@ -581,10 +583,11 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
     A --&gt; L
   end
   subgraph Rewt[rewt identity - Herdr Brain]
+    C[Existing rewt coordinator - T2 only within recorded delegation]
     RI[Owner import and export adapter]
     RS[Canonical project supervisor]
     RR[Own record - lanes - reviews - Git identity]
-    RP[Approved status and logs-viewer projection]
+    RP[Owner summaries first - scoped log views later]
     RC[Project chat - supervisor - logs slots retained]
     RI --&gt;|quiet addressed question| RS
     RS --&gt; RR
@@ -596,7 +599,7 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
     BI[Owner import and export adapter]
     BS[Canonical project supervisor]
     BR[Own record - lanes - reviews - GitHub identity]
-    BP[Approved status and logs-viewer projection]
+    BP[Owner summaries first - scoped log views later]
     BC[Project chat - supervisor - logs slots retained]
     BI --&gt;|quiet addressed question| BS
     BS --&gt; BR
@@ -609,28 +612,27 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
   A --&gt;|authorized envelope export| BI
   RI --&gt;|reply export - operator adapter imports| A
   BI --&gt;|reply export - operator adapter imports| A
-  RP --&gt;|scoped read only after approval| A
-  BP --&gt;|scoped read only after approval| A
-  C[Existing coordinator - T2 only within recorded delegation]
-  F -.-&gt;|bounded technical escalation| C
-  C -.-&gt;|decision evidence via owner imports| RI
-  C -.-&gt;|decision evidence via owner imports| BI
-  W[chats workspace is a layout container - no shared authority]
+  RP --&gt;|authorized summary export - log reads require proven enforcement and grant| A
+  BP --&gt;|authorized summary export - log reads require proven enforcement and grant| A
+  F -.-&gt;|bounded request via rewt import| C
+  C -.-&gt;|rewt decision evidence| RI
+  C -.-&gt;|cross-identity decision export via owner adapters| BI
+  W[Current chats preserved - separate operator workspace is the default]
   W -.-&gt; F
   W -.-&gt; RC
   W -.-&gt; BC
-  N[No fleet writes to project files - no raw transcript access - no refusal forwarding]
+  N[No fleet writes to project files - no transcript access - no refusal forwarding - management needs later delegation]
   A --- N
 </pre></details>
 </section>
 <section class="figure" id="13-fleet-chat-question" aria-labelledby="title-13-fleet-chat-question">
-  <div class="heading"><span class="number">13</span><h2 id="title-13-fleet-chat-question">Proposed fleet: question, replies and scoped decision</h2></div>
+  <div class="heading"><span class="number">13</span><h2 id="title-13-fleet-chat-question">Fleet protocol: question, replies and scoped decision</h2></div>
   <p>One question fans out independently. Replies wait for the operator to pull; each supervisor validates and records its own applicable decision.</p>
-  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Proposed fleet: question, replies and scoped decision"><div class="diagram" data-source="source-13-fleet-chat-question"></div></div>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Fleet protocol: question, replies and scoped decision"><div class="diagram" data-source="source-13-fleet-chat-question"></div></div>
   <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
   <details><summary>Mermaid source</summary><pre id="source-13-fleet-chat-question">sequenceDiagram
   actor O as Operator
-  participant F as Fleet chat and own durable adapter
+  participant F as Relay-first fleet chat and own durable adapter
   participant RI as rewt import and export adapter
   participant RS as Herdr Brain supervisor and own record
   participant BI as bastian import and export adapter
@@ -671,11 +673,45 @@ footer { color: var(--muted); font-size: .9rem; padding-top: 0; }
     BI--&gt;&gt;F: Correlated result for bastian
   end
   Note over F,BS: No cross-project atomic commit; one acceptance is not a fleet decision
+  Note over F,BS: Fleet runs under its own operator profile and root; management needs later bounded delegation
   Note over F,BS: Native refusals stop that action; report the reason only through a permitted operator path
   Note over F,BS: Acks, FYIs, holds and releases never wake models; warm review sessions stay parked
 </pre></details>
+</section>
+<section class="figure" id="14-transport-layers" aria-labelledby="title-14-transport-layers">
+  <div class="heading"><span class="number">14</span><h2 id="title-14-transport-layers">Adopted stage 8: one transport seam above Herdr</h2></div>
+  <p>Brain owns envelope meaning, identity, authority and receiver deduplication. One active adapter uses Herdr physical delivery; switching drains in-flight inboxes and preserves receipts.</p>
+  <div class="canvas" tabindex="0" aria-label="Scrollable diagram: Adopted stage 8: one transport seam above Herdr"><div class="diagram" data-source="source-14-transport-layers"></div></div>
+  <p class="render-status" role="status">Loading diagram… The source below is always available.</p>
+  <details><summary>Mermaid source</summary><pre id="source-14-transport-layers">flowchart TB
+  O[Operator]
+  Entry[Standalone entrypoints - operator chat - logs - status]
+  Plugin[Optional thin Herdr plugin front door]
+  O --&gt; Entry
+  Plugin -.-&gt;|opens existing entrypoints| Entry
+  subgraph Brain[Herdr Brain - standalone control plane requiring Herdr]
+    Meaning[Envelope and meaning - addresses - identity - authority - record]
+    Receiver[Durable inbox and receiver dedupe - eventId and producer epoch sequence]
+    Seam[One narrow transport seam]
+    Adapter[One active swappable adapter - existing quiet-gated delivery first]
+    Meaning &lt;--&gt; Receiver
+    Meaning --&gt; Seam --&gt; Adapter
+  end
+  Entry --&gt; Meaning
+  subgraph Runtime[Herdr - physical runtime]
+    Physical[Panes - agent state - input - events]
+  end
+  Adapter --&gt;|exact runtime binding and permitted envelope pointer| Physical
+  Physical --&gt;|receipt states precisely what was delivered| Adapter
+  Future[Later upstream proposal - deliver to agent X when idle and return a receipt]
+  Future -.-&gt;|would replace the delivery edge| Physical
+  Swap[Fence intake - spool arrivals - drain in-flight delivery - retain IDs and receipts - reverse the same way]
+  Swap --- Seam
+  Guard[Refusal holds that action - no automatic adapter fallback - no exactly-once model claim]
+  Guard --- Adapter
+</pre></details>
 </section></main>
-<footer>Adopted platform and proposed fleet chat; documentation only. Main-source progress is distinguished from live activation in the report. No live sessions are controlled by this page. Diagram rendering uses Mermaid 11.4.1 from the requested CDN; all source and styling are embedded.</footer>
+<footer>Adopted platform, operator direction and transport seam; documentation only. Adoption, native security setup, implementation and live activation remain distinct. No live sessions are controlled by this page. Diagram rendering uses Mermaid 11.4.1 from the requested CDN; all source and styling are embedded.</footer>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
 <script>
 (() => {

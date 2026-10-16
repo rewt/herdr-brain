@@ -1,7 +1,7 @@
 flowchart TB
   O[Machine operator]
-  subgraph Fleet[Proposed operator identity - non-repository root]
-    F[One fleet chat - native subscription session]
+  subgraph Fleet[Adopted operator target - own non-repository identity]
+    F[One fleet chat - relay first - native subscription session]
     A[Model-free scoped read and message adapter]
     R[Own record - exact operator answers and thread references]
     L[Own logs partition and model-free fleet viewer]
@@ -10,10 +10,11 @@ flowchart TB
     A --> L
   end
   subgraph Rewt[rewt identity - Herdr Brain]
+    C[Existing rewt coordinator - T2 only within recorded delegation]
     RI[Owner import and export adapter]
     RS[Canonical project supervisor]
     RR[Own record - lanes - reviews - Git identity]
-    RP[Approved status and logs-viewer projection]
+    RP[Owner summaries first - scoped log views later]
     RC[Project chat - supervisor - logs slots retained]
     RI -->|quiet addressed question| RS
     RS --> RR
@@ -25,7 +26,7 @@ flowchart TB
     BI[Owner import and export adapter]
     BS[Canonical project supervisor]
     BR[Own record - lanes - reviews - GitHub identity]
-    BP[Approved status and logs-viewer projection]
+    BP[Owner summaries first - scoped log views later]
     BC[Project chat - supervisor - logs slots retained]
     BI -->|quiet addressed question| BS
     BS --> BR
@@ -38,15 +39,14 @@ flowchart TB
   A -->|authorized envelope export| BI
   RI -->|reply export - operator adapter imports| A
   BI -->|reply export - operator adapter imports| A
-  RP -->|scoped read only after approval| A
-  BP -->|scoped read only after approval| A
-  C[Existing coordinator - T2 only within recorded delegation]
-  F -.->|bounded technical escalation| C
-  C -.->|decision evidence via owner imports| RI
-  C -.->|decision evidence via owner imports| BI
-  W[chats workspace is a layout container - no shared authority]
+  RP -->|authorized summary export - log reads require proven enforcement and grant| A
+  BP -->|authorized summary export - log reads require proven enforcement and grant| A
+  F -.->|bounded request via rewt import| C
+  C -.->|rewt decision evidence| RI
+  C -.->|cross-identity decision export via owner adapters| BI
+  W[Current chats preserved - separate operator workspace is the default]
   W -.-> F
   W -.-> RC
   W -.-> BC
-  N[No fleet writes to project files - no raw transcript access - no refusal forwarding]
+  N[No fleet writes to project files - no transcript access - no refusal forwarding - management needs later delegation]
   A --- N

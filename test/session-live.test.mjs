@@ -51,6 +51,7 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   const ids=s.panes.filter(p=>p.tab_id===a[2]).map(p=>p.pane_id);
   s.tabs=s.tabs.filter(t=>t.tab_id!==a[2]);s.panes=s.panes.filter(p=>!ids.includes(p.pane_id));s.agents=s.agents.filter(g=>!ids.includes(g.pane_id));out({});
 } else if(a[0]==='agent' && a[1]==='start') {
+  s.launchEnvironment={role:process.env.MONITOR_SESSION_ROLE,name:process.env.HERDR_AGENT_NAME,actor:process.env.ORG_ACTOR,record:process.env.ORG_DIR};
   const p=s.panes.find(p=>p.pane_id===value('--pane')), n=++s.counter;
   const idx=a.indexOf('--resume'), ri=a.indexOf('resume'), native=idx>=0?a[idx+1]:ri>=0?a[ri+1]:'native-'+n;
   if(idx>=0||ri>=0) p.terminal_id='resumed-term-'+n;
@@ -120,6 +121,7 @@ for (const role of ['chat','supervisor']) test(`${role}: real adapter and fake C
   assert.equal(result.apply.state,'attempted',JSON.stringify(result)); assert.equal(result.decisions[0].decision,'KEEP',JSON.stringify(result));
   assert.equal(starts(f).length,1); assert.equal(readControllerJournal(f.project.common).operations[0].state,'acknowledged');
   assert.equal((await f.apply()).apply.state,'observed'); assert.equal(starts(f).length,1);
+  assert.deepEqual(f.read().launchEnvironment,{role,name:f.binding().agentName,actor:f.binding().agentName,record:f.org});
   const args=starts(f)[0]; assert.ok(args.includes('--model'));assert.match(args.join(' '),new RegExp(role==='chat'?'project chat':'supervisor'));
 });
 test('lost start reply holds with no second launch, even if native occupant appeared', async t => {

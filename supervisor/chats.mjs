@@ -222,25 +222,27 @@ function nativeArguments(launch, instructions, resume) {
   return native;
 }
 export function openStandardSession({ target, launch, name, instructions, resume, create = false,
-  role, beforeMutation = () => {}, env = process.env, herdr, now = Date.now, sleep = pause, startupMs = 30000 }) {
+  role, record, beforeMutation = () => {}, env = process.env, herdr, now = Date.now, sleep = pause, startupMs = 30000 }) {
   if (typeof herdr !== 'function') throw Error('standard launch requires the controller Herdr edge');
   if (!['chat', 'supervisor'].includes(role) || !['codex', 'claude'].includes(launch.kind) ||
-      !instructions?.trim() || !/^[a-z][a-z0-9_-]{0,31}$/u.test(name)) throw Error('unsupported standard session launch');
+      !record || !path.isAbsolute(record) || !instructions?.trim() || !/^[a-z][a-z0-9_-]{0,31}$/u.test(name)) throw Error('unsupported standard session launch');
+  const pairs = Object.fromEntries(launch.env.map(pair => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0')) throw Error('invalid standard launch environment');
+    const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
+  }));
+  Object.assign(pairs, { ORG_DIR: record, ORG_ACTOR: name, HERDR_AGENT_NAME: name, MONITOR_SESSION_ROLE: role });
+  if (role === 'supervisor') pairs.MONITOR_SUPERVISOR_AGENT = name;
   let receipt = { workspace: target.workspace, tab: target.tab, pane: target.pane, terminalId: target.terminalId };
   if (create) {
     beforeMutation();
     const made = herdr(['tab', 'create', '--workspace', target.workspace, '--cwd', target.checkout,
-      '--label', role, '--no-focus', ...launch.env.flatMap(pair => ['--env', pair])]);
+      '--label', role, '--no-focus', ...Object.entries(pairs).flatMap(([key, value]) => ['--env', `${key}=${value}`])]);
     receipt = { workspace: target.workspace, tab: id(made.tab?.tab_id, 'tab id'), pane: id(made.root_pane?.pane_id, 'pane id'), terminalId: made.root_pane?.terminal_id };
     if (!receipt.terminalId) receipt.terminalId = herdr(['pane', 'get', receipt.pane]).pane?.terminal_id;
     if (made.tab.workspace_id !== target.workspace || made.root_pane.workspace_id !== target.workspace ||
         made.root_pane.tab_id !== receipt.tab) throw Error('created layout identity changed; inspect before retry');
   }
   waitForShell(herdr, receipt, { checkout: target.checkout }, { now, sleep, startupMs, beforeInput: beforeMutation });
-  const pairs = Object.fromEntries(launch.env.map(pair => {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0')) throw Error('invalid standard launch environment');
-    const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
-  }));
   beforeMutation(receipt);
   herdr(['agent', 'start', name, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs),
     '--', ...nativeArguments(launch, instructions, resume)], { env: { ...env, ...pairs }, timeout: startupMs + 10000 });

@@ -7,6 +7,14 @@ import { fixtureRoot, fixtureInboxEnrolled } from './fixture.mjs';
 import { readInbox } from '../supervisor/prompt-supervisor.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 
+function readLegacyInbox(file) {
+  if (fs.existsSync(file)) {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077)) throw Error('legacy inbox must be a private regular fixture file');
+  }
+  return readInbox(file);
+}
+
 export class SupervisorTransfer {
   constructor({ root }) { this.root = root; this.receiver = new Receiver({ root }); }
   async enroll() {
@@ -20,6 +28,16 @@ export class SupervisorTransfer {
     const releases = [];
     try {
       for (const suffix of ['.owner.lock', '.drain.lock', '.lock']) releases.push(noticeLock(file + suffix));
+      // Policy runs outside these locks, then appends its result under .lock.
+      // Do not import mutable delivery text while that result can still arrive.
+      for (const notice of readLegacyInbox(file)) {
+        if (notice.autopilot_owner === undefined) continue;
+        const pid = notice.autopilot_owner;
+        if (!Number.isInteger(pid) || pid < 1) throw Error('autopilot owner is unidentified; enrollment held');
+        try { process.kill(pid, 0); }
+        catch (error) { if (error.code === 'ESRCH') continue; throw Error('autopilot owner is unidentified; enrollment held'); }
+        throw Error('autopilot owner is live; enrollment held until its result is recorded');
+      }
       // Enqueue fsyncs append bytes. Persist an empty old inbox's directory
       // entry here too, before acknowledging any post-enrollment spool write.
       if (!fs.existsSync(file)) writeProjection(file, '');
@@ -30,11 +48,7 @@ export class SupervisorTransfer {
   async importLocked(config) {
     const source = config.legacy.inbox, receiver = this.receiver;
     const scope = config.senders.find(s => s.receipt === config.legacy.sender);
-    if (fs.existsSync(source)) {
-      const stat = fs.lstatSync(source);
-      if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077)) throw Error('legacy inbox must be a private regular fixture file');
-    }
-    const entries = readInbox(source);
+    const entries = readLegacyInbox(source);
     const history = fs.existsSync(source) ? fs.readFileSync(source, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
     for (const [index, notice] of entries.entries()) {
       if (notice.to !== config.legacy.target) throw Error('legacy target needs explicit re-resolution; cannot redirect notice');
@@ -57,8 +71,7 @@ export class SupervisorTransfer {
       const attempts = history.filter(e => e.id === notice.id && ['sending', 'retry', 'sent', 'autopilot'].includes(e.type));
       const last = attempts.at(-1);
       const disposition = ['sent', 'handled'].includes(notice.state) ? (notice.state === 'sent' ? 'delivered' : 'consumed') :
-        notice.state === 'uncertain' || notice.autopilot_owner || last?.may_have_delivered ? 'uncertain' :
-          last?.type === 'retry' && last.may_have_delivered === false ? 'refused' : null;
+        notice.state === 'uncertain' || notice.autopilot_owner || last?.may_have_delivered ? 'uncertain' : null;
       await receiver.accept(event, { sender: scope.receipt, recipient: addressKey(config.supervisor),
         legacy: { id: notice.id, message: notice.message, deliveryMessage: notice.delivery_message ?? notice.message, to: notice.to, disposition } });
     }

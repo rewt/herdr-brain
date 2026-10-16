@@ -384,3 +384,102 @@ test('bootstrap durably creates an empty compatibility log before publishing the
   assert.equal((await promptSupervisor('supervisor', 'durable spool', { inbox: f.inbox, id: 'new-arrival' })).queued, true);
   assert.equal(readInbox(f.inbox)[0].id, 'new-arrival');
 });
+
+test('inspected non-delivery retries the same refused ID only through its original quiet transport, then later work proceeds', async t => {
+  const f = await fixture(t), first = f.event(), later = f.event();
+  await f.accept(first); await f.accept(later);
+  f.runtime.mode = 'refuse';
+  assert.equal((await f.deliver()).state, 'refused');
+  for (const options of [{ disposition: 'pending' }, { disposition: 'pending', evidence: ' ' }, { disposition: 'delivered', evidence: 'inspected' }])
+    await assert.rejects(f.receiver.resolveRefused(first.eventId, f.key, options), /inspection evidence/);
+  assert.equal(f.receiver.state().entries[0].state, 'refused');
+  const release = fs.openSync(path.join(f.root, 'delivery.lock'), 'wx');
+  await assert.rejects(f.receiver.resolveRefused(first.eventId, f.key, { disposition: 'pending', evidence: 'verified no input; original edge cleared' }), /EEXIST/);
+  fs.closeSync(release); fs.unlinkSync(path.join(f.root, 'delivery.lock'));
+  const receipt = await f.receiver.resolveRefused(first.eventId, f.key, { disposition: 'pending', evidence: 'verified no input; original edge cleared' });
+  assert.equal(receipt.retryTransport, f.adapter.id);
+  const restarted = new Receiver({ root: f.root });
+  let fallback = 0;
+  const held = await restarted.deliverNext({ id: 'other-transport', deliver: () => { fallback++; } }, () => assert.fail('alternate edge cannot resolve a binding'));
+  assert.equal(held.state, 'pending'); assert.match(held.reason, /original transport/); assert.equal(fallback, 0);
+  f.runtime.mode = ''; f.runtime.text = screen('codex', 'typed');
+  assert.equal((await f.deliver()).state, 'pending', 'retry still needs an empty composer');
+  assert.equal(f.calls.filter(args => args[1] === 'prompt').length, 1);
+  f.runtime.text = screen('codex');
+  assert.equal((await f.deliver()).eventId, first.eventId);
+  assert.equal((await f.deliver()).eventId, later.eventId);
+  assert.equal(f.sent.length, 2);
+  assert.match(f.sent[0], new RegExp(`id=${JSON.stringify(first.eventId)}`));
+  assert.match(f.sent[1], new RegExp(`id=${JSON.stringify(later.eventId)}`));
+  assert.equal((await f.accept(first)).duplicate, true);
+});
+
+test('retained refusal is a known fenced-drain disposition, preserves content and never calls a replacement adapter', async t => {
+  const f = await fixture(t), first = f.event(); await f.accept(first); await f.transfer.enroll();
+  await f.transfer.fence('switch');
+  const late = f.event(); await f.accept(late);
+  f.runtime.mode = 'refuse';
+  assert.equal((await f.transfer.drain(f.adapter, async () => f.binding)).state, 'refused');
+  assert.equal((await f.transfer.finish('switch')).switched, false);
+  await assert.rejects(f.receiver.resolveRefused(first.eventId, f.key, { disposition: 'retained-refused' }), /inspection evidence/);
+  const retained = f.receiver.state().entries[0];
+  const disposition = await f.receiver.resolveRefused(first.eventId, f.key, { disposition: 'retained-refused', evidence: 'inspected native refusal; retain without another offer' });
+  assert.equal(disposition.state, 'retained-refused');
+  assert.deepEqual(f.transfer.status().retainedRefused, [first.eventId]);
+  assert.deepEqual(f.transfer.status().refused, []);
+  await assert.rejects(f.receiver.consume(first.eventId, f.key, { consumer: 'supervisor-reader' }), /delivery hold/);
+  assert.equal(await f.receiver.deliverNext({ id: 'replacement', deliver: () => assert.fail('retained refusal replayed') }, async () => f.binding), null, 'spooled work remains fenced');
+  assert.equal((await f.transfer.finish('switch')).owner, 'envelope');
+  f.runtime.mode = '';
+  assert.equal((await f.transfer.drain(f.adapter, async () => f.binding)).eventId, late.eventId);
+  assert.equal(f.sent.length, 1); assert.match(f.sent[0], new RegExp(`id=${JSON.stringify(late.eventId)}`));
+  assert.equal((await f.transfer.switch('reverse')).owner, 'legacy');
+  const restarted = new Receiver({ root: f.root }), original = restarted.state().entries[0];
+  assert.equal(original.state, 'retained-refused');
+  assert.deepEqual(original.event, retained.event); assert.deepEqual(original.bodies, retained.bodies);
+  assert.equal((await f.accept(first)).duplicate, true);
+  assert.equal(await restarted.deliverNext({ id: 'replacement', deliver: () => assert.fail('retained refusal replayed after reverse') }, async () => f.binding), null);
+});
+
+test('a refusal with unknown historical transport can be retained without guessing an edge for retry', async t => {
+  const f = await fixture(t), e = f.event(); await f.accept(e);
+  await f.receiver.deliverNext({ deliver: async (_p, _b, { beforePrompt }) => { beforePrompt(); return { state: 'refused' }; } }, async () => f.binding);
+  await assert.rejects(f.receiver.resolveRefused(e.eventId, f.key, { disposition: 'pending', evidence: 'no input, but edge identity unavailable' }), /original transport is unknown/);
+  assert.equal(f.receiver.state().entries[0].state, 'refused');
+  await f.receiver.resolveRefused(e.eventId, f.key, { disposition: 'retained-refused', evidence: 'retain without a guessed replay path' });
+  assert.equal(await f.deliver(), null);
+});
+
+for (const code of ['agent_blocked', 'agent_not_found']) test(`known-not-delivered legacy ${code} retry imports pending and drains with its original notice ID`, async t => {
+  const f = await fixture(t), text = '[watch-blocked] original notice';
+  enqueueSupervisor('supervisor', text, { inbox: f.inbox, id: 'old-retry' });
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'sending', id: 'old-retry' }) + '\n');
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'retry', id: 'old-retry', error: code, may_have_delivered: false }) + '\n');
+  assert.equal(readInbox(f.inbox)[0].state, 'pending');
+  await f.transfer.enroll();
+  const imported = f.receiver.state().entries[0];
+  assert.equal(imported.state, 'accepted'); assert.equal(imported.legacy.disposition, null);
+  assert.deepEqual(f.transfer.status().refused, []); assert.deepEqual(f.transfer.status().uncertain, []);
+  assert.equal((await f.transfer.switch()).switched, false);
+  assert.equal((await f.transfer.drain(f.adapter, async () => f.binding)).eventId, imported.event.eventId);
+  assert.deepEqual(f.sent, [`${text} notice-id=old-retry`]);
+  assert.equal((await f.transfer.finish('switch')).owner, 'envelope');
+  await f.transfer.syncIntake(); assert.equal(f.receiver.state().entries.length, 1);
+});
+
+test('enrollment waits for an in-flight autopilot result before importing immutable legacy delivery bytes', async t => {
+  const f = await fixture(t), original = '[org-report] original', escalation = '[org-report] policy escalation';
+  enqueueSupervisor('supervisor', original, { inbox: f.inbox, id: 'policy-race' });
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'autopilot-started', id: 'policy-race', pid: process.pid }) + '\n');
+  await assert.rejects(f.transfer.enroll(), /autopilot owner is live/);
+  assert.equal(fs.existsSync(`${f.inbox}.transport-fixture`), false);
+  assert.equal(f.receiver.state().entries.length, 0, 'no provisional summary was imported');
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'autopilot', id: 'policy-race', result: { disposition: 'escalate', summary: escalation } }) + '\n');
+  await f.transfer.enroll(); await f.transfer.syncIntake(); await f.transfer.fence('switch');
+  assert.equal((await f.transfer.finish('switch')).switched, false);
+  await f.transfer.drain(f.adapter, async () => f.binding);
+  assert.deepEqual(f.sent, [`${escalation} notice-id=policy-race`]);
+  assert.equal((await f.transfer.finish('switch')).owner, 'envelope');
+  assert.equal(readInbox(f.inbox)[0].message, original);
+  assert.equal(f.receiver.state().entries[0].legacy.deliveryMessage, escalation);
+});

@@ -200,6 +200,9 @@ unknown, noninteractive or nonempty-composer recipients remain pending. Binding
 receipts come from the receiver/controller's trusted resolver, never from an
 untrusted message. A role respawn changes the attempt binding, not the recipient
 key; exact session incarnations remain distinct recipients.
+The adapter's stable `id` (`quiet-herdr/v1` for the one implementation) is retained
+with each attempt. It is an implementation label, with no registry or fallback;
+an inspected retry of a refusal remains pinned to that original transport.
 
 The canonical acceptance journal is `ROOT/transport.jsonl`, separate from the
 stage-7 `shadow.jsonl`. Each acceptance commits the original envelope, recipient,
@@ -217,7 +220,7 @@ Identical retries return the original acceptance receipt. Changed bytes under
 either key are a retained conflict/refusal; identical text under distinct keys
 is separate work. Explicit per-recipient acceptance supports local fanout. Unknown
 message types cannot become deliveries. Unknown journal event types stay inert.
-The journal retains acceptance, intent, delivered, consumed, refused and uncertain
+The journal retains acceptance, intent, delivered, consumed, refused, retained-refused and uncertain
 receipts. A delivered receipt proves a Herdr acknowledgement; consumed proves
 verified exposure to the recipient, neither understanding nor authorized effect.
 Any conforming at-least-once transport may replace the adapter. There is **no
@@ -242,7 +245,16 @@ A refusal holds the action even if a caller supplies another adapter. An unknown
 prompt result, lost acknowledgement, or abandoned durable intent is uncertain;
 restarting or changing owners cannot replay it. `resolveUncertain` requires an
 explicit inspected disposition and evidence; only verified non-delivery can make
-the same ID pending again. Dispatch's separate `--accept-delivered`/`--resend`
+the same ID pending again. `resolveRefused(id, recipient, {disposition, evidence})`
+also requires nonempty inspection evidence. `pending` records verified non-delivery
+and allows the same ID to retry through the original transport and quiet gate
+after the refusal has been resolved through its owning path. It grants no new
+permission. A different adapter cannot perform that retry. `retained-refused`
+keeps the envelope, bodies and refusal as a known terminal delivery disposition,
+without another offer or a consumed/delivered claim. It permits later messages
+and a fenced transfer to proceed. Historical refusals with no recorded transport
+identity can be retained, but cannot retry through a guessed edge.
+Dispatch's separate `--accept-delivered`/`--resend`
 recovery and authorized `--reuse` remain unchanged.
 
 ### Offline transfer runbook
@@ -260,13 +272,18 @@ intact; tests also prove missing/foreign roots cannot create transport state.
    `ROOT/inbox.log`. Do not use shadow
    observations as delivery/authority evidence.
 2. `SupervisorTransfer.enroll()` acquires the original inbox's owner, drain and
-   journal locks. A live/unidentified owner blocks enrollment. An absent fixture
+   journal locks. A live/unidentified compatibility or autopilot-policy owner
+   blocks enrollment before any fence marker or import, so a policy result can
+   finish recording its existing escalation text before retrying enrollment.
+   An absent fixture
    inbox is created and its directory entry fsynced before intake can spool.
    It durably fences
    the compatibility delivery entrypoints with an explicit fixture marker and
    imports notices with stable source/notice IDs and original ordinal. Import
-   commits known sent/handled or uncertain/refused dispositions atomically with
-   acceptance; an unresolved autopilot owner also imports as uncertain.
+   commits known sent/handled or uncertain dispositions atomically with
+   acceptance. A legacy retry with `may_have_delivered: false` remains pending
+   under its original notice ID; `true` remains uncertain. A dead unresolved
+   autopilot owner also imports as uncertain.
 3. After enrollment, compatibility enqueue still durably appends original notice
    bytes. Its policy, resume and direct drain paths cannot send. The foreground
    fixture controller is the sole dispatcher for both owner phases, using the
@@ -277,8 +294,12 @@ intact; tests also prove missing/foreign roots cannot create transport state.
    entries or the compatibility log. The old owner can drain only entries through
    that watermark; new arrivals cannot be sent by either owner during the drain.
 5. Call the foreground fixture controller's `drain(adapter, resolveBinding)` until
-   old work has known delivered/consumed receipts. Pending, refused or uncertain
-   old work holds cutover. An active offer excludes owner commits with the separate
+   old work has known delivered/consumed or inspected `retained-refused` receipts.
+   Pending, refused or uncertain old work holds cutover. Inspect a refusal and use
+   `resolveRefused` with `pending` only after verified non-delivery and resolution
+   of the original refusal; then re-drain through the same transport. Otherwise
+   explicitly retain it with `retained-refused` and the inspection evidence.
+   An active offer excludes owner commits with the separate
    delivery lock. Acceptance can continue during an in-flight offer.
 6. Retry `switch`. It commits exactly one replacement owner only after the drain.
    The replacement reads the same journal, then can deliver spooled work. Repair
@@ -301,7 +322,7 @@ node messages/messages.mjs reverse --root "$transport_fixture_root" --json
 ```
 
 `status` is inspect-only (owner, last watermark, active fence, pending/spooled,
-uncertain, refused, open threads and retained receipts). `switch`/`reverse` never
+uncertain, refused, retained-refused, open threads and retained receipts). `switch`/`reverse` never
 invoke Herdr or drain implicitly; they return held IDs until the explicit fixture
 drain has completed. Repeating a completed direction is idempotent. These commands
 require an explicit root; `shadow-report` and its default roots are unchanged.

@@ -79,7 +79,7 @@ export function foldTransport(records) {
   return state;
 }
 export const pending = e => ['accepted', 'pending'].includes(e.state);
-export const drained = e => ['delivered', 'consumed'].includes(e.state);
+export const drained = e => ['delivered', 'consumed', 'retained-refused'].includes(e.state);
 
 export function transportStatus(root) {
   const state = foldTransport(readTransport(root));
@@ -92,6 +92,7 @@ export function transportStatus(root) {
       spooled: Boolean(state.fence && e.acceptance > state.fence.watermark) })),
     uncertain: state.entries.filter(e => e.state === 'uncertain').map(e => e.event.eventId),
     refused: state.entries.filter(e => e.state === 'refused').map(e => e.event.eventId),
+    retainedRefused: state.entries.filter(e => e.state === 'retained-refused').map(e => e.event.eventId),
     openThreads: openThreads.map(e => e.event.eventId), receipts: state.receipts };
 }
 
@@ -228,7 +229,7 @@ export class Receiver {
       const enrollment = state.config?.recipients.find(r => addressKey(r.address) === recipient && r.consumer === consumer);
       const entry = state.entries.find(e => e.event.eventId === eventId && e.recipient === recipient);
       if (!enrollment || !entry) throw Error('unknown consumer or addressed event');
-      if (['refused', 'uncertain'].includes(entry.state)) throw Error('delivery hold requires explicit inspection before consumption');
+      if (['refused', 'retained-refused', 'uncertain'].includes(entry.state)) throw Error('delivery hold requires explicit inspection before consumption');
       const pointer = this.project(entry), stored = parseJSON(fs.readFileSync(pointer.path, 'utf8'), 32 * 1024);
       if (digest(fs.readFileSync(pointer.path)) !== pointer.sha256) throw Error('envelope projection changed');
       const bodies = [];
@@ -246,6 +247,10 @@ export class Receiver {
       const entry = state.entries.find(e => e.recipient === recipient && !drained(e) && (!state.fence || e.acceptance <= state.fence.watermark));
       if (!entry) return null;
       if (!pending(entry)) return entry.receipts.at(-1); // Refused/uncertain: never another adapter attempt.
+      const transport = typeof adapter.id === 'string' && adapter.id ? adapter.id : null;
+      const retry = entry.receipts.findLast(receipt => receipt.retryTransport !== undefined);
+      if (retry && retry.retryTransport !== transport)
+        return this.#receipt(entry.acceptance, 'pending', { reason: 'inspected refusal retry requires the original transport', retryTransport: retry.retryTransport });
       if (controls.has(entry.event.payload.kind)) return this.#receipt(entry.acceptance, 'consumed', { reason: 'rule-consumed: control retained without model wake or control effect' });
       let binding;
       try { binding = clone((await resolveBinding(entry.recipient)) ?? null); }
@@ -256,7 +261,7 @@ export class Receiver {
       // pane read. Commit intent synchronously while holding the writer lock.
       const intent = () => {
         if (attempted) throw Error('adapter attempted input twice');
-        this.#receiptSync(entry.acceptance, 'wake-attempt', { owner: state.owner, binding, pointer });
+        this.#receiptSync(entry.acceptance, 'wake-attempt', { owner: state.owner, binding, pointer, transport });
         attempted = true;
       };
       let result;
@@ -264,7 +269,7 @@ export class Receiver {
       catch (error) { result = { state: attempted ? 'uncertain' : 'pending', reason: error.message }; }
       if (!['delivered', 'pending', 'refused', 'uncertain'].includes(result?.state) || (!attempted && result.state !== 'pending'))
         result = { state: attempted ? 'uncertain' : 'pending', reason: 'invalid adapter receipt; inspect before retry' };
-      return await this.#receipt(entry.acceptance, result.state, { reason: result.reason ?? '', owner: state.owner, binding, pointer });
+      return await this.#receipt(entry.acceptance, result.state, { reason: result.reason ?? '', owner: state.owner, binding, pointer, transport });
     } finally { fs.closeSync(lock); fs.unlinkSync(delivery); }
   }
   #receiptSync(acceptance, state, extra) {
@@ -282,12 +287,22 @@ export class Receiver {
   }
   async resolveUncertain(eventId, recipient, { delivered, evidence } = {}) {
     if (typeof delivered !== 'boolean' || typeof evidence !== 'string' || !evidence.trim()) throw Error('inspection evidence and explicit delivery disposition required');
+    return this.#resolveHold(eventId, recipient, 'uncertain', delivered ? 'delivered' : 'pending', evidence);
+  }
+  async resolveRefused(eventId, recipient, { disposition, evidence } = {}) {
+    if (!['pending', 'retained-refused'].includes(disposition) || typeof evidence !== 'string' || !evidence.trim())
+      throw Error('inspection evidence and explicit refused disposition required');
+    return this.#resolveHold(eventId, recipient, 'refused', disposition, evidence);
+  }
+  async #resolveHold(eventId, recipient, hold, disposition, evidence) {
     fixtureRoot(this.root);
     const file = path.join(this.root, 'delivery.lock'), lock = fs.openSync(file, 'wx', 0o600);
     try {
       const entry = this.state().entries.find(e => e.event.eventId === eventId && e.recipient === recipient);
-      if (entry?.state !== 'uncertain') throw Error('event is not uncertain');
-      return await this.#receipt(entry.acceptance, delivered ? 'delivered' : 'pending', { inspection: evidence });
+      if (entry?.state !== hold) throw Error(`event is not ${hold}`);
+      const retryTransport = hold === 'refused' && disposition === 'pending' ? entry.receipts.at(-1).transport : undefined;
+      if (hold === 'refused' && disposition === 'pending' && !retryTransport) throw Error('original transport is unknown; retain the refusal instead');
+      return await this.#receipt(entry.acceptance, disposition, { inspection: evidence, ...(retryTransport ? { retryTransport } : {}) });
     } finally { fs.closeSync(lock); fs.unlinkSync(file); }
   }
 }

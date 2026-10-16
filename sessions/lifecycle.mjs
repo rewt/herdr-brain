@@ -156,9 +156,13 @@ function boundaryVeto(entry, input, participants, request, reconstruct = false, 
         (!prepared && (q.recordSeq !== input.facts.record.revision || !strings(q.pendingInboxIds) ||
           q.pendingInboxIds.some(id => !h.unresolvedMessageIds.includes(id)) || !sameStrings(q.recordRefs, h.recordRefs) ||
           !sameStrings(q.unresolvedMessageIds, h.unresolvedMessageIds) || q.inboxCursor !== h.inboxCursor))) return 'callbacks, work/review, delivery or handoff coverage is not quiescent and verified';
+    if (prepared && reconstruct && (q.openWork.some(id => !request.quiescence[p.uid].openWork.includes(id)) ||
+        q.openReviews.some(id => !request.quiescence[p.uid].openReviews.includes(id)))) return 'new open work/review depends on reconstruction incarnation';
     const dependentRuns = input.facts.record.runs.filter(run => run.meta && (run.meta.pane === p.binding.pane ||
       run.meta.terminal_id === p.binding.terminalId || (p.binding.nativeSessionId && run.meta.agent_session_id === p.binding.nativeSessionId)));
-    if (!reconstruct && dependentRuns.some(run => !run.abandoned && (!run.report || chain(input, run).length))) return 'recorded open work/review depends on incarnation; reset veto';
+    const disposedItem = reconstruct && input.facts.record.runs.find(run => run.id === request.disposition?.run)?.item;
+    if (dependentRuns.some(run => (!reconstruct || prepared && run.item !== disposedItem) && !run.abandoned &&
+        (!run.report || chain(input, run).length))) return 'recorded open work/review depends on incarnation; reset veto';
     if ((input.facts.references ?? []).some(r => r.uid === p.uid || r.pane === p.binding.pane || r.tab === p.binding.tab ||
         (p.binding.nativeSessionId && r.nativeSessionId === p.binding.nativeSessionId) || dependentRuns.some(run => r.run === run.id || r.item === run.item))) return 'live callback or delivery reference depends on incarnation';
   }

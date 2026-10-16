@@ -197,6 +197,20 @@ test('an unrelated revision after reset preparation does not invalidate the fina
   await f.run(); assert.deepEqual(f.calls, ['close']); assert.equal(f.journal().operations.at(-1).state, 'closed-for-reset');
 });
 
+for (const change of ['open-work', 'open-review', 'recorded-work']) test(`prepared reconstruction rejects newly bound ${change} beyond its disposition`, async t => {
+  const f = fixture(t, 'engineer-worker'), request = f.boundary(); delete f.facts.resetRequests[f.uid]; f.loss();
+  Object.assign(f.facts.recovery[f.uid], request, { mode: 'reconstruct', disposition: { ref: 'recovery-decision', run: 'R-old', contextLossAccepted: true } });
+  await f.run(); assert.deepEqual(f.calls, ['close']); f.facts.record.revision++;
+  const q = f.facts.quiescence[f.uid];
+  if (change === 'open-work') q.openWork.push('ENG-unrelated');
+  if (change === 'open-review') q.openReviews.push('REV-unrelated');
+  if (change === 'recorded-work') f.facts.record.runs.push({ id: 'R-other', item: 'ENG-unrelated', started: { seq: 8 }, meta: { pane: q.binding.pane } });
+  assert.equal(first(await f.run()).decision, 'Hold'); assert.deepEqual(f.calls, ['close']);
+  q.openWork = []; q.openReviews = []; f.facts.record.runs = f.facts.record.runs.filter(run => run.id !== 'R-other');
+  await f.run(); await f.run(); await f.run();
+  assert.deepEqual(f.calls, ['close', 'respawn', 'transfer']); assert.equal(f.journal().operations.at(-1).state, 'acknowledged');
+});
+
 for (const change of ['callbacks', 'open-work', 'open-review', 'delivery', 'reference', 'recorded-work', 'hash', 'old-tab'])
   test(`prepared reset still vetoes ${change} tied to the old incarnation and resumes once it resolves`, async t => {
     const f = fixture(t), request = f.boundary(); await f.run();

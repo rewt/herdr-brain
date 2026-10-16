@@ -1,8 +1,8 @@
 # Session manifests
 
-Stages 1–3 of ARCH-33: a desired format, an **offline inspector**, KEEP-only
+Stages 1–4 of ARCH-33: a desired format, an **offline inspector**, KEEP-only
 retirement evidence, and foreground single-pass reconciliation with an
-**inspect-only live planner**. Node built-ins only. The CLI never launches a
+**inspect-only live planner** and **fake-only reset/recovery**. Node built-ins only. The CLI never launches a
 session, prompts a model, enrolls a live workspace, runs a loop, or writes the record.
 All model work is declared as a Herdr session on the subscription; the service
 and controller remain model-free. Native harness settings retain permission
@@ -243,7 +243,9 @@ identity is the exact socket path (`HERDR_SOCKET_PATH`, otherwise the existing
 client default); `plan({env})` applies that resolution to its supplied environment,
 including the default observer. An endpoint label is not an alias granting ownership.
 
-Enrollment is exclusively the active canonical standard-slot history. `home`
+Enrollment starts with the active canonical standard-slot history. Bound
+replacement layouts add KEEP from the validated controller incarnation journal;
+the original layout receipt remains protected. `home`
 means its canonical checkout. Other workspace references resolve to an exact
 native workspace ID or a Git-verified branch at the receipt's checkout. A
 branch with multiple enrolled workspace IDs is ambiguous and holds. Labels,
@@ -254,7 +256,8 @@ the matching folded run and dispatch receipt. Unknown occupants are retained.
 
 The JSON contains each desired resolved spec/generation/digest, observed binding
 and record/chain evidence when proven, decision and reason, pending generation,
-and at most one would-start action. Invalid manifests exit 1; holds and
+and at most one proposed start or lifecycle action. Reset eligibility/vetoes,
+recovery evidence and journal operation state are included when available. Invalid manifests exit 1; holds and
 unenrolled workspaces are inspectable decisions. There is no `--apply` option.
 Planning creates no lease, directory, journal, status, record event or Herdr
 mutation. The status cache is not read at all.
@@ -266,7 +269,7 @@ mutation. The status cache is not read at all.
 | STOP or canonical close hold | Observe only; keep exact occupants |
 | Exact live standard incarnation, including idle | `KEEP`; no brief/prompt replay |
 | Missing occupant in an existing adopted chat/supervisor pane, confirmed empty with no prior intent | At most one `WouldStart`; later candidates defer |
-| Missing tab/pane, prior incarnation gone, or uncertain launch | `Hold`; layout reset/recovery belongs to stage 4 |
+| Missing tab/pane, prior incarnation gone, or uncertain launch | `Hold` unless stage 4's exact transition evidence resolves it |
 | Start withheld after intent because evidence changed; delegate never invoked | `Hold` with the durable withholding reason; stage 4 recovery must resolve it |
 | Missing viewer/triage occupant | `KEEP`; activation belongs to later service/rollout stages |
 | Work item with no recorded run or an abandoned latest run | `Undispatched` / `Observe`; leave unrelated authorized slot starts available |
@@ -275,7 +278,7 @@ mutation. The status cache is not read at all.
 | Supervisor `dispatch --reuse`, new run/report, same item/native ID/terminal/checkout/route | Observe running correction, then re-park after its report |
 | Changed spec/generation during an existing incarnation | Show `pendingGeneration`; freeze the recorded generation and occupant |
 
-`reconcile.mjs` contains the pure `planSessions` policy and the test-only
+`reconcile.mjs` contains the read-only `planSessions` policy and the test-only
 `reconcileOffline` single-pass runner. Observation input is
 `{server, complete, workspaces, tabs, panes, agents, receipts, errors}`; receipt
 claims contain `{operationId, uid, generation, specDigest, binding}`. A complete
@@ -291,8 +294,98 @@ the controller constructs no native argv, readiness probe, record-worker call,
 watcher or prompt. The future authorized adapter must delegate those to the
 existing launch/dispatch paths, preserving native readiness, record-worker
 evidence and watcher-before-prompt ordering. There is no live implementation or
-CLI connection to `start` in stage 3. Workers are never dispatched/re-prompted,
-and no close, clear, replace, reset, recovery or fresh-worker fallback exists.
+CLI connection to any action. Workers are never dispatched/re-prompted here.
+Stage 4 adds only fake close, respawn, resume and inbox-handover delegates.
+
+## Offline reset and recovery (stage 4)
+
+`lifecycle.mjs` extends the single-pass planner; `lifecycle-evidence.mjs`
+verifies handoff bytes and closed journal/receipt shapes. There is **no live
+apply path, native mutation implementation, enrollment, loop or transport**.
+The live observer still uses only snapshot and exact agent reads. It cannot
+infer process exit, empty-process safety, native restore state, quiescence or
+handoff completion from absence or agent readiness. Those unknowns hold.
+Positive stage 4 evidence is supplied by offline fake record/Herdr adapters;
+the future live adapters and disposable-workspace experiment belong to A2.
+
+A reset request in `facts.resetRequests[uid]` names a boundary and a handoff.
+`persistHandoff({file, markdown, recordRefs, unresolvedMessageIds, inboxCursor})`
+writes a Markdown file and fsyncs it and its directory. Its descriptor contains
+the absolute `.md` path, content SHA-256, references, unresolved IDs, cursor and
+a canonical digest over that complete descriptor. Use a separate retained path
+for each handoff. The planner re-reads the regular file, rejects symlinked paths,
+checks its content hash, checks the metadata digest and resolves record IDs.
+It never reads a native transcript. Supplied prose grants no authority.
+
+Each participant needs `facts.quiescence[uid]`: an exact `binding`, receipt
+`ref`, current `recordSeq`, `callbacksQuiesced: true`, explicit empty `openWork`,
+`openReviews` and `inFlightDeliveries` arrays, `pendingInboxIds`, `recordRefs`,
+`unresolvedMessageIds` and `inboxCursor`. Handoff coverage must agree, pending
+inbox IDs must be retained among the unresolved IDs, and live callback/delivery
+references veto the operation. These receipts are copied into the durable
+operation and rechecked before subsequent steps. Changed evidence holds.
+
+Chat/supervisor require a boundary `{kind: "handoff", ref, declared: true}`.
+A supervisor also requires `draft: "complete"` or `"fallback"`; the latter is
+the explicit failed-draft fallback with authoritative references still present.
+An idle response or arriving report is not a boundary. A work-item reset request
+always holds; an open review/correction/integration chain vetoes reset even
+when the worker is idle and the supplied quiescence claims otherwise.
+
+The home logs rotation is requested by the `logs-triage` UID with
+`{kind: "committed-batch", ref, committed: true, batchRef, cursor, viewerCursor}`.
+The cursor must match the handoff's service cursor. Both declared manifests,
+both exact owned panes, committed batch evidence and quiescent delivery are
+required. Respawn recreates both panes and carries the viewer position and
+service cursor. No logging service is stopped or second triage replica created.
+An extra or foreign pane vetoes the entire tab close.
+
+The fake executor rechecks before and after journaling intent, closes only the
+fully owned exact tab, and requires both an exact close receipt and an observed
+absence of that tab, its panes and its processes. Only a later pass may respawn
+the same manifest generations/specs with the verified handoff. New tab, pane,
+terminal and native-session identities are required for a context reset.
+Every new binding is fsynced in `incarnations` before the fake `transfer`
+delegate receives pending inbox IDs. The original slot receipt, start operation,
+work-item run and frozen historical binding are retained. A consumed boundary
+cannot reset again. A new boundary needs new evidence.
+
+Recovery takes an exact-binding entry in `observation.losses` with
+`state: "confirmed-exit"`, `ref`, `processConfirmedGone: true`, explicit
+`restore: {state: "none" | "pending" | "resumed" | "unknown"}`, nonnegative
+`failures` and `backoffReady: true`. Disconnect, absence, unknown restore,
+pending native restore, repeated failures (two or more), missing backoff or
+any refusal holds. `facts.recovery[uid]` provides a mode, verified context
+receipt (`contextRef`, `contextHash`, `contextVerified: true`), exact native
+session reference and matching frozen route. The adopted restart policy must
+authorize native resume; no per-crash permission question is introduced.
+The viewer uses its saved cursor/context receipt and backoff, without a native
+model-session reference. A viewer restart leaves its sibling process intact.
+
+When Herdr has resumed the known reference, `restore.operationId` correlates
+an exact `native-restore` receipt. The controller binds that observed new
+incarnation without invoking `resume`. Otherwise it may invoke the fake resume
+once, requiring the known native ID and a new terminal/process receipt.
+Parked review intent and open chain remain attached; no correction dispatch
+or brief replay occurs. Fresh `mode: "reconstruct"` is labelled **context
+loss** and follows guarded close/respawn. Standard sessions require their
+declared boundary and complete handoff; an open worker additionally requires
+`disposition: {ref, run, contextLossAccepted: true}` from its record adapter.
+Reconstruction preserves the outstanding review intent and never claims the
+same warm process survived.
+
+Fake actions extend `{offline: true, start}` with `close`, `respawn`, `resume`
+and `transfer`, each receiving the journaled operation. At most one delegate
+is invoked per pass. Returned values never acknowledge anything. Observation
+receipts carry the operation ID and UID: `close` includes exact `target` and
+owned `bindings`; `respawn`, `resume` and `native-restore` include `contextHash`
+and all `incarnations` with IDs, previous incarnation IDs, frozen generation,
+spec digest, binding, route and verified context hash; `inbox` includes exact
+message IDs, cursor and destination incarnation IDs. Duplicate, missing or
+conflicting receipts hold. An ordinary lost reply stays an intent until fresh
+exact evidence resolves it, with **no second close/spawn/resume/transfer**.
+An error carrying `refused: true` is a durable terminal failure. A missing
+delegate or changed final evidence is durably `withheld` and never retried.
 
 ## Controller runtime evidence
 
@@ -302,7 +395,7 @@ checkouts, next to the earlier slot receipts:
 | Path relative to common directory | Purpose |
 | --- | --- |
 | `sessions/controller.lock/owner.json` | One project lease; contention or abandoned ownership holds, with no automatic stale-owner reclamation |
-| `sessions/controller-journal.json` | Durable start intents, withheld starts with reasons, exact acknowledged receipts, and first proven work-item/spec observation bindings |
+| `sessions/controller-journal.json` | Durable start/reset/recovery intent, transition history, handoff hashes, quiescence receipts, exact acknowledgements, immutable historical bindings and new incarnation receipts |
 | `sessions/controller-status.json` | Disposable recomputed projection; only the offline reconciler writes it in this stage |
 
 The runner holds the lease for one pass, re-observes before intent and after
@@ -315,13 +408,24 @@ delegate at most once. Status loss/corruption cannot launch or grant ownership:
 it triggers ordinary observation from manifests, receipts and record facts.
 Journal loss with a live occupant yields unknown ownership and holds.
 
-Operation states are `intent` (invocation/acknowledgement may be uncertain),
+Start operation states are `intent` (invocation/acknowledgement may be uncertain),
 `acknowledged` (fresh exact receipt and binding agree), and `withheld` (the final
 evidence check prevented delegate invocation). A withheld start is fsynced with
 its reason before returning and surfaces that reason in subsequent plans. It
 still holds, even if later evidence changes; stage 4 decides recovery, and this
 stage never clears or retries it. An undispatched work item has no ambiguous
 incarnation and does not engage the project-wide ownership/launch hold fence.
+
+Lifecycle history starts at `reset-prepared` or `recovery-required`, then uses
+`close-intent` → `closed-for-reset` → `respawn-intent`, or `resume-intent` /
+observed native restore, followed by `restarted` → optional `inbox-intent` →
+`acknowledged`. `withheld` and `failed` retain their reasons and hold. Intent
+is fsynced before each delegate. `readControllerJournal` rejects unknown states,
+invalid transition order, malformed handoff metadata/receipts and broken
+incarnation links. Older stage 3 journals without `incarnations` remain readable.
+Status remains disposable; these states record operation evidence, never item
+status or permission. STOP and the canonical close hold fence every action,
+including respawn, native resume and inbox handover after a successful close.
 
 The first exact work-item observation freezes its spec in the operation
 journal; it does not dispatch or adopt a new worker. The record and dispatch
@@ -333,4 +437,12 @@ record disposition remains subject to every existing safe-retirement check;
 this observer never grants retirement. ENG-338's KEEP-only protections and
 all existing watcher/notice paths remain unchanged.
 
-Stage 3 fixtures: `node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/session-reconciler.test.mjs test/sessions.test.mjs`.
+Focused fixtures (at most four files per group):
+
+```sh
+node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/session-lifecycle.test.mjs test/session-reconciler.test.mjs test/sessions.test.mjs test/retire-paths.test.mjs
+node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/retire.test.mjs
+```
+
+Run under Node 20.19.4 both in the lane and a git-archive snapshot of the final
+commit outside any Git/identity-root ancestry. All mutations target fixture roots.

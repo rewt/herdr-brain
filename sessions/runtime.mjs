@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readPlainFile, plainDirectory, writeFileAtomic } from '../lib/files.mjs';
 import { parseUniqueJson } from './json.mjs';
+import { validLifecycleOperation, validStartOperation, validIncarnation, validIncarnationLinks } from './lifecycle-evidence.mjs';
 
 export const runtimePaths = common => ({ directory: path.join(common, 'sessions'),
   journal: path.join(common, 'sessions/controller-journal.json'),
@@ -12,19 +13,26 @@ export const runtimePaths = common => ({ directory: path.join(common, 'sessions'
 export function present(file) {
   try { fs.lstatSync(file); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
 }
-export const emptyJournal = common => ({ schema: 'session-controller-journal/v1', common, operations: [], bindings: [] });
+export const emptyJournal = common => ({ schema: 'session-controller-journal/v1', common, operations: [], bindings: [], incarnations: [] });
 export function readControllerJournal(common) {
   const file = runtimePaths(common).journal;
   let journal;
   try { journal = parseUniqueJson(readPlainFile(file)); }
   catch (error) { if (error.code === 'ENOENT') return emptyJournal(common); throw error; }
   if (journal.schema !== 'session-controller-journal/v1' || journal.common !== common ||
+      Object.keys(journal).some(k => !['schema', 'common', 'operations', 'bindings', 'incarnations'].includes(k)) ||
       !Array.isArray(journal.operations) || !Array.isArray(journal.bindings) ||
-      journal.operations.some(op => !op.id || !op.uid || !op.specDigest || !op.target || !['intent', 'acknowledged', 'withheld'].includes(op.state) ||
-        (op.state === 'withheld' && (typeof op.reason !== 'string' || !op.reason.trim()))) ||
+      journal.operations.some(op => ['reset', 'recovery'].includes(op.kind) ? !validLifecycleOperation(op) :
+        !validStartOperation(op)) ||
       new Set(journal.operations.map(op => op.id)).size !== journal.operations.length ||
       journal.bindings.some(b => !b.uid || !b.specDigest || !b.binding || !Number.isSafeInteger(b.generation)) ||
-      new Set(journal.bindings.map(b => b.uid)).size !== journal.bindings.length) throw Error('invalid controller journal; hold');
+      new Set(journal.bindings.map(b => b.uid)).size !== journal.bindings.length ||
+      (journal.incarnations !== undefined && (!Array.isArray(journal.incarnations) || journal.incarnations.some(i =>
+        !validIncarnation(i) || !journal.operations.some(op => op.id === i.operationId && op.history?.includes('restarted') &&
+          op.participants.some(p => p.uid === i.uid && p.incarnation === i.previous && p.specDigest === i.specDigest))) ||
+        new Set(journal.incarnations.map(i => i.id)).size !== journal.incarnations.length)) ||
+      !validIncarnationLinks(journal)) throw Error('invalid controller journal; hold');
+  journal.incarnations ??= [];
   return journal;
 }
 export function durableWrite(file, value) {

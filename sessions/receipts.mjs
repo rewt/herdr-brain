@@ -7,6 +7,7 @@ import { writeFileAtomic } from '../lib/files.mjs';
 import { parseUniqueJson } from './json.mjs';
 import { canonicalProject } from './project.mjs';
 import { SLOT_PANES } from './manifest.mjs';
+import { readControllerJournal } from './runtime.mjs';
 
 const schema = 'standard-slot-history/v1';
 export const slotReceiptFile = common => path.join(common, 'sessions', 'standard-slots.json');
@@ -52,7 +53,20 @@ export function readStandardSlots(common) {
     try { fs.lstatSync(path.join(path.dirname(slotReceiptFile(common)), 'standard-slots.lock')); throw Error('standard-slot operation in progress or lock unresolved'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     const history = load(common);
-    return { schema, slots: validate(history, common), errors: [] };
+    const slots = validate(history, common), journal = readControllerJournal(common);
+    // Add KEEP for replacement layouts without withdrawing the old receipt.
+    // Only a bound, validated incarnation can extend the protection set.
+    for (const op of journal.operations.filter(op => op.history?.includes('restarted'))) {
+      const adopted = slots.find(s => s.server === op.target.server && s.workspace === op.target.workspace && s.tab === op.target.tab);
+      if (!adopted) continue; // A work-item resume does not enroll a standard slot.
+      const incarnations = journal.incarnations.filter(i => i.operationId === op.id);
+      if (incarnations.length !== op.participants.length) throw Error('incomplete replacement KEEP evidence');
+      const b = incarnations[0].binding;
+      if (b.tab === adopted.tab) continue;
+      slots.push({ ...adopted, uid: `incarnation:${op.id}`, tab: b.tab, controllerOperation: op.id,
+        panes: op.participants.map(p => ({ pane: incarnations.find(i => i.uid === p.uid).binding.pane, paneSlot: p.spec.paneSlot ?? 'primary' })) });
+    }
+    return { schema, slots, errors: [] };
   } catch (error) { return { schema, slots: [], errors: [`standard-slot protection evidence unreadable: ${error.message}; project kept`] }; }
 }
 

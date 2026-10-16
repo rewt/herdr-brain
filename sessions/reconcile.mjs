@@ -1,13 +1,13 @@
 // Foreground policy. No scheduling, model, record mutation or live action path.
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { matchingRun } from '../lib/retire.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding, sameBinding } from './observe.mjs';
 import { acquireControllerLease, durableWrite, emptyJournal, readControllerJournal, runtimePaths } from './runtime.mjs';
+import { specDigest } from './lifecycle-evidence.mjs';
+import { planLifecycle, resetAssessment, lifecycleOperation } from './lifecycle.mjs';
+export { specDigest } from './lifecycle-evidence.mjs';
 
-const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === 'object'
-  ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value;
-export const specDigest = entry => createHash('sha256').update(JSON.stringify(stable({ kind: entry.manifest.kind, spec: entry.resolvedSpec }))).digest('hex');
 const quiet = a => ['idle', 'done'].includes(a.agent_status ?? a.status);
 const row = (entry, phase, decision, reason, extra = {}) => ({ uid: entry.manifest.metadata.uid,
   desired: { generation: entry.manifest.metadata.generation, specDigest: specDigest(entry), spec: entry.resolvedSpec },
@@ -134,7 +134,9 @@ export function planSessions(input) {
     if (errors.length) return row(entry, 'Hold', 'Hold', errors.join('; '));
     if (workspaces.size !== 1) return row(entry, 'Hold', 'Hold', 'ambiguous workspace enrollment');
     let decision;
-    if (s.intent.kind === 'work-item') decision = worker(entry, input, slots);
+    const lifecycle = planLifecycle(entry, input, slots);
+    if (lifecycle) decision = row(entry, lifecycle.phase, lifecycle.decision, lifecycle.reason, lifecycle);
+    else if (s.intent.kind === 'work-item') decision = worker(entry, input, slots);
     else {
       const matching = slots.filter(slot => slot.standardSlot === s.standardSlot);
       if (matching.length !== 1) return row(entry, 'Hold', 'Hold', 'desired standard slot has no unique adopted binding');
@@ -143,7 +145,7 @@ export function planSessions(input) {
       const paneId = slot.panes.find(p => p.paneSlot === (s.paneSlot ?? 'primary'))?.pane;
       const pane = o.panes.find(p => p.pane_id === paneId);
       const target = { server: o.server, workspace: slot.workspace, tab: slot.tab, pane: paneId, checkout: slot.checkout };
-      const ops = journal.operations.filter(op => op.uid === uid || targetMatches(op.target, target));
+      const ops = journal.operations.filter(op => !lifecycleOperation(op) && (op.uid === uid || targetMatches(op.target, target)));
       if (ops.length > 1) return row(entry, 'Hold', 'Hold', 'multiple operations claim this standard position');
       const op = ops[0], agents = o.agents.filter(a => a.pane_id === paneId);
       if (op && op.uid !== uid) return row(entry, 'Hold', 'Hold', 'another manifest UID owns this standard position');
@@ -167,9 +169,16 @@ export function planSessions(input) {
         observed: { target, terminalId: pane.terminal_id }, action: { kind: 'start-standard-slot', uid, target,
           generation: entry.manifest.metadata.generation, specDigest: specDigest(entry), spec: entry.resolvedSpec } });
     }
-    if (brake) return { ...decision, decision: 'Observe', reason: `${brake}; ${decision.reason}`, action: null };
+    decision.reset ??= resetAssessment(entry, input);
+    decision.recovery ??= { state: 'not-required-or-unconfirmed' };
+    if (brake) return { ...decision, decision: 'Observe', reason: `${brake}; ${decision.reason}`, action: null, lifecycleUpdate: null,
+      reset: { eligible: false, vetoes: [brake, ...decision.reset.vetoes] } };
     return decision;
   });
+  for (const d of decisions) {
+    d.reset ??= { eligible: false, vetoes: [d.reason] };
+    d.recovery ??= { state: 'unknown' };
+  }
   // An unresolved ownership/launch hold fences the pass, including other slots.
   if (decisions.some(d => d.decision === 'Hold')) for (const d of decisions.filter(d => d.action)) {
     d.action = null; d.decision = 'Hold'; d.reason = 'another desired session has unresolved ownership or evidence';
@@ -184,7 +193,7 @@ export function planSessions(input) {
 // actions.start delegates to an existing launch owner; it must not build native
 // argv or send a prompt here. No live implementation is wired in this stage.
 export async function reconcileOffline({ inspection, read, actions }) {
-  if (actions?.offline !== true || typeof actions.start !== 'function') throw Error('stage 3 actions require an explicit offline fake');
+  if (actions?.offline !== true || typeof actions.start !== 'function') throw Error('session actions require an explicit offline fake');
   const common = inspection.project.common, paths = runtimePaths(common);
   let release;
   try { release = acquireControllerLease(common); }
@@ -193,8 +202,30 @@ export async function reconcileOffline({ inspection, read, actions }) {
     let journal;
     try { journal = readControllerJournal(common); }
     catch (error) { return { decision: 'Hold', reason: error.message, action: null }; }
-    const observe = async () => planSessions({ inspection, ...await read(), journal });
-    let plan = await observe();
+    const observe = async (evidence = journal) => planSessions({ inspection, ...await read(), journal: evidence });
+    const advance = (op, state, evidence = {}) => {
+      Object.assign(op, evidence, { state }); op.history.push(state); durableWrite(paths.journal, journal);
+    };
+    // Only fresh receipts resolve an uncertain operation. These writes never
+    // invoke an adapter and can finish an interrupted acknowledgement pass.
+    const settle = async () => {
+      for (let n = 0; n < 5; n++) {
+        const plan = await observe(), updates = plan.decisions.filter(d => d.lifecycleUpdate);
+        if (!updates.length) return plan;
+        for (const d of updates) {
+          const { operationId, state, ...evidence } = d.lifecycleUpdate;
+          const op = journal.operations.find(op => op.id === operationId);
+          if (state === 'restarted') {
+            for (const i of evidence.receipt.incarnations) journal.incarnations.push({ id: i.id, uid: i.uid, operationId,
+              previous: i.previous, generation: i.generation, specDigest: i.specDigest,
+              kind: op.participants.find(p => p.uid === i.uid).kind, binding: i.binding, contextLoss: op.contextLoss, contextHash: op.contextHash });
+          }
+          advance(op, state, evidence);
+        }
+      }
+      throw Error('lifecycle acknowledgement did not converge');
+    };
+    let plan = await settle();
     for (const d of plan.decisions) {
       if (d.freeze) journal.bindings.push(d.freeze);
       if (d.resolvedOperation) Object.assign(journal.operations.find(op => op.id === d.resolvedOperation), { state: 'acknowledged', receipt: d.receipt });
@@ -208,27 +239,66 @@ export async function reconcileOffline({ inspection, read, actions }) {
           JSON.stringify(fresh.decisions.find(d => d.action)?.observed) !== JSON.stringify(plan.decisions.find(d => d.action)?.observed)) plan = fresh.action
         ? fence(fresh, 'selected occupant changed before action; hold') : fresh;
       else {
-        const op = { ...plan.action, id: randomUUID(), state: 'intent' };
-        journal.operations.push(op); durableWrite(paths.journal, journal); // fsync before adapter.
-        let failure;
-        const final = planSessions({ inspection, ...await read(), journal: { ...journal, operations: journal.operations.filter(candidate => candidate.id !== op.id) } });
-        if (JSON.stringify(final.action) !== JSON.stringify(plan.action) ||
-            JSON.stringify(final.decisions.find(d => d.action)?.observed) !== JSON.stringify(plan.decisions.find(d => d.action)?.observed)) {
-          failure = 'evidence changed after intent; start withheld';
-          Object.assign(op, { state: 'withheld', reason: failure });
-          durableWrite(paths.journal, journal);
+        if (plan.action.kind === 'lifecycle') {
+          const selected = plan.action, before = structuredClone(journal);
+          let op = selected.operationId && journal.operations.find(op => op.id === selected.operationId);
+          if (!op) {
+            const first = selected.operation.kind === 'reset' ? 'reset-prepared' : 'recovery-required';
+            op = { ...selected.operation, id: selected.operation.mode === 'native-restore' ? selected.operation.request.restoreOperationId : randomUUID(),
+              state: first, history: [first] };
+            journal.operations.push(op); durableWrite(paths.journal, journal);
+          }
+          if (selected.stage !== 'adopt') {
+            const method = selected.stage, intent = { close: 'close-intent', respawn: 'respawn-intent', resume: 'resume-intent', transfer: 'inbox-intent' }[method];
+            if (!intent || typeof actions[method] !== 'function') {
+              advance(op, 'withheld', { reason: `offline ${method} delegate missing; never invoked` });
+            } else {
+              advance(op, intent); // durable before final check and adapter.
+              const final = await observe(before);
+              if (JSON.stringify(final.action) !== JSON.stringify(selected) ||
+                  JSON.stringify(final.decisions.find(d => d.action)?.observed) !== JSON.stringify(plan.decisions.find(d => d.action)?.observed)) {
+                advance(op, 'withheld', { reason: 'evidence changed after lifecycle intent; delegate never invoked' });
+              } else {
+                try { await actions[method](structuredClone(op)); }
+                catch (error) {
+                  // A refusal is terminal. An ordinary lost reply remains an
+                  // intent: only independent receipt evidence can resolve it.
+                  if (error.refused === true) advance(op, 'failed', { reason: `native refusal: ${error.message}` });
+                  plan.adapterError = error.message;
+                }
+              }
+            }
+          }
+          const adapterError = plan.adapterError;
+          plan = await settle();
+          for (const d of plan.decisions.filter(d => d.action)) {
+            d.action = null; d.decision = 'Defer'; d.reason = 'one action already attempted in this pass';
+          }
+          plan.action = null; plan.attemptedOperation = op.id;
+          if (adapterError) plan.adapterError = adapterError;
+        } else {
+          const op = { ...plan.action, id: randomUUID(), state: 'intent' };
+          journal.operations.push(op); durableWrite(paths.journal, journal); // fsync before adapter.
+          let failure;
+          const final = planSessions({ inspection, ...await read(), journal: { ...journal, operations: journal.operations.filter(candidate => candidate.id !== op.id) } });
+          if (JSON.stringify(final.action) !== JSON.stringify(plan.action) ||
+              JSON.stringify(final.decisions.find(d => d.action)?.observed) !== JSON.stringify(plan.decisions.find(d => d.action)?.observed)) {
+            failure = 'evidence changed after intent; start withheld';
+            Object.assign(op, { state: 'withheld', reason: failure });
+            durableWrite(paths.journal, journal);
+          }
+          else try { await actions.start(op); } catch (error) { failure = error.message; }
+          // The returned acknowledgement alone is insufficient. Only exact
+          // receipt evidence in a new observation can acknowledge an intent.
+          plan = await observe();
+          for (const d of plan.decisions.filter(d => d.action)) {
+            d.action = null; d.decision = 'Defer'; d.reason = 'one action already attempted in this pass';
+          }
+          plan.action = null; plan.attemptedOperation = op.id;
+          for (const d of plan.decisions) if (d.resolvedOperation === op.id) Object.assign(op, { state: 'acknowledged', receipt: d.receipt });
+          if (op.state === 'acknowledged') durableWrite(paths.journal, journal);
+          if (failure) plan.adapterError = failure;
         }
-        else try { await actions.start(op); } catch (error) { failure = error.message; }
-        // The returned acknowledgement alone is insufficient. Only exact
-        // receipt evidence in a new observation can acknowledge an intent.
-        plan = await observe();
-        for (const d of plan.decisions.filter(d => d.action)) {
-          d.action = null; d.decision = 'Defer'; d.reason = 'one action already attempted in this pass';
-        }
-        plan.action = null; plan.attemptedOperation = op.id;
-        for (const d of plan.decisions) if (d.resolvedOperation === op.id) Object.assign(op, { state: 'acknowledged', receipt: d.receipt });
-        if (op.state === 'acknowledged') durableWrite(paths.journal, journal);
-        if (failure) plan.adapterError = failure;
       }
     }
     durableWrite(paths.status, { ...plan, observedAt: new Date().toISOString() });

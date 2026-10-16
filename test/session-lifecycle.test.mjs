@@ -192,6 +192,13 @@ for (const status of ['idle', 'working']) test(`an open worker review chain unco
   const d = first(await f.run()); assert.equal(d.decision, 'Hold'); assert.match(d.reason, /open review/); assert.deepEqual(f.calls, []);
 });
 
+test('quiescence claims cannot override recorded work/review dependencies on a standard incarnation', async t => {
+  const f = fixture(t); f.boundary(); const b = f.binding(f.uid);
+  f.facts.record.runs.push({ id: 'R-dependent', item: 'ENG-232', started: { seq: 1 }, report: { seq: 2, outcome: 'done' },
+    meta: { pane: b.pane, terminal_id: b.terminalId, agent_session_id: b.nativeSessionId } });
+  assert.match(first(await f.run()).reason, /recorded open work\/review/); assert.deepEqual(f.calls, []);
+});
+
 for (const stage of ['close', 'respawn', 'resume', 'transfer']) test(`${stage} crash/lost acknowledgement holds without a second invocation`, async t => {
   const f = fixture(t); if (stage === 'resume') f.loss(); else f.boundary();
   if (['respawn', 'transfer'].includes(stage)) await f.run();

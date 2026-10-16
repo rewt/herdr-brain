@@ -153,8 +153,11 @@ function boundaryVeto(entry, input, participants, request, reconstruct = false) 
         (!reconstruct && (q.openWork.length || q.openReviews.length)) || q.inFlightDeliveries.length ||
         !strings(q.pendingInboxIds) || q.pendingInboxIds.some(id => !h.unresolvedMessageIds.includes(id)) ||
         !sameStrings(q.recordRefs, h.recordRefs) || !sameStrings(q.unresolvedMessageIds, h.unresolvedMessageIds) || q.inboxCursor !== h.inboxCursor) return 'callbacks, work/review, delivery or handoff coverage is not quiescent and verified';
+    const dependentRuns = input.facts.record.runs.filter(run => run.meta && (run.meta.pane === p.binding.pane ||
+      run.meta.terminal_id === p.binding.terminalId || (p.binding.nativeSessionId && run.meta.agent_session_id === p.binding.nativeSessionId)));
+    if (!reconstruct && dependentRuns.some(run => !run.abandoned && (!run.report || chain(input, run).length))) return 'recorded open work/review depends on incarnation; reset veto';
     if ((input.facts.references ?? []).some(r => r.uid === p.uid || r.pane === p.binding.pane || r.tab === p.binding.tab ||
-        (p.binding.nativeSessionId && r.nativeSessionId === p.binding.nativeSessionId))) return 'live callback or delivery reference depends on incarnation';
+        (p.binding.nativeSessionId && r.nativeSessionId === p.binding.nativeSessionId) || dependentRuns.some(run => r.run === run.id || r.item === run.item))) return 'live callback or delivery reference depends on incarnation';
     if (request.quiescence && !same(request.quiescence[p.uid], q)) return 'quiescence receipt changed during lifecycle operation';
   }
   return null;

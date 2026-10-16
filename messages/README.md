@@ -88,7 +88,7 @@ wake count**. Future triage batches may cover many entries with one wake.
 or authentication. A tag alone never establishes PASS or an unsupported-role
 skip. Deferred review scope remains distinct from deferred promotion tests.
 
-No delivery code awaits mirror work. Asynchronous filesystem/Git operations
+No delivery code awaits mirror work. Shadow filesystem/Git operations
 have no lock waits or shadow retry loop; in-process shadow writes serialize
 among themselves. Synchronous throws, asynchronous failures and even diagnostic
 callback errors are contained. Failures emit a local `message shadow:` stderr
@@ -99,9 +99,21 @@ can miss a mirror. There is no guaranteed capture count or automatic backfill.
 ## Journal and report
 
 Default partition:
-`~/.local/state/herdr-brain/logs/<identity>/<sha256(canonical-common-dir)>/`.
-Override the root with `BRAIN_SHADOW_ROOT` or the `root` library option. Newly
-created directories are 0700; bodies, journal and exclusive writer lock are
+`<identity-root>/.herdr-brain/logs/<identity>/<sha256(canonical-common-dir)>/`.
+The identity root is the nearest ancestor of the canonical Git common directory
+with a regular `.identity-root` file; a linked worktree uses the same root as its
+canonical checkout. The `root` library option (or report's `--root`) wins over
+`BRAIN_SHADOW_ROOT`, which wins over this default. Only an unmarked project
+falls back to `~/.local/state/herdr-brain/logs`, for example with `BRAIN_IDENTITY`
+set. Setting `BRAIN_IDENTITY` changes the logical identity, not marker discovery
+for storage. Mirrors and `shadow-report` share the same root resolver, so a
+report needs no root override to find default observations. No existing journal
+is migrated or deleted.
+
+Symlinked markers and identity-root directories are refused. Existing storage
+components from the selected root through the partition must be private real
+directories; the default also checks `.herdr-brain` before descending into it.
+Newly created directories are 0700; bodies, journal and exclusive writer lock are
 0600. Nonprivate files/directories and symlink journal targets are refused.
 The journal is always named `shadow.jsonl`, separate from record storage.
 

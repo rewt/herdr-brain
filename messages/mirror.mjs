@@ -1,12 +1,11 @@
 // Stage 7 observers. No Herdr calls, record writes or delivery receipts.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { digest, MAX_BODY_BYTES } from './schema.mjs';
 import { noticeEvidence } from './classify.mjs';
-import { ShadowJournal, privateDirectory } from './journal.mjs';
+import { ShadowJournal, privateDirectory, identityRootAt } from './journal.mjs';
 
 const execute = promisify(execFile);
 const pending = new Set(), partitions = new Map();
@@ -28,11 +27,9 @@ async function commonDirectory(cwd) {
 }
 export async function identityAt(commonDir, env = process.env) {
   if (env.BRAIN_IDENTITY) return env.BRAIN_IDENTITY;
-  for (let directory = commonDir; ; directory = path.dirname(directory)) {
-    try { if ((await fs.stat(path.join(directory, '.identity-root'))).isFile()) return path.basename(directory); }
-    catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error; }
-    if (directory === path.dirname(directory)) throw Error('shadow identity is unenrolled; set BRAIN_IDENTITY or use an identity-root checkout');
-  }
+  const root = identityRootAt(commonDir);
+  if (root) return path.basename(root);
+  throw Error('shadow identity is unenrolled; set BRAIN_IDENTITY or use an identity-root checkout');
 }
 const role = (identity, projectRef, name, key) => ({ identity, projectRef, role: { name, bindingRef: `legacy-shadow:${digest(key)}` } });
 
@@ -40,13 +37,12 @@ async function mirror({ id, at, sequence, message, to, source, cwd, project, evi
   commonDir ??= project?.identity ?? await commonDirectory(cwd ?? process.cwd());
   commonDir = await fs.realpath(commonDir);
   identity ??= await identityAt(commonDir, env);
-  root ??= env.BRAIN_SHADOW_ROOT || path.join(env.HOME || os.homedir(), '.local/state/herdr-brain/logs');
-  const journal = new ShadowJournal({ identity, commonDir, root });
+  const journal = new ShadowJournal({ identity, commonDir, root, env });
   // Serialize only shadow work in this process. Cross-process contention fails
   // immediately; the original transport neither waits nor retries for a mirror.
   const previous = partitions.get(journal.directory) ?? Promise.resolve();
   const work = previous.catch(() => {}).then(async () => {
-    const directory = await privateDirectory(journal.directory);
+    const directory = await journal.prepareDirectory();
     const bytes = Buffer.from(message);
     if (bytes.length > MAX_BODY_BYTES) throw Error('shadow body exceeds 64 KiB; original delivery retained');
     const sha256 = digest(bytes), bodyDir = await privateDirectory(path.join(directory, 'bodies'));

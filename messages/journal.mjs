@@ -1,14 +1,56 @@
 import fs from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { constants, lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { canonical, digest, parseJSON, validateEvent, MAX_EVENT_BYTES } from './schema.mjs';
 import { classify, PATHS } from './classify.mjs';
 
-export function stateDirectory({ identity, commonDir, root = process.env.BRAIN_SHADOW_ROOT || path.join(os.homedir(), '.local/state/herdr-brain/logs') }) {
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(identity ?? '') || !path.isAbsolute(commonDir ?? '') || path.normalize(commonDir) !== commonDir) throw Error('shadow partition needs identity and canonical commonDir');
-  return path.join(path.resolve(root), identity, digest(commonDir));
+export function identityRootAt(commonDir) {
+  for (let directory = commonDir; ; directory = path.dirname(directory)) {
+    let marker;
+    try { marker = lstatSync(path.join(directory, '.identity-root')); }
+    catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error; }
+    if (marker) {
+      if (!marker.isFile() || marker.isSymbolicLink() || realpathSync(directory) !== directory) throw Error('shadow identity root needs a regular marker and canonical directory');
+      return directory;
+    }
+    if (directory === path.dirname(directory)) return null;
+  }
 }
+
+// Check existing storage components before recursive mkdir or report reads can
+// follow them. Missing components will be created privately by the writer.
+function privatePath(root, directory) {
+  const relative = path.relative(root, directory);
+  let current = root;
+  for (const part of ['', ...relative.split(path.sep).filter(Boolean)]) {
+    current = path.join(current, part);
+    let stat;
+    try { stat = lstatSync(current); }
+    catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    if (!stat.isDirectory()) {
+      if (stat.isSymbolicLink()) throw Error(`shadow directory is a symlink: ${current}`);
+      throw Object.assign(Error(`shadow path is not a directory: ${current}`), { code: 'ENOTDIR' });
+    }
+    if (stat.mode & 0o077) throw Error(`shadow directory is not private: ${current}`);
+  }
+}
+
+function partitionLocation({ identity, commonDir, root, env = process.env }) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(identity ?? '') || !path.isAbsolute(commonDir ?? '') || path.normalize(commonDir) !== commonDir) throw Error('shadow partition needs identity and canonical commonDir');
+  root ??= env.BRAIN_SHADOW_ROOT || undefined;
+  let storageRoot;
+  if (root === undefined) {
+    const identityRoot = identityRootAt(commonDir);
+    if (identityRoot) { storageRoot = path.join(identityRoot, '.herdr-brain'); root = path.join(storageRoot, 'logs'); }
+    else root = path.join(env.HOME || os.homedir(), '.local/state/herdr-brain/logs');
+  }
+  root = path.resolve(root);
+  const directory = path.join(root, identity, digest(commonDir));
+  privatePath(storageRoot ?? root, directory);
+  return { directory, storageRoot: storageRoot ?? root };
+}
+export function stateDirectory(options) { return partitionLocation(options).directory; }
 export async function privateDirectory(directory) {
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   const stat = await fs.lstat(directory);
@@ -46,9 +88,13 @@ export async function readJournal(directory) {
 }
 
 export class ShadowJournal {
-  constructor({ identity, commonDir, root }) {
+  constructor({ identity, commonDir, root, env }) {
     this.identity = identity; this.commonDir = commonDir;
-    this.directory = stateDirectory({ identity, commonDir, root });
+    Object.assign(this, partitionLocation({ identity, commonDir, root, env }));
+  }
+  async prepareDirectory() {
+    privatePath(this.storageRoot, this.directory);
+    return privateDirectory(this.directory);
   }
   async append(input) {
     // Take an immutable JSON snapshot before any asynchronous filesystem work.
@@ -56,7 +102,7 @@ export class ShadowJournal {
     const event = JSON.parse(canonical(input));
     if (event.identity !== this.identity || event.project.commonDir !== this.commonDir) throw Error('shadow partition scope mismatch');
     if (event.cursor || event.receivedAt || event.stream || event.shadow) throw Error('shadow writer owns cursor, receivedAt, stream and classification');
-    const directory = await privateDirectory(this.directory);
+    const directory = await this.prepareDirectory();
     if (await fs.realpath(this.commonDir) !== this.commonDir) throw Error('noncanonical project commonDir');
     // Fail immediately on contention. Shadow work never waits on delivery or
     // steals an unknown/stale lock. Inspect a crash-left lock before removal.

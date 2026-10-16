@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { validateEvent, parseEvent, parseJSON, canonical, digest, verifyBody } from '../messages/schema.mjs';
 import { classify, noticeEvidence } from '../messages/classify.mjs';
 import { ShadowJournal, readJournal, report, stateDirectory } from '../messages/journal.mjs';
-import { mirrorNotice, mirrorDesk, flushShadow, bestEffort } from '../messages/mirror.mjs';
+import { mirrorNotice, mirrorDesk, flushShadow, bestEffort, identityAt } from '../messages/mirror.mjs';
 import { enqueueSupervisor, readInbox } from '../supervisor/prompt-supervisor.mjs';
 import * as notices from '../watch/notice.mjs';
 import { notice as promotionNotice } from '../promote/promote.mjs';
@@ -28,6 +28,87 @@ function fixture(t) {
       priority: 'normal', reply_by: null, summary: 'Should this continue?', body_ref: null, decision_ref: null } });
   return { root, scope, event, journal: new ShadowJournal(scope) };
 }
+
+test('shadow roots use the nearest identity marker, with explicit and environment overrides', async t => {
+  const f = fixture(t), env = { HOME: path.join(f.root, 'home') };
+  fs.writeFileSync(path.join(f.root, '.identity-root'), '');
+  const nested = path.join(f.root, 'nested'); fs.mkdirSync(nested);
+  fs.writeFileSync(path.join(nested, '.identity-root'), '');
+  const commonDir = path.join(nested, 'project/.git'); fs.mkdirSync(commonDir, { recursive: true });
+  const scope = { identity: 'example', commonDir, env };
+  const partition = path.join('example', digest(commonDir));
+  assert.equal(await identityAt(commonDir, env), 'nested');
+  assert.equal(stateDirectory(scope), path.join(nested, '.herdr-brain/logs', partition));
+  assert.equal(stateDirectory({ ...scope, env: { ...env, BRAIN_IDENTITY: 'override' } }), stateDirectory(scope), 'logical identity override does not hide the marker root');
+  assert.equal(await identityAt(commonDir, { BRAIN_IDENTITY: 'override' }), 'override');
+  const override = { ...env, BRAIN_SHADOW_ROOT: path.join(f.root, 'environment') };
+  assert.equal(stateDirectory({ ...scope, env: override }), path.join(override.BRAIN_SHADOW_ROOT, partition));
+  assert.equal(stateDirectory({ ...scope, env: override, root: f.scope.root }), path.join(f.scope.root, partition));
+  assert.equal(fs.existsSync(path.join(nested, '.herdr-brain')), false, 'resolution never creates storage');
+});
+
+test('an unmarked project falls back only to its fixture home with an explicit identity', async t => {
+  const f = fixture(t), env = { HOME: path.join(f.root, 'home'), BRAIN_IDENTITY: 'example' };
+  const { root, ...scope } = f.scope;
+  const directory = stateDirectory({ ...scope, env });
+  assert.equal(directory, path.join(env.HOME, '.local/state/herdr-brain/logs/example', digest(scope.commonDir)));
+  assert.equal(await identityAt(scope.commonDir, env), 'example');
+  await assert.rejects(identityAt(scope.commonDir, {}), /unenrolled/);
+  const journal = new ShadowJournal({ ...scope, env }); await journal.append(f.event());
+  assert.equal((await readJournal(directory)).entries.length, 1);
+});
+
+test('shadow root resolution refuses symlink markers, identity roots and storage directories', async t => {
+  const f = fixture(t), env = { HOME: path.join(f.root, 'home'), BRAIN_IDENTITY: 'example' };
+  const { root, ...scope } = f.scope, marker = path.join(f.root, '.identity-root');
+  const regular = path.join(f.root, 'marker'); fs.writeFileSync(regular, ''); fs.symlinkSync(regular, marker);
+  assert.throws(() => stateDirectory({ ...scope, env }), /regular marker/);
+  await assert.rejects(identityAt(scope.commonDir, {}), /regular marker/);
+  fs.unlinkSync(marker); fs.mkdirSync(marker);
+  assert.throws(() => stateDirectory({ ...scope, env }), /regular marker/);
+  fs.rmdirSync(marker); fs.writeFileSync(marker, '');
+  const journal = new ShadowJournal({ ...scope, env });
+  const alias = path.join(f.root, 'identity-alias'); fs.symlinkSync(f.root, alias, 'dir');
+  assert.throws(() => stateDirectory({ ...scope, commonDir: path.join(alias, '.git'), env }), /canonical directory/);
+  const target = path.join(f.root, 'elsewhere'); fs.mkdirSync(target, { mode: 0o700 });
+  const brain = path.join(f.root, '.herdr-brain'); fs.symlinkSync(target, brain, 'dir');
+  assert.throws(() => stateDirectory({ ...scope, env }), /symlink/);
+  await assert.rejects(journal.append(f.event()), /symlink/, 'a root replaced after construction is rechecked before writing');
+  fs.unlinkSync(brain); fs.mkdirSync(brain, { mode: 0o700 });
+  fs.symlinkSync(target, path.join(brain, 'logs'), 'dir');
+  assert.throws(() => stateDirectory({ ...scope, env }), /symlink/);
+  await assert.rejects(journal.append(f.event()), /symlink/);
+  fs.unlinkSync(path.join(brain, 'logs')); fs.chmodSync(brain, 0o755);
+  assert.throws(() => stateDirectory({ ...scope, env }), /not private/);
+  await assert.rejects(journal.append(f.event()), /not private/);
+  fs.chmodSync(brain, 0o700);
+  fs.symlinkSync(target, f.scope.root, 'dir');
+  assert.throws(() => stateDirectory({ ...scope, env, root: f.scope.root }), /symlink/);
+  assert.throws(() => stateDirectory({ ...scope, env: { ...env, BRAIN_SHADOW_ROOT: f.scope.root } }), /symlink/);
+  assert.deepEqual(fs.readdirSync(target), [], 'refused roots remain untouched');
+});
+
+test('shadow-report discovers a default mirror journal without root or identity flags', async t => {
+  const f = fixture(t), env = { HOME: path.join(f.root, 'home') };
+  fs.writeFileSync(path.join(f.root, '.identity-root'), '');
+  assert.equal(spawnSync('git', ['-C', f.root, 'init', '-q'], { encoding: 'utf8' }).status, 0);
+  const inbox = path.join(f.root, 'inbox.log'); fs.writeFileSync(inbox, 'fixture inbox');
+  const message = '[watch-blocked] run=R-1 item=ENG-1 state=blocked';
+  await mirrorNotice({ inbox, id: 'default-root', at: '2026-10-15T18:00:00Z', sequence: 1, message, to: 'supervisor', cwd: f.root }, { env });
+  const identity = path.basename(f.root), directory = path.join(f.root, '.herdr-brain/logs', identity, digest(f.scope.commonDir));
+  const entries = (await readJournal(directory)).entries;
+  assert.equal(entries.length, 1); assert.equal(fs.readFileSync(entries[0].payload.body_ref.path, 'utf8'), message);
+  for (const relative of ['.herdr-brain', '.herdr-brain/logs', `.herdr-brain/logs/${identity}`, path.relative(f.root, directory), path.relative(f.root, path.join(directory, 'bodies'))])
+    assert.equal(fs.statSync(path.join(f.root, relative)).mode & 0o777, 0o700, relative);
+  assert.equal(fs.statSync(entries[0].payload.body_ref.path).mode & 0o777, 0o600);
+  assert.equal(fs.statSync(path.join(directory, 'shadow.jsonl')).mode & 0o777, 0o600);
+  // Test preloads keep child environments contained. Unset the override only
+  // inside this child, whose Git discovery and HOME both point at the fixture.
+  const cliModule = new URL('../messages/messages.mjs', import.meta.url).href;
+  const cli = spawnSync(process.execPath, ['--input-type=module', '-e', `delete process.env.BRAIN_SHADOW_ROOT; delete process.env.BRAIN_IDENTITY; const {main} = await import(${JSON.stringify(cliModule)}); await main(['shadow-report', '--json']);`], { cwd: f.root, env: { ...process.env, HOME: env.HOME }, encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr); assert.deepEqual(JSON.parse(cli.stdout), report({ entries, tornTail: null }));
+  assert.equal(fs.existsSync(path.join(env.HOME, '.local')), false, 'a marked identity never falls back to home state');
+});
 
 test('message schema accepts the envelope, qualified refs, body and decision evidence', t => {
   const f = fixture(t), e = f.event();

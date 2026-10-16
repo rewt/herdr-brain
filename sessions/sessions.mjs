@@ -84,14 +84,16 @@ export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', e
     entries, diagnostics, valid: !diagnostics.some(d => d.level === 'error') };
 }
 
-export function main(args = process.argv.slice(2)) {
+export async function main(args = process.argv.slice(2)) {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { project: { type: 'string', default: process.cwd() }, workspace: { type: 'string', default: 'home' } },
-    usage: 'Usage: node sessions/sessions.mjs inspect [FILE ...] [--project PATH] [--workspace home|REF]' });
-  if (positionals.shift() !== 'inspect') throw Error('expected inspect');
-  const result = inspect({ files: positionals, cwd: values.project, workspace: values.workspace });
+    usage: 'Usage: node sessions/sessions.mjs inspect|plan [FILE ...] [--project PATH] [--workspace home|REF]' });
+  const command = positionals.shift();
+  if (!['inspect', 'plan'].includes(command)) throw Error('expected inspect or plan');
+  const options = { files: positionals, cwd: values.project, workspace: values.workspace };
+  const result = command === 'inspect' ? inspect(options) : await (await import('./plan.mjs')).plan(options);
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   if (!result.valid) process.exitCode = 1;
 }
 if (isMain(import.meta.url)) {
-  try { main(); } catch (error) { process.stderr.write(`sessions: ${error.message}\n`); process.exitCode = 1; }
+  main().catch(error => { process.stderr.write(`sessions: ${error.message}\n`); process.exitCode = 1; });
 }

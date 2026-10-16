@@ -1,0 +1,744 @@
+TAP version 13
+# Subtest: one journaled fake delegate, then idempotent KEEP even idle; cache loss cannot launch or replay
+ok 1 - one journaled fake delegate, then idempotent KEEP even idle; cache loss cannot launch or replay
+  ---
+  duration_ms: 225.564791
+  ...
+# Subtest: lost start acknowledgement holds forever without another start; exact receipt can resolve it
+ok 2 - lost start acknowledgement holds forever without another start; exact receipt can resolve it
+  ---
+  duration_ms: 178.459917
+  ...
+# Subtest: lost adapter reply resolves immediately only when a fresh exact receipt proves the incarnation
+ok 3 - lost adapter reply resolves immediately only when a fresh exact receipt proves the incarnation
+  ---
+  duration_ms: 157.693167
+  ...
+# Subtest: changed or ambiguous occupant holds: terminal_id
+ok 4 - changed or ambiguous occupant holds: terminal_id
+  ---
+  duration_ms: 159.120042
+  ...
+# Subtest: changed or ambiguous occupant holds: name
+ok 5 - changed or ambiguous occupant holds: name
+  ---
+  duration_ms: 145.99825
+  ...
+# Subtest: changed or ambiguous occupant holds: cwd
+ok 6 - changed or ambiguous occupant holds: cwd
+  ---
+  duration_ms: 163.190584
+  ...
+# Subtest: changed or ambiguous occupant holds: native
+ok 7 - changed or ambiguous occupant holds: native
+  ---
+  duration_ms: 161.521334
+  ...
+# Subtest: changed or ambiguous occupant holds: duplicate
+ok 8 - changed or ambiguous occupant holds: duplicate
+  ---
+  duration_ms: 178.761958
+  ...
+# Subtest: changed or ambiguous occupant holds: pane-topology
+ok 9 - changed or ambiguous occupant holds: pane-topology
+  ---
+  duration_ms: 161.589834
+  ...
+# Subtest: changed or ambiguous occupant holds: unrelated-pane
+ok 10 - changed or ambiguous occupant holds: unrelated-pane
+  ---
+  duration_ms: 162.893792
+  ...
+# Subtest: changed or ambiguous occupant holds: wrong-receipt
+ok 11 - changed or ambiguous occupant holds: wrong-receipt
+  ---
+  duration_ms: 165.0955
+  ...
+# Subtest: unknown live occupant in adopted position is held, never adopted, prompted or closed
+ok 12 - unknown live occupant in adopted position is held, never adopted, prompted or closed
+  ---
+  duration_ms: 124.599334
+  ...
+# Subtest: a pane retaining native/restore evidence is never treated as a missing empty occupant
+ok 13 - a pane retaining native/restore evidence is never treated as a missing empty occupant
+  ---
+  duration_ms: 140.307417
+  ...
+# Subtest: no receipt means not enrolled despite matching labels or injected sidecars
+ok 14 - no receipt means not enrolled despite matching labels or injected sidecars
+  ---
+  duration_ms: 177.040875
+  ...
+# Subtest: pending generation freezes live route, context and personality and never replays the initial prompt
+ok 15 - pending generation freezes live route, context and personality and never replays the initial prompt
+  ---
+  duration_ms: 162.473459
+  ...
+# Subtest: stopped is observe-only, including immediately after durable intent
+ok 16 - stopped is observe-only, including immediately after durable intent
+  ---
+  duration_ms: 183.672333
+  ...
+# Subtest: closeHold is observe-only, including immediately after durable intent
+ok 17 - closeHold is observe-only, including immediately after durable intent
+  ---
+  duration_ms: 160.337458
+  ...
+# Subtest: canonical lease contention across linked checkouts holds without writes or starts
+ok 18 - canonical lease contention across linked checkouts holds without writes or starts
+  ---
+  duration_ms: 165.307791
+  ...
+# Subtest: at most one action in a pass with two missing standard slots
+ok 19 - at most one action in a pass with two missing standard slots
+  ---
+  duration_ms: 249.611584
+  ...
+# Subtest: a changed empty terminal cancels before intent and unresolved ownership fences other starts
+ok 20 - a changed empty terminal cancels before intent and unresolved ownership fences other starts
+  ---
+  duration_ms: 228.554667
+  ...
+# Subtest: execution rejects a non-fake adapter and malformed or symlinked operation evidence holds
+ok 21 - execution rejects a non-fake adapter and malformed or symlinked operation evidence holds
+  ---
+  duration_ms: 119.414209
+  ...
+# Subtest: report, repeated failed/delayed review, dispatch reuse, new report, then park in same native session
+ok 22 - report, repeated failed/delayed review, dispatch reuse, new report, then park in same native session
+  ---
+  duration_ms: 209.77
+  ...
+# Subtest: report file parks before ingestion; malformed report retains; reuse replacing terminal or report holds
+ok 23 - report file parks before ingestion; malformed report retains; reuse replacing terminal or report holds
+  ---
+  duration_ms: 160.580459
+  ...
+# Subtest: work-item tab topology disagreement holds
+ok 24 - work-item tab topology disagreement holds
+  ---
+  duration_ms: 124.002
+  ...
+# Subtest: work-item checkout topology disagreement holds
+ok 25 - work-item checkout topology disagreement holds
+  ---
+  duration_ms: 119.089041
+  ...
+# Subtest: an edited generation without a prior manifest receipt stays pending and cannot claim the live spec
+ok 26 - an edited generation without a prior manifest receipt stays pending and cannot claim the live spec
+  ---
+  duration_ms: 123.91425
+  ...
+# Subtest: invalid manifests, unreadable canonical history and incomplete observations never start
+ok 27 - invalid manifests, unreadable canonical history and incomplete observations never start
+  ---
+  duration_ms: 147.726083
+  ...
+# Subtest: KEEP-only retirement protection survives status deletion, idle state and missing panes
+ok 28 - KEEP-only retirement protection survives status deletion, idle state and missing panes
+  ---
+  duration_ms: 137.449208
+  ...
+# Subtest: read-only live adapter uses only snapshot and exact agent.get; mismatch and incomplete schema hold
+ok 29 - read-only live adapter uses only snapshot and exact agent.get; mismatch and incomplete schema hold
+  ---
+  duration_ms: 99.3705
+  ...
+# Subtest: plan API and CLI use scratch socket/record only and leave every file unchanged; --apply rejected
+ok 30 - plan API and CLI use scratch socket/record only and leave every file unchanged; --apply rejected
+  ---
+  duration_ms: 364.7405
+  ...
+# Subtest: fact readers observe canonical STOP/close hold, dispatch/watch receipts, malformed reports and torn record
+ok 31 - fact readers observe canonical STOP/close hold, dispatch/watch receipts, malformed reports and torn record
+  ---
+  duration_ms: 143.871667
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: adopted example: chat
+ok 32 - adopted example: chat
+  ---
+  duration_ms: 2.153625
+  ...
+# Subtest: adopted example: supervisor
+ok 33 - adopted example: supervisor
+  ---
+  duration_ms: 0.4435
+  ...
+# Subtest: adopted example: engineer-worker
+ok 34 - adopted example: engineer-worker
+  ---
+  duration_ms: 0.309958
+  ...
+# Subtest: adopted example: logs-viewer
+ok 35 - adopted example: logs-viewer
+  ---
+  duration_ms: 0.312333
+  ...
+# Subtest: adopted example: logs-triage
+ok 36 - adopted example: logs-triage
+  ---
+  duration_ms: 0.336458
+  ...
+# Subtest: manifest rejects unknown kind
+ok 37 - manifest rejects unknown kind
+  ---
+  duration_ms: 0.419916
+  ...
+# Subtest: manifest rejects unknown root field
+ok 38 - manifest rejects unknown root field
+  ---
+  duration_ms: 0.209667
+  ...
+# Subtest: manifest rejects malformed uid
+ok 39 - manifest rejects malformed uid
+  ---
+  duration_ms: 0.231708
+  ...
+# Subtest: manifest rejects unknown nested field
+ok 40 - manifest rejects unknown nested field
+  ---
+  duration_ms: 0.299625
+  ...
+# Subtest: manifest rejects escaping context
+ok 41 - manifest rejects escaping context
+  ---
+  duration_ms: 0.806584
+  ...
+# Subtest: manifest rejects absolute context
+ok 42 - manifest rejects absolute context
+  ---
+  duration_ms: 0.325875
+  ...
+# Subtest: manifest rejects environment expansion
+ok 43 - manifest rejects environment expansion
+  ---
+  duration_ms: 0.318917
+  ...
+# Subtest: manifest rejects command field
+ok 44 - manifest rejects command field
+  ---
+  duration_ms: 0.252708
+  ...
+# Subtest: manifest rejects nested executable field
+ok 45 - manifest rejects nested executable field
+  ---
+  duration_ms: 0.319
+  ...
+# Subtest: manifest rejects viewer model
+ok 46 - manifest rejects viewer model
+  ---
+  duration_ms: 0.216875
+  ...
+# Subtest: manifest rejects standard auto retirement
+ok 47 - manifest rejects standard auto retirement
+  ---
+  duration_ms: 0.386209
+  ...
+# Subtest: manifest rejects route assertion
+ok 48 - manifest rejects route assertion
+  ---
+  duration_ms: 0.373708
+  ...
+# Subtest: manifest rejects missing execution
+ok 49 - manifest rejects missing execution
+  ---
+  duration_ms: 0.296417
+  ...
+# Subtest: manifest rejects API billing
+ok 50 - manifest rejects API billing
+  ---
+  duration_ms: 0.272416
+  ...
+# Subtest: manifest rejects model API permitted
+ok 51 - manifest rejects model API permitted
+  ---
+  duration_ms: 0.201167
+  ...
+# Subtest: manifest rejects wrong host
+ok 52 - manifest rejects wrong host
+  ---
+  duration_ms: 0.214291
+  ...
+# Subtest: manifest rejects wrong triage position
+ok 53 - manifest rejects wrong triage position
+  ---
+  duration_ms: 0.457583
+  ...
+# Subtest: manifest rejects triage outside home
+ok 54 - manifest rejects triage outside home
+  ---
+  duration_ms: 0.262625
+  ...
+# Subtest: manifest rejects triage replicas
+ok 55 - manifest rejects triage replicas
+  ---
+  duration_ms: 0.223042
+  ...
+# Subtest: manifest rejects triage tools
+ok 56 - manifest rejects triage tools
+  ---
+  duration_ms: 0.192458
+  ...
+# Subtest: manifest rejects missing triage tools
+ok 57 - manifest rejects missing triage tools
+  ---
+  duration_ms: 0.203542
+  ...
+# Subtest: manifest rejects hygiene triage route
+ok 58 - manifest rejects hygiene triage route
+  ---
+  duration_ms: 0.263541
+  ...
+# Subtest: manifest rejects unknown logs pane
+ok 59 - manifest rejects unknown logs pane
+  ---
+  duration_ms: 0.154125
+  ...
+# Subtest: manifest rejects unknown primary pane
+ok 60 - manifest rejects unknown primary pane
+  ---
+  duration_ms: 0.165792
+  ...
+# Subtest: manifest rejects worker reset
+ok 61 - manifest rejects worker reset
+  ---
+  duration_ms: 0.211416
+  ...
+# Subtest: manifest rejects unknown context source
+ok 62 - manifest rejects unknown context source
+  ---
+  duration_ms: 0.17925
+  ...
+# Subtest: manifest rejects required missing context
+ok 63 - manifest rejects required missing context
+  ---
+  duration_ms: 0.623834
+  ...
+# Subtest: manifest rejects unknown memory field
+ok 64 - manifest rejects unknown memory field
+  ---
+  duration_ms: 0.337583
+  ...
+# Subtest: Markdown fences and duplicate decoded keys are parsed without evaluating prose
+ok 65 - Markdown fences and duplicate decoded keys are parsed without evaluating prose
+  ---
+  duration_ms: 0.551042
+  ...
+# Subtest: Manifest section rejects an extra JSON fence
+ok 66 - Manifest section rejects an extra JSON fence
+  ---
+  duration_ms: 0.180084
+  ...
+# Subtest: Manifest section rejects an extra jsonc fence
+ok 67 - Manifest section rejects an extra jsonc fence
+  ---
+  duration_ms: 0.134417
+  ...
+# Subtest: Manifest section rejects an extra unlabelled fence
+ok 68 - Manifest section rejects an extra unlabelled fence
+  ---
+  duration_ms: 0.147166
+  ...
+# Subtest: Manifest section rejects an extra text fence
+ok 69 - Manifest section rejects an extra text fence
+  ---
+  duration_ms: 0.133542
+  ...
+# Subtest: context paths require an explicit canonical project diagnostic instead of a TypeError
+ok 70 - context paths require an explicit canonical project diagnostic instead of a TypeError
+  ---
+  duration_ms: 0.708416
+  ...
+# Subtest: required/optional paths are bounded to the canonical project, including missing and dangling symlinks
+ok 71 - required/optional paths are bounded to the canonical project, including missing and dangling symlinks
+  ---
+  duration_ms: 119.820084
+  ...
+# Subtest: set validation rejects a second project triage across namespaces, duplicate UID and duplicate pane positions
+ok 72 - set validation rejects a second project triage across namespaces, duplicate UID and duplicate pane positions
+  ---
+  duration_ms: 0.530416
+  ...
+# Subtest: layered route assertions and hygiene aliases validate resolved settings without model hard-coding
+ok 73 - layered route assertions and hygiene aliases validate resolved settings without model hard-coding
+  ---
+  duration_ms: 166.761459
+  ...
+# Subtest: worker inspection checks item existence in the read-only folded record and holds a torn tail
+ok 74 - worker inspection checks item existence in the read-only folded record and holds a torn tail
+  ---
+  duration_ms: 239.034667
+  ...
+# Subtest: default templates ship, follow canonical committed overrides, and select model-free non-home status
+ok 75 - default templates ship, follow canonical committed overrides, and select model-free non-home status
+  ---
+  duration_ms: 731.077
+  ...
+# Subtest: canonical HEAD manifest bytes survive working-tree edits, staged replacements and missing files with warnings
+ok 76 - canonical HEAD manifest bytes survive working-tree edits, staged replacements and missing files with warnings
+  ---
+  duration_ms: 505.834375
+  ...
+# Subtest: an unborn canonical project uses defaults and warns about uncommitted manifests
+ok 77 - an unborn canonical project uses defaults and warns about uncommitted manifests
+  ---
+  duration_ms: 180.750834
+  ...
+# Subtest: canonical receipt history adopts and explicitly withdraws slots across linked lanes without live actions
+ok 78 - canonical receipt history adopts and explicitly withdraws slots across linked lanes without live actions
+  ---
+  duration_ms: 300.516291
+  ...
+# Subtest: unknown, unreadable, duplicate-key and mismatched canonical receipts fail closed
+ok 79 - unknown, unreadable, duplicate-key and mismatched canonical receipts fail closed
+  ---
+  duration_ms: 112.205875
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation
+ok 80 - ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation
+  ---
+  duration_ms: 2.729167
+  ...
+# Subtest: retirement hold: pure policy retains every pane and executor logs a distinct held outcome
+ok 81 - retirement hold: pure policy retains every pane and executor logs a distinct held outcome
+  ---
+  duration_ms: 0.946875
+  ...
+# Subtest: retirement hold: executor checks each tab and empty workspace immediately before closing
+ok 82 - retirement hold: executor checks each tab and empty workspace immediately before closing
+  ---
+  duration_ms: 0.592792
+  ...
+# Subtest: process state changes do not change identity tokens, but stopped processes still keep on fresh decision
+ok 83 - process state changes do not change identity tokens, but stopped processes still keep on fresh decision
+  ---
+  duration_ms: 1.119459
+  ...
+# Subtest: the shared executor stops cleanly at a deadline without acting on later candidates
+ok 84 - the shared executor stops cleanly at a deadline without acting on later candidates
+  ---
+  duration_ms: 0.3835
+  ...
+# Subtest: pruning another tab callback does not invalidate this tab token
+ok 85 - pruning another tab callback does not invalidate this tab token
+  ---
+  duration_ms: 0.342834
+  ...
+# Subtest: narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities
+ok 86 - narrow watcher retirement keeps focus, extra occupants, jobs, missing ingestion and changed birth identities
+  ---
+  duration_ms: 1.030542
+  ...
+# Subtest: keeps report-file-only
+ok 87 - keeps report-file-only
+  ---
+  duration_ms: 0.472875
+  ...
+# Subtest: keeps report-before-review
+ok 88 - keeps report-before-review
+  ---
+  duration_ms: 0.365375
+  ...
+# Subtest: keeps blocked
+ok 89 - keeps blocked
+  ---
+  duration_ms: 0.236791
+  ...
+# Subtest: keeps needs-human
+ok 90 - keeps needs-human
+  ---
+  duration_ms: 0.179958
+  ...
+# Subtest: keeps working
+ok 91 - keeps working
+  ---
+  duration_ms: 0.1
+  ...
+# Subtest: keeps unknown
+ok 92 - keeps unknown
+  ---
+  duration_ms: 0.091875
+  ...
+# Subtest: keeps wrong-common
+ok 93 - keeps wrong-common
+  ---
+  duration_ms: 0.123792
+  ...
+# Subtest: keeps wrong-head
+ok 94 - keeps wrong-head
+  ---
+  duration_ms: 0.198375
+  ...
+# Subtest: keeps dirty
+ok 95 - keeps dirty
+  ---
+  duration_ms: 0.33125
+  ...
+# Subtest: keeps wrong-terminal
+ok 96 - keeps wrong-terminal
+  ---
+  duration_ms: 0.114
+  ...
+# Subtest: keeps wrong-session
+ok 97 - keeps wrong-session
+  ---
+  duration_ms: 0.201458
+  ...
+# Subtest: keeps wrong-pane
+ok 98 - keeps wrong-pane
+  ---
+  duration_ms: 0.140375
+  ...
+# Subtest: keeps wrong-cwd
+ok 99 - keeps wrong-cwd
+  ---
+  duration_ms: 0.11975
+  ...
+# Subtest: keeps new-shell
+ok 100 - keeps new-shell
+  ---
+  duration_ms: 0.131416
+  ...
+# Subtest: keeps other-program
+ok 101 - keeps other-program
+  ---
+  duration_ms: 0.148041
+  ...
+# Subtest: keeps focused
+ok 102 - keeps focused
+  ---
+  duration_ms: 0.275333
+  ...
+# Subtest: keeps lab
+ok 103 - keeps lab
+  ---
+  duration_ms: 0.079625
+  ...
+# Subtest: keeps persistent
+ok 104 - keeps persistent
+  ---
+  duration_ms: 0.076125
+  ...
+# Subtest: keeps operator
+ok 105 - keeps operator
+  ---
+  duration_ms: 0.074417
+  ...
+# Subtest: keeps missing-process
+ok 106 - keeps missing-process
+  ---
+  duration_ms: 0.073875
+  ...
+# Subtest: pending review and NEEDS-WORK preserve the engineer across a fix gap
+ok 107 - pending review and NEEDS-WORK preserve the engineer across a fix gap
+  ---
+  duration_ms: 0.313916
+  ...
+# Subtest: same native session new run keeps even after a rename and with immutable older report
+ok 108 - same native session new run keeps even after a rename and with immutable older report
+  ---
+  duration_ms: 0.124459
+  ...
+# Subtest: confirmed successor never releases a warm open chain; disposition still needs the retained identity
+ok 109 - confirmed successor never releases a warm open chain; disposition still needs the retained identity
+  ---
+  duration_ms: 0.783959
+  ...
+# Subtest: adopted standard tabs and both logs panes KEEP in a linked lane; display labels cannot change it
+ok 110 - adopted standard tabs and both logs panes KEEP in a linked lane; display labels cannot change it
+  ---
+  duration_ms: 0.4485
+  ...
+# Subtest: unknown standard-slot evidence keeps: null
+ok 111 - unknown standard-slot evidence keeps: null
+  ---
+  duration_ms: 0.293375
+  ...
+# Subtest: unknown standard-slot evidence keeps: {}
+ok 112 - unknown standard-slot evidence keeps: {}
+  ---
+  duration_ms: 0.239875
+  ...
+# Subtest: unknown standard-slot evidence keeps: {"schema":"future/v2","slots":[],"errors":[]}
+ok 113 - unknown standard-slot evidence keeps: {"schema":"future/v2","slots":[],"errors":[]}
+  ---
+  duration_ms: 0.169542
+  ...
+# Subtest: unknown standard-slot evidence keeps: {"schema":"standard-slot-history/v1","slots":[null],"errors":[]}
+ok 114 - unknown standard-slot evidence keeps: {"schema":"standard-slot-history/v1","slots":[null],"errors":[]}
+  ---
+  duration_ms: 0.215875
+  ...
+# Subtest: unknown standard-slot evidence keeps: {"schema":"standard-slot-history/v1","slots":[],"errors":["unreadable protection; project kept"]}
+ok 115 - unknown standard-slot evidence keeps: {"schema":"standard-slot-history/v1","slots":[],"errors":["unreadable protection; project kept"]}
+  ---
+  duration_ms: 0.475459
+  ...
+# Subtest: execution freshly rechecks receipt adoption and warm review corrections
+ok 116 - execution freshly rechecks receipt adoption and warm review corrections
+  ---
+  duration_ms: 0.385541
+  ...
+# Subtest: unreadable canonical hold lookup fails closed before execution
+ok 117 - unreadable canonical hold lookup fails closed before execution
+  ---
+  duration_ms: 0.292833
+  ...
+# Subtest: all tab occupants must be independently eligible; metadata never releases
+ok 118 - all tab occupants must be independently eligible; metadata never releases
+  ---
+  duration_ms: 0.123458
+  ...
+# Subtest: reference only keeps: promote
+ok 119 - reference only keeps: promote
+  ---
+  duration_ms: 0.147667
+  ...
+# Subtest: reference only keeps: verify
+ok 120 - reference only keeps: verify
+  ---
+  duration_ms: 0.136625
+  ...
+# Subtest: reference only keeps: host-check
+ok 121 - reference only keeps: host-check
+  ---
+  duration_ms: 0.139791
+  ...
+# Subtest: reference only keeps: callback
+ok 122 - reference only keeps: callback
+  ---
+  duration_ms: 0.189958
+  ...
+# Subtest: reference only keeps: test-slot
+ok 123 - reference only keeps: test-slot
+  ---
+  duration_ms: 0.1465
+  ...
+# Subtest: reference only keeps: waiter
+ok 124 - reference only keeps: waiter
+  ---
+  duration_ms: 0.140417
+  ...
+# Subtest: reference only keeps: reconcile
+ok 125 - reference only keeps: reconcile
+  ---
+  duration_ms: 0.133917
+  ...
+# Subtest: executor rechecks reactivated and reports the fresh reason
+ok 126 - executor rechecks reactivated and reports the fresh reason
+  ---
+  duration_ms: 0.200542
+  ...
+# Subtest: executor rechecks native-session and reports the fresh reason
+ok 127 - executor rechecks native-session and reports the fresh reason
+  ---
+  duration_ms: 0.18375
+  ...
+# Subtest: executor rechecks head and reports the fresh reason
+ok 128 - executor rechecks head and reports the fresh reason
+  ---
+  duration_ms: 0.141875
+  ...
+# Subtest: executor rechecks record-reopened and reports the fresh reason
+ok 129 - executor rechecks record-reopened and reports the fresh reason
+  ---
+  duration_ms: 0.199709
+  ...
+# Subtest: executor rechecks reference and reports the fresh reason
+ok 130 - executor rechecks reference and reports the fresh reason
+  ---
+  duration_ms: 0.138958
+  ...
+# Subtest: executor rechecks new-pane and reports the fresh reason
+ok 131 - executor rechecks new-pane and reports the fresh reason
+  ---
+  duration_ms: 0.569709
+  ...
+# Subtest: executor rechecks read-error and reports the fresh reason
+ok 132 - executor rechecks read-error and reports the fresh reason
+  ---
+  duration_ms: 0.164666
+  ...
+# Subtest: restart/idempotency uses fresh authority; failures are cleanup failures
+ok 133 - restart/idempotency uses fresh authority; failures are cleanup failures
+  ---
+  duration_ms: 0.282417
+  ...
+# Subtest: Git-only deletion rejects even a releasable pane until its removal is observed
+ok 134 - Git-only deletion rejects even a releasable pane until its removal is observed
+  ---
+  duration_ms: 0.203834
+  ...
+# Subtest: herdr-reference/v1 matches each declared key, expires visibly, and never releases
+ok 135 - herdr-reference/v1 matches each declared key, expires visibly, and never releases
+  ---
+  duration_ms: 3.75425
+  ...
+# Subtest: malformed, missing expiry, unknown schema, unreadable reference fail the whole project closed
+ok 136 - malformed, missing expiry, unknown schema, unreadable reference fail the whole project closed
+  ---
+  duration_ms: 2.222583
+  ...
+# Subtest: generic promote and trusted verify sources are read-only and include interrupted/reconcile holds
+ok 137 - generic promote and trusted verify sources are read-only and include interrupted/reconcile holds
+  ---
+  duration_ms: 2.147209
+  ...
+# Subtest: promotion references follow the latest request checkpoint and preserve active holds
+ok 138 - promotion references follow the latest request checkpoint and preserve active holds
+  ---
+  duration_ms: 2.527709
+  ...
+# Subtest: pending settlement callbacks keep; completed receipts remain historical
+ok 139 - pending settlement callbacks keep; completed receipts remain historical
+  ---
+  duration_ms: 1.387333
+  ...
+# Subtest: session display changes have no retirement authority
+ok 140 - session display changes have no retirement authority
+  ---
+  duration_ms: 0.270334
+  ...
+# Subtest: background descendants and unknown kernel birth keep, and PID reuse invalidates a plan
+ok 141 - background descendants and unknown kernel birth keep, and PID reuse invalidates a plan
+  ---
+  duration_ms: 0.231208
+  ...
+# Subtest: older folds ignore the confirmed handoff event
+ok 142 - older folds ignore the confirmed handoff event
+  ---
+  duration_ms: 0.22725
+  ...
+# Subtest: a reported successor is reserved until the superseded pane is actually gone
+ok 143 - a reported successor is reserved until the superseded pane is actually gone
+  ---
+  duration_ms: 0.29525
+  ...
+# Subtest: a native session without its launch receipt stays unknown even on the old terminal
+ok 144 - a native session without its launch receipt stays unknown even on the old terminal
+  ---
+  duration_ms: 0.373
+  ...
+# Subtest: project reference damage is reported even when no tabs are present
+ok 145 - project reference damage is reported even when no tabs are present
+  ---
+  duration_ms: 0.075292
+  ...
+# Subtest: lane removal uses fresh shared authority: new references and HOLD both stop the executor
+ok 146 - lane removal uses fresh shared authority: new references and HOLD both stop the executor
+  ---
+  duration_ms: 0.252125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..146
+# tests 146
+# suites 0
+# pass 146
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5317.333666
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -260,7 +260,9 @@ intact; tests also prove missing/foreign roots cannot create transport state.
    `ROOT/inbox.log`. Do not use shadow
    observations as delivery/authority evidence.
 2. `SupervisorTransfer.enroll()` acquires the original inbox's owner, drain and
-   journal locks. A live/unidentified owner blocks enrollment. It durably fences
+   journal locks. A live/unidentified owner blocks enrollment. An absent fixture
+   inbox is created and its directory entry fsynced before intake can spool.
+   It durably fences
    the compatibility delivery entrypoints with an explicit fixture marker and
    imports notices with stable source/notice IDs and original ordinal. Import
    commits known sent/handled or uncertain/refused dispositions atomically with

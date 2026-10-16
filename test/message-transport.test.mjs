@@ -367,3 +367,20 @@ test('an unanswered question without a correlation field remains visible after c
   await f.receiver.consume(e.eventId, f.key, { consumer: 'supervisor-reader' });
   assert.deepEqual(transportStatus(f.root).openThreads, [e.eventId]);
 });
+
+test('bootstrap durably creates an empty compatibility log before publishing the intake fence', async t => {
+  const f = await fixture(t), sync = fs.fsyncSync, exists = fs.existsSync;
+  let logSynced = false, directorySyncedAfterLog = false;
+  t.mock.method(fs, 'fsyncSync', fd => {
+    const stat = fs.fstatSync(fd);
+    if (exists(f.inbox) && stat.ino === fs.statSync(f.inbox).ino && stat.isFile()) logSynced = true;
+    if (stat.isDirectory() && logSynced && !exists(`${f.inbox}.transport-fixture`)) directorySyncedAfterLog = true;
+    return sync(fd);
+  });
+  await f.transfer.enroll();
+  assert.equal(logSynced, true);
+  assert.equal(directorySyncedAfterLog, true, 'file and directory durability precede intake fencing');
+  assert.equal(fs.readFileSync(f.inbox, 'utf8'), '');
+  assert.equal((await promptSupervisor('supervisor', 'durable spool', { inbox: f.inbox, id: 'new-arrival' })).queued, true);
+  assert.equal(readInbox(f.inbox)[0].id, 'new-arrival');
+});

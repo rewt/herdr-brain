@@ -20,6 +20,9 @@ export class SupervisorTransfer {
     const releases = [];
     try {
       for (const suffix of ['.owner.lock', '.drain.lock', '.lock']) releases.push(noticeLock(file + suffix));
+      // Enqueue fsyncs append bytes. Persist an empty old inbox's directory
+      // entry here too, before acknowledging any post-enrollment spool write.
+      if (!fs.existsSync(file)) writeProjection(file, '');
       writeProjection(`${file}.transport-fixture`, 'brain.transport-fixture/v1\n');
       await this.importLocked(config);
     } finally { for (const release of releases.reverse()) release(); }

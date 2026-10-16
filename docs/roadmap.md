@@ -7,9 +7,9 @@ shape and the reasons; it names items by ID and never repeats their state.
 ## Goal
 
 bch-cloak's agent cycle works: dispatch, routing, watch, settle, promote, housekeeping and the
-supervisor. Standardize it as one Herdr plugin that any project on any machine can adopt, with the
-console as its control plane, without disturbing bch-cloak while it runs. The inventory of what
-bch-cloak runs today is `docs/reports/INVENTORY-bch-cloak-workflow-2026-10-01.md`.
+supervisor. Standardize it as a standalone product that requires Herdr, with an optional thin Herdr
+plugin front door, that any project on any machine can adopt, without disturbing bch-cloak while it
+runs. The inventory of what bch-cloak runs today is `docs/reports/INVENTORY-bch-cloak-workflow-2026-10-01.md`.
 
 ## Operating model (operator, 2026-10-01)
 
@@ -20,9 +20,10 @@ agent's narrative.
 
 ## Shape
 
-One plugin made of modules a project switches on in its config. Herdr installs plugins per machine
-and has no plugin-to-plugin dependencies, so modules share one install and one version. Names: plain module names, chosen by the operator
-(HUM-15).
+A standalone product made of modules a project switches on in its config. Herdr is the runtime;
+Brain is the control plane. The optional thin Herdr plugin front door supplies keybound actions
+that open the operator chat, logs viewer and status; the core never depends on it.
+Names: plain module names, chosen by the operator (HUM-15).
 
 | Module | Job | Comes from (bch-cloak) |
 |---|---|---|
@@ -55,6 +56,6 @@ actionable now is written in advance.
 ## Rules for the whole programme
 
 1. bch-cloak keeps running its own kit until a module replaces that exact piece, and every switch can be undone.
-2. Development happens on lanes here and runs as a dev plugin; bch-cloak only runs installed releases.
+2. Development happens on lanes here and runs standalone against Herdr; bch-cloak only runs installed releases.
 3. Project configuration lives in the project, tracked; machine-specific values (paths, persona, accounts) stay local.
 4. The contract in `AGENTS.md` holds: the record never calls a model, budgets are advisory, status is derived, older code ignores newer event types.

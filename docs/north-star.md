@@ -52,13 +52,13 @@ their place. On what the operator wants, the operator decides; on how things wor
 on what will work, bring your own view. Speak up when it would change the outcome, give
 reasons either way, and once the operator has heard you and decided, commit.
 
-## The destination (2026-10-01)
+## The destination (2026-10-16)
 
 The agent cycle that works in bch-cloak (dispatch, routing, watching for reports,
-settling, review, promotion, housekeeping and the supervisor) becomes one Herdr
-plugin that any project on any machine can adopt, with the console as the place
-where the operator observes and steers, including its configuration (routes,
-models, desks). The roadmap is goal G-3 in herdr-brain's own record;
+settling, review, promotion, housekeeping and the supervisor) becomes a standalone
+product that requires Herdr, with an optional thin Herdr plugin front door, that
+any project on any machine can adopt. Herdr is the runtime; Brain is the control
+plane. The roadmap is goal G-3 in herdr-brain's own record;
 `docs/roadmap.md` gives its shape.
 
 ## The problem

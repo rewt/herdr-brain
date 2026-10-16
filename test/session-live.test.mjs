@@ -123,6 +123,7 @@ for (const role of ['chat','supervisor']) test(`${role}: real adapter and fake C
   assert.equal((await f.apply()).apply.state,'observed'); assert.equal(starts(f).length,1);
   assert.deepEqual(f.read().launchEnvironment,{role,name:f.binding().agentName,actor:f.binding().agentName,record:f.org});
   const args=starts(f)[0]; assert.ok(args.includes('--model'));assert.match(args.join(' '),new RegExp(role==='chat'?'project chat':'supervisor'));
+  assert.match(args.join(' '),/Host memory: available unknown/);
 });
 test('lost start reply holds with no second launch, even if native occupant appeared', async t => {
   const f=fixture(t);f.change(s=>s.lostStart=true);

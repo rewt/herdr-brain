@@ -101,7 +101,8 @@ function materializeContext(project, spec, env, handoff) {
     if (c.source === 'identity-instructions') continue; // Native harness owns identity instructions.
     if (c.source === 'supervisor-protocol') { chunks.push(readPlainFile(path.join(product, 'supervisor/PROTOCOL.md'))); continue; }
     if (c.source === 'project-cold-start') {
-      chunks.push(renderColdStart(coldStart({ cwd: project.root, org, env, memory: { available: false } }), { limit: c.limit ?? 6 })); continue;
+      chunks.push(renderColdStart(coldStart({ cwd: project.root, org, env,
+        memory: { total: null, available: null, swap_used: null, warning: 'Host memory was not sampled during session materialization.' } }), { limit: c.limit ?? 6 })); continue;
     }
     if (['latest-chat-handoff', 'latest-supervisor-handoff'].includes(c.source) && handoff) continue;
     if (c.source === 'file' || c.source === 'product-file') {

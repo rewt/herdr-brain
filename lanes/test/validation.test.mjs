@@ -11,8 +11,16 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import { processStart } from '../../test-slot/lock-support.mjs';
 import { environmentFingerprint, resolveValidation, validateValidation, validationEnvironment } from '../validation.mjs';
 import { resolveGateLimits } from '../../test-slot/limits.mjs';
+import { validateValidation as preProfileValidation } from './fixtures/pre-profile-validation.mjs';
+import { resourceStanza } from '../../test-slot/resources.mjs';
 
 const cli = fileURLToPath(new URL('../lane.mjs', import.meta.url));
+test('the pre-profile main validator accepts the tracked declaration without new fields', () => {
+  const declaration = JSON.parse(fs.readFileSync(new URL('../../.lane.validation.json', import.meta.url), 'utf8'));
+  assert.doesNotThrow(() => preProfileValidation(declaration));
+  assert.throws(() => preProfileValidation({ ...declaration, resources: {} }), /unknown validation field: resources/);
+  assert.equal(Object.hasOwn(declaration, 'resources'), false);
+});
 function fixture(t, declaration = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'validation-tiers-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -70,6 +78,22 @@ test('project gate limits override healthy history for promotion and release', t
   }
   assert.equal(settings.tiers.fast.timeoutSeconds, undefined);
   assert.equal(settings.tiers.fast.idleTimeoutSeconds, undefined);
+});
+
+test('validation looks up an exact command profile outside the legacy declaration', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs profiled' });
+  fs.mkdirSync(path.join(f.workspace, 'test-slot'));
+  fs.writeFileSync(path.join(f.workspace, 'test-slot/validation-resources.json'), JSON.stringify({
+    fast: resourceStanza('fixture/validation', 'node check.cjs profiled'),
+  }));
+  f.git(['add', 'test-slot/validation-resources.json'], f.workspace);
+  f.git(['commit', '-qm', 'Declare validation evidence separately'], f.workspace);
+  f.good(f.lane(['check']));
+  const execution = () => JSON.parse(fs.readFileSync(f.gate().execution_receipt, 'utf8'));
+  assert.equal(execution().resource.profile.id, 'fixture/validation');
+  assert.deepEqual(execution().resource.profile.command, ['/bin/sh', '-c', 'node check.cjs profiled']);
+  f.good(f.lane(['check', '--cmd', 'node check.cjs arbitrary']));
+  assert.equal(execution().resource.reason, 'unprofiled');
 });
 
 test('legacy host settings are ignored even in an unborn repository', t => {

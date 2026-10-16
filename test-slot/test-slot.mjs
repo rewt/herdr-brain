@@ -31,7 +31,8 @@ import { stopGateGroup } from "./watchdog.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { resolveResource } from "./resources.mjs";
-import { measureFamily } from "./measurement.mjs";
+import { boundedTelemetry, measureFamily } from "./measurement.mjs";
+import { EXECUTIONS_PER_PROFILE, RETENTION_SCHEMA, pruneExecutions } from './retention.mjs';
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -420,9 +421,19 @@ export async function run({ positional, options, child }) {
   }
   const saveExecution = value => {
     if (!options.resultPath) return;
-    try { writeFileAtomic(options.resultPath, JSON.stringify(value) + '\n', 0o600); }
+    try {
+      const retention = automaticReceipt ? { schema: RETENTION_SCHEMA, newest_per_profile: EXECUTIONS_PER_PROFILE,
+        holder: slot.holder, lock_paths: [...new Set([options.lockPath, options.compatPath])] } : undefined;
+      writeFileAtomic(options.resultPath, JSON.stringify({ ...value, ...(retention ? { retention } : {}) }) + '\n', 0o600);
+      if (automaticReceipt) {
+        try { pruneExecutions(options.resultPath, resource.profile.id, holderState); }
+        catch { /* Pruning cannot change exclusive execution. */ }
+      }
+    }
     catch (error) { if (!automaticReceipt) throw error; }
   };
+  const telemetry = resource.profile && !slot.nested && !options.noSlot && options.resultPath
+    ? boundedTelemetry(`${options.resultPath}.samples.jsonl`) : null;
   const measurementAttempts = [];
   let received = null;
   let execution = {};
@@ -433,11 +444,11 @@ export async function run({ positional, options, child }) {
   const retryTimeout = options.retryTimeout && process.env[RETRIED_ENV] !== "1";
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture, resource.profile && !slot.nested && !options.noSlot ? {
-      telemetryPath: options.resultPath ? `${options.resultPath}.samples.jsonl` : undefined, notes: options.measurementNotes,
+      telemetryPath: options.resultPath ? `${options.resultPath}.samples.jsonl` : undefined, telemetry, notes: options.measurementNotes,
     } : null);
     if (result.measurement) measurementAttempts.push({ attempt: attempt + 1, ...result.measurement });
     saveExecution({ ...execution, signal: received ?? result.signal,
-      measurement: result.measurement ?? { status: slot.nested ? 'inherited; sampled by parent' : options.noSlot ? 'unslotted' : 'unprofiled' }, measurement_attempts: measurementAttempts,
+      measurement: result.measurement ?? { status: slot.nested ? 'nested; sampling owned by top-level holder if profiled' : options.noSlot ? 'unslotted' : 'unprofiled' }, measurement_attempts: measurementAttempts,
       history_key: historyKey, exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() });
     if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
     if (!result.groupGone) return result.status || 1;

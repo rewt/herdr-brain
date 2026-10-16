@@ -1,12 +1,32 @@
 // Foreground, best-effort observations. No admission, signalling or lock writes.
-import fs from 'node:fs';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { lookupProcess } from '../lib/processes.mjs';
 import { readMemory } from '../lib/memory.mjs';
 import { workerSettings } from './resources.mjs';
+import { writeFileAtomic } from '../lib/files.mjs';
 
 export const SAMPLE_INTERVAL_MS = 2000;
+export const TELEMETRY_ROWS = 256;
+
+// One writer is shared across retries. Aggregate measurements still cover every
+// observation; only the raw diagnostic tail is truncated.
+export function boundedTelemetry(file, rowLimit = TELEMETRY_ROWS) {
+  if (!Number.isSafeInteger(rowLimit) || rowLimit < 1) throw Error('invalid telemetry row limit');
+  const rows = [];
+  let observed = 0, retained = 0, writeFailures = 0;
+  return {
+    write(row) {
+      observed++;
+      rows.push(JSON.stringify(row) + '\n');
+      if (rows.length > rowLimit) rows.shift();
+      try { writeFileAtomic(file, rows.join(''), 0o600); retained = rows.length; }
+      catch (error) { writeFailures++; throw error; }
+    },
+    summary: () => ({ policy: 'last rows across all attempts', row_limit: rowLimit, rows_observed: observed,
+      rows_retained: retained, rows_dropped: Math.max(0, observed - rowLimit), truncated: observed > rowLimit, write_failures: writeFailures }),
+  };
+}
 export function readOwnedRss(pids, execute = spawnSync) {
   if (!pids.length) return new Map();
   if (pids.some(pid => !Number.isSafeInteger(pid) || pid < 1)) throw Error('invalid owned PID');
@@ -26,6 +46,7 @@ export function readOwnedRss(pids, execute = spawnSync) {
 }
 
 export function measureFamily({ pid, identity, intervalMs = SAMPLE_INTERVAL_MS, telemetryPath, notes = 'cold/warm unknown; no cache preparation performed',
+  telemetry = telemetryPath ? boundedTelemetry(telemetryPath) : null,
   lookup = lookupProcess, rss = readOwnedRss, memory = readMemory, workers = workerSettings, load = () => os.loadavg()[0], now = () => new Date().toISOString() }) {
   const known = new Map(), peaks = new Map();
   const evidence = { schema: 'test-slot-measurement/v1', kind: 'execution evidence; not a PASS', phase_started_at: now(), phase_finished_at: null,
@@ -103,7 +124,7 @@ export function measureFamily({ pid, identity, intervalMs = SAMPLE_INTERVAL_MS, 
     } catch (error) { fail('owned-rss', error); }
     row.failure_count = evidence.failure_count - failuresBefore;
     row.failures = evidence.failures.filter(failure => failure.at >= row.at);
-    if (telemetryPath) try { fs.appendFileSync(telemetryPath, JSON.stringify(row) + '\n', { mode: 0o600 }); }
+    if (telemetry) try { telemetry.write(row); }
     catch (error) { fail('telemetry-write', error); }
   };
   const safeSample = () => { try { sample(); } catch (error) { fail('sampling', error); } };
@@ -112,6 +133,7 @@ export function measureFamily({ pid, identity, intervalMs = SAMPLE_INTERVAL_MS, 
   return { stop() { clearInterval(timer); }, finish() {
     clearInterval(timer); safeSample();
     evidence.phase_finished_at = now();
+    evidence.telemetry = telemetry?.summary() ?? null;
     evidence.per_process_peak_rss = [...peaks.values()];
     evidence.individual_peak_rss_bytes = peaks.size ? [...peaks.values()].reduce((maximum, row) => Math.max(maximum, row.peak_rss_bytes), 0) : null;
     evidence.status = evidence.failure_count ? 'partial-or-unavailable' : 'observed';

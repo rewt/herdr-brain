@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs';
 import { acquireLock } from './promotion-lock.mjs';
 import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
+import { resolveResource } from '../test-slot/resources.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
 
@@ -19,7 +20,7 @@ const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding:
 export function validateValidation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
   for (const [key, command] of Object.entries(value)) {
-    if (['host_suites', 'tier_suites', 'resources'].includes(key)) continue;
+    if (['host_suites', 'tier_suites'].includes(key)) continue;
     if (['timeout_seconds', 'idle_timeout_seconds'].includes(key)) {
       const values = typeof command === 'object' && command !== null && !Array.isArray(command) ? Object.entries(command) : [[null, command]];
       for (const [tier, seconds] of values) {
@@ -155,7 +156,9 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
         ...(usesSlot ? { slot_receipt: slotReceipt } : {}) });
       // Hold one slot for the chain; only its leaf steps may spend a retry.
       const execute = usesSlot ? runTestSlotSync : runGateSync;
+      const resource = resolveResource(['/bin/sh', '-c', command], { cwd, env }).profile;
       run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: usesSlot, cwd, env, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt,
+        resource,
         ...(usesSlot ? { waitReceipt: slotReceipt } : {}), retryTimeout: false, stdio: ['inherit', fd, fd] });
     }
     finally { fs.closeSync(fd); }

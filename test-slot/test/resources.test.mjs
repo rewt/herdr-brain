@@ -102,6 +102,10 @@ child.on('message',({pid})=>{
 });`);
   const r = f.run([process.execPath, parent]); assert.equal(r.status, 0, r.stderr + r.stdout);
   const receipt = f.saved(), m = receipt.measurement;
+  const inner = JSON.parse(fs.readFileSync(nestedReceipt));
+  assert.equal(inner.measurement.status, 'nested; sampling owned by top-level holder if profiled');
+  assert.equal(inner.measurement_attempts.length, 0);
+  assert.equal(fs.existsSync(nestedReceipt + '.samples.jsonl'), false);
   if (!m.rss_samples && m.failures?.some(f => /Operation not permitted|EPERM/.test(f.message))) { t.skip('sandbox refuses ps; real-family witness requires supervisor rerun under L-27'); t.diagnostic(JSON.stringify(m.failures)); return; }
   assert.ok(m.rss_samples > 0, JSON.stringify(receipt)); assert.ok(m.per_process_peak_rss.length >= 2);
   assert.ok(m.sampled_sum_owned_rss_peak_bytes >= m.individual_peak_rss_bytes);
@@ -109,13 +113,32 @@ child.on('message',({pid})=>{
   assert.ok(Date.parse(m.phase_finished_at) >= Date.parse(m.phase_started_at));
   assert.equal(m.sampling_interval_ms, 2000); assert.match(m.notes, /cold\/warm unknown/);
   assert.equal(fs.existsSync(f.lock), false);
-  const inner = JSON.parse(fs.readFileSync(nestedReceipt));
-  assert.equal(inner.measurement.status, 'inherited; sampled by parent');
-  assert.equal(inner.measurement_attempts.length, 0);
-  assert.equal(fs.existsSync(nestedReceipt + '.samples.jsonl'), false);
   const samples = fs.readFileSync(m.telemetry_path, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(samples.length, m.samples);
   assert.ok(samples.every(s => !s.processes.some(p => p.pid === process.pid)), 'the unrelated test runner is never sampled');
+});
+
+test('nested receipts do not claim sampling under an unprofiled top-level holder', t => {
+  const f = fixture(t), parent = path.join(f.root, 'unprofiled.cjs');
+  const argv = [process.execPath, '-e', 'console.log("nested marker")'];
+  fs.writeFileSync(parent, `const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict');
+const before=fs.readFileSync(${JSON.stringify(f.lock)},'utf8');
+for(const profiled of [false,true]) {
+ const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','nested','--lock-path',${JSON.stringify(f.lock)},'--result-path',${JSON.stringify(path.join(f.root, 'inner-'))}+profiled+'.json',...(profiled?['--resource',JSON.stringify(${JSON.stringify(resourceStanza('fixture/inner', argv))})]:[]),'--',...${JSON.stringify(argv)}],{encoding:'utf8'});
+ assert.equal(r.status,0,r.stderr);assert.equal(fs.readFileSync(${JSON.stringify(f.lock)},'utf8'),before);
+}`);
+  const result = f.run([process.execPath, parent], { profiled: false });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(f.saved().measurement.status, 'unprofiled');
+  assert.equal(fs.existsSync(f.receipt + '.samples.jsonl'), false);
+  for (const profiled of [false, true]) {
+    const file = path.join(f.root, `inner-${profiled}.json`), saved = JSON.parse(fs.readFileSync(file));
+    assert.equal(saved.resource.reason, profiled ? 'profiled' : 'unprofiled');
+    assert.equal(saved.measurement.status, 'nested; sampling owned by top-level holder if profiled');
+    assert.deepEqual(saved.measurement_attempts, []);
+    assert.equal(fs.existsSync(file + '.samples.jsonl'), false);
+  }
+  assert.equal(fs.existsSync(f.lock), false);
 });
 
 test('denied sampling and failed telemetry storage never change exclusive command outcomes', t => {

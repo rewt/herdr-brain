@@ -227,8 +227,11 @@ The v1.1 protocol and token aliases above are unchanged. Resource metadata never
 chooses admission, retries, deadlines, cleanup, or a validation verdict.
 
 Profiles live with existing recipes: `package.json.resources` binds each named
-test script by its JSON-string SHA-256; `.lane.validation.json.resources` binds
-validation commands exactly. `gate.resource` in a committed `.promote.json` may
+test script by its JSON-string SHA-256; `test-slot/validation-resources.json` binds
+validation commands exactly. Lane validation looks up the command it executes in
+that separate file. `.lane.validation.json` retains its pre-profile schema and
+bytes so older lane CLIs and installed validators can still read it; it carries
+no resource metadata. `gate.resource` in a committed `.promote.json` may
 carry a stanza for a project's train; otherwise the train derives its stanza
 from a matching validation recipe. Its binding also includes preparation and the
 existing gate fingerprint. A configured arbitrary command does not inherit a
@@ -250,8 +253,10 @@ archive), Node executable/version, platform, worker declarations and an environm
 hash; environment values are not copied into the profile receipt.
 
 Only the foreground top-level profiled slot owner samples. Nested receipts say
-`inherited; sampled by parent` and do not start another sampler or release the
-parent's hold. Unslotted validation still runs unslotted; its receipt says
+`nested; sampling owned by top-level holder if profiled` and do not start another
+sampler or release the parent's hold. This neutral status also applies when the
+top-level holder or the nested command is unprofiled; it does not assert that
+sampling happened. Unslotted validation still runs unslotted; its receipt says
 `unslotted`. While holding the slot, the owner samples every 2,000 ms and at
 phase boundaries. The owned set consists of the birth-confirmed command, its
 parent-walk descendants, same-group members while group ownership is established,
@@ -300,6 +305,28 @@ absolute `telemetry_path` records its original execution location. Rows include
 phase identity, so repeated attempts can be distinguished. Adapter-default
 scratch receipts remain temporary; callers needing durable measurements pass
 `executionReceipt`. These files do not enter healthy-clock history or the record.
+
+Automatic receipt writes prune managed receipt/telemetry pairs to the newest
+**20 per profile id** in that directory, across revisions and bindings. The receipt
+being written is always kept. Receipts also retain their holder identity and lock
+paths: live or unknown holders and matching live/unknown lock records are
+protected even when older than the newest 20. An unfinished receipt is eligible
+only after both its wrapper and recorded command group are confirmed gone;
+missing command identity retains it. A later write retries pruning after those
+holders finish. Files from before this retention schema,
+malformed or redirected files, and explicit caller-selected receipts remain
+untouched; protected evidence can exceed the normal bound. Pruning is best effort
+and cannot change the command result. Only fixed sibling telemetry paths are
+eligible for deletion; receipt-provided pointers are never followed.
+
+Telemetry keeps the **last 256 rows per run**, shared across both attempts of a
+permitted retry. Each successful write atomically replaces that tail. Aggregate
+sample counts, peaks, host minima and failures still cover all observations.
+Each measurement's `telemetry` summary records `row_limit`, `rows_observed`,
+`rows_retained`, `rows_dropped`, `truncated` and `write_failures`; failed writes
+can leave an older tail and are also recorded as sampling failures. A truncated
+tail is diagnostic detail, not the full time series. The nominal 2,000 ms sample
+interval and admission behavior are unchanged.
 
 Summarize retained execution receipts without launching work:
 

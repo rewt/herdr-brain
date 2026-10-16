@@ -25,8 +25,8 @@ export function resolveResource(argv, { cwd = process.cwd(), env = process.env, 
   try {
     if (!resource) {
       if (argv[0] === '/bin/sh' && argv[1] === '-c' && argv.length === 3) {
-        const validation = read(path.join(cwd, '.lane.validation.json'));
-        resource = Object.values(validation.resources ?? {}).find(row => row.command === argv[2]);
+        const profiles = read(path.join(cwd, 'test-slot/validation-resources.json'));
+        resource = Object.values(profiles).find(row => row.command === argv[2]);
         if (resource) resource = { ...resource, command: argv };
       } else if (argv[0] === 'npm' && argv[1] === 'run' && argv.length === 3) {
         const pkg = read(path.join(cwd, 'package.json'));

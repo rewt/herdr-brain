@@ -133,7 +133,7 @@ function participantsFor(entry, input, slots, wholeLayout = true) {
   if (participants.some(p => p.generation !== input.inspection.entries.find(e => e.manifest.metadata.uid === p.uid).manifest.metadata.generation)) return { error: 'pending generation; incarnation remains frozen' };
   return { participants: participants.map(({ run, receipt, ...p }) => p), run: first.run };
 }
-function boundaryVeto(entry, input, participants, request, reconstruct = false) {
+function boundaryVeto(entry, input, participants, request, reconstruct = false, prepared = false) {
   if (!request) return 'declared safe boundary and verified handoff required';
   const b = request.boundary, isWorker = entry.manifest.spec.intent.kind === 'work-item';
   if (!b || !text(b.ref)) return 'declared boundary receipt required';
@@ -146,19 +146,21 @@ function boundaryVeto(entry, input, participants, request, reconstruct = false) 
   try { verifyHandoff(request.handoff); } catch (error) { return error.message; }
   const refs = new Set([...input.facts.record.items, ...input.facts.record.runs].map(r => r.id));
   if (request.handoff.recordRefs.some(ref => !refs.has(ref))) return 'handoff record reference missing';
+  // Preparation freezes coverage and its revision. Later passes recheck only
+  // old-incarnation dependencies; unrelated record/inbox progress is allowed.
   for (const p of participants) {
     const q = input.facts.quiescence?.[p.uid], h = request.handoff;
-    if (!q || !equalBinding(q.binding, p.binding) || !text(q.ref) || q.recordSeq !== input.facts.record.revision ||
+    if (!q || !equalBinding(q.binding, p.binding) || !text(q.ref) ||
         q.callbacksQuiesced !== true || !strings(q.openWork) || !strings(q.openReviews) || !strings(q.inFlightDeliveries) ||
         (!reconstruct && (q.openWork.length || q.openReviews.length)) || q.inFlightDeliveries.length ||
-        !strings(q.pendingInboxIds) || q.pendingInboxIds.some(id => !h.unresolvedMessageIds.includes(id)) ||
-        !sameStrings(q.recordRefs, h.recordRefs) || !sameStrings(q.unresolvedMessageIds, h.unresolvedMessageIds) || q.inboxCursor !== h.inboxCursor) return 'callbacks, work/review, delivery or handoff coverage is not quiescent and verified';
+        (!prepared && (q.recordSeq !== input.facts.record.revision || !strings(q.pendingInboxIds) ||
+          q.pendingInboxIds.some(id => !h.unresolvedMessageIds.includes(id)) || !sameStrings(q.recordRefs, h.recordRefs) ||
+          !sameStrings(q.unresolvedMessageIds, h.unresolvedMessageIds) || q.inboxCursor !== h.inboxCursor))) return 'callbacks, work/review, delivery or handoff coverage is not quiescent and verified';
     const dependentRuns = input.facts.record.runs.filter(run => run.meta && (run.meta.pane === p.binding.pane ||
       run.meta.terminal_id === p.binding.terminalId || (p.binding.nativeSessionId && run.meta.agent_session_id === p.binding.nativeSessionId)));
     if (!reconstruct && dependentRuns.some(run => !run.abandoned && (!run.report || chain(input, run).length))) return 'recorded open work/review depends on incarnation; reset veto';
     if ((input.facts.references ?? []).some(r => r.uid === p.uid || r.pane === p.binding.pane || r.tab === p.binding.tab ||
         (p.binding.nativeSessionId && r.nativeSessionId === p.binding.nativeSessionId) || dependentRuns.some(run => r.run === run.id || r.item === run.item))) return 'live callback or delivery reference depends on incarnation';
-    if (request.quiescence && !same(request.quiescence[p.uid], q)) return 'quiescence receipt changed during lifecycle operation';
   }
   return null;
 }
@@ -218,25 +220,28 @@ export function planLifecycle(entry, input, slots) {
     const op = pending[0];
     if (op.uid !== uid) return make('KEEP', 'KEEP', `layout transition owned by ${op.uid}`, { observed: { operationId: op.id, operationState: op.state } });
     const observed = { operationId: op.id, operationState: op.state, contextLoss: op.contextLoss, parkedIntent: op.parkedIntent };
+    if (['respawn-pending', 'inbox-pending'].includes(op.state)) observed.pendingReason = op.reason;
     const baseHold = hold;
     hold = reason => ({ ...baseHold(reason), observed,
+      ...(['closed-for-reset', 'respawn-pending'].includes(op.state) ? { phase: 'ClosedForReset', reason: `closed session awaiting respawn: ${reason}` } : {}),
       recovery: { state: op.kind === 'recovery' ? 'RecoveryRequired' : 'not-required', operationState: op.state, mode: op.mode, contextLoss: op.contextLoss } });
     const result = (phase, decision, reason, extra = {}) => make(phase, decision, reason, { observed, ...extra });
-    const action = stage => result(op.state === 'closed-for-reset' ? 'ClosedForReset' : op.kind === 'recovery' ? 'RecoveryRequired' : 'ResetPrepared',
-      `Would${stage[0].toUpperCase()}${stage.slice(1)}`, `journaled ${op.mode}: ${stage}`, { action: { kind: 'lifecycle', stage, operationId: op.id } });
+    const action = stage => result(['closed-for-reset', 'respawn-pending'].includes(op.state) ? 'ClosedForReset' : op.state === 'inbox-pending' ? 'Restarted' : op.kind === 'recovery' ? 'RecoveryRequired' : 'ResetPrepared',
+      `Would${stage[0].toUpperCase()}${stage.slice(1)}`, `${stage === 'respawn' ? 'closed session awaiting respawn' : `journaled ${op.mode}: ${stage}`}${observed.pendingReason ? `; ${op.reason}` : ''}`,
+      { action: { kind: 'lifecycle', stage, operationId: op.id } });
     const update = (phase, state, evidence) => result(phase, 'Observe', `observed ${state}`, { lifecycleUpdate: { operationId: op.id, state, ...evidence } });
     if (['withheld', 'failed'].includes(op.state)) return hold(`${op.state}; delegate never retried: ${op.reason}`);
     if (op.participants.some(p => !input.inspection.entries.some(e => e.manifest.metadata.uid === p.uid &&
         e.manifest.metadata.generation === p.generation && specDigest(e) === p.specDigest))) return hold('manifest changed during lifecycle operation');
     if (op.contextLoss) {
-      const veto = boundaryVeto(entry, input, op.participants, op.request, op.mode === 'reconstruct');
+      const veto = boundaryVeto(entry, input, op.participants, op.request, op.mode === 'reconstruct', true);
       if (veto) return hold(veto);
     }
     if (op.state === 'close-intent') {
       const proof = closeProof(op, input);
       return proof ? update('ClosedForReset', 'closed-for-reset', { closeReceipt: proof }) : hold('close acknowledgement or absence uncertain; observe, never close or spawn twice');
     }
-    if (op.state === 'closed-for-reset') {
+    if (['closed-for-reset', 'respawn-pending'].includes(op.state)) {
       const veto = topology(input, op.participants, { absent: true });
       if (veto) return hold(veto);
       if (op.kind === 'recovery') {
@@ -268,13 +273,13 @@ export function planLifecycle(entry, input, slots) {
       const veto = topology(input, op.participants, { quiescent: true });
       return veto ? hold(veto) : action('close');
     }
-    if (['restarted', 'inbox-intent'].includes(op.state)) {
+    if (['restarted', 'inbox-pending', 'inbox-intent'].includes(op.state)) {
       const incarnations = input.journal.incarnations.filter(i => i.operationId === op.id);
       const bound = op.participants.map(p => ({ ...p, binding: incarnations.find(i => i.uid === p.uid)?.binding }));
       if (incarnations.length !== op.participants.length || (op.contextLoss ? topology(input, bound) : bound.some(p => processTopology(input, p)))) return hold('replacement binding changed before inbox handover');
       const ids = op.request.pendingInboxIds ?? [];
       if (!ids.length) return update('Restarted', 'acknowledged', {});
-      if (op.state === 'restarted') return action('transfer');
+      if (['restarted', 'inbox-pending'].includes(op.state)) return action('transfer');
       const rows = receiptRows(o, op.id, 'inbox'), r = rows[0];
       return rows.length === 1 && validInboxReceipt(op, r, incarnations.map(i => i.id)) ? update('Restarted', 'acknowledged', { inboxReceipt: r }) :
         hold('inbox acknowledgement uncertain; preserve pending IDs, never redeliver blindly');

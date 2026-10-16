@@ -153,7 +153,7 @@ export function planSessions(input) {
       const claims = op ? (o.receipts ?? []).filter(r => r.operationId === op.id) : [];
       const receipts = claims.filter(r => receiptMatches(r, op));
       const receipt = op?.receipt ?? (receipts.length === 1 ? receipts[0] : null);
-      if (op?.state === 'withheld') decision = row(entry, 'Hold', 'Hold', `start withheld, delegate never invoked: ${op.reason}; stage 4 recovery required`, {
+      if (op?.state === 'withheld') decision = row(entry, 'Hold', 'Hold', `start withheld, delegate never invoked: ${op.reason}; explicit later operator disposition required`, {
         observed: { operationId: op.id, operationState: op.state, withheldReason: op.reason } });
       else if (a) {
         if (!op || !receipt || claims.length > 1 || (claims.length && (receipts.length !== 1 || !sameBinding(claims[0].binding, receipt.binding))) || !sameBinding(receipt.binding, binding) || pane.terminal_id !== binding.terminalId ||
@@ -247,17 +247,26 @@ export async function reconcileOffline({ inspection, read, actions }) {
             op = { ...selected.operation, id: selected.operation.mode === 'native-restore' ? selected.operation.request.restoreOperationId : randomUUID(),
               state: first, history: [first] };
             journal.operations.push(op); durableWrite(paths.journal, journal);
+            // Reset preparation has frozen the boundary. The final close
+            // guard must use its incarnation checks, not rerun eligibility
+            // against a project-wide record revision that may have advanced.
+            if (op.contextLoss) before.operations.push(structuredClone(op));
           }
+          const pendingState = { respawn: 'respawn-pending', transfer: 'inbox-pending' }[selected.stage];
+          const notInvoked = reason => advance(op, op.history.includes('closed-for-reset') && pendingState ? pendingState : 'withheld', { reason });
           if (selected.stage !== 'adopt') {
             const method = selected.stage, intent = { close: 'close-intent', respawn: 'respawn-intent', resume: 'resume-intent', transfer: 'inbox-intent' }[method];
             if (!intent || typeof actions[method] !== 'function') {
-              advance(op, 'withheld', { reason: `offline ${method} delegate missing; never invoked` });
+              notInvoked(`offline ${method} delegate missing; never invoked`);
             } else {
               advance(op, intent); // durable before final check and adapter.
               const final = await observe(before);
-              if (JSON.stringify(final.action) !== JSON.stringify(selected) ||
-                  JSON.stringify(final.decisions.find(d => d.action)?.observed) !== JSON.stringify(plan.decisions.find(d => d.action)?.observed)) {
-                advance(op, 'withheld', { reason: 'evidence changed after lifecycle intent; delegate never invoked' });
+              const unchanged = selected.operation && op.contextLoss
+                ? final.action?.kind === 'lifecycle' && final.action.operationId === op.id && final.action.stage === method
+                : JSON.stringify(final.action) === JSON.stringify(selected) &&
+                  JSON.stringify(final.decisions.find(d => d.action)?.observed) === JSON.stringify(plan.decisions.find(d => d.action)?.observed);
+              if (!unchanged) {
+                notInvoked(`evidence changed after lifecycle intent; delegate never invoked: ${final.decisions.find(d => d.uid === op.uid)?.reason ?? 'changed plan'}`);
               } else {
                 try { await actions[method](structuredClone(op)); }
                 catch (error) {
@@ -272,7 +281,7 @@ export async function reconcileOffline({ inspection, read, actions }) {
           const adapterError = plan.adapterError;
           plan = await settle();
           for (const d of plan.decisions.filter(d => d.action)) {
-            d.action = null; d.decision = 'Defer'; d.reason = 'one action already attempted in this pass';
+            d.action = null; d.decision = 'Defer'; d.reason += '; one action already considered in this pass';
           }
           plan.action = null; plan.attemptedOperation = op.id;
           if (adapterError) plan.adapterError = adapterError;

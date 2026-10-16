@@ -44,13 +44,15 @@ export function persistHandoff({ file, markdown, recordRefs, unresolvedMessageId
   }
   return h;
 }
-export const states = ['reset-prepared', 'recovery-required', 'close-intent', 'closed-for-reset', 'respawn-intent',
-  'resume-intent', 'restarted', 'inbox-intent', 'acknowledged', 'withheld', 'failed'];
+export const states = ['reset-prepared', 'recovery-required', 'close-intent', 'closed-for-reset', 'respawn-intent', 'respawn-pending',
+  'resume-intent', 'restarted', 'inbox-intent', 'inbox-pending', 'acknowledged', 'withheld', 'failed'];
 const edges = {
   'reset-prepared': ['close-intent', 'withheld'], 'recovery-required': ['close-intent', 'resume-intent', 'restarted', 'withheld'],
-  'close-intent': ['closed-for-reset', 'withheld', 'failed'], 'closed-for-reset': ['respawn-intent', 'withheld'],
-  'respawn-intent': ['restarted', 'withheld', 'failed'], 'resume-intent': ['restarted', 'withheld', 'failed'],
-  restarted: ['inbox-intent', 'acknowledged', 'withheld'], 'inbox-intent': ['acknowledged', 'withheld', 'failed'],
+  'close-intent': ['closed-for-reset', 'withheld', 'failed'], 'closed-for-reset': ['respawn-intent', 'respawn-pending', 'withheld'],
+  'respawn-intent': ['restarted', 'respawn-pending', 'withheld', 'failed'], 'respawn-pending': ['respawn-intent', 'respawn-pending'],
+  'resume-intent': ['restarted', 'withheld', 'failed'],
+  restarted: ['inbox-intent', 'inbox-pending', 'acknowledged', 'withheld'], 'inbox-intent': ['acknowledged', 'inbox-pending', 'withheld', 'failed'],
+  'inbox-pending': ['inbox-intent', 'inbox-pending'],
 };
 export function validParticipant(p) {
   return exact(p, ['uid', 'generation', 'specDigest', 'kind', 'spec', 'binding', 'incarnation']) && text(p.uid) &&
@@ -133,13 +135,15 @@ export function validLifecycleOperation(op) {
     !object(op.request) || !states.includes(op.state) || !Array.isArray(op.history) || !op.history.length ||
     op.history[0] !== (op.kind === 'reset' ? 'reset-prepared' : 'recovery-required') || op.history.at(-1) !== op.state ||
     op.history.some((s, n) => !states.includes(s) || (n && !edges[op.history[n - 1]]?.includes(s))) ||
-    (['withheld', 'failed'].includes(op.state) && !text(op.reason))) return false;
+    ((['withheld', 'failed'].includes(op.state) || op.history.some(s => ['respawn-pending', 'inbox-pending'].includes(s))) && !text(op.reason))) return false;
   if (!validRequest(op)) return false;
   if (op.participants[0].spec.intent?.kind === 'work-item' && (!exact(op.parkedIntent, ['run', 'phase', 'openChain']) ||
       !text(op.parkedIntent.run) || !['Running', 'ParkedAwaitingReview'].includes(op.parkedIntent.phase) || !strings(op.parkedIntent.openChain))) return false;
   if (op.history.includes('closed-for-reset') && !validCloseReceipt(op, op.closeReceipt)) return false;
   if (op.history.includes('restarted') && !validMaterializationReceipt(op, op.receipt)) return false;
   if (op.history.includes('inbox-intent') && op.state === 'acknowledged' && !validInboxReceipt(op, op.inboxReceipt, op.receipt.incarnations.map(i => i.id))) return false;
+  if (op.history.includes('respawn-pending') && !op.history.includes('closed-for-reset') ||
+      op.history.includes('inbox-pending') && (!op.history.includes('restarted') || !op.request.pendingInboxIds.length)) return false;
   if (op.mode === 'reset' && op.history.includes('resume-intent') || !op.contextLoss && op.history.includes('close-intent') ||
       op.contextLoss && op.history.includes('restarted') && !op.history.includes('respawn-intent')) return false;
   return true;

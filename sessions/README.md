@@ -270,7 +270,8 @@ mutation. The status cache is not read at all.
 | Exact live standard incarnation, including idle | `KEEP`; no brief/prompt replay |
 | Missing occupant in an existing adopted chat/supervisor pane, confirmed empty with no prior intent | At most one `WouldStart`; later candidates defer |
 | Missing tab/pane, prior incarnation gone, or uncertain launch | `Hold` unless stage 4's exact transition evidence resolves it |
-| Start withheld after intent because evidence changed; delegate never invoked | `Hold` with the durable withholding reason; stage 4 recovery must resolve it |
+| Start withheld after intent because evidence changed; delegate never invoked | `Hold` with the durable reason, pending an explicit later operator disposition; stage 4 does not resolve it |
+| Post-close respawn or inbox delegate provably never invoked after a final check failed | `respawn-pending` / `inbox-pending` with the durable reason; observe while blocked, then retry that stage once with fresh evidence |
 | Missing viewer/triage occupant | `KEEP`; activation belongs to later service/rollout stages |
 | Work item with no recorded run or an abandoned latest run | `Undispatched` / `Observe`; leave unrelated authorized slot starts available |
 | Matching live work-item run/dispatch | `NoOp` while running; observation only |
@@ -322,8 +323,13 @@ Each participant needs `facts.quiescence[uid]`: an exact `binding`, receipt
 `openReviews` and `inFlightDeliveries` arrays, `pendingInboxIds`, `recordRefs`,
 `unresolvedMessageIds` and `inboxCursor`. Handoff coverage must agree, pending
 inbox IDs must be retained among the unresolved IDs, and live callback/delivery
-references veto the operation. These receipts are copied into the durable
-operation and rechecked before subsequent steps. Changed evidence holds.
+references veto the operation. Exact `recordSeq` equality is required only for
+initial eligibility. Preparation copies these receipts and handoff coverage
+into the durable operation. Subsequent steps recheck callbacks, open work/review
+and deliveries tied to the frozen incarnation, exact topology and handoff bytes;
+they do not require the project-wide revision or the full quiescence snapshot
+to stay unchanged. Unrelated record events and new logical-inbox arrivals do
+not strand a closed tab or change the operation's frozen pending message set.
 
 Chat/supervisor require a boundary `{kind: "handoff", ref, declared: true}`.
 A supervisor also requires `draft: "complete"` or `"fallback"`; the latter is
@@ -384,8 +390,16 @@ spec digest, binding, route and verified context hash; `inbox` includes exact
 message IDs, cursor and destination incarnation IDs. Duplicate, missing or
 conflicting receipts hold. An ordinary lost reply stays an intent until fresh
 exact evidence resolves it, with **no second close/spawn/resume/transfer**.
-An error carrying `refused: true` is a durable terminal failure. A missing
-delegate or changed final evidence is durably `withheld` and never retried.
+An error carrying `refused: true` is a durable terminal failure. Before close,
+a missing delegate or changed final evidence is durably `withheld`, pending an
+explicit later operator disposition. After confirmed close, if the respawn or
+inbox delegate was provably never invoked, the runner journals `respawn-pending`
+or `inbox-pending` with its reason. STOP/close holds remain observe-only. Once
+the brake or evidence issue resolves, a later pass can invoke that stage once;
+it never re-closes the tab or rebinds an already-created replacement. The plan
+explicitly shows a closed session awaiting respawn and the pending reason.
+Uncertain adapter outcomes and actual refusals still hold after close too;
+they never gain this retry path.
 
 ## Controller runtime evidence
 
@@ -412,14 +426,21 @@ Start operation states are `intent` (invocation/acknowledgement may be uncertain
 `acknowledged` (fresh exact receipt and binding agree), and `withheld` (the final
 evidence check prevented delegate invocation). A withheld start is fsynced with
 its reason before returning and surfaces that reason in subsequent plans. It
-still holds, even if later evidence changes; stage 4 decides recovery, and this
-stage never clears or retries it. An undispatched work item has no ambiguous
+still holds, even if later evidence changes, pending an explicit later operator
+disposition. Stage 4 supplies no resolution command and never clears or retries
+that start. An undispatched work item has no ambiguous
 incarnation and does not engage the project-wide ownership/launch hold fence.
 
 Lifecycle history starts at `reset-prepared` or `recovery-required`, then uses
 `close-intent` → `closed-for-reset` → `respawn-intent`, or `resume-intent` /
 observed native restore, followed by `restarted` → optional `inbox-intent` →
-`acknowledged`. `withheld` and `failed` retain their reasons and hold. Intent
+`acknowledged`. A provably uninvoked post-close delegate can move from
+`respawn-intent` to `respawn-pending`, or `inbox-intent` to `inbox-pending`, then
+back to that intent after fresh checks. Missing post-close delegates use the
+same pending states. Every pending edge retains a reason and requires the
+prior close/binding receipts. `withheld` and `failed` retain their reasons and
+hold pending an explicit later operator disposition, including pre-close
+lifecycle failures; they are not automatically resolved here. Intent
 is fsynced before each delegate. `readControllerJournal` rejects unknown states,
 invalid transition order, malformed handoff metadata/receipts and broken
 incarnation links. Older stage 3 journals without `incarnations` remain readable.

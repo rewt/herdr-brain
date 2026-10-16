@@ -158,6 +158,67 @@ test('exact owned-tab close, observed absence, same manifest/handoff respawn, du
   assert.equal(kept.close.length, 0);
 });
 
+for (const mode of ['reset', 'reconstruct']) for (const refresh of [false, true])
+  test(`${mode} completes once after unrelated record progress with ${refresh ? 'refreshed' : 'original'} quiescence receipts`, async t => {
+    const f = fixture(t, mode === 'reconstruct' ? 'engineer-worker' : 'chat'), request = f.boundary();
+    if (mode === 'reconstruct') {
+      delete f.facts.resetRequests[f.uid]; f.loss();
+      Object.assign(f.facts.recovery[f.uid], request, { mode, disposition: { ref: 'recovery-decision', run: 'R-old', contextLossAccepted: true } });
+    }
+    await f.run(); assert.deepEqual(f.calls, ['close']);
+    const frozen = structuredClone(f.journal().operations.at(-1).request.quiescence);
+    f.facts.record.revision++;
+    f.facts.record.items.push({ id: 'ENG-unrelated', role: 'engineer', notes: [{ text: 'Unrelated event', seq: f.facts.record.revision }] });
+    if (refresh) Object.assign(f.facts.quiescence[f.uid], { recordSeq: f.facts.record.revision, ref: 'refreshed-quiescence' });
+    await f.run(); assert.deepEqual(f.calls, ['close', 'respawn']);
+    // New logical-inbox progress stays in the adapter; the frozen handoff and
+    // pending message set are the ones this incarnation transition transfers.
+    f.facts.record.revision++;
+    Object.assign(f.facts.quiescence[f.uid], { recordSeq: f.facts.record.revision, ref: 'next-inbox-snapshot',
+      pendingInboxIds: ['M-1', 'M-new'], unresolvedMessageIds: ['M-1', 'Q-parked', 'M-new'],
+      recordRefs: ['ENG-232', 'ENG-unrelated'], inboxCursor: 'inbox:13' });
+    await f.run(); await f.run();
+    assert.deepEqual(f.calls, ['close', 'respawn', 'transfer']);
+    const op = f.journal().operations.at(-1);
+    assert.equal(op.state, 'acknowledged'); assert.deepEqual(op.request.quiescence, frozen);
+    assert.deepEqual(op.inboxReceipt.messageIds, ['M-1']); assert.equal(op.inboxReceipt.cursor, 'inbox:12');
+    assert.deepEqual(f.facts.quiescence[f.uid].pendingInboxIds, ['M-1', 'M-new'], 'new pending IDs remain owned by the inbox adapter');
+  });
+
+test('an unrelated revision after reset preparation does not invalidate the final exact-tab close guard', async t => {
+  const f = fixture(t); f.boundary(); const read = f.read; let reads = 0;
+  f.read = async () => {
+    if (++reads === 3) {
+      assert.equal(f.journal().operations.at(-1).state, 'close-intent');
+      f.facts.record.revision++;
+    }
+    return read();
+  };
+  await f.run(); assert.deepEqual(f.calls, ['close']); assert.equal(f.journal().operations.at(-1).state, 'closed-for-reset');
+});
+
+for (const change of ['callbacks', 'open-work', 'open-review', 'delivery', 'reference', 'recorded-work', 'hash', 'old-tab'])
+  test(`prepared reset still vetoes ${change} tied to the old incarnation and resumes once it resolves`, async t => {
+    const f = fixture(t), request = f.boundary(); await f.run();
+    const facts = structuredClone(f.facts), observation = structuredClone(f.observation), markdown = fs.readFileSync(request.handoff.file, 'utf8');
+    const q = f.facts.quiescence[f.uid], b = q.binding;
+    f.facts.record.revision++;
+    if (change === 'callbacks') q.callbacksQuiesced = false;
+    if (change === 'open-work') q.openWork.push('ENG-dependent');
+    if (change === 'open-review') q.openReviews.push('REV-dependent');
+    if (change === 'delivery') q.inFlightDeliveries.push('M-flight');
+    if (change === 'reference') f.facts.references.push({ pane: b.pane, kind: 'callback' });
+    if (change === 'recorded-work') f.facts.record.runs.push({ id: 'R-dependent', item: 'ENG-232', started: { seq: 8 }, meta: { pane: b.pane } });
+    if (change === 'hash') fs.appendFileSync(request.handoff.file, 'Changed context');
+    if (change === 'old-tab') f.observation.tabs.push({ tab_id: b.tab, workspace_id: b.workspace });
+    const d = first(await f.run());
+    assert.equal(d.decision, 'Hold'); assert.equal(d.phase, 'ClosedForReset'); assert.match(d.reason, /closed session awaiting respawn/);
+    assert.deepEqual(f.calls, ['close']);
+    Object.assign(f.facts, facts); Object.assign(f.observation, observation); fs.writeFileSync(request.handoff.file, markdown);
+    await f.run(); await f.run(); await f.run();
+    assert.deepEqual(f.calls, ['close', 'respawn', 'transfer']); assert.equal(f.journal().operations.at(-1).state, 'acknowledged');
+  });
+
 for (const role of ['chat', 'supervisor']) test(`${role} requires a declared boundary; supervisor draft needs completion/fallback`, async t => {
   const f = fixture(t, role); const r = f.boundary(); r.boundary.declared = false;
   assert.match(first(await f.run()).reason, /declared/); assert.deepEqual(f.calls, []);
@@ -166,7 +227,7 @@ for (const role of ['chat', 'supervisor']) test(`${role} requires a declared bou
   await f.run(); assert.deepEqual(f.calls, ['close']);
 });
 
-for (const change of ['extra-pane', 'other-owner', 'busy', 'callbacks', 'open-work', 'open-review', 'delivery', 'reference', 'cursor', 'unresolved', 'record-ref', 'hash', 'metadata-hash', 'generation'])
+for (const change of ['extra-pane', 'other-owner', 'busy', 'callbacks', 'open-work', 'open-review', 'delivery', 'reference', 'cursor', 'unresolved', 'record-ref', 'record-seq', 'hash', 'metadata-hash', 'generation'])
   test(`reset holds on ${change}`, async t => {
     const f = fixture(t), r = f.boundary(), q = f.facts.quiescence[f.uid];
     if (change === 'extra-pane') f.observation.panes.push({ pane_id: 'unrelated', tab_id: 'tab-old', workspace_id: 'w' });
@@ -180,6 +241,7 @@ for (const change of ['extra-pane', 'other-owner', 'busy', 'callbacks', 'open-wo
     if (change === 'cursor') q.inboxCursor = 'inbox:13';
     if (change === 'unresolved') q.unresolvedMessageIds = ['missing'];
     if (change === 'record-ref') q.recordRefs = [];
+    if (change === 'record-seq') q.recordSeq--;
     if (change === 'hash') fs.appendFileSync(r.handoff.file, 'changed');
     if (change === 'metadata-hash') r.handoff.unresolvedMessageIds = [];
     if (change === 'generation') f.inspection.entries[0].manifest.metadata.generation++;
@@ -239,6 +301,71 @@ for (const stage of ['respawn', 'transfer']) for (const brake of ['stopped', 'cl
   const f = fixture(t); f.boundary(); await f.run(); if (stage === 'transfer') await f.run();
   const calls = [...f.calls]; f.facts[brake] = true; assert.equal(first(await f.run()).decision, 'Observe'); assert.deepEqual(f.calls, calls);
   f.facts[brake] = false; await f.run(); assert.equal(f.calls.at(-1), stage);
+});
+
+for (const stage of ['respawn', 'transfer']) for (const brake of ['stopped', 'closeHold'])
+  test(`${brake} arriving after ${stage} intent leaves a durable retryable operation`, async t => {
+    const f = fixture(t); f.boundary(); await f.run(); if (stage === 'transfer') await f.run();
+    const priorCalls = [...f.calls], read = f.read; let reads = 0;
+    const intent = stage === 'respawn' ? 'respawn-intent' : 'inbox-intent', pending = stage === 'respawn' ? 'respawn-pending' : 'inbox-pending';
+    f.read = async () => {
+      if (++reads === 3) { assert.equal(f.journal().operations.at(-1).state, intent); f.facts[brake] = true; }
+      return read();
+    };
+    const d = first(await f.run());
+    assert.equal(d.decision, 'Observe'); assert.deepEqual(f.calls, priorCalls);
+    const op = f.journal().operations.at(-1);
+    assert.equal(op.state, pending); assert.deepEqual(op.history.slice(-2), [intent, pending]);
+    assert.match(op.reason, /delegate never invoked/); assert.match(op.reason, /STOP|close hold|true/);
+    assert.equal(d.observed.pendingReason, op.reason);
+    if (stage === 'respawn') { assert.equal(d.phase, 'ClosedForReset'); assert.match(d.reason, /closed session awaiting respawn/); }
+    await f.run(); assert.deepEqual(f.calls, priorCalls, 'brake remains observe-only');
+    f.read = read; f.facts[brake] = false;
+    assert.equal(first(await f.preview()).action.stage, stage);
+    await f.run(); if (stage === 'respawn') await f.run(); await f.run();
+    assert.deepEqual(f.calls, ['close', 'respawn', 'transfer']); assert.equal(f.journal().operations.at(-1).state, 'acknowledged');
+  });
+
+test('changed old-incarnation delivery evidence after inbox-intent can resolve without re-close or respawn', async t => {
+  const f = fixture(t); f.boundary(); await f.run(); await f.run();
+  const binding = structuredClone(f.journal().incarnations[0]), read = f.read; let reads = 0;
+  f.read = async () => {
+    if (++reads === 3) {
+      assert.equal(f.journal().operations.at(-1).state, 'inbox-intent');
+      f.facts.quiescence[f.uid].inFlightDeliveries.push('M-old-in-flight');
+    }
+    return read();
+  };
+  assert.equal(first(await f.run()).decision, 'Hold');
+  assert.equal(f.journal().operations.at(-1).state, 'inbox-pending'); assert.deepEqual(f.calls, ['close', 'respawn']);
+  await f.run(); assert.deepEqual(f.calls, ['close', 'respawn']);
+  f.read = read; f.facts.quiescence[f.uid].inFlightDeliveries = [];
+  await f.run(); await f.run();
+  assert.deepEqual(f.calls, ['close', 'respawn', 'transfer']); assert.equal(f.journal().operations.at(-1).state, 'acknowledged');
+  assert.deepEqual(f.journal().incarnations, [binding]);
+});
+
+for (const stage of ['respawn', 'transfer']) test(`a missing post-close ${stage} delegate can return without a second native spawn`, async t => {
+  const f = fixture(t); f.boundary(); await f.run(); if (stage === 'transfer') await f.run();
+  const delegate = f.actions[stage]; delete f.actions[stage]; await f.run();
+  assert.equal(f.journal().operations.at(-1).state, stage === 'respawn' ? 'respawn-pending' : 'inbox-pending');
+  f.actions[stage] = delegate; await f.run(); if (stage === 'respawn') await f.run(); await f.run();
+  assert.deepEqual(f.calls, ['close', 'respawn', 'transfer']); assert.equal(f.journal().operations.at(-1).state, 'acknowledged');
+  const journal = f.journal(); delete journal.operations.at(-1).reason;
+  durableWrite(runtimePaths(f.project.common).journal, journal);
+  assert.throws(f.journal, /invalid controller journal/, 'the pending edge retains its reason after completion');
+});
+
+for (const stage of ['respawn', 'transfer']) test(`an uncertain ${stage} after a provably uninvoked delegate still never retries`, async t => {
+  const f = fixture(t); f.boundary(); await f.run(); if (stage === 'transfer') await f.run();
+  const delegate = f.actions[stage], pending = stage === 'respawn' ? 'respawn-pending' : 'inbox-pending';
+  const intent = stage === 'respawn' ? 'respawn-intent' : 'inbox-intent', calls = [...f.calls];
+  delete f.actions[stage]; await f.run(); assert.equal(f.journal().operations.at(-1).state, pending);
+  f.actions[stage] = async () => { f.calls.push(stage); throw Error('lost acknowledgement'); };
+  assert.match(first(await f.run()).reason, /acknowledgement uncertain/);
+  assert.equal(f.journal().operations.at(-1).state, intent);
+  f.actions[stage] = delegate; await f.run(); await f.run();
+  assert.deepEqual(f.calls, [...calls, stage]); assert.equal(f.journal().incarnations.length, stage === 'respawn' ? 0 : 1);
 });
 
 test('an unrelated pane in the logs tab vetoes the entire two-pane rotation', async t => {

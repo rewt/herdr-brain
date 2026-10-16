@@ -32,8 +32,8 @@ function modify(m, key, value, remove = false) {
   if (remove) delete target[last]; else target[last] = value;
 }
 
-for (const name of ['chat', 'supervisor', 'engineer-worker', 'logs-viewer', 'logs-triage']) test(`adopted example: ${name}`, () => {
-  const m = fixture(name), result = validate(m);
+for (const name of ['chat', 'supervisor', 'engineer-worker', 'reviewer', 'logs-viewer', 'logs-triage']) test(`adopted example: ${name}`, () => {
+  const m = fixture(name), result = validate(m, name === 'reviewer' ? { root } : undefined);
   assert.equal(result.manifest, m); assert.deepEqual(result.diagnostics, []);
   if (m.kind === 'Session') assert.equal(result.resolvedSpec.resolvedRoute.route, m.spec.route);
 });
@@ -42,7 +42,37 @@ for (const negative of negatives) test(`manifest rejects ${negative.name}`, () =
   const m = fixture(negative.base);
   for (const [key, value] of Object.entries(negative.set ?? {})) modify(m, key, value);
   for (const key of negative.delete ?? []) modify(m, key, undefined, true);
-  assert.throws(() => validate(parseManifest(document(m))), new RegExp(negative.error));
+  assert.throws(() => validate(parseManifest(document(m)), negative.base === 'reviewer' ? { root } : undefined), new RegExp(negative.error));
+});
+
+test('shipped reviewer references the authoritative personality and has a round-specific lifecycle', () => {
+  const m = parseManifest(fs.readFileSync(path.join(root, 'sessions/templates/reviewer.md'), 'utf8')), s = m.spec;
+  assert.deepEqual(m, fixture('reviewer'));
+  assert.equal(s.role, 'reviewer'); assert.equal(s.intent.kind, 'work-item'); assert.equal(s.intent.item, 'ENG-232');
+  assert.equal(s.route, 'review'); assert.equal(s.launch, undefined);
+  assert.equal(s.personality.profile, 'lane-reviewer'); assert.match(s.personality.instructions, /lanes\/docs\/REVIEW_TEMPLATE\.md/);
+  for (const source of ['identity-instructions', 'run-brief', 'item-lessons']) assert.ok(s.context.some(c => c.source === source && c.required));
+  assert.ok(s.context.some(c => c.source === 'latest-review'));
+  assert.ok(s.context.some(c => c.source === 'file' && c.path === 'lanes/docs/REVIEW_TEMPLATE.md' && c.required));
+  assert.equal(s.permissions.owner, 'native'); assert.equal(s.permissions.profileRef, 'read-only');
+  assert.deepEqual(s.tools, { input: 'preloaded-scoped-files', allowed: ['write-own-review-output'] });
+  const l = s.lifecycle;
+  assert.equal(l.afterReport, 'park-awaiting-verdict-ingestion'); assert.equal(l.retainUntil, 'verdict-ingested-or-explicit-disposition');
+  assert.equal(l.corrections, 'new-reviewer-session'); assert.equal(l.reset, 'never-before-verdict-ingestion'); assert.equal(l.resetWhileParked, false);
+  assert.deepEqual(validate(m, { root }).diagnostics, []);
+  const engineer = fixture('engineer-worker'); engineer.spec.lifecycle = structuredClone(l);
+  assert.throws(() => validate(engineer), /engineer lifecycle must retain through review and corrections/);
+});
+
+test('reviewer resolves review variants and project override routes without fixing a model', () => {
+  const m = fixture('reviewer'), config = structuredClone(ROUTE_PRESET);
+  config.routes['project-review'] = { kind: 'codex', model: 'project-selected-model', effort: 'high' };
+  config.settle = { review_route: 'project-review' };
+  for (const route of ['review', 'review-codex', 'review-max', config.settle.review_route]) {
+    m.spec.route = route;
+    const resolved = validate(m, { root }, config).resolvedSpec.resolvedRoute;
+    assert.equal(resolved.route, route); assert.equal(resolved.model, config.routes[route].model);
+  }
 });
 
 test('Markdown fences and duplicate decoded keys are parsed without evaluating prose', () => {
@@ -106,9 +136,13 @@ test('layered route assertions and hygiene aliases validate resolved settings wi
   assert.equal(result.valid, true, JSON.stringify(result.diagnostics)); assert.equal(result.routeFiles.length, 2);
 });
 
-test('worker inspection checks item existence in the read-only folded record and holds a torn tail', t => {
+for (const name of ['engineer-worker', 'reviewer']) test(`${name} inspection checks item existence in the read-only folded record and holds a torn tail`, t => {
   const f = repo(t), file = path.join(f.scratch, 'worker.md'), org = path.join(f.scratch, 'record');
-  fs.mkdirSync(org); fs.writeFileSync(file, document(fixture('engineer-worker')));
+  if (name === 'reviewer') {
+    fs.mkdirSync(path.join(f.main, 'lanes/docs'), { recursive: true });
+    fs.copyFileSync(path.join(root, 'lanes/docs/REVIEW_TEMPLATE.md'), path.join(f.main, 'lanes/docs/REVIEW_TEMPLATE.md'));
+  }
+  fs.mkdirSync(org); fs.writeFileSync(file, document(fixture(name)));
   const log = path.join(org, 'events.jsonl'); fs.writeFileSync(log, '');
   const run = () => inspect({ files: [file], cwd: f.lane, env: { ...f.env, ORG_DIR: org } });
   assert.match(run().diagnostics[0].message, /unknown work item/);
@@ -120,6 +154,7 @@ test('worker inspection checks item existence in the read-only folded record and
 test('default templates ship, follow canonical committed overrides, and select model-free non-home status', t => {
   const f = repo(t), before = f.git('status', '--porcelain');
   const home = inspect({ cwd: f.lane, env: f.env }); assert.equal(home.valid, true, JSON.stringify(home.diagnostics)); assert.equal(home.entries.length, 4);
+  assert.equal(home.entries.some(e => ['engineer', 'reviewer'].includes(e.manifest.spec.role)), false, 'work-item examples are not discovered');
   assert.equal(home.project.common, path.join(f.main, '.git')); assert.equal(home.project.root, f.main);
   const away = inspect({ cwd: f.lane, workspace: 'lane/another', env: f.env });
   assert.equal(away.valid, true, JSON.stringify(away.diagnostics)); assert.equal(away.entries.filter(e => e.manifest.spec.role === 'logs-triage').length, 0);
@@ -144,6 +179,9 @@ test('default templates ship, follow canonical committed overrides, and select m
   assert.equal(before, ''); assert.equal(fs.existsSync(path.join(f.main, '.git/sessions')), false, 'inspector never enrolls');
   const installed = path.join(f.scratch, 'installed'); copyProduct(root, installed);
   assert.ok(productFiles(root).includes('sessions/templates/logs-triage.md'));
+  for (const file of ['sessions/templates/reviewer.md', 'lanes/docs/REVIEW_TEMPLATE.md']) assert.ok(productFiles(root).includes(file));
+  const reviewer = parseManifest(fs.readFileSync(path.join(installed, 'sessions/templates/reviewer.md'), 'utf8'));
+  assert.deepEqual(validate(reviewer, { root: installed }).diagnostics, [], 'copied product keeps required reviewer context without a product Git worktree');
   const copy = spawnSync(process.execPath, [path.join(installed, 'sessions/sessions.mjs'), 'inspect', '--project', f.main], { env: f.env, encoding: 'utf8' });
   assert.equal(copy.status, 0, copy.stderr);
 });

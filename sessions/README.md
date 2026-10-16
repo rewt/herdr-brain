@@ -41,7 +41,7 @@ not on restart. UID uniqueness is checked across the canonical project's
 inspected set regardless of human namespace. `status` is never tracked here;
 future observed status belongs to the reconciler's own store.
 
-The [templates](templates/) and five [adopted example fixtures](../test/fixtures/sessions/)
+The [templates](templates/) and [example fixtures](../test/fixtures/sessions/)
 show every nested field. Fields are closed at every level. In particular,
 `command`, `exec`, shell/argument/environment payloads and unknown executable
 fields are invalid. `spec` declares:
@@ -78,9 +78,10 @@ fields are invalid. `spec` declares:
 - `logs`: service reference, approved subscriptions, delivery policy, scope,
   cursor start and optional batch policy reference. This starts no log service.
 - `lifecycle`: scope, retirement/reset/restart policy, refusal hold and recovery
-  handling. Standard slots require `automaticRetirement: never`. Work-item
+  handling. Standard slots require `automaticRetirement: never`. Engineer
   sessions park after report, reuse the same session for corrections, retain
   through landing or explicit disposition, and never reset while open/parked.
+  Reviewers retain through verdict ingestion and use a new session each round.
 
 `kind: Session` additionally requires a personality profile plus explicit native
 instruction text, a named `route`, and
@@ -132,11 +133,50 @@ project manifests. A project without a first commit uses the shipped defaults.
 Explicit `FILE` arguments remain file previews read as written. No user
 configuration is needed. Canonical ownership comes from Git common-directory
 identity and the primary worktree, never a basename, remote or display label.
-The engineer-worker template is an example for one authorized item, not an
-automatically discovered worker to dispatch.
+The engineer-worker and reviewer templates are examples for one authorized item,
+never automatically discovered or dispatched.
 Explicit worker inspection also verifies that the item exists in the discovered
 project record (including the existing `ORG_DIR` selection). Missing/unreadable
 records or incomplete tails fail validation; inspection never writes that record.
+
+## Reviewer example and future integration
+
+[`templates/reviewer.md`](templates/reviewer.md) declares a `reviewer` Session
+with a `work-item` intent and illustrative item ENG-232. Its `review` route is a
+reference resolved through the existing route layers, with no model assertion.
+`review-codex`, `review-max` and project-defined routes also use that resolver;
+settle can select a project route through `review_route` or `--review-route`.
+Validation checks route resolution without imposing a separate route-name list.
+
+The `lane-reviewer` personality points to
+[`lanes/docs/REVIEW_TEMPLATE.md`](../lanes/docs/REVIEW_TEMPLATE.md) as the
+authoritative instructions. No personality text or receipt schema is copied.
+Context declares required identity instructions, the run brief (or review
+supplement), item lessons and that template as a required `file` source; the
+latest review is optional for the first round. Required file paths are relative
+to the canonical project, so a consuming project must supply that file there.
+
+Reviewers require the native `read-only` profile assertion and exactly
+`tools: {"input":"preloaded-scoped-files","allowed":["write-own-review-output"]}`.
+This declares read-only context and the designated private review record as the
+sole repository output. It installs no profile and changes no native permissions.
+A future adapter must enforce that exception at the exact output path or hold;
+the authoritative template still controls any separately authorized check budget.
+
+Reviewer lifecycle uses `afterReport: park-awaiting-verdict-ingestion`,
+`retainUntil: verdict-ingested-or-explicit-disposition` and
+`reset: never-before-verdict-ingestion`, with `resetWhileParked: false` and
+known-session recovery only (otherwise explicit recovery disposition).
+`corrections: new-reviewer-session` means each review round gets a fresh reviewer
+session and distinct UID. It never reuses the reviewer for engineer corrections;
+the warm correction chain belongs to the engineer.
+
+The future controller integration point is where settle calls `lane review`
+today: start the reviewer manifest there after rendering the authoritative
+personality with the fixed target, private output path and review supplement.
+Settle keeps owning the verdict, receipt and ingestion. This example changes
+neither settle nor `lane review` launch behavior nor the `lane-review/v1` format;
+the current inspector and planner cannot launch this reviewer.
 
 ## Canonical KEEP receipts
 

@@ -124,7 +124,7 @@ export function validateManifest(manifest, { config, project } = {}) {
   const scope = { chat: 'operator-conversation', supervisor: 'supervisor-decision-cycle', engineer: 'work-item', reviewer: 'work-item', logs: 'workspace-slot', 'triage-status': 'workspace-slot', 'logs-triage': 'project-triage-batch' }[s.role];
   if (l.scope !== scope) fail('lifecycle scope and role disagree');
   optional(l.replicas, positive, 'lifecycle.replicas'); optional(l.resetWhileParked, bool, 'lifecycle.resetWhileParked');
-  for (const [field, values] of Object.entries({ afterReport: ['park-awaiting-review'], corrections: ['reuse-same-session'], retainUntil: ['landed-or-explicit-disposition'], reset: ['close-and-respawn-at-safe-boundary', 'close-and-respawn-at-committed-batch-boundary', 'never-while-work-item-open'] })) {
+  for (const [field, values] of Object.entries({ afterReport: ['park-awaiting-review', 'park-awaiting-verdict-ingestion'], corrections: ['reuse-same-session', 'new-reviewer-session'], retainUntil: ['landed-or-explicit-disposition', 'verdict-ingested-or-explicit-disposition'], reset: ['close-and-respawn-at-safe-boundary', 'close-and-respawn-at-committed-batch-boundary', 'never-while-work-item-open', 'never-before-verdict-ingestion'] })) {
     optional(l[field], value => choice(value, values, `lifecycle.${field}`));
   }
   if (s.standardSlot && l.automaticRetirement !== 'never') fail('standard slot cannot opt into automatic retirement');
@@ -142,9 +142,12 @@ export function validateManifest(manifest, { config, project } = {}) {
       l.recovery?.uncommittedBatch !== 'retain-and-surface-in-next-summary')) fail('logs-triage requires committed batch recovery');
   if (!isSession && l.restartPolicy !== 'on-confirmed-exit-with-backoff') fail('LogViewer requires model-free backoff restart policy');
   if (s.intent.kind === 'work-item') {
-    if (l.scope !== 'work-item' || l.afterReport !== 'park-awaiting-review' || l.corrections !== 'reuse-same-session' || l.retainUntil !== 'landed-or-explicit-disposition' ||
-        l.resetWhileParked !== false || l.reset !== 'never-while-work-item-open' || l.restartPolicy !== 'on-confirmed-exit-resume-known-session' ||
-        l.recovery?.freshContextWhileItemOpen !== 'explicit-recovery-disposition-only') fail('work-item lifecycle must retain through review and corrections');
+    if (l.resetWhileParked !== false || l.restartPolicy !== 'on-confirmed-exit-resume-known-session' ||
+        l.recovery?.freshContextWhileItemOpen !== 'explicit-recovery-disposition-only') fail('work-item lifecycle must retain context until disposition');
+    if (s.role === 'engineer' && (l.afterReport !== 'park-awaiting-review' || l.corrections !== 'reuse-same-session' ||
+        l.retainUntil !== 'landed-or-explicit-disposition' || l.reset !== 'never-while-work-item-open')) fail('engineer lifecycle must retain through review and corrections');
+    if (s.role === 'reviewer' && (l.afterReport !== 'park-awaiting-verdict-ingestion' || l.corrections !== 'new-reviewer-session' ||
+        l.retainUntil !== 'verdict-ingested-or-explicit-disposition' || l.reset !== 'never-before-verdict-ingestion')) fail('reviewer lifecycle must retain through verdict ingestion and use a new reviewer each round');
   }
   let route;
   if (isSession) {
@@ -164,14 +167,18 @@ export function validateManifest(manifest, { config, project } = {}) {
     if (s.tools !== undefined) {
       obj(s.tools, ['input', 'allowed'], 'tools');
       choice(s.tools.input, ['preloaded-scoped-files'], 'tools.input');
-      if (!Array.isArray(s.tools.allowed) || s.tools.allowed.length !== 1 || s.tools.allowed[0] !== 'write-own-triage-output') fail('tools may only write own triage output');
+      const output = s.role === 'reviewer' ? 'review' : 'triage';
+      if (!Array.isArray(s.tools.allowed) || s.tools.allowed.length !== 1 || s.tools.allowed[0] !== `write-own-${output}-output`) fail(`tools may only write own ${output} output`);
     }
     if (s.role === 'logs-triage') {
       if (s.standardSlot !== 'logs' || s.paneSlot !== 'triage' || s.workspaceRef !== 'home' || s.singletonScope !== 'canonical-project' || l.replicas !== 1) fail('logs-triage requires home logs/triage singleton with replicas 1');
       if (!s.tools || s.permissions.profileRef !== 'triage-output-only') fail('logs-triage requires output-only tools and native profile assertion');
       const hygiene = resolveLaunchRoute(ROUTE_PRESET, { route: 'triage' });
       if (s.route === 'triage' || ['kind', 'model', 'effort'].every(key => route[key] === hygiene[key])) fail('logs-triage cannot resolve to preset triage (record hygiene) route');
-    } else if (s.singletonScope !== undefined || s.tools !== undefined) fail('singletonScope/tools are reserved for logs-triage');
+    } else if (s.role === 'reviewer') {
+      if (s.singletonScope !== undefined) fail('singletonScope is reserved for logs-triage');
+      if (!s.tools || s.permissions.profileRef !== 'read-only') fail('reviewer requires output-only tools and native read-only profile assertion');
+    } else if (s.singletonScope !== undefined || s.tools !== undefined) fail('singletonScope/tools are reserved for logs-triage and reviewer output');
   } else {
     choice(s.viewer, ['brain-structured-events', 'project-triage-status'], 'viewer');
     if ((s.viewer === 'project-triage-status') !== (s.role === 'triage-status') || s.memory.mode !== 'none' || s.memory.claudeMem !== undefined || s.memory.recordLessons !== undefined) fail('LogViewer must be model-free with matching status adapter and memory none');

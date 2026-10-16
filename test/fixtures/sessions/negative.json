@@ -23,8 +23,21 @@
   {"name":"hygiene triage route","base":"logs-triage","set":{"spec.route":"triage"},"delete":["spec.launch"],"error":"preset triage"},
   {"name":"unknown logs pane","base":"logs-viewer","set":{"spec.paneSlot":"extra"},"error":"paneSlot must be"},
   {"name":"unknown primary pane","base":"chat","set":{"spec.paneSlot":"viewer"},"error":"paneSlot must be"},
-  {"name":"worker reset","base":"engineer-worker","set":{"spec.lifecycle.resetWhileParked":true},"error":"retain through review"},
+  {"name":"worker reset","base":"engineer-worker","set":{"spec.lifecycle.resetWhileParked":true},"error":"retain context until disposition"},
   {"name":"unknown context source","base":"chat","set":{"spec.context":[{"source":"shell-output","required":true}]},"error":"context.source must be"},
   {"name":"required missing context","base":"chat","set":{"spec.context":[{"source":"file","required":true,"path":"absent-context"}]},"error":"required context missing"},
-  {"name":"unknown memory field","base":"chat","set":{"spec.memory.claudeMem.command":"launch"},"error":"unknown field memory.claudeMem.command"}
+  {"name":"unknown memory field","base":"chat","set":{"spec.memory.claudeMem.command":"launch"},"error":"unknown field memory.claudeMem.command"},
+  {"name":"reviewer missing item","base":"reviewer","delete":["spec.intent.item"],"error":"work-item intent requires"},
+  {"name":"reviewer conversation intent","base":"reviewer","set":{"spec.intent.kind":"conversation"},"error":"work-item intent requires"},
+  {"name":"reviewer extra write tools","base":"reviewer","set":{"spec.tools.allowed":["write-own-review-output","write-files"]},"error":"only write own review output"},
+  {"name":"reviewer shell tool","base":"reviewer","set":{"spec.tools.allowed":["shell"]},"error":"only write own review output"},
+  {"name":"reviewer triage output","base":"reviewer","set":{"spec.tools.allowed":["write-own-triage-output"]},"error":"only write own review output"},
+  {"name":"reviewer missing tools","base":"reviewer","delete":["spec.tools"],"error":"output-only tools and native read-only"},
+  {"name":"reviewer writable profile","base":"reviewer","set":{"spec.permissions.profileRef":"identity-default"},"error":"output-only tools and native read-only"},
+  {"name":"reviewer engineer lifecycle","base":"reviewer","set":{"spec.lifecycle":{"scope":"work-item","afterReport":"park-awaiting-review","corrections":"reuse-same-session","retainUntil":"landed-or-explicit-disposition","resetWhileParked":false,"automaticRetirement":"safe-planner-after-disposition","restartPolicy":"on-confirmed-exit-resume-known-session","recovery":{"freshContextWhileItemOpen":"explicit-recovery-disposition-only","missingEvidence":"hold"},"reset":"never-while-work-item-open","onRefusal":"hold"}},"error":"reviewer lifecycle must retain"},
+  {"name":"reviewer reused for corrections","base":"reviewer","set":{"spec.lifecycle.corrections":"reuse-same-session"},"error":"reviewer lifecycle must retain"},
+  {"name":"reviewer early retirement","base":"reviewer","set":{"spec.lifecycle.retainUntil":"landed-or-explicit-disposition"},"error":"reviewer lifecycle must retain"},
+  {"name":"reviewer parked reset","base":"reviewer","set":{"spec.lifecycle.resetWhileParked":true},"error":"retain context until disposition"},
+  {"name":"reviewer unknown route","base":"reviewer","set":{"spec.route":"missing-review-route"},"error":"unknown route"},
+  {"name":"reviewer missing personality file","base":"reviewer","set":{"spec.context":[{"source":"file","path":"missing-review-personality.md","required":true}]},"error":"required context missing"}
 ]

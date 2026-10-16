@@ -44,7 +44,7 @@ function readChatState(file) {
   return state;
 }
 
-function waitForShell(herdr, receipt, project, { now, sleep, startupMs }) {
+function waitForShell(herdr, receipt, project, { now, sleep, startupMs, beforeInput = () => {} }) {
   const deadline = now() + startupMs;
   let previous;
   do {
@@ -59,6 +59,7 @@ function waitForShell(herdr, receipt, project, { now, sleep, startupMs }) {
     const prompt = shell && /[$#%❯➜›]$/u.test(screen.split('\n').at(-1) ?? '');
     if (prompt && previous === screen) {
       const marker = `chat-ready-${randomBytes(24).toString('hex')}`;
+      beforeInput(receipt);
       herdr(['pane', 'run', receipt.pane, markerCommand(marker)]);
       do {
         if (paneText(herdr, receipt.pane, 'recent-unwrapped').split('\n').includes(marker)) return;
@@ -184,12 +185,9 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     // never types a second launch into an uncertain pane or creates a duplicate.
     writeFileAtomic(file, JSON.stringify(state, null, 2) + '\n', 0o600);
     waitForShell(herdr, receipt, project, { now, sleep, startupMs });
-    const native = [...launch.args];
-    if (launch.model) native.push('--model', launch.model);
-    if (launch.effort) native.push(...(launch.kind === 'codex' ? ['-c', `model_reasoning_effort=${launch.effort}`] : ['--effort', launch.effort]));
     const root = fileURLToPath(new URL('../', import.meta.url));
     const policy = entryPolicy({ canonical: project.checkout, org: project.record, role: 'chat' }, root);
-    native.push(...(launch.kind === 'claude' ? ['--append-system-prompt', policy] : ['-c', `developer_instructions=${JSON.stringify(policy)}`]));
+    const native = nativeArguments(launch, policy);
     try {
       // Agent start waits for harness readiness and reads account selectors from
       // its caller, so it needs both the chat environment and a longer deadline.
@@ -211,4 +209,55 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     if (focus) herdr(['tab', 'focus', receipt.tab]);
     return { ...receipt, project: name, reused: false, available: true };
   });
+}
+
+// Shared launch owner for enrolled standard slots. The controller supplies a
+// resolved route and materialized instructions, never executable/native argv.
+function nativeArguments(launch, instructions, resume) {
+  const native = [...launch.args];
+  if (resume) native.push(...(launch.kind === 'codex' ? ['resume', resume] : ['--resume', resume]));
+  if (launch.model) native.push('--model', launch.model);
+  if (launch.effort) native.push(...(launch.kind === 'codex' ? ['-c', `model_reasoning_effort=${launch.effort}`] : ['--effort', launch.effort]));
+  native.push(...(launch.kind === 'claude' ? ['--append-system-prompt', instructions] : ['-c', `developer_instructions=${JSON.stringify(instructions)}`]));
+  return native;
+}
+export function openStandardSession({ target, launch, name, instructions, resume, create = false,
+  role, beforeMutation = () => {}, env = process.env, herdr, now = Date.now, sleep = pause, startupMs = 30000 }) {
+  if (typeof herdr !== 'function') throw Error('standard launch requires the controller Herdr edge');
+  if (!['chat', 'supervisor'].includes(role) || !['codex', 'claude'].includes(launch.kind) ||
+      !instructions?.trim() || !/^[a-z][a-z0-9_-]{0,31}$/u.test(name)) throw Error('unsupported standard session launch');
+  let receipt = { workspace: target.workspace, tab: target.tab, pane: target.pane, terminalId: target.terminalId };
+  if (create) {
+    beforeMutation();
+    const made = herdr(['tab', 'create', '--workspace', target.workspace, '--cwd', target.checkout,
+      '--label', role, '--no-focus', ...launch.env.flatMap(pair => ['--env', pair])]);
+    receipt = { workspace: target.workspace, tab: id(made.tab?.tab_id, 'tab id'), pane: id(made.root_pane?.pane_id, 'pane id'), terminalId: made.root_pane?.terminal_id };
+    if (!receipt.terminalId) receipt.terminalId = herdr(['pane', 'get', receipt.pane]).pane?.terminal_id;
+    if (made.tab.workspace_id !== target.workspace || made.root_pane.workspace_id !== target.workspace ||
+        made.root_pane.tab_id !== receipt.tab) throw Error('created layout identity changed; inspect before retry');
+  }
+  waitForShell(herdr, receipt, { checkout: target.checkout }, { now, sleep, startupMs, beforeInput: beforeMutation });
+  const pairs = Object.fromEntries(launch.env.map(pair => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0')) throw Error('invalid standard launch environment');
+    const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
+  }));
+  beforeMutation(receipt);
+  herdr(['agent', 'start', name, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs),
+    '--', ...nativeArguments(launch, instructions, resume)], { env: { ...env, ...pairs }, timeout: startupMs + 10000 });
+  return { ...receipt, name, checkout: target.checkout, kind: launch.kind };
+}
+
+// The existing log viewer renders once; retain that verified output in its
+// terminal. This is not a new log service, refresh loop, or model session.
+export function openStandardViewer({ target, command, herdr, beforeMutation, now = Date.now, sleep = pause, startupMs = 30000 }) {
+  waitForShell(herdr, target, { checkout: target.checkout }, { now, sleep, startupMs, beforeInput: beforeMutation });
+  const marker = `viewer-ready-${randomBytes(24).toString('hex')}`;
+  beforeMutation(target);
+  herdr(['pane', 'run', target.pane, `${command} && ${markerCommand(marker)}`]);
+  const deadline = now() + startupMs;
+  do {
+    if (paneText(herdr, target.pane, 'recent-unwrapped').split('\n').includes(marker)) return { ...target };
+    sleep(100);
+  } while (now() < deadline);
+  throw Error('viewer render acknowledgement uncertain; inspect before retrying');
 }

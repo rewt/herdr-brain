@@ -1,10 +1,10 @@
-// Foreground policy. No scheduling, model, record mutation or live action path.
+// Foreground policy and single-action journal executor. No scheduling or model calls.
 import { randomUUID } from 'node:crypto';
 import { matchingRun } from '../lib/retire.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding, sameBinding } from './observe.mjs';
 import { acquireControllerLease, durableWrite, emptyJournal, readControllerJournal, runtimePaths } from './runtime.mjs';
-import { specDigest } from './lifecycle-evidence.mjs';
+import { specDigest, equalBinding, validBinding } from './lifecycle-evidence.mjs';
 import { planLifecycle, resetAssessment, lifecycleOperation } from './lifecycle.mjs';
 export { specDigest } from './lifecycle-evidence.mjs';
 
@@ -147,23 +147,25 @@ export function planSessions(input) {
       const target = { server: o.server, workspace: slot.workspace, tab: slot.tab, pane: paneId, checkout: slot.checkout };
       const ops = journal.operations.filter(op => !lifecycleOperation(op) && (op.uid === uid || targetMatches(op.target, target)));
       if (ops.length > 1) return row(entry, 'Hold', 'Hold', 'multiple operations claim this standard position');
-      const op = ops[0], agents = o.agents.filter(a => a.pane_id === paneId);
+      const op = ops[0], viewer = entry.manifest.kind === 'LogViewer', agents = viewer
+        ? (o.viewers ?? []).filter(v => v.binding.pane === paneId) : o.agents.filter(a => a.pane_id === paneId);
       if (op && op.uid !== uid) return row(entry, 'Hold', 'Hold', 'another manifest UID owns this standard position');
-      const a = agents[0], binding = a && agentBinding(a, o.server, slot.tab);
+      const a = agents[0], binding = a && (viewer ? a.binding : agentBinding(a, o.server, slot.tab));
+      const matches = (a, b) => viewer ? validBinding(a, 'LogViewer') && equalBinding(a, b) : sameBinding(a, b);
       const claims = op ? (o.receipts ?? []).filter(r => r.operationId === op.id) : [];
       const receipts = claims.filter(r => receiptMatches(r, op));
       const receipt = op?.receipt ?? (receipts.length === 1 ? receipts[0] : null);
       if (op?.state === 'withheld') decision = row(entry, 'Hold', 'Hold', `start withheld, delegate never invoked: ${op.reason}; explicit later operator disposition required`, {
         observed: { operationId: op.id, operationState: op.state, withheldReason: op.reason } });
       else if (a) {
-        if (!op || !receipt || claims.length > 1 || (claims.length && (receipts.length !== 1 || !sameBinding(claims[0].binding, receipt.binding))) || !sameBinding(receipt.binding, binding) || pane.terminal_id !== binding.terminalId ||
-            !targetMatches(binding, target) || !['working', 'idle', 'done'].includes(a.agent_status ?? a.status)) return row(entry, 'Hold', 'Hold', 'unknown or changed standard-slot occupant; never adopt or close');
+        if (!op || !receipt || claims.length > 1 || (claims.length && (receipts.length !== 1 || !matches(claims[0].binding, receipt.binding))) || !matches(receipt.binding, binding) || pane.terminal_id !== binding.terminalId ||
+            !targetMatches(binding, target) || (!viewer && !['working', 'idle', 'done'].includes(a.agent_status ?? a.status))) return row(entry, 'Hold', 'Hold', 'unknown or changed standard-slot occupant; never adopt or close');
         decision = row(entry, 'Running', 'KEEP', 'matching live incarnation; protected standard slot; no prompt replay', {
           observed: { binding, generation: op.generation, specDigest: op.specDigest },
           ...(op.specDigest !== specDigest(entry) || op.generation !== entry.manifest.metadata.generation ? { pendingGeneration: entry.manifest.metadata.generation } : {}),
           ...(op.state === 'intent' ? { resolvedOperation: op.id, receipt } : {}) });
       } else if (op) decision = row(entry, 'Hold', 'Hold', 'prior start intent or incarnation exists; acknowledgement/loss requires observation, never start twice');
-      else if (entry.manifest.kind !== 'Session' || s.role === 'logs-triage') decision = row(entry, 'Hold', 'KEEP', 'protected slot; viewer/triage activation belongs to later stages');
+      else if (s.role === 'logs-triage' || (viewer && s.viewer !== 'brain-structured-events')) decision = row(entry, 'Hold', 'KEEP', 'protected slot; triage activation belongs to later stages');
       else if (pane.emptyConfirmed !== true || !pane.terminal_id || pane.agent || pane.agent_session?.value || pane.restore_error || pane.launch_pending) decision = row(entry, 'Hold', 'Hold', 'missing occupant is not proven empty; keep unknown processes');
       else decision = row(entry, 'Missing', 'WouldStart', 'missing occupant in an adopted standard slot', {
         observed: { target, terminalId: pane.terminal_id }, action: { kind: 'start-standard-slot', uid, target,
@@ -189,11 +191,15 @@ export function planSessions(input) {
     diagnostics: inspection.diagnostics, errors, decisions, action: actionable[0]?.action ?? null };
 }
 
-// Test harness only. Production CLI never calls this execution path.
-// actions.start delegates to an existing launch owner; it must not build native
-// argv or send a prompt here. No live implementation is wired in this stage.
-export async function reconcileOffline({ inspection, read, actions }) {
-  if (actions?.offline !== true || typeof actions.start !== 'function') throw Error('session actions require an explicit offline fake');
+// Offline compatibility entry; live use must enter through the apply gate.
+export async function reconcileOffline(options) {
+  if (options.actions?.offline !== true || typeof options.actions.start !== 'function') throw Error('session actions require an explicit offline fake');
+  return reconcileOnce(options);
+}
+
+// The production entry is apply.mjs, which supplies a freshly checked permit on
+// every read. Journal semantics are shared with the offline harness.
+export async function reconcileOnce({ inspection, read, actions, approvePlan }) {
   const common = inspection.project.common, paths = runtimePaths(common);
   let release;
   try { release = acquireControllerLease(common); }
@@ -231,6 +237,10 @@ export async function reconcileOffline({ inspection, read, actions }) {
       if (d.resolvedOperation) Object.assign(journal.operations.find(op => op.id === d.resolvedOperation), { state: 'acknowledged', receipt: d.receipt });
     }
     if (plan.decisions.some(d => d.freeze || d.resolvedOperation)) durableWrite(paths.journal, journal);
+    if (approvePlan) {
+      try { await approvePlan(plan); }
+      catch (error) { return fence(plan, error.message); }
+    }
     if (plan.action) {
       // Repeat all record, enrollment, STOP and ownership checks immediately
       // before recording intent. Changed facts cancel this pass's action.
@@ -257,7 +267,7 @@ export async function reconcileOffline({ inspection, read, actions }) {
           if (selected.stage !== 'adopt') {
             const method = selected.stage, intent = { close: 'close-intent', respawn: 'respawn-intent', resume: 'resume-intent', transfer: 'inbox-intent' }[method];
             if (!intent || typeof actions[method] !== 'function') {
-              notInvoked(`offline ${method} delegate missing; never invoked`);
+              notInvoked(`${method} delegate missing; never invoked`);
             } else {
               advance(op, intent); // durable before final check and adapter.
               const final = await observe(before);

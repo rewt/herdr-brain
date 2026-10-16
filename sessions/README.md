@@ -1,9 +1,11 @@
 # Session manifests
 
-Stages 1–4 of ARCH-33: a desired format, an **offline inspector**, KEEP-only
-retirement evidence, and foreground single-pass reconciliation with an
-**inspect-only live planner** and **fake-only reset/recovery**. Node built-ins only. The CLI never launches a
-session, prompts a model, enrolls a live workspace, runs a loop, or writes the record.
+Stages 1–4 of ARCH-33: manifests, an offline inspector, KEEP-only receipts,
+foreground planning, and an explicitly authorized single-action apply path.
+Node built-ins only. `inspect` and `plan` are read-only. `authorize` writes only a
+scope receipt; `apply` can act only on an explicitly enrolled workspace with a
+valid receipt and fresh matching saved plan. There is no enrollment CLI, default
+apply workspace, controller loop, background process, or record writer.
 All model work is declared as a Herdr session on the subscription; the service
 and controller remain model-free. Native harness settings retain permission
 ownership. Assertions in a document grant no authority or capability.
@@ -272,7 +274,8 @@ mutation. The status cache is not read at all.
 | Missing tab/pane, prior incarnation gone, or uncertain launch | `Hold` unless stage 4's exact transition evidence resolves it |
 | Start withheld after intent because evidence changed; delegate never invoked | `Hold` with the durable reason, pending an explicit later operator disposition; stage 4 does not resolve it |
 | Post-close respawn or inbox delegate provably never invoked after a final check failed | `respawn-pending` / `inbox-pending` with the durable reason; observe while blocked, then retry that stage once with fresh evidence |
-| Missing viewer/triage occupant | `KEEP`; activation belongs to later service/rollout stages |
+| Missing model-free structured viewer with positive empty-process evidence | At most one `WouldStart`; renders the existing foreground viewer once |
+| Missing triage occupant | `KEEP`; activation belongs to later rollout stages |
 | Work item with no recorded run or an abandoned latest run | `Undispatched` / `Observe`; leave unrelated authorized slot starts available |
 | Matching live work-item run/dispatch | `NoOp` while running; observation only |
 | Report available and quiet worker, including ingestion delay or malformed report | `ParkedAwaitingReview` / `KEEP`; show folded review/correction/integration chain |
@@ -285,29 +288,40 @@ mutation. The status cache is not read at all.
 claims contain `{operationId, uid, generation, specDigest, binding}`. A complete
 binding contains server, workspace, tab, pane, terminal ID, native session ID,
 agent name and canonical checkout. Only an observation adapter with positive
-empty-process evidence may set a pane's `emptyConfirmed`. The live adapter
-leaves it unset: snapshot/agent reads alone do not prove an unregistered shell
-safe to launch into. This stage exercises starts solely through offline fakes.
+empty-process evidence may set a pane's `emptyConfirmed`. The default socket
+observer leaves it unset. An explicit `--evidence FILE --workspace REF` enables
+`live-observe.mjs`: it checks the scoped experiment descriptor and enrolled
+endpoint, then sandwiches `pane process-info` between matching `pane get`
+reads. Only a sole foreground shell in the exact enrolled checkout can be empty.
+The shared launcher subsequently proves shell readiness before input.
 
-The offline runner requires an explicit `{offline: true, start(operation)}`
-action adapter. That narrow delegate represents the existing launch owner;
-the controller constructs no native argv, readiness probe, record-worker call,
-watcher or prompt. The future authorized adapter must delegate those to the
-existing launch/dispatch paths, preserving native readiness, record-worker
-evidence and watcher-before-prompt ordering. There is no live implementation or
-CLI connection to any action. Workers are never dispatched/re-prompted here.
-Stage 4 adds only fake close, respawn, resume and inbox-handover delegates.
+`reconcileOffline` still requires `{offline: true, start(operation)}`. `apply`
+uses the same journal executor with `live.mjs` adapters. Native arguments and
+readiness remain owned by `supervisor/chats.mjs`, whose existing argument builder
+also serves the exact chat/supervisor opener and native resume. The adapters never
+invoke lane dispatch, start a worker, create a recorded run or replay a work brief;
+worker dispatch retains record-worker and watcher-before-prompt ordering.
+All new physical Herdr calls pass through `supervisor/herdr-edge.mjs`.
 
-## Offline reset and recovery (stage 4)
+## Reset and recovery (stage 4)
 
-`lifecycle.mjs` extends the single-pass planner; `lifecycle-evidence.mjs`
-verifies handoff bytes and closed journal/receipt shapes. There is **no live
-apply path, native mutation implementation, enrollment, loop or transport**.
-The live observer still uses only snapshot and exact agent reads. It cannot
-infer process exit, empty-process safety, native restore state, quiescence or
-handoff completion from absence or agent readiness. Those unknowns hold.
-Positive stage 4 evidence is supplied by offline fake record/Herdr adapters;
-the future live adapters and disposable-workspace experiment belong to A2.
+`lifecycle.mjs` supplies the single-pass policy; `lifecycle-evidence.mjs` verifies
+handoff bytes and journal shapes. The offline harness can exercise the full
+lifecycle contract. The authorized apply path supports chat and supervisor
+standard slots, a one-shot structured viewer render, and a stage-8 logical-role
+inbox transfer. Reviewers remain `DeclarativeOnly`; **all work-item sessions are
+observation-only in apply**, including recovery. Triage and multi-pane logs
+rotation remain held until their own activation stage. No native profile is
+installed or changed. Unsupported required context or memory enforcement holds;
+optional memory is explicitly disabled in materialized context.
+
+Snapshot absence alone cannot prove process exit, restore ownership, quiescence
+or a completed handoff. Experiment evidence must record those assertions with
+source references; fresh native process/topology checks still apply. Known-native
+resume additionally verifies the prior launch owner's immutable context receipt,
+route, manifest digest and native reference. Its new terminal/incarnation is
+observed before acknowledgement. Unknown/lost acknowledgements hold without an
+automatic retry.
 
 A reset request in `facts.resetRequests[uid]` names a boundary and a handoff.
 `persistHandoff({file, markdown, recordRefs, unresolvedMessageIds, inboxCursor})`
@@ -410,10 +424,10 @@ checkouts, next to the earlier slot receipts:
 | --- | --- |
 | `sessions/controller.lock/owner.json` | One project lease; contention or abandoned ownership holds, with no automatic stale-owner reclamation |
 | `sessions/controller-journal.json` | Durable start/reset/recovery intent, transition history, handoff hashes, quiescence receipts, exact acknowledgements, immutable historical bindings and new incarnation receipts |
-| `sessions/controller-status.json` | Disposable recomputed projection; only the offline reconciler writes it in this stage |
+| `sessions/controller-status.json` | Disposable recomputed projection; Disposable; written by the journal executor after a permitted pass |
 
 The runner holds the lease for one pass, re-observes before intent and after
-intent, fsyncs intent before calling the fake action adapter, then re-observes
+intent, fsyncs intent before calling the selected action adapter, then re-observes
 the exact receipt and live binding before acknowledging. A lost reply remains
 an unresolved intent until fresh receipt evidence proves that incarnation.
 An adapter return alone is insufficient. No intent is retried, even when its
@@ -467,3 +481,146 @@ node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/reti
 
 Run under Node 20.19.4 both in the lane and a git-archive snapshot of the final
 commit outside any Git/identity-root ancestry. All mutations target fixture roots.
+
+## Explicit authorization and single-action apply (Wave A2)
+
+These commands are implementation surfaces, **not authorization for live use**.
+This lane enrolls no workspace and runs no live action. The operator must first
+approve one disposable-workspace experiment after independent review and gate.
+Only the supervisor, from the canonical checkout and on that recorded say-so,
+runs `authorize`. `--operator-decision ID:SEQ` must resolve to an existing decision
+note in this project's record. The command binds its record path and event hash;
+the supervisor attests that the cited decision approves this exact experiment.
+A decision reference alone is not inferred permission. It never observes Herdr,
+launches, withdraws enrollment, clears STOP/holds, or writes a record event.
+
+```sh
+node sessions/sessions.mjs authorize --project "$experiment_project" \
+  --workspace "$experiment_workspace" --role supervisor --actor "$supervisor_actor" \
+  --actions start-standard-slot,close,respawn,resume,transfer \
+  --operator-decision "$operator_decision_id:$operator_decision_seq" --expires "$expiry_utc"
+```
+
+Use the returned `file` as `authorization_file`. Receipts are durable private JSON
+under `<common>/sessions/authorizations/`, scoped to common directory, explicit
+workspace reference, exact native workspace/server/checkout, original enrollment
+digest, allowed actions, actor, operator decision and expiry. Replacement KEEP
+receipts may extend layout protection without changing scope. Withdrawing or
+changing the original enrollment invalidates authorization. Renewal requires a
+new explicit command; there is no automatic extension or fallback authorization.
+
+`--evidence FILE` is a supervisor-captured descriptor with closed top-level fields:
+`schema: session-experiment-evidence/v1`, `common`, `server`, `workspace`,
+`resetRequests`, `recovery`, `quiescence`, `losses`, and optional
+`inbox: {root, recipient}`. Its lifecycle maps use the evidence shapes above;
+empty maps/array suffice for a start. It confers no action authority. Exit evidence
+must distinguish confirmed process loss from disconnect, explicitly record native
+restore state and source reference, refusal/failure count and backoff. No automatic
+restore-state inference is made. For resume use
+`contextRef: <common>/sessions/contexts/<prior-operation-id>.json` and its canonical
+JSON `digest` as `contextHash`. These launch-owned receipts bind UID, generation,
+spec digest, resolved route, native ID and actual instruction SHA-256. Missing or
+changed launch evidence holds.
+
+```sh
+node sessions/sessions.mjs plan "$experiment_manifest" --project "$experiment_project" \
+  --workspace "$experiment_workspace" --evidence "$experiment_evidence" > "$saved_plan"
+node sessions/sessions.mjs apply "$experiment_manifest" --project "$experiment_project" \
+  --workspace "$experiment_workspace" --evidence "$experiment_evidence" \
+  --authorization "$authorization_file" --plan "$saved_plan"
+```
+
+The saved plan is valid for at most 60 seconds and must match the freshly observed
+selection exactly. Apply repeats receipt, expiry, enrollment, manifest, record,
+STOP and canonical close-hold checks under the controller lease, after intent and
+at the physical mutation edge (including shell-readiness input). Each invocation
+considers at most one action: close does not respawn in the same invocation;
+respawn binds before a later inbox transfer. Without authorization, output is the
+read-only plan plus an explicit refusal, and no controller lease/journal/status
+or launch context is created. Expired/mismatched scope, plan drift, STOP, close
+hold, unknown occupants and abandoned locks refuse or hold without native input.
+
+`adapter-receipts.json` contains exact post-observation acknowledgements. A lost
+native reply leaves intent unresolved, even if an apparent agent exists. Do not
+repeat `agent start`, close, resume or delivery to repair it. Inspect evidence and
+use an explicit disposition; there is no automatic retry command.
+
+Inbox transfer goes through `messages/session-transfer.mjs` and the stage-8
+`Receiver.transaction` journal, preserving pending IDs, unanswered threads and
+logical-role addresses without a prompt. The committed cursor is
+`transport:<journal-sequence>`. Coverage changes or refused/uncertain delivery hold.
+The enrolled role must name `project-chat` or `project-supervisor` and bind its
+`bindingRef` to the manifest UID. Exact-session replies are never redirected. The receiver still enforces its
+existing temporary `brain-transport-*` fixture boundary: **this change does not
+activate live transport or install a live inbox importer**. A disposable experiment
+must use an explicitly enrolled fixture receiver, or the transfer holds.
+
+## Disposable experiment runbook: research experiments #1 and #3
+
+Do not execute until the operator's reviewed experiment decision is recorded.
+Use one isolated disposable workspace and throwaway native conversation, never a
+parked worker, home workspace, open review chain, BCH desk, or another identity.
+The research requires: “Record version/route/identity tuple before and after every
+step; preserve timestamps and source receipts.” Archive the source revision and
+installed product/Herdr/harness versions; manifests and resolved route; canonical
+common directory, explicit enrollment receipt and authorization; exact server,
+workspace, tab, pane, terminal, name and native session IDs; record revision,
+callbacks, queue references, STOP/hold observations, saved plans, controller and
+adapter journals, context receipts and command results. Save evidence outside any
+workspace that teardown may remove. No transcript or credential read is needed.
+
+1. **Setup and start (#1).** After approval, the supervisor creates the disposable
+   workspace through the existing native workspace opener, proves exact Git and
+   native ownership, and adopts only its standard-slot layout with
+   `recordStandardSlot`. Capture a scoped experiment descriptor and authorize only
+   that workspace/actions until a short explicit expiry. Inspect one chat or
+   supervisor manifest; save a fresh plan and apply once. Capture the complete
+   observed binding and launch context receipt. Idle must subsequently plan KEEP,
+   without a replayed prompt. The research says: “Make at most one missing
+   occupant.” Existing launch code owns argv and readiness; worker dispatch stays
+   outside this experiment.
+2. **Safe boundary (#1).** Save/hash a Markdown handoff, references, every unresolved
+   inbox ID and committed receiver cursor. Finish the supervisor draft or record
+   its explicit fallback. Quiesce old callbacks; prove no open work/review or
+   in-flight delivery depends on the old incarnation. Capture quiescence with its
+   binding and record revision. The research's step 7 says: “Persist and verify the
+   Markdown handoff, record references, unresolved message IDs and inbox cursor.”
+   Commit that exact boundary in the experiment evidence. Independently inspect
+   that every pane in the target tab belongs to this layout.
+3. **Close and respawn (#1).** Save a fresh plan and apply only the exact-tab close.
+   Capture the close receipt and a fresh snapshot proving old tab/panes/agents are
+   absent. The research says: “A tab containing another owner or an unrelated pane
+   must hold for disposition.” Re-plan, then apply one respawn from the same frozen
+   manifest and verified handoff. Capture new tab/pane/terminal/native ID, generation,
+   resolved model/effort/route and context hash; inspect handoff inclusion. Bind
+   the incarnation before re-planning and applying logical-role inbox transfer.
+   Verify the same pending IDs, cursor and unanswered questions survive; exact
+   worker replies retain their old address. Do not use native `/clear`.
+4. **Exit and recovery (#3).** Determine the installed harness's supported exit
+   command from its own help; exit only this throwaway conversation. Capture
+   confirmed process exit plus agent and shell evidence without retrying work.
+   Distinguish disconnect/readiness uncertainty and native restore
+   pending/resumed/none; designate exactly one spawn owner. The research's step 8
+   says: “Exactly one layer owns the spawn.” Supply the known native reference,
+   prior context receipt/hash, frozen route, failure count and satisfied backoff.
+   Save a fresh plan; apply one native resume. Capture the same native conversation,
+   new process/terminal/incarnation and rechecked route/context evidence. Verify
+   historical bindings and pending intent are preserved. A failed resume holds;
+   never substitute fresh context implicitly.
+5. **Stop and teardown.** Stop invoking apply on any refusal, timeout, uncertain
+   acknowledgement, identity mismatch, missing handoff/context, multi-owner tab,
+   STOP/close hold, native restore ambiguity, repeated failure, unexpected model
+   wake, changed pending-ID coverage, or any reference to work outside the
+   disposable setup. Preserve journals and inspect; never run a second spawn to
+   diagnose a lost reply. A HOLD from the supervisor also stops new test runs.
+   At completion let the authorization expire (or remove only its exact receipt
+   after preserving it); disable further applies. Archive receipts/handoffs and
+   transfer state. After explicit experiment disposition, withdraw only the
+   disposable slot's adoption via `recordStandardSlot`, then use existing guarded
+   retirement with freshly verified identities and no live references. Never bulk
+   close tabs/workspaces, remove another receipt, clear shared holds, delete unique
+   work/evidence, or stop the shared server. If guarded teardown refuses, retain
+   the disposable resources for supervisor inspection.
+
+Offline validation uses the real adapters with fixture CLI/socket endpoints in
+`test/session-live.test.mjs`; it is not evidence that either live experiment ran.

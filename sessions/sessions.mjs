@@ -85,14 +85,28 @@ export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', e
 }
 
 export async function main(args = process.argv.slice(2)) {
-  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { project: { type: 'string', default: process.cwd() }, workspace: { type: 'string', default: 'home' } },
-    usage: 'Usage: node sessions/sessions.mjs inspect|plan [FILE ...] [--project PATH] [--workspace home|REF]' });
+  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
+    project: { type: 'string', default: process.cwd() }, workspace: { type: 'string' },
+    authorization: { type: 'string' }, plan: { type: 'string' }, evidence: { type: 'string' },
+    role: { type: 'string' }, actor: { type: 'string' }, actions: { type: 'string' },
+    'operator-decision': { type: 'string' }, expires: { type: 'string' }
+  }, usage: 'Usage: node sessions/sessions.mjs inspect|plan|apply|authorize [FILE ...] --project PATH [--workspace REF] [--authorization FILE --plan FILE --evidence FILE] [--role supervisor --actor NAME --actions KINDS --operator-decision ID:SEQ --expires UTC]' });
   const command = positionals.shift();
-  if (!['inspect', 'plan'].includes(command)) throw Error('expected inspect or plan');
-  const options = { files: positionals, cwd: values.project, workspace: values.workspace };
-  const result = command === 'inspect' ? inspect(options) : await (await import('./plan.mjs')).plan(options);
+  if (!['inspect', 'plan', 'apply', 'authorize'].includes(command)) throw Error('expected inspect, plan, apply or authorize');
+  const options = { files: positionals, cwd: values.project, workspace: values.workspace, authorization: values.authorization,
+    planFile: values.plan, evidence: values.evidence };
+  let result;
+  if (command === 'authorize') {
+    if (positionals.length) throw Error('authorize takes no manifest files');
+    const match = /^([A-Za-z0-9-]+):([1-9][0-9]*)$/u.exec(values['operator-decision'] ?? '');
+    if (!match) throw Error('--operator-decision requires RECORD-ID:SEQ');
+    result = (await import('./authorization.mjs')).authorize({ ...options, role: values.role, actor: values.actor,
+      actions: values.actions?.split(','), operatorDecision: { id: match[1], seq: Number(match[2]) }, expiresAt: values.expires });
+  } else if (command === 'inspect') result = inspect(options);
+  else if (command === 'plan') result = await (await import('./plan.mjs')).plan(options);
+  else result = await (await import('./apply.mjs')).apply(options);
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-  if (!result.valid) process.exitCode = 1;
+  if (result.valid === false || result.apply?.state === 'refused') process.exitCode = 1;
 }
 if (isMain(import.meta.url)) {
   main().catch(error => { process.stderr.write(`sessions: ${error.message}\n`); process.exitCode = 1; });

@@ -24,6 +24,8 @@ import { gitProject } from '../../lib/project.mjs';
 
 const TEST_ENV = { ...process.env, BRAIN_SHADOW_ROOT: process.env.BRAIN_SHADOW_ROOT || path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'), ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
+const checkout = path.resolve(import.meta.dirname, '../..');
+const hasGitCheckout = !!fs.lstatSync(path.join(checkout, '.git'), { throwIfNoEntry: false });
 
 function executable(file, body) {
   if (path.basename(file) === 'herdr') body = `
@@ -267,13 +269,19 @@ esac`);
     const root = path.join(fs.realpathSync(f.root), 'shadow');
     const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV, BRAIN_SHADOW_ROOT: root, BRAIN_IDENTITY: 'example' } });
     const done = await waitForExit(child); assert.equal(done.code, 0, done.stderr);
-    const directory = stateDirectory({ root, identity: 'example', commonDir: gitProject().identity });
-    const { entries } = await readJournal(directory);
-    assert.equal(entries.length, 1, done.stderr); assert.equal(entries[0].shadow.path, route);
-    assert.equal(entries[0].payload.evidence.validated, true);
-    assert.equal(entries[0].run, run); assert.equal(entries[0].payload.refs[0].orgRef, fs.realpathSync(path.join(f.root, '.org')));
     const text = reportNotice({ run, item: 'ENG-9', outcome: 'done', headline: 'The report arrived', report: f.report });
-    assert.equal(fs.readFileSync(entries[0].payload.body_ref.path, 'utf8'), text);
+    await t.test(`shadow mirror for ${run}`, async t => {
+      if (!hasGitCheckout) {
+        t.skip('release snapshots have no product .git entry; shadow mirroring requires a Git identity');
+        return;
+      }
+      const directory = stateDirectory({ root, identity: 'example', commonDir: gitProject().identity });
+      const { entries } = await readJournal(directory);
+      assert.equal(entries.length, 1, done.stderr); assert.equal(entries[0].shadow.path, route);
+      assert.equal(entries[0].payload.evidence.validated, true);
+      assert.equal(entries[0].run, run); assert.equal(entries[0].payload.refs[0].orgRef, fs.realpathSync(path.join(f.root, '.org')));
+      assert.equal(fs.readFileSync(entries[0].payload.body_ref.path, 'utf8'), text);
+    });
     assert.ok(fs.readFileSync(f.calls, 'utf8').includes(`agent prompt supervisor-test ${text} notice-id=watch:${run}:final`));
   }
 });

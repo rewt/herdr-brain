@@ -109,7 +109,7 @@ test('CLI validates options, independent snapshots survive closure, and all sour
   const collect = createBoard({ projects: [f.root], sources: [], roots: [f.root] }, { discover: () => ({ identity: f.root, paths: [f.root] }), brain: async () => raw,
     memory: async () => null, panes: async () => ({ state: 'unavailable', panes: new Set() }), slot: emptySlot });
   assert.equal((await collect()).rows[0].status.text, 'withheld');
-  assert.ok(render({ ...snapshot(f), rows: [row] }, { width: 240 }).includes(f.log));
+  assert.ok(render({ ...snapshot(f), rows: [row] }, { width: 240 }).includes('job.log'));
 });
 test('the release archive includes the board and its dependency closure', t => {
   if (!fs.existsSync(new URL('../.git', import.meta.url))) { t.skip('git-archive snapshot has no repository metadata'); return; }

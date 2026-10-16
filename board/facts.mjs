@@ -37,7 +37,11 @@ export async function paneState({ command = 'herdr', env = process.env } = {}) {
 }
 export function readSlot({ lockPath = TEST_SLOT_PATH, projects = [], now = Date.now() } = {}) {
   let holder = null, state = 'free', tickets = [];
-  try { holder = JSON.parse(fs.readFileSync(lockPath, 'utf8')); state = holderState(holder).state; }
+  try {
+    const fd = fs.openSync(lockPath, 'r');
+    try { holder = JSON.parse(fs.readFileSync(fd, 'utf8')); } finally { fs.closeSync(fd); }
+    state = holderState(holder).state;
+  }
   catch (e) { if (e.code !== 'ENOENT') state = 'unknown'; }
   try { tickets = readTestSlotQueue(lockPath, { prune: false, now }).tickets.filter(t => ['live', 'unknown'].includes(t.state)); }
   catch { state = 'unknown'; }

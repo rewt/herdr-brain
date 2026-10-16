@@ -24,7 +24,11 @@ export function render(snapshot, { width = 120, height = Infinity, now = Date.no
     { title: 'SLOT', min: 11, max: 11, value: r => r.slot },
     { title: 'STATUS', min: 10, max: 28, value: r => r.status.text },
     { title: 'RESULT / MAIN', min: 13, max: 18, value: r => `${r.result.exit ?? '-'} ${r.result.main === WITHHELD ? WITHHELD : r.result.main?.slice(0, 12) ?? '-'}` },
-    { title: 'WHERE', min: 12, max: 48, value: r => r.where.pane !== WITHHELD ? r.where.pane : r.where.log },
+    { title: 'WHERE', min: 12, max: 48, value: (r, width) => {
+      if (r.where.pane !== WITHHELD) return r.where.pane;
+      const log = r.where.log;
+      return log.length > width ? '...' + log.slice(-(width - 3)) : log;
+    } },
     { title: 'CLOCKS', min: 12, max: 60, value: r => Array.isArray(r.clocks) ? r.clocks.map(c => `${c.label} ${c.seconds === WITHHELD ? WITHHELD : duration(c.seconds)}${c.legacy === true ? ' legacy' : ''}`).join('; ') : WITHHELD },
   ];
   const cost = cols => cols.reduce((n, c) => n + c.min, 0) + Math.max(0, cols.length - 1) * 2;
@@ -38,7 +42,7 @@ export function render(snapshot, { width = 120, height = Infinity, now = Date.no
       project = row.project;
       lines.push('', clip(`[${project}]`), clip(columns.map(c => cell(c.title, c.width)).join('  ')));
     }
-    lines.push(clip(columns.map(c => cell(c.value(row), c.width)).join('  ').trimEnd()));
+    lines.push(clip(columns.map(c => cell(c.value(row, c.width), c.width)).join('  ').trimEnd()));
   }
   if (!snapshot.rows.length) lines.push('No promotions in the selected window.');
   if (Number.isFinite(height) && lines.length > height) return [...lines.slice(0, Math.max(0, height - 1)), clip('More rows available with --once or --json')].join('\n');

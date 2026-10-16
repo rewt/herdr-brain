@@ -48,7 +48,7 @@ export function resolveGateProfile(canonical, environment = process.env, { setti
   }
   if (gate === undefined) return null;
   if (!object(gate)) throw new Error('promote gate must be an object');
-  const fields = ['node_version_file', 'env', 'prepare', 'external_lock', 'refuse_processes', 'wait_seconds', 'timeout_seconds', 'idle_timeout_seconds'];
+  const fields = ['node_version_file', 'env', 'prepare', 'external_lock', 'refuse_processes', 'wait_seconds', 'timeout_seconds', 'idle_timeout_seconds', 'resource'];
   for (const key of Object.keys(gate)) if (!fields.includes(key)) throw new Error(`unknown promote gate field: ${key}`);
   if (gate.timeout_seconds !== undefined) limitSeconds(gate.timeout_seconds, 'gate.timeout_seconds');
   if (gate.idle_timeout_seconds !== undefined) limitSeconds(gate.idle_timeout_seconds, 'gate.idle_timeout_seconds', { idle: true });
@@ -90,7 +90,7 @@ export function resolveGateProfile(canonical, environment = process.env, { setti
     env.PATH = [bin, ...(env.PATH ?? '').split(path.delimiter).filter(entry => entry !== bin)].join(path.delimiter);
     node = { pin, executable };
   }
-  return { env, node, prepare, externalLock: gate.external_lock, processes, waitSeconds, timeoutSeconds: gate.timeout_seconds, idleTimeoutSeconds: gate.idle_timeout_seconds,
+  return { resource: gate.resource, env, node, prepare, externalLock: gate.external_lock, processes, waitSeconds, timeoutSeconds: gate.timeout_seconds, idleTimeoutSeconds: gate.idle_timeout_seconds,
     // Hash declarations and effective runtime without persisting environment
     // values. Preparation and this salt participate in tree-keyed evidence.
     fingerprint: hash({ gate, node }), file };

@@ -27,5 +27,246 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "resources": {
+    "test:fast": {
+      "id": "herdr/test:fast",
+      "revision": 1,
+      "command_sha256": "d3d335cc54b88e422446e4a607fbb2978f44fa8bc57cc90a2186936b281bf8ae",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:core": {
+      "id": "herdr/test:core",
+      "revision": 1,
+      "command_sha256": "9795915ba3db7ec73c85c92f93ea4e7e409727db03bd6f1dc4664aed9092aca5",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:cycle": {
+      "id": "herdr/test:cycle",
+      "revision": 1,
+      "command_sha256": "0a2b015eda9b27f0593e4074a38f70363bfd02414a9c229f788e04f9dcad52a4",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:lanes": {
+      "id": "herdr/test:lanes",
+      "revision": 1,
+      "command_sha256": "b9786a8c9868adec11e8fb08ca406a095cdc71ed17bd813b52bcf943482af93f",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:acceptance": {
+      "id": "herdr/test:acceptance",
+      "revision": 1,
+      "command_sha256": "40e9f1550e0c63fe12b8b0f991f762710b2ec5d4bf18753b71f2aec71a482f30",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:promotion:steps": {
+      "id": "herdr/test:promotion:steps",
+      "revision": 1,
+      "command_sha256": "efd879b0151e2acdab6c2d24f55e7b0227a19812b318b21448c3483f04642596",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:slot": {
+      "id": "herdr/test:slot",
+      "revision": 1,
+      "command_sha256": "edcad17d75c5715481f7b5e5ec6fff62c1f0037e55d59e5ae05cee168ea187d7",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": null,
+        "scope": "node --test default file concurrency; transitive CPU/thread demand unknown",
+        "source": "package.json scripts.test:slot"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:promotion:logic": {
+      "id": "herdr/test:promotion:logic",
+      "revision": 1,
+      "command_sha256": "c1ac8b9a51ea0cf966504150d76146a77bb347eea25db6cd44e0d52f917948bf",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:release:steps": {
+      "id": "herdr/test:release:steps",
+      "revision": 1,
+      "command_sha256": "505c3181403c893157b539767a39c07fc7bf8d2005d7e53b3163e278510d1491",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:promotion:core": {
+      "id": "herdr/test:promotion:core",
+      "revision": 1,
+      "command_sha256": "fb3ccc7feb233ba7c94426bd8d82498eaade7e7384c3fc926e25a45cc527c2bf",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:promotion:lanes": {
+      "id": "herdr/test:promotion:lanes",
+      "revision": 1,
+      "command_sha256": "07421c7a18ad8f4b9968c741119d442f86ec185c9bffc9687fc2e6a56c33415b",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    },
+    "test:release:only": {
+      "id": "herdr/test:release:only",
+      "revision": 1,
+      "command_sha256": "64e34f17f25db4d7cb38469e2b1db9cf85bd1d1e9b13c03bf1aec9a42e1575f2",
+      "admission_class": "EXCLUSIVE",
+      "M_bytes": null,
+      "C": null,
+      "worker_caps": {
+        "maximum": 4,
+        "scope": "test files only; transitive CPU/thread demand unknown",
+        "formula": "max(1, floor(4/loadFactor))",
+        "source": "test/helpers/run.mjs"
+      },
+      "named_claims": [],
+      "evidence": [
+        "test/helpers/run.mjs",
+        "lib/deadline.mjs",
+        "ARCH-649; ENG-353: envelopes unmeasured"
+      ]
+    }
   }
 }

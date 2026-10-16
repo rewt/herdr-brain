@@ -25,7 +25,7 @@ function callerRefusal(label, error, options) {
   return { pid: 0, output, stdout: output[1], stderr: output[2], status: REFUSED_EXIT, signal: null };
 }
 
-export function runGateSync(label, argv, { acquireSlot = false, retryTimeout = true, waitSeconds, waitReceipt, executionReceipt, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, ...options } = {}) {
+export function runGateSync(label, argv, { acquireSlot = false, retryTimeout = true, waitSeconds, waitReceipt, executionReceipt, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, resource, measurementNotes, ...options } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-test-slot-result-'));
   const receipt = executionReceipt ?? path.join(directory, 'result.json');
   try {
@@ -33,6 +33,8 @@ export function runGateSync(label, argv, { acquireSlot = false, retryTimeout = t
     try { caller = { pid: process.pid, ...processStartRecord(process.pid) }; }
     catch (error) { return callerRefusal(label, error, options); }
     const result = spawnSync(process.execPath, [CLI, 'run', label, ...(acquireSlot ? [] : ['--no-slot']), '--result-path', receipt, '--caller', JSON.stringify(caller),
+      ...(resource === undefined ? [] : ['--resource', JSON.stringify(resource)]),
+      ...(measurementNotes === undefined ? [] : ['--measurement-notes', measurementNotes]),
       ...(common === undefined ? [] : ['--project-common', common]),
       ...(tier === undefined ? [] : ['--tier', tier]),
       ...(historyKey === undefined ? [] : ['--history-key', JSON.stringify(historyKey)]),

@@ -19,7 +19,7 @@ const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding:
 export function validateValidation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
   for (const [key, command] of Object.entries(value)) {
-    if (['host_suites', 'tier_suites'].includes(key)) continue;
+    if (['host_suites', 'tier_suites', 'resources'].includes(key)) continue;
     if (['timeout_seconds', 'idle_timeout_seconds'].includes(key)) {
       const values = typeof command === 'object' && command !== null && !Array.isArray(command) ? Object.entries(command) : [[null, command]];
       for (const [tier, seconds] of values) {

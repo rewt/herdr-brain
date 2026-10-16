@@ -218,3 +218,100 @@ re-enqueue individually, without blaming each lane. Nothing replays automaticall
 and main stays unchanged.
 The timeout receipt distinguishes this from ordinary test failures and a slot
 wait refusal. Tests use scratch slot paths and never take the real host slot.
+
+## Resource profiles and measurements (exclusive migration step)
+
+Admission remains **EXCLUSIVE** for every command. There is no capacity ledger,
+shared admission, named-claim enforcement, new lock record, or new ticket format.
+The v1.1 protocol and token aliases above are unchanged. Resource metadata never
+chooses admission, retries, deadlines, cleanup, or a validation verdict.
+
+Profiles live with existing recipes: `package.json.resources` binds each named
+test script by its JSON-string SHA-256; `.lane.validation.json.resources` binds
+validation commands exactly. `gate.resource` in a committed `.promote.json` may
+carry a stanza for a project's train; otherwise the train derives its stanza
+from a matching validation recipe. Its binding also includes preparation and the
+existing gate fingerprint. A configured arbitrary command does not inherit a
+nearby profile. Extra arguments or changed script bytes fall back to the legacy
+serialized path with `resource.reason: unprofiled`. Metadata is execution evidence,
+not authorization. The synchronous adapter can pass an exact-command `resource`
+stanza (`--resource JSON` on the CLI) for an owned recipe.
+
+Each stanza contains `id`, `revision`, exact command or script digest,
+`admission_class: EXCLUSIVE`, `M_bytes: null`, `C: null`, worker caps,
+`named_claims: []`, and evidence references. Memory envelopes and transitive
+simultaneous CPU-worker demand are **unknown**, awaiting necessary runs. The
+helper's `max(1, floor(4/loadFactor))` is a cap on simultaneous **test files**,
+not on the threads, subprocesses or CPU workers those files create. `test:slot`
+uses Node's default test-file concurrency instead. The release and promotion
+composites include that step. No worker settings are changed by profiling.
+Bindings record actual argv, recipe, real cwd, tree (or `.release-commit` in an
+archive), Node executable/version, platform, worker declarations and an environment
+hash; environment values are not copied into the profile receipt.
+
+Only the foreground top-level profiled slot owner samples. Nested receipts say
+`inherited; sampled by parent` and do not start another sampler or release the
+parent's hold. Unslotted validation still runs unslotted; its receipt says
+`unslotted`. While holding the slot, the owner samples every 2,000 ms and at
+phase boundaries. The owned set consists of the birth-confirmed command, its
+parent-walk descendants, same-group members while group ownership is established,
+and previously observed descendants with the same birth. After leader exit,
+extending group ownership requires a retained member with a matching birth.
+RSS is queried with `/bin/ps -o pid=,rss= -p <owned-pids>` only for that set;
+births are rechecked after the read. Unrelated PIDs are never RSS query inputs.
+Exited/reused PIDs are omitted. Double-forked descendants lost before observation,
+short-lived spikes, shared pages, GPU/VM/kernel allocations and other host work
+remain outside exact accounting. This is sampled evidence, not physical memory
+accounting or an OS limit.
+
+Execution receipts include `resource`, `measurement`, and `measurement_attempts`
+(one phase per permitted retry inside the same hold). Metrics deliberately stay
+separate:
+
+- `sampled_sum_owned_rss_peak_bytes`: maximum sampled sum of owned RSS.
+- `per_process_peak_rss` and `individual_peak_rss_bytes`: per-birth process peaks
+  and the largest individual peak; summing these peaks is not a family peak.
+- `host_available_min_bytes`: Linux `MemAvailable`, or macOS free + inactive +
+  speculative pages; purgeable is not added again. Advisory raw-free fallbacks
+  are recorded as unavailable, never as this metric.
+- `host_available_drawdown_bytes`: first available reading minus the minimum,
+  floored at zero. It includes other host work and is not the job's allocation.
+- Phase start/end, nominal interval, sample counts, `load1_max`, sampled worker
+  settings, missing/changed processes, failure details, and cold/warm notes.
+  Worker settings reflect the formula at observation time; individual runners
+  choose their own factor at startup. No inference of a transitive CPU cap follows.
+
+`--measurement-notes TEXT` (adapter `measurementNotes`) supplies known cold/warm
+context; the default explicitly says it is unknown. Sampling and telemetry-write
+failures are retained as `partial-or-unavailable` evidence and do not change
+exclusive command results, timeout retries, or cleanup. No memory breach policy
+is enabled in this step. A measurement never supplies a review PASS.
+
+Explicit `--result-path` / adapter `executionReceipt` paths retain the existing
+receipt contract. The train retains `host-gate.execution.json` next to its existing
+host receipt. Direct profiled CLI holders, including `test:release`, automatically
+retain unique receipts in `GIT_COMMON_DIR/gate-watchdog/executions/` (or the existing
+scratch history override). Git archives without a common directory use
+`.test-slot-executions/` inside the snapshot. Each receipt has a sibling
+`*.samples.jsonl` telemetry file. `telemetry_file` is relative to the receipt so
+it remains locatable after a release's `.partial` directory is renamed; the
+absolute `telemetry_path` records its original execution location. Rows include
+phase identity, so repeated attempts can be distinguished. Adapter-default
+scratch receipts remain temporary; callers needing durable measurements pass
+`executionReceipt`. These files do not enter healthy-clock history or the record.
+
+Summarize retained execution receipts without launching work:
+
+```sh
+node test-slot/summarize.mjs /path/to/*.execution.json
+node test-slot/summarize.mjs --margin-bytes=268435456 /path/to/*.execution.json
+```
+
+The helper groups by profile/revision, counts runs once across retries, and
+reports binding counts and incomplete runs. It invents no margin. With an
+explicit chosen margin it labels the result “observed max plus chosen margin,
+from N runs; provisional, not a guarantee”. Inspect the individual bindings,
+phase notes, missing samples and isolation evidence before adopting any envelope.
+Gather the first release and train envelopes on their next necessary runs;
+this feature starts no measurement campaign. Shared enablement and coordinated
+reader migration belong to the next rollout step.

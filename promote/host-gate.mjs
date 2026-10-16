@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { writeFileAtomic } from '../lib/files.mjs';
+import { resolveResource } from '../test-slot/resources.mjs';
 import { runTestSlotSync } from '../test-slot/run.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -107,8 +108,16 @@ async function execute(profile, memoryOptions) {
   const plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   const gates = Math.max(1, 2 * plan.jobs.length - 1);
   const envelopeSeconds = gates * (limits.wall_seconds + 600) + 60;
-  const result = runTestSlotSync(`train ${canonical}`, [process.execPath, process.argv[1], '--execute', canonical, receipt, ...argv],
-    { cwd: canonical, env: profile.env, common, tier: 'promotion-host', timeoutSeconds: envelopeSeconds, idleTimeoutSeconds: 0, waitSeconds: profile.waitSeconds, waitReceipt: slotFile, retryTimeout: false, stdio: 'inherit' });
+  const command = [process.execPath, process.argv[1], '--execute', canonical, receipt, ...argv];
+  const declaredResource = profile.resource ?? resolveResource(['/bin/sh', '-c', declared.command], { cwd: canonical, env: profile.env }).profile;
+  const resource = declaredResource ? { ...declaredResource, id: `${declaredResource.id}/train`, command,
+    recipe: { command: declared.command, prepare: profile.prepare, gate_fingerprint: profile.fingerprint,
+      batch_inputs: { identity: plan.identity, jobs: plan.jobs.map(job => ({ id: job.id, topic: job.topic, expected_head: job.expectedHead })) } } } : undefined;
+  const executionReceipt = path.join(path.dirname(receipt), 'host-gate.execution.json');
+  update({ execution_receipt: executionReceipt });
+  const result = runTestSlotSync(`train ${canonical}`, command,
+    { cwd: canonical, env: profile.env, resource, executionReceipt, common, tier: 'promotion-host', timeoutSeconds: envelopeSeconds, idleTimeoutSeconds: 0, waitSeconds: profile.waitSeconds, waitReceipt: slotFile, retryTimeout: false, stdio: 'inherit' });
+  update({ resource: result.execution?.resource, measurement: result.execution?.measurement });
   const saved = read();
   if (result.gateTimeout) update({ phase: 'timeout', finished_at: new Date().toISOString(), exit_code: 124, gate_timeout: result.gateTimeout,
     reason: result.gateTimeout.kind === 'idle' ? 'gate no-output limit exceeded; lane isolated for correction' : 'gate wall-clock limit exceeded; lane isolated for correction' });

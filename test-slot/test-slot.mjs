@@ -29,6 +29,9 @@
 import { resolveGateLimits, projectCommon, recordHealthyGate, historyFile, gateHistoryKey, TIMEOUT_EXIT } from "./limits.mjs";
 import { stopGateGroup } from "./watchdog.mjs";
 import { spawn } from "node:child_process";
+import path from "node:path";
+import { resolveResource } from "./resources.mjs";
+import { measureFamily } from "./measurement.mjs";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -350,6 +353,8 @@ function parse(argv) {
     else if (arg === "--project-common") options.common = value();
     else if (arg === "--history-key") options.historyKey = JSON.parse(value());
     else if (arg === "--tier") options.tier = value();
+    else if (arg === "--resource") options.resource = JSON.parse(value());
+    else if (arg === "--measurement-notes") options.measurementNotes = value();
     else if (arg === "--result-path") options.resultPath = value();
     else if (arg === '--caller') {
       options.caller = JSON.parse(value());
@@ -401,17 +406,39 @@ export async function run({ positional, options, child }) {
   } finally {
     for (const signal of SIGNALS) process.off(signal, cancelWait);
   }
+  const resource = resolveResource(child, { resource: options.resource });
+  let automaticReceipt = false;
+  // CLI recipes (not just synchronous adapters) retain execution evidence.
+  // These sidecars are outside the wire protocol and healthy-clock history.
+  if (resource.profile && !slot.nested && !options.noSlot && !options.resultPath) {
+    try {
+      const directory = historyPath ? path.join(path.dirname(historyPath), 'executions') : path.resolve('.test-slot-executions');
+      fs.mkdirSync(directory, { recursive: true });
+      automaticReceipt = true;
+      options.resultPath = path.join(directory, `${Date.now()}-${randomBytes(8).toString('hex')}.execution.json`);
+    } catch { /* Evidence storage cannot change exclusive execution. */ }
+  }
+  const saveExecution = value => {
+    if (!options.resultPath) return;
+    try { writeFileAtomic(options.resultPath, JSON.stringify(value) + '\n', 0o600); }
+    catch (error) { if (!automaticReceipt) throw error; }
+  };
+  const measurementAttempts = [];
   let received = null;
   let execution = {};
   const started = proc => {
-    execution = { command_started: true, command_pid: proc.pid, started_at: new Date().toISOString() };
-    if (options.resultPath) writeFileAtomic(options.resultPath, JSON.stringify(execution) + '\n', 0o600);
+    execution = { resource, command_started: true, command_pid: proc.pid, started_at: new Date().toISOString() };
+    saveExecution(execution);
   };
   const retryTimeout = options.retryTimeout && process.env[RETRIED_ENV] !== "1";
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture);
-    if (options.resultPath) writeFileAtomic(options.resultPath, JSON.stringify({ ...execution, signal: received ?? result.signal,
-      history_key: historyKey, exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() }) + '\n', 0o600);
+    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture, resource.profile && !slot.nested && !options.noSlot ? {
+      telemetryPath: options.resultPath ? `${options.resultPath}.samples.jsonl` : undefined, notes: options.measurementNotes,
+    } : null);
+    if (result.measurement) measurementAttempts.push({ attempt: attempt + 1, ...result.measurement });
+    saveExecution({ ...execution, signal: received ?? result.signal,
+      measurement: result.measurement ?? { status: slot.nested ? 'inherited; sampled by parent' : options.noSlot ? 'unslotted' : 'unprofiled' }, measurement_attempts: measurementAttempts,
+      history_key: historyKey, exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() });
     if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
     if (!result.groupGone) return result.status || 1;
     if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
@@ -433,7 +460,7 @@ export function shouldRetryTimeout({ status, timeout, load, childRetried = false
   return status !== 0 && status !== REFUSED_EXIT && !gateTimeout && timeout && load > 1 && !childRetried;
 }
 
-async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits, onCapture) {
+async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits, onCapture, measurementOptions) {
   const capacity = Math.max(1, Math.min(4, os.availableParallelism()));
   let load = os.loadavg()[0] / capacity;
   let timeout = false;
@@ -443,7 +470,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
   const clock = () => Number(process.hrtime.bigint()) / 1e9;
   const commandStart = clock();
   let lastOutput = commandStart, longestSilence = 0;
-  let stopping, stopError, failWatchdog, rootIdentity;
+  let stopping, stopError, failWatchdog, rootIdentity, measurement;
   const ownsGroup = !slot.nested;
   let leftover = false;
   const failure = new Promise(resolve => { failWatchdog = error => resolve({ error }); });
@@ -506,6 +533,10 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
       } catch { /* The unreaped detached child still proves group ownership. */ }
       if (startRecord) slot.setGroup(proc.pid, startRecord.start, startRecord.birth);
     }
+    if (measurementOptions && proc.pid !== undefined) {
+      try { measurement = measureFamily({ pid: proc.pid, identity: rootIdentity, ...measurementOptions }); }
+      catch (error) { measurement = { finish: () => ({ status: 'unavailable', failures: [{ component: 'sampling-start', message: error.message }] }) }; }
+    }
     const completed = await Promise.race([completion, failure]);
     if (completed.error) throw completed.error;
     const { status, signal } = completed;
@@ -544,17 +575,18 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     longestSilence = Math.max(longestSilence, ended - lastOutput);
     if (status === TIMEOUT_EXIT) gateTimeout ??= descendantTimeout;
     // Signals are never retryable, including commands that swallow a signal.
-    return { status: gateTimeout ? TIMEOUT_EXIT : leftover ? LEFTOVER_EXIT : status, signal: gateTimeout ? null : signal, gateTimeout, duration_s, longest_silence_s: longestSilence, timeout: signal ? false : timeout, load, childRetried, groupGone };
+    return { status: gateTimeout ? TIMEOUT_EXIT : leftover ? LEFTOVER_EXIT : status, signal: gateTimeout ? null : signal, gateTimeout, duration_s, longest_silence_s: longestSilence, timeout: signal ? false : timeout, load, childRetried, groupGone, measurement: measurement?.finish() };
   } catch (error) {
     if (gateTimeout || leftover) {
       process.stderr.write(`${gateTimeout ? 'GATE_TIMEOUT_CLEANUP_FAILED' : 'GATE_LEFTOVER_GROUP_CLEANUP_FAILED'}: ${error.message}; slot retained.\n`);
       proc.stdout.destroy(); proc.stderr.destroy(); proc.unref();
       return { status: gateTimeout ? TIMEOUT_EXIT : LEFTOVER_EXIT, signal: null, gateTimeout, groupGone: false,
-        duration_s: clock() - commandStart, longest_silence_s: clock() - lastOutput, cleanup_error: error.message };
+        duration_s: clock() - commandStart, longest_silence_s: clock() - lastOutput, cleanup_error: error.message, measurement: measurement?.finish() };
     }
     forward("SIGTERM");
     throw error;
   } finally {
+    measurement?.stop?.();
     clearInterval(watcher);
     for (const signal of SIGNALS) process.off(signal, forward);
   }

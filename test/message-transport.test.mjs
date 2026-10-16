@@ -360,3 +360,10 @@ test('a compatibility drain rechecks enrollment after winning its drain lock', a
   assert.match(result.delivery_error, /offline fixture intake is fenced/);
   assert.equal(readInbox(f.inbox)[0].state, 'pending');
 });
+
+test('an unanswered question without a correlation field remains visible after consumption', async t => {
+  const f = await fixture(t), e = f.event(); delete e.correlationId;
+  await f.accept(e);
+  await f.receiver.consume(e.eventId, f.key, { consumer: 'supervisor-reader' });
+  assert.deepEqual(transportStatus(f.root).openThreads, [e.eventId]);
+});

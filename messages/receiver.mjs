@@ -83,7 +83,7 @@ export const drained = e => ['delivered', 'consumed'].includes(e.state);
 
 export function transportStatus(root) {
   const state = foldTransport(readTransport(root));
-  const openThreads = state.entries.filter(e => ['question', 'request'].includes(e.event.payload.kind) && e.event.correlationId &&
+  const openThreads = state.entries.filter(e => ['question', 'request'].includes(e.event.payload.kind) &&
     !state.entries.some(r => r.event.payload.kind === 'reply' && r.event.payload.reply_to === e.event.eventId &&
       r.event.correlationId === e.event.correlationId && r.event.payload.to.some(a => addressKey(a) === addressKey(e.event.payload.from))));
   return { schema: 'brain.transport-status/v1', owner: state.owner, watermark: state.watermark,

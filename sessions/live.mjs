@@ -114,7 +114,12 @@ function materializeContext(project, spec, env, handoff) {
     }
     if (c.required) fail(`context materializer unavailable for ${c.source}`);
   }
-  if (handoff) { verifyHandoff(handoff); chunks.push(`Verified handoff ${handoff.digest}\n${readPlainFile(handoff.file)}`); }
+  if (handoff) {
+    verifyHandoff(handoff);
+    const markdown = readPlainFile(handoff.file);
+    if (createHash('sha256').update(markdown).digest('hex') !== handoff.sha256) fail('handoff changed during materialization');
+    chunks.push(`Verified handoff ${handoff.digest}\n${markdown}`);
+  }
   const instructions = chunks.join('\n\n');
   if (Buffer.byteLength(instructions) > 256 * 1024) fail('materialized context exceeds 256 KiB; hold');
   return instructions;
@@ -164,7 +169,7 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     // Synchronous: no await separates these reads from the launch owner's input.
     permit(op);
     const o = physicalObservation(op);
-    if (!receipt && create) { layout(o, project, op.participants.map(p => p.binding), { absent: true }); return; }
+    if (!receipt && create) { layout(o, project, op.participants.map(p => p.binding), { absent: true }); permit(op); return; }
     const b = { ...op.target, ...receipt, server: op.target.server, checkout: op.target.checkout };
     workspace(o, project, b);
     const pane = o.panes.find(p => p.pane_id === b.pane), process = herdr(['pane', 'process-info', '--pane', b.pane]).process_info;
@@ -173,6 +178,7 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
         o.agents.some(a => a.pane_id === b.pane || op.mode === 'resume' && (a.agent_session?.value ?? a.agent_session_id) === op.request.nativeSessionId) ||
         !Number.isSafeInteger(process?.shell_pid) || process.shell_pid < 1 || process.foreground_processes?.length !== 1 ||
         process.foreground_processes[0].pid !== process.shell_pid) fail('physical launch target changed or is not a sole shell');
+    permit(op);
   }
   function saveContext(op, uid, generation, specDigest, route, binding, instructionsSha256) {
     if (!binding.nativeSessionId) return;
@@ -215,6 +221,7 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
       verifyHandoff(op.request.handoff); layout(o, project, bindings, { quiet: true });
       await permit(op); // authorization/STOP/hold rechecked at the physical edge.
       layout(physicalObservation(op), project, bindings, { quiet: true });
+      permit(op);
       herdr(['tab', 'close', op.target.tab]);
       layout(await observe(), project, bindings, { absent: true });
       return record({ operationId: op.id, kind: 'close', uid: op.uid, target: op.target, bindings });

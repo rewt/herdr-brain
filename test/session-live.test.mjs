@@ -32,7 +32,10 @@ else if (a[0] === 'pane' && a[1] === 'list') out({panes:s.panes.filter(p=>p.work
 else if (a[0] === 'agent' && a[1] === 'list') out({agents:s.agents});
 else if (a[0] === 'agent' && a[1] === 'get') out({agent:s.agents.find(g=>g.name===a[2])});
 else if (a[0] === 'pane' && a[1] === 'get') out({pane:s.panes.find(p=>p.pane_id===a[2])});
-else if (a[0] === 'pane' && a[1] === 'process-info') out({process_info:{shell_pid:12,foreground_processes:[{pid:s.busy?13:12}]}});
+else if (a[0] === 'pane' && a[1] === 'process-info') {
+  if(s.stopAfterMarkerProcess && s.calls.some(c=>c[0]==='pane'&&c[1]==='run')) fs.writeFileSync(s.stopAfterMarkerProcess,'STOP');
+  out({process_info:{shell_pid:12,foreground_processes:[{pid:s.busy?13:12}]}});
+}
 else if (a[0] === 'pane' && a[1] === 'read') { save(); console.log(s.screen || 'fixture % '); }
 else if (a[0] === 'pane' && a[1] === 'run') {
   if(a[3].startsWith('printf ')) { const parts = [...a[3].matchAll(/'([^']*)'/g)]; s.screen = parts.slice(-2).map(m=>m[1]).join('')+'\\nfixture % '; }
@@ -240,11 +243,11 @@ test('CLI authorize only records, and apply requires explicit workspace, receipt
 });
 
 test('STOP or terminal replacement during shell readiness prevents agent start', async t => {
-  for (const mode of ['stopOnMarker', 'replaceOnMarker']) {
-    const f=fixture(t);f.change(s=>s[mode]=mode==='stopOnMarker'?path.join(f.org,'STOP'):true);
+  for (const mode of ['stopOnMarker', 'stopAfterMarkerProcess', 'replaceOnMarker']) {
+    const f=fixture(t);f.change(s=>s[mode]=mode.startsWith('stop')?path.join(f.org,'STOP'):true);
     const result=await f.apply();assert.equal(starts(f).length,0,JSON.stringify(result));
-    assert.equal(result.decisions[0].decision,mode==='stopOnMarker'?'Observe':'Hold');
-    if(mode==='stopOnMarker') fs.unlinkSync(path.join(f.org,'STOP'));
+    assert.equal(result.decisions[0].decision,mode.startsWith('stop')?'Observe':'Hold');
+    if(mode.startsWith('stop')) fs.unlinkSync(path.join(f.org,'STOP'));
     await f.apply();assert.equal(starts(f).length,0,'uncertain intent is never replayed');
   }
 });

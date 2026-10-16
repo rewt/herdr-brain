@@ -1,4 +1,4 @@
-// Stage 4 policy and fake-only execution support. No Herdr mutation adapter.
+// Stage 4 policy and execution guards. Native mutations stay in live.mjs.
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding } from './observe.mjs';
 import { digest, specDigest, equalBinding, validBinding, strings, sameStrings, text, verifyHandoff,
@@ -206,6 +206,14 @@ function recoveryVeto(entry, input, p, request) {
   const policy = entry.manifest.spec.lifecycle;
   if (request.mode === 'resume' && p.kind === 'Session' && policy.recovery?.knownNativeSession !== 'resume' &&
       policy.restartPolicy !== 'on-confirmed-exit-resume-known-session') return 'adopted manifest does not authorize native resume';
+  return null;
+}
+
+// Reuse the prepared-boundary policy at the physical edge after shell readiness
+// or native identity reads. The adapter separately proves current topology.
+export function lifecycleEdgeVeto(entry, input, op) {
+  if (op.contextLoss) return boundaryVeto(entry, input, op.participants, op.request, op.mode === 'reconstruct', true);
+  if (op.kind === 'recovery') return recoveryVeto(entry, input, op.participants[0], op.request);
   return null;
 }
 

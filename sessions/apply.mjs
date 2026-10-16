@@ -10,6 +10,7 @@ import { experimentEvidence } from './live-observe.mjs';
 import { enrolledWorkspace } from './authorization.mjs';
 import { readSessionFacts } from './observe.mjs';
 import { digest } from './lifecycle-evidence.mjs';
+import { lifecycleEdgeVeto } from './lifecycle.mjs';
 
 export async function apply(options = {}) {
   const { workspace, authorization, planFile, env = process.env, now = Date.now } = options;
@@ -52,6 +53,15 @@ export async function apply(options = {}) {
     if (facts.stopped || facts.closeHold || facts.errors.length) throw Error('STOP, close hold or unreadable current facts; action withheld');
     const current = inspect(options);
     if (!current.valid || digest(current.entries) !== digest(inspection.entries)) throw Error('desired manifests drifted before action');
+    if (op.kind !== 'start-standard-slot') {
+      const experiment = experimentEvidence(options.evidence, project, receipt.workspace);
+      if (!experiment) throw Error('current lifecycle experiment evidence required');
+      const entry = current.entries.find(e => e.manifest.metadata.uid === op.uid);
+      const veto = lifecycleEdgeVeto(entry, { inspection: current,
+        facts: { ...facts, quiescence: experiment.quiescence },
+        observation: { agents: [], viewers: [], losses: experiment.losses } }, op);
+      if (veto) throw Error(veto);
+    }
   };
   try {
     const bound = enrolledWorkspace(project, workspace), experiment = experimentEvidence(options.evidence, project, bound);

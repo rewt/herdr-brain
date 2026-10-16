@@ -4,6 +4,23 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { gitProject } from '../lib/project.mjs';
+import { identityRootAt } from '../messages/journal.mjs';
+import { digest } from '../messages/schema.mjs';
+
+const fixtureIdentity = 'fixture';
+function identityPartitionGuard() {
+  const commonDir = gitProject(path.resolve(import.meta.dirname, '..')).identity;
+  const identityRoot = identityRootAt(commonDir);
+  // Unmarked checkouts have no identity-local default; the fixture HOME
+  // fallback assertions below remain their isolation guard.
+  if (!identityRoot) return () => {};
+  const partition = path.join(identityRoot, '.herdr-brain/logs', fixtureIdentity, digest(commonDir));
+  const journal = path.join(partition, 'shadow.jsonl');
+  const snapshot = () => ({ exists: fs.existsSync(partition), bytes: fs.existsSync(journal) ? fs.readFileSync(journal) : null });
+  const before = snapshot();
+  return () => assert.deepEqual(snapshot(), before, 'child must leave the fixture identity partition unchanged');
+}
 
 function shadowFixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'offline-shadow-')));
@@ -30,7 +47,7 @@ for (const mode of ['fresh', 'inherited', 'explicit']) test(`shadow isolation su
     assert.equal(fs.statSync(process.env.HERDR_TEST_OFFLINE_ROOT).mode & 0o077, 0);
     const args = ['-e', 'process.stdout.write(process.env.BRAIN_SHADOW_ROOT || "missing")'];
     // Minimal envs and ordinary inherited envs must both retain isolation.
-    for (const env of [undefined, {HOME: process.env.HOME, PATH: process.env.PATH}]) {
+    for (const env of [undefined, {HOME: process.env.HOME, PATH: process.env.PATH, BRAIN_IDENTITY: process.env.BRAIN_IDENTITY}]) {
       const sync = spawnSync(process.execPath, args, {env, encoding: 'utf8'});
       assert.equal(sync.status, 0, sync.stderr); assert.equal(sync.stdout, root);
       const child = spawn(process.execPath, args, {env, stdio: ['ignore', 'pipe', 'pipe']});
@@ -42,12 +59,14 @@ for (const mode of ['fresh', 'inherited', 'explicit']) test(`shadow isolation su
     assert.equal(override.status, 0, override.stderr); assert.equal(override.stdout, ${JSON.stringify(path.join(f.root, 'child-override'))});
     cleanup();
   `;
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: f.home }, encoding: 'utf8' });
+  const unchanged = identityPartitionGuard();
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: f.home, BRAIN_IDENTITY: fixtureIdentity }, encoding: 'utf8' });
+  unchanged();
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(fs.existsSync(path.join(f.home, '.local/state/herdr-brain/logs')), false);
 });
 
-test('watch, request and promotion suites mirror fixtures without writing the default home root', t => {
+test('watch, request and promotion suites mirror fixtures without writing default state roots', t => {
   const f = shadowFixture(t);
   const files = ['watch/test/watch.test.mjs', 'supervisor/test/request.test.mjs', 'promote/test/promote.test.mjs'];
   const pattern = '^(a valid report is checked and delivered without Herdr being present|a delivered identity request mirrors its marked non-Git desk on the supervisor path|idle supervisor receives a default queued promotion notice without a false alert)$';
@@ -59,9 +78,11 @@ test('watch, request and promotion suites mirror fixtures without writing the de
     process.stdout.write(result.stdout); process.stderr.write(result.stderr);
     process.exitCode = result.status ?? 1;
   `;
+  const unchanged = identityPartitionGuard();
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
-    cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, HOME: f.home, BRAIN_IDENTITY: 'fixture' }, encoding: 'utf8',
+    cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, HOME: f.home, BRAIN_IDENTITY: fixtureIdentity }, encoding: 'utf8',
   });
+  unchanged();
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /# pass 3\b/);
   assert.equal(fs.existsSync(path.join(f.home, '.local/state/herdr-brain/logs')), false, 'suite notices must never reach the default home state root');

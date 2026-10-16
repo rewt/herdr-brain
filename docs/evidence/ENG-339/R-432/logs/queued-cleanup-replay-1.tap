@@ -1,0 +1,177 @@
+TAP version 13
+# Subtest: fixture teardown waits for post-release catch-up before removing its root
+ok 1 - fixture teardown waits for post-release catch-up before removing its root # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.552459
+  ...
+# Subtest: fixture cleanup ignores an ambient record inbox owner
+ok 2 - fixture cleanup ignores an ambient record inbox owner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.04325
+  ...
+# Subtest: busy supervisor does not hold completed queue accounting by default
+ok 3 - busy supervisor does not hold completed queue accounting by default # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033709
+  ...
+# Subtest: idle supervisor receives a default queued promotion notice without a false alert
+ok 4 - idle supervisor receives a default queued promotion notice without a false alert # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.069125
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 5 - queued promotion waits before validation under low-memory pressure and proceeds when cleared # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033667
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 6 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032167
+  ...
+# Subtest: retirement hold: batch promotion keeps its integrated lane and skips git-only cleanup
+ok 7 - retirement hold: batch promotion keeps its integrated lane and skips git-only cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027334
+  ...
+# Subtest: retirement hold: single promotion keeps its integrated lane and skips git-only cleanup
+ok 8 - retirement hold: single promotion keeps its integrated lane and skips git-only cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029417
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 9 - promotion notice queues during typing and delivers after clearing without repeating promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.114917
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 10 - queue refuses a lane changed while pending behind another job before validation or integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.093125
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 11 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.072958
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 12 - expected head refuses an automatic rebase and post-preparation tip changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031167
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 13 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028959
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 14 - dirty refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.061125
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 15 - red refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02725
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 16 - conflict refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0755
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 17 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029625
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 18 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.112792
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 19 - project override selects supervisor and duplicate pending lanes do not repeat # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.07
+  ...
+# Subtest: a drain owner this caller may not signal still counts as running
+ok 20 - a drain owner this caller may not signal still counts as running # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027042
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 21 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.050417
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 22 - enqueue during the empty-worker handoff always starts a new drain # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024209
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 23 - interrupted attempt emits a notice without retrying a gate or deleting its lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020333
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 24 - stale worker lock refuses startup while keeping the queued request # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018916
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 25 - green gate that modifies its worktree is refused before fast-forward # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018291
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 26 - recorded completed outcome resumes delivery without repeating promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018875
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 27 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4571.959666
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 28 - recovery: a failed velocity note still closes the finished tab and promoted lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078917
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 29 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029208
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 30 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.045583
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 31 - conditional close rechecks the promoted tip and base before any removal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022334
+  ...
+# Subtest: only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS
+ok 32 - only the committed gate profile reaches the host adapter, and it cannot set NODE_OPTIONS # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.10975
+  ...
+# Subtest: an unborn canonical branch has no gate profile, whatever its working tree holds
+ok 33 - an unborn canonical branch has no gate profile, whatever its working tree holds # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.073666
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..33
+# tests 33
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 32
+# todo 0
+# duration_ms 4681.132292
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

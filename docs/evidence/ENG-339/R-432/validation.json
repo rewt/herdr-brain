@@ -1,0 +1,149 @@
+{
+  "schema": "eng-339-teardown-correction-validation/v1",
+  "run": "R-432",
+  "baseCommit": "b3ec5e3831a12ca9934c27fe1ce3dcfccb5032f4",
+  "gateEvidence": "/Users/rewt/development/rewt/.org/evidence/ENG-339-GATE-f2fd7d1b-RED-20261015.txt",
+  "result": "Fixture-only drain-worker exit wait fixed; prescribed full file and three isolated cleanup repetitions green.",
+  "fix": "Capture worker PIDs from launcher JSON even after worker.lock has disappeared, retain available lock-owner captures, and pin each exact fixture command plus birth identity. After custom cleanup and inbox stops, wait up to a load-scaled ten seconds for every pinned worker to exit, become a zombie, or be replaced; existing identity-checked killProcess remains the backstop. Remove the root only after the wait succeeds.",
+  "regression": "A real empty-queue drain releases its lock, then blocks inside a fake Herdr agent-list catch-up call on an explicit release file. The test invokes the idempotent fixture cleanup, verifies it remains pending and preserves the root, releases the catch-up call, and verifies natural completion, root removal, and no later root recreation.",
+  "sourceSha256": {
+    "promote/test/promote.test.mjs": "635ff66360015f982c974fbb554fa027242e69f6e8fb85ac1521cfeb65fa6be1"
+  },
+  "runs": [
+    {
+      "phase": "negative-control-before-worker-exit-wait",
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 --test-name-pattern='^fixture teardown waits for post-release catch-up before removing its root$' promote/test/promote.test.mjs",
+      "log": "logs/teardown-negative-control.tap",
+      "exitCode": 1,
+      "note": "The deterministic regression fails because teardown returns while post-release catch-up is blocked; the runner reports the surviving fake Herdr child and cleans its owned group. PID capture and the regression were already present; the worker-exit wait was absent.",
+      "rawCaptureSha256": "dc22dc91af73d7975104ee1b142a5e07f3caa31b272552a97c189d8d8c74ebb9",
+      "formatting": "Trailing whitespace removed from committed TAP evidence; test content is unchanged.",
+      "sha256": "4f146af25c9ae214439d0dff29a85f7447177a4a00ccdf7c84734764daf2049b",
+      "totals": {
+        "tests": 33,
+        "pass": 0,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 32
+      }
+    },
+    {
+      "phase": "development-regression",
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 --test-name-pattern='^fixture teardown waits for post-release catch-up before removing its root$' promote/test/promote.test.mjs",
+      "log": "logs/teardown-regression.tap",
+      "exitCode": 1,
+      "note": "The selected regression passes, but the sandboxed runner final audit exits nonzero after its native process source returns Operation not permitted. This is preserved as diagnostic evidence and superseded by the successful final run.",
+      "sha256": "e038f3fea7fecfd8d35b5c7a63ca4898a371bd564cd4fb7dc1d5aae1e4a07bf6",
+      "totals": {
+        "tests": 33,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 32
+      }
+    },
+    {
+      "phase": "final-full-file",
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 promote/test/promote.test.mjs",
+      "log": "logs/promote-full.tap",
+      "exitCode": 0,
+      "note": "The only full-file execution. Native process-audit access was approved through the tool; no permission configuration changed.",
+      "sha256": "cc9d58c6de27482739995a6d3a2218f4429ec41b99f7525c0fbf546e5caef005",
+      "totals": {
+        "tests": 33,
+        "pass": 33,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "phase": "queued-cleanup-replay-1",
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 --test-name-pattern='queued cleanup closes the recorded finished tab' promote/test/promote.test.mjs",
+      "log": "logs/queued-cleanup-replay-1.tap",
+      "exitCode": 0,
+      "note": "One selected case passes; 32 unrelated cases are excluded by the name filter. Native process-audit access was approved through the tool.",
+      "sha256": "dd931672e867f1e38b2d090d2e3143a7f86210bbc964cb61ec7a5f5322d7ce27",
+      "totals": {
+        "tests": 33,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 32
+      }
+    },
+    {
+      "phase": "queued-cleanup-replay-2",
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 --test-name-pattern='queued cleanup closes the recorded finished tab' promote/test/promote.test.mjs",
+      "log": "logs/queued-cleanup-replay-2.tap",
+      "exitCode": 0,
+      "note": "One selected case passes; 32 unrelated cases are excluded by the name filter. Native process-audit access was approved through the tool.",
+      "sha256": "cf795391115c70cffe41fe2f2f2e7bd441115c8ada4beea481baed718da38b32",
+      "totals": {
+        "tests": 33,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 32
+      }
+    },
+    {
+      "phase": "queued-cleanup-replay-3",
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 --test-name-pattern='queued cleanup closes the recorded finished tab' promote/test/promote.test.mjs",
+      "log": "logs/queued-cleanup-replay-3.tap",
+      "exitCode": 0,
+      "note": "One selected case passes; 32 unrelated cases are excluded by the name filter. Native process-audit access was approved through the tool.",
+      "sha256": "6eb8ec8e8468ef2370a4da0926795d885928898d362292de3fe04c357b346040",
+      "totals": {
+        "tests": 33,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 32
+      }
+    }
+  ],
+  "finalPassingExecutions": 36,
+  "otherFixtureAudit": [
+    {
+      "path": "promote/test/train.test.mjs",
+      "lines": [
+        60,
+        180,
+        185
+      ],
+      "disposition": "Follow-up: shared teardown waits only for inbox idle; detached CLI/refusal paths can use lock absence without retaining an acknowledged worker identity. Most direct drains are synchronous, so the launcher wrapper requires a separate targeted change."
+    },
+    {
+      "path": "promote/test/completion.test.mjs",
+      "lines": [
+        69,
+        410,
+        451,
+        455
+      ],
+      "disposition": "Follow-up: supervisor completion retry returns a worker PID, but the case waits only for worker.lock and shared teardown waits only for inbox idle. The supervisor wrapper does not retain worker identities."
+    },
+    {
+      "path": "promote/test/helpers/conformance.mjs",
+      "lines": [
+        19,
+        20,
+        25
+      ],
+      "disposition": "Follow-up audit: explicit lock-only teardown guard has no drain-worker identity tracking; its lane CLI callers are synchronous. Inspect sender reachability before changing it. Consumers are conformance.test.mjs, metrics-profile.test.mjs and wait-timing.test.mjs."
+    },
+    {
+      "path": "promote/test/workflow-train.test.mjs",
+      "lines": [
+        18,
+        37,
+        82
+      ],
+      "disposition": "No matching detached drain gap found: fixture executions, including --drain, use synchronous child completion before teardown."
+    }
+  ],
+  "scopeDecision": "Only promote/test/promote.test.mjs was changed. Other launcher wrappers have no existing worker receipt registry, so the same correction was not identical and tiny; they are listed for follow-up as requested.",
+  "staticCheck": "git diff --check passed; product promote/promote.mjs is byte-identical to the base commit.",
+  "boundaries": "No baseline, broad suite, independent review, live Herdr work, housekeeping, promotion, push or release. Product drain ordering and empty-queue handoff are unchanged."
+}

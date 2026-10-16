@@ -85,16 +85,26 @@ function fixture(t) {
     return wt;
   };
   const processes = new Map();
+  const rememberWorker = (pid) => {
+    const current = lookupProcess(pid);
+    assert.ok(current.ok, current.error);
+    const row = current.value;
+    // A short-lived acknowledged worker may already be gone or replaced.
+    if (!row || /^Z/.test(row.state) || row.command !== `${process.execPath} ${CLI} --drain --repo ${repo}`) return;
+    processes.set(`${pid}:${row.identity}`, { pid, identity: row.identity, command: row.command, group: false });
+  };
   const cli = (args, cwd = repo) => {
     const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: loadTimeout(10000) });
+    // The lock can disappear before the launcher returns its acknowledgement.
+    for (const line of (result.stdout ?? '').trim().split('\n')) {
+      let reply; try { reply = JSON.parse(line); } catch { continue; }
+      if (reply?.worker?.pid) rememberWorker(reply.worker.pid);
+    }
     const owner = path.join(queue.directory, 'worker.lock/owner.json');
-    if (result.status === 0 && fs.existsSync(owner)) {
-      const pid = JSON.parse(fs.readFileSync(owner, 'utf8')).pid;
-      if (!processes.has(pid)) {
-        const entry = registerProcess(pid);
-        assert.ok(entry.command.includes(CLI) && entry.command.includes(repo), 'acknowledged worker command belongs to this fixture');
-        processes.set(pid, entry);
-      }
+    try {
+      if (result.status === 0) rememberWorker(JSON.parse(fs.readFileSync(owner, 'utf8')).pid);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
     }
     return result;
   };
@@ -106,7 +116,8 @@ function fixture(t) {
   const messages = () => fs.existsSync(notices) ? fs.readFileSync(notices, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
   let cleanupProcesses = async () => {};
   let foreignInboxes = [];
-  t.after(async () => {
+  let cleanupPromise;
+  const cleanup = () => cleanupPromise ??= (async () => {
     try {
       await cleanupProcesses();
       await until(() => !fs.existsSync(path.join(queue.directory, 'worker.lock')));
@@ -126,14 +137,64 @@ function fixture(t) {
       for (const file of ownedInboxes) await stopOwnedInbox(file, {
         script: fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url)),
       });
+      // Empty-queue handoff releases worker.lock before retirement catch-up.
+      // Wait for each pinned birth identity, not the lock or a reusable PID.
+      await waitForChange([queue.directory], () => [...processes.values()].every(entry => {
+        const current = lookupProcess(entry.pid);
+        assert.ok(current.ok, current.error);
+        const row = current.value;
+        return !row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command;
+      }), { timeoutMs: 10000 });
     } finally {
       for (const entry of processes.values()) killProcess(entry);
     }
     fs.rmSync(root, { recursive: true, force: true });
     assert.equal(foreignInboxes.length, 0, 'fixture inbox stays inside its owned root');
-  });
-  return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, ownedProcess: (pid) => processes.get(pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
+  })();
+  t.after(cleanup);
+  return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, cleanup,
+    ownedProcess: (pid) => [...processes.values()].findLast(entry => entry.pid === pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
+
+test('fixture teardown waits for post-release catch-up before removing its root', async t => {
+  const f = fixture(t), org = path.join(f.repo, '.org');
+  const record = spawnSync(process.execPath, [fileURLToPath(new URL('../../bin/org.mjs', import.meta.url)), 'init', org],
+    { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(record.status, 0, record.stderr);
+  const control = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'pt-teardown-'));
+  t.after(() => fs.rmSync(control, { recursive: true, force: true }));
+  const reached = path.join(control, 'reached'), release = path.join(control, 'release'), done = path.join(control, 'done');
+  fs.mkdirSync(path.join(org, 'retirement'), { recursive: true });
+  fs.writeFileSync(path.join(org, 'retirement/request.json'), JSON.stringify({ schema: 'retirement-request/v1', revision: 1 }));
+  const calls = path.join(f.root, 'catch-up-calls');
+  fs.writeFileSync(f.herdr, `#!${process.execPath}
+import fs from 'node:fs'; const args=process.argv.slice(2);
+if(args[0]==='agent'&&args[1]==='list') {
+  fs.writeFileSync(${JSON.stringify(reached)},String(process.pid));
+  const deadline=Date.now()+${loadTimeout(10000)};
+  while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+  fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');
+  fs.writeFileSync(${JSON.stringify(done)},'finished');
+}
+console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
+  const launched = f.launch(['--resume']);
+  await waitForFile(reached, text => /^[1-9]\d*$/.test(text));
+  assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false, 'catch-up follows the empty-queue lock release');
+  assert.ok(f.ownedProcess(launched.worker.pid), 'the returned PID is owned even after its lock disappeared');
+  let removed = false;
+  const removing = f.cleanup().then(() => { removed = true; });
+  try {
+    await delay(50);
+    assert.equal(removed, false, 'teardown must wait for the live worker');
+    assert.equal(fs.existsSync(f.root), true);
+    assert.equal(fs.existsSync(done), false, 'catch-up is still blocked');
+  } finally { fs.writeFileSync(release, 'release'); }
+  await removing;
+  assert.equal(fs.readFileSync(done, 'utf8'), 'finished', 'the worker finished catch-up before teardown, without being killed');
+  assert.equal(fs.existsSync(f.root), false);
+  await delay(50);
+  assert.equal(fs.existsSync(f.root), false, 'no late fake-Herdr write recreates the fixture');
+});
 
 test('fixture cleanup ignores an ambient record inbox owner', (t) => {
   const f = fixture(t);

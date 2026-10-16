@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { scriptSource, sourceEnvironment } from '../board/source.mjs';
 import { validateDocument } from '../board/rows.mjs';
 import { boardFixture } from './helpers/board-fixture.mjs';
+import { lookupProcess } from './helpers/processes.mjs';
 
 test('board script runs from its project with a minimal environment and validates its rows', async t => {
   const f = boardFixture(t);
@@ -44,7 +45,15 @@ test('board script reads coalesce, enforce five seconds, and never overlap even 
   const timed = scriptSource({ name: 'bch', project: f.root, script: hanging, timeout: 150, now: () => clock });
   const first = timed.read(); clock += 6000; assert.deepEqual(await timed.read(), await first);
   assert.equal((await timed.read()).rows[0].status.code, 'source-timeout');
-  const pipes = f.write('pipes.mjs', `import {spawn} from 'node:child_process';spawn(process.execPath,['-e','setTimeout(()=>{},1000)'],{stdio:['ignore',process.stdout,process.stderr]}).unref();`);
-  const heldPipe = scriptSource({ name: 'bch', project: f.root, script: pipes, timeout: 150 });
+  const pipes = f.write('pipes.mjs', `import fs from 'node:fs';import {spawn} from 'node:child_process';const child=spawn(process.execPath,['-e','setTimeout(()=>{},1500)'],{stdio:['ignore',process.stdout,process.stderr]});fs.writeFileSync(${JSON.stringify(f.root + '/pipe-child')},String(child.pid));child.unref();`);
+  const heldPipe = scriptSource({ name: 'bch', project: f.root, script: pipes, timeout: 500 });
   assert.equal((await heldPipe.read()).rows[0].status.code, 'source-timeout');
+  const pid = Number(fs.readFileSync(f.root + '/pipe-child', 'utf8'));
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const result = lookupProcess(pid); assert.ok(result.ok, result.error);
+    if (result.value === null || result.value.state.startsWith('Z')) break;
+    assert.ok(Date.now() < deadline, 'bounded inherited-pipe fixture exited');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
 });

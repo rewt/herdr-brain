@@ -8,7 +8,10 @@
 - `brain/` is the foreground, model-free record signal digest for lesson distillation; it has no
   dependencies, keeps its own state and never writes `events.jsonl`. `supervisor/` supplies the read-only
   cold start and generic protocol and foreground notice/queue glue. Workers never invoke its cycle mutations.
-- Native harness settings own sandboxing and permissions; the product installs no wrappers or SessionStart hooks.
+- Native harness settings own sandboxing and permissions; the product installs no wrappers. Hooks are allowed
+  for the hook-pull transport only for sessions Herdr Brain launches: Claude through a per-session `--settings`
+  file at launch; Codex through each project's committed `.codex/hooks.json`, trusted once by that project's
+  owner. Never machine-wide, never in another identity's config, and never in human-typed chat panes.
 - Follow [decision routing policy v2](supervisor/DECISION-ROUTING.md) for authority and review defaults;
   project-specific constraints and standing directions belong in its appendix.
 - Tests run once, before code merges into main: the promotion batch runs the merge checks, like CI on a

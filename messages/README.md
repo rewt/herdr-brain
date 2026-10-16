@@ -336,3 +336,115 @@ stolen. Inspect ownership and archive evidence before explicitly repairing a tai
 or removing a stale fixture lock. A crash after intent without a result holds
 uncertain even if no input happened. No compaction, expiration, automatic repair,
 retention deletion, alternate-transport retry or live importer is installed.
+
+## Hook-pull transport (opt-in, no live enablement)
+
+`hook-pull.mjs` is the foreground Stop/UserPromptSubmit adapter. The receiver
+still enforces its stage-8 **fixture-only mutation boundary**. This change does
+not enroll live recipients, fence a live inbox, start a service, or enable hooks
+in this project. A future authorized adoption must supply a live receiver and
+trusted recipient enrollment; flipping the launch option alone is not delivery
+activation. The legacy adapter and its notice text are unchanged.
+
+A project's owner can opt Claude launches in with its canonical checkout's
+`.hook-pull.json` containing `{"enabled":true,"rendering":"plain"}`. Absence or
+`enabled:false` leaves native argv unchanged, including installed lane/settle
+consumers. Parent/identity/machine config cannot enable it. Dispatch workers and
+lane reviewers share the lane launch owner; A2 standard supervisor launches use
+the same helper through `supervisor/chats.mjs`. Human chat slots remain pull-only.
+The configuration is read from the canonical checkout even for linked lanes.
+No config is added to this repository by this change.
+
+Each enabled Claude launch generates private `session.json` and
+`claude-settings.json` files in
+`<canonical Git common directory>/sessions/hook-pull/<launch UUID>/` and appends
+`--settings <absolute settings path>`. Both hook commands reference the absolute
+product script and absolute session descriptor with shell quoting. Existing
+explicit `--settings` is refused rather than silently replaced. The descriptor
+contains the exact recipient address, consumer launch token, checkout, rendering,
+and default receiver location `<common>/sessions/receiver`. The receiver's
+trusted enrollment must match this address and consumer; an envelope cannot
+supply its own enrollment. Runtime files are retained for handoff/inspection,
+with no automatic cleanup. Tests use private disposable roots only.
+
+On Stop, `stop_hook_active` prevents continuation loops. Otherwise one oldest
+pending addressed message is claimed under the receiver's existing writer and
+delivery locks. A concurrent Stop/nudge cannot claim the same acceptance twice.
+The hook verifies retained body/memo bytes and constructs all JSON before the
+single `delivered` receipt append, then returns `{decision:"block",reason:...}`.
+The receipt includes event ID, consumer, native session ID, hook event and the
+`hook-pull/v1` transport. Acceptance deduplication and producer tuples are
+unchanged. Controls remain rule-consumed; fences, refused/uncertain holds and
+transport-pinned inspected retries are respected.
+
+UserPromptSubmit acts only when the prompt is **exactly** `inbox`. It returns a
+single claimed message as `hookSpecificOutput.additionalContext`, or an explicit
+`inbox empty` context requesting `INBOX-EMPTY`. Duplicate nudges are harmless.
+Other prompts, hook events and mismatched checkouts produce no output. Errors
+(missing enrollment, lock contention, invalid input, corrupt retained bytes or
+rendering failure) fail open without output or a claim. As with the existing
+journal, a torn write or an fsync error needs inspection; a process/output crash
+**after** committing a claim leaves a durable handoff, never an automatic replay.
+
+The default plain rendering includes stable IDs, sender, references, body/memo
+text and `decision_ref`. `rendering:"teammate"` wraps escaped text in a Claude-only
+`<teammate-message teammate_id="..." summary="...">` rendering. Neither rendering
+carries authority; recipients check decisions through the record. No code writes
+Claude's internal teammate mailbox. Binary bodies which cannot decode as UTF-8
+fail open for inspection.
+
+`hook-nudge.mjs:nudgeHookSession` sends only the fixed word `inbox` through
+`offerQuiet`'s exact name/pane/terminal/native-session/workspace/checkout checks.
+Every composer read requests `--lines 14 --format ansi`, including the final
+read immediately preceding input. Busy, drafted, changed and unknown panes stay
+pending. Chat/operator and standard supervisor conversation panes are never
+nudged: use pull-only status (or the existing notification path). The caller
+must supply its trusted session descriptor and freshly resolved physical binding.
+The nudge is only a wake hint: a Herdr acknowledgement or lost nudge reply is
+**not** a message delivery receipt and never changes the receiver's pending work.
+There remains a screen-read-to-nudge race, but payload text is never typed.
+
+At every session handoff boundary, use
+`node messages/hook-pull.mjs handoff --session /absolute/session.json` and include
+its claimed-but-unprocessed IDs. `persistHandoff({...,hookSession})` incorporates
+both that Markdown and the IDs in the hashed `unresolvedMessageIds` metadata.
+Use the existing enrolled `Receiver.consume` after processing exposure to clear
+those IDs. Claims never assert understanding or authorized effects. A replacement
+must retain the IDs and inspect them; it must not reset/re-enqueue claims as new
+messages. The hook receipt/native session remains available after a crash.
+
+### Codex trust finding (0.163.0, offline)
+
+Read-only evidence from the installed 0.163.0 binary includes `HookStateToml`,
+`trusted_hash`, `sourcePath`, `currentHash`, `trustStatus`, "normalized hook
+identity should serialize to TOML", and the new/changed-hooks review prompt.
+The actual owner-trusted scratch project's entries at `~/.codex/config.toml`
+lines 250–254 are keyed as:
+
+```
+[hooks.state."/absolute/scratch/.codex/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:..."
+[hooks.state."/absolute/scratch/.codex/hooks.json:stop:0:0"]
+trusted_hash = "sha256:..."
+```
+
+Thus persisted trust is scoped by absolute source path, event and positional
+indexes, with a hash as a second condition. **Inference:** copying an identical
+committed `.codex/hooks.json` into a fresh lane changes the source key and needs
+fresh trust. Binary strings do not establish the exact hash preimage or a
+supported stable-project alias across worktrees; no trust inheritance is assumed.
+Trusting the canonical project once cannot be promised to cover future lanes.
+
+Codex hook execution is implemented and offline-tested, with a non-installed
+`messages/codex-hooks.template.json`, but **Codex launch integration is disabled**.
+Codex argv and today's quiet-gated content delivery remain unchanged even when
+the Claude project opt-in is enabled. No `.codex/hooks.json` is installed or
+committed at the project root, no review dialog is accepted, no trust state is
+copied, and no trust-bypass flag is used. Existing hook-review refusal remains.
+
+Minimal proposed owner step for a future explicitly authorized stable checkout:
+review the two commands in the template, materialize them with absolute product
+and enrolled session paths in that project's committed `.codex/hooks.json`, then
+have its owner review and trust those two entries in Codex's native review UI.
+A changed source/path/entry needs owner review again. This is a proposal, not an
+instruction to enable lanes; per-worktree trust remains a separate adoption issue.

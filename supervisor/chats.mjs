@@ -12,6 +12,7 @@ import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { entryPolicy } from '../discovery/policy.mjs';
 import { fileURLToPath } from 'node:url';
 import { gitProject } from '../lib/project.mjs';
+import { hookLaunchArguments } from '../messages/hook-session.mjs';
 
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -243,9 +244,11 @@ export function openStandardSession({ target, launch, name, instructions, resume
         made.root_pane.tab_id !== receipt.tab) throw Error('created layout identity changed; inspect before retry');
   }
   waitForShell(herdr, receipt, { checkout: target.checkout }, { now, sleep, startupMs, beforeInput: beforeMutation });
+  const native = hookLaunchArguments({ cwd: target.checkout, kind: launch.kind, role,
+    args: nativeArguments(launch, instructions, resume) });
   beforeMutation(receipt);
   herdr(['agent', 'start', name, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs),
-    '--', ...nativeArguments(launch, instructions, resume)], { env: { ...env, ...pairs }, timeout: startupMs + 10000 });
+    '--', ...native], { env: { ...env, ...pairs }, timeout: startupMs + 10000 });
   return { ...receipt, name, checkout: target.checkout, kind: launch.kind };
 }
 

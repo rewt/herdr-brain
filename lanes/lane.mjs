@@ -18,6 +18,7 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
+import { hookLaunchArguments } from '../messages/hook-session.mjs';
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -1242,7 +1243,7 @@ function dispatch(topic, promptText, options = {}) {
   // route owns kind/model/effort; extra agent-CLI arguments are launch plumbing
   // passed through via --arg. No config: kind falls back to
   // claude, no model argument is sent.
-  const agentArgs = [...resolved.args];
+  let agentArgs = [...resolved.args];
   if (resolved.model !== undefined) agentArgs.push("--model", resolved.model);
   const hasEffort = resolved.kind === "codex"
     ? resolved.args.some((arg, index) => {
@@ -1255,6 +1256,8 @@ function dispatch(topic, promptText, options = {}) {
     if (resolved.kind === "codex") agentArgs.push("-c", `model_reasoning_effort=${resolved.effort}`);
     else agentArgs.push("--effort", resolved.effort);
   }
+  agentArgs = hookLaunchArguments({ cwd: path, kind: resolved.kind,
+    role: IS_REVIEW_COMMAND ? 'reviewer' : 'worker', args: agentArgs });
   const startArgsFor = (name) => {
     const args = ["agent", "start", name, "--kind", resolved.kind, "--pane", pane];
     if (agentArgs.length > 0) args.push("--", ...agentArgs);

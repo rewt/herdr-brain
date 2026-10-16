@@ -5090,3 +5090,42 @@ test('close marks matching sessions done even while empty workspace cleanup is p
     negativeControl('post-Git session completion despite pending workspace cleanup');
   } finally { fixture.cleanup(); }
 });
+
+test('hook-pull opt-in adds per-session settings to Claude worker and reviewer launches; disabled argv stays identical', () => {
+  for (const enabled of [undefined, false, true]) {
+    const fixture = makeFixture({ main: 'main', validate: 'true', registry: '.lane/sessions.json',
+      routes: { engineer: { kind: 'claude', model: 'worker-model', effort: 'high' } } });
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, 'hook-pull');
+      if (enabled !== undefined) writeFileSync(join(fixture.repo, '.hook-pull.json'), JSON.stringify({ enabled }));
+      fixture.env.HERDR_SOCKET_PATH = join(fixture.root, 'herdr.sock');
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: 'lane/hook-pull', initiallyOpened: true });
+      const result = lane(fixture, ['dispatch', 'hook-pull', '--route', 'engineer']);
+      assert.equal(result.status, 0, result.stderr);
+      const start = fake.calls().find(a => a[0] === 'agent' && a[1] === 'start');
+      const native = start.slice(start.indexOf('--') + 1), previous = ['--model', 'worker-model', '--effort', 'high'];
+      assert.deepEqual(enabled ? native.slice(0, -2) : native, previous);
+      if (enabled) {
+        assert.equal(native.at(-2), '--settings');
+        const settings = JSON.parse(readFileSync(native.at(-1), 'utf8'));
+        assert.match(settings.hooks.Stop[0].hooks[0].command, /messages\/hook-pull.mjs/);
+        assert.ok(native.at(-1).startsWith(join(repositoryIdentity(fixture.repo), 'sessions/hook-pull/')));
+      }
+    } finally { fixture.cleanup(); }
+  }
+});
+
+test('hook-pull Claude reviewer uses the same opt-in launch owner', () => {
+  const review = makeReviewFixture('hook-pull-review', { verdict: 'PASS' });
+  try {
+    writeFileSync(join(review.fixture.repo, '.hook-pull.json'), '{"enabled":true}\n');
+    const result = lane(review.fixture, ['review', 'hook-pull-review', '--round', '1', '--route', 'alternate', '--brief', review.brief]);
+    assert.equal(result.status, 0, result.stderr);
+    const start = review.fake.calls().find(a => a[0] === 'agent' && a[1] === 'start');
+    const settings = start[start.indexOf('--settings') + 1];
+    const descriptor = JSON.parse(readFileSync(join(dirname(settings), 'session.json'), 'utf8'));
+    assert.equal(descriptor.role, 'reviewer');
+    assert.equal(descriptor.humanTyped, false);
+  } finally { review.fixture.cleanup(); }
+});

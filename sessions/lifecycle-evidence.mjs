@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { readPlainFile, writeFileAtomic } from '../lib/files.mjs';
+import { hookHandoff } from '../messages/hook-pull.mjs';
 
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === 'object'
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value;
@@ -32,7 +33,12 @@ export function verifyHandoff(h) {
 }
 // A caller can also supply an already persisted handoff; every observation
 // re-reads its bytes. This helper gives fixture/context owners durable output.
-export function persistHandoff({ file, markdown, recordRefs, unresolvedMessageIds, inboxCursor }) {
+export function persistHandoff({ file, markdown, recordRefs, unresolvedMessageIds, inboxCursor, hookSession }) {
+  if (hookSession) {
+    const claims = hookHandoff(hookSession);
+    markdown += `\n${claims.markdown}`;
+    unresolvedMessageIds = [...new Set([...unresolvedMessageIds, ...claims.claimedIds])];
+  }
   if (typeof markdown !== 'string' || !markdown.trim()) throw Error('empty Markdown handoff');
   const h = { file, sha256: createHash('sha256').update(markdown).digest('hex'), recordRefs, unresolvedMessageIds, inboxCursor };
   h.digest = digest(h);

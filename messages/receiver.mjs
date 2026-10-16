@@ -238,6 +238,35 @@ export class Receiver {
       return { event: stored.event, bodies };
     } finally { fs.closeSync(lock); fs.unlinkSync(delivery); }
   }
+  // Pull at a harness turn boundary. Prepare/verify every output byte before
+  // committing the single handoff receipt. Shares the push/transfer exclusion.
+  async claimNext({ recipient, consumer, session, hook, render }) {
+    fixtureRoot(this.root);
+    const file = path.join(this.root, 'delivery.lock'), lock = fs.openSync(file, 'wx', 0o600);
+    try { return await this.transaction((state, append) => {
+      if (typeof session !== 'string' || !session || !['Stop', 'UserPromptSubmit'].includes(hook) ||
+          !state.config?.recipients.some(r => addressKey(r.address) === recipient && r.consumer === consumer))
+        throw Error('unknown hook session or consumer');
+      const entry = state.entries.find(e => e.recipient === recipient && !drained(e) && (!state.fence || e.acceptance <= state.fence.watermark));
+      if (!entry) return null;
+      if (!pending(entry)) throw Error('delivery hold requires inspection');
+      const retry = entry.receipts.findLast(r => r.retryTransport !== undefined);
+      if (retry && retry.retryTransport !== 'hook-pull/v1') throw Error('retry belongs to another transport');
+      const bodies = entry.bodies.map(b => {
+        const bytes = Buffer.from(b.base64, 'base64');
+        if (bytes.length !== b.ref.bytes || digest(bytes) !== b.ref.sha256) throw Error('corrupt retained body');
+        return { field: b.field, bytes };
+      });
+      const control = controls.has(entry.event.payload.kind);
+      const output = control ? null : render({ event: clone(entry.event), bodies });
+      if (!control && (typeof output !== 'string' || !output)) throw Error('empty hook rendering');
+      const receipt = { state: control ? 'consumed' : 'delivered', eventId: entry.event.eventId, recipient, acceptance: entry.acceptance,
+        transport: 'hook-pull/v1', consumer, session, hook,
+        reason: control ? 'rule-consumed: control retained without model wake or control effect' : 'hook handoff committed; processing unknown' };
+      append({ type: 'receipt', acceptance: entry.acceptance, receipt });
+      return output;
+    }); } finally { fs.closeSync(lock); fs.unlinkSync(file); }
+  }
   async deliverNext(adapter, resolveBinding, { recipient = addressKey(this.state().config.supervisor) } = {}) {
     fixtureRoot(this.root);
     const delivery = path.join(this.root, 'delivery.lock');

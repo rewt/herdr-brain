@@ -1,0 +1,65 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { brainSource, brainPhase, discoverProject } from '../board/brain.mjs';
+import { validateDocument } from '../board/rows.mjs';
+import { brainFixture } from './helpers/board-fixture.mjs';
+
+test('Brain reads sanitized real queue/train/log shapes and matching receipts; quoted completions never land a job', async t => {
+  const f = brainFixture(t), seen = [];
+  const doc = await brainSource(f.project, { now: f.now, show: async (p, j, id) => { seen.push(id); return f.show(p, j, id); } });
+  const safe = validateDocument(doc, { ...f.options, roots: [f.project.identity] });
+  const active = safe.rows.find(r => r.id === 'job-active'), done = safe.rows.find(r => r.id === 'job-done');
+  assert.equal(active.phase, 'stage'); assert.deepEqual(active.stage, { n: 1, m: 1 });
+  assert.equal(active.phaseAt, f.receipt.command_started_at); assert.equal(active.item, 'ENG-1');
+  assert.equal(active.result.main, null); assert.equal(active.result.candidate, 'a'.repeat(40));
+  assert.equal(active.clocks[0].seconds, 1); assert.equal(active.where.log.endsWith('/batch-1/train.log'), true);
+  assert.equal(done.phase, 'landed'); assert.equal(done.result.main, 'b'.repeat(40));
+  assert.equal(done.result.candidate, 'a'.repeat(40)); assert.equal(done.clocks[0].seconds, 60);
+  assert.equal(safe.rows.find(r => r.id === 'job-queued').phase, 'queued');
+  assert.equal(JSON.stringify(safe).includes('PLANTED'), false); assert.deepEqual(seen.sort(), ['ENG-1', 'ENG-2', 'ENG-3', 'R-1', 'R-2', 'R-3']);
+  f.receipt.head = 'e'.repeat(40); f.save();
+  const unmatched = await brainSource(f.project, { now: f.now, show: f.show });
+  assert.equal(unmatched.rows.find(r => r.id === 'job-active').phaseAt, f.train.attempts[0].gate.started_at);
+});
+test('Brain maps every actual queue and attempt phase, results win, and candidate never supplies main', async t => {
+  const f = brainFixture(t);
+  const phase = (job, attempt, result, gate) => brainPhase({ job, attempt, result, gate });
+  for (const value of ['batching', 'promoting']) assert.equal(phase({ phase: value }), 'admission');
+  for (const value of ['preparing', 'prepared', 'rebasing']) assert.equal(phase({}, { phase: value }), 'admission');
+  for (const value of ['validated', 'integrated', 'complete']) assert.equal(phase({}, { phase: value }), 'reconcile');
+  for (const value of ['batch-delivering', 'completed']) assert.equal(phase({ phase: value }), 'reconcile');
+  for (const value of ['red', 'invalid']) assert.equal(phase({}, { phase: value }), 'failed');
+  for (const value of ['timeout', 'interrupted']) assert.equal(phase({}, { phase: value }), 'interrupted');
+  for (const value of ['timeout', 'interrupted', 'refused', 'failed']) assert.equal(phase({}, null, { outcome: value }), ['refused', 'failed'].includes(value) ? 'failed' : 'interrupted');
+  assert.equal(phase({}, null, { outcome: 'promoted', reconciliation: { state: 'pending' } }), 'reconcile');
+  assert.equal(phase({ phase: 'promoted' }), 'landed'); assert.equal(phase({ phase: 'something-new' }), 'unknown');
+  f.queue.results[0].outcome = 'refused'; f.save();
+  const failed = (await brainSource(f.project, { now: f.now, show: f.show })).rows.find(r => r.id === 'job-done');
+  assert.equal(failed.phase, 'failed'); assert.equal(failed.result.main, null);
+  f.queue.current.phase = 'batch-delivering'; f.save();
+  assert.equal((await brainSource(f.project, { now: f.now, show: f.show })).rows.find(r => r.id === 'job-active').phase, 'reconcile');
+});
+test('Brain caps recent results, deduplicates resumed jobs, rejects foreign queues, and reads only targeted record show', async t => {
+  const f = brainFixture(t);
+  for (let i = 0; i < 25; i++) f.queue.results.push({ ...f.queue.results[0], id: `done-${i}` });
+  f.queue.results.unshift({ ...f.queue.results[0], id: 'old', finished: '2026-10-14T00:00:00Z' }); f.save();
+  assert.equal((await brainSource(f.project, { now: f.now, show: f.show })).rows.length, 22);
+  f.queue.results.push({ ...f.queue.results[0], id: 'job-active', finished: '2026-10-16T12:30:00Z' }); f.save();
+  const rows = (await brainSource(f.project, { now: f.now, show: f.show })).rows;
+  assert.equal(rows.filter(r => r.id === 'job-active').length, 1);
+  const calls = f.write('calls', '');
+  f.write('bin/org.mjs', `import fs from 'node:fs';const a=process.argv.slice(2);if(a.length!==3||a[0]!=='show'||a[2]!=='--json')process.exit(8);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(a)+'\\n');const id=a[1];console.log(JSON.stringify(id.startsWith('R-')?{id,item:'ENG-1',meta:{pane:'w2XS:p4'}}:{id}));`);
+  const fromRecord = await brainSource(f.project, { now: f.now });
+  assert.equal(fromRecord.rows.find(r => r.id === 'job-active').item, 'ENG-1');
+  assert.equal(fs.readFileSync(calls, 'utf8').trim().split('\n').every(line => JSON.parse(line)[0] === 'show'), true);
+  f.queue.identity = 'foreign'; f.save(); assert.equal((await brainSource(f.project)).rows[0].status.code, 'source-schema');
+  fs.writeFileSync(f.queueFile, '{'); assert.equal((await brainSource(f.project)).rows[0].status.code, 'source-read');
+  fs.unlinkSync(f.queueFile); assert.equal(await brainSource(f.project), null);
+});
+test('discovery uses canonical common-directory identity when repository metadata is present', t => {
+  if (!fs.existsSync(new URL('../.git', import.meta.url))) { t.skip('git-archive snapshot has no repository metadata'); return; }
+  const project = discoverProject(process.cwd());
+  assert.ok(project.identity.endsWith('/.git')); assert.ok(project.paths.includes(project.canonical));
+  assert.ok(project.paths.includes(project.checkout));
+});

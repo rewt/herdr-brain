@@ -78,6 +78,7 @@ checks inside harness sandboxes.
 | Review and integration | [Settle](settle/README.md), [Promote](promote/README.md) |
 | Supervisor / housekeeping | [Supervisor](supervisor/README.md), [Housekeeping](housekeeping/README.md) |
 | Host test slot | [Test slot](test-slot/README.md) |
+| Live promotion view | [Promotion board](board/README.md) |
 | Release batching and validation | [Machine releases](herdr/README.md), [Acceptance](acceptance/README.md) |
 | Intent | [North star](docs/north-star.md), [Roadmap](docs/roadmap.md) |
 

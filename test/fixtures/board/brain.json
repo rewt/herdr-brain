@@ -1,0 +1,19 @@
+{
+  "queue": {
+    "identity": "@COMMON@",
+    "pending": [{ "id": "job-queued", "topic": "waiting", "queued": "2026-10-16T12:00:00.000Z", "run": "R-3", "expectedHead": "cccccccccccccccccccccccccccccccccccccccc" }],
+    "current": { "id": "batch-1", "phase": "batching", "jobs": [{ "id": "job-active", "topic": "active", "queued": "2026-10-16T12:00:00.000Z", "run": "R-1", "expectedHead": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }] },
+    "results": [{ "id": "job-done", "topic": "done", "queued": true, "run": "R-2", "batch": "batch-2", "outcome": "promoted", "tip": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "source_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "workspace": "@ROOT@/done", "log": "@COMMON@/promote/batches/batch-2/train.log", "finished": "2026-10-16T12:30:00.000Z", "integrated_at": "2026-10-16T12:29:59.000Z", "report_to_main_s": 60.25, "reconciliation": { "state": "complete" } }],
+    "interrupted": []
+  },
+  "train": {
+    "schema": "promotion-train/v1", "identity": "@COMMON@", "id": "batch-1", "phase": "validating", "started_at": "2026-10-16T12:00:00.000Z",
+    "jobs": [{ "id": "job-active", "topic": "active", "queued": "2026-10-16T12:00:00.000Z" }], "results": {}, "groups": [["job-active"]],
+    "attempts": [{ "ids": ["job-active"], "jobs": [{ "id": "job-active", "topic": "active" }], "phase": "prepared", "scratch": "@ROOT@/active", "base": "cccccccccccccccccccccccccccccccccccccccc", "tip": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "tips": { "job-active": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      "prepare": { "started_at": "2026-10-16T12:00:00.000Z", "finished_at": "2026-10-16T12:00:01.000Z" },
+      "gate": { "schema": "lane-validation/v1", "key": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "tree": "cccccccccccccccccccccccccccccccccccccccc", "started_at": "2026-10-16T12:00:01.000Z" }
+    }]
+  },
+  "receipt": { "schema": "lane-validation/v1", "key": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "tree": "cccccccccccccccccccccccccccccccccccccccc", "started_at": "2026-10-16T12:00:01.000Z", "command_started_at": "2026-10-16T12:00:02.000Z" },
+  "log": "> herdr-brain@0.1.0 test:slot\n> node --test test-slot/test/*.test.mjs\nTAP version 13\n# duration_ms 1200\nquoted from another job: done exit=0 main=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n[other-job] promoted lane/other: main cccccccccccccccccccccccccccccccccccccccc -> eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee (fast-forward)\n"
+}

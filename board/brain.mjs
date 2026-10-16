@@ -50,7 +50,7 @@ export async function brainSource(project, { now = Date.now(), recentMs = 864000
   if (!fs.existsSync(queuePath)) return null;
   try {
     const queue = read(queuePath);
-    if (queue.identity !== common || !Array.isArray(queue.pending) || !Array.isArray(queue.results)) return errorDocument(project.name, 'source-schema');
+    if (!queue || queue.identity !== common || !Array.isArray(queue.pending) || !Array.isArray(queue.results)) return errorDocument(project.name, 'source-schema');
     const members = current => current?.jobs ? current.jobs.map(j => ({ ...j, phase: current.phase, batch: current.id,
       result: current.results?.find(r => r.job?.id === j.id)?.result })) : current ? [current] : [];
     const jobs = new Map();

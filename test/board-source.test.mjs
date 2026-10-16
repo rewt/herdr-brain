@@ -44,4 +44,7 @@ test('board script reads coalesce, enforce five seconds, and never overlap even 
   const timed = scriptSource({ name: 'bch', project: f.root, script: hanging, timeout: 150, now: () => clock });
   const first = timed.read(); clock += 6000; assert.deepEqual(await timed.read(), await first);
   assert.equal((await timed.read()).rows[0].status.code, 'source-timeout');
+  const pipes = f.write('pipes.mjs', `import {spawn} from 'node:child_process';spawn(process.execPath,['-e','setTimeout(()=>{},1000)'],{stdio:['ignore',process.stdout,process.stderr]}).unref();`);
+  const heldPipe = scriptSource({ name: 'bch', project: f.root, script: pipes, timeout: 150 });
+  assert.equal((await heldPipe.read()).rows[0].status.code, 'source-timeout');
 });

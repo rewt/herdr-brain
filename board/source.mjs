@@ -10,7 +10,12 @@ export function runCommand(command, args, { cwd, env = process.env, timeout = 10
     let child, code = null, bytes = 0, chunks = [], timer;
     try { child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] }); }
     catch { resolve({ code: 'source-exit' }); return; }
-    const stop = reason => { code ??= reason; chunks = []; child.kill('SIGKILL'); };
+    const stop = reason => {
+      if (code) return;
+      code = reason; chunks = []; child.kill('SIGKILL');
+      // Inherited pipes must not keep a completed/killed source past its deadline.
+      child.stdout.destroy(); child.stderr.destroy();
+    };
     timer = setTimeout(() => stop('source-timeout'), timeout);
     child.stdout.on('data', data => {
       bytes += data.length;

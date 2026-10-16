@@ -16,11 +16,13 @@ import { createLiveActions, readAdapterReceipts } from '../sessions/live.mjs';
 import { digest, persistHandoff } from '../sessions/lifecycle-evidence.mjs';
 import { Receiver, addressKey } from '../messages/receiver.mjs';
 import { transferSessionInbox } from '../messages/session-transfer.mjs';
+import { LogJournal } from '../logs/journal.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const cli = path.join(root, 'sessions/sessions.mjs');
 const fake = `#!${process.execPath}
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 const file = process.env.SESSION_FAKE_STATE, s = JSON.parse(fs.readFileSync(file)), a = process.argv.slice(2);
 s.calls.push(a);
 const save = () => fs.writeFileSync(file, JSON.stringify(s));
@@ -39,7 +41,7 @@ else if (a[0] === 'pane' && a[1] === 'process-info') {
 else if (a[0] === 'pane' && a[1] === 'read') { save(); console.log(s.screen || 'fixture % '); }
 else if (a[0] === 'pane' && a[1] === 'run') {
   if(a[3].startsWith('printf ')) { const parts = [...a[3].matchAll(/'([^']*)'/g)]; s.screen = parts.slice(-2).map(m=>m[1]).join('')+'\\nfixture % '; }
-  else { s.viewer = a[3]; const parts = [...a[3].matchAll(/'([^']*)'/g)]; s.screen = parts.slice(-2).map(m=>m[1]).join('')+'\\nfixture % '; }
+  else { s.viewer = a[3]; s.viewerOutput = execFileSync('/bin/sh', ['-c', a[3]], {encoding:'utf8'}); s.screen = s.viewerOutput+'\\nfixture % '; }
   if(s.stopOnMarker) fs.writeFileSync(s.stopOnMarker,'STOP');
   if(s.replaceOnMarker) s.panes.find(p=>p.pane_id===a[2]).terminal_id='other-terminal';
   out({});
@@ -71,13 +73,17 @@ function fixture(t, role = 'chat') {
   fs.writeFileSync(path.join(cwd, 'seed'), 'fixture'); git('add', '.'); git('commit', '-qm', 'fixture');
   const org = path.join(scratch, 'record'); fs.mkdirSync(org);
   fs.writeFileSync(path.join(org, 'events.jsonl'), [
-    { seq: 1, at: '2026-10-16T18:00:00Z', by: 'operator', type: 'item.added', id: 'ENG-1', title: 'Disposable fixture', role: 'engineer' },
-    { seq: 2, at: '2026-10-16T18:00:01Z', by: 'operator', type: 'note.added', id: 'ENG-1', decision: true, text: 'Approve this fixture experiment' }
+    { seq: 1, at: '2026-10-16T18:00:00Z', by: 'fixture-supervisor', type: 'item.added', id: 'ENG-1', title: 'Disposable fixture', role: 'engineer' },
+    { seq: 2, at: '2026-10-16T18:00:01Z', by: 'fixture-supervisor', type: 'item.added', id: 'HUM-1', title: 'Approve the scoped fixture experiment?', role: 'human', parent: 'ENG-1',
+      meta: { category:'security', session_authorization:JSON.stringify({schema:'session-authorization-scope/v1',common:path.join(cwd,'.git'),
+        server:path.join(scratch,'native.sock'),workspace:'w',checkout:cwd,actions:ACTIONS}) } }
   ].map(JSON.stringify).join('\n') + '\n');
   const bin = path.join(scratch, 'fake-herdr.mjs'), state = path.join(scratch, 'native.json');
   fs.writeFileSync(bin, fake, { mode: 0o755 });
   const env = { ...process.env, ORG_DIR: org, LANE_CONFIG: undefined, HERDR_BIN_PATH: bin, SESSION_FAKE_STATE: state,
-    HERDR_SOCKET_PATH: path.join(scratch, 'native.sock'), HERDR_MONITOR_FLEET: path.join(scratch, 'fleet'), BRAIN_SHADOW_ROOT: path.join(scratch, 'shadow') };
+    HERDR_SOCKET_PATH: path.join(scratch, 'native.sock'), HERDR_MONITOR_FLEET: path.join(scratch, 'fleet'), BRAIN_SHADOW_ROOT: path.join(scratch, 'shadow'), BRAIN_IDENTITY:'fixture' };
+  // Use the real operator-answer producer, with an explicit simulated human.
+  execFileSync(process.execPath,[path.join(root,'bin/org.mjs'),'answer','HUM-1','yes'],{cwd,env:{...env,ORG_ACTOR:'human'},stdio:['ignore','pipe','pipe']});
   const m = JSON.parse(fs.readFileSync(path.join(root, `sessions/templates/${role === 'logs' ? 'logs-viewer' : role}.md`), 'utf8').split('```json')[1].split('```')[0]);
   m.spec.workspaceRef = 'w';
   const file = path.join(scratch, 'manifest.md'); fs.writeFileSync(file, document(m));
@@ -97,7 +103,9 @@ function fixture(t, role = 'chat') {
   const observer = { observe: async () => read(), close() {} };
   const options = {cwd,files:[file],workspace:'w',env,observer,evidence};
   const f = {scratch,cwd,org,env,state,read,change,project,file,evidence,updateEvidence,options,uid:m.metadata.uid,role};
-  f.auth = changes => authorize({cwd,workspace:'w',actions:ACTIONS,operatorDecision:{id:'ENG-1',seq:2},expiresAt:new Date(Date.now()+3600000).toISOString(),role:'supervisor',actor:'fixture-supervisor',env,...changes});
+  f.events = () => fs.readFileSync(path.join(org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  f.writeEvents = events => fs.writeFileSync(path.join(org,'events.jsonl'),events.map(JSON.stringify).join('\n')+'\n');
+  f.auth = changes => authorize({cwd,workspace:'w',actions:ACTIONS,operatorDecision:{id:'HUM-1',seq:3},expiresAt:new Date(Date.now()+3600000).toISOString(),role:'supervisor',actor:'fixture-supervisor',env,...changes});
   f.plan = () => plan(options);
   f.apply = async (authorization = f.auth().file) => {
     const planFile=path.join(scratch,'plan.json'); fs.writeFileSync(planFile,JSON.stringify(await f.plan()));
@@ -108,7 +116,7 @@ function fixture(t, role = 'chat') {
     const b=f.binding(), h=persistHandoff({file:path.join(scratch,'handoff.md'),markdown:'# Handoff\nPreserve fixture question.\n',recordRefs:['ENG-1'],unresolvedMessageIds:pending,inboxCursor:'transport:0'});
     updateEvidence(e=>{
       e.resetRequests[f.uid]={boundary:{kind:'handoff',ref:'boundary-1',declared:true,draft:'complete'},handoff:h};
-      e.quiescence[f.uid]={ref:'q-1',binding:b,recordSeq:2,callbacksQuiesced:true,openWork:[],openReviews:[],inFlightDeliveries:[],pendingInboxIds:pending,recordRefs:h.recordRefs,unresolvedMessageIds:pending,inboxCursor:h.inboxCursor};
+      e.quiescence[f.uid]={ref:'q-1',binding:b,recordSeq:5,callbacksQuiesced:true,openWork:[],openReviews:[],inFlightDeliveries:[],pendingInboxIds:pending,recordRefs:h.recordRefs,unresolvedMessageIds:pending,inboxCursor:h.inboxCursor};
     });
   };
   return f;
@@ -177,6 +185,44 @@ test('authorize validates record reference, role, workspace and durable receipt 
   assert.equal(checkAuthorization({file:a.file,project:f.project,workspace:'w',env:f.env}).id,a.receipt.id);assert.equal(f.read().calls.length,0);
   for(const change of [{role:'worker'},{workspace:'absent'},{operatorDecision:{id:'ENG-1',seq:1}},{actions:['destroy']},{expiresAt:'2020-01-01T00:00:00Z'}]) assert.throws(()=>f.auth(change));
 });
+test('authorize refuses auto answers, supervisor decision notes and other machine or unattributed answers', t => {
+  const f=fixture(t), original=f.events();
+  const cases=[
+    events=>{events[3].fields.meta.answered_by='auto';},
+    events=>{events[2].by='fixture-supervisor';delete events[2].kind;},
+    events=>{for(const e of events.slice(2))e.by='fixture-supervisor';events[3].fields.meta.answered_by='fixture-supervisor';},
+    events=>{events[2].kind='supervisor-decision';},
+    events=>{for(const e of events.slice(2))e.unattributed=true;},
+    events=>{events[3].fields.meta.answer='no';},
+  ];
+  for(const edit of cases) {
+    const events=structuredClone(original);edit(events);f.writeEvents(events);
+    assert.throws(()=>f.auth(),/attributed human record answer yes/);
+  }
+  assert.equal(fs.existsSync(path.join(f.project.common,'sessions/authorizations')),false);assert.equal(f.read().calls.length,0);
+});
+test('operator approval binds the workspace and actions before the answer and is rechecked on use', t => {
+  const f=fixture(t), original=f.events();
+  for(const edit of [s=>s.workspace='another',s=>s.server='another',s=>s.common=f.scratch,s=>s.checkout=f.scratch,s=>s.actions=['close']]) {
+    const events=structuredClone(original),scope=JSON.parse(events[1].meta.session_authorization);edit(scope);events[1].meta.session_authorization=JSON.stringify(scope);f.writeEvents(events);
+    assert.throws(()=>f.auth(),/workspace or action scope mismatch/);
+  }
+  f.writeEvents(original);const a=f.auth({actions:['close']});
+  assert.equal(checkAuthorization({file:a.file,project:f.project,workspace:'w',env:f.env}).id,a.receipt.id);
+  const later={seq:6,at:'2026-10-16T19:00:00Z',by:'fixture-supervisor',type:'item.updated',id:'HUM-1',fields:{meta:{session_authorization:'{}'}}};
+  f.writeEvents([...original,later]);
+  assert.throws(()=>f.auth(),/scope recorded before/);
+  assert.throws(()=>checkAuthorization({file:a.file,project:f.project,workspace:'w',env:f.env}),/scope recorded before/);
+  f.writeEvents([...original,{...later,type:'item.reopened'}]);
+  assert.throws(()=>checkAuthorization({file:a.file,project:f.project,workspace:'w',env:f.env}),/attributed human record answer yes/);
+  f.writeEvents(original);
+  execFileSync(process.execPath,[path.join(root,'bin/org.mjs'),'answer','HUM-1','no','--overrule'],{cwd:f.cwd,env:{...f.env,ORG_ACTOR:'human'},stdio:['ignore','pipe','pipe']});
+  assert.throws(()=>checkAuthorization({file:a.file,project:f.project,workspace:'w',env:f.env}),/attributed human record answer yes/);
+  const missing=structuredClone(original);delete missing[1].meta.session_authorization;f.writeEvents(missing);
+  assert.throws(()=>f.auth(),/scope recorded before/);
+  f.writeEvents([...missing,{...later,fields:{meta:{session_authorization:original[1].meta.session_authorization}}}]);
+  assert.throws(()=>f.auth(),/scope recorded before/);assert.equal(f.read().calls.length,0);
+});
 test('real adapters reject work items, reviewers and triage before the physical seam', async t => {
   const f=fixture(t);let permits=0;const actions=createLiveActions({project:f.project,env:f.env,observe:async()=>f.read(),permit:()=>permits++});
   for(const role of ['engineer','reviewer','logs-triage']) for(const method of ['start','close','respawn','resume','transfer']) {
@@ -218,8 +264,14 @@ test('stage-8 transfer never redirects exact-session addresses and never mutates
   const before=i.receiver.records().length;await assert.rejects(transferSessionInbox({...args,messageIds:[]}),/coverage/);assert.equal(i.receiver.records().length,before);
 });
 test('logs viewer uses the existing foreground viewer and never starts a model', async t => {
-  const f=fixture(t,'logs'),result=await f.apply();
+  const f=fixture(t,'logs');
+  const journal=new LogJournal({identity:'fixture',commonDir:f.project.common,env:f.env});
+  await journal.append({schema:'brain.log/v1',eventId:'fixture-project-event',producer:{id:'fixture',epoch:'one',sequence:1},
+    occurredAt:'2026-10-16T18:00:00Z',level:'info',identity:'fixture',project:{commonDir:f.project.common},
+    type:'herdr.observation',payload:{summary:'Fixture project event is visible'}});
+  const result=await f.apply();
   assert.equal(result.decisions[0].decision,'KEEP',JSON.stringify(result));assert.equal(starts(f).length,0);assert.match(f.read().viewer,/logs\/logs.mjs.*view/);
+  assert.match(f.read().viewerOutput,/herdr.observation.*Fixture project event is visible/);
   assert.equal((await f.apply()).apply.state,'observed');
 });
 async function child(args, env) {
@@ -235,7 +287,7 @@ test('CLI authorize only records, and apply requires explicit workspace, receipt
   await new Promise(resolve=>server.listen(f.env.HERDR_SOCKET_PATH,resolve));
   t.after(async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));});
   const base=['--project',f.cwd,'--workspace','w'];
-  const auth=await child(['authorize',...base,'--role','supervisor','--actor','fixture-supervisor','--actions',ACTIONS.join(','),'--operator-decision','ENG-1:2','--expires',new Date(Date.now()+3600000).toISOString()],f.env);
+  const auth=await child(['authorize',...base,'--role','supervisor','--actor','fixture-supervisor','--actions',ACTIONS.join(','),'--operator-decision','HUM-1:3','--expires',new Date(Date.now()+3600000).toISOString()],f.env);
   assert.equal(auth.code,0,auth.stderr);assert.equal(rpc.length,0);assert.equal(f.read().calls.length,0);
   const receipt=JSON.parse(auth.stdout).file;
   const noAuth=await child(['apply',f.file,...base],f.env);assert.equal(noAuth.code,1);assert.match(noAuth.stdout,/authorization receipt required/);

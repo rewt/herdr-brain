@@ -147,8 +147,7 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     if (spec.viewer) {
       if (create || resume) fail('viewer reconstruction needs its complete logs layout; hold');
       // Existing model-free viewer, one foreground render. No service or loop.
-      const command = [process.execPath, path.join(product, 'logs/logs.mjs'), 'view', '--common-dir', project.common,
-        '--workspace', target.workspace].map(quote).join(' ');
+      const command = [process.execPath, path.join(product, 'logs/logs.mjs'), 'view', '--common-dir', project.common].map(quote).join(' ');
       return openStandardViewer({ ...launchOptions, target, command, herdr, beforeMutation: receipt => physicalPermit(op, receipt, create) });
     }
     const made = opener({ ...launchOptions, target, role: spec.role, record: findOrgDir({ cwd: project.root, env }), launch: spec.resolvedRoute,

@@ -488,10 +488,39 @@ These commands are implementation surfaces, **not authorization for live use**.
 This lane enrolls no workspace and runs no live action. The operator must first
 approve one disposable-workspace experiment after independent review and gate.
 Only the supervisor, from the canonical checkout and on that recorded say-so,
-runs `authorize`. `--operator-decision ID:SEQ` must resolve to an existing decision
-note in this project's record. The command binds its record path and event hash;
-the supervisor attests that the cited decision approves this exact experiment.
-A decision reference alone is not inferred permission. It never observes Herdr,
+runs `authorize`. `--operator-decision ID:SEQ` names the **answer note's sequence**
+on a human question in this project's record. Accepted evidence is the three
+adjacent events emitted by the operator's `record answer ID yes`: a `note.added`
+with `decision: true`, `kind: answer`, followed by `item.updated` with
+`meta.answer: yes`, `meta.answered_by: human`, then `item.closed` as `done`.
+All three must have `by: human`, the same timestamp and consecutive sequences,
+and no `unattributed` flag. The question must still be human, closed by that exact
+answer, with the same affirmative human answer. Auto-category answers
+(`answered_by: auto`), named agent answers, supervisor `note --decision`, other
+decision kinds, negative answers, reopened or superseded answers are refused.
+
+Before the operator answers, record the exact scope as a JSON **string** in the
+question's `meta.session_authorization`, using existing `record set`:
+
+```sh
+record set "$operator_decision_id" "meta.session_authorization=$scope_json"
+```
+
+`scope_json` has exactly these fields, with values taken from the canonical
+project and original enrollment (the following values are illustrative):
+
+```json
+{"schema":"session-authorization-scope/v1","common":"/canonical/project/.git","server":"/exact/herdr.sock","workspace":"native-workspace-id","checkout":"/canonical/disposable-checkout","actions":["start-standard-slot","close","respawn","resume","transfer"]}
+```
+
+Present this scope with the question for the operator to inspect before answering.
+Only the listed action names are accepted; requested actions must be a nonempty
+subset. Common directory, server, native workspace ID and checkout must match
+exactly. Scope missing at answer time or changed afterward is refused. The receipt
+binds the record path and hash of the answer transaction and approved scope;
+every use rechecks that evidence, including a later overrule or reopening.
+No approval is inferred from question or note prose, or from a decision reference
+alone. `authorize` never observes Herdr,
 launches, withdraws enrollment, clears STOP/holds, or writes a record event.
 
 ```sh
@@ -573,8 +602,10 @@ workspace that teardown may remove. No transcript or credential read is needed.
 1. **Setup and start (#1).** After approval, the supervisor creates the disposable
    workspace through the existing native workspace opener, proves exact Git and
    native ownership, and adopts only its standard-slot layout with
-   `recordStandardSlot`. Capture a scoped experiment descriptor and authorize only
-   that workspace/actions until a short explicit expiry. Inspect one chat or
+   `recordStandardSlot`. Capture a scoped experiment descriptor and record the
+   exact `session_authorization` scope above on a human question. Obtain the
+   operator's `record answer ID yes` for that scope, then authorize only those
+   workspace/actions until a short explicit expiry. Inspect one chat or
    supervisor manifest; save a fresh plan and apply once. Capture the complete
    observed binding and launch context receipt. Idle must subsequently plan KEEP,
    without a replayed prompt. The research says: “Make at most one missing

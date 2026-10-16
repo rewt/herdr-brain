@@ -11,7 +11,7 @@ import { plan } from '../sessions/plan.mjs';
 import { apply } from '../sessions/apply.mjs';
 import { authorize, checkAuthorization, ACTIONS } from '../sessions/authorization.mjs';
 import { recordStandardSlot } from '../sessions/receipts.mjs';
-import { readControllerJournal, runtimePaths } from '../sessions/runtime.mjs';
+import { readControllerJournal, runtimePaths, durableWrite } from '../sessions/runtime.mjs';
 import { createLiveActions, readAdapterReceipts } from '../sessions/live.mjs';
 import { digest, persistHandoff } from '../sessions/lifecycle-evidence.mjs';
 import { Receiver, addressKey } from '../messages/receiver.mjs';
@@ -131,7 +131,8 @@ test('lost start reply holds with no second launch, even if native occupant appe
 });
 test('exact tab close refuses a multi-owner tab in the real adapter', async t => {
   const f=fixture(t);await f.apply();await f.boundary();
-  const preview=await f.plan(), op={...preview.action.operation,id:'manual-close',state:'close-intent'};
+  const preview=await f.plan(), op={...preview.action.operation,id:'manual-close',state:'close-intent',history:['reset-prepared','close-intent']};
+  const journal=readControllerJournal(f.project.common);journal.operations.push(op);durableWrite(runtimePaths(f.project.common).journal,journal);
   f.change(s=>s.panes.push({...s.panes[0],pane_id:'foreign-pane'}));
   const actions=createLiveActions({project:f.project,workspace:'w',authorization:f.auth().file,env:f.env,permit:()=>{},observe:async()=>f.read()});
   await assert.rejects(actions.close(op),/multi-owner/);assert.equal(f.read().calls.filter(a=>a[1]==='close').length,0);
@@ -272,4 +273,11 @@ test('a copied receipt, stale saved plan and missing enrollment never grant acti
   assert.equal((await apply({...f.options,authorization:auth.file,planFile})).apply.state,'refused');
   recordStandardSlot({cwd:f.cwd,action:'withdraw',uid:'fixture-slot',actor:'fixture',why:'test authorization invalidation'});
   await assert.rejects(apply({...f.options,authorization:auth.file,planFile}),/enrollment/);assert.equal(mutations(f).length,0);
+});
+test('the real adapter cannot invoke a launcher without its exact durable intent', async t => {
+  const f=fixture(t),selected=(await f.plan()).action;
+  const actions=createLiveActions({project:f.project,workspace:'w',authorization:f.auth().file,env:f.env,permit:()=>{},observe:async()=>f.read()});
+  const count=mutations(f).length;
+  await assert.rejects(actions.start({...selected,id:'unjournaled',state:'intent'}),/durable journal intent/);
+  assert.equal(mutations(f).length,count);
 });

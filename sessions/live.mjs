@@ -128,6 +128,10 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
   opener = openStandardSession, launchOptions = {}, inbox } = {}) {
   if (typeof gate !== 'function') throw Error('live adapters require the apply authorization gate');
   const permit = op => {
+    const saved = readControllerJournal(project.common).operations.find(candidate => candidate.id === op.id);
+    const supplied = structuredClone(op);
+    delete supplied.target?.terminalId; // Private shell observation, not durable target identity.
+    if (!saved || digest(saved) !== digest(supplied)) fail('adapter requires the exact durable journal intent');
     const action = op.kind === 'start-standard-slot' ? { kind: op.kind } : { kind: 'lifecycle', stage:
       ({ 'close-intent': 'close', 'respawn-intent': 'respawn', 'resume-intent': 'resume', 'inbox-intent': 'transfer' })[op.state] };
     const r = checkAuthorization({ file: authorization, project, workspace: workspaceRef, action, env });

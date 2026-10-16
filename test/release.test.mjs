@@ -47,6 +47,7 @@ test('build gates the tagged partial snapshot once, then publishes a read-only i
   const f = scratch(t); f.write('bin/org.mjs', "console.log('uncommitted');");
   f.ok(['build', 't1']);
   assert.equal(fs.readFileSync(path.join(f.release('t1'), 'bin/org.mjs'), 'utf8'), "console.log('t1');");
+  assert.equal(fs.readFileSync(path.join(f.release('t1'), '.nvmrc'), 'utf8'), '20.19.4\n');
   assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('t1')}.partial\n`);
   assert.equal(fs.statSync(path.join(f.release('t1'), 'bin/org.mjs')).mode & 0o222, 0);
   assert.match(fs.readFileSync(path.join(f.release('t1'), '.release-commit'), 'utf8'), /^[a-f0-9]{40}\n$/);
@@ -189,7 +190,7 @@ test('failed plugin unlink warns and leaves the launchers usable', t => {
 });
 test('distribution inventory retains bch-cloak launch dependencies', () => {
   const files = productFiles(path.resolve(import.meta.dirname, '..'));
-  for (const file of ['contrib/settle-watch.mjs', 'lib/cli-help.mjs', 'supervisor/reconcile.mjs', 'supervisor/request.mjs']) assert.ok(files.includes(file));
+  for (const file of ['.nvmrc', 'contrib/settle-watch.mjs', 'lib/cli-help.mjs', 'supervisor/reconcile.mjs', 'supervisor/request.mjs']) assert.ok(files.includes(file));
   assert.ok(!files.some(file => file.startsWith('release/')));
 });
 

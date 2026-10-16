@@ -4,6 +4,7 @@
   derived status, `lib/report.mjs` report parsing, `lib/render.mjs` every view and brief. No dependencies.
 - The product has no npm dependencies. The console and MCP adapter were removed (archived at tag
   `archive/console-20261012` and in Git history); do not reintroduce a dependency-bearing module.
+- The repository pins Node 20.19.4 through `.nvmrc`; the move to Node 22 is tracked separately in ENG-359.
 - `brain/` is the foreground, model-free record signal digest for lesson distillation; it has no
   dependencies, keeps its own state and never writes `events.jsonl`. `supervisor/` supplies the read-only
   cold start and generic protocol and foreground notice/queue glue. Workers never invoke its cycle mutations.

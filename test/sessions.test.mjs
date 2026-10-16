@@ -33,7 +33,7 @@ function modify(m, key, value, remove = false) {
 }
 
 for (const name of ['chat', 'supervisor', 'engineer-worker', 'reviewer', 'logs-viewer', 'logs-triage']) test(`adopted example: ${name}`, () => {
-  const m = fixture(name), result = validate(m, name === 'reviewer' ? { root } : undefined);
+  const m = fixture(name), result = validate(m);
   assert.equal(result.manifest, m); assert.deepEqual(result.diagnostics, []);
   if (m.kind === 'Session') assert.equal(result.resolvedSpec.resolvedRoute.route, m.spec.route);
 });
@@ -53,13 +53,13 @@ test('shipped reviewer references the authoritative personality and has a round-
   assert.equal(s.personality.profile, 'lane-reviewer'); assert.match(s.personality.instructions, /lanes\/docs\/REVIEW_TEMPLATE\.md/);
   for (const source of ['identity-instructions', 'run-brief', 'item-lessons']) assert.ok(s.context.some(c => c.source === source && c.required));
   assert.ok(s.context.some(c => c.source === 'latest-review'));
-  assert.ok(s.context.some(c => c.source === 'file' && c.path === 'lanes/docs/REVIEW_TEMPLATE.md' && c.required));
+  assert.ok(s.context.some(c => c.source === 'product-file' && c.path === 'lanes/docs/REVIEW_TEMPLATE.md' && c.required));
   assert.equal(s.permissions.owner, 'native'); assert.equal(s.permissions.profileRef, 'read-only');
   assert.deepEqual(s.tools, { input: 'preloaded-scoped-files', allowed: ['write-own-review-output'] });
   const l = s.lifecycle;
   assert.equal(l.afterReport, 'park-awaiting-verdict-ingestion'); assert.equal(l.retainUntil, 'verdict-ingested-or-explicit-disposition');
   assert.equal(l.corrections, 'new-reviewer-session'); assert.equal(l.reset, 'never-before-verdict-ingestion'); assert.equal(l.resetWhileParked, false);
-  assert.deepEqual(validate(m, { root }).diagnostics, []);
+  assert.deepEqual(validateManifest(m, { config: ROUTE_PRESET }).diagnostics, [], 'product context needs no consuming project');
   const engineer = fixture('engineer-worker'); engineer.spec.lifecycle = structuredClone(l);
   assert.throws(() => validate(engineer), /engineer lifecycle must retain through review and corrections/);
 });
@@ -116,6 +116,28 @@ test('required/optional paths are bounded to the canonical project, including mi
   assert.throws(set('context.md/child'), /ENOTDIR/);
 });
 
+test('product-file resolves inside the installed product with the same path and file-type checks', async t => {
+  const f = repo(t), installed = path.join(f.scratch, 'installed'); copyProduct(root, installed);
+  const { validateManifest: installedValidate } = await import(path.join(installed, 'sessions/manifest.mjs'));
+  const m = fixture('chat');
+  const set = (p, required = false) => { m.spec.context = [{ source: 'product-file', path: p, required }]; return () => installedValidate(m, { config: ROUTE_PRESET, project: f.project }); };
+  assert.equal(fs.existsSync(path.join(f.main, 'lanes/docs/REVIEW_TEMPLATE.md')), false);
+  assert.deepEqual(set('lanes/docs/REVIEW_TEMPLATE.md', true)().diagnostics, []);
+  assert.match(set('absent')().diagnostics[0].message, /optional context absent/);
+  assert.throws(set('absent', true), /required context missing/);
+  assert.throws(set('lanes/docs', true), /not a regular file/);
+  fs.symlinkSync(f.scratch, path.join(installed, 'escape'));
+  fs.symlinkSync('absent', path.join(installed, 'dangling'));
+  assert.throws(set('escape/missing'), /escapes project/);
+  assert.throws(set('dangling'), /dangling symlink/);
+  for (const p of ['../outside', '/tmp/outside', '$HOME/file']) assert.throws(set(p), /unsafe project path/);
+  // A project copy cannot substitute for a missing installed personality.
+  fs.mkdirSync(path.join(f.main, 'lanes/docs'), { recursive: true });
+  fs.writeFileSync(path.join(f.main, 'lanes/docs/REVIEW_TEMPLATE.md'), 'project substitute');
+  fs.unlinkSync(path.join(installed, 'lanes/docs/REVIEW_TEMPLATE.md'));
+  assert.throws(() => installedValidate(fixture('reviewer'), { config: ROUTE_PRESET, project: f.project }), /required context missing/);
+});
+
 test('set validation rejects a second project triage across namespaces, duplicate UID and duplicate pane positions', () => {
   const a = validate(fixture('logs-triage')), b = validate(fixture('logs-triage'));
   b.manifest.metadata.namespace = 'other/namespace';
@@ -138,10 +160,6 @@ test('layered route assertions and hygiene aliases validate resolved settings wi
 
 for (const name of ['engineer-worker', 'reviewer']) test(`${name} inspection checks item existence in the read-only folded record and holds a torn tail`, t => {
   const f = repo(t), file = path.join(f.scratch, 'worker.md'), org = path.join(f.scratch, 'record');
-  if (name === 'reviewer') {
-    fs.mkdirSync(path.join(f.main, 'lanes/docs'), { recursive: true });
-    fs.copyFileSync(path.join(root, 'lanes/docs/REVIEW_TEMPLATE.md'), path.join(f.main, 'lanes/docs/REVIEW_TEMPLATE.md'));
-  }
   fs.mkdirSync(org); fs.writeFileSync(file, document(fixture(name)));
   const log = path.join(org, 'events.jsonl'); fs.writeFileSync(log, '');
   const run = () => inspect({ files: [file], cwd: f.lane, env: { ...f.env, ORG_DIR: org } });
@@ -151,7 +169,7 @@ for (const name of ['engineer-worker', 'reviewer']) test(`${name} inspection che
   fs.appendFileSync(log, '{'); assert.match(run().diagnostics[0].message, /complete record tail/);
 });
 
-test('default templates ship, follow canonical committed overrides, and select model-free non-home status', t => {
+test('default templates ship, follow canonical committed overrides, and select model-free non-home status', async t => {
   const f = repo(t), before = f.git('status', '--porcelain');
   const home = inspect({ cwd: f.lane, env: f.env }); assert.equal(home.valid, true, JSON.stringify(home.diagnostics)); assert.equal(home.entries.length, 4);
   assert.equal(home.entries.some(e => ['engineer', 'reviewer'].includes(e.manifest.spec.role)), false, 'work-item examples are not discovered');
@@ -181,7 +199,9 @@ test('default templates ship, follow canonical committed overrides, and select m
   assert.ok(productFiles(root).includes('sessions/templates/logs-triage.md'));
   for (const file of ['sessions/templates/reviewer.md', 'lanes/docs/REVIEW_TEMPLATE.md']) assert.ok(productFiles(root).includes(file));
   const reviewer = parseManifest(fs.readFileSync(path.join(installed, 'sessions/templates/reviewer.md'), 'utf8'));
-  assert.deepEqual(validate(reviewer, { root: installed }).diagnostics, [], 'copied product keeps required reviewer context without a product Git worktree');
+  const { validateManifest: installedValidate } = await import(path.join(installed, 'sessions/manifest.mjs'));
+  assert.deepEqual(installedValidate(reviewer, { config: ROUTE_PRESET, project: f.project }).diagnostics, [], 'installed product supplies reviewer context for a separate project');
+  assert.equal(fs.existsSync(path.join(f.main, 'lanes/docs/REVIEW_TEMPLATE.md')), false, 'consuming project has no personality copy');
   const copy = spawnSync(process.execPath, [path.join(installed, 'sessions/sessions.mjs'), 'inspect', '--project', f.main], { env: f.env, encoding: 'utf8' });
   assert.equal(copy.status, 0, copy.stderr);
 });

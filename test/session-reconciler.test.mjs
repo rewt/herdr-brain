@@ -224,6 +224,29 @@ function withWorker(f) {
   return { a, addRun };
 }
 
+for (const route of ['review', 'engineer']) test(`declarative reviewer on ${route} never binds the live engineer or fences another slot`, async t => {
+  const f = fixture(t), chat = f.inspection.entries[0], { a, addRun } = withWorker(f); addRun('R-1', 1);
+  const m = example('reviewer'); m.spec.workspaceRef = 'home'; m.spec.route = route;
+  const reviewer = validateManifest(m, { project: f.project, config: ROUTE_PRESET });
+  f.inspection.entries = [reviewer];
+  const check = p => {
+    const d = p.decisions.find(d => d.uid === m.metadata.uid);
+    assert.equal(d.decision, 'Observe'); assert.equal(d.phase, 'DeclarativeOnly');
+    assert.match(d.reason, /reviewer sessions are declarative only; settle owns review launch/);
+    assert.equal(d.action, null); assert.equal(d.freeze, undefined); assert.equal(d.observed, undefined);
+  };
+  check(await f.preview());
+  const p = await f.run(); check(p); assert.equal(p.action, null);
+  assert.deepEqual(readControllerJournal(f.project.common).bindings, []); assert.equal(f.calls.length, 0);
+  // Missing/mismatched engineer evidence must not turn the reviewer into a Hold.
+  a.terminal_id = 'unexpected-occupant';
+  f.inspection.entries.unshift(chat);
+  const withChat = await f.preview(); check(withChat);
+  assert.equal(withChat.decisions[0].decision, 'WouldStart'); assert.equal(withChat.action.uid, chat.manifest.metadata.uid);
+  check(await f.run()); assert.equal(f.calls.length, 1); assert.equal(f.calls[0].uid, chat.manifest.metadata.uid);
+  assert.deepEqual(readControllerJournal(f.project.common).bindings, []);
+});
+
 for (const abandoned of [false, true]) test(`an ${abandoned ? 'abandoned' : 'undispatched'} work item does not fence a missing chat slot`, async t => {
   const f = fixture(t), m = example('engineer-worker'); m.spec.workspaceRef = 'home';
   f.inspection.entries.push(validateManifest(m, { project: f.project, config: ROUTE_PRESET }));

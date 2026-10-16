@@ -61,8 +61,10 @@ fields are invalid. `spec` declares:
   start, chat/supervisor/item handoffs, supervisor protocol, run brief, item
   lessons, latest review, workspace event filter, triage contract, committed
   project log cursor, materialized batch/cited reports, project triage status,
-  and `file` (the exact serialized names appear in `manifest.mjs`). An explicit
-  `path` is project-relative; absolute paths, traversal, environment/shell
+  and `file` / `product-file` (the exact serialized names appear in `manifest.mjs`).
+  An explicit `path` is project-relative, except `product-file` resolves against
+  the installed Herdr Brain product root (or this checkout when running from source).
+  Both file sources require a path. Absolute paths, traversal, environment/shell
   expansion syntax, dangling symlinks and symlink escapes are rejected, even
   for optional files. Required missing files fail; optional missing files
   produce visible diagnostics. The inspector checks file presence/type only.
@@ -152,9 +154,13 @@ The `lane-reviewer` personality points to
 [`lanes/docs/REVIEW_TEMPLATE.md`](../lanes/docs/REVIEW_TEMPLATE.md) as the
 authoritative instructions. No personality text or receipt schema is copied.
 Context declares required identity instructions, the run brief (or review
-supplement), item lessons and that template as a required `file` source; the
-latest review is optional for the first round. Required file paths are relative
-to the canonical project, so a consuming project must supply that file there.
+supplement), item lessons and that template as a required `product-file` source;
+reviewer validation requires this exact product source and path. The latest
+review is optional for the first round. Projects never copy the personality
+template: it is read from the product asset in the installed release or source
+checkout, independent of the consuming project's files. Product-relative paths
+use the same containment, symlink and file-type checks as project-relative paths;
+inspection checks metadata only and never evaluates the file contents.
 
 Reviewers require the native `read-only` profile assertion and exactly
 `tools: {"input":"preloaded-scoped-files","allowed":["write-own-review-output"]}`.
@@ -176,7 +182,9 @@ today: start the reviewer manifest there after rendering the authoritative
 personality with the fixed target, private output path and review supplement.
 Settle keeps owning the verdict, receipt and ingestion. This example changes
 neither settle nor `lane review` launch behavior nor the `lane-review/v1` format;
-the current inspector and planner cannot launch this reviewer.
+the current inspector and planner cannot launch this reviewer. The planner emits
+an explicit `Observe` row for reviewers, without matching engineer runs, freezing
+bindings or fencing other slots.
 
 ## Canonical KEEP receipts
 

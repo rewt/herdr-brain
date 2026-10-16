@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { isAbsolute } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseUniqueJson } from './json.mjs';
 import { safeProjectPath } from './project.mjs';
 import { resolveLaunchRoute } from '../lanes/routes.mjs';
@@ -7,9 +8,10 @@ import { ROUTE_PRESET } from '../lanes/preset.mjs';
 
 export const API_VERSION = 'brain.herdr.dev/v1alpha1';
 export const SLOT_PANES = { chat: ['primary'], supervisor: ['primary'], logs: ['viewer', 'triage'] };
+const productRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const sources = ['identity-instructions', 'project-cold-start', 'latest-chat-handoff', 'supervisor-protocol', 'latest-supervisor-handoff',
   'run-brief', 'item-lessons', 'latest-review', 'item-handoff', 'workspace-event-filter', 'triage-contract',
-  'committed-project-log-cursor', 'materialized-batch-and-cited-reports', 'project-triage-status', 'file'];
+  'committed-project-log-cursor', 'materialized-batch-and-cited-reports', 'project-triage-status', 'file', 'product-file'];
 const subscriptions = ['operator-requested-summary', 'exception', 'review-ready', 'authorized-correction-ready', 'triage-batch-ready', 'supervisor-handoff-draft-request'];
 const fail = message => { throw Error(message); };
 const obj = (value, fields, label) => {
@@ -80,10 +82,11 @@ export function validateManifest(manifest, { config, project } = {}) {
   for (const [index, c] of s.context.entries()) {
     obj(c, ['source', 'required', 'limit', 'path'], `context[${index}]`);
     choice(c.source, sources, 'context.source'); bool(c.required, 'context.required'); optional(c.limit, positive, 'context.limit');
-    if (c.source === 'file' && c.path === undefined) fail('file context requires path');
+    if (['file', 'product-file'].includes(c.source) && c.path === undefined) fail(`${c.source} context requires path`);
     if (c.path !== undefined) {
-      if (typeof project?.root !== 'string' || !isAbsolute(project.root)) fail('context path validation requires a canonical project');
-      const file = safeProjectPath(project.root, c.path);
+      const root = c.source === 'product-file' ? productRoot : project?.root;
+      if (typeof root !== 'string' || !isAbsolute(root)) fail('context path validation requires a canonical project');
+      const file = safeProjectPath(root, c.path);
       try { if (!fs.statSync(file).isFile()) fail(`context is not a regular file: ${c.path}`); }
       catch (error) {
         if (error.code !== 'ENOENT') throw error;
@@ -178,6 +181,7 @@ export function validateManifest(manifest, { config, project } = {}) {
     } else if (s.role === 'reviewer') {
       if (s.singletonScope !== undefined) fail('singletonScope is reserved for logs-triage');
       if (!s.tools || s.permissions.profileRef !== 'read-only') fail('reviewer requires output-only tools and native read-only profile assertion');
+      if (!s.context.some(c => c.source === 'product-file' && c.required && c.path === 'lanes/docs/REVIEW_TEMPLATE.md')) fail('reviewer requires authoritative product-file personality context');
     } else if (s.singletonScope !== undefined || s.tools !== undefined) fail('singletonScope/tools are reserved for logs-triage and reviewer output');
   } else {
     choice(s.viewer, ['brain-structured-events', 'project-triage-status'], 'viewer');

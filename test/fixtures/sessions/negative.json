@@ -39,5 +39,13 @@
   {"name":"reviewer early retirement","base":"reviewer","set":{"spec.lifecycle.retainUntil":"landed-or-explicit-disposition"},"error":"reviewer lifecycle must retain"},
   {"name":"reviewer parked reset","base":"reviewer","set":{"spec.lifecycle.resetWhileParked":true},"error":"retain context until disposition"},
   {"name":"reviewer unknown route","base":"reviewer","set":{"spec.route":"missing-review-route"},"error":"unknown route"},
-  {"name":"reviewer missing personality file","base":"reviewer","set":{"spec.context":[{"source":"file","path":"missing-review-personality.md","required":true}]},"error":"required context missing"}
+  {"name":"reviewer missing personality file","base":"reviewer","set":{"spec.context":[{"source":"product-file","path":"missing-review-personality.md","required":true}]},"error":"required context missing"},
+  {"name":"reviewer missing personality entry","base":"reviewer","set":{"spec.context":[{"source":"identity-instructions","required":true},{"source":"run-brief","required":true},{"source":"item-lessons","required":true},{"source":"latest-review","required":false}]},"error":"requires authoritative product-file"},
+  {"name":"reviewer empty context","base":"reviewer","set":{"spec.context":[]},"error":"requires authoritative product-file"},
+  {"name":"reviewer optional personality","base":"reviewer","set":{"spec.context":[{"source":"product-file","path":"lanes/docs/REVIEW_TEMPLATE.md","required":false}]},"error":"requires authoritative product-file"},
+  {"name":"reviewer project personality copy","base":"reviewer","set":{"spec.context":[{"source":"file","path":"lanes/docs/REVIEW_TEMPLATE.md","required":true}]},"error":"requires authoritative product-file"},
+  {"name":"product context missing path","base":"chat","set":{"spec.context":[{"source":"product-file","required":true}]},"error":"product-file context requires path"},
+  {"name":"product context traversal","base":"chat","set":{"spec.context":[{"source":"product-file","path":"../outside","required":false}]},"error":"unsafe project path"},
+  {"name":"product context absolute path","base":"chat","set":{"spec.context":[{"source":"product-file","path":"/tmp/outside","required":false}]},"error":"unsafe project path"},
+  {"name":"product context shell expansion","base":"chat","set":{"spec.context":[{"source":"product-file","path":"$HOME/outside","required":false}]},"error":"unsafe project path"}
 ]

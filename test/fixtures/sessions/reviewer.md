@@ -43,7 +43,7 @@
         "required": false
       },
       {
-        "source": "file",
+        "source": "product-file",
         "path": "lanes/docs/REVIEW_TEMPLATE.md",
         "required": true
       }

@@ -123,6 +123,7 @@ export function planSessions(input) {
   const brake = facts.stopped ? 'STOP: observe only' : facts.closeHold ? `${facts.closeHold}: observe only` : null;
   const decisions = inspection.entries.map(entry => {
     const s = entry.manifest.spec, uid = entry.manifest.metadata.uid;
+    if (s.role === 'reviewer') return row(entry, 'DeclarativeOnly', 'Observe', 'reviewer sessions are declarative only; settle owns review launch');
     if (enrollment.errors?.length) return row(entry, 'Hold', 'Hold', errors.join('; '));
     // home = canonical checkout, otherwise exact native workspace ID or a
     // Git-verified branch reference. Never use display labels for enrollment.

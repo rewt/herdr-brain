@@ -4,8 +4,9 @@ Offline example for one authorized item and review round; never auto-discovered
 or dispatched. Assign a distinct UID for every review round. Reading this file
 grants no authority.
 
-The personality is authoritative in `lanes/docs/REVIEW_TEMPLATE.md`; the future
-controller must render that file with the exact target, private output path and
+The personality is authoritative in the product asset
+`lanes/docs/REVIEW_TEMPLATE.md`; projects never copy it. The future
+controller must render that product file with the exact target, private output path and
 review supplement. `run-brief` supplies the round's brief or review supplement.
 The native read-only profile and output tool are assertions: the adapter must
 allow only the designated private review record as repository output, or hold.
@@ -56,7 +57,7 @@ engineer session.
         "required": false
       },
       {
-        "source": "file",
+        "source": "product-file",
         "path": "lanes/docs/REVIEW_TEMPLATE.md",
         "required": true
       }

@@ -21,8 +21,20 @@ function identityPartitionGuard() {
   // fallback assertions below remain their isolation guard.
   if (!identityRoot) return () => {};
   const partition = path.join(identityRoot, '.herdr-brain/logs', fixtureIdentity, digest(commonDir));
-  const journal = path.join(partition, 'shadow.jsonl');
-  const snapshot = () => ({ exists: fs.existsSync(partition), bytes: fs.existsSync(journal) ? fs.readFileSync(journal) : null });
+  // Cover every owned log file, including stage 5 segments and subscriber
+  // cursors, rather than observing only the stage 7 shadow journal.
+  const snapshot = () => {
+    const files = [];
+    function visit(directory) {
+      for (const name of fs.readdirSync(directory).sort()) {
+        const file = path.join(directory, name), stat = fs.lstatSync(file);
+        if (stat.isDirectory()) visit(file);
+        else files.push([path.relative(partition, file), stat.mode, stat.isFile() ? digest(fs.readFileSync(file)) : 'non-regular']);
+      }
+    }
+    if (fs.existsSync(partition)) visit(partition);
+    return { exists: fs.existsSync(partition), files };
+  };
   const before = snapshot();
   return () => assert.deepEqual(snapshot(), before, 'child must leave the fixture identity partition unchanged');
 }
@@ -50,6 +62,11 @@ for (const mode of ['fresh', 'inherited', 'explicit']) test(`shadow isolation su
     const cleanup = offlineHerdr(), root = process.env.BRAIN_SHADOW_ROOT;
     assert.equal(root, ${JSON.stringify(mode)} === 'explicit' ? ${JSON.stringify(path.join(f.root, 'explicit'))} : path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'));
     assert.equal(fs.statSync(process.env.HERDR_TEST_OFFLINE_ROOT).mode & 0o077, 0);
+    const {LogJournal} = await import(${JSON.stringify(new URL('../logs/journal.mjs', import.meta.url).href)});
+    const commonDir = ${JSON.stringify(gitProject(path.resolve(import.meta.dirname, '..')).identity)};
+    const journal = new LogJournal({identity:'fixture',commonDir});
+    assert.ok(journal.directory.startsWith(root + path.sep));
+    await journal.append({schema:'brain.log/v1',eventId:'isolation',producer:{id:'fixture',epoch:'isolation',sequence:1},occurredAt:'2026-10-16T00:00:00Z',type:'herdr.observation',level:'info',identity:'fixture',project:{commonDir},payload:{}});
     const args = ['-e', 'process.stdout.write(process.env.BRAIN_SHADOW_ROOT || "missing")'];
     // Minimal envs and ordinary inherited envs must both retain isolation.
     for (const env of [undefined, {HOME: process.env.HOME, PATH: process.env.PATH, BRAIN_IDENTITY: process.env.BRAIN_IDENTITY}]) {

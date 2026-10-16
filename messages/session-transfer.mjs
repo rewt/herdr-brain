@@ -2,6 +2,9 @@
 // address rewriting: exact-session replies never become role messages. The
 // receiver retains its existing fixture-only mutation boundary.
 import { Receiver, addressKey, pending } from './receiver.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fixtureRoot } from './fixture.mjs';
 import { canonical } from './schema.mjs';
 import { validBinding, equalBinding, strings, text } from '../sessions/lifecycle-evidence.mjs';
 
@@ -9,7 +12,10 @@ export async function transferSessionInbox({ root, recipient, common, uid, role,
   if (!text(uid) || !['chat', 'supervisor'].includes(role) || !text(operationId) || !validBinding(previous) || !validBinding(next) || equalBinding(previous, next) ||
       !strings(messageIds) || !/^transport:[0-9]+$/u.test(cursor ?? '')) throw Error('invalid session inbox transfer');
   const receiver = new Receiver({ root });
-  return receiver.transaction((state, append) => {
+  fixtureRoot(root);
+  receiver.records(); // Validate the private receiver directory before locking.
+  const file = path.join(root, 'delivery.lock'), lock = fs.openSync(file, 'wx', 0o600);
+  try { return await receiver.transaction((state, append) => {
     const enrollment = state.config?.recipients.find(r => addressKey(r.address) === recipient);
     if (!enrollment?.address.role || enrollment.address.projectRef !== common ||
         enrollment.address.role.bindingRef !== uid || enrollment.address.role.name !== `project-${role}`) throw Error('transfer requires the enrolled logical role in this project');
@@ -28,5 +34,5 @@ export async function transferSessionInbox({ root, recipient, common, uid, role,
     if (ids.length !== messageIds.length || ids.some(id => !messageIds.includes(id))) throw Error('pending inbox coverage changed');
     append({ type: 'session-role-transfer', ...transfer });
     return transfer;
-  });
+  }); } finally { fs.closeSync(lock); fs.unlinkSync(file); }
 }

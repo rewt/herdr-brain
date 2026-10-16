@@ -547,7 +547,8 @@ use an explicit disposition; there is no automatic retry command.
 
 Inbox transfer goes through `messages/session-transfer.mjs` and the stage-8
 `Receiver.transaction` journal, preserving pending IDs, unanswered threads and
-logical-role addresses without a prompt. The committed cursor is
+logical-role addresses without a prompt. It holds the receiver's existing
+delivery lock as well as its writer lock, excluding an active offer. The committed cursor is
 `transport:<journal-sequence>`. Coverage changes or refused/uncertain delivery hold.
 The enrolled role must name `project-chat` or `project-supervisor` and bind its
 `bindingRef` to the manifest UID. Exact-session replies are never redirected. The receiver still enforces its

@@ -282,3 +282,14 @@ test('the real adapter cannot invoke a launcher without its exact durable intent
   await assert.rejects(actions.start({...selected,id:'unjournaled',state:'intent'}),/durable journal intent/);
   assert.equal(mutations(f).length,count);
 });
+test('stage-8 handover excludes an active receiver offer through its existing delivery lock', async t => {
+  const f=fixture(t);await f.apply();const i=await inboxFixture(t,f),previous=f.binding(),next={...previous,terminalId:'next-term',nativeSessionId:'next-native'};
+  const args={root:i.root,recipient:i.recipient,common:f.project.common,uid:f.uid,role:f.role,operationId:'locked-transfer',previous,next,messageIds:['pending-1'],cursor:`transport:${i.receiver.records().length}`};
+  let enter,release;const entered=new Promise(resolve=>enter=resolve),paused=new Promise(resolve=>release=resolve);
+  const offering=i.receiver.deliverNext({id:'held-offer',deliver:async()=>{enter();await paused;return {state:'pending',reason:'no native input'};}},async()=>({}));
+  await entered;
+  try {await assert.rejects(transferSessionInbox(args),error=>error.code==='EEXIST');}
+  finally {release();await offering;}
+  assert.equal(i.receiver.records().some(r=>r.type==='session-role-transfer'),false);
+  await transferSessionInbox(args);assert.equal(i.receiver.records().filter(r=>r.type==='session-role-transfer').length,1);
+});

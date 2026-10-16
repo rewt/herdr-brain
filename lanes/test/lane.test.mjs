@@ -5142,6 +5142,6 @@ test('invalid enabled hook config is refused before creating a dispatch workspac
     assert.equal(result.status, 1); assert.match(result.stderr, /invalid hook-pull project config/);
     assert.equal(fake.calls().some(a => ['workspace', 'tab'].includes(a[0]) && a[1] === 'create'), false);
     assert.equal(fake.calls().some(a => a[0] === 'agent' && a[1] === 'start'), false);
-    assert.equal(fake.state().opened, false);
+    assert.equal(existsSync(join(fixture.root, 'herdr-state.json')), false);
   } finally { fixture.cleanup(); }
 });

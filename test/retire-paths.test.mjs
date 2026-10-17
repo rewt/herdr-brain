@@ -468,6 +468,29 @@ test('record release closes only the fixture tab and preserves the open lane, wo
   assert.deepEqual(f.gitCalls().filter(args => args.includes('worktree') && args.includes('remove')), []);
 });
 
+test('record release canonicalizes a symlinked lane cwd and keeps an unresolvable disposition', t => {
+  const f = fixture(t), alias = path.join(f.scratch, 'lane-alias');
+  fs.symlinkSync(f.lane, alias, 'dir');
+  const events = loadEvents(f.org).events.filter(e => e.type !== 'item.closed');
+  events.find(e => e.type === 'run.started').workspace = alias; writeEvents(f, events);
+  const accepted = recordRelease(f); assert.equal(accepted.status, 0, accepted.stderr);
+  const recorded = loadEvents(f.org).events, release = recorded.find(e => e.type === 'retirement.release');
+  assert.equal(release.cwd, alias); assert.notEqual(alias, f.lane);
+  const retirement = f.retirement(), plan = retirement.plan();
+  assert.equal(plan.close.length, 1, JSON.stringify(plan.keep));
+  assert.match(plan.close[0].why, /record release for R-1/);
+  const snapshot = retirement.observe();
+  assert.equal(snapshot.record.runs[0].workspace, f.lane); assert.equal(snapshot.releases[0].cwd, f.lane);
+
+  const loop = path.join(f.scratch, 'loop'); fs.symlinkSync(loop, loop);
+  release.cwd = loop; writeEvents(f, recorded);
+  const kept = retirement.plan(); assert.equal(kept.close.length, 0); assert.match(kept.keep[0].why, /chain is still open/);
+  assert.equal(retirement.observe().releases[0].cwd, null);
+  release.cwd = alias; writeEvents(f, recorded);
+  assert.equal(retirement.apply(plan)[0].action, 'closed');
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
 test('Git-only lane without a workspace still keeps queued lane and run references', t => {
   const f=fixture(t,{occupied:false});f.state.workspaces=[];f.save();
   const queue=f.queue();queue.transaction(data=>data.pending.push({...f.job}));

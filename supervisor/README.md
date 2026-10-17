@@ -55,7 +55,8 @@ for a project's read-only `board-rows/v1` adapter; these scripts run through
 size limit and row validation. Source rows are presentation only and never
 change retirement decisions. Completed/failed/interrupted promotions are omitted;
 source failures remain visible as UNKNOWN. Scripts run from the canonical
-checkout; relative script paths resolve against `--repo`.
+checkout with the selected `--org` in `ORG_DIR`; relative script paths resolve
+against `--repo`.
 
 Projects with an external dispatcher must call
 [`dispatch/record-worker.mjs`](../dispatch/README.md#external-dispatchers) after

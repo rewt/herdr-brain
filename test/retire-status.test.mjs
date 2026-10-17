@@ -74,6 +74,15 @@ test('unmapped reasons and arbitrary observation errors stay UNKNOWN, with concr
   }
   s.errors = ['occupant worker is working'];
   assert.equal(tab(s).class, 'UNKNOWN', 'errors cannot masquerade as a known reason');
+  const tree = retirementStatus(fixture(), { worktrees: [{ worktree: '/repo/unreadable', error: 'Git unavailable', paneCount: 0 }] }).rows.find(r => r.type === 'worktree');
+  assert.equal(tree.class, 'UNKNOWN'); assert.equal(tree.nextAction, 'keep; Git unavailable');
+});
+
+test('ignored expired-reference diagnostics do not invent a keep when the planner releases', () => {
+  const s = fixture(); s.diagnostics = [{ reason: 'expired reference ignored' }];
+  const status = retirementStatus(s), note = status.rows.find(r => r.type === 'diagnostic');
+  assert.equal(status.counts.TERMINAL, 2); assert.equal(status.counts.UNKNOWN, 0);
+  assert.equal(note.class, null); assert.equal(note.nextAction, 'diagnostic only; no live hold');
 });
 
 // This inventory is bound to the planner's reason expressions below. New wording
@@ -128,7 +137,7 @@ const reasonCases = [
 test('every planner reason expression is enumerated and mapped; source drift fails', () => {
   const source = fs.readFileSync(new URL('../lib/retire.mjs', import.meta.url), 'utf8');
   const policy = source.slice(0, source.indexOf('// One executor')) + source.slice(source.indexOf('export function laneRemovalReason'));
-  const emitted = [...policy.matchAll(/\b(?:return|reason\s*=)\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g)].map(m => m[1].slice(1, -1));
+  const emitted = [...policy.matchAll(/\b(?:return|reason\s*(?:\?\?=|=))\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g)].map(m => m[1].slice(1, -1));
   assert.deepEqual([...new Set(emitted)].sort(), reasonCases.map(([expression]) => expression).sort());
   const s = fixture(); item(s).closed = null; s.references.push({ kind: 'host-check', job: 'job', owner: 'owner' });
   for (const [expression, expected, sample = expression] of reasonCases)
@@ -320,18 +329,21 @@ test('--out publishes only by same-directory rename and preserves the previous f
 
 test('--source uses board/source.mjs, only active rows show, and the built-in queue reuses the observed record', t => {
   const f = runtimeFixture(t), source = path.join(f.scratch, 'rows.mjs');
+  f.env.ORG_DIR = path.join(f.scratch, 'wrong-record');
   const row = phase => ({ id: phase, item: 'ENG-1', lane: 'topic', kind: 'promotion', phase, stage: null, startedAt: null, phaseAt: null, endedAt: null,
     status: { code: phase, text: phase }, result: { exit: null, main: null, candidate: null }, where: {}, worktree: f.lane });
-  fs.writeFileSync(source, `if(process.cwd()!==${JSON.stringify(f.repo)}) process.exit(2); console.log(JSON.stringify(${JSON.stringify({ schema: 'board-rows/v1', project: 'external', generatedAt: '2026-01-01T00:00:00Z', rows: ['queued', 'stage', 'landed', 'failed', 'interrupted'].map(row) })}));`);
+  fs.writeFileSync(source, `if(process.cwd()!==${JSON.stringify(f.repo)} || process.env.ORG_DIR!==${JSON.stringify(f.org)}) process.exit(2); console.log(JSON.stringify(${JSON.stringify({ schema: 'board-rows/v1', project: 'external', generatedAt: '2026-01-01T00:00:00Z', rows: ['queued', 'stage', 'landed', 'failed', 'interrupted'].map(row) })}));`);
   const queue = path.join(f.common, 'promote/queue.json'); fs.mkdirSync(path.dirname(queue), { recursive: true });
-  fs.writeFileSync(queue, JSON.stringify({ identity: f.common, pending: [{ id: 'built-in', topic: 'topic', run: 'R-1' }], results: [] }));
+  fs.writeFileSync(queue, JSON.stringify({ identity: f.common, pending: [{ id: 'built-in', topic: 'topic', run: 'R-1' }, { id: 'without-run', topic: 'topic' }], results: [] }));
   const r = f.cli(['--json', '--source', `external=${source}`]); assert.equal(r.status, 0, r.stderr);
   const rows = JSON.parse(r.stdout).rows.filter(r => r.type === 'promotion');
-  assert.deepEqual(rows.map(r => r.id).sort(), ['built-in', 'queued', 'stage']);
+  assert.deepEqual(rows.map(r => r.id).sort(), ['built-in', 'queued', 'stage', 'without-run']);
   assert.ok(rows.every(r => r.class === 'ACTIVE')); assert.equal(rows.find(r => r.id === 'built-in').item, 'ENG-1');
+  assert.equal(rows.find(r => r.id === 'without-run').item, null);
   fs.writeFileSync(source, 'console.log("not-json")');
   const broken = JSON.parse(f.cli(['--json', '--source', `external=${source}`]).stdout).rows.find(r => r.id === 'source-json');
   assert.equal(broken.class, 'UNKNOWN'); assert.match(broken.reason, /source-json/);
+  assert.match(broken.nextAction, /^keep; external: source-json/);
 });
 
 test('a copied product includes the board sources and can run status without its source checkout', t => {

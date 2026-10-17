@@ -143,7 +143,10 @@ test('housekeeping --once preserves waiting reports, blocking items and missing 
     'open-blocker', 'missing-blocker', 'declined-blocker', 'missing-item', 'incomplete-items']) {
     Object.assign(f.stateData, structuredClone(original));
     const s = f.stateData;
-    if (variant.endsWith('-report')) s.runs[0].report.outcome = variant === 'blocked-report' ? 'blocked' : 'needs_human';
+    if (variant.endsWith('-report')) {
+      s.runs[0].report.outcome = variant === 'blocked-report' ? 'blocked' : 'needs_human';
+      s.items[0].closed = null;
+    }
     if (variant.endsWith('-item') && variant !== 'missing-item') s.items[0].closed = null;
     if (variant.endsWith('-blocker')) {
       s.items[0].blocked_by = ['HUM-1'];
@@ -357,6 +360,7 @@ test('review evidence cannot override a recorded worker waiting on a blocker', t
   fs.writeFileSync(path.join(registry, 'worker.json'), JSON.stringify(f.reviewSession('lane-topic-worker')));
   fs.writeFileSync(path.join(reviews, 'verdict.md'), '**PASS**\n');
   f.stateData.runs[0].report.outcome = 'blocked';
+  f.stateData.items[0].closed = null;
   f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
 });
 

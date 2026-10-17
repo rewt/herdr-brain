@@ -139,7 +139,10 @@ for (const variant of ['open', 'unpromoted', 'dirty', 'blocked', 'working', 'unk
     if (variant === 'replaced') f.agent.terminal_id = 'term-new';
     if (variant === 'waiting') { f.items[0].blocked_by = ['HUM-1']; f.items.push({ id: 'HUM-1', status: 'ready' }); }
     if (variant === 'declined') { f.items[0].blocked_by = ['HUM-1']; f.items.push({ id: 'HUM-1', status: 'done', closed: {}, meta: { answer: 'no' } }); }
-    if (variant.startsWith('report-')) f.run.report.outcome = variant === 'report-blocked' ? 'blocked' : 'needs_human';
+    if (variant.startsWith('report-')) {
+      f.run.report.outcome = variant === 'report-blocked' ? 'blocked' : 'needs_human';
+      f.items[0].closed = null;
+    }
     if (variant === 'new-open-run') f.runs.push({ ...f.run, id: 'R-2', report: null, started: { seq: 2 }, meta: { ...f.run.meta, agent: 'new-worker' } });
     if (variant === 'wrong-repo') f.ws[0].worktree.repo_key = f.root;
     if (variant === 'mixed-pane') { f.agents.push({ ...f.agent, name: 'operator', pane_id: 'w:q' }); f.panes.push({ pane_id: 'w:q', tab_id: 'w:t' }); }

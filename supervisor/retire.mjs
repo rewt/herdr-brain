@@ -5,5 +5,5 @@ import { retirementMain } from '../lib/retire-runtime.mjs';
 export { createRetirement, isShellOnly, readDeclaredReferences, readLiveReferences } from '../lib/retire-runtime.mjs';
 
 if (isMain(import.meta.url)) {
-  try { retirementMain(); } catch (e) { process.stderr.write(`retire: ${e.message}\n`); process.exitCode = 1; }
+  try { await retirementMain(); } catch (e) { process.stderr.write(`retire: ${e.message}\n`); process.exitCode = 1; }
 }

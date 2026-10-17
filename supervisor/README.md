@@ -1,5 +1,72 @@
 # Supervisor
 
+## Read-only lanes view
+
+```sh
+node supervisor/retire.mjs status --repo CHECKOUT --org RECORD
+node supervisor/retire.mjs status --repo CHECKOUT --org RECORD --json
+node supervisor/retire.mjs status --repo CHECKOUT --org RECORD --out LANES-TODAY.md
+node supervisor/retire.mjs status --repo CHECKOUT --org RECORD --source project=/absolute/rows.mjs
+```
+
+`status` observes through `createRetirement().observe()` and uses the same
+`planRetirement()` as apply. It never applies a plan, closes a tab or workspace,
+removes a lane, records a callback, consumes a request or writes the record.
+Git reads disable optional index refresh locks. The only output-file write is
+`--out`: a temporary file beside the destination, published by rename. Its parent
+directory must already exist. The supervisor's existing daily routine can run
+this command for its daily list; the command starts no daemon or schedule.
+
+There is one row for every observed tab and each of its panes. Pane rows show
+the enclosing tab's planner decision because closing a tab affects all its
+panes. Workspace, tab, pane, agent kind/status, matched run, item and lane sit
+beside the class, reason and next action. Run identity uses the shared
+`matchingRun`, including workspace, cwd and recorded terminal/native session;
+a matching pane id alone is insufficient. Classes are derived display labels,
+never stored status or permission to close.
+
+| Planner result / view fact | Class | Next action |
+| --- | --- | --- |
+| Release | TERMINAL | Terminal; retire through the guarded executor |
+| Working/blocked occupant, un-ingested report or known live reference | ACTIVE | Names the worker, report, resource owner or job being awaited |
+| Open chain with this item's latest run or latest review | WAITING | Names the fix owner, reviewer, supervisor, or operator for an open human question |
+| Older idle/done run in an open chain | IDLE-NONTERMINAL | Release candidate; supervisor/Astra decision via `record release` (ENG-369) |
+| Unknown identity/process/topology, unreadable evidence, or an unmapped reason | UNKNOWN | Keep, with the concrete reason |
+| Standard slot, persistent/operator/lab workspace, or focus | PROTECTED | Keep |
+
+The **Held** column is separate from the underlying class. When a hold exists,
+the view also plans an in-memory copy with `retirementHold` omitted solely to
+explain what is underneath. That copy never reaches an executor, and the real
+hold and all containments remain in force. Counts count classified rows (both
+tabs and panes, plus promotion/diagnostic rows), not unique sessions.
+
+Worktree inventory rows include every worktree registered to the canonical Git
+common directory, even with zero panes: branch, short head, containment in
+`main`, clean/dirty, `archive/lane/TOPIC` tag and whether it matches HEAD,
+untracked/ignored file counts, and pane count. These facts do not classify a
+worktree as releasable: lane removal still requires its own fresh guarded plan,
+terminal-chain disposition and preservation checks. An inventory read failure
+appears as UNKNOWN. Releasing a pane never implies deleting its worktree.
+
+The built-in [board source](../board/brain.mjs) shows active Brain promotion
+queue rows, using the already observed record. Repeat `--source NAME=SCRIPT`
+for a project's read-only `board-rows/v1` adapter; these scripts run through
+[board/source.mjs](../board/source.mjs), with the board's environment, timeout,
+size limit and row validation. Source rows are presentation only and never
+change retirement decisions. Completed/failed/interrupted promotions are omitted;
+source failures remain visible as UNKNOWN. Scripts run from the canonical
+checkout; relative script paths resolve against `--repo`.
+
+Projects with an external dispatcher must call
+[`dispatch/record-worker.mjs`](../dispatch/README.md#external-dispatchers) after
+launch, recording the worker workspace and terminal/native session identity.
+Otherwise a live worker remains UNKNOWN. The view names missing
+`worker_workspace`, `terminal_id` and `agent_session_id` fields on the newest
+candidate run, together with the launcher correction. Background-process keeps
+list extra kernel process names only, with no argv; the view does not relax
+those keeps. The operator line points to `record today` for reserved decisions;
+neither item titles nor a `needs_human` outcome decide operator authority.
+
 ## Safe retirement
 
 `node supervisor/retire.mjs plan --repo CHECKOUT --org RECORD` is a read-only

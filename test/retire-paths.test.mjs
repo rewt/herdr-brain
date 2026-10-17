@@ -123,6 +123,17 @@ test('receipt-identified settle agent exits before the ordinary process_gone cal
   assert.deepEqual(fs.readdirSync(path.join(f.org, 'retirement/occupants')), []);
 });
 
+test('a working receipt-identified native agent with its helpers stays ACTIVE without input', t => {
+  const f = fixture(t); nativeExit(f);
+  const retirement = f.retirement({ readOwner: owner => f.read().info.process_tree.some(row => row.pid === owner.pid && row.identity === owner.identity) });
+  retirement.recordCallback({ kind: 'settle', pane: 'w:p', pid: 2, run: 'R-1', agent: 'worker' });
+  f.state.agents[0].agent_status = 'working'; f.save();
+  const plan = retirement.plan(); assert.equal(plan.close.length, 0);
+  assert.equal(plan.keep[0].why, 'occupant worker is working');
+  assert.equal(classifyRetirement(plan.keep[0]).class, 'ACTIVE');
+  retirement.apply(plan); assert.deepEqual(f.read().actions, []);
+});
+
 test('concurrent native retirement holds the tab lock across prompt and close', t => {
   const f = fixture(t); nativeExit(f);
   const retirement = f.retirement(), plan = retirement.plan();

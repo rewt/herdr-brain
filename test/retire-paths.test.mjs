@@ -376,13 +376,24 @@ test('record handoff is confirmed, idempotent, ignored by older fold, and never 
   const request=JSON.parse(fs.readFileSync(path.join(f.org,'retirement/request.json')));assert.equal(request.source,'record handoff');
 });
 
-const releaseArgs = f => ['release', 'R-1', '--session', 'session', '--terminal', 'term', '--pane', 'w:p', '--head', f.head,
+const releaseArgs = f => ['pane-release', 'R-1', '--session', 'session', '--terminal', 'term', '--pane', 'w:p', '--head', f.head,
   '--authority', 'owner ruling', '--next', 'reviewer after correction', '--unresolved', 'review and integration',
   '--evidence', '/evidence/report.md', '--evidence', '/evidence/review.md', '--confirm', '--why', 'idle context recorded'];
 const recordRelease = (f, args = releaseArgs(f)) => spawnSync(process.execPath, [recordCLI, ...args], { cwd: f.repo, env: f.env, encoding: 'utf8' });
 const writeEvents = (f, events) => fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
 
-test('record release atomically records continuation, is idempotent, refuses conflicts and never rewrites reports', t => {
+test('record pane-release leaves the legacy release command unavailable', t => {
+  const f = fixture(t), before = fs.readFileSync(f.eventFile, 'utf8');
+  for (const args of [['release', 'cut'], ['release', 'R-1'], ['release', ...releaseArgs(f).slice(1)]]) {
+    const result = recordRelease(f, args); assert.equal(result.status, 1);
+    assert.match(result.stderr, /unknown command "release"/i);
+  }
+  const usage = recordRelease(f, ['pane-release', 'R-1']); assert.equal(usage.status, 1);
+  assert.match(usage.stderr, /usage: record pane-release R-n/);
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), before); assert.deepEqual(f.read().actions, []);
+});
+
+test('record pane-release atomically records continuation, is idempotent, refuses conflicts and never rewrites reports', t => {
   const f = fixture(t), before = fs.readFileSync(f.eventFile, 'utf8'), oldReport = fold(loadEvents(f.org).events).runs.get('R-1').report;
   const reportFile = path.join(f.org, 'reports/R-1.md'); fs.mkdirSync(path.dirname(reportFile)); fs.writeFileSync(reportFile, 'immutable report bytes');
   const accepted = recordRelease(f); assert.equal(accepted.status, 0, accepted.stderr);
@@ -396,7 +407,7 @@ test('record release atomically records continuation, is idempotent, refuses con
       cwd: f.lane, head: f.head, authority: 'owner ruling', confirmed: true, why: 'idle context recorded' });
   const bytes = fs.readFileSync(f.eventFile, 'utf8'); assert.ok(bytes.startsWith(before));
   const requestFile = path.join(f.org, 'retirement/request.json'), requestBytes = fs.readFileSync(requestFile, 'utf8');
-  assert.equal(JSON.parse(requestBytes).source, 'record release'); assert.equal(JSON.parse(requestBytes).event_seq, release.seq);
+  assert.equal(JSON.parse(requestBytes).source, 'record pane-release'); assert.equal(JSON.parse(requestBytes).event_seq, release.seq);
   assert.deepEqual(JSON.parse(recordRelease(f).stdout), { run: 'R-1', recorded: false });
   for (const flag of ['--head', '--authority', '--why', '--next', '--unresolved', '--evidence']) {
     const args = releaseArgs(f); args[args.indexOf(flag) + 1] = flag === '--head' ? 'b'.repeat(40) : 'different';
@@ -407,7 +418,7 @@ test('record release atomically records continuation, is idempotent, refuses con
   assert.equal(fs.readFileSync(reportFile, 'utf8'), 'immutable report bytes'); assert.deepEqual(f.read().actions, []);
 });
 
-test('record release refuses incomplete or mismatched confirmation without appending either event', t => {
+test('record pane-release refuses incomplete or mismatched confirmation without appending either event', t => {
   const f = fixture(t), before = fs.readFileSync(f.eventFile, 'utf8');
   for (const flag of ['--session', '--terminal', '--pane', '--head', '--authority', '--next', '--unresolved', '--evidence', '--why', '--confirm']) {
     const args = releaseArgs(f), at = args.indexOf(flag);
@@ -421,7 +432,7 @@ test('record release refuses incomplete or mismatched confirmation without appen
   assert.equal(fs.existsSync(path.join(f.org, 'retirement/request.json')), false);
 });
 
-test('record release requires an existing non-abandoned ingested run and complete launch receipt', t => {
+test('record pane-release requires an existing non-abandoned ingested run and complete launch receipt', t => {
   const f = fixture(t), original = loadEvents(f.org).events;
   for (const variant of ['unknown', 'abandoned', 'report-file-only', 'session', 'terminal', 'pane', 'workspace', 'worker_workspace']) {
     const events = structuredClone(original), args = releaseArgs(f);
@@ -437,7 +448,7 @@ test('record release requires an existing non-abandoned ingested run and complet
   assert.equal(fs.existsSync(path.join(f.org, 'retirement/request.json')), false);
 });
 
-for (const binding of ['pane', 'agent_session_id']) test(`record release refuses newer ${binding} continuation before and after recording`, t => {
+for (const binding of ['pane', 'agent_session_id']) test(`record pane-release refuses newer ${binding} continuation before and after recording`, t => {
   const f = fixture(t), events = loadEvents(f.org).events;
   const newer = { type: 'run.started', id: 'R-2256', item: 'ENG-1', workspace: f.lane, seq: 5,
     meta: { ...events[1].meta, agent: 'continuation', pane: 'w:q', agent_session_id: 'new-session', [binding]: events[1].meta[binding] } };
@@ -450,7 +461,7 @@ for (const binding of ['pane', 'agent_session_id']) test(`record release refuses
   assert.equal(f.retirement().plan().close.length, 0);
 });
 
-test('record release closes only the fixture tab and preserves the open lane, worktree, branch, workspace and files', t => {
+test('record pane-release closes only the fixture tab and preserves the open lane, worktree, branch, workspace and files', t => {
   const f = fixture(t, { merged: false }); writeEvents(f, loadEvents(f.org).events.filter(e => e.type !== 'item.closed'));
   fs.writeFileSync(path.join(f.lane, 'uncommitted'), 'keep these bytes'); f.traceGit();
   const retirement = f.retirement(); assert.match(retirement.plan().keep[0].why, /chain is still open/);
@@ -468,7 +479,7 @@ test('record release closes only the fixture tab and preserves the open lane, wo
   assert.deepEqual(f.gitCalls().filter(args => args.includes('worktree') && args.includes('remove')), []);
 });
 
-test('record release canonicalizes a symlinked lane cwd and keeps an unresolvable disposition', t => {
+test('record pane-release canonicalizes a symlinked lane cwd and keeps an unresolvable disposition', t => {
   const f = fixture(t), alias = path.join(f.scratch, 'lane-alias');
   fs.symlinkSync(f.lane, alias, 'dir');
   const events = loadEvents(f.org).events.filter(e => e.type !== 'item.closed');

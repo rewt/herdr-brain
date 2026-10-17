@@ -79,7 +79,7 @@ Runs and reports
   record sync                             record every report waiting at an open run's report path
   record handoff R-old --to R-new --confirm --why TEXT
                                           confirm a retained successor; reports stay immutable
-  record release R-n --session S --terminal T --pane P --head SHA --authority TEXT --next TEXT --unresolved TEXT --evidence PATH... --confirm --why TEXT
+  record pane-release R-n --session S --terminal T --pane P --head SHA --authority TEXT --next TEXT --unresolved TEXT --evidence PATH... --confirm --why TEXT
   record abandon <R-n> [--note T]         give up on a run (a later report is still accepted)
   record brief <R-n>                      print the brief a run was given
 
@@ -987,7 +987,7 @@ const COMMANDS = {
   start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.
   handoff: lazy('../lib/retire-command.mjs', 'handoffCommand'),
-  release: lazy('../lib/retire-command.mjs', 'releaseCommand'),
+  'pane-release': lazy('../lib/retire-command.mjs', 'releaseCommand'),
   desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
   routes: lazy('../lanes/routes-command.mjs', 'routesCommand'),
   housekeeping: lazy('../housekeeping/command.mjs', 'housekeepingCommand'),

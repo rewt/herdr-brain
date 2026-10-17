@@ -376,6 +376,98 @@ test('record handoff is confirmed, idempotent, ignored by older fold, and never 
   const request=JSON.parse(fs.readFileSync(path.join(f.org,'retirement/request.json')));assert.equal(request.source,'record handoff');
 });
 
+const releaseArgs = f => ['release', 'R-1', '--session', 'session', '--terminal', 'term', '--pane', 'w:p', '--head', f.head,
+  '--authority', 'owner ruling', '--next', 'reviewer after correction', '--unresolved', 'review and integration',
+  '--evidence', '/evidence/report.md', '--evidence', '/evidence/review.md', '--confirm', '--why', 'idle context recorded'];
+const recordRelease = (f, args = releaseArgs(f)) => spawnSync(process.execPath, [recordCLI, ...args], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+const writeEvents = (f, events) => fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
+
+test('record release atomically records continuation, is idempotent, refuses conflicts and never rewrites reports', t => {
+  const f = fixture(t), before = fs.readFileSync(f.eventFile, 'utf8'), oldReport = fold(loadEvents(f.org).events).runs.get('R-1').report;
+  const reportFile = path.join(f.org, 'reports/R-1.md'); fs.mkdirSync(path.dirname(reportFile)); fs.writeFileSync(reportFile, 'immutable report bytes');
+  const accepted = recordRelease(f); assert.equal(accepted.status, 0, accepted.stderr);
+  assert.deepEqual(JSON.parse(accepted.stdout), { run: 'R-1', recorded: true });
+  const loaded = loadEvents(f.org).events, [note, release] = loaded.slice(-2);
+  assert.equal(note.type, 'note.added'); assert.equal(note.id, 'ENG-1'); assert.equal(note.kind, 'release'); assert.equal(note.decision, true);
+  for (const value of ['R-1', 'session', 'term', 'w:p', f.head, '/evidence/report.md', '/evidence/review.md', 'reviewer after correction',
+    'review and integration', 'owner ruling', 'idle context recorded']) assert.ok(note.text.includes(value), value);
+  assert.deepEqual(Object.fromEntries(Object.keys(release).filter(key => !['seq', 'at', 'by', 'unattributed'].includes(key)).map(key => [key, release[key]])),
+    { type: 'retirement.release', run: 'R-1', item: 'ENG-1', pane: 'w:p', terminal: 'term', session: 'session', workspace: 'w',
+      cwd: f.lane, head: f.head, authority: 'owner ruling', confirmed: true, why: 'idle context recorded' });
+  const bytes = fs.readFileSync(f.eventFile, 'utf8'); assert.ok(bytes.startsWith(before));
+  const requestFile = path.join(f.org, 'retirement/request.json'), requestBytes = fs.readFileSync(requestFile, 'utf8');
+  assert.equal(JSON.parse(requestBytes).source, 'record release'); assert.equal(JSON.parse(requestBytes).event_seq, release.seq);
+  assert.deepEqual(JSON.parse(recordRelease(f).stdout), { run: 'R-1', recorded: false });
+  for (const flag of ['--head', '--authority', '--why', '--next', '--unresolved', '--evidence']) {
+    const args = releaseArgs(f); args[args.indexOf(flag) + 1] = flag === '--head' ? 'b'.repeat(40) : 'different';
+    const result = recordRelease(f, args); assert.equal(result.status, 1); assert.match(result.stderr, /different release/);
+  }
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), bytes); assert.equal(fs.readFileSync(requestFile, 'utf8'), requestBytes);
+  assert.deepEqual(fold(loadEvents(f.org).events).runs.get('R-1').report, oldReport);
+  assert.equal(fs.readFileSync(reportFile, 'utf8'), 'immutable report bytes'); assert.deepEqual(f.read().actions, []);
+});
+
+test('record release refuses incomplete or mismatched confirmation without appending either event', t => {
+  const f = fixture(t), before = fs.readFileSync(f.eventFile, 'utf8');
+  for (const flag of ['--session', '--terminal', '--pane', '--head', '--authority', '--next', '--unresolved', '--evidence', '--why', '--confirm']) {
+    const args = releaseArgs(f), at = args.indexOf(flag);
+    if (flag === '--confirm') args.splice(at, 1);
+    else args[at + 1] = ['--session', '--terminal', '--pane'].includes(flag) ? 'wrong' : '   ';
+    const result = recordRelease(f, args); assert.equal(result.status, 1, flag + result.stderr);
+    assert.equal(fs.readFileSync(f.eventFile, 'utf8'), before);
+  }
+  const args = releaseArgs(f).filter((value, i, all) => value !== '--evidence' && all[i - 1] !== '--evidence');
+  assert.equal(recordRelease(f, args).status, 1);
+  assert.equal(fs.existsSync(path.join(f.org, 'retirement/request.json')), false);
+});
+
+test('record release requires an existing non-abandoned ingested run and complete launch receipt', t => {
+  const f = fixture(t), original = loadEvents(f.org).events;
+  for (const variant of ['unknown', 'abandoned', 'report-file-only', 'session', 'terminal', 'pane', 'workspace', 'worker_workspace']) {
+    const events = structuredClone(original), args = releaseArgs(f);
+    if (variant === 'unknown') args[1] = 'R-99';
+    if (variant === 'abandoned') events.push({ type: 'run.abandoned', id: 'R-1', seq: 5 });
+    if (variant === 'report-file-only') { events.splice(2, 1); events[1].report_path = '/exists/report.md'; }
+    if (variant === 'workspace') delete events[1].workspace;
+    if (['session', 'terminal', 'pane', 'worker_workspace'].includes(variant)) delete events[1].meta[{ session: 'agent_session_id', terminal: 'terminal_id' }[variant] ?? variant];
+    writeEvents(f, events); const bytes = fs.readFileSync(f.eventFile, 'utf8');
+    const result = recordRelease(f, args); assert.equal(result.status, 1, variant + result.stderr);
+    assert.equal(fs.readFileSync(f.eventFile, 'utf8'), bytes);
+  }
+  assert.equal(fs.existsSync(path.join(f.org, 'retirement/request.json')), false);
+});
+
+for (const binding of ['pane', 'agent_session_id']) test(`record release refuses newer ${binding} continuation before and after recording`, t => {
+  const f = fixture(t), events = loadEvents(f.org).events;
+  const newer = { type: 'run.started', id: 'R-2256', item: 'ENG-1', workspace: f.lane, seq: 5,
+    meta: { ...events[1].meta, agent: 'continuation', pane: 'w:q', agent_session_id: 'new-session', [binding]: events[1].meta[binding] } };
+  writeEvents(f, [...events, newer]); const bytes = fs.readFileSync(f.eventFile, 'utf8');
+  const refused = recordRelease(f); assert.equal(refused.status, 1); assert.match(refused.stderr, /newer run uses the same pane or native session/);
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), bytes);
+  writeEvents(f, events); const accepted = recordRelease(f); assert.equal(accepted.status, 0, accepted.stderr);
+  fs.appendFileSync(f.eventFile, JSON.stringify({ ...newer, seq: 7 }) + '\n');
+  assert.equal(recordRelease(f).status, 1);
+  assert.equal(f.retirement().plan().close.length, 0);
+});
+
+test('record release closes only the fixture tab and preserves the open lane, worktree, branch, workspace and files', t => {
+  const f = fixture(t, { merged: false }); writeEvents(f, loadEvents(f.org).events.filter(e => e.type !== 'item.closed'));
+  fs.writeFileSync(path.join(f.lane, 'uncommitted'), 'keep these bytes'); f.traceGit();
+  const retirement = f.retirement(); assert.match(retirement.plan().keep[0].why, /chain is still open/);
+  const accepted = recordRelease(f); assert.equal(accepted.status, 0, accepted.stderr);
+  const plan = retirement.plan(); assert.equal(plan.close.length, 1); assert.match(plan.close[0].why, /record release for R-1/);
+  const unhold = hold(f); assert.equal(retirement.apply(plan)[0].action, 'held'); assertNoRemoval(f); unhold();
+  assert.equal(retirement.apply(plan)[0].action, 'closed');
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]); assert.equal(f.read().workspaces.length, 1);
+  assert.equal(fs.readFileSync(path.join(f.lane, 'uncommitted'), 'utf8'), 'keep these bytes');
+  assert.equal(f.git(['rev-parse', 'HEAD'], f.lane), f.head); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  assert.ok(f.git(['worktree', 'list', '--porcelain']).includes(f.lane));
+  assert.throws(() => retirement.closeEmptyWorkspace('w', f.lane), /worktree removal is not confirmed/);
+  assert.throws(() => retirement.assertVacant(f.lane), /chain is still open/);
+  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', expectedTip: f.head }), /lane worktree is not clean/);
+  assert.deepEqual(f.gitCalls().filter(args => args.includes('worktree') && args.includes('remove')), []);
+});
+
 test('Git-only lane without a workspace still keeps queued lane and run references', t => {
   const f=fixture(t,{occupied:false});f.state.workspaces=[];f.save();
   const queue=f.queue();queue.transaction(data=>data.pending.push({...f.job}));

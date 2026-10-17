@@ -165,6 +165,122 @@ test('confirmed successor never releases a warm open chain; disposition still ne
   s.agents.pop(); assert.equal(planRetirement(s).close.length, 0);
 });
 
+function releasedFixture() {
+  const s = fixture(), run = s.record.runs.get('R-1');
+  s.record.items.get('ENG-1').closed = null;
+  s.git[0].head = 'a'.repeat(40); s.git[0].clean = false; s.git[0].integrated = false;
+  s.agents[0].agent_status = 'idle';
+  s.releases = [{ type: 'retirement.release', run: run.id, item: run.item, pane: 'w:p', terminal: 'terminal', session: 'session',
+    workspace: 'w', cwd: run.workspace, head: s.git[0].head, authority: 'owner ruling', confirmed: true, why: 'continue at desk', seq: 5 }];
+  return s;
+}
+
+test('explicit release lifts only the session KEEP; an ingested open chain alone stays and lane removal still keeps', () => {
+  const s = releasedFixture(), releases = s.releases, before = structuredClone(s.record);
+  s.releases = []; assert.match(kept(s), /chain is still open/);
+  s.releases = releases; const plan = planRetirement(s);
+  assert.equal(plan.close.length, 1); assert.match(plan.close[0].why, /record release for R-1/);
+  const actions = []; executeRetirement(plan, { observe: () => s, close: id => actions.push(id),
+    closeWorkspace: () => assert.fail('workspace'), removeLane: () => assert.fail('lane') });
+  assert.deepEqual(actions, ['w:t']); assert.deepEqual(s.record, before);
+  s.tabs = []; s.panes = []; s.agents = [];
+  assert.match(laneRemovalReason(s, '/repo/lane'), /chain is still open/);
+});
+
+for (const outcome of ['blocked', 'needs_human', 'failed']) test(`explicit release permits a reported ${outcome} session`, () => {
+  const s = releasedFixture(); s.record.runs.get('R-1').report.outcome = outcome;
+  assert.equal(planRetirement(s).close.length, 1);
+});
+
+for (const change of ['session', 'terminal', 'pane', 'workspace', 'cwd', 'unstamped', 'before-report', 'unconfirmed', 'head',
+  'git-common', 'git-path', 'git-error', 'missing-report', 'working', 'process', 'focus', 'standard-slot', 'persistent', 'operator', 'lab', 'hold', 'error', 'other-occupant'])
+  test(`explicit release keeps ${change}`, () => {
+    const s = releasedFixture(), release = s.releases[0];
+    if (['session', 'terminal', 'pane', 'workspace', 'cwd'].includes(change)) release[change] = 'wrong';
+    if (change === 'unstamped') delete release.seq;
+    if (change === 'before-report') release.seq = s.record.runs.get('R-1').report.seq;
+    if (change === 'unconfirmed') release.confirmed = false;
+    if (change === 'head') s.git[0].head = 'b'.repeat(40);
+    if (change === 'git-common') s.git[0].common = '/other/.git';
+    if (change === 'git-path') s.git[0].path = '/other/lane';
+    if (change === 'git-error') s.git[0].error = 'Git unreadable';
+    if (change === 'missing-report') s.record.runs.get('R-1').report = null;
+    if (change === 'working') s.agents[0].agent_status = 'working';
+    if (change === 'process') s.panes[0].process_info.process_tree.push({ pid: 99, identity: 'server', command: 'server', state: 'S' });
+    if (change === 'focus') s.tabs[0].focused = true;
+    if (change === 'standard-slot') s.standardSlots = standardSlots(s);
+    if (change === 'persistent') s.workspaces[0].persistent = true;
+    if (change === 'operator') s.workspaces[0].operator = true;
+    if (change === 'lab') s.workspaces[0].lab_owned = true;
+    if (change === 'hold') s.retirementHold = RETIREMENT_HOLD_REASON;
+    if (change === 'error') s.errors.push('unreadable evidence');
+    if (change === 'other-occupant') { s.panes.push({ ...s.panes[0], pane_id: 'w:q' }); s.agents.push({ ...s.agents[0], name: 'unknown', pane_id: 'w:q' }); }
+    const reason = kept(s);
+    if (change === 'head') assert.equal(reason, 'release for R-1 is stale: head moved');
+    if (change === 'hold') assert.equal(reason, RETIREMENT_HOLD_REASON);
+  });
+
+for (const ref of [{ item: 'ENG-1' }, { run: 'R-1' }, { pane: 'w:p' }, { cwd: '/repo/lane' }])
+  test(`explicit release rechecks new live reference ${Object.keys(ref)[0]}`, () => {
+    const s = releasedFixture(), plan = planRetirement(s); s.references.push({ ...ref, kind: 'new work' });
+    assert.match(kept(s), /new work reference/);
+    assert.equal(executeRetirement(plan, { observe: () => s, close: () => assert.fail('new reference') })[0].action, 'skip-close');
+  });
+
+for (const change of ['terminal', 'session', 'same-pane-run', 'same-session-run']) test(`explicit release cannot close later occupant ${change}`, () => {
+  const s = releasedFixture(), plan = planRetirement(s), old = s.record.runs.get('R-1');
+  if (change === 'terminal') s.agents[0].terminal_id = 'later';
+  if (change === 'session') s.agents[0].agent_session.value = 'later';
+  if (change.endsWith('-run')) {
+    const meta = { ...old.meta, agent: 'continuation' };
+    if (change === 'same-pane-run') { meta.terminal_id = 'later'; meta.agent_session_id = 'later'; }
+    if (change === 'same-session-run') meta.pane = 'w:q';
+    s.record.runs.set('R-2256', { ...old, id: 'R-2256', started: { seq: 6 }, meta, report: null });
+    Object.assign(s.agents[0], { name: meta.agent, terminal_id: meta.terminal_id, agent_session: { value: meta.agent_session_id } });
+  }
+  assert.ok(kept(s));
+  assert.equal(executeRetirement(plan, { observe: () => s, close: () => assert.fail('later occupant') })[0].action, 'skip-close');
+});
+
+test('explicit release ignores unrelated open lane runs but retains pane, session and run references', () => {
+  for (const meta of [{}, { pane: 'w:p' }, { agent_session_id: 'session' }, { run: 'R-1' }]) {
+    const s = releasedFixture();
+    s.record.runs.set('R-2', { id: 'R-2', item: 'ENG-2', workspace: '/repo/lane', started: { seq: 1 }, report: null, meta });
+    if (!Object.keys(meta).length) assert.equal(planRetirement(s).close.length, 1);
+    else assert.match(kept(s), /open run in lane/);
+  }
+});
+
+test('release authority changes both plan and tab tokens and executor freshly keeps a moved head', () => {
+  const s = releasedFixture(), plan = planRetirement(s);
+  s.releases[0].authority = 'new ruling';
+  assert.notEqual(planRetirement(s).token, plan.token); assert.notEqual(planRetirement(s).close[0].token, plan.close[0].token);
+  assert.equal(executeRetirement(plan, { observe: () => s, close: () => assert.fail('changed authority') })[0].action, 'skip-close');
+  const fresh = planRetirement(s); s.git[0].head = 'b'.repeat(40);
+  assert.match(executeRetirement(fresh, { observe: () => s, close: () => assert.fail('moved head') })[0].why, /stale: head moved/);
+});
+
+test('explicit release cannot override an incoming handoff reservation', () => {
+  const s = releasedFixture(), run = s.record.runs.get('R-1');
+  run.started.seq = 3;
+  const predecessor = { ...run, id: 'R-0', started: { seq: 2 }, meta: { ...run.meta,
+    agent: 'predecessor', pane: 'w:q', terminal_id: 'old-term', agent_session_id: 'old-session' } };
+  s.record.runs.set(predecessor.id, predecessor);
+  s.tabs.push({ tab_id: 'w:u', workspace_id: 'w' }); s.panes.push({ ...s.panes[0], pane_id: 'w:q', tab_id: 'w:u' });
+  s.agents.push({ ...s.agents[0], name: 'predecessor', pane_id: 'w:q', tab_id: 'w:u', terminal_id: 'old-term', agent_session: { value: 'old-session' } });
+  s.handoffs.push({ from: 'R-0', to: 'R-1', confirmed: true, seq: 6 });
+  const plan = planRetirement(s); assert.equal(plan.close.length, 0);
+  assert.match(plan.keep.find(t => t.tab_id === 'w:t').why, /retained successor for handoff/);
+});
+
+test('older folds ignore retirement.release and both folds preserve the ingested report', () => {
+  const events = [{ type: 'item.added', id: 'ENG-1', role: 'engineer', seq: 1 },
+    { type: 'run.started', id: 'R-1', item: 'ENG-1', seq: 2 },
+    { type: 'report.ingested', run: 'R-1', report: { outcome: 'done' }, sha256: 'immutable', seq: 3 },
+    { type: 'retirement.release', run: 'R-1', confirmed: true, seq: 4 }];
+  for (const f of [fold, olderFold]) assert.deepEqual([...f(events).runs.values()], [...f(events.slice(0, -1)).runs.values()]);
+});
+
 function standardSlots(s) {
   return { schema: 'standard-slot-history/v1', errors: [], slots: [{ uid: 'adopted-logs', common: s.common, server: 'default', workspace: 'w', checkout: '/repo/lane', tab: 'w:t', standardSlot: 'logs', panes: [{ pane: 'w:p', paneSlot: 'viewer' }, { pane: 'w:q', paneSlot: 'triage' }] }] };
 }

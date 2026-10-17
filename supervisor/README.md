@@ -121,7 +121,8 @@ this stage performs no live enrollment. Withdrawal preserves history and
 removes only this KEEP input, leaving every other guard intact.
 
 Warm work-item sessions also stay while their review/correction/integration
-chain remains open, **including with a confirmed successor**. Ingested reports,
+chain remains open, **including with a confirmed successor**, unless an explicit
+`record release` binds that idle session under the checks below. Ingested reports,
 failed reviews, correction gaps and needs-human outcomes remain protected until
 the record supplies terminal evidence/disposition under the ordinary checks.
 The shared executor re-reads both the record chain and canonical slot receipts
@@ -154,6 +155,13 @@ are immutable; the fold's shape and exports are unchanged and older folds ignore
 the handoff event. A live native session needs its recorded launch session id;
 a terminal-only legacy receipt cannot authorize a later native session. Labels, ledgers and session display metadata never authorize
 retirement, so unrecorded reviewer, session and watcher tabs stay.
+
+`record release` records an authority-bound owner continuation note and a release
+for one ingested run, binding its exact native session, terminal, pane, worker
+workspace, checkout and Git head. It can release the idle session's whole tab
+while its chain stays open; another kept occupant keeps the tab. It never releases
+a lane, worktree or workspace. BCH's `HOLD-WORKER-TAB-CLOSE` still holds it, and
+a same-pane or same-session continuation keeps the tab.
 
 Short-lived watcher and settle/executive/plan launches can write a mechanical
 `retirement-occupant/v1` receipt under `ORG/retirement/occupants/`. It binds the

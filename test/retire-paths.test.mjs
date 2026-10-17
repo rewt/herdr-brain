@@ -421,6 +421,21 @@ const releaseArgs = f => ['pane-release', 'R-1', '--session', 'session', '--term
 const recordRelease = (f, args = releaseArgs(f)) => spawnSync(process.execPath, [recordCLI, ...args], { cwd: f.repo, env: f.env, encoding: 'utf8' });
 const writeEvents = (f, events) => fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
 
+test('native helper descendants on an open chain exit only after an exact record pane-release', t => {
+  const f = fixture(t); nativeExit(f);
+  writeEvents(f, loadEvents(f.org).events.filter(e => e.type !== 'item.closed'));
+  const retirement = f.retirement();
+  assert.match(retirement.plan().keep[0].why, /chain is still open/);
+  retirement.apply(retirement.plan()); assert.deepEqual(f.read().actions, []);
+  const release = recordRelease(f); assert.equal(release.status, 0, release.stdout + release.stderr);
+  const planned = retirement.plan(); assert.equal(planned.close[0].decision, 'exit');
+  assert.equal(retirement.apply(planned)[0].action, 'closed');
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+  assert.equal(fs.existsSync(f.lane), true);
+  assert.equal(fold(loadEvents(f.org).events).items.get('ENG-1').closed, null);
+  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', expectedTip: f.head, gitOnly: true }), /chain is still open/);
+});
+
 test('record pane-release leaves the legacy release command unavailable', t => {
   const f = fixture(t), before = fs.readFileSync(f.eventFile, 'utf8');
   for (const args of [['release', 'cut'], ['release', 'R-1'], ['release', ...releaseArgs(f).slice(1)]]) {

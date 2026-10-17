@@ -1317,7 +1317,8 @@ function dispatch(topic, promptText, options = {}) {
     // Reviewers have no worker run of their own. Bind their native occupant to
     // the run under review before delivery, independently of display metadata.
     try {
-      createRetirement({ cwd: REPO_ROOT, main: MAIN, deadline: options.deadline }).recordCallback({
+      createRetirement({ cwd: REPO_ROOT, main: MAIN,
+        deadline: Math.min(options.deadline ?? Infinity, Date.now() + 10000) }).recordCallback({
         kind: 'settle', pane, agent: agentName, run: options.run,
       });
     } catch (error) {

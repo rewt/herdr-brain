@@ -22,7 +22,7 @@ import test, { currentTest } from '../../test/helpers/bounded-test.mjs';
 import { repositorySeed } from '../../test/helpers/git-seed.mjs';
 
 import { loadTimeout } from '../../lib/deadline.mjs';
-import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { spawnChild, spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../review-evidence.mjs';
 import { createRetirement } from '../../lib/retire-runtime.mjs';
@@ -301,6 +301,12 @@ const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")
 appendFileSync(log, JSON.stringify(args) + "\\n");
 const save = () => writeFileSync(statePath, JSON.stringify(state));
 const result = (id, value) => process.stdout.write(JSON.stringify({ id, result: value }) + "\\n");
+const stallObservation = stage => {
+  if (!state.agent || !process.env.FAKE_RETIREMENT_OBSERVE_DELAY_MS) return;
+  (state.retirementStalls ||= []).push(stage); save();
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.FAKE_RETIREMENT_OBSERVE_DELAY_MS));
+  (state.retirementStallsCompleted ||= []).push(stage); save();
+};
 const workspace = (id, label, path, linked, repoKey = process.env.FAKE_HERDR_REPO_KEY) => ({
   active_tab_id: id + ":t1", agent_status: "idle", focused: false, label,
   number: 1, pane_count: id === "w-lane" ? (state.tabCount || 1) : 1,
@@ -311,6 +317,7 @@ const workspace = (id, label, path, linked, repoKey = process.env.FAKE_HERDR_REP
   },
 });
 if (args[0] === "workspace" && args[1] === "list") {
+  stallObservation('workspace');
   state.workspaceLists = (state.workspaceLists || 0) + 1;
   save();
   const workspaces = process.env.FAKE_HERDR_NO_PARENT === "1" ? [] : [workspace("w-parent", "repository", process.env.FAKE_HERDR_REPO_ROOT, false)];
@@ -332,6 +339,7 @@ if (args[0] === "workspace" && args[1] === "list") {
   workspaces.push(...JSON.parse(process.env.FAKE_HERDR_EXTRA_WORKSPACES || "[]"));
   result("cli:workspace:list", { type: "workspace_list", workspaces });
 } else if (args[0] === "tab" && args[1] === "list") {
+  if (args.at(-1) === "w-lane") stallObservation('tab');
   result("cli:tab:list", { tabs: process.env.FAKE_RETIREMENT_OWNER && state.agent && args.at(-1) === "w-lane"
     ? [{ tab_id: "w-lane:t2", workspace_id: "w-lane" }] : [] });
 } else if (args[0] === "pane" && args[1] === "list") {
@@ -3422,6 +3430,37 @@ test("review recording failure warns once and preserves verdicts and review arti
       assert.equal(review.fake.calls().some(args => args[1] === 'close'), false);
     } finally { fixture.cleanup(); }
   }
+});
+
+test("review recording deadline interrupts a stalled observation and preserves the review", async t => {
+  const topic = 'review-record-deadline', review = makeReviewFixture(topic, { verdict: 'PASS' });
+  const { fixture } = review;
+  try {
+    fixture.env.ORG_DIR = join(fixture.root, 'record'); mkdirSync(fixture.env.ORG_DIR);
+    writeFileSync(join(fixture.env.ORG_DIR, 'events.jsonl'), '');
+    fixture.env.FAKE_RETIREMENT_OWNER = JSON.stringify(ownerProcess(process.pid));
+    fixture.env.FAKE_RETIREMENT_OBSERVE_DELAY_MS = '6000';
+    // Each observation command is below its ordinary ten-second allowance;
+    // their combined twelve seconds must hit the recording's own deadline.
+    const child = spawnScenarioChild(t, process.execPath, [LANE, 'review', topic, '--round', '1',
+      '--brief', review.brief, '--run', 'R-1', '--timeout', '45'], {
+      cwd: fixture.repo, env: hermeticGitEnvironment(fixture.env),
+    }, 35000);
+    const run = await waitForExit(child);
+    assert.equal(run.status, 0, run.stderr); assert.equal(run.stdout, 'PASS\n');
+    assert.equal((run.stderr.match(/lane review: warning: launch identity could not be recorded/g) ?? []).length, 1);
+    assert.match(run.stderr, /deadline.*tab retained/);
+    assert.deepEqual(review.fake.state().retirementStalls, ['workspace', 'tab']);
+    assert.deepEqual(review.fake.state().retirementStallsCompleted, ['workspace']);
+    const directory = join(fixture.env.ORG_DIR, 'retirement/occupants');
+    assert.deepEqual(existsSync(directory) ? readdirSync(directory) : [], []);
+    assert.equal(review.fake.state().receiptBeforePrompt, false);
+    assert.equal(review.fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, 1);
+    const head = git(review.path, ['rev-parse', 'HEAD']).slice(0, 7);
+    assert.equal(parseVerdict(readFileSync(join(review.path, 'docs/reviews', topic, `${head}-r1.md`), 'utf8')), 'PASS');
+    assert.ok(existsSync(join(fixture.repo, '.lane/reviews', topic, `${head}-r1.md`)));
+    assert.equal(review.fake.calls().some(args => args[1] === 'close'), false);
+  } finally { fixture.cleanup(); }
 });
 
 test("review dispatches once and publishes all canonical verdicts after private validation", () => {

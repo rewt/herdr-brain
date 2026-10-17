@@ -167,7 +167,7 @@ test('latest worker and reviewer name the next actor; older idle contexts are re
   const newer = { ...run(s), id: 'R-3', started: { seq: 10 }, meta: { ...run(s).meta, agent: 'new-owner', pane: 'new:p', agent_session_id: 'new-session' } };
   s.record.runs.set('R-3', newer);
   assert.equal(tab(s).class, 'IDLE-NONTERMINAL');
-  assert.match(tab(s).nextAction, /record release/);
+  assert.match(tab(s).nextAction, /record pane-release/);
 });
 
 test('no-report, blocked occupant and exact live references are ACTIVE; unknown sources still keep', () => {

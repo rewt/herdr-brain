@@ -30,7 +30,7 @@ never stored status or permission to close.
 | Release | TERMINAL | Terminal; retire through the guarded executor |
 | Working/blocked occupant, un-ingested report or known live reference | ACTIVE | Names the worker, report, resource owner or job being awaited |
 | Open chain with this item's latest run or latest review | WAITING | Names the fix owner, reviewer, supervisor, or operator for an open human question |
-| Older idle/done run in an open chain | IDLE-NONTERMINAL | Release candidate; supervisor/Astra decision via `record release` (ENG-369) |
+| Older idle/done run in an open chain | IDLE-NONTERMINAL | Release candidate; supervisor/Astra decision via `record pane-release` (ENG-369) |
 | Unknown identity/process/topology, unreadable evidence, or an unmapped reason | UNKNOWN | Keep, with the concrete reason |
 | Standard slot, persistent/operator/lab workspace, or focus | PROTECTED | Keep |
 

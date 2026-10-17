@@ -74,7 +74,13 @@ test('Brain gate starts with legacy holders and a queue waiting, without any loc
   const bytes = JSON.stringify({ pid: owner.child.pid, processStart: identity.start, processBirth: identity.birth,
     pgid: null, token: 'legacy', label: 'legacy holder' }) + '\n';
   for (const file of [f.lock, f.compat]) fs.writeFileSync(file, bytes);
-  const queue = `${f.lock}.queue`; fs.mkdirSync(queue); fs.writeFileSync(path.join(queue, 'waiting.json'), 'waiting peer');
+  const peer = f.start(['-e', 'setInterval(()=>{},1000)']);
+  await new Promise(resolve => peer.child.once('spawn', resolve));
+  const peerIdentity = processStartRecord(peer.child.pid);
+  const queue = `${f.lock}.queue`; fs.mkdirSync(queue);
+  const ticket = JSON.stringify({ v: 1, pid: peer.child.pid, processStart: peerIdentity.start, processBirth: peerIdentity.birth,
+    token: 'fixture-waiting-peer', label: 'waiting peer', arrivedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60000).toISOString() });
+  fs.writeFileSync(path.join(queue, 'waiting.json'), ticket);
   const deny = path.join(f.root, 'guard.cjs');
   fs.writeFileSync(deny, `const fs=require('fs'),path=require('path');const locks=${JSON.stringify([f.lock, f.compat])};
 const protectedPath=p=>locks.some(lock=>String(p)===lock||String(p).startsWith(lock+'.queue'));
@@ -96,6 +102,7 @@ const read=fs.readFileSync,counts=new Map();fs.readFileSync=(p,...args)=>{if(pro
   }
   for (const file of [f.lock, f.compat]) assert.equal(fs.readFileSync(file, 'utf8'), bytes);
   assert.deepEqual(fs.readdirSync(queue), ['waiting.json']);
+  assert.equal(fs.readFileSync(path.join(queue, 'waiting.json'), 'utf8'), ticket);
 });
 
 for (const status of [0, 7, 127]) test(`shared occupancy is removed after command exit ${status}`, t => {

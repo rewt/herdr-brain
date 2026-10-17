@@ -38,6 +38,7 @@ const promotion = [
   'supervisor/test/autopilot.test.mjs',
   'supervisor/test/chats.test.mjs',
   'supervisor/test/reconcile.test.mjs',
+  'test/activation-seam.test.mjs',
   'test/approvals.test.mjs',
   'test/discernment.test.mjs',
   'test/file-wait.test.mjs',

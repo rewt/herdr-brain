@@ -8,6 +8,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -24,6 +25,9 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../review-evidence.mjs';
+import { createRetirement } from '../../lib/retire-runtime.mjs';
+import { planRetirement } from '../../lib/retire.mjs';
+import { ownerProcess } from '../../lib/process-owner.mjs';
 // Bounded evidence polling avoids the shared host's exhausted FSEvents pool.
 async function waitForFile(file, predicate = () => true, { timeoutMs = 10000 } = {}) {
   const deadline = Date.now() + loadTimeout(timeoutMs);
@@ -328,9 +332,11 @@ if (args[0] === "workspace" && args[1] === "list") {
   workspaces.push(...JSON.parse(process.env.FAKE_HERDR_EXTRA_WORKSPACES || "[]"));
   result("cli:workspace:list", { type: "workspace_list", workspaces });
 } else if (args[0] === "tab" && args[1] === "list") {
-  result("cli:tab:list", { tabs: [] });
+  result("cli:tab:list", { tabs: process.env.FAKE_RETIREMENT_OWNER && state.agent && args.at(-1) === "w-lane"
+    ? [{ tab_id: "w-lane:t2", workspace_id: "w-lane" }] : [] });
 } else if (args[0] === "pane" && args[1] === "list") {
-  result("cli:pane:list", { panes: [] });
+  result("cli:pane:list", { panes: process.env.FAKE_RETIREMENT_OWNER && state.agent && args.at(-1) === "w-lane"
+    ? [{ pane_id: state.agentPane, tab_id: "w-lane:t2", workspace_id: "w-lane" }] : [] });
 } else if (args[0] === "worktree" && args[1] === "list") {
   const openId = state.opened ? "w-lane" : process.env.FAKE_HERDR_STALE_ID;
   const worktrees = [{
@@ -390,6 +396,13 @@ if (args[0] === "workspace" && args[1] === "list") {
   });
 } else if (args[0] === "pane" && args[1] === "process-info") {
   const shellPid = Number(process.env.FAKE_HERDR_SHELL_PID || 123456789);
+  if (process.env.FAKE_RETIREMENT_OWNER && state.agent) {
+    const owner = JSON.parse(process.env.FAKE_RETIREMENT_OWNER);
+    result("cli:pane:process-info", { process_info: { shell_pid: shellPid,
+      foreground_processes: [{ pid: owner.pid, name: owner.command.replace(/^\\[|\\]$/g, '') }], process_tree_complete: true,
+      process_tree: [{ pid: shellPid, identity: "fixture-shell", command: "[zsh]", state: "S" }, owner] } });
+    process.exit(0);
+  }
   result("cli:pane:process-info", { process_info: { shell_pid: shellPid,
     foreground_processes: process.env.FAKE_HERDR_RC_CHILD === "1" ? [{ pid: 987654321, name: "rc-child" }] :
       [{ pid: shellPid, name: process.env.FAKE_HERDR_PANE_SHELL || "zsh" }] } });
@@ -448,6 +461,7 @@ if (args[0] === "workspace" && args[1] === "list") {
   result("cli:agent:list", { type: "agent_list", agents: state.agent ? [{
     agent_status: "idle", cwd: process.env.FAKE_HERDR_AGENT_CWD || process.env.FAKE_HERDR_LANE_PATH, name: state.agent,
     pane_id: state.agentPane || "w-lane:p2", workspace_id: "w-lane", terminal_id: "fixture-terminal-1",
+    ...(process.env.FAKE_RETIREMENT_OWNER ? { agent: JSON.parse(process.env.FAKE_RETIREMENT_OWNER).command.replace(/^\\[|\\]$/g, ''), tab_id: "w-lane:t2" } : {}),
     agent_session: { agent: "codex", kind: "id", source: "herdr:codex", value: state.agentSession || "fixture-session-1" },
   }] : [] });
 } else if (args[0] === "agent" && args[1] === "read") {
@@ -469,6 +483,11 @@ if (args[0] === "workspace" && args[1] === "list") {
   }
   result("cli:agent:focus", { type: "agent_focus", target: args[2] });
 } else if (args[0] === "agent" && args[1] === "prompt") {
+  if (process.env.FAKE_RETIREMENT_OWNER) {
+    const directory = process.env.ORG_DIR + "/retirement/occupants";
+    state.receiptBeforePrompt = existsSync(directory) && statSync(directory).isDirectory() && (await import('node:fs')).readdirSync(directory).length === 1;
+    save();
+  }
   if (process.env.FAKE_HERDR_PROMPT_FAIL === "1") process.exit(4);
   if (process.env.FAKE_HERDR_REPLACE_AFTER_PROMPT === "1") {
     state.agentSession = "replacement-session";
@@ -3304,6 +3323,9 @@ test("review requires explicit source, round, route, and bounded unique flags wi
       ["review-flags", "--round", "1", "--brief", brief, "--route", "missing"],
       ["review-flags", "--round", "1", "--round", "2", "--brief", brief],
       ["review-flags", "--round", "1", "--brief", brief, "--unknown", "value"],
+      ["review-flags", "--round", "1", "--brief", brief, "--run", "invalid"],
+      ["review-flags", "--round", "1", "--brief", brief, "--run"],
+      ["review-flags", "--round", "1", "--brief", brief, "--run", "R-1", "--run", "R-2"],
     ];
     for (const args of cases) {
       const run = lane(fixture, ["review", ...args]);
@@ -3321,6 +3343,84 @@ test("review requires explicit source, round, route, and bounded unique flags wi
     negativeControl("review flag refusals use exit 2");
   } finally {
     fixture.cleanup();
+  }
+});
+
+test("review records one native launch identity before delivery and the planner recognises it", () => {
+  const review = makeReviewFixture('review-occupant', { verdict: 'PASS' });
+  const { fixture } = review;
+  try {
+    const org = join(fixture.root, 'record');
+    mkdirSync(org);
+    fixture.env.ORG_DIR = org;
+    fixture.env.FAKE_RETIREMENT_OWNER = JSON.stringify(ownerProcess(process.pid));
+    const events = [
+      { type: 'item.added', id: 'ENG-1', role: 'engineer', kind: 'work' },
+      { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: review.path, meta: {} },
+      { type: 'report.ingested', run: 'R-1', report: { outcome: 'done' } },
+      { type: 'item.closed', id: 'ENG-1', as: 'done' },
+    ].map((event, index) => ({ ...event, seq: index + 1, at: '2026-01-01T00:00:00Z', by: 'fixture' }));
+    const eventFile = join(org, 'events.jsonl'), eventBytes = events.map(event => JSON.stringify(event) + '\n').join('');
+    writeFileSync(eventFile, eventBytes);
+    const run = lane(fixture, ['review', 'review-occupant', '--round', '1', '--brief', review.brief, '--run', 'R-1']);
+    assert.equal(run.status, 0, run.stderr); assert.equal(run.stdout, 'PASS\n');
+    assert.doesNotMatch(run.stderr, /launch identity could not be recorded/);
+    assert.equal(review.fake.state().receiptBeforePrompt, true);
+    const directory = join(org, 'retirement/occupants'), files = readdirSync(directory);
+    assert.equal(files.length, 1);
+    const receipt = JSON.parse(readFileSync(join(directory, files[0]), 'utf8'));
+    const agent = review.fake.calls().find(args => args[0] === 'agent' && args[1] === 'start')[2];
+    assert.deepEqual(receipt, { schema: 'retirement-occupant/v1', kind: 'settle',
+      common: repositoryIdentity(fixture.repo), cwd: review.path, workspace: 'w-lane', tab: 'w-lane:t2', pane: 'w-lane:p2',
+      shell: { pid: 123456789, identity: 'fixture-shell', command: '[zsh]' },
+      process: { pid: process.pid, identity: ownerProcess(process.pid).identity, command: ownerProcess(process.pid).command },
+      run: 'R-1', agent, terminal_id: 'fixture-terminal-1', agent_session_id: 'fixture-session-1' });
+    const runtime = createRetirement({ cwd: fixture.repo, org, env: fixture.env, herdr: join(fixture.bin, 'herdr') });
+    const snapshot = runtime.observe();
+    assert.match(planRetirement({ ...snapshot, callbacks: [] }).keep[0].why, /unknown or mismatched recorded launch identity/);
+    assert.equal(planRetirement(snapshot).keep[0].why, 'recorded callback process is still live or unknown');
+    // An exited review on a clean, integrated terminal chain is recognised by
+    // the unchanged planner. Exiting/closing a native agent is a separate slice.
+    git(review.path, ['add', 'docs/reviews']); git(review.path, ['commit', '-m', 'Record fixture review']);
+    git(fixture.repo, ['merge', '--ff-only', 'lane/review-occupant']);
+    const finished = runtime.observe();
+    finished.agents = []; finished.callbacks[0].process_gone = true;
+    const pane = finished.panes[0], shell = pane.process_info.process_tree[0];
+    pane.shellOnly = true;
+    pane.process_info = { shell_pid: shell.pid, foreground_processes: [{ pid: shell.pid, name: 'zsh' }],
+      process_tree_complete: true, process_tree: [shell] };
+    assert.equal(planRetirement(finished).close[0].why, 'recorded settle callback complete; unchanged process and shell identity');
+    // The fixture deliberately reuses the same tab. The existing live-owner
+    // rule must preserve the first receipt, while review itself still succeeds.
+    const bytes = readFileSync(join(directory, files[0]), 'utf8');
+    const second = lane(fixture, ['review', 'review-occupant', '--round', '2', '--brief', review.brief, '--run', 'R-1']);
+    assert.equal(second.status, 0, second.stderr); assert.equal(second.stdout, 'PASS\n');
+    assert.equal((second.stderr.match(/lane review: warning: launch identity could not be recorded/g) ?? []).length, 1);
+    assert.match(second.stderr, /receipt belongs to a live process/);
+    assert.equal(readFileSync(join(directory, files[0]), 'utf8'), bytes);
+    assert.equal(readFileSync(eventFile, 'utf8'), eventBytes);
+    assert.equal(review.fake.calls().some(args => ['close', 'send-keys'].includes(args[1])), false);
+  } finally { fixture.cleanup(); }
+});
+
+test("review recording failure warns once and preserves verdicts and review artifacts", () => {
+  for (const [verdict, status] of [['PASS', 0], ['NEEDS-WORK', 1]]) {
+    const topic = `review-record-failure-${status}`, review = makeReviewFixture(topic, { verdict });
+    const { fixture } = review;
+    try {
+      fixture.env.ORG_DIR = join(fixture.root, 'record');
+      fixture.env.FAKE_RETIREMENT_OWNER = JSON.stringify(ownerProcess(process.pid));
+      const parent = join(fixture.env.ORG_DIR, 'retirement'); mkdirSync(parent, { recursive: true });
+      writeFileSync(join(parent, 'occupants'), 'occupied by fixture');
+      const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--run', 'R-1']);
+      assert.equal(run.status, status, run.stderr); assert.equal(run.stdout, `${verdict}\n`);
+      assert.equal((run.stderr.match(/lane review: warning: launch identity could not be recorded/g) ?? []).length, 1);
+      assert.match(run.stderr, /tab retained/);
+      const head = git(review.path, ['rev-parse', 'HEAD']).slice(0, 7);
+      assert.equal(parseVerdict(readFileSync(join(review.path, 'docs/reviews', topic, `${head}-r1.md`), 'utf8')), verdict);
+      assert.ok(existsSync(join(fixture.repo, '.lane/reviews', topic, `${head}-r1.md`)));
+      assert.equal(review.fake.calls().some(args => args[1] === 'close'), false);
+    } finally { fixture.cleanup(); }
   }
 });
 

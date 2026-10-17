@@ -712,7 +712,7 @@ function main() {
     job.reviewRelative = `docs/reviews/${lane}/${job.head.slice(0, 7)}-r${job.round}.md`;
     job.stage = 'reviewing'; save();
     const r = call(cli('lane', '../lanes/lane.mjs'), ['review', lane, '--round', String(job.round), '--brief', supplement,
-      '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--memory-checked']);
+      '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--run', id, '--memory-checked']);
     job.reviewLog = evidence(`review-r${job.round}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`); save();
     if (!r.error && r.status === 3 && r.stdout?.trim().startsWith('{')) {
       const receipt = JSON.parse(r.stdout);

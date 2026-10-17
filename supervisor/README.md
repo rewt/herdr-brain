@@ -168,6 +168,7 @@ Short-lived watcher and settle/executive/plan launches can write a mechanical
 canonical common directory, cwd, workspace, tab, pane, shell PID and kernel birth,
 and callback PID, birth and command; session launches also bind the agent's
 terminal and native session. This receipt is independent of the display registry.
+Lane review writes this receipt after verifying the reviewer; settle supplies the run under review.
 The shared planner can prune an unchanged shell after the recorded process exits
 and its callback completes. A watcher requires an ingested report; settle sessions
 also require a terminal chain, and other sessions require no open run in their cwd.

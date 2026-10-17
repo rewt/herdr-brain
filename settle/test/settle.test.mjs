@@ -10,6 +10,24 @@ import { INHERITED_GATE_NON_CLAIM } from '../../lanes/review-evidence.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 const journal = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
+test('settle review launch records its native occupant against the run under review', t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  f.env.SETTLE_TEST_REVIEW_IDENTITY = '1';
+  const settled = result(f.settle(run));
+  assert.equal(settled.result, 'promotable'); assert.equal(settled.review.verdict, 'PASS');
+  const directory = path.join(f.org, 'retirement/occupants'), files = fs.readdirSync(directory);
+  assert.equal(files.length, 1);
+  const receipt = JSON.parse(fs.readFileSync(path.join(directory, files[0])));
+  const agent = f.calls().find(args => args[0] === 'agent' && args[1] === 'start')[2];
+  assert.equal(receipt.schema, 'retirement-occupant/v1'); assert.equal(receipt.kind, 'settle');
+  assert.equal(receipt.run, run); assert.equal(receipt.agent, agent);
+  assert.equal(receipt.terminal_id, `t-${agent}`); assert.equal(receipt.agent_session_id, `s-${agent}`);
+  assert.equal(receipt.common, path.join(f.repo, '.git')); assert.equal(receipt.cwd, f.workspace);
+  assert.equal(receipt.workspace, 'w-lane'); assert.ok(receipt.pane); assert.ok(receipt.tab);
+  assert.ok(receipt.shell.identity); assert.ok(receipt.process.identity);
+  assert.doesNotMatch(fs.readFileSync(journal(f, run).reviewLog, 'utf8'), /launch identity could not be recorded/);
+});
+
 test('settle retains the review stage under simulated memory pressure and launches once after it clears', async t => {
   const f = fixture(t), run = f.start();
   f.commit('correct\n'); f.report(run);

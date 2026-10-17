@@ -275,7 +275,7 @@ and job guards. An installed CLI whose server cannot be read refuses closure.
 | --- | --- |
 | `lane open <topic> [base-ref] [--git-only]` | Create a lane worktree and branch; optionally defer its Herdr workspace |
 | `lane dispatch <topic> [--route <name>] [options] [@brief \| prompt]` | Start and prompt a visible Herdr agent |
-| `lane review <topic> --round N [--brief <path>] [--route <name>] [--timeout <seconds>]` | Run one foreground independent review |
+| `lane review <topic> --round N [--brief <path>] [--route <name>] [--timeout <seconds>] [--run R-n]` | Run one foreground independent review; optionally bind its launch receipt to the run under review |
 | `lane routes [--for <task-class> [--pool <pool>]]` | List routes or resolve selection policy |
 | `lane config` | Print resolved configuration values and sources |
 | `lane status` | Show lane state and overlapping files |

@@ -175,6 +175,11 @@ const clientOwner=(relative,operation='')=>{
  if(!owner||seen.has(owner.pid))throw Error('fixture client has no foreground owner');
  return {pid:owner.pid,identity:owner.identity};
 };
+const liveAgents=()=>Object.values(agents).filter(agent=>{
+ if(!agent.client_owner)return true;
+ const owner=lookupProcess(agent.client_owner.pid,{identityOnly:true});
+ return !owner.ok||!!(owner.value&&owner.value.identity===agent.client_owner.identity&&!/^Z/.test(owner.value.state));
+});
 fs.appendFileSync(path.join(root,'calls'),JSON.stringify(args)+'\\n');
 const ws={workspace_id:'w-lane',label:'topic',worktree:{checkout_path:cwd,is_linked_worktree:true,repo_key:path.join(repo,'.git'),repo_root:repo}};
 if(args[0]==='workspace'&&args[1]==='list') out({workspaces:[ws,{workspace_id:'w-parent',label:'project',worktree:{checkout_path:repo,repo_key:path.join(repo,'.git'),repo_root:repo}}]});
@@ -183,16 +188,18 @@ else if(args[0]==='tab'&&args[1]==='create') {const n=Object.keys(agents).length
 // Scripted clients belong to their real foreground review/dispatch process.
 // Keep their registrations through delivery verification, then report vacancy
 // only after that process has exited or its kernel birth has changed.
-else if(args[0]==='tab'&&args[1]==='list') out({tabs:[]});
-else if(args[0]==='pane'&&args[1]==='list') out({panes:[]});
+else if(args[0]==='tab'&&args[1]==='list') out({tabs:process.env.SETTLE_TEST_REVIEW_IDENTITY&&args.at(-1)==='w-lane'?liveAgents().map(a=>({tab_id:a.pane_id.replace(':p',':t'),workspace_id:'w-lane'})):[]});
+else if(args[0]==='pane'&&args[1]==='list') out({panes:process.env.SETTLE_TEST_REVIEW_IDENTITY&&args.at(-1)==='w-lane'?liveAgents().map(a=>({pane_id:a.pane_id,tab_id:a.pane_id.replace(':p',':t'),workspace_id:'w-lane'})):[]});
+else if(args[0]==='pane'&&args[1]==='process-info') {
+ const agent=liveAgents().find(a=>a.pane_id===args.at(-1)),owner=lookupProcess(agent?.client_owner?.pid,{identityOnly:true});
+ if(!owner.ok||!owner.value)throw Error('fixture reviewer owner unavailable');
+ out({process_info:{shell_pid:123456789,foreground_processes:[{pid:owner.value.pid,name:'native'}],process_tree_complete:true,
+  process_tree:[{pid:123456789,identity:'fixture-shell',command:'[zsh]',state:'S'},owner.value]}});
+}
 else if(args[0]==='pane'&&args[1]==='get') out({pane:{pane_id:args[2],foreground_cwd:cwd}});
 else if(args[0]==='pane'&&args[1]==='read') console.log(fs.existsSync(path.join(root,'supervisor-composer'))?fs.readFileSync(path.join(root,'supervisor-composer'),'utf8'):'────────────────────\\n❯ \\n────────────────────');
-else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:'w-lane',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle'};save();out({name:n,pane_id:pane});}
-else if(args[0]==='agent'&&args[1]==='list') out({agents:Object.values(agents).filter(agent=>{
- if(!agent.client_owner)return true;
- const owner=lookupProcess(agent.client_owner.pid,{identityOnly:true});
- return !owner.ok||!!(owner.value&&owner.value.identity===agent.client_owner.identity&&!/^Z/.test(owner.value.state));
-})});
+else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:'w-lane',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle',...(process.env.SETTLE_TEST_REVIEW_IDENTITY?{client_owner:clientOwner('lanes/lane.mjs','review')}:{})};save();out({name:n,pane_id:pane});}
+else if(args[0]==='agent'&&args[1]==='list') out({agents:liveAgents()});
 else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent:'claude',agent_status:'idle',cwd,pane_id:'original:p',workspace_id:'w-lane'}});
 else if(args[0]==='agent'&&args[1]==='read') console.log('');
 else if(args[0]==='agent'&&args[1]==='wait') {await new Promise(r=>setTimeout(r,100));out({});}

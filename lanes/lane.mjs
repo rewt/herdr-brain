@@ -1313,6 +1313,17 @@ function dispatch(topic, promptText, options = {}) {
   if (!cwdCheck.ok) {
     fail(`agent '${agentName}' is running in '${cwdCheck.cwd}', not the lane worktree ${path}; ${failedTab()}, brief NOT sent`);
   }
+  if (IS_REVIEW_COMMAND) {
+    // Reviewers have no worker run of their own. Bind their native occupant to
+    // the run under review before delivery, independently of display metadata.
+    try {
+      createRetirement({ cwd: REPO_ROOT, main: MAIN, deadline: options.deadline }).recordCallback({
+        kind: 'settle', pane, agent: agentName, run: options.run,
+      });
+    } catch (error) {
+      process.stderr.write(`lane review: warning: launch identity could not be recorded (${error.message}); tab retained\n`);
+    }
+  }
   if (promptText !== undefined && promptText.trim() !== "") {
     if (resolved.kind === "codex") {
       const screen = spawnSync("herdr", ["pane", "read", pane, "--source", "visible", "--format", "text"], {
@@ -1429,8 +1440,8 @@ function parseReviewOptions(args) {
   const seen = new Set();
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
-    if (!["--round", "--brief", "--change", "--route", "--route-config", "--timeout"].includes(flag)) {
-      fail(`usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] (unknown operand: ${flag})`);
+    if (!["--round", "--brief", "--change", "--route", "--route-config", "--timeout", "--run"].includes(flag)) {
+      fail(`usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n] (unknown operand: ${flag})`);
     }
     if (seen.has(flag)) fail(`duplicate review option: ${flag}`);
     seen.add(flag);
@@ -1442,6 +1453,7 @@ function parseReviewOptions(args) {
     else options[flag.slice(2)] = value;
   }
   if (!Number.isSafeInteger(options.round) || options.round < 1) fail("--round must be a positive safe integer");
+  if (options.run !== undefined && !/^R-[1-9]\d*$/u.test(options.run)) fail("--run must be a run id (R-n)");
   if (!Number.isInteger(options.timeout) || options.timeout < REVIEW_MIN_TIMEOUT_SECONDS || options.timeout > 7200) {
     fail(`--timeout must be an integer from ${REVIEW_MIN_TIMEOUT_SECONDS} through 7200 seconds`);
   }
@@ -2190,7 +2202,7 @@ async function waitForPrivateReview(path, deadline, interrupted, session) {
 
 async function review(topic, args, memoryChecked = false) {
   repositoryRoot({ requiredBy: "review" });
-  if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>]");
+  if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n]");
   const options = parseReviewOptions(args);
   const branch = laneBranch(topic);
   // Explicit route choices must fail before a memory wait. Resolve the implicit
@@ -2253,7 +2265,7 @@ async function review(topic, args, memoryChecked = false) {
   let session;
   try {
     try {
-      session = dispatch(topic, prompt, { route: options.route, routeConfig: options.routeConfig, silent: true, deadline });
+      session = dispatch(topic, prompt, { route: options.route, routeConfig: options.routeConfig, run: options.run, silent: true, deadline });
     } catch (error) {
       fail(`review dispatch failed: ${error.code === "ETIMEDOUT" ? "timeout" : "Herdr command error"}`);
     }

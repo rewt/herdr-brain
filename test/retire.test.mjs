@@ -631,9 +631,9 @@ test('native exit wait is bounded and never escalates to a close or a process si
   assert.equal(results[0].decision, 'keep'); assert.equal(results[0].why, 'agent did not exit through its exit command');
 });
 
-for (const change of ['reference', 'focus', 'HOLD', 'working', 'session', 'shell', 'background']) test(`native exit's final ordinary plan keeps a newly changed ${change}`, () => {
+for (const change of ['reference', 'focus', 'HOLD', 'working', 'session', 'shell', 'background', 'foreground-shell']) test(`native exit's final ordinary plan keeps a newly changed ${change}`, () => {
   const s = nativeHelpers(fixture()), plan = planRetirement(s);
-  let reads = 0, sends = 0;
+  let reads = 0, sends = 0, closes = 0;
   const result = executeRetirement(plan, { observe: () => {
     if (++reads === 3) {
       if (change === 'reference') s.references.push({ pane: 'w:p', kind: 'new job' });
@@ -643,19 +643,25 @@ for (const change of ['reference', 'focus', 'HOLD', 'working', 'session', 'shell
       if (change === 'session') s.agents[0].agent_session.value = 'replacement';
       if (change === 'shell') s.panes[0].process_info.process_tree[0].identity = 'new shell';
       if (change === 'background') s.panes[0].process_info.process_tree.push({ pid: 99, identity: 'job', state: 'S', command: '[job]' });
+      if (change === 'foreground-shell') {
+        s.panes[0].process_info.process_tree.push({ pid: 99, ppid: 5, identity: 'job', state: 'S', command: '[zsh]' });
+        s.panes[0].process_info.foreground_processes = [{ pid: 99, name: 'zsh' }];
+      }
     }
     return s;
-  }, exit: () => { sends++; bareShell(s); }, close: () => assert.fail('changed final authority') });
-  assert.equal(sends, 1); assert.equal(result[0].decision, 'keep'); assert.equal(result[0].action, 'skip-close');
+  }, exit: () => { sends++; bareShell(s); }, close: () => { closes++; } });
+  assert.equal(sends, 1); assert.equal(closes, 0); assert.equal(result[0].decision, 'keep'); assert.equal(result[0].action, 'skip-close');
 });
 
 test('a stale native exit token cannot send input to a shell or a different process tree', () => {
   for (const change of ['shell', 'parent', 'birth']) {
     const s = nativeHelpers(fixture()), plan = planRetirement(s);
+    let sends = 0, closes = 0;
     if (change === 'shell') bareShell(s);
     if (change === 'parent') s.panes[0].process_info.process_tree[2].ppid = 5;
     if (change === 'birth') s.panes[0].process_info.process_tree[2].identity = 'new birth';
-    const result = executeRetirement(plan, { observe: () => s, exit: () => assert.fail('stale exit'), close: () => assert.fail('stale close') });
+    const result = executeRetirement(plan, { observe: () => s, exit: () => { sends++; }, close: () => { closes++; } });
+    assert.equal(sends, 0); assert.equal(closes, 0);
     assert.equal(result[0].action, 'skip-close');
   }
 });

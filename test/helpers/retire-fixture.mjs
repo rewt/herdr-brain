@@ -98,7 +98,7 @@ else {console.error('unexpected fixture command '+a.join(' '));process.exit(1);}
     { type: 'item.closed', id: 'ENG-1', as: 'done' },
   ].map((e,i) => ({...e,seq:i+1,at:'2026-01-01T00:00:00Z',by:'test'}));
   const eventFile = path.join(org, 'events.jsonl'); const eventBytes = events.map(e => JSON.stringify(e)+'\n').join(''); fs.writeFileSync(eventFile,eventBytes);
-  const retirement = () => createRetirement({ cwd: repo, org, herdr, env });
+  const retirement = (options = {}) => createRetirement({ cwd: repo, org, herdr, env, ...options });
   const close = (gitOnly = true) => spawnSync(process.execPath, [laneCLI, 'close', 'topic', ...(gitOnly ? ['--git-only'] : []), ...(merged ? ['--expected-tip',head] : [])], { cwd: repo, env, encoding: 'utf8' });
   const job = { id: 'job', topic: 'topic', org, run: 'R-1', herdr, laneCLI };
   return { scratch, repo, lane, org, env, git, head, common, state, save, file, retirement, close, job,

@@ -199,9 +199,12 @@ test('unmatched launch names missing fields, never matches pane alone, and uses 
 test('background-process keeps display extra kernel comm names and no argv', () => {
   const s = fixture(), info = s.panes[0].process_info;
   info.process_tree.push(...['codex-code-mode-host', 'node', 'node_repl'].map((name, i) => ({ pid: 3 + i, identity: name, state: 'S', command: `[${name}]`, argv0: 'PLANTED-ARGV' })));
+  info.process_tree.push({ pid: 6, identity: 'helper', state: 'S', command: '[helper with spaces]' },
+    { pid: 7, identity: 'not-comm', state: 'S', command: 'node PLANTED-ARGV' });
   const row = tab(s);
   assert.equal(row.class, 'UNKNOWN');
   assert.match(row.reason, /extra kernel processes: codex-code-mode-host, node, node_repl/);
+  assert.match(row.reason, /node_repl, helper with spaces/);
   assert.doesNotMatch(JSON.stringify(retirementStatus(s)), /PLANTED-ARGV/);
 });
 

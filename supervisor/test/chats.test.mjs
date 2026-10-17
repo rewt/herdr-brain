@@ -18,6 +18,7 @@ state.calls.push(a);
 const save = () => fs.writeFileSync(file, JSON.stringify(state));
 const result = body => { save(); console.log(JSON.stringify({result: body})); };
 const fail = message => { save(); console.error(message); process.exit(1); };
+const runReply = () => { save();process.stdout.write(state.paneRunOutput ?? '');process.exit(state.paneRunExit ?? 0); };
 if (state.fail === a.slice(0, 2).join(' ')) fail('injected failure');
 const value = flag => a[a.indexOf(flag) + 1];
 const environment = () => Object.fromEntries(a.flatMap((word, i) => word === '--env' ? [a[i+1].split(/=(.*)/s).slice(0, 2)] : []));
@@ -46,12 +47,11 @@ else if (a[0] === 'pane' && a[1] === 'read') {
 else if (a[0] === 'pane' && a[1] === 'run') {
   if (state.updatePrompt || state.updateReads > 0) fail('input swallowed by update prompt');
   const pane = state.panes.find(p => p.pane_id === a[2]); save();
-  if (state.dropInput) { state.screen = a[3] + '\\ncheckout % '; result({}); process.exit(0); }
+  if (state.dropInput) { state.screen = a[3] + '\\ncheckout % '; runReply(); }
   const run = spawnSync('/bin/sh', ['-c', a[3]], {cwd: pane.foreground_cwd, env: {...process.env, ...state.env[a[2]]}, encoding: 'utf8'});
   if (run.status !== 0) fail(run.stderr);
   state.screen = (state.screen || '') + '\\n' + run.stdout + '\\ncheckout % ';
-  if (a[3].startsWith('printf ')) { result({}); process.exit(0); }
-  result({});
+  runReply();
 } else if (a[0] === 'agent' && a[1] === 'start') {
   if (state.startDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, state.startDelayMs);
   const pane = state.panes.find(p => p.pane_id === value('--pane'));
@@ -62,7 +62,7 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   if (!state.noDetect) state.agents.push({pane_id: pane.pane_id, agent: state.detectKind || value('--kind'),
     name: state.unnamed ? null : a[2], cwd: state.wrongCwd || pane.foreground_cwd});
   result({});
-} else if (a[0] === 'agent' && a[1] === 'list') result({agents: state.agents});
+} else if (a[0] === 'agent' && a[1] === 'list') { if(state.emptyAgentList) { save();process.exit(0); } result({agents: state.agents}); }
 else if (a[0] === 'agent' && a[1] === 'rename') { state.agents.find(p => p.pane_id === a[2]).name = a[3]; result({}); }
 else fail('unexpected fake call: ' + JSON.stringify(a));
 `;
@@ -388,4 +388,24 @@ test('standard launch argument failure occurs before tab creation', t => {
     launch: { kind: 'claude', args: null, env: [] }, name: 'standard-conversation', role: 'supervisor',
     record: project.record, instructions: 'Conversation', env: f.env, herdr: herdrCommand(f.env) }), TypeError);
   assert.deepEqual(f.state().calls, []);
+});
+
+test('standard session proves the marker with empty or whitespace pane run output', t => {
+  const f=fixture(t), p=f.projects[0];
+  for(const output of ['', ' \n\t', '{"result":{}}']) {
+    f.change(s=>s.paneRunOutput=output);
+    const receipt=openStandardSession({target:{workspace:'standard',checkout:p.checkout},create:true,
+      launch:{kind:'claude',args:[],env:[]},name:'standard-conversation',role:'chat',record:p.record,
+      instructions:'Conversation',env:f.env,herdr:herdrCommand(f.env),startupMs:1000});
+    assert.ok(receipt.pane);assert.match(f.state().screen,/chat-ready-/);
+  }
+  assert.equal(f.state().launches.length,3);
+});
+test('empty failing pane run and empty agent list fail, and malformed pane run stays strict', t => {
+  const f=fixture(t);f.change(s=>s.paneRunExit=7);
+  assert.throws(()=>f.open(),/Herdr pane run/);assert.equal(f.state().launches.length,0);
+  f.change(s=>{s.paneRunExit=0;s.paneRunOutput='malformed';});
+  assert.throws(()=>herdrCommand(f.env)(['pane','run',f.state().panes[0].pane_id,"printf '%s' 'marker'"]),SyntaxError);
+  f.change(s=>s.emptyAgentList=true);
+  assert.throws(()=>herdrCommand(f.env)(['agent','list']),SyntaxError);
 });

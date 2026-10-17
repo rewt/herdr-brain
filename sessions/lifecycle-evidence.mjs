@@ -66,13 +66,31 @@ export function validParticipant(p) {
     p.specDigest === digest({ kind: p.kind, spec: p.spec }) && validBinding(p.binding, p.kind) && text(p.incarnation);
 }
 export function validStartOperation(op) {
-  return exact(op, ['id', 'uid', 'kind', 'generation', 'specDigest', 'target', 'spec', 'state', 'receipt', 'reason']) &&
+  return exact(op, ['id', 'uid', 'kind', 'generation', 'specDigest', 'target', 'spec', 'state', 'receipt', 'reason', 'disposition']) &&
     op.kind === 'start-standard-slot' && text(op.id) && text(op.uid) && hash(op.specDigest) && object(op.spec) &&
     Number.isSafeInteger(op.generation) && op.generation > 0 && exact(op.target, bindingKeys.slice(0, 5)) &&
-    bindingKeys.slice(0, 5).every(k => text(op.target[k])) && ['intent', 'acknowledged', 'withheld'].includes(op.state) &&
+    bindingKeys.slice(0, 5).every(k => text(op.target[k])) && ['intent', 'acknowledged', 'withheld', 'never-started'].includes(op.state) &&
+    (op.state === 'never-started' ? !op.receipt && validStartDisposition(op, op.disposition?.request) &&
+      exact(op.disposition, ['request', 'recordedAt', 'observationDigest']) &&
+      Number.isFinite(Date.parse(op.disposition.recordedAt)) && hash(op.disposition.observationDigest) : op.disposition === undefined) &&
     (op.state !== 'withheld' || text(op.reason)) && (op.state !== 'acknowledged' ||
       op.receipt?.operationId === op.id && op.receipt.uid === op.uid && op.receipt.generation === op.generation && op.receipt.specDigest === op.specDigest &&
       bindingKeys.slice(0, 5).every(k => op.receipt.binding?.[k] === op.target[k]));
+}
+// A supervisor's historical claim, bound to the exact unresolved intent and
+// hashed source files. Native absence alone is never proof of non-invocation.
+export function validStartDisposition(op, d) {
+  const intent = { ...op, state: 'intent' }; delete intent.disposition;
+  return exact(d, ['schema', 'common', 'operationId', 'operationDigest', 'target', 'outcome', 'launchInvoked',
+    'shellOnly', 'agentPresent', 'sessionPresent', 'launchPending', 'role', 'actor', 'observedAt', 'reason', 'evidence']) &&
+    d.schema === 'session-start-disposition/v1' && path.isAbsolute(d.common ?? '') && d.operationId === op.id &&
+    d.operationDigest === digest(intent) && exact(d.target, bindingKeys.slice(0, 6)) && text(d.target.terminalId) &&
+    bindingKeys.slice(0, 5).every(k => d.target[k] === op.target[k]) &&
+    d.outcome === 'never-started' && d.launchInvoked === false && d.shellOnly === true && d.agentPresent === false &&
+    d.sessionPresent === false && d.launchPending === false && d.role === 'supervisor' && text(d.actor) &&
+    Number.isFinite(Date.parse(d.observedAt)) && text(d.reason) && Array.isArray(d.evidence) && d.evidence.length > 0 &&
+    d.evidence.every(e => exact(e, ['file', 'sha256']) && path.isAbsolute(e.file ?? '') && hash(e.sha256)) &&
+    new Set(d.evidence.map(e => e.file)).size === d.evidence.length;
 }
 export function validIncarnation(i) {
   return exact(i, ['id', 'uid', 'operationId', 'previous', 'generation', 'specDigest', 'kind', 'binding', 'contextLoss', 'contextHash']) &&

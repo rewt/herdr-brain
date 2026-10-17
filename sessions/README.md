@@ -574,6 +574,125 @@ native reply leaves intent unresolved, even if an apparent agent exists. Do not
 repeat `agent start`, close, resume or delivery to repair it. Inspect evidence and
 use an explicit disposition; there is no automatic retry command.
 
+### Disposing a start that was never invoked
+
+`losses` and recovery require a previously bound incarnation. They cannot resolve
+an initial start intent with no receipt. For that narrow case, the supervisor can
+run `dispose-start`, declaring **never started**, with the full operation ID, a
+digest of its exact intent, exact target/terminal, hashed source files, actor,
+reason and fresh observation time. Every claim below is required; missing,
+unknown or contrary evidence refuses the disposition. A missing agent alone
+does not prove that the launcher was never invoked: inspect the failure's place
+in the launch path and the recorded evidence first. If an agent may have started
+and exited, or a start reply was lost, retain Hold and investigate.
+
+The command requires the canonical checkout, an explicit workspace, supervisor
+role and the actor's current `start-standard-slot` authorization. It rechecks
+scope, enrollment, STOP/holds, evidence hashes, no receipt/context/binding or
+competing operation, exact topology and a sole foreground shell. It reads native
+pane/process/agent state twice without sending input, and refuses any agent,
+session, pending launch, restore error, changed terminal or uncertain process.
+It keeps the original operation, adds the supervisor evidence and observation
+digest, and changes only that operation to `never-started`. No launch occurs.
+The next plan may propose a **new** start; normal saved-plan, authorization and
+physical-edge checks still apply. A contrary later receipt or occupant holds.
+
+For the stopped A2 trial, operation
+`9fc82490-e2d6-4001-8c31-f5b6b33bcc5e`, the source evidence is
+`.org/evidence/A2-EXPERIMENT-20261017/` in the identity root. Inspect `RESULT.txt`,
+`step1-apply.json`, `controller-journal.json`, `step1-panes-after.json` and
+`step1-pane-after.txt`: the parse error occurred in `waitForShell`'s marker call,
+before `agent start`; the marker executed and the retained pane was shell-only.
+These historical files are not a fresh absence check. The following steps are
+for the supervisor after this fix is installed; lane workers must not run them.
+Do not change the real journal by hand or reuse an expired authorization.
+
+1. From the canonical checkout, use the existing experiment enrollment and a
+   current authorization for `lane/a2-experiment` (the original receipt
+   `396e229c-6da6-47cd-bb71-fabccd8dfe90` expires at `2026-10-17T22:30:00Z`).
+   If renewal is needed, use the `authorize` command above with the still-valid
+   recorded scope/answer `HUM-33:6857`; the receipt actor is `supervisor-herdr`.
+2. Capture fresh **read-only** `herdr pane get w3C2:p1`,
+   `herdr pane process-info --pane w3C2:p1`, and `herdr agent list` replies into
+   separate new files. Inspect them together with the historical failure and
+   marker evidence. Stop if launcher non-invocation or present absence is uncertain.
+3. Write the descriptor below to a new private JSON file. Use `digest` exported
+   by `sessions/lifecycle-evidence.mjs` on the exact current intent for
+   `operationDigest`; use the fresh pane's terminal ID and observation UTC time.
+   Each `evidence` entry is `{ "file": "/absolute/source/file", "sha256": "<SHA-256 of file bytes>" }`.
+   Include all five historical files named above and the three fresh captures.
+   The command re-reads the source bytes and performs its own fresh native checks.
+
+```json
+{
+  "schema": "session-start-disposition/v1",
+  "common": "/Users/rewt/development/rewt/herdr-brain/.git",
+  "operationId": "9fc82490-e2d6-4001-8c31-f5b6b33bcc5e",
+  "operationDigest": "<digest of exact current intent>",
+  "target": {
+    "server": "/Users/rewt/.config/herdr/herdr.sock",
+    "workspace": "w3C2", "tab": "w3C2:t1", "pane": "w3C2:p1",
+    "checkout": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-a2-experiment",
+    "terminalId": "<fresh observed terminal ID>"
+  },
+  "outcome": "never-started", "launchInvoked": false, "shellOnly": true,
+  "agentPresent": false, "sessionPresent": false, "launchPending": false,
+  "role": "supervisor", "actor": "supervisor-herdr",
+  "observedAt": "<fresh ISO UTC time>",
+  "reason": "Marker execution observed; adapter parse failed inside waitForShell before agent start; fresh pane is sole shell with no agent/session/pending launch.",
+  "evidence": [
+    { "file": "<absolute historical or fresh capture path>", "sha256": "<file SHA-256>" }
+  ]
+}
+```
+
+After inspecting those captures, this helper writes the descriptor with exact
+hashes (use `pane.json`, `process.json`, `agents.json` in `capture_dir`). It uses
+the oldest fresh capture's mtime as `observedAt`; stale captures must be repeated.
+It does not observe or mutate Herdr or change the controller journal.
+
+```sh
+node --input-type=module - "$historical_dir" "$capture_dir" "$never_started_evidence" <<'JS'
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { readControllerJournal } from './sessions/runtime.mjs';
+import { digest } from './sessions/lifecycle-evidence.mjs';
+const [historical, captures, output] = process.argv.slice(2);
+const common = '/Users/rewt/development/rewt/herdr-brain/.git';
+const op = readControllerJournal(common).operations.find(o => o.id === '9fc82490-e2d6-4001-8c31-f5b6b33bcc5e');
+if (op?.state !== 'intent') throw Error('exact unresolved intent required');
+const fresh = ['pane.json', 'process.json', 'agents.json'].map(f => path.resolve(captures, f));
+const pane = JSON.parse(fs.readFileSync(fresh[0], 'utf8')).result.pane;
+const files = ['RESULT.txt', 'step1-apply.json', 'controller-journal.json', 'step1-panes-after.json', 'step1-pane-after.txt']
+  .map(f => path.resolve(historical, f)).concat(fresh);
+const d = { schema: 'session-start-disposition/v1', common, operationId: op.id, operationDigest: digest(op),
+  target: { ...op.target, terminalId: pane.terminal_id }, outcome: 'never-started', launchInvoked: false,
+  shellOnly: true, agentPresent: false, sessionPresent: false, launchPending: false,
+  role: 'supervisor', actor: 'supervisor-herdr',
+  observedAt: new Date(Math.min(...fresh.map(f => fs.statSync(f).mtimeMs))).toISOString(),
+  reason: 'Marker executed; parse failed in waitForShell before agent start; fresh captures show sole shell and no agent/session/pending launch.',
+  evidence: files.map(file => ({ file, sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') })) };
+fs.writeFileSync(output, JSON.stringify(d, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+JS
+```
+
+4. Within 60 seconds of the observation, run this explicit disposition command,
+   using the current canonical authorization path and descriptor path:
+
+```sh
+node sessions/sessions.mjs dispose-start \
+  --project /Users/rewt/development/rewt/herdr-brain \
+  --workspace lane/a2-experiment --role supervisor --actor supervisor-herdr \
+  --authorization "$authorization_file" \
+  --operation 9fc82490-e2d6-4001-8c31-f5b6b33bcc5e \
+  --disposition "$never_started_evidence"
+```
+
+5. Re-run `plan` with the experiment manifest and `--evidence` as above. Inspect
+   the fresh `WouldStart` selection, then use a separate authorized `apply` with
+   that saved plan. Do not loop or automatically renew/dispose/retry after a failure.
+
 Inbox transfer goes through `messages/session-transfer.mjs` and the stage-8
 `Receiver.transaction` journal, preserving pending IDs, unanswered threads and
 logical-role addresses without a prompt. It holds the receiver's existing

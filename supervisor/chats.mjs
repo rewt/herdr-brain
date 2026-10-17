@@ -76,8 +76,9 @@ function waitForShell(herdr, receipt, project, { now, sleep, startupMs, beforeIn
 export function herdrCommand(env = process.env) {
   return (args, { env: callerEnv = env, timeout = 10000 } = {}) => {
     const reply = spawnSync(callerEnv.HERDR_BIN_PATH || 'herdr', args, { env: callerEnv, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024 });
-    if (reply.error || reply.status !== 0) throw new Error(`Herdr ${args.slice(0, 2).join(' ')}: ${(reply.stderr || reply.stdout || reply.error?.message).trim()}`);
+    if (reply.error || reply.status !== 0) throw new Error(`Herdr ${args.slice(0, 2).join(' ')}: ${(reply.stderr || reply.stdout || reply.error?.message || `exited ${reply.status}`).trim()}`);
     if (args[0] === 'pane' && args[1] === 'read' && args.includes('text')) return { text: reply.stdout };
+    if (args[0] === 'pane' && args[1] === 'run' && !reply.stdout.trim()) return {};
     const body = JSON.parse(reply.stdout);
     if (!body.result || body.ok === false) throw new Error(`Herdr ${args.slice(0, 2).join(' ')} returned an invalid result`);
     return body.result;

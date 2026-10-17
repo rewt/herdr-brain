@@ -89,10 +89,11 @@ export async function main(args = process.argv.slice(2)) {
     project: { type: 'string', default: process.cwd() }, workspace: { type: 'string' },
     authorization: { type: 'string' }, plan: { type: 'string' }, evidence: { type: 'string' },
     role: { type: 'string' }, actor: { type: 'string' }, actions: { type: 'string' },
-    'operator-decision': { type: 'string' }, expires: { type: 'string' }
-  }, usage: 'Usage: node sessions/sessions.mjs inspect|plan|apply|authorize [FILE ...] --project PATH [--workspace REF] [--authorization FILE --plan FILE --evidence FILE] [--role supervisor --actor NAME --actions KINDS --operator-decision ID:SEQ --expires UTC]' });
+    'operator-decision': { type: 'string' }, expires: { type: 'string' },
+    operation: { type: 'string' }, disposition: { type: 'string' }
+  }, usage: 'Usage: node sessions/sessions.mjs inspect|plan|apply|authorize|dispose-start [FILE ...] --project PATH [--workspace REF] [--authorization FILE --plan FILE --evidence FILE] [--role supervisor --actor NAME --actions KINDS --operator-decision ID:SEQ --expires UTC] [--operation ID --disposition FILE]' });
   const command = positionals.shift();
-  if (!['inspect', 'plan', 'apply', 'authorize'].includes(command)) throw Error('expected inspect, plan, apply or authorize');
+  if (!['inspect', 'plan', 'apply', 'authorize', 'dispose-start'].includes(command)) throw Error('expected inspect, plan, apply, authorize or dispose-start');
   const options = { files: positionals, cwd: values.project, workspace: values.workspace, authorization: values.authorization,
     planFile: values.plan, evidence: values.evidence };
   let result;
@@ -102,6 +103,10 @@ export async function main(args = process.argv.slice(2)) {
     if (!match) throw Error('--operator-decision requires RECORD-ID:SEQ');
     result = (await import('./authorization.mjs')).authorize({ ...options, role: values.role, actor: values.actor,
       actions: values.actions?.split(','), operatorDecision: { id: match[1], seq: Number(match[2]) }, expiresAt: values.expires });
+  } else if (command === 'dispose-start') {
+    if (positionals.length) throw Error('dispose-start takes no manifest files');
+    result = (await import('./disposition.mjs')).disposeStart({ ...options, role: values.role, actor: values.actor,
+      operationId: values.operation, dispositionFile: values.disposition });
   } else if (command === 'inspect') result = inspect(options);
   else if (command === 'plan') result = await (await import('./plan.mjs')).plan(options);
   else result = await (await import('./apply.mjs')).apply(options);

@@ -44,7 +44,7 @@ function known(entry, input) {
   let source;
   if (entry.manifest.spec.intent.kind === 'work-item') source = workerSource(entry, input);
   else {
-    const starts = journal.operations.filter(op => !isLifecycle(op) && op.uid === uid);
+    const starts = journal.operations.filter(op => !isLifecycle(op) && op.state !== 'never-started' && op.uid === uid);
     const op = starts.length === 1 && starts[0];
     const claims = op && (input.observation.receipts ?? []).filter(r => r.operationId === op.id);
     if (op?.state === 'acknowledged' && op.receipt?.operationId === op.id && op.receipt.uid === uid &&

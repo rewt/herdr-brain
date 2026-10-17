@@ -1,5 +1,5 @@
 // Foreground policy and single-action journal executor. No scheduling or model calls.
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { matchingRun } from '../lib/retire.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding, sameBinding } from './observe.mjs';
@@ -118,6 +118,10 @@ export function planSessions(input) {
   const errors = [...(enrollment.errors ?? []), ...(facts.errors ?? []), ...(o.errors ?? [])];
   if (!inspection.valid) errors.push('invalid desired manifests');
   if (!o.complete) errors.push('incomplete Herdr observation');
+  if (journal.operations.some(op => op.state === 'never-started' &&
+      ((o.receipts ?? []).some(r => r.operationId === op.id) ||
+       o.agents.some(a => a.name === `slot-${createHash('sha256').update(op.id).digest('hex').slice(0, 24)}`))))
+    errors.push('launch evidence contradicts never-started disposition; inspect evidence');
   const duplicate = duplicates(o); if (duplicate) errors.push(duplicate);
   if (leaseHeld) errors.push('canonical controller lease held or unresolved');
   const brake = facts.stopped ? 'STOP: observe only' : facts.closeHold ? `${facts.closeHold}: observe only` : null;
@@ -145,7 +149,8 @@ export function planSessions(input) {
       const paneId = slot.panes.find(p => p.paneSlot === (s.paneSlot ?? 'primary'))?.pane;
       const pane = o.panes.find(p => p.pane_id === paneId);
       const target = { server: o.server, workspace: slot.workspace, tab: slot.tab, pane: paneId, checkout: slot.checkout };
-      const ops = journal.operations.filter(op => !lifecycleOperation(op) && (op.uid === uid || targetMatches(op.target, target)));
+      const prior = journal.operations.filter(op => !lifecycleOperation(op) && (op.uid === uid || targetMatches(op.target, target)));
+      const ops = prior.filter(op => op.state !== 'never-started');
       if (ops.length > 1) return row(entry, 'Hold', 'Hold', 'multiple operations claim this standard position');
       const op = ops[0], viewer = entry.manifest.kind === 'LogViewer', agents = viewer
         ? (o.viewers ?? []).filter(v => v.binding.pane === paneId) : o.agents.filter(a => a.pane_id === paneId);

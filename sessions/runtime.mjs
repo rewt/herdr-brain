@@ -23,7 +23,7 @@ export function readControllerJournal(common) {
       Object.keys(journal).some(k => !['schema', 'common', 'operations', 'bindings', 'incarnations'].includes(k)) ||
       !Array.isArray(journal.operations) || !Array.isArray(journal.bindings) ||
       journal.operations.some(op => ['reset', 'recovery'].includes(op.kind) ? !validLifecycleOperation(op) :
-        !validStartOperation(op)) ||
+        !validStartOperation(op) || op.state === 'never-started' && op.disposition.request.common !== common) ||
       new Set(journal.operations.map(op => op.id)).size !== journal.operations.length ||
       journal.bindings.some(b => !b.uid || !b.specDigest || !b.binding || !Number.isSafeInteger(b.generation)) ||
       new Set(journal.bindings.map(b => b.uid)).size !== journal.bindings.length ||

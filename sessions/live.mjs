@@ -27,6 +27,8 @@ export function herdrEdge(env = process.env) {
   return (args, options = {}) => {
     const stdout = invokeHerdr(env.HERDR_BIN_PATH || 'herdr', args, { env, ...options });
     if (args[0] === 'pane' && args[1] === 'read' && args.includes('text')) return { text: stdout };
+    // invokeHerdr has already rejected errors and nonzero exit status.
+    if (args[0] === 'pane' && args[1] === 'run' && !stdout.trim()) return {};
     const body = JSON.parse(stdout);
     if (body.ok === false || !body.result) throw Error('invalid Herdr result; inspect before retry');
     return body.result;

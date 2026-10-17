@@ -12,7 +12,9 @@ import { apply } from '../sessions/apply.mjs';
 import { authorize, checkAuthorization, ACTIONS } from '../sessions/authorization.mjs';
 import { recordStandardSlot } from '../sessions/receipts.mjs';
 import { readControllerJournal, runtimePaths, durableWrite } from '../sessions/runtime.mjs';
-import { createLiveActions, readAdapterReceipts } from '../sessions/live.mjs';
+import { createLiveActions, readAdapterReceipts, herdrEdge } from '../sessions/live.mjs';
+import { disposeStart } from '../sessions/disposition.mjs';
+import { createHash } from 'node:crypto';
 import { digest, persistHandoff } from '../sessions/lifecycle-evidence.mjs';
 import { Receiver, addressKey } from '../messages/receiver.mjs';
 import { transferSessionInbox } from '../messages/session-transfer.mjs';
@@ -31,7 +33,7 @@ const value = f => a[a.indexOf(f)+1];
 if (a[0] === 'workspace' && a[1] === 'list') out({workspaces:s.workspaces});
 else if (a[0] === 'tab' && a[1] === 'list') out({tabs:s.tabs.filter(t=>t.workspace_id===value('--workspace'))});
 else if (a[0] === 'pane' && a[1] === 'list') out({panes:s.panes.filter(p=>p.workspace_id===value('--workspace'))});
-else if (a[0] === 'agent' && a[1] === 'list') out({agents:s.agents});
+else if (a[0] === 'agent' && a[1] === 'list') { if(s.emptyAgentList) { save();process.exit(0); } out({agents:s.agents}); }
 else if (a[0] === 'agent' && a[1] === 'get') out({agent:s.agents.find(g=>g.name===a[2])});
 else if (a[0] === 'pane' && a[1] === 'get') out({pane:s.panes.find(p=>p.pane_id===a[2])});
 else if (a[0] === 'pane' && a[1] === 'process-info') {
@@ -44,7 +46,7 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   else { s.viewer = a[3]; s.viewerOutput = execFileSync('/bin/sh', ['-c', a[3]], {encoding:'utf8'}); s.screen = s.viewerOutput+'\\nfixture % '; }
   if(s.stopOnMarker) fs.writeFileSync(s.stopOnMarker,'STOP');
   if(s.replaceOnMarker) s.panes.find(p=>p.pane_id===a[2]).terminal_id='other-terminal';
-  out({});
+  save();process.stdout.write(s.paneRunOutput ?? '');process.exit(s.paneRunExit ?? 0);
 } else if(a[0]==='tab' && a[1]==='create') {
   const n=++s.counter, tab={tab_id:'new-tab-'+n,workspace_id:value('--workspace')};
   const pane={pane_id:'new-pane-'+n,tab_id:tab.tab_id,workspace_id:tab.workspace_id,terminal_id:'new-term-'+n,foreground_cwd:value('--cwd')};
@@ -111,7 +113,7 @@ function fixture(t, role = 'chat') {
     const planFile=path.join(scratch,'plan.json'); fs.writeFileSync(planFile,JSON.stringify(await f.plan()));
     return apply({...options,authorization,planFile});
   };
-  f.binding = () => { const j=readControllerJournal(project.common); return j.incarnations.at(-1)?.binding ?? j.operations[0]?.receipt?.binding; };
+  f.binding = () => { const j=readControllerJournal(project.common); return j.incarnations.at(-1)?.binding ?? j.operations.findLast(op=>op.state==='acknowledged')?.receipt?.binding; };
   f.boundary = async (pending = []) => {
     const b=f.binding(), h=persistHandoff({file:path.join(scratch,'handoff.md'),markdown:'# Handoff\nPreserve fixture question.\n',recordRefs:['ENG-1'],unresolvedMessageIds:pending,inboxCursor:'transport:0'});
     updateEvidence(e=>{
@@ -137,6 +139,97 @@ test('lost start reply holds with no second launch, even if native occupant appe
   const f=fixture(t);f.change(s=>s.lostStart=true);
   const first=await f.apply();assert.equal(first.decisions[0].decision,'Hold');
   await f.apply();assert.equal(starts(f).length,1);assert.equal(readAdapterReceipts(f.project.common).length,0);
+});
+test('pane run accepts only successful empty output and other commands remain strict JSON', t => {
+  const f=fixture(t), herdr=herdrEdge(f.env);
+  for(const output of ['', '  \n\t', '{"result":{}}']) {
+    f.change(s=>s.paneRunOutput=output);
+    assert.deepEqual(herdr(['pane','run','pane',"printf '%s%s' 'fixture' '-marker'"]),{});
+  }
+  f.change(s=>{s.paneRunOutput='';s.paneRunExit=7;});
+  assert.throws(()=>herdr(['pane','run','pane',"printf '%s' 'marker'"]),/Herdr exited 7/);
+  f.change(s=>{s.paneRunExit=0;s.paneRunOutput='malformed';});
+  assert.throws(()=>herdr(['pane','run','pane',"printf '%s' 'marker'"]),SyntaxError);
+  f.change(s=>s.emptyAgentList=true);
+  assert.throws(()=>herdr(['agent','list']),SyntaxError);
+});
+test('an empty failing pane run stops the live start before launching', async t => {
+  const f=fixture(t);f.change(s=>s.paneRunExit=7);
+  const result=await f.apply();assert.match(result.adapterError,/Herdr exited 7/);
+  assert.equal(starts(f).length,0);assert.equal(result.decisions[0].decision,'Hold');
+  await f.apply();assert.equal(starts(f).length,0);
+});
+async function unresolvedStart(t) {
+  const f=fixture(t);f.change(s=>s.paneRunOutput='malformed');
+  const result=await f.apply();assert.equal(result.decisions[0].decision,'Hold');assert.equal(starts(f).length,0);
+  const op=readControllerJournal(f.project.common).operations[0];
+  const source=path.join(f.scratch,'failed-apply.json');fs.writeFileSync(source,JSON.stringify(result));
+  const d={schema:'session-start-disposition/v1',common:f.project.common,operationId:op.id,operationDigest:digest(op),
+    target:{...op.target,terminalId:'term'},outcome:'never-started',launchInvoked:false,shellOnly:true,
+    agentPresent:false,sessionPresent:false,launchPending:false,role:'supervisor',actor:'fixture-supervisor',
+    observedAt:new Date().toISOString(),reason:'Adapter parse failed during marker probe before agent start; marker seen in shell-only pane.',
+    evidence:[{file:source,sha256:createHash('sha256').update(fs.readFileSync(source)).digest('hex')}]};
+  const dispositionFile=path.join(f.scratch,'disposition.json');fs.writeFileSync(dispositionFile,JSON.stringify(d));
+  const options={cwd:f.cwd,workspace:'w',authorization:f.auth().file,operationId:op.id,dispositionFile,role:d.role,actor:d.actor,env:f.env};
+  return {...f,op,d,source,dispositionFile,dispose:()=>disposeStart(options),disposeOptions:options};
+}
+test('explicit never-started disposition retains the intent and permits a newly planned start once', async t => {
+  const f=await unresolvedStart(t);
+  assert.equal((await f.plan()).decisions[0].decision,'Hold','evidence file alone never disposes an intent');
+  const count=mutations(f).length;
+  const saved=f.dispose();assert.equal(saved.state,'never-started');assert.equal(mutations(f).length,count);
+  const j=readControllerJournal(f.project.common);assert.equal(j.operations[0].id,f.op.id);assert.deepEqual(j.operations[0].disposition.request,f.d);
+  assert.equal((await f.plan()).action.kind,'start-standard-slot');
+  f.change(s=>delete s.paneRunOutput);
+  await f.apply();assert.equal(starts(f).length,1);assert.equal(readControllerJournal(f.project.common).operations.length,2);
+  await f.apply();assert.equal(starts(f).length,1);await f.boundary();
+  const reset=await f.plan();assert.equal(reset.action?.stage,'close',JSON.stringify(reset));
+  assert.throws(f.dispose,/unresolved start intent/);
+  const file=path.join(f.project.common,'sessions/adapter-receipts.json'), receipts=JSON.parse(fs.readFileSync(file));
+  receipts.receipts.push({...receipts.receipts[0],operationId:f.op.id});fs.writeFileSync(file,JSON.stringify(receipts));
+  const contradicted=await f.plan();assert.equal(contradicted.action,null);assert.match(contradicted.errors.join(';'),/contradicts/);
+});
+test('CLI dispose-start records only the explicitly named never-started intent before re-planning', async t => {
+  const f=await unresolvedStart(t), count=mutations(f).length;
+  const result=await child(['dispose-start','--project',f.cwd,'--workspace','w','--role','supervisor','--actor','fixture-supervisor',
+    '--authorization',f.disposeOptions.authorization,'--operation',f.op.id,'--disposition',f.dispositionFile],f.env);
+  assert.equal(result.code,0,result.stderr);assert.equal(JSON.parse(result.stdout).operationId,f.op.id);
+  assert.equal(mutations(f).length,count);assert.equal((await f.plan()).action.kind,'start-standard-slot');
+});
+test('never-started disposition refuses uncertain claims, stale/foreign evidence, sources, receipts and launch context', async t => {
+  const f=await unresolvedStart(t), original=fs.readFileSync(f.dispositionFile), journal=fs.readFileSync(runtimePaths(f.project.common).journal);
+  for(const edit of [d=>delete d.launchInvoked,d=>d.launchInvoked=true,d=>d.shellOnly=false,d=>d.agentPresent=true,
+    d=>d.sessionPresent=true,d=>d.launchPending=true,d=>d.operationId='other',d=>d.operationDigest='0'.repeat(64),
+    d=>d.common=f.scratch,d=>d.target.terminalId='changed',d=>d.observedAt='2020-01-01T00:00:00Z',d=>d.evidence=[],
+    d=>d.evidence[0].sha256='0'.repeat(64)]) {
+    const d=structuredClone(f.d);edit(d);fs.writeFileSync(f.dispositionFile,JSON.stringify(d));
+    assert.throws(f.dispose);assert.deepEqual(fs.readFileSync(runtimePaths(f.project.common).journal),journal);
+    assert.equal((await f.plan()).decisions[0].decision,'Hold');
+  }
+  fs.writeFileSync(f.dispositionFile,original);
+  assert.throws(()=>disposeStart({...f.disposeOptions,authorization:undefined}),/authorization/);
+  assert.throws(()=>disposeStart({...f.disposeOptions,role:'worker'}),/supervisor/);
+  const context=path.join(f.project.common,'sessions/contexts',f.op.id+'.json');fs.mkdirSync(path.dirname(context));fs.writeFileSync(context,'{}');
+  assert.throws(f.dispose,/launch evidence/);fs.unlinkSync(context);
+  const receipts=path.join(f.project.common,'sessions/adapter-receipts.json');
+  fs.writeFileSync(receipts,JSON.stringify({schema:'session-adapter-receipts/v1',common:f.project.common,receipts:[{operationId:f.op.id,uid:f.op.uid,
+    generation:f.op.generation,specDigest:f.op.specDigest,binding:{...f.d.target,agentName:'launched',nativeSessionId:'native'}}]}));
+  assert.throws(f.dispose,/launch evidence/);fs.unlinkSync(receipts);
+  fs.writeFileSync(f.source,'changed');assert.throws(f.dispose,/source hash changed/);
+  assert.deepEqual(fs.readFileSync(runtimePaths(f.project.common).journal),journal);
+});
+test('never-started disposition and planning hold with an agent, session, pending launch, busy or changed pane', async t => {
+  const f=await unresolvedStart(t), native=f.read(), original=fs.readFileSync(runtimePaths(f.project.common).journal);
+  for(const edit of [s=>s.agents.push({name:'unexpected',pane_id:'pane',terminal_id:'term'}),s=>s.panes[0].agent='claude',
+    s=>s.panes[0].agent_session={value:'native'},s=>s.panes[0].agent_session={},s=>s.panes[0].launch_pending=true,s=>s.panes[0].restore_error='unknown',
+    s=>s.busy=true,s=>s.panes[0].terminal_id='other',s=>s.tabs=[]]) {
+    fs.writeFileSync(f.state,JSON.stringify(native));f.change(edit);
+    assert.throws(f.dispose);assert.deepEqual(fs.readFileSync(runtimePaths(f.project.common).journal),original);
+    assert.equal((await f.plan()).decisions[0].decision,'Hold');
+  }
+  fs.writeFileSync(f.state,JSON.stringify(native));f.dispose();
+  f.change(s=>s.agents.push({name:'unexpected',pane_id:'pane',terminal_id:'term'}));
+  assert.equal((await f.plan()).decisions[0].decision,'Hold','even a completed disposition cannot authorize starting over an agent');
 });
 test('exact tab close refuses a multi-owner tab in the real adapter', async t => {
   const f=fixture(t);await f.apply();await f.boundary();

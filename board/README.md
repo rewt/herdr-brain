@@ -80,6 +80,10 @@ and unknown elsewhere. The shared slot reader uses read-only filesystem calls
 and `readTestSlotQueue(..., {prune:false})`; it never acquires or repairs a lock,
 prunes a ticket or prints tokens, pids or cwd paths. Uncertain holder liveness
 stays unknown. The holder's label passes through the status-text filter.
+The strip also shows `shared N` from the configured slot's `occupancy/v1`
+directory (ARCH-34). Live/reserved records count; stale records and unknown
+schema versions do not. Unreadable occupancy is shown as unknown. These reads
+never prune records and expose only the count, without holder identity fields.
 
 Releases archive the complete tracked tree, so `board/` ships without changing
 the release file selection. Focused offline checks:

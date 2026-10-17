@@ -1,6 +1,7 @@
 import fs from 'node:fs';
-import { TEST_SLOT_PATH, holderState } from '../test-slot/test-slot.mjs';
+import { slotPathOf, holderState } from '../test-slot/test-slot.mjs';
 import { readTestSlotQueue } from '../test-slot/ticket-queue.mjs';
+import { readTestSlotOccupancy } from '../test-slot/occupancy.mjs';
 import { safeProject, safeStatus, safeTime, safeWorktree, within, WITHHELD } from './rows.mjs';
 import { runCommand } from './source.mjs';
 
@@ -35,8 +36,9 @@ export async function paneState({ command = 'herdr', env = process.env } = {}) {
     return { state: 'available', panes: new Set(agents.map(a => a.pane_id).filter(id => typeof id === 'string' && /^w[A-Za-z0-9]+:p[A-Za-z0-9]+$/.test(id))) };
   } catch { return { state: 'unavailable', panes: new Set() }; }
 }
-export function readSlot({ lockPath = TEST_SLOT_PATH, projects = [], now = Date.now() } = {}) {
+export function readSlot({ lockPath = slotPathOf(), projects = [], now = Date.now() } = {}) {
   let holder = null, state = 'free', tickets = [];
+  let sharedCount = null;
   try {
     const fd = fs.openSync(lockPath, 'r');
     try { holder = JSON.parse(fs.readFileSync(fd, 'utf8')); } finally { fs.closeSync(fd); }
@@ -45,13 +47,17 @@ export function readSlot({ lockPath = TEST_SLOT_PATH, projects = [], now = Date.
   catch (e) { if (e.code !== 'ENOENT') state = 'unknown'; }
   try { tickets = readTestSlotQueue(lockPath, { prune: false, now }).tickets.filter(t => ['live', 'unknown'].includes(t.state)); }
   catch { state = 'unknown'; }
+  try {
+    const occupancy = readTestSlotOccupancy(lockPath);
+    if (!occupancy.some(row => row.state === 'unknown')) sharedCount = occupancy.filter(row => row.state === 'live').length;
+  } catch { /* An unreadable occupancy directory remains unknown. Never prune. */ }
   const cwd = safeWorktree(holder?.cwd);
   const project = projects.find(p => p.paths.some(root => cwd !== WITHHELD && within(root, cwd)));
   const acquired = safeTime(holder?.acquiredAt);
   const heldSeconds = typeof acquired === 'string' && acquired !== WITHHELD ? Math.max(0, Math.floor((now - Date.parse(acquired)) / 1000)) : null;
   return {
     state, label: holder ? safeStatus(holder.label) : null, project: project ? safeProject(project.name) : null, heldSeconds,
-    queueLength: tickets.length,
+    queueLength: tickets.length, sharedCount,
     // These validated paths stay inside collection and are never returned by the CLI.
     holderWorktree: state !== 'gone' && holder ? cwd : null,
     queueWorktrees: tickets.map(t => safeWorktree(t.ticket?.cwd)),

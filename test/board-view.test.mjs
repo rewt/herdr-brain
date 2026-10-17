@@ -11,7 +11,7 @@ import { validateDocument } from '../board/rows.mjs';
 import { brainSource, discoverProject } from '../board/brain.mjs';
 import { brainFixture, boardFixture } from './helpers/board-fixture.mjs';
 
-const emptySlot = () => ({ state: 'free', label: null, project: null, heldSeconds: null, queueLength: 0, holderWorktree: null, queueWorktrees: [] });
+const emptySlot = () => ({ state: 'free', label: null, project: null, heldSeconds: null, queueLength: 0, sharedCount: 0, holderWorktree: null, queueWorktrees: [] });
 const snapshot = f => ({ memory: 6 * 1024 ** 3, herdr: 'available', slot: emptySlot(), rows: validateDocument(f.document(), f.options).rows.map(r => ({ ...r, slot: '#2 in queue' })) });
 test('memory parsers honor page size and exact available fields; Herdr validates pane handles and absence', async t => {
   const f = boardFixture(t);
@@ -23,7 +23,7 @@ test('memory parsers honor page size and exact available fields; Herdr validates
   const state = await paneState({ command: fake }); assert.equal(state.state, 'available'); assert.deepEqual([...state.panes], ['w2XS:p4']);
   fs.writeFileSync(fake, '#!/bin/sh\necho PLANTED\n'); assert.equal((await paneState({ command: fake })).state, 'unavailable');
 });
-test('board ticks never write, open for write, prune, rename or unlink the slot or queue', async t => {
+test('board ticks count shared occupancy without writing, pruning or changing the slot, queue or occupancy', async t => {
   const f = brainFixture(t), now = f.now, lockPath = f.write('slot.lock', { pid: process.pid, pgid: null, processStart: '', token: 'PLANTED', label: 'gate running', cwd: f.root + '/active/sub', acquiredAt: '2026-10-16T12:00:00Z' });
   fs.mkdirSync(f.root + '/active/sub');
   const ticket = { v: 1, pid: process.pid, processStart: '', token: 'PLANTED', label: 'gate queue', cwd: f.root + '/waiting/sub', arrivedAt: '2026-10-16T12:01:00Z', expiresAt: '2026-10-16T15:00:00Z' };
@@ -31,7 +31,12 @@ test('board ticks never write, open for write, prune, rename or unlink the slot 
   f.write('slot.lock.queue/0000000000000001-fixture.json', ticket);
   f.write('slot.lock.queue/0000000000000002-expired.json', { ...ticket, expiresAt: '2026-10-14T00:00:00Z' });
   f.write('slot.lock.queue/0000000000000003-malformed.json', '{');
-  const protectedPath = file => typeof file === 'string' && (file === lockPath || file === lockPath + '.queue' || file.startsWith(lockPath + '.queue/'));
+  const shared = { schema: 'occupancy/v1', class: 'shared', pid: process.pid, processStart: null, pgid: null, acquiredAt: '2026-10-16T12:00:00Z', project: 'PLANTED', label: 'PLANTED' };
+  f.write('slot.lock.occupancy/one.json', shared);
+  f.write('slot.lock.occupancy/two.json', shared);
+  f.write('slot.lock.occupancy/gone.json', { ...shared, pid: 2147483647 });
+  f.write('slot.lock.occupancy/future.json', { ...shared, schema: 'occupancy/v2' });
+  const protectedPath = file => typeof file === 'string' && (file === lockPath || ['.queue', '.occupancy'].some(suffix => file === lockPath + suffix || file.startsWith(lockPath + suffix + '/')));
   let mutations = 0, readOpens = 0; const undo = [], descriptors = new Set();
   function intercept(object, method, wrapper) {
     const original = object[method]; if (!original) return;
@@ -70,6 +75,8 @@ test('board ticks never write, open for write, prune, rename or unlink the slot 
     });
     const a = await collect(), b = await collect(); assert.deepEqual(a, b);
     assert.equal(a.slot.label, 'gate running'); assert.equal(a.slot.project, 'herdr-brain'); assert.equal(a.slot.heldSeconds, 3600); assert.equal(a.slot.queueLength, 1);
+    assert.equal(a.slot.sharedCount, 2);
+    assert.match(render(a, { width: 160 }), /shared 2/);
     assert.equal(a.rows.find(r => r.id === 'job-active').slot, 'holder');
     assert.equal(a.rows.find(r => r.id === 'job-queued').slot, '#1 in queue');
     assert.equal(rowSlot(f.root + '/wait', readSlot({ lockPath, now })), '');
@@ -78,6 +85,7 @@ test('board ticks never write, open for write, prune, rename or unlink the slot 
     assert.equal(mutations, 0); assert.ok(readOpens > 0);
   } finally { for (const restore of undo.reverse()) restore(); }
   assert.equal(fs.readdirSync(lockPath + '.queue').length, 3);
+  assert.equal(fs.readdirSync(lockPath + '.occupancy').length, 4, 'gone and unknown-schema records remain untouched');
   fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, pgid: null, token: 'PLANTED', label: 'token=PLANTED', cwd: f.root, acquiredAt: 'invalid' }));
   const withheld = readSlot({ lockPath }); assert.equal(withheld.label, 'withheld'); assert.equal(withheld.heldSeconds, null);
 });

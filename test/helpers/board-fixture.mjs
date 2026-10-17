@@ -7,6 +7,12 @@ export function boardFixture(t) {
   fs.mkdirSync(parent, { recursive: true });
   const root = fs.realpathSync(fs.mkdtempSync(path.join(parent, 'case-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const slotEnvironment = ['MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH'];
+  const previous = slotEnvironment.map(key => process.env[key]);
+  for (const key of slotEnvironment) process.env[key] = path.join(root, 'fixture-slot.lock');
+  t.after(() => slotEnvironment.forEach((key, i) => {
+    if (previous[i] === undefined) delete process.env[key]; else process.env[key] = previous[i];
+  }));
   fixtureFleet(t, root);
   const write = (name, value) => {
     const file = path.join(root, name); fs.mkdirSync(path.dirname(file), { recursive: true });

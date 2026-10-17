@@ -11,6 +11,9 @@ import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { matchingRun, waitingOnRecord } from '../supervisor/tidy-tabs.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { planRetirement } from '../lib/retire.mjs';
+import { consumeRetirement } from '../lib/retire-trigger.mjs';
+import { retirementStatus } from '../lib/retire-status.mjs';
+import { noticeIdleRetirement } from './retirement-notices.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
@@ -98,7 +101,7 @@ export function tidyFinishedTabs({ cwd, org, herdr = 'herdr', record = [process.
 }
 
 export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
-  command = spawnSync, log = () => {}, selfTab = process.env.HERDR_TAB_ID ?? null }) {
+  command = spawnSync, log = () => {}, selfTab = process.env.HERDR_TAB_ID ?? null, stateDir }) {
   const invoke = (exe, args, extra = {}) => {
     const r = command(exe, args, { cwd, encoding: 'utf8', timeout: loadTimeout(10000),
       maxBuffer: 32 * 1024 * 1024, env: { ...process.env, ORG_DIR: org }, ...extra });
@@ -123,8 +126,21 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     if (!interruptedComposer(invoke(herdr, ['agent', 'read', agent.pane_id, '--source', 'visible']))) return null;
     return run;
   }
-  function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath } = {}) {
+  function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath,
+    now = new Date().toISOString() } = {}) {
+    let consumed;
+    // A hint is only a reason to re-observe through the guarded executor. Do
+    // not acknowledge requests during previews or workspace-scoped checks.
+    if (!dryRun && !workspacePath) {
+      try {
+        consumed = consumeRetirement({ org, deadline: Date.now() + loadTimeout(30000),
+          retirement: ({ deadline }) => createRetirement({ cwd, org, main, herdr, record, command, selfTab, log, deadline }) });
+        if (consumed.handled || consumed.pending) log({ ...consumed, action: 'retirement-consumed' });
+      } catch (error) { log({ action: 'retirement-failed', error: error.message }); }
+    }
     const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
+    if (!workspacePath) noticeIdleRetirement({ status: retirementStatus(snapshot, { generatedAt: now }), snapshot,
+      stateDir, cwd, org, herdr, dryRun, log });
     const selected = workspacePath ? new Set(snapshot.workspaces.filter(w => canonicalPath(w.worktree.checkout_path) === canonicalPath(workspacePath)).map(w => w.workspace_id)) : null;
     const allPlan = cleanup ? tidy(snapshot) : { close: [], keep: [] };
     const plan = selected ? { ...allPlan, close: allPlan.close.filter(t => selected.has(t.workspace_id)), keep: allPlan.keep.filter(t => selected.has(t.workspace_id)) } : allPlan;
@@ -132,7 +148,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     for (const tab of plan.keep) log({ action: 'keep', ...tab, dryRun });
     for (const diagnostic of plan.diagnostics ?? []) log({ action: 'reference-diagnostic', ...diagnostic });
     if (dryRun) for (const tab of plan.close) log({ action: 'would-close', ...tab });
-    else retirement.apply(plan, workspacePath, snapshot);
+    else if (cleanup && !consumed?.results) retirement.apply(plan, workspacePath, snapshot);
     if (resume) for (const agent of snapshot.agents) {
       const run = candidate(snapshot, agent);
       if (!run || seen.has(resumeKey(run, agent))) continue;
@@ -270,7 +286,7 @@ async function main() {
     const seenFile = path.join(stateDir, 'resume-attempts.jsonl');
     const seen = new Set(fs.existsSync(seenFile) ? fs.readFileSync(seenFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : []);
     const runner = createHousekeeping({ cwd, org: project.org, main: opt.main ?? project.main, herdr: opt.herdr, log,
-      record: recordCLI });
+      record: recordCLI, stateDir });
     process.send?.({ ready: true });
     let lastCleanup = -Infinity;
     do {

@@ -42,12 +42,37 @@ review, correction, integration or a live resource reference can return to it.
 Unrecorded reviews, sessions and watcher shells stay. See the exact eligibility
 and generic reference contract in [the supervisor README](../supervisor/README.md#safe-retirement).
 Tidy failures are logged and do not prevent recovery or subsequent ticks.
+Each tick also consumes a newer `retirement/request.json` revision through the
+guarded executor, without waiting for the cleanup interval. Requests coalesce;
+a request written during apply remains pending, as does a request under the
+project HOLD. A preview never acknowledges a request. No schedule is added.
 Dry-run previews the plan without closing tabs.
 A loop covers interruptions while watch waits,
 and catches promotion/closure long after watch's final notice. Herdr events alone
 do not include Git promotion or record ingestion; a small timer avoids wiring
 several imperfect triggers together. The supervisor can start the same command;
 no supervisor context is consumed after that.
+
+`supervisor/retire.mjs status` derives terminal age by replaying record events:
+the close or final ingested report that completes the chain, or the exact recorded
+pane release. A reopening clears that chain's age. JSON exposes `terminalAt` and
+`terminalAgeMs`; text and `--out` show the age and count/list TERMINAL rows older
+than 30 minutes. IDLE-NONTERMINAL rows name the next actor and include the exact
+pane/session/head release command; authority, disposition and evidence placeholders
+must be filled by the supervisor. When the recorded identity cannot support a
+pane release, the recommendation uses guarded `lane close`, which archive-tags
+unmerged work. These projections never authorize retirement.
+Missing or prunable Git worktree entries stay as individual rows with their lane,
+canonical common-directory identity and reason; status never prunes them.
+
+Housekeeping remembers when it first observes an unchanged IDLE-NONTERMINAL tab.
+After more than 24 hours it queues one notice through the existing supervisor
+inbox and action log, addressed to `MONITOR_SUPERVISOR_AGENT` (default
+`supervisor-herdr`). The tab notice coalesces the duplicate pane rows. Its release
+recommendation includes all required flags. Changed occupants or recommendations
+restart the observation period; unchanged rows do not repeat across restarts.
+`retirement-notices.json` lives in housekeeping's state directory, never the
+record event log. Previews neither queue notices nor update this bookkeeping.
 
 ## Evidence before action
 

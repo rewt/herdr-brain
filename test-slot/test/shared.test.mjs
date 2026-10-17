@@ -126,7 +126,9 @@ test('a killed shared owner stays reserved while its command group lives, then b
   await until(() => execution.child.signalCode === 'SIGKILL');
   assert.equal(readTestSlotOccupancy(f.lock, { prune: true })[0].state, 'live');
   assert.equal(fs.existsSync(record.path), true);
-  process.kill(-record.record.pgid, 'SIGKILL'); await execution.done;
+  // This fixture has a single leaf. Signal its PID so the same witness also
+  // works under the bounded runner's deliberate process-group containment.
+  process.kill(record.record.pgid, 'SIGKILL'); await execution.done;
   await until(() => readTestSlotOccupancy(f.lock)[0].state === 'gone');
   readTestSlotOccupancy(f.lock, { prune: true }); assert.equal(fs.existsSync(record.path), false);
 });

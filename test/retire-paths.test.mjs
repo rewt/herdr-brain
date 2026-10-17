@@ -54,6 +54,19 @@ for (const [kind, command] of [['codex', '/quit'], ['claude', '/exit']]) test(`n
   assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
 });
 
+for (const state of ['Z', 'X']) test(`ordinary bare shell still releases with an unreaped ${state} row`, t => {
+  const f = fixture(t); nativeExit(f);
+  f.state.info.foreground_processes = [{ pid: 1, name: 'zsh' }];
+  f.state.info.process_tree = [f.state.info.process_tree[0], { pid: 3, ppid: 1, identity: 'gone', state, command: '[helper]' }];
+  f.save();
+  const retirement = f.retirement(), snapshot = retirement.observe();
+  assert.equal(snapshot.panes[0].process_info.process_tree.length, 1);
+  assert.equal(snapshot.panes[0].process_info.process_tree_raw.length, 2);
+  const plan = retirement.plan(); assert.equal(plan.close[0].decision, 'release');
+  assert.equal(retirement.apply(plan)[0].action, 'closed');
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+});
+
 test('working native agent with helper descendants is ACTIVE, while a shell sibling stays UNKNOWN', t => {
   const f = fixture(t); nativeExit(f); f.state.agents[0].agent_status = 'working'; f.save();
   const retirement = f.retirement(), plan = retirement.plan();
@@ -67,13 +80,14 @@ test('working native agent with helper descendants is ACTIVE, while a shell sibl
   retirement.apply(retirement.plan()); assert.deepEqual(f.read().actions, []);
 });
 
-for (const guard of ['sibling', 'missing-parent', 'cycle', 'stopped', 'zombie', 'incomplete', 'unknown-kind', 'reference', 'test-slot', 'HOLD', 'standard-slot', 'focus', 'open-chain']) test(`native exit retains ${guard} without sending input`, t => {
+for (const guard of ['sibling', 'missing-parent', 'cycle', 'stopped', 'zombie', 'dead', 'incomplete', 'unknown-kind', 'reference', 'test-slot', 'HOLD', 'standard-slot', 'focus', 'open-chain']) test(`native exit retains ${guard} without sending input`, t => {
   const f = fixture(t); nativeExit(f, guard === 'unknown-kind' ? 'unknown' : 'codex');
   if (guard === 'sibling') f.state.info.process_tree[2].ppid = 1;
   if (guard === 'missing-parent') f.state.info.process_tree[2].ppid = 99;
   if (guard === 'cycle') f.state.info.process_tree[2].ppid = 4;
   if (guard === 'stopped') f.state.info.process_tree[2].state = 'T';
-  if (guard === 'zombie') f.state.info.process_tree[2].state = 'Z';
+  if (guard === 'zombie') f.state.info.process_tree[3].state = 'Z';
+  if (guard === 'dead') f.state.info.process_tree[3].state = 'X';
   if (guard === 'incomplete') f.state.info.process_tree_complete = false;
   if (guard === 'focus') f.state.tabs[0].focused = true;
   if (guard === 'reference') fs.writeFileSync(path.join(f.org, 'references/job.json'), JSON.stringify({ schema: 'herdr-reference/v1', state: 'running',
@@ -89,15 +103,54 @@ for (const guard of ['sibling', 'missing-parent', 'cycle', 'stopped', 'zombie', 
   retirement.apply(plan); assert.deepEqual(f.read().actions, []);
 });
 
-for (const guard of ['typed', 'not-ready', 'new-session', 'new-reference', 'new-HOLD']) test(`native exit rechecks ${guard} after planning and sends no input`, t => {
+for (const guard of ['typed', 'not-ready', 'new-session', 'new-test-slot-occupancy', 'new-reference', 'new-HOLD']) test(`native exit rechecks ${guard} after planning and sends no input`, t => {
   const f = fixture(t); nativeExit(f);
   const retirement = f.retirement(), plan = retirement.plan();
+  assert.equal(plan.close[0].decision, 'exit');
   if (guard === 'typed') f.state.screen = fs.readFileSync(path.join(root, 'supervisor/test/fixtures/codex-typed.ansi'), 'utf8');
   if (guard === 'not-ready') f.state.agents[0].interactive_ready = false;
   if (guard === 'new-session') f.state.agents[0].agent_session.value = 'new-session';
   if (guard === 'new-HOLD') hold(f);
-  if (guard === 'new-reference') fs.writeFileSync(f.env.MONITOR_TEST_SLOT_PATH, JSON.stringify({ pid: process.pid, cwd: f.lane, label: f.lane }));
-  f.save(); retirement.apply(plan); assert.deepEqual(f.read().actions, []);
+  if (guard === 'new-test-slot-occupancy') fs.writeFileSync(f.env.MONITOR_TEST_SLOT_PATH, JSON.stringify({ pid: process.pid, cwd: f.lane, label: f.lane }));
+  if (guard === 'new-reference') fs.writeFileSync(path.join(f.org, 'references/job.json'), JSON.stringify({ schema: 'herdr-reference/v1', state: 'running',
+    owner: 'fixture', kind: 'live fixture', job: 'job', item: 'ENG-1', created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString() }));
+  f.save(); const result = retirement.apply(plan);
+  if (guard === 'new-reference') assert.match(result[0].why, /live fixture reference/);
+  assert.deepEqual(f.read().actions, []);
+});
+
+for (const outcome of ['success', 'timeout']) test(`late native exit disarms its deadline before final observation and tab close ${outcome}`, t => {
+  const f = fixture(t); nativeExit(f);
+  const now = Date.now, start = now(), budgets = {};
+  let elapsed = 0, prompted = false, sawShell = false;
+  try {
+    Date.now = () => start + elapsed;
+    const retirement = f.retirement({ command: (exe, args, options) => {
+      if (exe === f.job.herdr && prompted) {
+        if (args[0] === 'workspace' && args[1] === 'list' && sawShell) budgets.finalObservation = options.timeout;
+        if (args[0] === 'pane' && args[1] === 'process-info' && !sawShell) { elapsed = 59000; sawShell = true; }
+        if (args[0] === 'tab' && args[1] === 'close') {
+          budgets.close = options.timeout; elapsed = 61000;
+          if (outcome === 'timeout') return { status: null, stdout: '', stderr: '', error: Object.assign(Error('injected tab close timeout'), { code: 'ETIMEDOUT' }) };
+        }
+      }
+      const result = spawnSync(exe, args, options);
+      if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'prompt') prompted = true;
+      return result;
+    } });
+    const result = retirement.apply(retirement.plan())[0];
+    assert.ok(budgets.finalObservation > 1000, `final observation allowance: ${budgets.finalObservation}`);
+    assert.ok(budgets.close > 1000, `close allowance: ${budgets.close}`);
+    if (outcome === 'success') {
+      assert.equal(result.action, 'closed');
+      assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+    } else {
+      assert.equal(result.action, 'skip-close');
+      assert.match(result.why, /tab close: injected tab close timeout/);
+      assert.doesNotMatch(result.why, /agent did not exit/);
+      assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
+    }
+  } finally { Date.now = now; }
 });
 
 test('native exit timeout keeps the tab and lane with a concrete refusal and no force fallback', t => {

@@ -592,6 +592,8 @@ scope, enrollment, STOP/holds, evidence hashes, no receipt/context/binding or
 competing operation, exact topology and a sole foreground shell. It reads native
 pane/process/agent state twice without sending input, and refuses any agent,
 session, pending launch, restore error, changed terminal or uncertain process.
+Stability covers the target workspace's identity/worktree, tab, panes, matching
+agents and pane/process facts; unrelated workspace and agent churn is ignored.
 It keeps the original operation, adds the supervisor evidence and observation
 digest, and changes only that operation to `never-started`. No launch occurs.
 The next plan may propose a **new** start; normal saved-plan, authorization and

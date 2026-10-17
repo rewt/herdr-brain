@@ -61,10 +61,11 @@ export function disposeStart({ cwd = process.cwd(), workspace, authorization, op
       const ws = workspaces.filter(w => w.workspace_id === t.workspace), ts = tabs.filter(tab => tab.tab_id === t.tab),
         ps = panes.filter(p => p.tab_id === t.tab || p.pane_id === t.pane), p = ps[0];
       const name = `slot-${createHash('sha256').update(op.id).digest('hex').slice(0, 24)}`;
+      const targetAgents = agents.filter(a => a.pane_id === t.pane || a.terminal_id === t.terminalId || a.name === name);
       if (slots.errors.length || slot.length !== 1 || ws.length !== 1 || ws[0].worktree?.repo_key !== project.common ||
           ws[0].worktree.checkout_path !== t.checkout || ts.length !== 1 || ts[0].workspace_id !== t.workspace || ps.length !== 1 ||
           !p || p.pane_id !== t.pane || p.tab_id !== t.tab || p.workspace_id !== t.workspace || p.terminal_id !== t.terminalId ||
-          agents.some(a => a.pane_id === t.pane || a.terminal_id === t.terminalId || a.name === name)) throw Error('changed topology or agent present; hold');
+          targetAgents.length) throw Error('changed topology or agent present; hold');
       const first = herdr(['pane', 'get', t.pane]).pane,
         info = herdr(['pane', 'process-info', '--pane', t.pane]).process_info,
         last = herdr(['pane', 'get', t.pane]).pane;
@@ -73,7 +74,11 @@ export function disposeStart({ cwd = process.cwd(), workspace, authorization, op
           [p, last].some(p => p.agent || p.agent_session != null || p.agent_session_id != null || p.launch_pending || p.restore_error || p.foreground_cwd !== t.checkout) ||
           !Number.isSafeInteger(info?.shell_pid) || info.shell_pid < 1 || info.foreground_processes?.length !== 1 ||
           info.foreground_processes[0].pid !== info.shell_pid) throw Error('sole shell, session absence or launch state is uncertain; hold');
-      return { workspaces, tabs, panes, agents, info };
+      // Server-wide display/status churn is irrelevant to this exact target.
+      // Keep complete target rows (including pane.get) except workspace display
+      // metadata: only its identity and worktree participate in stability.
+      return { workspace: { workspace_id: ws[0].workspace_id, worktree: ws[0].worktree },
+        tabs: ts, panes: ps, agents: targetAgents, pane: last, info };
     };
     const first = observe(), last = observe();
     if (digest(first) !== digest(last)) throw Error('disposition observation changed; hold');

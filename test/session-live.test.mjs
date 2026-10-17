@@ -28,17 +28,34 @@ import { execFileSync } from 'node:child_process';
 const file = process.env.SESSION_FAKE_STATE, s = JSON.parse(fs.readFileSync(file)), a = process.argv.slice(2);
 s.calls.push(a);
 const save = () => fs.writeFileSync(file, JSON.stringify(s));
-const out = result => { save(); console.log(JSON.stringify({result})); };
+const out = result => {
+  if (s.captureObservations && ['workspace list','agent list'].includes(a.slice(0,2).join(' ')))
+    (s.observations ??= []).push({command:a.slice(0,2).join(' '),result});
+  save(); console.log(JSON.stringify({result}));
+};
 const value = f => a[a.indexOf(f)+1];
+// Mutate display fields on every CLI call, as a busy server does.
+if (s.churn) for (const [rows, ids, key] of [[s.workspaces, s.churn.workspaces, 'workspace_id'], [s.agents, s.churn.agents, 'name']]) for (const row of rows) {
+  if (!ids?.includes(row[key])) continue;
+  row.title = 'spinner-' + s.calls.length; row.status = s.calls.length % 2 ? 'working' : 'idle';
+  row.revision = s.calls.length; row.focused = s.calls.length % 2 === 0;
+  if (row.name) row.agent_status = row.status;
+}
+if (s.changeOnCall?.command === a.slice(0, 2).join(' ')) {
+  s.changeOnCall.seen = (s.changeOnCall.seen || 0) + 1;
+  if (s.changeOnCall.seen === s.changeOnCall.at) Object.assign(s, s.changeOnCall.patch);
+}
 if (a[0] === 'workspace' && a[1] === 'list') out({workspaces:s.workspaces});
 else if (a[0] === 'tab' && a[1] === 'list') out({tabs:s.tabs.filter(t=>t.workspace_id===value('--workspace'))});
 else if (a[0] === 'pane' && a[1] === 'list') out({panes:s.panes.filter(p=>p.workspace_id===value('--workspace'))});
 else if (a[0] === 'agent' && a[1] === 'list') { if(s.emptyAgentList) { save();process.exit(0); } out({agents:s.agents}); }
 else if (a[0] === 'agent' && a[1] === 'get') out({agent:s.agents.find(g=>g.name===a[2])});
-else if (a[0] === 'pane' && a[1] === 'get') out({pane:s.panes.find(p=>p.pane_id===a[2])});
+else if (a[0] === 'pane' && a[1] === 'get') {
+  const pane=s.panes.find(p=>p.pane_id===a[2]);out({pane:pane && {...pane,...s.paneGetFields}});
+}
 else if (a[0] === 'pane' && a[1] === 'process-info') {
   if(s.stopAfterMarkerProcess && s.calls.some(c=>c[0]==='pane'&&c[1]==='run')) fs.writeFileSync(s.stopAfterMarkerProcess,'STOP');
-  out({process_info:{shell_pid:12,foreground_processes:[{pid:s.busy?13:12}]}});
+  out({process_info:s.processInfo ?? {shell_pid:12,foreground_processes:[{pid:s.busy?13:12}]}});
 }
 else if (a[0] === 'pane' && a[1] === 'read') { save(); console.log(s.screen || 'fixture % '); }
 else if (a[0] === 'pane' && a[1] === 'run') {
@@ -175,6 +192,78 @@ async function unresolvedStart(t) {
     role:d.role,actor:d.actor,env:f.env,now:()=>now};
   return {...f,op,d,source,dispositionFile,dispose:()=>disposeStart(options),disposeOptions:options};
 }
+function unrelatedChurn(f) {
+  f.change(s=>{
+    s.workspaces.push({workspace_id:'elsewhere',worktree:{repo_key:'/other/repo',checkout_path:'/other/checkout'}});
+    s.tabs.push({tab_id:'other-tab',workspace_id:'w'});
+    s.panes.push({pane_id:'other-pane',tab_id:'other-tab',workspace_id:'w',terminal_id:'other-term',foreground_cwd:f.cwd});
+    s.agents.push({name:'other-agent',pane_id:'other-pane',tab_id:'other-tab',workspace_id:'w',terminal_id:'other-term',cwd:f.cwd,
+      agent_session:{value:'other-native'},agent_status:'idle'});
+    s.agents.push({name:'foreign-agent',pane_id:'foreign-pane',tab_id:'foreign-tab',workspace_id:'elsewhere',terminal_id:'foreign-term',
+      cwd:'/other/checkout',agent_session:{value:'foreign-native'},agent_status:'working'});
+    // Even target-workspace display changes are outside its identity/worktree.
+    s.churn={workspaces:['w','elsewhere'],agents:['other-agent','foreign-agent']};
+  });
+}
+test('never-started disposition succeeds through unrelated workspace and agent churn', async t => {
+  const f=await unresolvedStart(t);unrelatedChurn(f);
+  f.change(s=>{
+    s.captureObservations=true;
+    s.changeOnCall={command:'workspace list',at:2,patch:{
+      tabs:s.tabs.map(tab=>tab.tab_id==='other-tab'?{...tab,title:'unrelated change'}:tab),
+      panes:s.panes.map(pane=>pane.pane_id==='other-pane'?{...pane,title:'unrelated change'}:pane)}};
+  });
+  const before=f.read(), count=mutations(f).length;
+  const saved=f.dispose(), after=f.read();
+  assert.equal(saved.state,'never-started');assert.equal(mutations(f).length,count);
+  for(const rows of ['workspaces','agents']) {
+    const observations=after.observations.filter(o=>o.result[rows]).map(o=>o.result[rows]);
+    assert.equal(observations.length,2,rows);
+    for(let i=0;i<observations[0].length;i++) for(const key of ['title','status','revision','focused'])
+      assert.notEqual(observations[0][i][key],observations[1][i][key],`${rows}[${i}].${key}`);
+  }
+  assert.equal(after.calls.slice(before.calls.length).filter(a=>a[0]==='workspace'&&a[1]==='list').length,2);
+  assert.equal((await f.plan()).action.kind,'start-standard-slot');
+});
+test('plan and apply launch the exact target through unrelated workspace and agent churn', async t => {
+  const f=fixture(t);unrelatedChurn(f);
+  const first=await f.plan(), result=await f.apply();
+  assert.equal(first.action.kind,'start-standard-slot');
+  assert.equal(result.apply.state,'attempted',JSON.stringify(result));
+  assert.equal(result.decisions[0].decision,'KEEP',JSON.stringify(result));assert.equal(starts(f).length,1);
+  assert.equal(f.binding().pane,'pane');
+  assert.ok(f.read().agents.find(a=>a.name==='other-agent').revision>0);
+});
+test('never-started disposition holds on target changes between observations without changing the journal', async t => {
+  const f=await unresolvedStart(t), native=f.read(), journal=fs.readFileSync(runtimePaths(f.project.common).journal);
+  const topology=/changed topology or agent present/, changed=/disposition observation changed/;
+  const slotName=`slot-${createHash('sha256').update(f.op.id).digest('hex').slice(0,24)}`;
+  for(const [label, patch, expected, command='workspace list', at=2] of [
+    ['workspace identity',{workspaces:[{...native.workspaces[0],workspace_id:'replacement'}]},topology],
+    ['workspace repo',{workspaces:[{...native.workspaces[0],worktree:{...native.workspaces[0].worktree,repo_key:f.scratch}}]},topology],
+    ['workspace checkout',{workspaces:[{...native.workspaces[0],worktree:{...native.workspaces[0].worktree,checkout_path:f.scratch}}]},topology],
+    ['workspace worktree metadata',{workspaces:[{...native.workspaces[0],worktree:{...native.workspaces[0].worktree,is_linked_worktree:true}}]},changed],
+    ['tab identity',{tabs:[{...native.tabs[0],tab_id:'replacement'}]},topology],
+    ['tab metadata',{tabs:[{...native.tabs[0],title:'changed target'}]},changed],
+    ['pane metadata',{panes:[{...native.panes[0],title:'changed target'}]},changed],
+    ['terminal',{panes:[{...native.panes[0],terminal_id:'replacement'}]},topology],
+    ['pane tab',{panes:[{...native.panes[0],tab_id:'replacement'}]},topology],
+    ['extra pane in target tab',{panes:[...native.panes,{...native.panes[0],pane_id:'extra',terminal_id:'extra-term'}]},topology],
+    ['foreground process',{processInfo:{shell_pid:14,foreground_processes:[{pid:14}]}},changed],
+    ['agent on pane',{agents:[{name:'appeared',pane_id:'pane',terminal_id:'elsewhere'}]},topology],
+    ['agent on terminal',{agents:[{name:'appeared',pane_id:'elsewhere',terminal_id:'term'}]},topology],
+    ['slot-named agent',{agents:[{name:slotName,pane_id:'elsewhere',terminal_id:'elsewhere'}]},topology],
+    ['pane get across observations',{paneGetFields:{title:'get-only change'}},changed],
+    ['pane get around process read',{paneGetFields:{title:'get-only change'}},/sole shell, session absence or launch state is uncertain/,'pane get',2]
+  ]) {
+    fs.writeFileSync(f.state,JSON.stringify(native));
+    f.change(s=>s.changeOnCall={command,at,patch});
+    assert.throws(f.dispose,expected,label);
+    assert.equal(f.read().changeOnCall.seen,at,`${label}: injected change was reached`);
+    assert.deepEqual(fs.readFileSync(runtimePaths(f.project.common).journal),journal,label);
+    assert.equal(mutations(f).length,mutations({read:()=>native}).length,label);
+  }
+});
 test('explicit never-started disposition retains the intent and permits a newly planned start once', async t => {
   const f=await unresolvedStart(t);
   assert.equal((await f.plan()).decisions[0].decision,'Hold','evidence file alone never disposes an intent');

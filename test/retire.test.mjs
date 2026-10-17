@@ -604,3 +604,58 @@ test('lane removal uses fresh shared authority: new references and HOLD both sto
   const done = executeRetirement(planRetirement(s), { observe: () => s, removeLane: row => actions.push(row) });
   assert.equal(done[0].action, 'lane-removed'); assert.equal(actions.length, 1);
 });
+
+function nativeHelpers(s) {
+  s.agents[0].agent = 'codex';
+  const info = s.panes[0].process_info;
+  info.foreground_processes = [{ name: 'codex', pid: 10 }];
+  info.process_tree[1].command = '[codex]';
+  info.process_tree[1].ppid = info.shell_pid;
+  info.process_tree.push({ pid: 20, ppid: 10, identity: 'helper', state: 'S', command: '[node]' });
+  return s;
+}
+function bareShell(s) {
+  const p = s.panes[0], info = p.process_info;
+  p.shellOnly = true; info.process_tree = [info.process_tree[0]];
+  info.foreground_processes = [{ pid: info.shell_pid, name: 'zsh' }];
+}
+
+test('native exit wait is bounded and never escalates to a close or a process signal', () => {
+  const s = nativeHelpers(fixture()), plan = planRetirement(s);
+  assert.equal(plan.close[0].decision, 'exit');
+  let clock = 0, sends = 0;
+  const results = executeRetirement(plan, { observe: () => s, exit: () => sends++,
+    now: () => clock, pause: ms => { clock += ms; }, exitTimeoutMs: 60000,
+    close: () => assert.fail('an agent that did not exit must remain') });
+  assert.equal(clock, 60000); assert.equal(sends, 1);
+  assert.equal(results[0].decision, 'keep'); assert.equal(results[0].why, 'agent did not exit through its exit command');
+});
+
+for (const change of ['reference', 'focus', 'HOLD', 'working', 'session', 'shell', 'background']) test(`native exit's final ordinary plan keeps a newly changed ${change}`, () => {
+  const s = nativeHelpers(fixture()), plan = planRetirement(s);
+  let reads = 0, sends = 0;
+  const result = executeRetirement(plan, { observe: () => {
+    if (++reads === 3) {
+      if (change === 'reference') s.references.push({ pane: 'w:p', kind: 'new job' });
+      if (change === 'focus') s.tabs[0].focused = true;
+      if (change === 'HOLD') s.retirementHold = 'new hold';
+      if (change === 'working') s.agents[0].agent_status = 'working';
+      if (change === 'session') s.agents[0].agent_session.value = 'replacement';
+      if (change === 'shell') s.panes[0].process_info.process_tree[0].identity = 'new shell';
+      if (change === 'background') s.panes[0].process_info.process_tree.push({ pid: 99, identity: 'job', state: 'S', command: '[job]' });
+    }
+    return s;
+  }, exit: () => { sends++; bareShell(s); }, close: () => assert.fail('changed final authority') });
+  assert.equal(sends, 1); assert.equal(result[0].decision, 'keep'); assert.equal(result[0].action, 'skip-close');
+});
+
+test('a stale native exit token cannot send input to a shell or a different process tree', () => {
+  for (const change of ['shell', 'parent', 'birth']) {
+    const s = nativeHelpers(fixture()), plan = planRetirement(s);
+    if (change === 'shell') bareShell(s);
+    if (change === 'parent') s.panes[0].process_info.process_tree[2].ppid = 5;
+    if (change === 'birth') s.panes[0].process_info.process_tree[2].identity = 'new birth';
+    const result = executeRetirement(plan, { observe: () => s, exit: () => assert.fail('stale exit'), close: () => assert.fail('stale close') });
+    assert.equal(result[0].action, 'skip-close');
+  }
+});

@@ -5,6 +5,13 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ROUTE_PRESET } from './preset.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
 
+// Native lifecycle commands belong to launch plumbing, never record policy.
+const launchData = Object.freeze({
+  codex: Object.freeze({ exit: '/quit' }),
+  claude: Object.freeze({ exit: '/exit' }),
+});
+export const exitCommandFor = kind => Object.hasOwn(launchData, kind) ? launchData[kind].exit : null;
+
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -205,6 +212,7 @@ export function resolveLaunchRoute(config, options = {}) {
     ? resolved.args
     : resolveRoute(config, { route: options.route }).args;
   resolved.effort ??= effortFromArgs(resolved.kind, inferenceArgs);
+  resolved.exit = exitCommandFor(resolved.kind);
   return resolved;
 }
 

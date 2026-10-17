@@ -115,6 +115,20 @@ its children or blockers. Open blockers still expand, as does the root's own
 subtree, and reviewer roots still climb to their engineer's chain. All other
 retirement guards remain in force.
 
+An idle recorded native agent whose extra processes all descend from its single
+foreground process may receive an `exit` decision when every ordinary occupant
+guard passes. Exit commands are launch-route data (`/quit` or `/exit`); unknown
+kinds stay kept. A complete, healthy process tree is required; shell background
+jobs, stopped/zombie processes and live references still keep the tab. Working
+agents with their own helpers remain ACTIVE. The guarded executor serializes
+each tab, re-observes the same token, checks native identity and an empty ready
+composer, and sends the command with `herdr agent prompt`. It waits at most 60
+seconds for the unchanged shell, then re-observes and requires an ordinary
+`release` decision before closing. Failure keeps the tab with a concrete reason;
+there is no process kill or force fallback. Lane removal still requires zero panes.
+Descendancy proves ownership, not that a tool job has finished: it authorizes only
+the agent's normal exit command, and never authorizes closing a surviving job.
+
 Adopted standard slots add a KEEP input from canonical
 `<git-common-dir>/sessions/standard-slots.json`, independent of manifests,
 tab labels and `.lane/sessions.json.d`. The history binds common directory,

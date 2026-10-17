@@ -67,6 +67,12 @@ else if (a[0] === 'tab' && a[1] === 'list') out({tabs:s.tabs.filter(t=>t.workspa
 else if (a[0] === 'pane' && a[1] === 'list') out({panes:s.panes.filter(p=>p.workspace_id===a.at(-1))});
 else if (a[0] === 'pane' && a[1] === 'process-info') out({process_info:s.watcherMode&&a.at(-1)==='main:watch:p'?{shell_pid:1,foreground_processes:[{name:'node',pid:process.ppid}],process_tree_complete:true,process_tree:[{pid:1,identity:'shell',state:'S',command:'[zsh]'},{pid:process.ppid,identity:'watcher',state:'S',command:'[node]'}]}:s.info??{shell_pid:1,foreground_processes:[{name:'native',pid:2}],process_tree_complete:true,process_tree:[{pid:1,identity:'shell',state:'S',command:'[zsh]'},{pid:2,identity:'native',state:'S',command:'[native]'}]}});
 else if (a[0] === 'agent' && a[1] === 'list') out({agents:s.agents});
+else if (s.exitMode && a[0] === 'pane' && a[1] === 'read') { process.stdout.write(s.screen); }
+else if (s.exitMode && a[0] === 'agent' && a[1] === 'prompt') {
+  s.actions.push(a);
+  if(s.exitMode==='exit') s.info={shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}],process_tree_complete:true,process_tree:[s.info.process_tree[0]]};
+  fs.writeFileSync(file,JSON.stringify(s));out({});
+}
 else if (a[0] === 'tab' && a[1] === 'close') {
   if(s.failClose) { console.error('injected tab failure'); process.exit(1); }
   s.actions.push(a); s.tabs=s.tabs.filter(t=>t.tab_id!==a[2]); s.panes=s.panes.filter(p=>p.tab_id!==a[2]); s.agents=s.agents.filter(g=>g.tab_id!==a[2]); fs.writeFileSync(file,JSON.stringify(s)); out({});

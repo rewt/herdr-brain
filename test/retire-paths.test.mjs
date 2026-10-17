@@ -11,10 +11,11 @@ import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
 import { requestRetirement, consumeRetirement } from '../lib/retire-trigger.mjs';
-import { retirementDeadline } from '../lib/retire-lock.mjs';
+import { retirementDeadline, retirementLock } from '../lib/retire-lock.mjs';
 import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
 import { recordStandardSlot, slotReceiptFile } from '../sessions/receipts.mjs';
+import { classifyRetirement } from '../lib/retire-status.mjs';
 import { fixture, hold, heldReason, isolatedEnv, assertNoRemoval, completionFixture, traceLane } from './helpers/retire-fixture.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -24,6 +25,112 @@ function adoptStandard(f) {
   return recordStandardSlot({ cwd: f.lane, action: 'adopt', uid: 'fixture-chat', actor: 'fixture', why: 'offline proven binding',
     slot: { server: 'default', workspace: 'w', checkout: f.lane, tab: 'w:t', standardSlot: 'chat', panes: [{ pane: 'w:p', paneSlot: 'primary' }] } });
 }
+
+function nativeExit(f, kind = 'codex') {
+  f.state.agents[0].agent = kind;
+  f.state.agents[0].agent_status = 'idle';
+  f.state.exitMode = 'exit';
+  f.state.screen = fs.readFileSync(path.join(root, `supervisor/test/fixtures/${kind === 'claude' ? 'claude' : 'codex'}-empty.ansi`), 'utf8');
+  f.state.info = { shell_pid: 1, foreground_processes: [{ name: kind, pid: 2 }], process_tree_complete: true,
+    process_tree: [{ pid: 1, identity: 'shell', state: 'S', command: '[zsh]' },
+      { pid: 2, ppid: 1, identity: 'native', state: 'S', command: `[${kind}]` },
+      { pid: 3, ppid: 2, identity: 'helper', state: 'S', command: '[codex-code-mode-host]' },
+      { pid: 4, ppid: 3, identity: 'repl', state: 'S', command: '[node]' }] };
+  f.save();
+}
+
+for (const [kind, command] of [['codex', '/quit'], ['claude', '/exit']]) test(`native ${kind} exits once through route data, then closes only its unchanged bare shell`, t => {
+  const f = fixture(t); nativeExit(f, kind);
+  const retirement = f.retirement(), plan = retirement.plan();
+  assert.equal(plan.close[0].decision, 'exit'); assert.equal(plan.close[0].exit, command);
+  assert.equal(classifyRetirement(plan.close[0]).class, 'TERMINAL');
+  assert.equal(retirement.apply(plan)[0].action, 'closed');
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', command], ['tab', 'close', 'w:t']]);
+  assert.equal(retirement.apply(plan)[0].action, 'already-gone');
+  // Reuse the native IDs after close: the old token cannot touch a new session.
+  f.state.agents[0].terminal_id = 'new-terminal'; f.state.agents[0].agent_session.value = 'new-session'; f.save();
+  assert.equal(retirement.apply(plan)[0].action, 'skip-close');
+  assert.deepEqual(f.read().actions, []); assert.equal(f.read().tabs.length, 1);
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});
+
+test('working native agent with helper descendants is ACTIVE, while a shell sibling stays UNKNOWN', t => {
+  const f = fixture(t); nativeExit(f); f.state.agents[0].agent_status = 'working'; f.save();
+  const retirement = f.retirement(), plan = retirement.plan();
+  assert.match(plan.keep[0].why, /^occupant worker is working$/);
+  assert.equal(classifyRetirement(plan.keep[0]).class, 'ACTIVE');
+  retirement.apply(plan); assert.deepEqual(f.read().actions, []);
+  f.state.info.process_tree[2].ppid = 1; f.save();
+  const sibling = retirement.plan().keep[0];
+  assert.match(sibling.why, /background or unknown pane process remains/);
+  assert.equal(classifyRetirement(sibling).class, 'UNKNOWN');
+  retirement.apply(retirement.plan()); assert.deepEqual(f.read().actions, []);
+});
+
+for (const guard of ['sibling', 'missing-parent', 'cycle', 'stopped', 'zombie', 'incomplete', 'unknown-kind', 'reference', 'test-slot', 'HOLD', 'standard-slot', 'focus', 'open-chain']) test(`native exit retains ${guard} without sending input`, t => {
+  const f = fixture(t); nativeExit(f, guard === 'unknown-kind' ? 'unknown' : 'codex');
+  if (guard === 'sibling') f.state.info.process_tree[2].ppid = 1;
+  if (guard === 'missing-parent') f.state.info.process_tree[2].ppid = 99;
+  if (guard === 'cycle') f.state.info.process_tree[2].ppid = 4;
+  if (guard === 'stopped') f.state.info.process_tree[2].state = 'T';
+  if (guard === 'zombie') f.state.info.process_tree[2].state = 'Z';
+  if (guard === 'incomplete') f.state.info.process_tree_complete = false;
+  if (guard === 'focus') f.state.tabs[0].focused = true;
+  if (guard === 'reference') fs.writeFileSync(path.join(f.org, 'references/job.json'), JSON.stringify({ schema: 'herdr-reference/v1', state: 'running',
+    owner: 'fixture', kind: 'live fixture', job: 'job', item: 'ENG-1', created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString() }));
+  if (guard === 'test-slot') fs.writeFileSync(f.env.MONITOR_TEST_SLOT_PATH, JSON.stringify({ pid: process.pid, cwd: f.lane, label: f.lane }));
+  if (guard === 'HOLD') hold(f);
+  if (guard === 'standard-slot') adoptStandard(f);
+  if (guard === 'open-chain') fs.writeFileSync(f.eventFile, loadEvents(f.org).events.filter(e => e.type !== 'item.closed').map(e => JSON.stringify(e) + '\n').join(''));
+  f.save();
+  const retirement = f.retirement(), plan = retirement.plan();
+  assert.equal(plan.close.length, 0); assert.ok(plan.keep[0].why);
+  if (guard === 'unknown-kind') assert.match(plan.keep[0].why, /no declared exit command/);
+  retirement.apply(plan); assert.deepEqual(f.read().actions, []);
+});
+
+for (const guard of ['typed', 'not-ready', 'new-session', 'new-reference', 'new-HOLD']) test(`native exit rechecks ${guard} after planning and sends no input`, t => {
+  const f = fixture(t); nativeExit(f);
+  const retirement = f.retirement(), plan = retirement.plan();
+  if (guard === 'typed') f.state.screen = fs.readFileSync(path.join(root, 'supervisor/test/fixtures/codex-typed.ansi'), 'utf8');
+  if (guard === 'not-ready') f.state.agents[0].interactive_ready = false;
+  if (guard === 'new-session') f.state.agents[0].agent_session.value = 'new-session';
+  if (guard === 'new-HOLD') hold(f);
+  if (guard === 'new-reference') fs.writeFileSync(f.env.MONITOR_TEST_SLOT_PATH, JSON.stringify({ pid: process.pid, cwd: f.lane, label: f.lane }));
+  f.save(); retirement.apply(plan); assert.deepEqual(f.read().actions, []);
+});
+
+test('native exit timeout keeps the tab and lane with a concrete refusal and no force fallback', t => {
+  const f = fixture(t); nativeExit(f); f.state.exitMode = 'stay'; f.save();
+  const retirement = f.retirement({ exitTimeoutMs: 0 });
+  const result = retirement.apply(retirement.plan());
+  assert.equal(result[0].decision, 'keep'); assert.equal(result[0].why, 'agent did not exit through its exit command');
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
+  assert.equal(f.read().tabs.length, 1);
+  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', expectedTip: f.head, gitOnly: true }), /occupied lane/);
+  assert.equal(fs.existsSync(f.lane), true);
+});
+
+test('receipt-identified settle agent exits before the ordinary process_gone callback close', t => {
+  const f = fixture(t); nativeExit(f);
+  const retirement = f.retirement({ readOwner: owner => f.read().info.process_tree.some(row => row.pid === owner.pid && row.identity === owner.identity) });
+  retirement.recordCallback({ kind: 'settle', pane: 'w:p', pid: 2, run: 'R-1', agent: 'worker' });
+  const events = loadEvents(f.org).events; delete events[1].meta.agent;
+  fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
+  const plan = retirement.plan(); assert.equal(plan.close[0].decision, 'exit');
+  assert.equal(retirement.apply(plan)[0].action, 'closed');
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+  assert.deepEqual(fs.readdirSync(path.join(f.org, 'retirement/occupants')), []);
+});
+
+test('concurrent native retirement holds the tab lock across prompt and close', t => {
+  const f = fixture(t); nativeExit(f);
+  const retirement = f.retirement(), plan = retirement.plan();
+  const unlock = retirementLock(path.join(f.common, 'retirement/tabs', createHash('sha256').update('w:t').digest('hex')));
+  try { assert.match(retirement.apply(plan)[0].why, /locked/); assert.deepEqual(f.read().actions, []); }
+  finally { unlock(); }
+  assert.equal(retirement.apply(plan)[0].action, 'closed');
+});
 test('standard-slot runtime rechecks canonical lane receipts before tab, workspace and guarded lane removal', t => {
   const f = fixture(t), retirement = f.retirement(), plan = retirement.plan(); assert.equal(plan.close.length, 1);
   adoptStandard(f);

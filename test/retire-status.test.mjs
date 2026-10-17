@@ -132,6 +132,7 @@ const reasonCases = [
   ['kernel process differs from foreground observation', 'UNKNOWN'],
   ['another or unknown foreground process is here', 'UNKNOWN'],
   ['occupant cwd differs from lane', 'UNKNOWN'],
+  ['agent kind has no declared exit command', 'UNKNOWN'],
   ['open recorded run uses lane', 'ACTIVE'],
   ['occupied lane; retire panes before removing the worktree', 'UNKNOWN'],
 ];
@@ -147,12 +148,13 @@ test('every planner reason expression is enumerated and mapped; source drift fai
     if (expected === 'UNKNOWN') assert.equal(result.nextAction, `keep; ${sample}`, expression);
   }
   const releaseReasons = [
+    'recorded idle agent and its descendants; exit before closing the shell',
     'recorded ${callback.kind} callback complete; unchanged process and shell identity',
     "record release for ${released.join(', ')}; exact session and head",
     "${agents.map(a => matchingRun(a, snapshot.record.runs)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
     'lane removal preconditions verified',
   ];
-  const releases = [...policy.matchAll(/why: reason \?\? (?:\(callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
+  const releases = [...policy.matchAll(/why: reason \?\? (?:\(needsExit \? ('[^']*') : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());
   for (const why of releases) assert.equal(classifyRetirement({ decision: 'release', why }).class, 'TERMINAL');
 });

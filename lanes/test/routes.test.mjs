@@ -4,11 +4,18 @@ import { dirname, resolve } from "node:path";
 import test from '../../test/helpers/bounded-test.mjs';
 import { fileURLToPath } from "node:url";
 
-import { readRoutesConfig, resolveLaunchRoute, resolveRoute, selectRoute, validateRoutesConfig } from "../routes.mjs";
+import { exitCommandFor, readRoutesConfig, resolveLaunchRoute, resolveRoute, selectRoute, validateRoutesConfig } from "../routes.mjs";
 import { ROUTE_PRESET } from "../preset.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BCH_ROUTING = resolve(HERE, "fixtures/bch-cloak-routing.json");
+
+test('native exit commands are launch data and unknown kinds have none', () => {
+  for (const [kind, command] of [['codex', '/quit'], ['claude', '/exit'], ['unknown', null], ['toString', null]]) {
+    assert.equal(exitCommandFor(kind), command);
+    assert.equal(resolveLaunchRoute({ dispatch: { kind } }).exit, command);
+  }
+});
 
 test("planning and Codex review default to Sol xhigh", () => {
   assert.deepEqual(["unblock", "review-codex"].map((route) => { const { model, effort } = resolveLaunchRoute(ROUTE_PRESET, { route }); return [model, effort]; }), [["gpt-6.1-sol", "xhigh"], ["gpt-6.1-sol", "xhigh"]]);

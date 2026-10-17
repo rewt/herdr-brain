@@ -8,7 +8,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
+import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { consumeRetirement } from '../lib/retire-trigger.mjs';
@@ -144,7 +144,10 @@ export function enqueue(queue, topics, options) {
         if (JSON.stringify(existing.superseded ?? []) !== JSON.stringify(options.superseded ?? []) || JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
         return { id: existing.id, topic, duplicate: true };
       }
-      const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options };
+      const record = options.run ? loadEvents(options.org) : null;
+      if (record?.tornTail) throw Error('incomplete record event; nothing queued');
+      const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options,
+        ...(record ? { admittedSeq: record.events.at(-1)?.seq ?? 0 } : {}) };
       data.pending.push(job);
       return { id: job.id, topic, duplicate: false };
     });
@@ -679,6 +682,22 @@ async function main() {
   if (opt.drain) { await drain(queue); return; }
   if (opt.resume) {
     if (positionals.length) throw Error('--resume takes no lane topics');
+    // Only an explicit native resume may release a capability refusal. Ordinary
+    // drains leave it intact while processing unrelated requests.
+    if (queue.load().interrupted?.some(batch => batch.native_refusal)) {
+      const native = probeNativeGate();
+      if (!native.ok) throw settingsRefusal(native.code, native.reason);
+      queue.transaction(data => {
+        for (const batch of data.interrupted ?? []) if (batch.native_refusal) {
+          const file = path.join(queue.directory, 'batches', batch.id, 'train.json');
+          const train = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (train.id !== batch.id || train.identity !== queue.project.identity) throw Error('native resume receipt binding changed');
+          train.native_resumptions = [...(train.native_resumptions ?? []), { refusal: batch.native_refusal, native_context: native }];
+          writeFileAtomic(file, JSON.stringify(train, null, 2) + '\n');
+          delete batch.native_refusal;
+        }
+      });
+    }
     const worker = await start(queue);
     process.stdout.write(JSON.stringify({ worker, queue: queue.file }) + '\n'); return;
   }
@@ -687,4 +706,8 @@ async function main() {
   const worker = opt['existing-worker'] ? { already_running: true } : await start(queue);
   process.stdout.write(JSON.stringify({ jobs, worker, queue: queue.file }) + '\n');
 }
-if (isMain(import.meta.url)) main().catch((error) => { console.error(`promote: ${error.message}`); process.exitCode = 1; });
+if (isMain(import.meta.url)) main().catch((error) => {
+  // This refusal is atomic under queue.lock, before any admission or worker start.
+  if (error.code === 'AUTOPILOT_NO_NATIVE_WORKER') process.stdout.write(JSON.stringify({ result: 'not_queued', code: error.code, reason: error.message }) + '\n');
+  console.error(`promote: ${error.message}`); process.exitCode = 1;
+});

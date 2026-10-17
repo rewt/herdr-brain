@@ -970,7 +970,7 @@ test('existing-worker enqueue refuses an absent worker atomically and never star
   assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.log')), false);
 });
 
-for (const context of ['worker', 'host']) test(`native refusal in the ${context} preserves a prior validated checkpoint while unrelated work proceeds`, t => {
+for (const context of ['worker', 'host']) test(`native refusal in the ${context} preserves a prior validated checkpoint until explicit resume`, async t => {
   const f = fixture(t);
   if (context === 'host') {
     fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ gate: {} }));
@@ -990,6 +990,13 @@ for (const context of ['worker', 'host']) test(`native refusal in the ${context}
   assert.deepEqual(after.attempts, before.attempts); assert.equal(after.native_context.ok, false);
   assert.equal(f.runs(), 1); assert.equal(f.git(['rev-parse', 'main']), base);
   assert.equal(f.queue.load().interrupted[0].native_refusal.code, 'PROMOTE_NATIVE_PTMX_REFUSED');
+  if (context === 'worker') {
+    const deniedResume = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--resume']);
+    assert.equal(deniedResume.status, 1); assert.match(deniedResume.stderr, /PROMOTE_NATIVE_PTMX_REFUSED/);
+    assert.equal(f.queue.load().interrupted[0].native_refusal.code, 'PROMOTE_NATIVE_PTMX_REFUSED');
+    assert.deepEqual(JSON.parse(fs.readFileSync(job.receipt)).attempts, before.attempts);
+    assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false);
+  }
   // A healthy worker may process a different request without adopting the
   // native-refused attempt as ordinary interrupted recovery.
   f.env.NODE_OPTIONS = originalOptions;
@@ -999,4 +1006,39 @@ for (const context of ['worker', 'host']) test(`native refusal in the ${context}
   assert.equal(fs.existsSync(path.join(f.repo, 'alone')), false); assert.equal(fs.existsSync(path.join(f.repo, 'later')), true);
   assert.deepEqual(JSON.parse(fs.readFileSync(job.receipt)).attempts, before.attempts);
   assert.equal(f.queue.load().interrupted.length, 1);
+  const resumed = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--resume']);
+  assert.equal(resumed.status, 0, resumed.stderr);
+  await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')));
+  const completed = f.queue.load(), final = JSON.parse(fs.readFileSync(job.receipt));
+  assert.equal(final.native_resumptions.at(-1).refusal.code, 'PROMOTE_NATIVE_PTMX_REFUSED');
+  assert.equal(final.native_resumptions.at(-1).native_context.ok, true);
+  assert.equal(completed.interrupted.length, 0, JSON.stringify(completed.interrupted));
+  assert.equal(queueJobs(completed).find(row => row.id === job.id).outcome, 'promoted');
+  assert.equal(fs.existsSync(path.join(f.repo, 'alone')), true);
+  assert.equal(fs.existsSync(path.join(f.repo, 'later')), true);
+  assert.equal(final.attempts[0].gate.started_at, before.attempts[0].gate.started_at, 'old validation evidence retained');
+  assert.equal(f.runs(), 3, 'changed main requires one new gate');
+});
+
+test('explicit native resume completes an unchanged validated batch without another gate', async t => {
+  const f = fixture(t); f.lane('alone'); f.add('alone');
+  interruptAt(f, 'validated'); assert.equal(f.drain().status, 0); assert.equal(f.runs(), 1);
+  const first = f.queue.load().results[0], before = JSON.parse(fs.readFileSync(first.receipt));
+  const preload = path.join(f.root, 'refuse-pty.cjs');
+  fs.writeFileSync(preload, "const fs=require('fs'),open=fs.openSync;fs.openSync=function(file,...args){if(file==='/dev/ptmx')throw Object.assign(new Error('fixture refusal'),{code:'EPERM'});return open.call(this,file,...args);};");
+  const originalOptions = f.env.NODE_OPTIONS;
+  f.env.NODE_OPTIONS = `${originalOptions ?? ''} --require ${preload}`;
+  assert.equal(f.drain().status, 0);
+  assert.equal(f.queue.load().interrupted[0].native_refusal.code, 'PROMOTE_NATIVE_PTMX_REFUSED');
+  f.env.NODE_OPTIONS = originalOptions;
+  const resumed = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--resume']);
+  assert.equal(resumed.status, 0, resumed.stderr);
+  await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')));
+  assert.equal(f.queue.load().interrupted.length, 0); assert.equal(f.runs(), 1);
+  assert.equal(queueJobs(f.queue.load()).find(row => row.id === first.id).outcome, 'promoted');
+  const final = JSON.parse(fs.readFileSync(first.receipt));
+  assert.equal(final.native_resumptions.at(-1).refusal.code, 'PROMOTE_NATIVE_PTMX_REFUSED');
+  assert.equal(final.native_resumptions.at(-1).native_context.ok, true);
+  assert.equal(final.attempts[0].gate.started_at, before.attempts[0].gate.started_at);
+  assert.equal(final.attempts[0].phase, 'complete');
 });

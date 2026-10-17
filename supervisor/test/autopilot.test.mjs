@@ -56,12 +56,12 @@ function setup(t, results = [], { ingest = true } = {}) {
   };
   return { ...f, commit, nativeWorker: () => ({ pid: 1 }), herdrCalls: f.calls, run, item, entry, calls, execute, apply: () => autopilotNotice(entry, { execute, nativeWorker: () => ({ pid: 1 }) }) };
 }
-async function existingWorker(t, f) {
+async function existingWorker(t, f, { refuse = false } = {}) {
   const anchor = path.join(f.root, 'anchor'), release = path.join(f.root, 'release-worker'), started = path.join(f.root, 'worker-gate-started');
   f.git(['worktree', 'add', '-qb', 'lane/anchor', anchor]);
   fs.writeFileSync(path.join(anchor, 'anchor.txt'), 'anchor'); f.git(['add', '.'], anchor); f.git(['commit', '-qm', 'Anchor'], anchor);
   const checker = path.join(f.root, 'anchor-check.cjs');
-  fs.writeFileSync(checker, `const fs=require('fs');fs.writeFileSync(${JSON.stringify(started)},'started');const deadline=Date.now()+${loadTimeout(60000)};while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<deadline)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);console.log('green');`);
+  fs.writeFileSync(checker, `const fs=require('fs');fs.writeFileSync(${JSON.stringify(started)},'started');const deadline=Date.now()+${loadTimeout(60000)};while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<deadline)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);console.log('gate complete');process.exitCode=${refuse ? 1 : 0};`);
   const queue = queueFor(f.repo);
   enqueue(queue, ['anchor'], { to: f.entry.to, herdr: path.join(f.root, 'bin/herdr'), attempts: 1, retry: 0,
     laneCLI: path.join(f.source, 'lanes/lane.mjs'), validate: `${process.execPath} ${checker}`, org: null });
@@ -488,9 +488,13 @@ test('real handle still wakes for a non-test claim alongside ingest proof and de
   assert.match(receipt.actions[0].result.reason, /unverified claims/);
   assert.equal(f.show(f.item).closed, null);
 });
-for (const [awaited, scopedTests, recordClaim] of [[false, false], [true, false], [false, true], [false, true, RECORD_CHECK_CLAIM], [false, true, LEGACY_RECORD_CHECK_CLAIM]]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}${scopedTests ? ' with deferred test evidence' : ''}${recordClaim ? ` and ingest proof: ${recordClaim}` : ''}`, { timeout: 30000 }, async t => {
+for (const [awaited, scopedTests, recordClaim, withProposal] of [[false, false], [true, false], [false, true], [false, true, RECORD_CHECK_CLAIM], [false, true, LEGACY_RECORD_CHECK_CLAIM], [false, false, undefined, true]]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}${scopedTests ? ' with deferred test evidence' : ''}${recordClaim ? ` and ingest proof: ${recordClaim}` : ''}${withProposal ? ' with a non-blocking engineer proposal' : ''}`, { timeout: 30000 }, async t => {
   const f = setup(t, [], { ingest: false }); f.commit('correct\n');
   const state = () => fold(loadEvents(f.org).events);
+  if (withProposal) {
+    const report = f.show(f.run).report_path;
+    fs.writeFileSync(report, fs.readFileSync(report, 'utf8').replace('proposals: []', 'proposals:\n  - role: engineer\n    title: Optional improvement\n    why: Separate follow-up\n    blocking: false'));
+  }
   if (scopedTests) {
     const marker = path.join(f.root, 'extra-test-runs');
     fs.writeFileSync(path.join(f.repo, 'planner.mjs'), `import {spawnSync} from 'node:child_process'; if(process.argv[2]==='--plan') console.log(JSON.stringify({files:['brain/checks.test.mjs']})); else process.exitCode=spawnSync(process.execPath,['--test',...JSON.parse(process.argv[3])],{stdio:'inherit'}).status??1;`);
@@ -518,12 +522,17 @@ for (const [awaited, scopedTests, recordClaim] of [[false, false], [true, false]
     if (closed && !fs.existsSync(path.join(directory, 'worker.lock'))) break;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  assert.ok(closed, 'promotion notice closes the record without supervisor chat');
+  assert.ok(closed, `promotion notice closes the record without supervisor chat: ${JSON.stringify(queueFor(f.repo).load())}`);
   assert.ok(!fs.existsSync(path.join(directory, 'worker.lock')), 'finite promotion owner exited');
-  assert.ok(!fs.existsSync(f.workspace)); assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
+  if (!withProposal) assert.ok(!fs.existsSync(f.workspace));
+  assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
   const queue = JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')));
   const promoted = queue.results.filter(j => j.run === f.run);
   assert.equal(promoted.length, 1); assert.equal(promoted[0].outcome, 'promoted');
+  if (withProposal) {
+    const child = [...state().items.values()].find(item => item.created.run === f.run);
+    assert.ok(child); assert.equal(child.role, 'engineer'); assert.equal(child.closed, null);
+  }
   assert.match(fastPathTiming(f.entry.project, f.run, {}).clocks.queue_admission, /^20/);
   const timingNotes = state().runs.get(f.run).notes.filter(n => n.text.startsWith('Fast path timing: '));
   assert.equal(timingNotes.length, 1);
@@ -597,7 +606,8 @@ process.exit(r.status??1);`, { mode: 0o755 });
   assert.equal(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'start').length, 1, 'retry reuses independent review');
   const directory = path.join(f.entry.project.identity, 'promote'), deadline = Date.now() + loadTimeout(20000);
   while (Date.now() < deadline && (!state().items.get(f.item).closed || fs.existsSync(path.join(directory, 'worker.lock')))) await new Promise(resolve => setTimeout(resolve, 100));
-  assert.equal(state().items.get(f.item).closed?.as, 'done'); assert.ok(!fs.existsSync(path.join(directory, 'worker.lock')));
+  assert.equal(state().items.get(f.item).closed?.as, 'done', JSON.stringify(JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')))));
+  assert.ok(!fs.existsSync(path.join(directory, 'worker.lock')));
   assert.equal(fs.readFileSync(path.join(f.repo, 'upstream'), 'utf8'), 'new main\n');
   assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
   const queue = JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')));
@@ -626,18 +636,29 @@ for (const stdout of ['', '{broken']) test(`stderr-only failed action preserves 
   assert.equal(saved.actions[0].exit_code, 1);
 });
 
-test('autopilot is off by default and requires the named cohort when enabled', t => {
+for (const config of [null, { autopilot: { enabled: false } }, { autopilot: { enabled: false, cohort: 'clean-pass' } }]) test(`disabled autopilot preserves the original notice for ${JSON.stringify(config)}`, t => {
   const f = setup(t, [pass]);
-  fs.unlinkSync(path.join(f.repo, '.supervisor.json'));
+  if (config === null) fs.unlinkSync(path.join(f.repo, '.supervisor.json'));
+  else fs.writeFileSync(path.join(f.repo, '.supervisor.json'), JSON.stringify(config));
   assert.equal(autopilotSettings(f.repo).enabled, false);
-  assert.equal(f.apply().disposition, 'wake'); assert.equal(f.calls.length, 0);
-
+  const result = f.apply();
+  assert.equal(result.disposition, 'wake'); assert.equal(f.calls.length, 0);
+  assert.equal(result.summary, f.entry.message);
+  const saved = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(saved.exception, 'AUTOPILOT_DISABLED');
+  assert.equal(saved.reason, 'AUTOPILOT_DISABLED: autopilot disabled in project config');
+  assert.equal(f.apply().summary, f.entry.message); assert.equal(f.calls.length, 0);
+  saved.delivery_summary = '[autopilot] previous landing text';
+  fs.writeFileSync(result.receipt, JSON.stringify(saved));
+  assert.equal(f.apply().summary, f.entry.message, 'disabled policy also preserves delayed notices with cached delivery text');
 });
 for (const cohort of [undefined, 'unknown']) test(`enabled pilot rejects cohort ${cohort}`, t => {
   const f = setup(t, [pass]);
   fs.writeFileSync(path.join(f.repo, '.supervisor.json'), JSON.stringify({ autopilot: { enabled: true, cohort } }));
   const result = f.apply(); assert.equal(result.disposition, 'wake'); assert.equal(f.calls.length, 0);
-  assert.match(JSON.parse(fs.readFileSync(result.receipt)).reason, /AUTOPILOT_COHORT_UNKNOWN/);
+  const reason = JSON.parse(fs.readFileSync(result.receipt)).reason;
+  assert.match(reason, /^AUTOPILOT_COHORT_UNKNOWN: select/);
+  assert.equal(reason.match(/AUTOPILOT_COHORT_UNKNOWN/g).length, 1);
 });
 for (const [file, code] of [
   ['supervisor/autopilot.mjs', 'AUTOPILOT_SCOPE_EXCLUDED'], ['lib/store.mjs', 'AUTOPILOT_SCOPE_EXCLUDED'],
@@ -699,6 +720,42 @@ test('no live native worker records one named exception and never starts or enqu
   assert.equal(fs.existsSync(path.join(f.entry.project.identity, 'promote/worker.log')), false);
   f.entry.id = 'delayed'; assert.equal(autopilotNotice(f.entry, { execute: f.execute }).disposition, 'wake'); assert.equal(f.calls.length, 1);
   assert.equal(f.show(f.run).notes.filter(n => n.text.startsWith('Fast path timing: ')).length, 1);
+});
+
+test('a worker exiting after autopilot precheck leaves a confirmed no-op that bare promotion can recover', { timeout: 45000 }, async t => {
+  const f = setup(t, [], { ingest: false }), release = await existingWorker(t, f, { refuse: true });
+  const queue = queueFor(f.repo);
+  try {
+    const result = autopilotNotice(f.entry, { execute: (file, args) => {
+      if (args[0] === 'promote') {
+        assert.ok(liveNativeWorker(f.entry.project.identity), 'worker was live at precheck');
+        release();
+        const wait = f.exec(process.execPath, ['-e', `const fs=require('fs');const end=Date.now()+${loadTimeout(20000)};while(fs.existsSync(${JSON.stringify(path.join(queue.directory, 'worker.lock'))})&&Date.now()<end)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);`]);
+        assert.equal(wait.status, 0, wait.stderr);
+        assert.equal(liveNativeWorker(f.entry.project.identity), null);
+      }
+      return f.exec(process.execPath, [file, ...args]);
+    } });
+    assert.equal(result.disposition, 'wake');
+    assert.equal(JSON.parse(fs.readFileSync(result.receipt)).exception, 'AUTOPILOT_NO_NATIVE_WORKER');
+    const journal = path.join(receiptDirectory(f.org, f.entry.project.identity), `${f.run}.json`);
+    const refused = JSON.parse(fs.readFileSync(journal));
+    assert.equal(refused.phase, 'not-queued'); assert.equal(refused.refusal.code, 'AUTOPILOT_NO_NATIVE_WORKER');
+    assert.equal(refused.queue, undefined);
+    assert.equal(queue.load().pending.length, 0);
+    assert.equal(queue.load().results.filter(job => job.run === f.run).length, 0);
+    assert.ok(f.show(f.run).notes.every(note => !note.summary?.startsWith('Promotion authorized:')));
+    const recovered = f.exec(process.execPath, [path.join(f.source, 'supervisor/supervisor.mjs'), 'promote', f.run,
+      '--repo', f.repo, '--org', f.org, '--role', 'supervisor', '--why', 'Bare native recovery after confirmed no-op']);
+    assert.equal(recovered.status, 0, recovered.stderr);
+    const acknowledged = JSON.parse(recovered.stdout);
+    assert.equal(acknowledged.phase, 'acknowledged');
+    assert.equal(acknowledged.prior_attempts.length, 1); assert.equal(acknowledged.prior_attempts[0].phase, 'not-queued');
+    const deadline = Date.now() + loadTimeout(20000);
+    while (fs.existsSync(path.join(queue.directory, 'worker.lock')) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(queue.load().results.filter(job => job.run === f.run).length, 1);
+    assert.equal(queue.load().results.find(job => job.run === f.run).outcome, 'promoted');
+  } finally { release(); }
 });
 
 for (const change of ['stale-PASS', 'kill-switch', 'pause']) test(`automatic queue rechecks ${change} at final integration`, { timeout: 30000 }, async t => {

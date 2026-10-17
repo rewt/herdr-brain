@@ -65,7 +65,7 @@ export function main(argv = process.argv.slice(2)) {
     const r = spawnSync(process.execPath, [file, ...args], { cwd: project.canonical, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...options });
     if (r.error || r.status !== 0) {
       if (r.stdout) process.stdout.write(r.stdout);
-      throw new Error(`${path.basename(file)}: ${r.stderr || r.error?.message || `exit ${r.status}`}`);
+      throw new Error(`${path.basename(file)}: ${r.stderr || r.error?.message || `exit ${r.status}`}`, { cause: r });
     }
     return r.stdout;
   };
@@ -165,23 +165,28 @@ export function main(argv = process.argv.slice(2)) {
     if (fs.existsSync(file)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (saved.identity !== project.identity || saved.org !== project.org || saved.run !== id) throw new Error('promotion receipt identity changed');
-      if (saved.phase !== 'acknowledged') throw new Error(`promotion enqueue is uncertain; inspect ${file} and ${doc.promotion_queue}; do not blindly enqueue again`);
-      if (!opt.retry) { print(saved); return; }
-      const jobs = saved.queue?.jobs;
-      if (jobs?.length !== 1) throw new Error('retry requires one acknowledged queue job; inspect evidence');
-      const outcome = completedJob(loadQueue(), jobs[0].id);
-      if (!outcome) throw new Error('retry requires a confirmed refused queue job; pending or uncertain attempts need inspection');
-      if (outcome.outcome === 'promoted') {
-        if (outcome.reconciliation?.state === 'pending') {
-          if (outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw Error('completion retry requires the same acknowledged binding');
-          const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
-          print({ result: 'resuming_completion', ...JSON.parse(call(promote, ['--resume', '--repo', project.canonical])) });
-        } else print(saved);
-        return;
+      if (saved.phase === 'not-queued' && saved.refusal?.code === 'AUTOPILOT_NO_NATIVE_WORKER' && !saved.queue) {
+        const { prior_attempts, ...attempt } = saved;
+        prior = [...(prior_attempts ?? []), attempt];
+      } else {
+        if (saved.phase !== 'acknowledged') throw new Error(`promotion enqueue is uncertain; inspect ${file} and ${doc.promotion_queue}; do not blindly enqueue again`);
+        if (!opt.retry) { print(saved); return; }
+        const jobs = saved.queue?.jobs;
+        if (jobs?.length !== 1) throw new Error('retry requires one acknowledged queue job; inspect evidence');
+        const outcome = completedJob(loadQueue(), jobs[0].id);
+        if (!outcome) throw new Error('retry requires a confirmed refused queue job; pending or uncertain attempts need inspection');
+        if (outcome.outcome === 'promoted') {
+          if (outcome.reconciliation?.state === 'pending') {
+            if (outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw Error('completion retry requires the same acknowledged binding');
+            const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
+            print({ result: 'resuming_completion', ...JSON.parse(call(promote, ['--resume', '--repo', project.canonical])) });
+          } else print(saved);
+          return;
+        }
+        if (!['refused', 'timeout'].includes(outcome.outcome) || outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw new Error('retry requires a confirmed refused queue job with the same binding; inspect evidence');
+        const { prior_attempts, ...attempt } = saved;
+        prior = [...(prior_attempts ?? []), { ...attempt, result: outcome }];
       }
-      if (!['refused', 'timeout'].includes(outcome.outcome) || outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw new Error('retry requires a confirmed refused queue job with the same binding; inspect evidence');
-      const { prior_attempts, ...attempt } = saved;
-      prior = [...(prior_attempts ?? []), { ...attempt, result: outcome }];
     }
     else if (opt.retry) throw new Error('no acknowledged promotion attempt to retry');
     // Settle rechecks report hash, record, exact heads, clean trees and readiness.
@@ -200,14 +205,26 @@ export function main(argv = process.argv.slice(2)) {
       ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),
       ...(prior ? { prior_attempts: prior } : {}) };
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n');
-    call(local('../bin/org.mjs'), ['note', id, `Queue promotion of ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion authorized: ${saved.why}`]);
+    call(local('../bin/org.mjs'), ['note', id, `Request queue admission for ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion requested: ${saved.why}`]);
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
-    saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
-      '--expected-head', result.head, '--if-current-run', id,
-      ...(opt['existing-worker'] ? ['--existing-worker'] : []),
-      ...(result.test_evidence && !result.test_evidence.reexecuted ? ['--required-tests', JSON.stringify(result.test_evidence.files)] : []), ...(opt.to ? ['--to', opt.to] : [])]));
+    try {
+      saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
+        '--expected-head', result.head, '--if-current-run', id,
+        ...(opt['existing-worker'] ? ['--existing-worker'] : []),
+        ...(result.test_evidence && !result.test_evidence.reexecuted ? ['--required-tests', JSON.stringify(result.test_evidence.files)] : []), ...(opt.to ? ['--to', opt.to] : [])]));
+    } catch (error) {
+      let refusal;
+      try { refusal = JSON.parse(error.cause?.stdout); } catch { /* Other failures remain uncertain. */ }
+      if (opt['existing-worker'] && error.cause?.status === 1 && !error.cause.error && !error.cause.signal &&
+          refusal?.result === 'not_queued' && refusal.code === 'AUTOPILOT_NO_NATIVE_WORKER') {
+        saved.phase = 'not-queued'; saved.refusal = refusal;
+        writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n');
+      }
+      throw error;
+    }
     saved.phase = 'acknowledged';
-    writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n'); print(saved);
+    writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n');
+    print(saved);
   } finally { release(); }
 }
 if (isMain(import.meta.url)) {

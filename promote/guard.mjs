@@ -11,7 +11,7 @@ import { loadEvents, withLock } from '../lib/store.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { fold, children, laterRuns, openRuns, blockersOf, releases, itemStatus, reviewsWithoutPass, openQuestionsFor } from '../lib/state.mjs';
 
-export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, completionExpected, existingWorker = false, superseded = [] }, operation = () => {}, recordLocked = false) {
+export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, admittedSeq, completionExpected, existingWorker = false, superseded = [] }, operation = () => {}, recordLocked = false) {
   const checkGit = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
     if (expectedHead !== undefined) {
@@ -41,9 +41,16 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     // Batch completion relies on this: its fingerprint already covers every blocker item.
     const unpassed = reviewsWithoutPass(state, item.id);
     if (unpassed.length) throw new Error(`${run} review ${unpassed.join(', ')} has no recorded PASS verdict; record one or drop the review; nothing merged`);
-    const unfinished = children(state, item.id).filter(child => roleIs(child, 'ENG') && !child.closed);
+    const blockers = blockersOf(state, item.id);
+    // Optional follow-ups already present at admission do not hold promotion.
+    // Legacy/direct requests use report intake as their conservative snapshot,
+    // including the proposals created by that same immutable report.
+    const unfinished = children(state, item.id).filter(child => roleIs(child, 'ENG') && !child.closed &&
+      child.created.seq > (admittedSeq ?? current.report.seq) &&
+      !(admittedSeq === undefined && child.created.run === run));
     if (unfinished.length) throw new Error(`${run} has open engineer children ${unfinished.map(child => child.id).join(', ')}; nothing merged`);
-    const blocked = blockersOf(state, item.id).some((id) => !releases(state, id, itemStatus(state, id, new Set(), item.id)));
+    // Pre-existing blocking children use the ordinary dependency release rules.
+    const blocked = blockers.some((id) => !releases(state, id, itemStatus(state, id, new Set(), item.id)));
     const overlapping = [...state.runs.values()].some((r) => {
       if (r.id === run || superseded.includes(r.id) || r.report || r.abandoned || !r.workspace) return false;
       try { return fs.realpathSync(r.workspace) === fs.realpathSync(workspace); } catch { return r.workspace === current.workspace; }

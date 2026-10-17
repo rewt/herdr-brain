@@ -118,13 +118,13 @@ export function autopilotNotice(entry, { execute: call = execute, nativeWorker: 
       catch (error) { receipt.measurement_error = error.message; }
     }
     save();
-    return { disposition, receipt: file, summary: receipt.delivery_summary ?? (unchanged ? entry.message : summary(reason)) };
+    return { disposition, receipt: file, summary: unchanged ? entry.message : receipt.delivery_summary ?? summary(reason) };
   };
   // If the action receipt cannot safely be written, the inbox journals this
   // diagnostic with the policy result while delivery still uses only summary.
   const retained = reason => ({ disposition: 'wake', receipt: file, reason: line(reason), summary: entry.message });
   let runId = report?.[1], alreadyClosed;
-  const exception = (code, reason) => { receipt.exception = code; return finish('wake', `${code}: ${reason}`); };
+  const exception = (code, reason) => { receipt.exception = code; return finish('wake', `${code}: ${reason}`, code === 'AUTOPILOT_DISABLED'); };
   const git = (cwd, args) => {
     const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
     if (r.error || r.status !== 0) throw Error(`AUTOPILOT_SCOPE_UNKNOWN: ${r.stderr || r.error?.message || 'Git unavailable'}`);
@@ -304,7 +304,7 @@ export function autopilotNotice(entry, { execute: call = execute, nativeWorker: 
     if (!release) return retained(error.message);
     receipt.error = error.message; // Keep full diagnostic evidence behind the compact wake.
     const named = /(AUTOPILOT_[A-Z_]+):/.exec(error.message);
-    if (named) return exception(named[1], error.message);
+    if (named) return exception(named[1], error.message.slice(named.index + named[0].length).trim());
     return finish('wake', error.message, true);
   } finally { release?.(); }
 }

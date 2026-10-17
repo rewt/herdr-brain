@@ -55,7 +55,8 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     const superseded = options.supersede ? [record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0]] : [];
     const run = record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0];
     const report = path.join(root, `${topic}.md`);
-    fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Implemented ${topic}\nheadline: Implemented ${topic}\n${options.questions ? "questions:\n  - question: Does this behavior need adjustment?\n    category: design\n    recommend: no\n    why: The implementation is complete\n" : ""}---\n`);
+    const proposals = options.proposals?.length ? `proposals:\n${options.proposals.map(p => Object.entries(p).map(([key, value], i) => `${i ? '    ' : '  - '}${key}: ${JSON.stringify(value)}`).join('\n')).join('\n')}\n` : '';
+    fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Implemented ${topic}\nheadline: Implemented ${topic}\n${proposals}${options.questions ? "questions:\n  - question: Does this behavior need adjustment?\n    category: design\n    recommend: no\n    why: The implementation is complete\n" : ""}---\n`);
     record(['ingest', report]);
     const head = git(['rev-parse', 'HEAD'], workspace);
     const job = enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0,
@@ -566,6 +567,34 @@ for (const under of ['work', 'review']) test(`an operator question raised under 
   f.record(['answer', question, 'yes']); f.drain();
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
   for (const x of [m, other]) assert.equal(f.show(x.item).closed.as, 'done');
+});
+
+for (const [blocking, resolved] of [[false, false], [true, false], [true, true]]) test(`ordinary promotion ${resolved ? 'completes with a resolved blocking' : blocking ? 'refuses a blocking' : 'completes with a non-blocking'} engineer report proposal`, t => {
+  const f = fixture(t), m = f.lane('follow-up', false, { proposals: [{ role: 'engineer', title: 'Optional improvement', why: 'Separate follow-up', blocking }] });
+  const child = f.events().find(e => e.type === 'item.added' && e.from_run === m.run);
+  assert.ok(child); assert.equal(child.role, 'engineer'); assert.ok(m.job.id);
+  assert.ok(f.queue.load().pending[0].admittedSeq >= child.seq);
+  if (resolved) {
+    const run = f.record(['start', child.id]).match(/^R-\d+/)[0], report = path.join(f.root, 'child-done.md');
+    fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Follow-up complete\n---\n`);
+    f.record(['ingest', report]);
+  }
+  const base = f.git(['rev-parse', 'main']); f.drain();
+  const result = f.queue.load().results[0];
+  const refused = blocking && !resolved;
+  assert.equal(result.outcome, refused ? 'refused' : 'promoted', result.reason);
+  assert.equal(f.show(child.id).closed, null);
+  assert.equal(f.show(m.item).closed?.as ?? null, refused ? null : 'done');
+  if (refused) assert.equal(f.git(['rev-parse', 'main']), base);
+});
+
+test('an engineer child created after queue admission refuses before train capture', t => {
+  const f = fixture(t), m = f.lane('guarded'), base = f.git(['rev-parse', 'main']);
+  f.record(['add', 'New engineering scope', '--role', 'engineering', '--parent', m.item]);
+  f.drain();
+  assert.equal(f.queue.load().results[0].outcome, 'refused');
+  assert.match(f.queue.load().results[0].reason, /open engineer children/);
+  assert.equal(f.gates(), 0); assert.equal(f.git(['rev-parse', 'main']), base);
 });
 
 for (const change of ['engineer-child', 'dependency', 'question', 'hold', 'new-run', 'review-PASS'])

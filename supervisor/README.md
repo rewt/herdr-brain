@@ -403,8 +403,10 @@ inspect and resolve it under native authority; unrelated requests still drain.
 A new worker never adopts that refusal as ordinary interrupted recovery.
 
 The guarded fast-forward rechecks current run/head/clean PASS, pilot switch and housekeeping pause,
-open engineer children, dependencies, questions and STOP under the existing Git
-and record locks. Retirement holds retain their separate cleanup-only meaning.
+engineer children created after queue admission, blocking children, dependencies,
+questions and STOP under the existing Git and record locks. Pre-existing optional
+follow-ups, including non-blocking engineer report proposals, remain independent.
+Retirement holds retain their separate cleanup-only meaning.
 Duplicate/delayed notices adopt prior action journals; uncertain commands wake
 without replay. A completion-only retry never reruns a successful gate or merge.
 
@@ -665,8 +667,8 @@ For a manual exception, after inspecting capped findings, explicitly choose
 acceptance and enqueue the bound head, or
 `handle RUN --retry --fix-findings --role supervisor` to dispatch another fix
 without repeating the review. Repeated correction requests adopt the existing
-receipt. Autopilot files one follow-up only for the parsed Moderate/Minor case
-above; other follow-ups remain the supervisor's decision. Major/FAIL findings,
+receipt. Autopilot requires a clean PASS; findings always take
+`AUTOPILOT_FINDINGS` and the ordinary path. Major/FAIL findings,
 red validation and unresolved evidence keep their correction or handoff path.
 
 `promote RUN --why REASON` is the supervisor's explicit authority judgment. It
@@ -697,8 +699,23 @@ After a confirmed `refused` queue result and resolution of its cause, use
 and current readiness, binds a new queue job, and keeps all prior attempts and
 refusal receipts. Late notices for prior attempts remain recognizable. Pending,
 interrupted or uncertain attempts require inspection; they cannot be retried this
-way. Repeating a successful promotion, including with `--retry`, returns the saved
+way. A coded `AUTOPILOT_NO_NATIVE_WORKER` enqueue refusal is a confirmed no-op:
+the journal records `not-queued`, and a later bare `promote RUN --why REASON`
+can proceed without `--retry`, preserving the refusal in its attempt history.
+The record note describes a promotion request; only the acknowledged queue receipt
+establishes admission.
+Repeating a successful promotion, including with `--retry`, returns the saved
 acknowledgement even after lane closure.
+
+An interrupted batch carrying `native_refusal` stays excluded from automatic
+drains. After the operator resolves the native refusal in the authorized context,
+explicitly run `node promote/promote.mjs --resume --repo CANONICAL` there. This
+re-probes the concrete capabilities; failure retains the refusal and checkpoints,
+while success records the refusal and new probe, clears the automatic-recovery
+hold and resumes the existing batch. It never changes permissions or selects
+another executor. Recovery consumes validated or integrated checkpoints when
+their original inputs still match; changed inputs retain the existing replan
+and validation requirements. Unrelated requests can drain during the hold.
 
 Supervisor promotion receipts describe enqueue intent and acknowledgement, never
 stored item status. Repeated commands return the same acknowledged request after

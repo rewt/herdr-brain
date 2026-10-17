@@ -168,7 +168,7 @@ never replays a command chain, including when a leaf declines to retry. Leaf
 wrappers and the release gate command may enable `--retry-timeout-under-load`: a
 nonzero timeout (exit 124, `ETIMEDOUT`, or the Node test runner's timeout marker)
 under measured load above one per available CPU (capacity capped at four) is
-re-run once, with the slot still held. The log includes
+re-run once within the same top-level execution (retaining any exclusive hold). The log includes
 `TEST_SLOT_TIMEOUT_RETRY` and both attempts. A second timeout counts as failure.
 The retry scope is the wrapped command. This project's shared promotion command spans
 the whole chain and wraps `test:promotion:core`, the focused
@@ -309,12 +309,12 @@ Bindings record actual argv, recipe, real cwd, tree (or `.release-commit` in an
 archive), Node executable/version, platform, worker declarations and an environment
 hash; environment values are not copied into the profile receipt.
 
-Only the foreground top-level profiled slot owner samples. Nested receipts say
+Only the foreground top-level profiled holder samples, in either class. Nested receipts say
 `nested; sampling owned by top-level holder if profiled` and do not start another
 sampler or release the parent's hold. This neutral status also applies when the
 top-level holder or the nested command is unprofiled; it does not assert that
 sampling happened. Unslotted validation still runs unslotted; its receipt says
-`unslotted`. While holding the slot, the owner samples every 2,000 ms and at
+`unslotted`. During execution, the owner samples every 2,000 ms and at
 phase boundaries. The owned set consists of the birth-confirmed command, its
 parent-walk descendants, same-group members while group ownership is established,
 and previously observed descendants with the same birth. After leader exit,

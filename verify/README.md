@@ -108,8 +108,8 @@ sidecars. Preparation failure is `error` and skips the command. Every job has a
 positive wall cap (default 4500 seconds), positive no-output cap (default 300
 seconds), and a bounded declared-proving slot wait (`--wait`, default 86400 seconds). Caps cover
 prepare plus command, starting after slot grant. Jobs never retry automatically.
-An outer host hold leaves 60 seconds beyond those caps for cleanup; a nested
-job watchdog enforces the requested caps. The coordinator keeps that hold until
+An outer command family leaves 60 seconds beyond those caps for cleanup; a nested
+job watchdog enforces the requested caps. The coordinator stays alive until
 every captured process, escaped or still in the phase runner's group, is confirmed gone,
 including after a job timeout.
 

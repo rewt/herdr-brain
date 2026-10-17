@@ -199,7 +199,7 @@ and verifies that executable's version. Missing pins refuse before building.
 `env` supplies literal strings; it cannot redirect host slot paths, supply
 slot tokens or set `NODE_OPTIONS`, which would load project code into the host
 adapter (gate commands may still set it themselves). Profile preparation follows existing lane preparation in each
-scratch candidate, under the slot. Both preparations and the effective profile
+scratch candidate, within the admitted execution. Both preparations and the effective profile
 fingerprint salt green evidence; environment values are not written to receipts.
 
 Run dependency installs unconditionally for each scratch candidate. An existing
@@ -223,7 +223,7 @@ again after that wait, and under the Git lock before integration. Unreadable
 process evidence refuses. Matching processes are reported and left running.
 
 The wait cap defaults to 7200 seconds and applies separately to the external
-lock and host slot. Unknown holders still refuse immediately. The host receipt
+lock and any declared-exclusive host slot. Unknown exclusive holders still refuse immediately. The host receipt
 `promote/batches/ID/host-gate.json` shows the current phase, Node pin, profile
 fingerprint, lock wait and refusal reason; after a slot grant,
 `test-slot-wait.json` records the encountered holders, cap and acquisition time.

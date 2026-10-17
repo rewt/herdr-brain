@@ -51,7 +51,7 @@ cleanliness and record guards still run before integration.
 Queued batches wait for memory before taking promotion resources; fresh batches
 also check STOP during this wait.
 For a declared gate profile, the host adapter owns this initial wait before the
-external kernel lock and shared test slot; an unprofiled batch waits before the
+external kernel lock and execution admission (shared for Brain under ARCH-34); an unprofiled batch waits before the
 project promotion lock. Each subsequent check at a lock boundary has a five-second
 wait allowance, sampling every second (native probes retain their two-second
 response allowance). Persistent pressure returns `PROMOTION_MEMORY_PRESSURE`,

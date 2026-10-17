@@ -181,3 +181,17 @@ test('occupancy reserves EPERM and failed start reads, and is stale only after o
   assert.deepEqual(readTestSlotOccupancy(f.lock, { prune: true, kill: gone }), []);
   assert.equal(fs.existsSync(file), true, 'unknown schemas are skipped and never removed');
 });
+
+test('inherited shared occupancy avoids exclusive admission and duplicate sampling when ancestry reads are denied', t => {
+  const f = fixture(t), parent = path.join(f.root, 'parent.cjs'), deny = path.join(f.root, 'deny-snapshot.mjs');
+  fs.writeFileSync(deny, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+const execute=cp.spawnSync,list=fs.readdirSync;
+cp.spawnSync=(file,args,...rest)=>String(file).includes('process-source-')&&!args.some(a=>/^\\d+$/.test(a))?{status:125,stderr:'snapshot: Operation not permitted'}:execute(file,args,...rest);
+fs.readdirSync=(file,...rest)=>String(file)==='/proc'?(()=>{throw Object.assign(Error('snapshot denied'),{code:'EPERM'});})():list(file,...rest);syncBuiltinESMExports();`);
+  const command = [process.execPath, '-e', `const fs=require('fs');if(fs.readdirSync(${JSON.stringify(f.lock + '.occupancy')}).filter(n=>!n.startsWith('.')).length!==1)throw Error('double occupancy');if(fs.existsSync(${JSON.stringify(f.lock)})||fs.existsSync(${JSON.stringify(f.compat)}))throw Error('nested exclusive acquisition');`];
+  fs.writeFileSync(parent, `const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict');
+const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','denied nested','--result-path',${JSON.stringify(path.join(f.root, 'inner.json'))},'--resource',${JSON.stringify(JSON.stringify(resourceStanza('fixture/proving', command, 'EXCLUSIVE')))},'--',...${JSON.stringify(command)}],{env:{...process.env,NODE_OPTIONS:(process.env.NODE_OPTIONS||'')+' --import='+${JSON.stringify(JSON.stringify(deny))}},encoding:'utf8'});
+assert.equal(r.status,0,r.stderr);const saved=JSON.parse(fs.readFileSync(${JSON.stringify(path.join(f.root, 'inner.json'))}));assert.equal(saved.class,'shared');assert.match(saved.measurement.status,/^nested;/);assert.deepEqual(saved.measurement_attempts,[]);`);
+  const result = f.run([process.execPath, parent]);
+  assert.equal(result.status, 0, result.stderr); assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+});

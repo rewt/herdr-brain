@@ -25,6 +25,11 @@ in `<lockPath>.occupancy/`; different concurrent runs have different filenames.
 Nested runs, even a declared-exclusive child of a shared holder, remain inside
 the existing command group, take nothing and publish no second record. Sampling
 belongs only to a profiled top-level holder.
+`MONITOR_TEST_SLOT_OCCUPANCY_PATH` carries the holder's path to descendants;
+nesting still requires a live `occupancy/v1` record. Like the existing slot paths,
+it is coordination metadata excluded from validation fingerprints. It avoids a
+complete ancestry read when sandbox restrictions deny that read. Without the
+inherited path, ancestry/group recognition remains available.
 
 The versioned cross-project record contract is **occupancy/v1**. Its first field
 is `"schema": "occupancy/v1"`. Fields are:

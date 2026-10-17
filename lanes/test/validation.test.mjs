@@ -167,6 +167,7 @@ test('tree, command, environment, preparation and declared environment changes i
   assert.equal(a, environmentFingerprint({ env: { ORG_ACTOR: 'settle', PWD: '/canonical', SECRET: 'one' } }));
   assert.notEqual(a, environmentFingerprint({ env: { SECRET: 'two' } }));
   assert.equal(a, environmentFingerprint({ env: { SECRET: 'one', MONITOR_TEST_SLOT_TIMEOUT_RETRIED: '1' } }));
+  assert.equal(a, environmentFingerprint({ env: { SECRET: 'one', MONITOR_TEST_SLOT_OCCUPANCY_PATH: '/fixture/slot.occupancy/holder.json' } }));
   assert.equal(fs.readFileSync(path.join(f.workspace, '.lane/gate.json'), 'utf8').includes('SECRET'), false);
 });
 

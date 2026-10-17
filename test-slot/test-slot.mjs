@@ -52,6 +52,7 @@ export const PATH_ENV = "MONITOR_TEST_SLOT_PATH";
 export const LEGACY_TOKEN_ENV = "BCH_CLOAK_TEST_SLOT_TOKEN";
 export const LEGACY_WAIT_ENV = "BCH_CLOAK_TEST_SLOT_WAIT_SECONDS";
 export const TOKEN_ENV = "MONITOR_TEST_SLOT_TOKEN";
+export const OCCUPANCY_ENV = "MONITOR_TEST_SLOT_OCCUPANCY_PATH";
 export const WAIT_ENV = "MONITOR_TEST_SLOT_WAIT_SECONDS";
 export const RETRIED_ENV = "MONITOR_TEST_SLOT_TIMEOUT_RETRIED";
 export const HELD_CODE = "TEST_SLOT_HELD";
@@ -314,7 +315,7 @@ function inheritedSlot(paths, { exclusive = false } = {}) {
     try { occupants = readTestSlotOccupancy(file); } catch { /* Presence is informational. */ }
     for (const row of occupants) {
       try {
-        if (row.state === 'live' && insideHolder(row.record))
+        if (row.state === 'live' && (process.env[OCCUPANCY_ENV] === row.path || insideHolder(row.record)))
           return { ...nested(row.record), token: null, class: 'shared', occupancyPath: row.path };
       } catch { /* An unavailable ancestry source does not block shared work. */ }
     }
@@ -541,6 +542,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
   };
   const proc = spawn(argv[0], argv.slice(1), { stdio: ["inherit", "pipe", "pipe"], detached: !slot.nested,
     env: { ...process.env, [PATH_ENV]: lockPath, [COMPAT_PATH_ENV]: compatPath, ...(slot.token === null ? {} : { [TOKEN_ENV]: slot.token, [LEGACY_TOKEN_ENV]: slot.token }),
+      ...(slot.occupancyPath ? { [OCCUPANCY_ENV]: slot.occupancyPath } : {}),
       ...(retried ? { [RETRIED_ENV]: "1" } : {}) } });
   const closed = new Promise(resolve => proc.once("close", resolve));
   let leaderExited = false;

@@ -108,15 +108,74 @@ test('a proposal dispatched in its own lane does not reclaim the integrated sour
   assert.equal(followUps(planRetirement(s)).length, 1);
 });
 
-test('ordinary descendants and live references remain holds even when the proposal itself qualifies', t => {
+test('ordinary source children and live references remain holds even when the proposal itself qualifies', t => {
   const f = fixture(t); record(f);
   const s = f.retirement().observe();
-  s.record.items.push({ id: 'ENG-3', parent: 'ENG-2', role: 'engineer' });
+  s.record.items.push({ id: 'ENG-3', parent: 'ENG-1', role: 'engineer' });
   assert.match(planRetirement(s).keep[0].why, /ENG-3 has no recorded disposition/);
   assert.match(laneRemovalReason(vacant(s), f.lane), /ENG-3 has no recorded disposition/);
   s.record.items.pop(); s.references.push({ kind: 'callback', item: 'ENG-2' });
   assert.match(planRetirement(s).keep[0].why, /callback reference/);
   assert.match(laneRemovalReason(vacant(s), f.lane), /callback reference/);
+});
+
+test('a separately dispatched follow-up owns its reviewer, corrections and exclusive blocker chain', t => {
+  const f = fixture(t); record(f, [proposal,
+    { type: 'run.started', id: 'R-2', item: 'ENG-2', workspace: path.join(f.scratch, 'followup-lane') },
+    { type: 'item.added', id: 'REV-1', parent: 'ENG-2', role: 'reviewer', from_run: 'R-2' },
+    { type: 'item.added', id: 'ENG-3', parent: 'REV-1', role: 'engineer' },
+    { type: 'item.added', id: 'HUM-1', role: 'human' },
+    { type: 'item.added', id: 'ENG-4', parent: 'HUM-1', role: 'engineer' },
+    { type: 'link.added', blocked: 'ENG-2', blocker: 'HUM-1' },
+  ]);
+  const s = f.retirement().observe(), before = structuredClone(s);
+  const plan = planRetirement(s);
+  assert.equal(plan.close.length, 1); assert.equal(laneRemovalReason(vacant(s), f.lane), null);
+  assert.deepEqual(followUps(plan).map(d => d.item), ['ENG-2']);
+  assert.deepEqual(s, before, 'exemptions must not rewrite the folded chain');
+  assert.equal(retirementStatus(s).counts.UNKNOWN, 0);
+  const cases = [
+    ['reviewer run in source checkout', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'REV-1', workspace: f.lane }); }],
+    ['correction run in source subdirectory', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'ENG-3', workspace: path.join(f.lane, 'subdir') }); }],
+    ['descendant with unknown run binding', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'ENG-3' }); }],
+    ['subtree blocker through links', fresh => { fresh.record.links.push({ blocked: 'ENG-1', blocker: 'ENG-3' }); }],
+    ['subtree blocker through blocked_by', fresh => { fresh.record.items[0].blocked_by = ['REV-1']; }],
+    ['subtree blocker through satisfied source blocker', fresh => {
+      fresh.record.items.push({ id: 'ENG-5', role: 'engineer', closed: { as: 'done' }, blocked_by: ['ENG-3'] });
+      fresh.record.links.push({ blocked: 'ENG-1', blocker: 'ENG-5' });
+    }],
+    ['follow-up blocker independently belongs to source subtree', fresh => { fresh.record.items.find(i => i.id === 'HUM-1').parent = 'ENG-1'; }],
+    ['follow-up blocker also blocks source root', fresh => { fresh.record.links.push({ blocked: 'ENG-1', blocker: 'HUM-1' }); }],
+  ];
+  for (const [name, mutate] of cases) {
+    const fresh = structuredClone(s); mutate(fresh);
+    assert.equal(planRetirement(fresh).close.length, 0, name);
+    assert.ok(laneRemovalReason(vacant(fresh), f.lane), name);
+  }
+  for (const mutate of [
+    fresh => { fresh.record.runs.push({ id: 'R-3', item: 'REV-1', workspace: f.lane }); },
+    fresh => { fresh.record.links.push({ blocked: 'ENG-1', blocker: 'ENG-3' }); },
+  ]) {
+    const fresh = structuredClone(s); mutate(fresh);
+    const result = executeRetirement(plan, { observe: () => fresh, close: () => assert.fail('newly bound subtree was closed') });
+    assert.equal(result[0].action, 'skip-close');
+  }
+});
+
+test('dependencies between exempt follow-ups do not retain the source, but a retained branch revokes their exemption', t => {
+  const f = fixture(t); record(f, [proposal,
+    { ...proposal, id: 'ENG-3', title: 'Another independent follow-up' },
+    { type: 'item.added', id: 'REV-1', parent: 'ENG-3', role: 'reviewer' },
+    { type: 'link.added', blocked: 'ENG-2', blocker: 'REV-1' },
+  ]);
+  const s = f.retirement().observe();
+  assert.equal(planRetirement(s).close.length, 1);
+  assert.equal(laneRemovalReason(vacant(s), f.lane), null);
+  assert.deepEqual(followUps(planRetirement(s)).map(d => d.item), ['ENG-2', 'ENG-3']);
+  s.record.runs.push({ id: 'R-2', item: 'ENG-2', workspace: f.lane, report: { seq: 8, outcome: 'done' } });
+  assert.equal(planRetirement(s).close.length, 0);
+  assert.ok(laneRemovalReason(vacant(s), f.lane));
+  assert.deepEqual(followUps(planRetirement(s)), [], 'retained source work depends on the second follow-up subtree');
 });
 
 test('fresh blocker and same-lane dispatch observations invalidate a prior follow-up release', t => {

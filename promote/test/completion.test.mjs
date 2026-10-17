@@ -567,3 +567,30 @@ for (const under of ['work', 'review']) test(`an operator question raised under 
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
   for (const x of [m, other]) assert.equal(f.show(x.item).closed.as, 'done');
 });
+
+for (const change of ['engineer-child', 'dependency', 'question', 'hold', 'new-run', 'review-PASS'])
+test(`final integration refuses a gate-time ${change} change`, t => {
+  const f = fixture(t), m = f.lane('guarded'), base = f.git(['rev-parse', 'main']);
+  const commands = [];
+  if (change === 'engineer-child') commands.push(['add', 'Unfinished child', '--role', 'engineering', '--parent', m.item]);
+  if (change === 'dependency') {
+    const dependency = f.record(['add', 'Dependency', '--role', 'engineer']);
+    f.record(['close', dependency]); f.record(['block', m.item, '--by', dependency]);
+    commands.push(['reopen', dependency]);
+  }
+  if (change === 'question') commands.push(['ask', 'May this integrate?', '--parent', m.item, '--category', 'security', '--recommend', 'no', '--why', 'Changed during validation', '--wait']);
+  if (change === 'new-run') commands.push(['start', m.item, '--workspace', m.workspace]);
+  if (change === 'review-PASS') {
+    const review = f.record(['add', 'Review', '--role', 'reviewer', '--parent', m.item]);
+    const run = f.record(['start', review]).match(/^R-\d+/)[0], report = path.join(f.root, 'review.md');
+    fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Reviewed\nverdict: PASS\n---\n`); f.record(['ingest', report]);
+    commands.push(['reopen', review]);
+  }
+  let extra = '';
+  if (change === 'hold') extra = `fs.mkdirSync(${JSON.stringify(path.join(f.repo, '.lane/supervisor'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(f.repo, '.lane/supervisor/STOP'))},'STOP');`;
+  fs.appendFileSync(f.checker, `const cp=require('child_process');for(const args of ${JSON.stringify(commands)})cp.execFileSync(process.execPath,[${JSON.stringify(path.join(source, 'bin/org.mjs'))},...args],{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});${extra}`);
+  f.drain(); assert.equal(f.gates(), 1); assert.equal(f.git(['rev-parse', 'main']), base);
+  const result = f.queue.load().results[0]; assert.equal(result.outcome, 'refused'); assert.equal(f.show(m.item).closed, null);
+  if (change === 'engineer-child') assert.match(result.reason, /open engineer children/);
+  assert.equal(f.events().some(e => e.type === 'promotion.reconciled'), false);
+});

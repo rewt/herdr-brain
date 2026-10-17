@@ -306,10 +306,10 @@ workers recover pending policy through the same durable action receipts.
 | Evidence | Policy action |
 | --- | --- |
 | Run-bound `[org-report]` done | Preflight the immutable report or worker file, then `supervisor handle RUN` for conditional intake and the project's review route |
-| `promotable`, independent PASS | `promote RUN --why 'notice-autopilot/v1: PASS promotes …'` |
+| `promotable`, clean independent PASS in the named cohort | `promote RUN --existing-worker --why 'notice-autopilot/v1: clean PASS promotes …'`; an already-live native worker is required |
 | `fix_round` | Leave the dispatched, watched correction in flight |
 | Exact settle "base branch moved" escalation | One `handle RUN --retry` using the saved request, without `--to`; a second escalation wakes |
-| Capped `promotable_with_findings`, parsed Moderate/Minor only | One engineer follow-up containing all findings, then `promote --accept-findings` with the follow-up and policy in its reason |
+| Any findings, including capped Moderate/Minor or PASS with findings | `AUTOPILOT_FINDINGS`; ordinary supervisor judgment, no automatic acceptance or follow-up |
 | `[promote-queue]` promoted | `handle --notice TEXT` closes the bound item; an awaited item then wakes with one landing line |
 | Verified notice for an abandoned run | Journal and drop without waking or mutating the record |
 | Anything else | Wake with a bounded one-line reason and the action receipt path |
@@ -326,8 +326,10 @@ independent reviewer still runs through the project's configured review route.
 
 STOP, paused housekeeping (`enabled: false`), malformed configuration, and record
 damage disable automatic actions. The project kill switch is a canonical
-`.supervisor.json` containing `{"autopilot":{"enabled":false}}`; absence means
-enabled. The schema accepts only `autopilot.enabled` as a boolean. Tooling must be
+`.supervisor.json` containing `{"autopilot":{"enabled":false}}`. Absence means
+**off**. The schema accepts `autopilot.enabled` as a boolean and `autopilot.cohort`
+as a string. The pilot requires both `enabled: true` and `cohort: "clean-pass"`;
+a missing/unknown cohort wakes with `AUTOPILOT_COHORT_UNKNOWN`. Tooling must be
 `auto` in the record's approvals config. Operator-reserved/human items,
 publish/priorities categories, other categories routed to `ask`, report questions,
 blockers, unclassified decisions and category warnings wake for judgment. No
@@ -350,9 +352,11 @@ retains delivery/retry ownership. Clear the request with `meta.notify=none`.
 The marker expresses supervisor intent and grants no promotion authority.
 
 Action receipts live under `ORG/supervisor/REPOSITORY_KEY/autopilot/`. Report keys
-remain per run so different delivery IDs cannot create duplicate follow-ups.
+remain per run so different delivery IDs cannot create duplicate reviews or enqueues.
 Promotion receipts use the producer's notice ID: `promote:JOB` and
-`promote:JOB:complete` are separate receipts after an interruption. Legacy receipts
+`promote:JOB:complete` are separate receipts after an interruption. A resumed
+native refusal uses `promote:JOB:native-refusal:CONTENT_HASH` so its coded
+exception never rewrites the original immutable interruption notice. Legacy receipts
 remain intact and uncertain commands still require inspection. Each command's
 argv, intent and acknowledged result are retained. Runless promotion receipts
 wake with an explicit missing-binding diagnostic; no item is inferred from a lane name.
@@ -365,6 +369,76 @@ inbox retains the complete original notice and records its handled/wake disposit
 and receipt. Exceptions deliver the complete original notice unchanged for
 foreground `handle`, followed by the autopilot reason and receipt on their own line.
 Legacy/custom inbox entries without a project binding keep their delivery path.
+
+The clean-PASS pilot checks the complete base-to-candidate diff before review
+and after settle, with rename detection disabled so deletions and both rename
+names are checked. Its closed Brain map covers one area among `brain/`, `board/`,
+`logs/`, the `pane-run-output`, `render` or `report-feed` lib module and its named
+test, or documentation. Protected lifecycle, session/permission, native launch,
+notice, record, review, validation, receipt, promotion and release surfaces stay
+on the ordinary path. Unmapped paths, symlinks/submodules, changed executable
+permissions, missing/dirty diffs, and changes across mapped areas produce named `AUTOPILOT_SCOPE_UNKNOWN` or
+`AUTOPILOT_SCOPE_EXCLUDED` exceptions. Settle's exact added review document is
+included and hash-checked, never omitted from validation's tree identity. Scope
+eligibility supplements the independent review of reachable effects; it does
+not grant a changed behavior or authority contract.
+
+`AUTOPILOT_NO_NATIVE_WORKER` means no currently live finite drain has successful
+`/dev/ptmx` read/write, loopback listener and complete native process inventory
+probes recorded against its kernel process birth and command. Autopilot does
+not start one. `--existing-worker` rechecks
+under the queue lock, serialized with the finite worker's empty exit, and never
+falls back to a launch. The supervisor may use the ordinary bare enqueue from
+its already authorized native context. Every worker and train probes again
+before running preparation/checks; refusal is `PROMOTE_NATIVE_PTMX_REFUSED` or
+`PROMOTE_NATIVE_LOOPBACK_REFUSED` or `PROMOTE_NATIVE_PROCESS_SOURCE_REFUSED`
+in the batch receipt and notice. The concrete
+loopback requirement is exercised by `test-slot/test/helpers/gate-profile.mjs`;
+the bounded gate runner and fixture cleanup require complete native inventory. No provider/harness detection, permission change,
+unsandboxed relaunch or forwarding of a refusal is performed. A refusal is
+preserved for the operator under native authority. If an earlier validation or
+integration checkpoint exists, its interrupted batch retains `native_refusal`
+evidence and is excluded from automatic drain retries. The operator must
+inspect and resolve it under native authority; unrelated requests still drain.
+A new worker never adopts that refusal as ordinary interrupted recovery.
+
+The guarded fast-forward rechecks current run/head/clean PASS, pilot switch and housekeeping pause,
+open engineer children, dependencies, questions and STOP under the existing Git
+and record locks. Retirement holds retain their separate cleanup-only meaning.
+Duplicate/delayed notices adopt prior action journals; uncertain commands wake
+without replay. A completion-only retry never reruns a successful gate or merge.
+
+While policy authority remains active, each pilot run gets one `Fast path timing:`
+note at landing or an exception,
+projected from existing clocks: run start (dispatch), report-file mtime (report
+available), ingest event, settle review start/end, queue admission, gate start/end,
+integration and reconciliation event. The action receipt also keeps the current
+measurement. Queue, slot, external-lock and dispatch waits remain named, with
+missing clocks null and reuse explicit. File mtime is an observation, not a
+claim about when the engineer finished writing. Awaited landing delivery is not
+an exception. No scheduler or timing service is installed.
+
+**Second-project adapter seam (BCH joins later).** The existing queue remains
+the integration authority: bind a request with `--expected-head`,
+`--if-current-run`, `--org` and the approved required-check plan (including
+`--required-tests` for Brain's deferred full-file test evidence). The
+automatic caller also needs the current run-bound completed settle/PASS receipt;
+BCH must bind its own accepted review evidence at that seam, never infer PASS
+from a done report. The owning project supplies its canonical
+`.lane.validation.json` promotion command/planner and `.promote.json` gate preparation, Node/environment and resource declarations.
+Its existing selector/receipt adapter runs against the queue's actual scratch
+candidate and base; reuse requires its full existing input binding, and a miss
+runs the selected focused checks there. A separate reviewed scope mapping and
+project authority adoption are required before BCH opts into automatic enqueue;
+Brain's map does not certify BCH paths. Preserve BCH's consumer/resource/proof
+obligations and distinct review workspace contract. Do not put a second
+fast-forward behind the adapter or weaken receipt identity to obtain a hit.
+No BCH rollout or new receipt bridge is a prerequisite for this Brain pilot.
+
+Bootstrap: this implementation uses the full existing review/promotion route.
+Leave the canonical switch off until independent implementation/security review
+of the landed bundle, then the owning supervisor may enable the named cohort
+under its existing activation authority. This change does not enable itself.
 
 For exceptions, the helper aligns with bch-cloak's `prompt-supervisor.sh` and
 `box-empty.py`: append the notice to `inbox.log` first, read the input box twice

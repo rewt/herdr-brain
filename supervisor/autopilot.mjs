@@ -12,6 +12,9 @@ import { approvalPolicy, reportCategoryFlags } from '../lib/discernment.mjs';
 import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { receiptDirectory } from './context.mjs';
 import { noticeLock } from './notice-lock.mjs';
+import { cleanPassScope } from './clean-pass.mjs';
+import { fastPathTiming } from './fast-path-timing.mjs';
+import { liveNativeWorker } from '../promote/native-context.mjs';
 import { queueJobs } from '../promote/promote.mjs';
 
 export const POLICY = 'notice-autopilot/v1';
@@ -27,9 +30,10 @@ export function autopilotSettings(repo) {
   const file = path.join(repo, '.supervisor.json'), config = fs.existsSync(file) ? read(file) : {};
   if (!config || typeof config !== 'object' || Array.isArray(config) || Object.keys(config).some(k => k !== 'autopilot')) throw Error('invalid supervisor config');
   const policy = config.autopilot === undefined ? {} : config.autopilot;
-  if (!policy || typeof policy !== 'object' || Array.isArray(policy) || Object.keys(policy).some(k => k !== 'enabled') ||
-      (policy.enabled !== undefined && typeof policy.enabled !== 'boolean')) throw Error('autopilot.enabled must be true|false');
-  return { enabled: policy.enabled !== false, file };
+  if (!policy || typeof policy !== 'object' || Array.isArray(policy) || Object.keys(policy).some(k => !['enabled', 'cohort'].includes(k)) ||
+      (policy.enabled !== undefined && typeof policy.enabled !== 'boolean') ||
+      (policy.cohort !== undefined && typeof policy.cohort !== 'string')) throw Error('autopilot.enabled must be true|false; cohort must be a string');
+  return { enabled: policy.enabled === true, cohort: policy.cohort ?? null, file };
 }
 
 function execute(file, args, options) {
@@ -48,7 +52,9 @@ function runIdentity(project, run) {
 function authority(project, runId, { pendingReport = false } = {}) {
   const live = gitProject(project.repo);
   if (live.identity !== project.identity || live.canonical !== project.repo || fs.realpathSync(project.org) !== project.org) throw Error('autopilot project binding changed');
-  if (!autopilotSettings(project.repo).enabled) throw Error('autopilot disabled in project config');
+  const settings = autopilotSettings(project.repo);
+  if (!settings.enabled) throw Error('AUTOPILOT_DISABLED: autopilot disabled in project config');
+  if (settings.cohort !== 'clean-pass') throw Error('AUTOPILOT_COHORT_UNKNOWN: select the clean-pass cohort or use the ordinary path');
   if (fs.existsSync(path.join(project.repo, '.lane/supervisor/STOP'))) throw Error('STOP disables autopilot');
   if (!housekeepingConfig(path.join(project.repo, '.housekeeping.json')).enabled) throw Error('paused housekeeping disables autopilot');
   const { events, tornTail } = loadEvents(project.org);
@@ -80,15 +86,9 @@ function authority(project, runId, { pendingReport = false } = {}) {
   return { state, run, item };
 }
 
-function findings(text) {
-  const rows = typeof text === 'string' ? text.trim().split('\n').filter(s => s.trim()) : [];
-  if (!rows.length || rows.some(s => !/^- \[(Moderate|Minor)\] .+:[1-9][0-9]* - .+; Fix: .+$/.test(s))) return false;
-  return true;
-}
-
 // A receipt is an action journal, never work status. Intent precedes every
 // command; a lost reply wakes the supervisor instead of replaying side effects.
-export function autopilotNotice(entry, { execute: call = execute } = {}) {
+export function autopilotNotice(entry, { execute: call = execute, nativeWorker: worker = liveNativeWorker } = {}) {
   if (!entry.project) return null; // Unbound/legacy transports retain delivery.
   const project = entry.project;
   const report = /^\[org-report\] run=(R-\d+) item=(\S+) outcome=(done|blocked|needs_human|failed) headline=/.exec(entry.message);
@@ -105,13 +105,31 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     ? `${entry.message}\n[autopilot] ${report?.[1] ?? promotion?.[1]} ${line(reason)} receipt=${file}`
     : entry.message;
   const finish = (disposition, reason, unchanged = false) => {
-    receipt.disposition = disposition; receipt.reason = line(reason); receipt.finished = new Date().toISOString(); save();
+    receipt.disposition = disposition; receipt.reason = line(reason); receipt.finished = new Date().toISOString();
+    if (runId) {
+      try {
+        let terminal = Boolean(receipt.actions.length || receipt.scope || (promotion && runId)) &&
+          (disposition === 'wake' || /promotion recorded|already closed|notification|watched fix/.test(reason));
+        // Telemetry must not mutate a reopened/superseded item, or write past
+        // a kill switch that appeared while a command was running.
+        if (terminal) { try { authority(project, runId, { pendingReport: true }); } catch { terminal = false; } }
+        receipt.measurement = fastPathTiming(project, runId, receipt, { terminal });
+      }
+      catch (error) { receipt.measurement_error = error.message; }
+    }
+    save();
     return { disposition, receipt: file, summary: receipt.delivery_summary ?? (unchanged ? entry.message : summary(reason)) };
   };
   // If the action receipt cannot safely be written, the inbox journals this
   // diagnostic with the policy result while delivery still uses only summary.
   const retained = reason => ({ disposition: 'wake', receipt: file, reason: line(reason), summary: entry.message });
-  let runId, alreadyClosed;
+  let runId = report?.[1], alreadyClosed;
+  const exception = (code, reason) => { receipt.exception = code; return finish('wake', `${code}: ${reason}`); };
+  const git = (cwd, args) => {
+    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    if (r.error || r.status !== 0) throw Error(`AUTOPILOT_SCOPE_UNKNOWN: ${r.stderr || r.error?.message || 'Git unavailable'}`);
+    return r.stdout.trim();
+  };
   const landingFile = () => path.join(path.dirname(file), 'landings', `${runId}.json`);
   const landingReceipt = item => {
     const saved = read(landingFile());
@@ -180,7 +198,14 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
       const { run } = authority(project, runId, { pendingReport: true });
       if (run.item !== report[2]) throw Error('notice item differs from record');
     } else if (promotion) {
-      if (promotion[3] !== 'promoted') return finish('wake', `promotion ${promotion[3]}`);
+      if (promotion[3] !== 'promoted') {
+        const queue = read(path.join(project.identity, 'promote/queue.json'));
+        const job = queue?.identity === project.identity && queueJobs(queue).find(j => j.id === promotion[1]);
+        if (job?.run && job.topic === promotion[2] && job.org === project.org && job.outcome === promotion[3]) {
+          runId = job.run; receipt.exception = job.code ?? `PROMOTION_${promotion[3].toUpperCase()}`;
+        }
+        return finish('wake', `promotion ${promotion[3]}`);
+      }
       const queue = read(path.join(project.identity, 'promote/queue.json'));
       if (queue?.identity !== project.identity) throw Error('promotion queue binding missing or changed');
       const job = queueJobs(queue).find(j => j.id === promotion[1]);
@@ -233,6 +258,14 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
       return landed(result);
     }
     const saved = read(path.join(project.org, 'settle', `${runId}.json`));
+    const bound = authority(project, runId, { pendingReport: true });
+    if (!bound.item.closed && bound.run.workspace && fs.existsSync(bound.run.workspace)) {
+      const head = git(bound.run.workspace, ['rev-parse', 'HEAD']);
+      const base = git(bound.run.workspace, ['merge-base', git(project.repo, ['rev-parse', 'HEAD']), head]);
+      const scope = cleanPassScope({ repo: project.repo, workspace: bound.run.workspace, base, head, review: saved?.review });
+      receipt.scope = scope; save();
+      if (!scope.eligible) return exception(scope.code, scope.reason);
+    }
     if (saved && (saved.common !== project.identity || saved.run !== runId || (saved.stage !== 'complete' && !moved(saved.result)))) throw Error('uncertain or interrupted settlement; inspect retained receipt');
     let result = command('handle done report', supervisor, ['handle', runId, ...args], { pendingReport: true });
     if (result.review?.verdict === 'FAIL') return finish('wake', 'review FAIL');
@@ -248,23 +281,30 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     if (result.result === 'fix_round' && policy?.cap > 0 && policy.round >= policy.cap && result.review?.verdict === 'NEEDS-WORK') return finish('wake', 'correction findings at review cap require judgment');
     if (result.result === 'fix_round') return finish('handled', 'watched fix already dispatched');
     if (result.result === 'recorded_promotion') return landed(result);
-    const accepted = result.result === 'promotable_with_findings';
-    if (result.result !== 'promotable' && !accepted) return finish('wake', `${result.result ?? 'unknown result'}: ${result.reason ?? 'inspect evidence'}`);
-    if (!accepted && result.review?.verdict !== 'PASS') return finish('wake', 'promotable result lacks PASS');
-    if (accepted && (result.review?.verdict !== 'NEEDS-WORK' || !findings(result.findings) || !(policy?.cap > 0 && policy.round >= policy.cap))) return finish('wake', 'capped findings are not proved Moderate/Minor');
-    if (accepted) {
-      receipt.follow_up = command('file findings follow-up', local('../bin/org.mjs'), ['add', `Review follow-up for ${runId}`, '--parent', report[2],
-        '--role', 'engineer', '--capability', 'tooling', '--meta', `autopilot_key=${key}`, `--accept=${result.findings}`], { json: false });
-      if (!/^ENG-\d+$/.test(receipt.follow_up)) throw Error('follow-up response is uncertain');
-    }
-    const why = `${POLICY}: ${accepted ? `accept capped Moderate/Minor findings; follow-up ${receipt.follow_up}` : 'PASS promotes'}; project tooling authority is auto; settle and queue recheck readiness`;
-    const promoted = command('enqueue promotion', supervisor, ['promote', runId, ...(accepted ? ['--accept-findings'] : []), '--why', why, ...args]);
+    if (result.result === 'promotable_with_findings') return exception('AUTOPILOT_FINDINGS', 'clean-pass requires zero findings; capped acceptance uses the ordinary path');
+    if (result.result !== 'promotable') return finish('wake', `${result.result ?? 'unknown result'}: ${result.reason ?? 'inspect evidence'}`);
+    if (result.review?.verdict !== 'PASS') return exception('AUTOPILOT_PASS_MISSING', 'promotable result lacks PASS');
+    const clean = settled?.review?.text?.match(/## Findings\n([\s\S]*?)(?=\n## )/)?.[1]?.trim();
+    if (clean !== 'None' || (result.findings && result.findings !== 'None')) return exception('AUTOPILOT_FINDINGS', 'clean-pass requires an explicit empty Findings section');
+    if (result.run !== runId || settled?.run !== runId || settled.common !== project.identity || settled.org !== project.org || settled.stage !== 'complete' ||
+        settled.review.verdict !== 'PASS' || settled.review.sha256 !== digest(settled.review.text) || result.review.sha256 !== settled.review.sha256 ||
+        result.reviewed_commit !== settled.head || result.head !== settled.finalHead || settled.result?.result !== 'promotable')
+      return exception('AUTOPILOT_PASS_STALE', 'PASS or candidate binding differs from completed settlement');
+    const { run } = authority(project, runId);
+    const scope = cleanPassScope({ repo: project.repo, workspace: run.workspace, base: settled.mainHead, head: result.head, review: settled.review });
+    receipt.scope = scope; save();
+    if (!scope.eligible) return exception(scope.code, scope.reason);
+    if (!worker(project.identity)) return exception('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
+    const why = `${POLICY}: clean PASS promotes in ${scope.area}; project tooling authority is auto; settle and queue recheck readiness`;
+    const promoted = command('enqueue promotion', supervisor, ['promote', runId, '--existing-worker', '--why', why, ...args]);
     if (promoted.phase !== 'acknowledged') return finish('wake', promoted.reason ?? promoted.result ?? 'promotion enqueue not acknowledged');
-    return finish('handled', accepted ? `findings filed in ${receipt.follow_up}; promotion queued` : 'PASS promotion queued');
+    return finish('handled', 'clean PASS promotion queued');
   } catch (error) {
     // A contending/live owner must retain its receipt untouched.
     if (!release) return retained(error.message);
     receipt.error = error.message; // Keep full diagnostic evidence behind the compact wake.
+    const named = /(AUTOPILOT_[A-Z_]+):/.exec(error.message);
+    if (named) return exception(named[1], error.message);
     return finish('wake', error.message, true);
   } finally { release?.(); }
 }

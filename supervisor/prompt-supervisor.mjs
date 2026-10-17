@@ -101,7 +101,7 @@ function applyPolicy(file, id, options) {
   });
   if (!entry) return false;
   if (entry.autopilot || !entry.project || entry.state !== 'pending') return true;
-  const policy = autopilotNotice(entry, { execute: options.executeAutopilot });
+  const policy = autopilotNotice(entry, { execute: options.executeAutopilot, nativeWorker: options.nativeAutopilotWorker });
   if (policy) record(file, { type: 'autopilot', id, result: policy });
   return true;
 }

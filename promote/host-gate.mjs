@@ -12,6 +12,7 @@ import { gitProject } from '../lib/project.mjs';
 import { canonicalValidation } from '../lanes/validation.mjs';
 import { resolveGateLimits, gateHistoryKey } from '../test-slot/limits.mjs';
 import { cliHelp } from '../lib/cli-help.mjs';
+import { probeNativeGate } from './native-context.mjs';
 import { waitForPromotionMemory } from './memory-gate.mjs';
 cliHelp(import.meta.url, "Usage: node promote/host-gate.mjs [--lock|--held|--execute] CANONICAL RECEIPT [COMMAND ARGS...]");
 
@@ -30,11 +31,17 @@ const updateTrain = changes => {
   // A capped wait can be retried later. Pair the first successful grant with
   // that invocation's wait start, excluding the idle time between retries.
   if (changes.external_lock_granted_at && !plan.external_lock_granted_at) plan.external_lock_started_at = changes.external_lock_started_at;
-  for (const [key, value] of Object.entries(changes)) plan[key] ??= value;
+  for (const [key, value] of Object.entries(changes)) {
+    if (key === 'native_context') plan[key] = value;
+    else plan[key] ??= value;
+  }
   writeFileAtomic(receipt, JSON.stringify(plan, null, 2) + '\n', 0o600);
 };
 
 try {
+  const native = probeNativeGate();
+  updateTrain({ native_context: native });
+  if (!native.ok) throw Object.assign(new Error(native.reason), { code: native.code });
   const profile = resolveGateProfile(canonical);
   if (!profile) throw new Error('promotion host adapter requires a declared gate profile');
   // Saved attempts may have integrated before losing their response. Keep all
@@ -88,7 +95,9 @@ try {
     process.exitCode = exitOf(result);
   } else throw new Error('unknown host gate phase');
 } catch (error) {
-  if (fs.existsSync(hostFile)) update({ phase: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), finished_at: new Date().toISOString() });
+  const refusal = { phase: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), finished_at: new Date().toISOString() };
+  if (fs.existsSync(hostFile)) update(refusal);
+  else if (error.code?.startsWith('PROMOTE_NATIVE_')) save({ schema: 'promotion-host-gate/v1', ...refusal });
   process.stderr.write(error.message + '\n'); process.exitCode = 75;
 }
 

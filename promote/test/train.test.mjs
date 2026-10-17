@@ -940,3 +940,63 @@ if(process.argv[2]==='--plan') {
   assert.deepEqual(JSON.parse(fs.readFileSync(marker, 'utf8').trim()), plan.required);
   assert.equal(f.runs(), 1);
 });
+
+for (const capability of ['PTY', 'loopback', 'process source']) test(`native ${capability} refusal is coded in the batch and notice without running or relaunching a gate`, t => {
+  const f = fixture(t); f.lane('sandbox'); f.add('sandbox');
+  const base = f.git(['rev-parse', 'main']), preload = path.join(f.root, 'native-refusal.cjs'), starts = path.join(f.root, 'drain-starts');
+  const deny = capability === 'PTY'
+    ? "const open=fs.openSync;fs.openSync=function(file,...args){if(file==='/dev/ptmx')throw Object.assign(new Error('native sandbox refusal'),{code:'EPERM'});return open.call(this,file,...args);};"
+    : capability === 'loopback' ? "require('net').Server.prototype.listen=function(){setImmediate(()=>this.emit('error',Object.assign(new Error('native sandbox refusal'),{code:'EPERM'})));return this;};"
+    : "const cp=require('child_process'),spawn=cp.spawnSync,list=fs.readdirSync;cp.spawnSync=function(file,...args){if(String(file).includes('process-source-')&&new Error().stack.includes('probeNativeGate'))return {status:125,stdout:'',stderr:'native fixture EPERM'};return spawn.call(this,file,...args);};fs.readdirSync=function(file,...args){if(String(file)==='/proc'&&new Error().stack.includes('probeNativeGate'))throw Object.assign(new Error('native fixture EPERM'),{code:'EPERM'});return list.call(this,file,...args);};require('module').syncBuiltinESMExports();";
+  fs.writeFileSync(preload, `const fs=require('fs');if(process.argv.includes('--drain'))fs.appendFileSync(${JSON.stringify(starts)},'drain\\n');${deny}`);
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require ${preload}`;
+  const r = f.drain(); assert.equal(r.status, 0, r.stderr);
+  const job = f.queue.load().results[0], plan = JSON.parse(fs.readFileSync(job.receipt));
+  assert.equal(job.outcome, 'refused'); assert.equal(job.code, capability === 'PTY' ? 'PROMOTE_NATIVE_PTMX_REFUSED' : capability === 'loopback' ? 'PROMOTE_NATIVE_LOOPBACK_REFUSED' : 'PROMOTE_NATIVE_PROCESS_SOURCE_REFUSED');
+  assert.match(plan.native_context.error, /EPERM/); assert.equal(plan.phase, 'complete'); assert.equal(plan.attempts?.length ?? 0, 0);
+  assert.equal(f.runs(), 0); assert.equal(f.git(['rev-parse', 'main']), base);
+  assert.equal(fs.readFileSync(starts, 'utf8'), 'drain\n');
+  assert.ok(f.messages().some(args => args[3].includes(`code=${job.code}`)));
+  assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false);
+});
+test('existing-worker enqueue refuses an absent worker atomically and never starts one', t => {
+  const f = fixture(t); f.lane('alone');
+  const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), 'alone', '--existing-worker', '--repo', f.repo]);
+  assert.equal(r.status, 1); assert.match(r.stderr, /AUTOPILOT_NO_NATIVE_WORKER/);
+  assert.equal(f.queue.load().pending.length, 0); assert.equal(f.queue.load().current, null);
+  assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.log')), false); assert.equal(f.runs(), 0);
+  const resume = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--existing-worker', '--resume', '--repo', f.repo]);
+  assert.equal(resume.status, 1); assert.match(resume.stderr, /enqueue-only/);
+  assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.log')), false);
+});
+
+for (const context of ['worker', 'host']) test(`native refusal in the ${context} preserves a prior validated checkpoint while unrelated work proceeds`, t => {
+  const f = fixture(t);
+  if (context === 'host') {
+    fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ gate: {} }));
+    f.git(['add', '.promote.json']); f.git(['commit', '-qm', 'Declare host adapter']);
+  }
+  f.lane('alone'); f.add('alone'); const base = f.git(['rev-parse', 'main']);
+  interruptAt(f, 'validated'); assert.equal(f.drain().status, 0); assert.equal(f.runs(), 1);
+  const first = f.queue.load().results[0], before = JSON.parse(fs.readFileSync(first.receipt));
+  assert.equal(before.attempts[0].phase, 'validated');
+  const preload = path.join(f.root, 'native-refusal.cjs');
+  fs.writeFileSync(preload, `const fs=require('fs'),open=fs.openSync;fs.openSync=function(file,...args){if(file==='/dev/ptmx'&&(${JSON.stringify(context)}==='worker'||process.argv[1]?.endsWith('host-gate.mjs')))throw Object.assign(new Error('native sandbox refusal'),{code:'EPERM'});return open.call(this,file,...args);};`);
+  const originalOptions = f.env.NODE_OPTIONS;
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require ${preload}`;
+  const refused = f.drain(); assert.equal(refused.status, 0, refused.stderr || refused.stdout);
+  const job = f.queue.load().results.at(-1), after = JSON.parse(fs.readFileSync(job.receipt));
+  assert.equal(job.code, 'PROMOTE_NATIVE_PTMX_REFUSED'); assert.equal(job.outcome, 'interrupted');
+  assert.deepEqual(after.attempts, before.attempts); assert.equal(after.native_context.ok, false);
+  assert.equal(f.runs(), 1); assert.equal(f.git(['rev-parse', 'main']), base);
+  assert.equal(f.queue.load().interrupted[0].native_refusal.code, 'PROMOTE_NATIVE_PTMX_REFUSED');
+  // A healthy worker may process a different request without adopting the
+  // native-refused attempt as ordinary interrupted recovery.
+  f.env.NODE_OPTIONS = originalOptions;
+  f.lane('later'); f.add('later'); const later = f.drain(); assert.equal(later.status, 0, later.stderr);
+  const last = f.queue.load().results.at(-1);
+  assert.equal(last.outcome, 'promoted', `${last.code ?? ''}: ${last.reason}`); assert.equal(f.runs(), 2);
+  assert.equal(fs.existsSync(path.join(f.repo, 'alone')), false); assert.equal(fs.existsSync(path.join(f.repo, 'later')), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(job.receipt)).attempts, before.attempts);
+  assert.equal(f.queue.load().interrupted.length, 1);
+});

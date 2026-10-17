@@ -13,6 +13,7 @@ import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
+import { probeNativeGate } from './native-context.mjs';
 import { gateHistoryKey } from '../test-slot/limits.mjs';
 import { changedPaths, plannedCommand } from './test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
@@ -214,6 +215,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   };
   const validateAttempt = attempt => {
     try {
+      plan.native_context = probeNativeGate(); save();
+      if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
       if (attempt.prepare) (attempt.prepare_history ??= []).push(attempt.prepare);
       attempt.prepare = { started_at: new Date().toISOString() };
       phase('preparing');
@@ -260,7 +263,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         attempt.gate.error = error.message;
       }
       attempt.phase = 'invalid'; attempt.error = error.message; plan.groups.shift();
-      for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
+      for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), batch: plan.id });
       saveSlotGrant(attempt); save(); return false;
     }
     saveSlotGrant(attempt);

@@ -17,6 +17,7 @@ import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs
 import { runProjectGateSync } from './gate-profile.mjs';
 import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
 import { verifyTrainResult } from './evidence.mjs';
+import { probeNativeGate, nativeWorkerEvidence, liveNativeWorker } from './native-context.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const LANE = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
@@ -122,7 +123,7 @@ function settings(project, opt) {
   const org = opt.org ? fs.realpathSync(path.resolve(opt.org)) : findOrgDir({ cwd: project.canonical });
   if (run !== undefined && !org) throw new Error('--if-current-run requires a record');
   return { to, attempts, retry, herdr: opt.herdr ?? 'herdr', laneCLI,
-    org, expectedHead, run,
+    org, expectedHead, run, existingWorker: opt['existing-worker'] === true,
     superseded: opt['superseded-runs'] === undefined ? [] : JSON.parse(opt['superseded-runs']),
     requiredTests: opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']),
     validate,
@@ -135,16 +136,19 @@ export function enqueue(queue, topics, options) {
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
   if (options.superseded !== undefined && (!Array.isArray(options.superseded) || (options.superseded.length && !options.run) || new Set(options.superseded).size !== options.superseded.length || options.superseded.some(id => !/^R-\d+$/.test(id)))) throw Error('invalid explicit superseded runs');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
-  return queue.transaction((data) => topics.map((topic) => {
-    const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && ['refused', 'timeout'].includes(job.result?.outcome)));
-    if (existing) {
-      if (JSON.stringify(existing.superseded ?? []) !== JSON.stringify(options.superseded ?? []) || JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
-      return { id: existing.id, topic, duplicate: true };
-    }
-    const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options };
-    data.pending.push(job);
-    return { id: job.id, topic, duplicate: false };
-  }));
+  return queue.transaction((data) => {
+    if (options.existingWorker && !liveNativeWorker(queue.project.identity)) throw settingsRefusal('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
+    return topics.map((topic) => {
+      const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && ['refused', 'timeout'].includes(job.result?.outcome)));
+      if (existing) {
+        if (JSON.stringify(existing.superseded ?? []) !== JSON.stringify(options.superseded ?? []) || JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
+        return { id: existing.id, topic, duplicate: true };
+      }
+      const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options };
+      data.pending.push(job);
+      return { id: job.id, topic, duplicate: false };
+    });
+  });
 }
 
 function cleanup(job, queue, workspace) {
@@ -169,6 +173,8 @@ function cleanup(job, queue, workspace) {
 }
 
 function perform(job, queue) {
+  const native = probeNativeGate();
+  if (!native.ok) return { outcome: 'refused', code: native.code, reason: native.reason, native_context: native };
   const cwd = queue.project.canonical;
   const env = { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_VALIDATE: job.validate ?? undefined, LANE_CONFIG: job.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
@@ -217,6 +223,21 @@ function performBatch(batch, queue, settings) {
   const retained = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   if (retained.phase === 'complete') return batch.jobs.map(job => ({ job, result: { ...retained.results[job.id], log, receipt,
     ...(retained.host_receipt ? { host_receipt: retained.host_receipt } : {}) } }));
+  const refuseNative = native => {
+    const retained = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+    retained.native_context = native; retained.results ??= {};
+    // Integrated checkpoints belong to recovery, never to a new refusal.
+    if (!retained.attempts?.length) {
+      for (const job of batch.jobs) retained.results[job.id] = { outcome: 'refused', code: native.code, reason: native.reason, batch: batch.id };
+      retained.phase = 'complete'; retained.groups = [];
+      writeFileAtomic(receipt, JSON.stringify(retained, null, 2) + '\n');
+      return batch.jobs.map(job => ({ job, result: { ...retained.results[job.id], log, receipt } }));
+    }
+    writeFileAtomic(receipt, JSON.stringify(retained, null, 2) + '\n');
+    throw settingsRefusal(native.code, `${native.reason}; prior integration checkpoints retained for inspection`);
+  };
+  const native = probeNativeGate();
+  if (!native.ok) return refuseNative(native);
   const output = fs.openSync(log, 'a');
   let r;
   try { r = runProjectGateSync({ canonical: cwd, receipt, settings,
@@ -225,6 +246,12 @@ function performBatch(batch, queue, settings) {
   const hostFile = path.join(directory, 'host-gate.json');
   if (r.status !== 0 && fs.existsSync(hostFile)) {
     const host = JSON.parse(fs.readFileSync(hostFile, 'utf8'));
+    // The host may refuse before replacing a prior command_started marker.
+    // Its native refusal must retain checkpoints and block automatic replay.
+    if (host.phase === 'refused' && host.code?.startsWith('PROMOTE_NATIVE_')) {
+      const saved = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+      return refuseNative({ ...saved.native_context, ok: false, code: host.code, reason: host.reason });
+    }
     if (host.phase === 'timeout') {
       const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
       train.results ??= {};
@@ -420,7 +447,10 @@ async function deliver(job, result, queue) {
   const message = notice(job, result);
   const resumed = result.outcome !== 'interrupted' && queue.load().results.some(prior => prior.id === job.id && prior.outcome === 'interrupted');
   const reconciled = result.reconciliation?.state === 'complete' && queue.load().results.some(prior => prior.id === job.id && prior.reconciliation?.state === 'pending');
-  const suffix = result.reconciliation?.state === 'pending' ? `:reconciliation-pending:${createHash('sha256').update(message).digest('hex').slice(0, 16)}` : reconciled ? ':reconciled' : resumed ? ':complete' : '';
+  // A resumed native refusal is a distinct exception, not a rewrite of the
+  // immutable earlier interruption notice. Repeated copies adopt this ID.
+  const nativeRefusal = result.outcome === 'interrupted' && result.code?.startsWith('PROMOTE_NATIVE_');
+  const suffix = nativeRefusal ? `:native-refusal:${createHash('sha256').update(message).digest('hex').slice(0, 16)}` : result.reconciliation?.state === 'pending' ? `:reconciliation-pending:${createHash('sha256').update(message).digest('hex').slice(0, 16)}` : reconciled ? ':reconciled' : resumed ? ':complete' : '';
   const { id: deliveryId, ...delivery } = await promptSupervisor(job.to, message, {
     inbox: inboxPath({ org: job.org, cwd: queue.project.canonical }),
     herdr: job.herdr, attempts: job.attempts, retrySeconds: job.retry,
@@ -439,13 +469,17 @@ export async function drain(queue) {
   // Serialize the startup/empty-exit handoff with enqueuers. A worker releases
   // ownership while still holding queue.lock, so an enqueue cannot be stranded.
   queue.transaction(() => {
-    try { release = acquireLock(path.join(queue.directory, 'worker.lock')); }
+    const lock = path.join(queue.directory, 'worker.lock');
+    try { release = acquireLock(lock); }
     catch (error) {
-      const ownerFile = path.join(queue.directory, 'worker.lock', 'owner.json');
-      const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+      const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
       if (!Number.isInteger(owner.pid) || owner.pid < 1 || owner.argv?.[1] !== SELF) throw error;
-      // EPERM means the owner exists but this caller (another user or a sandbox) may not signal it.
+      // EPERM means the owner exists but this caller may not signal it.
       try { process.kill(owner.pid, 0); } catch (signal) { if (signal.code !== 'EPERM') throw error; }
+    }
+    if (release) {
+      const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
+      writeFileAtomic(path.join(lock, 'owner.json'), JSON.stringify({ ...owner, ...nativeWorkerEvidence() }) + '\n');
     }
   });
   if (!release) { process.send?.({ ready: true, already_running: true }); return; }
@@ -457,7 +491,7 @@ export async function drain(queue) {
       // enqueuers remain free to append while this worker waits for settings.
       const snapshot = queue.load();
       let policy;
-      if (!snapshot.current && !(snapshot.interrupted ?? []).some(batch => !attempted.has(batch.id)) && snapshot.pending.length) {
+      if (!snapshot.current && !(snapshot.interrupted ?? []).some(batch => !batch.native_refusal && !attempted.has(batch.id)) && snapshot.pending.length) {
         try { const settings = promotionSettings(queue.project); policy = { maxBatch: settings.max_batch ?? Infinity, settings }; }
         catch (error) { policy = { error }; }
       }
@@ -472,7 +506,7 @@ export async function drain(queue) {
         }
         // Retry each suspended batch once per drain. Another exception keeps
         // its receipt resumable while allowing later requests to run now.
-        const resume = (data.interrupted ?? []).findIndex(batch => !attempted.has(batch.id));
+        const resume = (data.interrupted ?? []).findIndex(batch => !batch.native_refusal && !attempted.has(batch.id));
         if (resume >= 0) {
           const [saved] = data.interrupted.splice(resume, 1);
           const job = { ...saved, phase: 'batching' };
@@ -547,10 +581,12 @@ export async function drain(queue) {
             const receipt = path.join(directory, 'train.json'), log = path.join(directory, 'train.log');
             const hostReceipt = path.join(directory, 'host-gate.json');
             const results = batch.jobs.map(member => ({ job: member, result: {
-              outcome: 'interrupted', reason: 'batch interrupted; inspect the receipt and log, then resume --drain', receipt, log, batch: batch.id,
+              outcome: 'interrupted', reason: error.code ? error.message : 'batch interrupted; inspect the receipt and log, then resume --drain',
+              ...(error.code ? { code: error.code } : {}), receipt, log, batch: batch.id,
               ...(fs.existsSync(hostReceipt) ? { host_receipt: hostReceipt } : {}),
             } }));
-            batch = { ...batch, phase: 'batch-delivering', error: error.message, results, deliveredCount: 0 };
+            batch = { ...batch, phase: 'batch-delivering', error: error.message, results, deliveredCount: 0,
+              ...(error.code?.startsWith('PROMOTE_NATIVE_') ? { native_refusal: { code: error.code, reason: error.message } } : {}) };
           }
           queue.transaction(data => { data.current = batch; });
         }
@@ -635,8 +671,9 @@ async function main() {
     validate: { type: 'string' }, herdr: { type: 'string' }, 'lane-cli': { type: 'string' },
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },
     'superseded-runs': { type: 'string' }, 'required-tests': { type: 'string' }, 'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
-    resume: { type: 'boolean' }, drain: { type: 'boolean' }, status: { type: 'boolean' },
+    'existing-worker': { type: 'boolean' }, resume: { type: 'boolean' }, drain: { type: 'boolean' }, status: { type: 'boolean' },
   } });
+  if (opt['existing-worker'] && (opt.resume || opt.drain)) throw Error('--existing-worker is enqueue-only; it never starts or resumes a worker');
   const queue = queueFor(opt.repo);
   if (opt.status) { process.stdout.write(JSON.stringify({ queue: queue.file, ...queue.load() }, null, 2) + '\n'); return; }
   if (opt.drain) { await drain(queue); return; }
@@ -647,7 +684,7 @@ async function main() {
   }
   if (!positionals.length) throw new Error('usage: promote.mjs TOPIC [TOPIC ...] [--repo PROJECT] [--to SUPERVISOR] | --status | --drain');
   const jobs = enqueue(queue, positionals, settings(queue.project, opt));
-  const worker = await start(queue);
+  const worker = opt['existing-worker'] ? { already_running: true } : await start(queue);
   process.stdout.write(JSON.stringify({ jobs, worker, queue: queue.file }) + '\n');
 }
 if (isMain(import.meta.url)) main().catch((error) => { console.error(`promote: ${error.message}`); process.exitCode = 1; });

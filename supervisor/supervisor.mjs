@@ -35,7 +35,7 @@ export function main(argv = process.argv.slice(2)) {
     json: { type: 'boolean' }, 'since-seq': { type: 'string' }, through: { type: 'string' },
     notice: { type: 'string' }, why: { type: 'string' }, to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || undefined }, brief: { type: 'string' },
     'review-route': { type: 'string' }, 'fix-route': { type: 'string' }, timeout: { type: 'string' },
-    retry: { type: 'boolean' }, 'review-again': { type: 'boolean' },
+    'existing-worker': { type: 'boolean' }, retry: { type: 'boolean' }, 'review-again': { type: 'boolean' },
     'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'accept-findings': { type: 'boolean' },
     'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
   } });
@@ -204,6 +204,7 @@ export function main(argv = process.argv.slice(2)) {
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
     saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
       '--expected-head', result.head, '--if-current-run', id,
+      ...(opt['existing-worker'] ? ['--existing-worker'] : []),
       ...(result.test_evidence && !result.test_evidence.reexecuted ? ['--required-tests', JSON.stringify(result.test_evidence.files)] : []), ...(opt.to ? ['--to', opt.to] : [])]));
     saved.phase = 'acknowledged';
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n'); print(saved);

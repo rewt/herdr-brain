@@ -18,7 +18,12 @@ test('settle review launch records its native occupant against the run under rev
   const directory = path.join(f.org, 'retirement/occupants'), files = fs.readdirSync(directory);
   assert.equal(files.length, 1);
   const receipt = JSON.parse(fs.readFileSync(path.join(directory, files[0])));
-  const agent = f.calls().find(args => args[0] === 'agent' && args[1] === 'start')[2];
+  // A failed scripted start can be retried before any reviewer exists. Bind
+  // the receipt to the actual review delivery, not the first attempted name.
+  const deliveries = f.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt' && args[3]?.includes('Private record file: '));
+  assert.equal(deliveries.length, 1);
+  const agent = deliveries[0][2];
+  assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(path.join(f.root, 'agents.json')))), [agent]);
   assert.equal(receipt.schema, 'retirement-occupant/v1'); assert.equal(receipt.kind, 'settle');
   assert.equal(receipt.run, run); assert.equal(receipt.agent, agent);
   assert.equal(receipt.terminal_id, `t-${agent}`); assert.equal(receipt.agent_session_id, `s-${agent}`);

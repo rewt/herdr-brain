@@ -83,7 +83,7 @@ const count=kind=>{if(fs.existsSync(${JSON.stringify(started)}))fs.appendFileSyn
 cp.spawnSync=(...args)=>{count('spawn');return execute(...args);};crypto.createHash=(...args)=>{count('hash');return hash(...args);};syncBuiltinESMExports();`);
   // Readiness follows the recorded group identity, even on a loaded host.
   fs.writeFileSync(adapter, `import {runTestSlotSync} from ${JSON.stringify(new URL('../run.mjs', import.meta.url).href)};
-const r=runTestSlotSync('poll-proof',[process.execPath,'-e',${JSON.stringify(`const fs=require('fs');const timer=setInterval(()=>{if(JSON.parse(fs.readFileSync(${JSON.stringify(lock)},'utf8')).groupBirth){clearInterval(timer);fs.writeFileSync(${JSON.stringify(started)},'ready');setTimeout(()=>process.exit(0),1000);}},20);`)}],{retryTimeout:false,encoding:'utf8',timeout:4000});if(r.status!==0)throw Error(r.stderr);`);
+const command=[process.execPath,'-e',${JSON.stringify(`const fs=require('fs');const timer=setInterval(()=>{if(JSON.parse(fs.readFileSync(require('path').join(${JSON.stringify(lock + '.occupancy')},fs.readdirSync(${JSON.stringify(lock + '.occupancy')}).find(n=>!n.startsWith('.'))),'utf8')).groupBirth){clearInterval(timer);fs.writeFileSync(${JSON.stringify(started)},'ready');setTimeout(()=>process.exit(0),1000);}},20);`)}];const r=runTestSlotSync('poll-proof',command,{retryTimeout:false,encoding:'utf8',timeout:4000});if(r.status!==0)throw Error(r.stderr);`);
   const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, NODE_OPTIONS: `--import=${preload}` };
   const r = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
   assert.equal(r.status, 0, r.stderr); assert.ok(fs.existsSync(started));

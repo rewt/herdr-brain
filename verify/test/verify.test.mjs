@@ -45,10 +45,14 @@ async function until(fn, message) {
   while (Date.now() < by) { if (fn()) return; await new Promise(resolve => setTimeout(resolve, 25)); }
   assert.fail(message);
 }
-function fixture(t, { defaultState = false } = {}) {
+function fixture(t, { defaultState = false, proving = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'verify-'))), repo = path.join(root, 'repo');
   fs.mkdirSync(repo);
   const before = { ...process.env };
+  if (proving) {
+    const preload = fileURLToPath(new URL('../../test-slot/test/helpers/proving-preload.mjs', import.meta.url));
+    process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}`;
+  }
   // Trusted fixtures must also be outside system temp. They belong to this
   // test's temporary project, never the source checkout's live verify store.
   const storeParent = fileURLToPath(new URL('../../.lane/verify-fixtures/', import.meta.url));
@@ -296,7 +300,7 @@ test('init applies repeatable CLI roots and environment roots before creating a 
 });
 
 test('one detached admitted worker returns before grant, drains FIFO and records holders plus one note and notice', async t => {
-  const f = fixture(t), order = path.join(f.root, 'order');
+  const f = fixture(t, { proving: true }), order = path.join(f.root, 'order');
   const holder = await acquireTestSlot('fixture holder', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
   t.after(() => holder.release());
   const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`));
@@ -390,7 +394,7 @@ test('completed status keeps the admitted spec and group after inbox edits', asy
 });
 
 test('detached admission refuses edited specs even with forged queue digests; recorded spec files cannot change execution', async t => {
-  const f = fixture(t), marker = path.join(f.root, 'must-not-run'), order = path.join(f.root, 'order');
+  const f = fixture(t, { proving: true }), marker = path.join(f.root, 'must-not-run'), order = path.join(f.root, 'order');
   const holder = await acquireTestSlot('admission mutation fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
   t.after(() => holder.release());
   const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`)), b = f.add();
@@ -418,7 +422,7 @@ test('detached admission refuses edited specs even with forged queue digests; re
 });
 
 test('a detached worker ignores jobs injected with its active token and forged allowlist entries', async t => {
-  const f = fixture(t), marker = path.join(f.root, 'injected'), order = path.join(f.root, 'order');
+  const f = fixture(t, { proving: true }), marker = path.join(f.root, 'injected'), order = path.join(f.root, 'order');
   const holder = await acquireTestSlot('injection fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
   t.after(() => holder.release());
   const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`));
@@ -441,7 +445,7 @@ test('a detached worker ignores jobs injected with its active token and forged a
 });
 
 test('admission snapshots only submission fields; drain and recover never read the writable inbox', async t => {
-  const f = fixture(t), order = path.join(f.root, 'order'), injected = path.join(f.root, 'injected');
+  const f = fixture(t, { proving: true }), order = path.join(f.root, 'order'), injected = path.join(f.root, 'injected');
   const a = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'A')`));
   const b = f.add({}, node(`require('fs').appendFileSync(${JSON.stringify(order)},'B')`));
   f.queue.inbox.transaction(data => Object.assign(data.jobs[0], { admission: { token: 'forged' }, started_at: 'forged', completed_at: 'forged', receipt_sha256: '0'.repeat(64), outcome: 'pass' }));
@@ -497,7 +501,7 @@ test('a forged pass receipt for a never-admitted pending job is unverified and n
 });
 
 test('a forged pass receipt for an admitted queued job halts the worker with runner.error', async t => {
-  const f = fixture(t), marker = path.join(f.root, 'never-ran');
+  const f = fixture(t, { proving: true }), marker = path.join(f.root, 'never-ran');
   const holder = await acquireTestSlot('queued forgery fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
   t.after(() => holder.release());
   const a = f.add(), b = f.add({}, node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`));
@@ -633,7 +637,7 @@ test('a log hashing error is recoverable bookkeeping but an executed job never r
 });
 
 test('a desk edited during a busy slot wait is refused at grant and its edits are preserved', async t => {
-  const f = fixture(t), holder = await acquireTestSlot('busy grant fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
+  const f = fixture(t, { proving: true }), holder = await acquireTestSlot('busy grant fixture', { lockPath: process.env.MONITOR_TEST_SLOT_PATH, waitSeconds: 0 });
   t.after(() => holder.release());
   const marker = path.join(f.root, 'must-not-run'), job = f.add({}, node(`require('fs').writeFileSync(${JSON.stringify(marker)},'bad')`));
   await f.cli(['admit', job.job]);
@@ -647,7 +651,7 @@ test('a desk edited during a busy slot wait is refused at grant and its edits ar
 });
 
 test('prepare and command share the slot; receipts bind prior SHA with and without prepare and preserve ignored caches', async t => {
-  const f = fixture(t), slot = process.env.MONITOR_TEST_SLOT_PATH;
+  const f = fixture(t, { proving: true }), slot = process.env.MONITOR_TEST_SLOT_PATH;
   const prepare = node(`const fs=require('fs');if(JSON.parse(fs.readFileSync(${JSON.stringify(slot)})).token!==process.env.MONITOR_TEST_SLOT_TOKEN)throw Error('no slot');fs.mkdirSync('cache',{recursive:true});fs.writeFileSync('cache/token',process.env.MONITOR_TEST_SLOT_TOKEN);`);
   const a = f.add({}, node("const fs=require('fs');if(fs.readFileSync('cache/token','utf8')!==process.env.MONITOR_TEST_SLOT_TOKEN)throw Error('different slot');console.log(fs.readFileSync('version','utf8'));"), prepare);
   await f.run(a);
@@ -885,7 +889,7 @@ test('timeout captures an escaped descendant while its phase observer is stopped
 });
 
 test('a previously observed orphan is reaped inside the host hold after job timeout', async t => {
-  const f = fixture(t), pids = path.join(f.root, 'orphan'), seen = path.join(f.root, 'held-during-cleanup'), slot = process.env.MONITOR_TEST_SLOT_PATH;
+  const f = fixture(t, { proving: true }), pids = path.join(f.root, 'orphan'), seen = path.join(f.root, 'held-during-cleanup'), slot = process.env.MONITOR_TEST_SLOT_PATH;
   const leaf = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(pids)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(seen)},String(fs.existsSync(${JSON.stringify(slot)})))});setInterval(()=>{},1000);`;
   const middle = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{detached:true,stdio:'ignore'}).unref();setTimeout(()=>{},500);`;
   const job = f.add({ 'timeout-seconds': '1.5', 'idle-timeout-seconds': '5' }, node(`require('child_process').spawn(process.execPath,['-e',${JSON.stringify(middle)}],{detached:true,stdio:'ignore'}).unref();setInterval(()=>{},1000);`));

@@ -29,7 +29,7 @@ test('profiles bind actual recipes, arguments, environment and input identity wi
   const resource = resolveResource(argv, { cwd: source, env: { NODE_OPTIONS: 'secret-value' } });
   assert.equal(resource.reason, 'profiled');
   assert.equal(resource.profile.M_bytes, null); assert.equal(resource.profile.C, null);
-  assert.equal(resource.profile.admission_class, 'EXCLUSIVE');
+  assert.equal(resource.profile.admission_class, 'SHARED');
   assert.equal(resource.profile.worker_caps.maximum, 4);
   assert.match(resource.profile.worker_caps.scope, /transitive.*unknown/);
   assert.equal(JSON.stringify(resource).includes('secret-value'), false);
@@ -44,9 +44,12 @@ test('profiles bind actual recipes, arguments, environment and input identity wi
   const workers = workerSettings(); assert.ok(workers.test_file_cap >= 1 && workers.test_file_cap <= 4); assert.equal(workers.transitive_cpu_bound, null);
 });
 
-test('all participating named npm recipes have a bound exclusive profile', () => {
+test('all participating named npm recipes have a bound shared profile', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(source, 'package.json')));
-  for (const name of Object.keys(pkg.resources)) assert.equal(resolveResource(['npm', 'run', name], { cwd: source }).reason, 'profiled', name);
+  for (const name of Object.keys(pkg.resources)) {
+    const resource = resolveResource(['npm', 'run', name], { cwd: source });
+    assert.equal(resource.reason, 'profiled', name); assert.equal(resource.admission_class, 'SHARED', name);
+  }
   const script = ['node', 'test/helpers/release-suites.mjs', '--file-timeout=480000', '--suite-timeout=540000'];
   assert.equal(resolveResource(script, { cwd: source }).reason, 'profiled');
   assert.equal(resolveResource([...script, '--unknown'], { cwd: source }).reason, 'unprofiled');
@@ -93,7 +96,7 @@ const child=cp.fork(${JSON.stringify(leaf)},[],{stdio:['ignore','ignore','ignore
 child.on('message',({pid})=>{
  const nested=[process.execPath,'-e','console.log("nested marker")'];
  const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','nested','--lock-path',${JSON.stringify(f.lock)},'--result-path',${JSON.stringify(nestedReceipt)},'--resource',JSON.stringify(${JSON.stringify(resourceStanza('fixture/inner', [process.execPath, '-e', 'console.log("nested marker")']))}),'--',...nested],{encoding:'utf8'});
- assert.equal(r.status,0,r.stderr);assert(fs.existsSync(${JSON.stringify(f.lock)}));
+ assert.equal(r.status,0,r.stderr);assert.equal(fs.readdirSync(${JSON.stringify(f.lock + '.occupancy')}).filter(n=>!n.startsWith('.')).length,1);
  const deadline=Date.now()+10000; const timer=setInterval(()=>{
   const samples=fs.existsSync(${JSON.stringify(f.receipt + '.samples.jsonl')})?fs.readFileSync(${JSON.stringify(f.receipt + '.samples.jsonl')},'utf8'):'';
   if(samples.includes('"pid":'+pid+',')){clearInterval(timer);child.kill();}
@@ -125,7 +128,7 @@ function unprofiledNestedFixture(t, { mutateLock = false } = {}) {
   // the parent has observed the pending record. Never patch product code.
   fs.writeFileSync(preload, `const fs=require('fs'),path=require('path'),rename=fs.renameSync;
 fs.renameSync=(from,to)=>{
- if(path.resolve(to)===${JSON.stringify(path.join(fs.realpathSync(f.root), 'slot'))}) {
+ if(path.dirname(path.resolve(to))===${JSON.stringify(path.join(fs.realpathSync(f.root), 'slot.occupancy'))} && fs.existsSync(to)) {
   const holder=JSON.parse(fs.readFileSync(from,'utf8'));
   if(holder.pid===process.pid&&holder.groupStart!==null) {
    const deadline=Date.now()+${loadTimeout(5000)};
@@ -137,13 +140,14 @@ fs.renameSync=(from,to)=>{
  }
  return rename(from,to);
 };`);
-  const mutation = mutateLock ? `const fs=require('fs'),file=process.env.MONITOR_TEST_SLOT_PATH,holder=JSON.parse(fs.readFileSync(file,'utf8'));holder.label+='/nested-mutation';fs.writeFileSync(file,JSON.stringify(holder)+'\\n');` : '';
+  const mutation = mutateLock ? `const fs=require('fs'),dir=process.env.MONITOR_TEST_SLOT_PATH+'.occupancy',file=require('path').join(dir,fs.readdirSync(dir).find(n=>!n.startsWith('.'))),holder=JSON.parse(fs.readFileSync(file,'utf8'));holder.label+='/nested-mutation';fs.writeFileSync(file,JSON.stringify(holder)+'\\n');` : '';
   const argv = [process.execPath, '-e', `console.log("nested marker");${mutation}`];
   fs.writeFileSync(parent, `const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict');
 const deadline=Date.now()+${loadTimeout(5000)};
+const dir=${JSON.stringify(f.lock + '.occupancy')},occupancy=require('path').join(dir,fs.readdirSync(dir).find(n=>!n.startsWith('.')));
 let before;
 while(!before) {
- const bytes=fs.readFileSync(${JSON.stringify(f.lock)},'utf8');
+ const bytes=fs.readFileSync(occupancy,'utf8');
  if(JSON.parse(bytes).groupStart!==null)before=bytes;
  else {
   fs.writeFileSync(${JSON.stringify(pending)},'observed pending group');
@@ -153,7 +157,7 @@ while(!before) {
 }
 for(const profiled of [false,true]) {
  const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','nested','--lock-path',${JSON.stringify(f.lock)},'--result-path',${JSON.stringify(path.join(f.root, 'inner-'))}+profiled+'.json',...(profiled?['--resource',JSON.stringify(${JSON.stringify(resourceStanza('fixture/inner', argv))})]:[]),'--',...${JSON.stringify(argv)}],{encoding:'utf8'});
- assert.equal(r.status,0,r.stderr);assert.equal(fs.readFileSync(${JSON.stringify(f.lock)},'utf8'),before,'nested command changed outer holder record');
+ assert.equal(r.status,0,r.stderr);assert.equal(fs.readFileSync(occupancy,'utf8'),before,'nested command changed outer holder record');
 }`);
   const result = f.run([process.execPath, parent], { profiled: false,
     environment: { ...f.env, NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}` } });
@@ -176,7 +180,7 @@ test('nested receipts do not claim sampling under an unprofiled top-level holder
   assert.equal(fs.existsSync(f.lock), false);
 });
 
-test('nested lock byte assertion rejects a real lock mutation after group readiness', t => {
+test('nested occupancy byte assertion rejects a real occupancy mutation after group readiness', t => {
   const { f, result } = unprofiledNestedFixture(t, { mutateLock: true });
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /nested command changed outer holder record/);
@@ -185,7 +189,7 @@ test('nested lock byte assertion rejects a real lock mutation after group readin
   t.diagnostic('nested child changed holder.label; the byte-exact assertion rejected it and the wrapper exited 1');
 });
 
-test('denied sampling and failed telemetry storage never change exclusive command outcomes', t => {
+test('denied sampling and failed telemetry storage never change shared command outcomes', t => {
   const f = fixture(t), deny = path.join(f.root, 'deny.mjs');
   fs.writeFileSync(deny, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(file,...args)=>file==='/bin/ps'?{status:1,stderr:'ps: Operation not permitted',stdout:''}:run(file,...args);syncBuiltinESMExports();`);
   for (const status of [0, 7, 75]) {
@@ -201,22 +205,15 @@ test('denied sampling and failed telemetry storage never change exclusive comman
   assert.equal(fs.existsSync(f.lock), false);
 });
 
-test('unprofiled execution and profiled admission/refusal decisions preserve exact output, exit and legacy lock bytes', async t => {
+test('unprofiled and profiled shared execution preserve exact output and exit', t => {
   const f = fixture(t), command = [process.execPath, '-e', 'console.log("started")'];
-  const legacy = f.run(command, { profiled: false }), profiled = f.run(command);
-  assert.deepEqual([profiled.status, profiled.stdout, profiled.stderr], [legacy.status, legacy.stdout, legacy.stderr]);
-  const plain = f.run(command, { profiled: false }); assert.equal(plain.status, 0);
-  assert.equal(f.saved().resource.reason, 'unprofiled'); assert.equal(f.saved().measurement.status, 'unprofiled');
-  const other = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { env: f.env, stdio: 'ignore' });
-  await new Promise(resolve => other.once('spawn', resolve));
-  t.after(() => other.kill('SIGKILL'));
-  const identity = processStartRecord(other.pid);
-  for (const holder of [{ pid: other.pid, token: 'legacy-token', pgid: null, label: 'fixed', processStart: identity.start, processBirth: identity.birth }, { invalid: true }]) {
-    const bytes = JSON.stringify(holder)+'\n'; fs.writeFileSync(f.lock, bytes);
-    const a = f.run(command, { profiled: false }), b = f.run(command);
-    assert.deepEqual([b.status, b.stdout, b.stderr], [a.status, a.stdout, a.stderr]);
-    assert.equal(b.status, 75); assert.equal(b.stdout, ''); assert.equal(fs.readFileSync(f.lock, 'utf8'), bytes);
-  }
+  const plain = f.run(command, { profiled: false }), profiled = f.run(command);
+  assert.deepEqual([profiled.status, profiled.stdout, profiled.stderr], [plain.status, plain.stdout, plain.stderr]);
+  assert.equal(f.saved().class, 'shared');
+  assert.equal(f.saved().resource.profile.admission_class, 'SHARED');
+  f.run(command, { profiled: false });
+  assert.equal(f.saved().resource.reason, 'unprofiled');
+  assert.equal(f.saved().measurement.status, 'unprofiled');
 });
 
 test('summary keeps metrics separate, counts retries once and invents no envelope or PASS', () => {
@@ -248,7 +245,7 @@ test('promotion host retains the exact train profile and measurement beside its 
   const f = fixture(t), marker = path.join(f.root, 'marker.mjs'), plan = path.join(f.root, 'train.json');
   const git = args => { const r = spawnSync('git', ['-C', f.root, '-c', 'user.name=Resource', '-c', 'user.email=resource@example.invalid', ...args], { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); };
   git(['init', '-qb', 'main']);
-  fs.writeFileSync(path.join(f.root, '.promote.json'), JSON.stringify({ gate: { wait_seconds: 0, resource: resourceStanza('fixture/host', null) } }));
+  fs.writeFileSync(path.join(f.root, '.promote.json'), JSON.stringify({ gate: { wait_seconds: 0, resource: resourceStanza('fixture/host', null, 'EXCLUSIVE') } }));
   fs.writeFileSync(path.join(f.root, '.lane.validation.json'), JSON.stringify({ promotion: 'node check.cjs' }));
   fs.writeFileSync(marker, 'console.log("train workload marker");');
   git(['add', '.promote.json', '.lane.validation.json', 'marker.mjs']); git(['commit', '-qm', 'resource fixture']);

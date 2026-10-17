@@ -212,7 +212,8 @@ exists; do not use it to guard dependency installs.
 
 The foreground gate adapter first takes the optional external kernel record lock for the train
 invocation, including preparation, all bisection gates, integration and scratch
-cleanup. It then takes the host test slot for that entire invocation. This order
+cleanup. It then starts shared work immediately, recording occupancy (ARCH-34). Only a
+declared-exclusive proving profile takes the host test slot. For that class, this order
 matches legacy promotion's lock-then-slot order. The external lock uses
 `/bin/zsh`'s `zsystem flock` (`fcntl`, not the incompatible `flock(2)` API), keeps
 its descriptor through exec, and never deletes the lock file. Projects using
@@ -237,7 +238,8 @@ When the confirmed host timeout interrupts preparation, the queue classifies
 that last interrupted attempt as timed out even if cancellation let it save a
 preparation refusal first. Earlier completed outcomes remain intact. A signaled
 preparation without a host timeout remains an ordinary refusal.
-Unconfigured trains also wait for the host slot with a 7200-second default;
+Unconfigured trains start shared immediately; declared-exclusive trains have a
+7200-second default host-slot wait;
 explicit Monitor or legacy slot wait settings retain precedence.
 
 ## Evidence and recovery

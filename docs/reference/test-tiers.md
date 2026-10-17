@@ -7,8 +7,8 @@ fast-forward merge. Settle reviews do not run a suite.
 | Command | Boundary and cost |
 | --- | --- |
 | `npm run test:fast` | Selected parsers, derived models, rendering, routes and process-identity logic; seconds, two small Git discovery fixtures and no PTYs. |
-| `npm run test:promotion` | Explicit merge correctness files, selected fast logic and lane lifecycle cases, plus native host-slot tests. Holds the host slot across the batch. |
-| `npm run test:release` | The complete offline suite, including copied-product workflows and deliberate wall-clock deadline regressions. Holds the host slot; calls no model and never runs the live harness. |
+| `npm run test:promotion` | Explicit merge correctness files, selected fast logic and lane lifecycle cases, plus native host-slot tests. Records shared occupancy across the batch (ARCH-34). |
+| `npm run test:release` | The complete offline suite, including copied-product workflows and deliberate wall-clock deadline regressions. Records shared occupancy (ARCH-34); calls no model and never runs the live harness. |
 
 `test/helpers/tier.mjs` selects only `.test.mjs` entries. Support modules and
 frozen folds remain imported by their tests rather than being reported as empty

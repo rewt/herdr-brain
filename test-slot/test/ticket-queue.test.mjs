@@ -1,3 +1,4 @@
+import { provingRun } from './helpers/proving.mjs';
 // Protocol v1.1 firing cases. Every process and lock/queue belongs to this fixture.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,7 +32,7 @@ function fixture(t) {
   const env = { ...testSlotEnvironment(), HERDR_MONITOR_FLEET: file('fleet'),
     MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const start = (args, extraEnv = {}) => {
-    const child = spawn(process.execPath, args, { cwd: root, env: { ...env, ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, args[0] === CLI ? provingRun(args) : args, { cwd: root, env: { ...env, ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] });
     children.push(child);
     let stdout = '', stderr = '';
     child.stdout.on('data', data => { stdout += data; });

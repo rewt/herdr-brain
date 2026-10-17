@@ -1,3 +1,4 @@
+import { provingRun } from './helpers/proving.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -26,8 +27,8 @@ async function until(fn) {
 
 async function holdSlot(t, f) {
   const ready = path.join(f.root, 'slot-ready');
-  const owner = spawnChild(t, process.execPath, [slotCLI, 'run', 'fixture owner', '--lock-path', f.slot, '--', process.execPath, '-e',
-    `require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000)`], { env: f.env });
+  const owner = spawnChild(t, process.execPath, provingRun([slotCLI, 'run', 'fixture owner', '--lock-path', f.slot, '--', process.execPath, '-e',
+    `require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000)`]), { env: f.env });
   await until(() => fs.existsSync(ready));
   return { release: async () => { owner.kill('SIGTERM'); await waitForExit(owner); } };
 }

@@ -1,3 +1,4 @@
+import { provingRun } from './helpers/proving.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -59,7 +60,7 @@ const execute=cp.spawnSync,read=fs.readFileSync;
 cp.spawnSync=(file,...args)=>String(file).includes('process-source-')?{error:Object.assign(Error('source missing'),{code:'ENOENT'})}:execute(file,...args);
 fs.readFileSync=(file,...args)=>String(file).startsWith('/proc/')?(()=>{throw Object.assign(Error('source missing'),{code:'EACCES'});})():read(file,...args);syncBuiltinESMExports();`);
   const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
-  const result = spawnSync(process.execPath, ['--import', preload, cli, 'run', 'denied', '--lock-path', lock, '--', process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'unsafe')`], { env: testSlotEnvironment(), encoding: 'utf8', timeout: 10000 });
+  const result = spawnSync(process.execPath, provingRun(['--import', preload, cli, 'run', 'denied', '--lock-path', lock, '--', process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'unsafe')`]), { env: testSlotEnvironment(), encoding: 'utf8', timeout: 10000 });
   assert.equal(result.status, 75, result.stderr);
   assert.match(result.stderr, /TEST_SLOT_HOLDER_UNKNOWN:.*process source identity/);
   assert.equal(fs.existsSync(lock), false);
@@ -76,7 +77,7 @@ const holder=JSON.parse(fs.readFileSync(${JSON.stringify(lock)},'utf8'));if(hold
 const env={...process.env};delete env.MONITOR_TEST_SLOT_TOKEN;delete env.BCH_CLOAK_TEST_SLOT_TOKEN;
 const inner=spawnSync(process.execPath,[${JSON.stringify(cli)},'run','nested','--lock-path',${JSON.stringify(lock)},'--',process.execPath,'-e','console.log("SLOT_NESTED")'],{env,encoding:'utf8',timeout:5000});if(inner.status!==0)throw Error(inner.stderr);console.log(inner.stdout);`;
   const profile = '(version 1)(allow default)(deny network*)';
-  const result = spawnSync('/usr/bin/sandbox-exec', ['-p', profile, process.execPath, cli, 'run', 'outer', '--lock-path', lock, '--', process.execPath, '--input-type=module', '-e', program], { env: testSlotEnvironment(), encoding: 'utf8', timeout: 12000 });
+  const result = spawnSync('/usr/bin/sandbox-exec', provingRun(['-p', profile, process.execPath, cli, 'run', 'outer', '--lock-path', lock, '--', process.execPath, '--input-type=module', '-e', program]), { env: testSlotEnvironment(), encoding: 'utf8', timeout: 12000 });
   if (result.stderr?.includes('sandbox_apply: Operation not permitted')) { t.skip('seatbelt cannot nest; promotion host verifies this acceptance'); return; }
   const legacy = spawnSync('/bin/ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', timeout: 5000, env: { ...testSlotEnvironment(), LC_ALL: 'C', TZ: 'UTC' } });
   assert.equal(legacy.status, 0, legacy.stderr);

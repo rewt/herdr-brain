@@ -6,7 +6,7 @@ Workers run focused offline test files while developing and
 Settle reviews code and runs no suite.
 
 Promotion validates once per batch before moving main. `npm run test:promotion`
-holds the host test slot and runs the explicit promotion inventory plus selected
+starts shared immediately (ARCH-34) and runs the explicit promotion inventory plus selected
 merge-critical lane and mixed-file cases. The inventory is in
 `test/helpers/tier.mjs`; title selectors are in `package.json`. Clean worktrees,
 canonical Git identity, clean replay, compare-and-swap, fast-forward and recoverable

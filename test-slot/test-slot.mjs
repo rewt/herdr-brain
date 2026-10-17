@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Host-wide heavy-validation slot, ported from bch-cloak ENG-725 (ENG-118).
-// Promotion and release commands share the existing bch-cloak lock by default.
+// Ordinary work starts immediately; only declared proving takes the legacy lock.
 // Workspace configuration selects one path for every participating project.
 // Waiting takers publish protocol v1 tickets and acquire each path in arrival order.
 //
 //   node test-slot/test-slot.mjs run <label> [--wait <seconds>] -- <command> [args...]
 //   node test-slot/test-slot.mjs status
 //
-// `run` takes the slot, runs the command in its own process group, and releases
-// the slot when the command ends. SIGINT, SIGTERM and SIGHUP are forwarded to
+// `run` publishes shared occupancy (or takes the slot for declared proving),
+// runs the command in its own process group, and cleans up when it ends. SIGINT, SIGTERM and SIGHUP are forwarded to
 // that group. A refusal exits 75 with one line on stderr that starts with its
 // code. A command started inside a held slot (the holder's token in its
 // environment, or the holder among its ancestors or process group) runs inside
@@ -40,6 +40,7 @@ import { setTimeout as pollSleep } from 'node:timers/promises';
 
 import { probe, processStartRecord, processState, removeStaleLock } from "./lock-support.mjs";
 import { readTestSlotQueue, testSlotTicket } from './ticket-queue.mjs';
+import { occupancyState, readTestSlotOccupancy, sharedOccupancy } from './occupancy.mjs';
 import { lookupProcess } from "../lib/processes.mjs";
 import { writeFileAtomic } from "../lib/files.mjs";
 import { cliHelp, isMain } from '../lib/cli-help.mjs';
@@ -304,6 +305,30 @@ function nested(holder) {
   return { nested: true, token: holder.token, holder, setGroup: () => {}, release: () => true };
 }
 
+// Read once for nesting, never poll, acquire or modify a lock/queue. Occupancy
+// uses ancestry/group identity rather than tokens. This also preserves nesting
+// under a legacy exclusive holder, including when its tokens were scrubbed.
+function inheritedSlot(paths, { exclusive = false } = {}) {
+  for (const file of paths) {
+    let occupants = [];
+    try { occupants = readTestSlotOccupancy(file); } catch { /* Presence is informational. */ }
+    for (const row of occupants) {
+      try {
+        if (row.state === 'live' && insideHolder(row.record))
+          return { ...nested(row.record), token: null, class: 'shared', occupancyPath: row.path };
+      } catch { /* An unavailable ancestry source does not block shared work. */ }
+    }
+    if (exclusive) continue; // The unchanged exclusive path checks its locks.
+    try {
+      const holder = JSON.parse(readText(file));
+      if (holderState(holder).state === 'live' &&
+          ((process.env[TOKEN_ENV] ?? process.env[LEGACY_TOKEN_ENV]) === holder.token || insideHolder(holder)))
+        return { ...nested(holder), class: 'exclusive' };
+    } catch { /* An unrelated unreadable lock cannot block shared work. */ }
+  }
+  return null;
+}
+
 function held(lockPath, mine) {
   const ours = () => { try { return JSON.parse(readText(lockPath) ?? "null")?.token === mine.token; } catch { return false; } };
   return {
@@ -381,6 +406,7 @@ export async function run({ positional, options, child }) {
   const historyKey = options.historyKey ?? gateHistoryKey(tier, child);
   const limits = resolveGateLimits({ ...options, common, tier, historyKey, command: child });
   const historyPath = historyFile(common, tier, child, historyKey);
+  const resource = resolveResource(child, { resource: options.resource });
   let slot;
   const waiting = new AbortController();
   const cancelWait = signal => { waiting.abort(signal); removeWaitingTickets(); };
@@ -388,16 +414,23 @@ export async function run({ positional, options, child }) {
   const wait = { schema: 'test-slot-wait/v1', state: 'waiting', started_at: new Date().toISOString(),
     wait_seconds: options.waitSeconds ?? waitSecondsOf(), waits: [] };
   try {
-    slot = options.noSlot ? { nested: false, token: null, setGroup: () => {}, release: () => {} } : await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs, signal: waiting.signal,
+    const exclusive = resource.admission_class === 'EXCLUSIVE';
+    slot = options.noSlot ? { nested: false, token: null, setGroup: () => {}, release: () => {} }
+      : inheritedSlot([...new Set([options.lockPath, options.compatPath])], { exclusive })
+      ?? (exclusive ? await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs, signal: waiting.signal,
       onWait: entry => {
         wait.waits.push({ ...entry, at: new Date().toISOString() });
         if (options.waitReceipt) process.stderr.write(`TEST_SLOT_WAIT: ${entry.holder}; ${entry.lock_path}; capped at ${wait.wait_seconds}s\n`);
-      }, ...(options.waitSeconds === undefined ? {} : { waitSeconds: options.waitSeconds }) });
+      }, ...(options.waitSeconds === undefined ? {} : { waitSeconds: options.waitSeconds }) })
+        : sharedOccupancy(options.lockPath, label, resource));
+    slot.class ??= options.noSlot ? 'unslotted' : 'exclusive';
     const acquiredAt = new Date().toISOString();
-    Object.assign(wait, { state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt, nested: slot.nested });
+    Object.assign(wait, { state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt, nested: slot.nested,
+      class: slot.class, occupancy_path: slot.occupancyPath });
     // This sidecar proves a grant. Queue/log evidence records refusals instead.
     if (options.waitReceipt) writeFileAtomic(options.waitReceipt, JSON.stringify(wait, null, 2) + '\n', 0o600);
   } catch (error) {
+    if (slot?.class === 'shared') slot.release();
     if (waiting.signal.aborted) return exitOf(null, waiting.signal.reason);
     if (error?.code === HELD_CODE || error?.code === HOLDER_UNKNOWN_CODE) {
       process.stderr.write(`${error.message}\n`);
@@ -407,62 +440,68 @@ export async function run({ positional, options, child }) {
   } finally {
     for (const signal of SIGNALS) process.off(signal, cancelWait);
   }
-  const resource = resolveResource(child, { resource: options.resource });
-  let automaticReceipt = false;
-  // CLI recipes (not just synchronous adapters) retain execution evidence.
-  // These sidecars are outside the wire protocol and healthy-clock history.
-  if (resource.profile && !slot.nested && !options.noSlot && !options.resultPath) {
-    try {
-      const directory = historyPath ? path.join(path.dirname(historyPath), 'executions') : path.resolve('.test-slot-executions');
-      fs.mkdirSync(directory, { recursive: true });
-      automaticReceipt = true;
-      options.resultPath = path.join(directory, `${Date.now()}-${randomBytes(8).toString('hex')}.execution.json`);
-    } catch { /* Evidence storage cannot change exclusive execution. */ }
-  }
-  const saveExecution = value => {
-    if (!options.resultPath) return;
-    try {
-      const retention = automaticReceipt ? { schema: RETENTION_SCHEMA, newest_per_profile: EXECUTIONS_PER_PROFILE,
-        holder: slot.holder, lock_paths: [...new Set([options.lockPath, options.compatPath])] } : undefined;
-      writeFileAtomic(options.resultPath, JSON.stringify({ ...value, ...(retention ? { retention } : {}) }) + '\n', 0o600);
-      if (automaticReceipt) {
-        try { pruneExecutions(options.resultPath, resource.profile.id, holderState); }
-        catch { /* Pruning cannot change exclusive execution. */ }
+  try {
+    let automaticReceipt = false;
+    // CLI recipes (not just synchronous adapters) retain execution evidence.
+    // These sidecars are outside the wire protocol and healthy-clock history.
+    if (resource.profile && !slot.nested && !options.noSlot && !options.resultPath) {
+      try {
+        const directory = historyPath ? path.join(path.dirname(historyPath), 'executions') : path.resolve('.test-slot-executions');
+        fs.mkdirSync(directory, { recursive: true });
+        automaticReceipt = true;
+        options.resultPath = path.join(directory, `${Date.now()}-${randomBytes(8).toString('hex')}.execution.json`);
+      } catch { /* Evidence storage cannot change execution. */ }
+    }
+    const saveExecution = value => {
+      if (!options.resultPath) return;
+      try {
+        const retention = automaticReceipt ? { schema: RETENTION_SCHEMA, newest_per_profile: EXECUTIONS_PER_PROFILE,
+          holder: slot.holder, lock_paths: slot.occupancyPath ? [slot.occupancyPath] : [...new Set([options.lockPath, options.compatPath])] } : undefined;
+        writeFileAtomic(options.resultPath, JSON.stringify({ ...value, ...(retention ? { retention } : {}) }) + '\n', 0o600);
+        if (automaticReceipt) {
+          try { pruneExecutions(options.resultPath, resource.profile.id, holder => holder?.class === 'shared' ? occupancyState(holder) : holderState(holder)); }
+          catch { /* Pruning cannot change execution. */ }
+        }
       }
+      catch (error) { if (!automaticReceipt) throw error; }
+    };
+    const telemetry = resource.profile && !slot.nested && !options.noSlot && options.resultPath
+      ? boundedTelemetry(`${options.resultPath}.samples.jsonl`) : null;
+    const measurementAttempts = [];
+    let received = null;
+    let execution = { resource, class: slot.class, occupancy_path: slot.occupancyPath };
+    const started = proc => {
+      execution = { resource, class: slot.class, occupancy_path: slot.occupancyPath,
+        command_started: true, command_pid: proc.pid, started_at: new Date().toISOString() };
+      saveExecution(execution);
+    };
+    const retryTimeout = options.retryTimeout && process.env[RETRIED_ENV] !== "1";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture, resource.profile && !slot.nested && !options.noSlot ? {
+        telemetryPath: options.resultPath ? `${options.resultPath}.samples.jsonl` : undefined, telemetry, notes: options.measurementNotes,
+      } : null);
+      if (result.measurement) measurementAttempts.push({ attempt: attempt + 1, ...result.measurement });
+      saveExecution({ ...execution, signal: received ?? result.signal,
+        measurement: result.measurement ?? { status: slot.nested ? 'nested; sampling owned by top-level holder if profiled' : options.noSlot ? 'unslotted' : 'unprofiled' }, measurement_attempts: measurementAttempts,
+        history_key: historyKey, exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() });
+      if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
+      if (!result.groupGone) return result.status || 1;
+      if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
+        process.stderr.write(`TEST_SLOT_TIMEOUT_RETRY: ${label}: timeout under load; re-running once inside the held slot.\n`);
+        continue;
+      }
+      const released = slot.release();
+      if (released !== false && result.status === 0 && received === null && !result.gateTimeout) {
+        try { recordHealthyGate({ common, tier, historyKey, file: historyPath, command: child, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s }); }
+        catch (error) { process.stderr.write(`GATE_HISTORY_WARNING: ${error.message}\n`); }
+      }
+      if (released === false) process.stderr.write('TEST_SLOT_GROUP_REMAINS: nested command group still exists; lock retained.\n');
+      return released === false ? result.status || 1 : result.status;
     }
-    catch (error) { if (!automaticReceipt) throw error; }
-  };
-  const telemetry = resource.profile && !slot.nested && !options.noSlot && options.resultPath
-    ? boundedTelemetry(`${options.resultPath}.samples.jsonl`) : null;
-  const measurementAttempts = [];
-  let received = null;
-  let execution = {};
-  const started = proc => {
-    execution = { resource, command_started: true, command_pid: proc.pid, started_at: new Date().toISOString() };
-    saveExecution(execution);
-  };
-  const retryTimeout = options.retryTimeout && process.env[RETRIED_ENV] !== "1";
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture, resource.profile && !slot.nested && !options.noSlot ? {
-      telemetryPath: options.resultPath ? `${options.resultPath}.samples.jsonl` : undefined, telemetry, notes: options.measurementNotes,
-    } : null);
-    if (result.measurement) measurementAttempts.push({ attempt: attempt + 1, ...result.measurement });
-    saveExecution({ ...execution, signal: received ?? result.signal,
-      measurement: result.measurement ?? { status: slot.nested ? 'nested; sampling owned by top-level holder if profiled' : options.noSlot ? 'unslotted' : 'unprofiled' }, measurement_attempts: measurementAttempts,
-      history_key: historyKey, exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() });
-    if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
-    if (!result.groupGone) return result.status || 1;
-    if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
-      process.stderr.write(`TEST_SLOT_TIMEOUT_RETRY: ${label}: timeout under load; re-running once inside the held slot.\n`);
-      continue;
-    }
-    const released = slot.release();
-    if (released !== false && result.status === 0 && received === null && !result.gateTimeout) {
-      try { recordHealthyGate({ common, tier, historyKey, file: historyPath, command: child, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s }); }
-      catch (error) { process.stderr.write(`GATE_HISTORY_WARNING: ${error.message}\n`); }
-    }
-    if (released === false) process.stderr.write('TEST_SLOT_GROUP_REMAINS: nested command group still exists; lock retained.\n');
-    return released === false ? result.status || 1 : result.status;
+  } finally {
+    // Informational presence always follows its owner, even on setup/storage
+    // failure or an uncertain watchdog cleanup. Exclusive retention is unchanged.
+    if (slot.class === 'shared') slot.release();
   }
 }
 
@@ -615,7 +654,8 @@ function status({ options }) {
     return { ...holderState(holder), lockPath, holder, queue };
   });
   const state = locks.find(row => row.state === "unknown") ?? locks.find(row => row.state === "live") ?? locks[locks.length - 1];
-  process.stdout.write(`${JSON.stringify(locks.length === 1 ? state : { ...state, locks })}\n`);
+  const occupancy = [...new Set([options.lockPath, options.compatPath])].flatMap(file => readTestSlotOccupancy(file));
+  process.stdout.write(`${JSON.stringify({ ...(locks.length === 1 ? state : { ...state, locks }), occupancy })}\n`);
   return state.state === "live" ? 1 : state.state === "unknown" ? 2 : 0;
 }
 

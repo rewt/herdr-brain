@@ -1,4 +1,4 @@
-// Execution evidence only. This module never participates in slot admission.
+// Exact recipe declarations select shared work or exclusive proving (ARCH-34).
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -9,9 +9,9 @@ const hash = value => createHash('sha256').update(JSON.stringify(value)).digest(
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 export const FILE_WORKERS = { maximum: 4, scope: 'test files only; transitive CPU/thread demand unknown',
   formula: 'max(1, floor(4/loadFactor))', source: 'test/helpers/run.mjs' };
-export function resourceStanza(id, command) {
-  return { id, revision: 1, command, admission_class: 'EXCLUSIVE', M_bytes: null, C: null,
-    worker_caps: FILE_WORKERS, named_claims: [], evidence: ['test/helpers/run.mjs', 'lib/deadline.mjs', 'ARCH-649; ENG-353: envelopes unmeasured'] };
+export function resourceStanza(id, command, admissionClass = 'SHARED') {
+  return { id, revision: 1, command, admission_class: admissionClass, M_bytes: null, C: null,
+    worker_caps: FILE_WORKERS, named_claims: [], evidence: ['test/helpers/run.mjs', 'lib/deadline.mjs', 'ARCH-34: ordinary work starts immediately; only declared proving is exclusive'] };
 }
 export function workerSettings(env = process.env) {
   const factor = loadFactor();
@@ -44,9 +44,9 @@ export function resolveResource(argv, { cwd = process.cwd(), env = process.env, 
       }
     }
     if (!resource || !/^[\w:./-]+$/.test(resource.id ?? '') || !Number.isSafeInteger(resource.revision) || resource.revision < 1 ||
-        JSON.stringify(resource.command) !== JSON.stringify(argv) || resource.admission_class !== 'EXCLUSIVE' || !(resource.M_bytes === null || (Number.isSafeInteger(resource.M_bytes) && resource.M_bytes >= 0)) ||
+        JSON.stringify(resource.command) !== JSON.stringify(argv) || !['SHARED', 'EXCLUSIVE'].includes(resource.admission_class) || !(resource.M_bytes === null || (Number.isSafeInteger(resource.M_bytes) && resource.M_bytes >= 0)) ||
         !(resource.C === null || (Number.isSafeInteger(resource.C) && resource.C > 0)) || !resource.worker_caps ||
-        !Array.isArray(resource.named_claims) || resource.named_claims.length || !Array.isArray(resource.evidence)) return { admission_class: 'EXCLUSIVE', reason: 'unprofiled' };
+        !Array.isArray(resource.named_claims) || resource.named_claims.length || !Array.isArray(resource.evidence)) return { admission_class: 'SHARED', reason: 'unprofiled' };
     let target = null;
     try { target = execFileSync('git', ['-C', cwd, 'rev-parse', 'HEAD^{tree}'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { try { target = { release_commit: fs.readFileSync(path.join(cwd, '.release-commit'), 'utf8').trim() }; } catch { /* No invented input identity. */ } }
     // Environment values may be credentials. Bind all execution inputs by hash.
@@ -54,6 +54,6 @@ export function resolveResource(argv, { cwd = process.cwd(), env = process.env, 
     const binding = { argv, cwd: fs.realpathSync(cwd), recipe: resource.recipe ?? resource.command, target_identity: target,
       node: { executable: process.execPath, version: process.version }, platform: process.platform, arch: process.arch,
       environment_sha256: hash(environment), worker_caps: resource.worker_caps };
-    return { reason: 'profiled', admission_class: 'EXCLUSIVE', profile: { ...resource, binding, binding_sha256: hash(binding) } };
-  } catch { return { admission_class: 'EXCLUSIVE', reason: 'unprofiled' }; }
+    return { reason: 'profiled', admission_class: resource.admission_class, profile: { ...resource, binding, binding_sha256: hash(binding) } };
+  } catch { return { admission_class: 'SHARED', reason: 'unprofiled' }; }
 }

@@ -1,20 +1,79 @@
 # Host test slot
 
-Herdr Monitor supplies a dependency-free foreground slot for heavy validation in
-any project. Promotion-tier lane validation takes it before executing tests;
-reused green evidence needs no slot. The release supervisor takes it before
-cutting or claiming a candidate and keeps it through preparation and the gate.
-Worker fast checks use the same watchdog without taking the slot. The validation module carries this
-module, and this project's `npm run test:promotion` also takes it directly.
+Herdr Monitor supplies a dependency-free foreground command runner with shared
+occupancy, optional exclusive proving, process-family measurements and watchdogs.
+ARCH-34 records the operator's cross-project rule (2026-10-16): every job,
+including gates and releases, starts immediately and shares the machine; only a
+real, declared proving step pauses for a quiet machine at that step. Brain does
+no proving. Its promotion, release and validation profiles are **SHARED**, even
+before measurement. The promote memory gate and integration `lane-promote.lock`
+remain unchanged guards.
 
 ```sh
 node /path/to/herdr-monitor/test-slot/test-slot.mjs run promotion --wait 600 -- npm test
 node /path/to/herdr-monitor/test-slot/test-slot.mjs status
 ```
 
+## Classes and occupancy/v1
+
+A top-level `run` defaults to **shared**, including unprofiled commands from any
+project (`resource.reason: unprofiled`). Shared runs acquire no legacy,
+compatibility or workspace lock, publish no queue ticket and never poll those
+paths. They read holders once only to recognize nesting. They never wait on
+occupancy. One top-level record is published beside the selected workspace lock
+in `<lockPath>.occupancy/`; different concurrent runs have different filenames.
+Nested runs, even a declared-exclusive child of a shared holder, remain inside
+the existing command group, take nothing and publish no second record. Sampling
+belongs only to a profiled top-level holder.
+
+The versioned cross-project record contract is **occupancy/v1**. Its first field
+is `"schema": "occupancy/v1"`. Fields are:
+
+- `class: "shared"`, `pid`, nullable `processStart`, nullable `processBirth`;
+- nullable `pgid`, `groupStart` and `groupBirth` for the command group;
+- `acquiredAt` and `startedAt` (the same ISO time), `project` (project directory
+  label), `label` (job label) and `host`;
+- `reason` (`profiled` or `unprofiled`) and optional `profile_id`.
+
+No command text or token is recorded. Publication writes complete bytes to a
+hidden temporary file in the same directory, then renames it atomically; group
+updates also use atomic rename. The owner removes its record on success,
+failure, forwarded INT/TERM/HUP, timeout, spawn failure and exception. SIGKILL
+cannot run cleanup, so readers apply the stale rule instead. Status is read-only
+and includes `occupancy`; the reader can optionally prune confirmed stale rows.
+
+**Liveness:** ESRCH for the owner **and every recorded group** means stale.
+EPERM means live (reserved), never unknown. A start-identity mismatch proves an
+identity gone only after a successful process-source read; failed `ps` or denied
+identity reads cannot make a record stale. Brain uses its existing kernel birth
+reader instead of `ps` for that comparison. Nullable starts remain reserved
+while the PID/group exists. A dead group leader with surviving group members
+reserves the record. Unknown schema versions are skipped and never removed;
+malformed or unreadable records are retained. A reader may remove only records
+confirmed stale under these rules. Legacy BCH `scripts/test-slot` and old
+exclusive-create pollers read only the lock (and, for newer readers, `.queue`);
+they ignore `.occupancy/`.
+
+Only an exact declared profile with `admission_class: "EXCLUSIVE"` selects the
+existing exclusive path. That path's legacy lock, FIFO queue, one-token bridge,
+watchdog and conformance behavior remain unchanged. Declare the proving command
+in the calling project's `package.json.resources` with the matching script
+`command_sha256`, or in `test-slot/validation-resources.json` with the exact shell
+command. Use the same stanza fields described below, set `admission_class` to
+`EXCLUSIVE`, and wrap the proving step itself. For example:
+
+```json
+{"prove":{"id":"project/prove","revision":1,"command":"npm run prove","admission_class":"EXCLUSIVE","M_bytes":null,"C":null,"worker_caps":{},"named_claims":[],"evidence":["project proving declaration"]}}
+```
+
+That example belongs in `test-slot/validation-resources.json` and matches
+`run proving -- /bin/sh -c 'npm run prove'`. No project-name special case or
+shared throttling knob exists. The following lock/queue details apply only to
+**declared-exclusive proving**; watchdogs, limits and retries apply to both classes.
+
 The default lock is `/private/tmp/bch-cloak-test-slot.lock` on macOS and
 `/tmp/bch-cloak-test-slot.lock` on Linux. It uses bch-cloak ENG-725's holder schema
-and UTC/C process start identity, so existing bch-cloak gates exclude Monitor
+and UTC/C process start identity, so existing bch-cloak exclusive gates exclude declared-exclusive Monitor
 runs and vice versa. No source changes in that project are needed.
 
 Set `MONITOR_TEST_SLOT_PATH` to an absolute workspace-owned lock file path; its
@@ -59,8 +118,9 @@ tickets do not block and may be pruned only after their filename arrival is over
 the wait start, grant time and encountered holder descriptions. Waiting and
 refusal write no slot receipt. It also logs each new live
 holder with `TEST_SLOT_WAIT`. Without this option the existing coded CLI output
-stays unchanged. The promotion gate profile uses this receipt while holding the
-slot across its pre-gate build and entire train invocation. The legacy bridge
+stays unchanged. Shared admission writes the same grant sidecar immediately with `class: shared`,
+`occupancy_path` and no encountered waits. Declared-exclusive promotion profiles
+retain their grant across preparation and the train invocation. The legacy bridge
 and configured workspace slot share one deadline, so acquiring the bridge does
 not grant a fresh wait allowance for the second lock.
 
@@ -103,15 +163,15 @@ via the parent walk, never signal the shared group. Group-registration guards
 record their owner PID and birth identity; only a confirmed dead owner permits
 recovery, with a coded diagnostic naming the guard path. Age never permits recovery. A stale inherited token cannot authorize nesting.
 
-The lane promotion adapter holds the slot with timeout retry disabled, so it
+The lane promotion adapter runs with timeout retry disabled, so it
 never replays a command chain, including when a leaf declines to retry. Leaf
 wrappers and the release gate command may enable `--retry-timeout-under-load`: a
 nonzero timeout (exit 124, `ETIMEDOUT`, or the Node test runner's timeout marker)
 under measured load above one per available CPU (capacity capped at four) is
 re-run once, with the slot still held. The log includes
 `TEST_SLOT_TIMEOUT_RETRY` and both attempts. A second timeout counts as failure.
-The retry scope is the wrapped command. This project's promotion command holds
-the slot for the whole chain and wraps `test:promotion:core`, the focused
+The retry scope is the wrapped command. This project's shared promotion command spans
+the whole chain and wraps `test:promotion:core`, the focused
 `test:promotion:lanes` and mixed-file `test:promotion:logic` separately, so only
 the timed-out step reruns. The complete
 former chain (`test:core`, `test:cycle`, `test:lanes`, `test:acceptance`) now runs
@@ -121,9 +181,7 @@ again. When a containing wrapper initiates the retry, it passes
 `MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1` so descendants cannot add another attempt.
 Ordinary failures, signals and exit 75 never retry. The release claim and snapshot
 are created once; only its gate command can retry, never preparation or the
-release lifecycle. Gate commands must be safe to rerun after a timeout. This
-isolates other participating heavy suites, rather than stopping unrelated host
-work or relaxing any test deadline.
+release lifecycle. Gate commands must be safe to rerun after a timeout. Deadlines and retry scope remain the same for both execution classes.
 
 `npm run test:slot` exercises temporary locks and owned child groups offline;
 `npm test` includes it. These tests need kernel process reads and signal access and
@@ -219,12 +277,12 @@ and main stays unchanged.
 The timeout receipt distinguishes this from ordinary test failures and a slot
 wait refusal. Tests use scratch slot paths and never take the real host slot.
 
-## Resource profiles and measurements (exclusive migration step)
+## Resource profiles and measurements
 
-Admission remains **EXCLUSIVE** for every command. There is no capacity ledger,
-shared admission, named-claim enforcement, new lock record, or new ticket format.
-The v1.1 protocol and token aliases above are unchanged. Resource metadata never
-chooses admission, retries, deadlines, cleanup, or a validation verdict.
+Profiles choose shared execution or declared-exclusive proving. There is no
+capacity ledger, named-claim enforcement or new exclusive ticket/lock format.
+The v1.1 exclusive protocol and token aliases above are unchanged. Measurements
+never choose retries, deadlines, cleanup or a validation verdict.
 
 Profiles live with existing recipes: `package.json.resources` binds each named
 test script by its JSON-string SHA-256; `test-slot/validation-resources.json` binds
@@ -235,13 +293,12 @@ no resource metadata. `gate.resource` in a committed `.promote.json` may
 carry a stanza for a project's train; otherwise the train derives its stanza
 from a matching validation recipe. Its binding also includes preparation and the
 existing gate fingerprint. A configured arbitrary command does not inherit a
-nearby profile. Extra arguments or changed script bytes fall back to the legacy
-serialized path with `resource.reason: unprofiled`. Metadata is execution evidence,
-not authorization. The synchronous adapter can pass an exact-command `resource`
+nearby profile. Extra arguments or changed script bytes fall back to shared execution with `resource.reason: unprofiled`. The exact declaration selects the class and supplies execution evidence. The synchronous adapter can pass an exact-command `resource`
 stanza (`--resource JSON` on the CLI) for an owned recipe.
 
-Each stanza contains `id`, `revision`, exact command or script digest,
-`admission_class: EXCLUSIVE`, `M_bytes: null`, `C: null`, worker caps,
+Brain profiles use revision 2 for the ARCH-34 shared class. Each stanza contains
+`id`, `revision`, exact command or script digest,
+`admission_class: SHARED` (ordinary work) or `EXCLUSIVE` (proving), `M_bytes: null`, `C: null`, worker caps,
 `named_claims: []`, and evidence references. Memory envelopes and transitive
 simultaneous CPU-worker demand are **unknown**, awaiting necessary runs. The
 helper's `max(1, floor(4/loadFactor))` is a cap on simultaneous **test files**,
@@ -269,6 +326,7 @@ short-lived spikes, shared pages, GPU/VM/kernel allocations and other host work
 remain outside exact accounting. This is sampled evidence, not physical memory
 accounting or an OS limit.
 
+Execution and grant receipts include `class` and `occupancy_path` for shared work.
 Execution receipts include `resource`, `measurement`, and `measurement_attempts`
 (one phase per permitted retry inside the same hold). Metrics deliberately stay
 separate:
@@ -289,7 +347,7 @@ separate:
 `--measurement-notes TEXT` (adapter `measurementNotes`) supplies known cold/warm
 context; the default explicitly says it is unknown. Sampling and telemetry-write
 failures are retained as `partial-or-unavailable` evidence and do not change
-exclusive command results, timeout retries, or cleanup. No memory breach policy
+command results, timeout retries, or cleanup. No memory breach policy
 is enabled in this step. A measurement never supplies a review PASS.
 
 Explicit `--result-path` / adapter `executionReceipt` paths retain the existing
@@ -326,7 +384,7 @@ Each measurement's `telemetry` summary records `row_limit`, `rows_observed`,
 `rows_retained`, `rows_dropped`, `truncated` and `write_failures`; failed writes
 can leave an older tail and are also recorded as sampling failures. A truncated
 tail is diagnostic detail, not the full time series. The nominal 2,000 ms sample
-interval and admission behavior are unchanged.
+interval is unchanged.
 
 Summarize retained execution receipts without launching work:
 
@@ -341,5 +399,5 @@ explicit chosen margin it labels the result “observed max plus chosen margin,
 from N runs; provisional, not a guarantee”. Inspect the individual bindings,
 phase notes, missing samples and isolation evidence before adopting any envelope.
 Gather the first release and train envelopes on their next necessary runs;
-this feature starts no measurement campaign. Shared enablement and coordinated
-reader migration belong to the next rollout step.
+this feature starts no measurement campaign. Joint proving-step quiet admission belongs to the next rollout step; shared
+occupancy itself never gates work.

@@ -103,10 +103,10 @@ the batch for inspection. A job on one desk never touches another desk.
 Prepare argv follows `--prepare` and consumes all arguments up to `--`; command
 argv follows `--`. Put all submit options before `--prepare`. Neither phase uses
 an implicit shell; use `/bin/sh -c '…'` explicitly when needed. The optional
-prepare and command run in the same `test-slot run` hold with grant and result
+prepare and command run in the same shared `test-slot run` family with grant and result
 sidecars. Preparation failure is `error` and skips the command. Every job has a
 positive wall cap (default 4500 seconds), positive no-output cap (default 300
-seconds), and bounded slot wait (`--wait`, default 86400 seconds). Caps cover
+seconds), and a bounded declared-proving slot wait (`--wait`, default 86400 seconds). Caps cover
 prepare plus command, starting after slot grant. Jobs never retry automatically.
 An outer host hold leaves 60 seconds beyond those caps for cleanup; a nested
 job watchdog enforces the requested caps. The coordinator keeps that hold until

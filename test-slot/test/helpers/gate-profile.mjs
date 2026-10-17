@@ -1,3 +1,4 @@
+import { provingResource } from './proving.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -40,7 +41,7 @@ export function fixture(t, { externalLock = false, ...changes } = {}) {
   fs.writeFileSync(path.join(repo, '.gitignore'), 'dist/\n');
   fs.writeFileSync(path.join(repo, 'prep.cjs'), `const fs=require('fs'),assert=require('assert/strict');assert(process.env.BCH_CLOAK_TEST_SLOT_TOKEN);assert.equal(JSON.parse(fs.readFileSync(${JSON.stringify(slot)})).token,process.env.BCH_CLOAK_TEST_SLOT_TOKEN);const lock=JSON.parse(fs.readFileSync('.promote.json')).gate.external_lock;if(lock){const r=require('child_process').spawnSync('/bin/zsh',['-f','-c','zmodload zsh/system; zsystem flock -t 0 -f fd "$1"','probe',lock],{env:process.env,timeout:${loadTimeout(5000)}});assert.notEqual(r.status,null,'legacy kernel lock probe completes within its bound');assert.notEqual(r.status,0,'legacy kernel lock stays held during preparation');}fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/prepared','prepared');`);
   fs.writeFileSync(path.join(repo, 'gate.cjs'), `const fs=require('fs'),assert=require('assert/strict'),net=require('net');assert.equal(fs.readFileSync('dist/prepared','utf8'),'prepared');assert.equal(process.env.PROFILE_VALUE,'declared');assert.equal(process.env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS,'7200');assert.equal(JSON.parse(fs.readFileSync(${JSON.stringify(slot)})).token,process.env.BCH_CLOAK_TEST_SLOT_TOKEN);const fd=fs.openSync('/dev/ptmx','r+');fs.closeSync(fd);const s=net.createServer();s.listen(0,'127.0.0.1',()=>s.close(()=>fs.appendFileSync(process.env.PROFILE_EVIDENCE,JSON.stringify({node:process.execPath,version:process.version,token:process.env.BCH_CLOAK_TEST_SLOT_TOKEN})+'\\n')));`);
-  const gate = { node_version_file: '.nvmrc', env: { PROFILE_VALUE: 'declared', BCH_CLOAK_TEST_SLOT_WAIT_SECONDS: '7200' },
+  const gate = { resource: provingResource(null), node_version_file: '.nvmrc', env: { PROFILE_VALUE: 'declared', BCH_CLOAK_TEST_SLOT_WAIT_SECONDS: '7200' },
     prepare: [{ run: 'node prep.cjs' }], wait_seconds: 1,
     ...(externalLock ? { external_lock: path.join(root, 'promote.flock') } : {}), ...changes };
   const declare = () => { fs.writeFileSync(path.join(repo, '.promote.json'), JSON.stringify({ gate })); git(['add', '.']); git(['commit', '-qm', 'Profile']); };

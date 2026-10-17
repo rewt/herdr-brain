@@ -1,3 +1,4 @@
+import { provingRun } from './proving.mjs';
 // Fixed native-group scenarios, invoked only by detached-fixture.mjs. Their
 // original process-group assertions require real detachment, while the normal
 // test runner deliberately contains arbitrary product children in its group.
@@ -20,7 +21,7 @@ const lock = path.join(root, 'slot'), result = path.join(root, 'result.json');
 const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
   HERDR_NATIVE_GROUP_FIXTURE_ROOT: root, NODE_OPTIONS: `--import=${JSON.stringify(preload)}` };
 const run = (args, command) => spawnSync(process.execPath,
-  [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command],
+  provingRun([cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command]),
   { cwd: root, env, encoding: 'utf8', timeout: 15000 });
 async function until(predicate) {
   const deadline = Date.now() + 5000;
@@ -32,8 +33,8 @@ if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid aft
   const ready = path.join(root, 'ready');
   let holder;
   t.after(async () => { if (holder) await stopGateGroup(holder.pgid); });
-  const owner = spawnChild(t, process.execPath, [cli, 'run', 'outer', '--project-common', root, '--', process.execPath, cli, 'run', 'inner', '--project-common', root, '--', process.execPath, '-e',
-    `require('fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`], { cwd: root, env });
+  const owner = spawnChild(t, process.execPath, provingRun([cli, 'run', 'outer', '--project-common', root, '--', process.execPath, cli, 'run', 'inner', '--project-common', root, '--', process.execPath, '-e',
+    `require('fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`]), { cwd: root, env });
   await until(() => fs.existsSync(ready));
   holder = JSON.parse(fs.readFileSync(lock));
   const leaf = Number(fs.readFileSync(ready));

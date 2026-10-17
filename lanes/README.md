@@ -294,9 +294,10 @@ messages. Use [the brief template](docs/BRIEF_TEMPLATE.md) when dispatching work
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
 
-Promotion validation takes the [host test slot](../test-slot/README.md), shared
-with other projects and bch-cloak. Set its paths and wait budget at the workspace
-boundary. CLI exit 75 is a pre-execution slot refusal and supplies no GATE line
+Promotion validation uses the [host runner](../test-slot/README.md). Under ARCH-34,
+Brain gates start immediately with shared occupancy. Only a project-declared
+exclusive proving profile takes the host slot. Set paths and any proving wait
+budget at the workspace boundary. CLI exit 75 is a pre-execution slot refusal and supplies no GATE line
 or failed validation receipt; retry or queue when the holder finishes. A command
 that starts and exits 75 is a validation failure: check and promote exit 1,
 while the GATE line (for check) and failed receipt retain the command's exit 75.

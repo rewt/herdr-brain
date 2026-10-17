@@ -1,3 +1,4 @@
+import { provingRun } from './helpers/proving.mjs';
 // Ported ENG-725 regressions: the host-wide test slot. Every case uses its own lock path, never the real one, and scrubs the slot's
 // environment, so these tests run the same inside a held slot (the full gate) as outside it. They use the non-setuid kernel process source.
 import assert from "node:assert/strict";
@@ -51,7 +52,7 @@ const nodeCommand = (ready, body = "setInterval(() => {}, 1000);") => {
 
 /** Starts the CLI; resolves `done` with its exit code and stderr. */
 function cli(args, { env = ENV } = {}) {
-  const child = spawn(process.execPath, [CLI, ...args], { cwd: REPO, env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, [CLI, ...provingRun(args)], { cwd: REPO, env, stdio: ["ignore", "pipe", "pipe"] });
   children.push(child);
   let stdout = ""; let stderr = "";
   child.stdout.on("data", (d) => { stdout += String(d); });

@@ -1,9 +1,9 @@
 {
   "fast": {
     "id": "herdr/validation/fast",
-    "revision": 1,
+    "revision": 2,
     "command": "npm run test:fast",
-    "admission_class": "EXCLUSIVE",
+    "admission_class": "SHARED",
     "M_bytes": null,
     "C": null,
     "worker_caps": {
@@ -17,14 +17,14 @@
       ".lane.validation.json",
       "package.json",
       "test/helpers/run.mjs",
-      "ARCH-649; ENG-353: envelopes unmeasured"
+      "ARCH-34: ordinary work starts immediately; only declared proving is exclusive"
     ]
   },
   "promotion": {
     "id": "herdr/validation/promotion",
-    "revision": 1,
+    "revision": 2,
     "command": "npm run test:promotion",
-    "admission_class": "EXCLUSIVE",
+    "admission_class": "SHARED",
     "M_bytes": null,
     "C": null,
     "worker_caps": {
@@ -38,14 +38,14 @@
       ".lane.validation.json",
       "package.json",
       "test/helpers/run.mjs",
-      "ARCH-649; ENG-353: envelopes unmeasured"
+      "ARCH-34: ordinary work starts immediately; only declared proving is exclusive"
     ]
   },
   "release": {
     "id": "herdr/validation/release",
-    "revision": 1,
+    "revision": 2,
     "command": "npm run test:release",
-    "admission_class": "EXCLUSIVE",
+    "admission_class": "SHARED",
     "M_bytes": null,
     "C": null,
     "worker_caps": {
@@ -59,7 +59,7 @@
       ".lane.validation.json",
       "package.json",
       "test/helpers/run.mjs",
-      "ARCH-649; ENG-353: envelopes unmeasured"
+      "ARCH-34: ordinary work starts immediately; only declared proving is exclusive"
     ]
   }
 }

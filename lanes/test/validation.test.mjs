@@ -285,7 +285,7 @@ test('overlapping checks serialize evidence without running the same command twi
   assert.match(f.good(f.lane(['check'])), /REUSE/);
 });
 
-test('promotion checks in different projects serialize and a nested command uses the held slot', { timeout: 30000 }, async t => {
+test('shared promotion checks in different projects overlap and a nested command takes nothing', { timeout: 30000 }, async t => {
   const first = fixture(t, { promotion: 'node block.cjs' });
   const second = fixture(t, { promotion: 'node check.cjs second' });
   const lock = path.join(first.root, 'shared.lock'), ready = path.join(first.root, 'ready'), release = path.join(first.root, 'release');
@@ -299,17 +299,22 @@ test('promotion checks in different projects serialize and a nested command uses
   const b = spawnChild(t, process.execPath, [cli, 'check', '--tier', 'promotion'], { cwd: second.workspace, env: second.env });
   const bDone = waitForExit(b);
   try {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    assert.deepEqual(second.count(), [], 'second project cannot start its tests while the first holds');
-    assert.equal(JSON.parse(fs.readFileSync(lock, 'utf8')).label, `promotion ${first.workspace}`);
+    const completed = await bDone; assert.equal(completed.code, 0, completed.stderr);
+    assert.deepEqual(second.count(), ['second'], 'second project completes while the first still runs');
+    assert.equal(fs.existsSync(lock), false);
   } finally { fs.writeFileSync(release, 'finish'); }
   for (const result of await Promise.all([aDone, bDone])) assert.equal(result.code, 0, result.stderr + result.stdout);
   assert.deepEqual(second.count(), ['second']);
   assert.equal(fs.existsSync(lock), false);
 });
 
-test('bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt', { timeout: 20000 }, async t => {
+test('bch-cloak-compatible holder refuses declared-exclusive proving promotion with 75 and supplies no failed receipt', { timeout: 20000 }, async t => {
   const f = fixture(t, { promotion: 'node check.cjs forbidden', fast: 'node check.cjs fast' });
+  fs.mkdirSync(path.join(f.workspace, 'test-slot'));
+  fs.writeFileSync(path.join(f.workspace, 'test-slot/validation-resources.json'), JSON.stringify({
+    proving: resourceStanza('fixture/proving', 'node check.cjs forbidden', 'EXCLUSIVE'),
+  }));
+  f.git(['add', '.'], f.workspace); f.git(['commit', '-qm', 'Declare proving fixture'], f.workspace);
   const lock = path.join(f.root, 'bch-cloak-test-slot.lock');
   const holder = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)'], { env: f.env });
   // Same on-disk schema and UTC/C start identity as the existing bch-cloak slot.

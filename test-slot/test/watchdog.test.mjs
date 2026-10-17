@@ -1,3 +1,4 @@
+import { provingRun } from './helpers/proving.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -189,10 +190,10 @@ async function until(predicate) {
 }
 test('slot waiting consumes none of a short command deadline', { timeout: 10000 }, async t => {
   const s = scratch(t), ready = path.join(s.root, 'ready');
-  const owner = spawnChild(t, process.execPath, [cli, 'run', 'owner', '--project-common', s.root, '--timeout-seconds', '3', '--', process.execPath, '-e',
-    `require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setTimeout(()=>{},1000);`], { cwd: s.root, env: s.env });
+  const owner = spawnChild(t, process.execPath, provingRun([cli, 'run', 'owner', '--project-common', s.root, '--timeout-seconds', '3', '--', process.execPath, '-e',
+    `require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setTimeout(()=>{},1000);`]), { cwd: s.root, env: s.env });
   await until(() => fs.existsSync(ready));
-  const waiter = spawnChild(t, process.execPath, [cli, 'run', 'waiter', '--project-common', s.root, '--wait', '3', '--timeout-seconds', '.3', '--result-path', s.result, '--', process.execPath, '-e', 'setTimeout(()=>{},50)'], { cwd: s.root, env: s.env });
+  const waiter = spawnChild(t, process.execPath, provingRun([cli, 'run', 'waiter', '--project-common', s.root, '--wait', '3', '--timeout-seconds', '.3', '--result-path', s.result, '--', process.execPath, '-e', 'setTimeout(()=>{},50)']), { cwd: s.root, env: s.env });
   const began = Date.now(), result = await waitForExit(waiter); await waitForExit(owner);
   assert.equal(result.code, 0, result.stderr); assert.ok(Date.now() - began > 800);
   const receipt = JSON.parse(fs.readFileSync(s.result)); assert.ok(receipt.duration_s < .3);

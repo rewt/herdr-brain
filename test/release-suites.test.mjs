@@ -35,7 +35,7 @@ test('growing directories add bounded suites without losing or repeating files',
   assert.throws(() => releasePhases(['a', 'a']), /unique/);
 });
 
-test('release scripts hold the slot without retrying the entire release inventory', () => {
+test('release scripts retain one shared family without retrying the entire release inventory', () => {
   const scripts = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).scripts;
   assert.match(scripts['test:release:only'], /^node test-slot\/test-slot.mjs run test:release:only -- node test\/helpers\/release-suites.mjs --file-timeout=480000 --suite-timeout=540000$/);
   assert.ok(scripts['test:release:steps'].endsWith(' && npm run test:release:only'));
@@ -57,7 +57,7 @@ async function scenario(t, failure) {
 import fs from 'node:fs';
 const log=${JSON.stringify(log)}, file=${JSON.stringify(file)};
 const before=fs.existsSync(log)?fs.readFileSync(log,'utf8').trim().split('\\n').map(JSON.parse):[];
-fs.appendFileSync(log,JSON.stringify({file,token:process.env.MONITOR_TEST_SLOT_TOKEN})+'\\n');
+fs.appendFileSync(log,JSON.stringify({file,occupancy:fs.readdirSync(${JSON.stringify(lock + '.occupancy')}).filter(name=>!name.startsWith('.'))})+'\\n');
 ${i === 1 ? failure : ''}
 `);
   }
@@ -71,8 +71,8 @@ ${i === 1 ? failure : ''}
   });
   const result = await waitForExit(child);
   const attempts = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(new Set(attempts.map(row => row.token)).size, 1, 'all suites and retries retain the same slot');
-  assert.ok(attempts[0].token);
+  assert.ok(attempts.every(row => row.occupancy.length === 1));
+  assert.equal(new Set(attempts.map(row => row.occupancy[0])).size, 1, 'all suites and retries retain the same occupancy');
   assert.equal(fs.existsSync(lock), false, result.stdout + result.stderr);
   return { ...result, attempts: attempts.map(row => row.file), files };
 }

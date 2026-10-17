@@ -60,6 +60,17 @@ test('housekeeping HOLD keeps the request pending, and dry-run never acknowledge
   r.tick(); assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
 });
 
+test('a non-cleanup housekeeping tick prunes an absent callback receipt', t => {
+  const f = fixture(t), r = runner(t, f), file = path.join(f.org, 'retirement/occupants/absent.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ schema: 'retirement-occupant/v1', kind: 'watcher', common: f.common,
+    cwd: f.lane, workspace: 'w', tab: 'absent:t', pane: 'absent:p',
+    shell: { pid: 1, identity: 'shell', command: '[zsh]' }, process: { pid: 2, identity: 'watcher', command: '[node]' } }));
+  r.tick();
+  assert.equal(fs.existsSync(file), false);
+  assert.deepEqual(f.read().actions, []);
+});
+
 test('an old duplicate trigger consumed after tab reuse cannot close its new occupant', t => {
   const f = fixture(t), r = runner(t, f);
   requestRetirement({ org: f.org, eventSeq: 4, source: 'old completion' });
@@ -175,6 +186,27 @@ test('idle notice is coalesced, durable across restarts, resets on occupant chan
   tick('2026-01-06T01:00:02Z'); tick('2026-01-07T01:00:03Z');
   assert.equal(notices.length, 3); assert.match(notices[2].message, /lane close 'topic'/);
   assert.deepEqual(fs.readFileSync(f.eventFile), before);
+});
+
+test('an idle row lacking release identity logs its hold once and notifies once across ticks', t => {
+  const f = fixture(t), stateDir = path.join(f.scratch, 'held-notice'), logs = [], notices = [];
+  const row = { type: 'tab', class: 'IDLE-NONTERMINAL', workspace: 'w', tab: 'w:t', run: 'R-1', lane: 'topic',
+    reason: 'review, correction or integration chain is still open', nextActor: 'supervisor', recommendation: null };
+  const tick = (generatedAt, extra = {}) => noticeIdleRetirement({ status: { generatedAt, rows: [row] },
+    snapshot: { common: f.common, agents: f.state.agents }, stateDir, log: entry => logs.push(entry),
+    enqueue: (_to, message, options) => { notices.push(message); return { id: options.id }; }, ...extra });
+  tick('2026-01-01T00:00:00Z');
+  tick('2026-01-02T00:00:01Z', { dryRun: true });
+  assert.equal(logs.filter(row => row.action === 'retirement-notice-held').length, 0);
+  assert.equal(notices.length, 0);
+  // A failed enqueue must not repeat the held log, but must remain retryable.
+  assert.throws(() => tick('2026-01-02T00:00:01Z', { enqueue: () => { throw Error('enqueue unavailable'); } }), /enqueue unavailable/);
+  for (const generatedAt of ['2026-01-02T00:00:02Z', '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z']) tick(generatedAt);
+  assert.equal(logs.filter(row => row.action === 'retirement-notice-held').length, 1);
+  assert.equal(notices.length, 1);
+  assert.match(notices[0], /lane topic/); assert.match(notices[0], /exact release identity unavailable/);
+  const [receipt] = Object.values(read(path.join(stateDir, 'retirement-notices.json')));
+  assert.equal(receipt.held, true); assert.ok(receipt.sent);
 });
 
 test('missing/prunable worktrees retain their own reason, lane and canonical owner without pruning', async t => {

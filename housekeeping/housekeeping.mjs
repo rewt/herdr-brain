@@ -139,8 +139,10 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       } catch (error) { log({ action: 'retirement-failed', error: error.message }); }
     }
     const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
-    if (!workspacePath) noticeIdleRetirement({ status: retirementStatus(snapshot, { generatedAt: now }), snapshot,
-      stateDir, cwd, org, herdr, dryRun, log });
+    if (!workspacePath) try {
+      noticeIdleRetirement({ status: retirementStatus(snapshot, { generatedAt: now }), snapshot,
+        stateDir, cwd, org, herdr, dryRun, log });
+    } catch (error) { log({ action: 'retirement-notice-failed', error: error.message }); }
     const selected = workspacePath ? new Set(snapshot.workspaces.filter(w => canonicalPath(w.worktree.checkout_path) === canonicalPath(workspacePath)).map(w => w.workspace_id)) : null;
     const allPlan = cleanup ? tidy(snapshot) : { close: [], keep: [] };
     const plan = selected ? { ...allPlan, close: allPlan.close.filter(t => selected.has(t.workspace_id)), keep: allPlan.keep.filter(t => selected.has(t.workspace_id)) } : allPlan;
@@ -148,7 +150,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     for (const tab of plan.keep) log({ action: 'keep', ...tab, dryRun });
     for (const diagnostic of plan.diagnostics ?? []) log({ action: 'reference-diagnostic', ...diagnostic });
     if (dryRun) for (const tab of plan.close) log({ action: 'would-close', ...tab });
-    else if (cleanup && !consumed?.results) retirement.apply(plan, workspacePath, snapshot);
+    else if (!consumed?.results) retirement.apply(plan, workspacePath, snapshot);
     if (resume) for (const agent of snapshot.agents) {
       const run = candidate(snapshot, agent);
       if (!run || seen.has(resumeKey(run, agent))) continue;

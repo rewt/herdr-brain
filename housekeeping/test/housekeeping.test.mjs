@@ -80,6 +80,49 @@ test('recorded promoted workers close through the shared tidy planner', (t) => {
   assert.match(f.logs.find((x) => x.action === 'closed').why, /R-1/);
 });
 
+for (const failure of ['enqueue', 'corrupt notice state']) test(`notice failure never stalls cleanup or resume: ${failure}`, t => {
+  const f = fixture(t, { reported: false }), finishedLane = path.join(f.root, 'finished');
+  f.git(['worktree', 'add', '-b', 'lane/finished', finishedLane]);
+  f.tabs[0].workspace_id = 'w'; f.panes[0].workspace_id = 'w';
+  f.ws.push({ workspace_id: 'finished', worktree: { checkout_path: finishedLane,
+    repo_root: f.repo, repo_key: f.common, is_linked_worktree: true } });
+  for (const [name, run, item, seq] of [['finished', 'R-2', 'ENG-2', 5], ['old-idle', 'R-3', 'ENG-3', 8]]) {
+    const agent = { ...f.agent, name, workspace_id: 'finished', cwd: finishedLane,
+      pane_id: `finished:${name}:p`, tab_id: `finished:${name}:t`, terminal_id: `${name}-terminal` };
+    f.agents.push(agent); f.tabs.push({ tab_id: agent.tab_id, workspace_id: 'finished' });
+    f.panes.push({ pane_id: agent.pane_id, tab_id: agent.tab_id, workspace_id: 'finished' });
+    f.runs.push({ id: run, item, workspace: finishedLane, started: { seq }, report: { seq: seq + 1, outcome: 'done' },
+      meta: { agent: name, pane: agent.pane_id, worker_workspace: 'finished', terminal_id: agent.terminal_id, lane: 'finished' } });
+    f.items.push({ id: item, role: 'engineer', closed: name === 'finished' ? { as: 'done', seq: seq + 2 } : null });
+  }
+  f.runs.push({ id: 'R-4', item: 'ENG-3', workspace: finishedLane, started: { seq: 12 },
+    report: { seq: 13, outcome: 'done' }, meta: { agent: 'successor', pane: 'other:p', terminal_id: 'other-terminal' } });
+  const stateDir = path.join(f.root, 'notice-state');
+  const command = (exe, args, options) => {
+    if (exe === 'fake-herdr' && ['tab', 'pane'].includes(args[0]) && args[1] === 'list') {
+      const key = args[0] === 'tab' ? 'tabs' : 'panes';
+      return { status: 0, stdout: JSON.stringify({ result: { [key]: f[key].filter(row => row.workspace_id === args.at(-1)) } }) };
+    }
+    return f.command(exe, args, options);
+  };
+  const run = f.runner({ stateDir, command });
+  run.tick({ cleanup: false, resume: false, now: '2026-01-01T00:00:00Z' });
+  const stateFile = path.join(stateDir, 'retirement-notices.json');
+  assert.equal(Object.keys(JSON.parse(fs.readFileSync(stateFile))).length, 1, 'a real idle row must reach notice bookkeeping');
+  if (failure === 'enqueue') {
+    const prior = process.env.SUPERVISOR_INPUT_WAIT_SECONDS;
+    process.env.SUPERVISOR_INPUT_WAIT_SECONDS = 'invalid';
+    t.after(() => { if (prior === undefined) delete process.env.SUPERVISOR_INPUT_WAIT_SECONDS; else process.env.SUPERVISOR_INPUT_WAIT_SECONDS = prior; });
+  } else fs.writeFileSync(stateFile, '{invalid JSON');
+  for (let tick = 0; tick < 2; tick++) run.tick({ now: `2026-01-02T00:00:0${tick + 1}Z` });
+  const failures = f.logs.filter(row => row.action === 'retirement-notice-failed');
+  assert.equal(failures.length, 2);
+  assert.ok(failures.every(row => failure === 'enqueue' ? /SUPERVISOR_INPUT_WAIT_SECONDS/.test(row.error) : /JSON|property name/i.test(row.error)));
+  assert.equal(f.actions.filter(args => args[0] === 'tab' && args[1] === 'close' && args[2] === 'finished:finished:t').length, 2);
+  assert.equal(f.actions.filter(args => args[0] === 'agent' && args[1] === 'prompt' && args[2] === 'w:p').length, 2);
+  assert.equal(f.logs.filter(row => row.action === 'resumed').length, 2);
+});
+
 test('the housekeeping CLI record reader loads confirmed handoffs and reserves the successor', t => {
   const f = fixture(t, { reported: false });
   const newer = { ...f.run, id: 'R-2', started: { seq: 2 }, meta: { ...f.run.meta,

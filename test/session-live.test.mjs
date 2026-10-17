@@ -164,13 +164,15 @@ async function unresolvedStart(t) {
   const result=await f.apply();assert.equal(result.decisions[0].decision,'Hold');assert.equal(starts(f).length,0);
   const op=readControllerJournal(f.project.common).operations[0];
   const source=path.join(f.scratch,'failed-apply.json');fs.writeFileSync(source,JSON.stringify(result));
+  const now=Date.now(); // Disposition freshness must not depend on fake-process spawn time.
   const d={schema:'session-start-disposition/v1',common:f.project.common,operationId:op.id,operationDigest:digest(op),
     target:{...op.target,terminalId:'term'},outcome:'never-started',launchInvoked:false,shellOnly:true,
     agentPresent:false,sessionPresent:false,launchPending:false,role:'supervisor',actor:'fixture-supervisor',
-    observedAt:new Date().toISOString(),reason:'Adapter parse failed during marker probe before agent start; marker seen in shell-only pane.',
+    observedAt:new Date(now).toISOString(),reason:'Adapter parse failed during marker probe before agent start; marker seen in shell-only pane.',
     evidence:[{file:source,sha256:createHash('sha256').update(fs.readFileSync(source)).digest('hex')}]};
   const dispositionFile=path.join(f.scratch,'disposition.json');fs.writeFileSync(dispositionFile,JSON.stringify(d));
-  const options={cwd:f.cwd,workspace:'w',authorization:f.auth().file,operationId:op.id,dispositionFile,role:d.role,actor:d.actor,env:f.env};
+  const options={cwd:f.cwd,workspace:'w',authorization:f.auth({now:()=>now}).file,operationId:op.id,dispositionFile,
+    role:d.role,actor:d.actor,env:f.env,now:()=>now};
   return {...f,op,d,source,dispositionFile,dispose:()=>disposeStart(options),disposeOptions:options};
 }
 test('explicit never-started disposition retains the intent and permits a newly planned start once', async t => {
@@ -198,12 +200,18 @@ test('CLI dispose-start records only the explicitly named never-started intent b
 });
 test('never-started disposition refuses uncertain claims, stale/foreign evidence, sources, receipts and launch context', async t => {
   const f=await unresolvedStart(t), original=fs.readFileSync(f.dispositionFile), journal=fs.readFileSync(runtimePaths(f.project.common).journal);
-  for(const edit of [d=>delete d.launchInvoked,d=>d.launchInvoked=true,d=>d.shellOnly=false,d=>d.agentPresent=true,
-    d=>d.sessionPresent=true,d=>d.launchPending=true,d=>d.operationId='other',d=>d.operationDigest='0'.repeat(64),
-    d=>d.common=f.scratch,d=>d.target.terminalId='changed',d=>d.observedAt='2020-01-01T00:00:00Z',d=>d.evidence=[],
-    d=>d.evidence[0].sha256='0'.repeat(64)]) {
+  const invalid=/invalid or mismatched never-started evidence/;
+  for(const [edit, expected] of [
+    [d=>delete d.launchInvoked,invalid], [d=>d.launchInvoked=true,invalid],
+    [d=>d.shellOnly=false,invalid], [d=>d.agentPresent=true,invalid],
+    [d=>d.sessionPresent=true,invalid], [d=>d.launchPending=true,invalid],
+    [d=>d.operationId='other',invalid], [d=>d.operationDigest='0'.repeat(64),invalid],
+    [d=>d.common=f.scratch,invalid], [d=>d.target.terminalId='changed',/changed topology or agent present/],
+    [d=>d.observedAt='2020-01-01T00:00:00Z',/never-started evidence is stale/], [d=>d.evidence=[],invalid],
+    [d=>d.evidence[0].sha256='0'.repeat(64),/disposition source hash changed/]
+  ]) {
     const d=structuredClone(f.d);edit(d);fs.writeFileSync(f.dispositionFile,JSON.stringify(d));
-    assert.throws(f.dispose);assert.deepEqual(fs.readFileSync(runtimePaths(f.project.common).journal),journal);
+    assert.throws(f.dispose,expected);assert.deepEqual(fs.readFileSync(runtimePaths(f.project.common).journal),journal);
     assert.equal((await f.plan()).decisions[0].decision,'Hold');
   }
   fs.writeFileSync(f.dispositionFile,original);
@@ -220,11 +228,16 @@ test('never-started disposition refuses uncertain claims, stale/foreign evidence
 });
 test('never-started disposition and planning hold with an agent, session, pending launch, busy or changed pane', async t => {
   const f=await unresolvedStart(t), native=f.read(), original=fs.readFileSync(runtimePaths(f.project.common).journal);
-  for(const edit of [s=>s.agents.push({name:'unexpected',pane_id:'pane',terminal_id:'term'}),s=>s.panes[0].agent='claude',
-    s=>s.panes[0].agent_session={value:'native'},s=>s.panes[0].agent_session={},s=>s.panes[0].launch_pending=true,s=>s.panes[0].restore_error='unknown',
-    s=>s.busy=true,s=>s.panes[0].terminal_id='other',s=>s.tabs=[]]) {
+  const topology=/changed topology or agent present/, shell=/sole shell, session absence or launch state is uncertain/;
+  for(const [edit, expected] of [
+    [s=>s.agents.push({name:'unexpected',pane_id:'pane',terminal_id:'term'}),topology],
+    [s=>s.panes[0].agent='claude',shell], [s=>s.panes[0].agent_session={value:'native'},shell],
+    [s=>s.panes[0].agent_session={},shell], [s=>s.panes[0].launch_pending=true,shell],
+    [s=>s.panes[0].restore_error='unknown',shell], [s=>s.busy=true,shell],
+    [s=>s.panes[0].terminal_id='other',topology], [s=>s.tabs=[],topology]
+  ]) {
     fs.writeFileSync(f.state,JSON.stringify(native));f.change(edit);
-    assert.throws(f.dispose);assert.deepEqual(fs.readFileSync(runtimePaths(f.project.common).journal),original);
+    assert.throws(f.dispose,expected);assert.deepEqual(fs.readFileSync(runtimePaths(f.project.common).journal),original);
     assert.equal((await f.plan()).decisions[0].decision,'Hold');
   }
   fs.writeFileSync(f.state,JSON.stringify(native));f.dispose();

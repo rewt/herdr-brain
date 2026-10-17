@@ -65,7 +65,7 @@ export function sharedOccupancy(lockPath, label, resource) {
   const name = `${process.pid}-${randomBytes(16).toString('hex')}`;
   const file = path.join(directory, `${name}.json`), temporary = path.join(directory, `.${name}.tmp`);
   const holder = { schema: 'occupancy/v1', pid: process.pid, processStart: identity.start, processBirth: identity.birth,
-    pgid: null, groupStart: null, groupBirth: null, label, host: os.hostname(),
+    pgid: null, groupStart: null, groupBirth: null, label, cwd: process.cwd(), host: os.hostname(),
     project: path.basename(process.cwd()), acquiredAt: new Date().toISOString(), class: 'shared', reason: resource.reason,
     ...(resource.profile ? { profile_id: resource.profile.id } : {}) };
   holder.startedAt = holder.acquiredAt;

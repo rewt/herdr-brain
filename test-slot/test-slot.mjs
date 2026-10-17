@@ -407,7 +407,8 @@ export async function run({ positional, options, child }) {
   const historyKey = options.historyKey ?? gateHistoryKey(tier, child);
   const limits = resolveGateLimits({ ...options, common, tier, historyKey, command: child });
   const historyPath = historyFile(common, tier, child, historyKey);
-  const resource = resolveResource(child, { resource: options.resource });
+  const { declaration, ...resource } = resolveResource(child, { resource: options.resource });
+  if (resource.rejection) process.stderr.write(`${resource.reason}; admission ${resource.admission_class}\n`);
   let slot;
   const waiting = new AbortController();
   const cancelWait = signal => { waiting.abort(signal); removeWaitingTickets(); };

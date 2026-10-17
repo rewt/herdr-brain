@@ -34,13 +34,13 @@ test('profiles bind actual recipes, arguments, environment and input identity wi
   assert.match(resource.profile.worker_caps.scope, /transitive.*unknown/);
   assert.equal(JSON.stringify(resource).includes('secret-value'), false);
   assert.notEqual(resolveResource(argv, { cwd: source, env: {} }).profile.binding_sha256, resource.profile.binding_sha256);
-  assert.equal(resolveResource([...argv, '--', '--extra'], { cwd: source }).reason, 'unprofiled');
+  assert.match(resolveResource([...argv, '--', '--extra'], { cwd: source }).reason, /TEST_SLOT_PROFILE_REJECTED.*failed command$/);
   assert.equal(resolveResource(['/bin/sh', '-c', 'npm run test:release'], { cwd: source }).reason, 'profiled');
   assert.equal(resolveResource(['/bin/sh', '-c', 'npm run test:release; arbitrary'], { cwd: source }).reason, 'unprofiled');
   const f = fixture(t), pkg = JSON.parse(fs.readFileSync(path.join(source, 'package.json')));
   pkg.scripts['test:release:steps'] += ' && arbitrary';
   fs.writeFileSync(path.join(f.root, 'package.json'), JSON.stringify(pkg));
-  assert.equal(resolveResource(argv, { cwd: f.root }).reason, 'unprofiled');
+  assert.match(resolveResource(argv, { cwd: f.root }).reason, /TEST_SLOT_PROFILE_REJECTED.*failed command_sha256$/);
   const workers = workerSettings(); assert.ok(workers.test_file_cap >= 1 && workers.test_file_cap <= 4); assert.equal(workers.transitive_cpu_bound, null);
 });
 
@@ -52,7 +52,7 @@ test('all participating named npm recipes have a bound shared profile', () => {
   }
   const script = ['node', 'test/helpers/release-suites.mjs', '--file-timeout=480000', '--suite-timeout=540000'];
   assert.equal(resolveResource(script, { cwd: source }).reason, 'profiled');
-  assert.equal(resolveResource([...script, '--unknown'], { cwd: source }).reason, 'unprofiled');
+  assert.match(resolveResource([...script, '--unknown'], { cwd: source }).reason, /TEST_SLOT_PROFILE_REJECTED.*failed command$/);
 });
 
 test('sampling walks owned births only, retains escaped descendants and excludes replacement PIDs and foreign groups', () => {

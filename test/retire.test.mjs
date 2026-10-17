@@ -295,6 +295,41 @@ test('generic promote and trusted verify sources are read-only and include inter
   assert.equal(fs.readFileSync(file, 'utf8'), bytes);
 });
 
+for (const state of ['live', 'gone', 'EPERM']) for (const match of ['cwd', 'label'])
+  test(`shared occupancy ${state} matched by ${match} participates in tab and lane retirement without pruning`, t => {
+    const f = referenceFixture(t), common = path.join(f.org, 'common'), lock = path.join(f.org, 'slot');
+    const directory = `${lock}.occupancy`, file = path.join(directory, 'fixture.json');
+    fs.mkdirSync(directory);
+    const owner = 2147483000, group = owner + 1, kill = process.kill, probes = [];
+    const record = { schema: 'occupancy/v1', class: 'shared', pid: owner, processStart: null,
+      pgid: group, groupStart: null, [match]: match === 'cwd' ? '/repo/lane' : 'promotion /repo/lane' };
+    const bytes = JSON.stringify(record), future = JSON.stringify({ ...record, schema: 'occupancy/future' });
+    fs.writeFileSync(file, bytes); fs.writeFileSync(path.join(directory, 'future.json'), future);
+    process.kill = (pid, signal) => {
+      assert.equal(signal, 0); assert.ok([owner, group, -group].includes(pid)); probes.push(pid);
+      if (state !== 'live') throw Object.assign(Error(state), { code: state === 'gone' ? 'ESRCH' : 'EPERM' });
+      return true;
+    };
+    let observed;
+    try { observed = readLiveReferences({ common, org: f.org, verifyStateDir: path.join(f.org, 'verify'),
+      env: { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock } }); }
+    finally { process.kill = kill; }
+    assert.deepEqual(observed.errors, []);
+    assert.deepEqual(probes, state === 'gone' ? [owner, group, -group] : [owner], 'read the v1 owner/groups and skip unknown schemas');
+    const s = fixture(); Object.assign(s, observed);
+    if (state === 'gone') {
+      assert.ok(probes.includes(group)); assert.ok(probes.includes(-group));
+      assert.deepEqual(observed.references, []);
+      assert.equal(planRetirement(s).close.length, 1);
+      assert.equal(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), null);
+    } else {
+      assert.equal(observed.references.length, 1); assert.equal(observed.references[0].kind, 'test-slot occupant');
+      assert.match(kept(s), /test-slot occupant reference/);
+      assert.match(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), /test-slot occupant reference/);
+    }
+    assert.equal(fs.readFileSync(file, 'utf8'), bytes); assert.equal(fs.readFileSync(path.join(directory, 'future.json'), 'utf8'), future);
+  });
+
 test('promotion references follow the latest request checkpoint and preserve active holds', t => {
   const f = referenceFixture(t), common = path.join(f.org, 'common');
   fs.mkdirSync(path.join(common, 'promote'), { recursive: true });

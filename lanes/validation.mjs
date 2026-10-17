@@ -156,7 +156,8 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
         ...(usesSlot ? { slot_receipt: slotReceipt } : {}) });
       // Hold one slot for the chain; only its leaf steps may spend a retry.
       const execute = usesSlot ? runTestSlotSync : runGateSync;
-      const resource = resolveResource(['/bin/sh', '-c', command], { cwd, env }).profile;
+      const resolved = resolveResource(['/bin/sh', '-c', command], { cwd, env });
+      const resource = resolved.profile ?? resolved.declaration;
       run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: usesSlot, cwd, env, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt,
         resource,
         ...(usesSlot ? { waitReceipt: slotReceipt } : {}), retryTimeout: false, stdio: ['inherit', fd, fd] });

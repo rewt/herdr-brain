@@ -110,7 +110,8 @@ async function execute(profile, memoryOptions) {
   const gates = Math.max(1, 2 * plan.jobs.length - 1);
   const envelopeSeconds = gates * (limits.wall_seconds + 600) + 60;
   const command = [process.execPath, process.argv[1], '--execute', canonical, receipt, ...argv];
-  const declaredResource = profile.resource ?? resolveResource(['/bin/sh', '-c', declared.command], { cwd: canonical, env: profile.env }).profile;
+  const resolved = resolveResource(['/bin/sh', '-c', declared.command], { cwd: canonical, env: profile.env });
+  const declaredResource = profile.resource ?? resolved.profile ?? resolved.declaration;
   const resource = declaredResource ? { ...declaredResource, id: `${declaredResource.id}/train`, command,
     recipe: { command: declared.command, prepare: profile.prepare, gate_fingerprint: profile.fingerprint,
       batch_inputs: { identity: plan.identity, jobs: plan.jobs.map(job => ({ id: job.id, topic: job.topic, expected_head: job.expectedHead })) } } } : undefined;

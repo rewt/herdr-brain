@@ -37,8 +37,9 @@ is `"schema": "occupancy/v1"`. Fields are:
 - `class: "shared"`, `pid`, nullable `processStart`, nullable `processBirth`;
 - nullable `pgid`, `groupStart` and `groupBirth` for the command group;
 - `acquiredAt` and `startedAt` (the same ISO time), `project` (project directory
-  label), `label` (job label) and `host`;
-- `reason` (`profiled` or `unprofiled`) and optional `profile_id`.
+  label), `label` (job label), `cwd` (the holder's working directory, matching
+  the legacy holder field) and `host`;
+- `reason` (`profiled`, `unprofiled` or a coded profile rejection) and optional `profile_id`.
 
 No command text or token is recorded. Publication writes complete bytes to a
 hidden temporary file in the same directory, then renames it atomically; group
@@ -58,9 +59,14 @@ malformed or unreadable records are retained. A reader may remove only records
 confirmed stale under these rules. Legacy BCH `scripts/test-slot` and old
 exclusive-create pollers read only the lock (and, for newer readers, `.queue`);
 they ignore `.occupancy/`.
+Retirement reads occupancy without pruning. Live and EPERM-reserved records
+keep matching lanes and tabs by the same `cwd` and `label` rules used for legacy
+holders and queue tickets; confirmed stale records do not keep them.
 
-Only an exact declared profile with `admission_class: "EXCLUSIVE"` selects the
-existing exclusive path. That path's legacy lock, FIFO queue, one-token bridge,
+An exact declared profile with `admission_class: "EXCLUSIVE"` selects the
+existing exclusive path. A found declaration that says EXCLUSIVE also stays
+exclusive if validation rejects it, so a mis-specified proving step cannot run
+shared. That path's legacy lock, FIFO queue, one-token bridge,
 watchdog and conformance behavior remain unchanged. Declare the proving command
 in the calling project's `package.json.resources` with the matching script
 `command_sha256`, or in `test-slot/validation-resources.json` with the exact shell
@@ -298,7 +304,16 @@ no resource metadata. `gate.resource` in a committed `.promote.json` may
 carry a stanza for a project's train; otherwise the train derives its stanza
 from a matching validation recipe. Its binding also includes preparation and the
 existing gate fingerprint. A configured arbitrary command does not inherit a
-nearby profile. Extra arguments or changed script bytes fall back to shared execution with `resource.reason: unprofiled`. The exact declaration selects the class and supplies execution evidence. The synchronous adapter can pass an exact-command `resource`
+nearby profile. If no declaration is found, execution is shared with
+`resource.reason: unprofiled`. A found stanza rejected for a stale script digest,
+extra arguments or a malformed field keeps EXCLUSIVE if it declares that class;
+a rejected SHARED stanza or one with no class runs shared. The runner emits one
+`TEST_SLOT_PROFILE_REJECTED` stderr warning naming the profile id and failed
+check, and records that coded reason in the execution receipt. Rejection supplies
+no valid profile or measurement binding. Validation and train adapters preserve
+the declaration and failed check when passing the command to the runner.
+The exact valid declaration selects the class and supplies execution evidence.
+The synchronous adapter can pass an exact-command `resource`
 stanza (`--resource JSON` on the CLI) for an owned recipe.
 
 Brain profiles use revision 2 for the ARCH-34 shared class. Each stanza contains

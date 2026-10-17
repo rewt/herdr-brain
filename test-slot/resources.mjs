@@ -22,31 +22,59 @@ export function workerSettings(env = process.env) {
 
 // Recipes carry their own stanza; a label alone can never select a profile.
 export function resolveResource(argv, { cwd = process.cwd(), env = process.env, resource } = {}) {
+  const reject = (check, id = resource?.id ?? '<missing>') => {
+    const rejection = { code: 'TEST_SLOT_PROFILE_REJECTED', profile_id: id, check };
+    return { admission_class: resource?.admission_class === 'EXCLUSIVE' ? 'EXCLUSIVE' : 'SHARED',
+      reason: `${rejection.code}: profile ${JSON.stringify(id)}; failed ${check}`, rejection,
+      // Adapters must carry a found but invalid declaration to the runner,
+      // including the failed check when they bind a derived train command.
+      declaration: { ...resource, rejection } };
+  };
   try {
+    let recipeCheck;
     if (!resource) {
-      if (argv[0] === '/bin/sh' && argv[1] === '-c' && argv.length === 3) {
+      if (argv[0] === '/bin/sh' && argv[1] === '-c' && argv.length >= 3) {
         const profiles = read(path.join(cwd, 'test-slot/validation-resources.json'));
-        resource = Object.values(profiles).find(row => row.command === argv[2]);
-        if (resource) resource = { ...resource, command: argv };
-      } else if (argv[0] === 'npm' && argv[1] === 'run' && argv.length === 3) {
+        resource = Object.values(profiles).find(row => row?.command === argv[2]);
+        if (resource) resource = { ...resource, command: argv.slice(0, 3) };
+      } else if (argv[0] === 'npm' && argv[1] === 'run' && argv.length >= 3) {
         const pkg = read(path.join(cwd, 'package.json'));
         resource = pkg.resources?.[argv[2]];
-        if (resource?.command_sha256 === hash(pkg.scripts?.[argv[2]])) resource = { ...resource, command: argv, recipe: pkg.scripts[argv[2]] };
-        else resource = null;
+        if (resource) {
+          if (typeof pkg.scripts?.[argv[2]] !== 'string' || resource.command_sha256 !== hash(pkg.scripts[argv[2]])) recipeCheck = 'command_sha256';
+          resource = { ...resource, command: argv.slice(0, 3), recipe: pkg.scripts?.[argv[2]] };
+        }
       } else if (argv[0] === 'node' || argv[0] === process.execPath) {
         const pkg = read(path.join(cwd, 'package.json'));
         const command = ['node', ...argv.slice(1)];
-        const entry = Object.entries(pkg.resources ?? {}).find(([name, row]) => {
+        const entries = Object.entries(pkg.resources ?? {}).flatMap(([name, row]) => {
           const recipe = pkg.scripts?.[name];
-          return row.command_sha256 === hash(recipe) && JSON.stringify(recipe?.split(' -- ').at(-1).split(' ')) === JSON.stringify(command);
-        });
-        if (entry) resource = { ...entry[1], command: argv, recipe: pkg.scripts[entry[0]] };
+          const expected = typeof recipe === 'string' ? recipe.split(' -- ').at(-1).split(' ') : [];
+          return expected.length && expected.every((arg, i) => arg === command[i]) ? [{ row, recipe, expected }] : [];
+        }).sort((a, b) => b.expected.length - a.expected.length);
+        if (entries.length) {
+          const { row, recipe, expected } = entries[0];
+          if (row?.command_sha256 !== hash(recipe)) recipeCheck = 'command_sha256';
+          resource = { ...row, command: [argv[0], ...expected.slice(1)], recipe };
+        }
       }
     }
-    if (!resource || !/^[\w:./-]+$/.test(resource.id ?? '') || !Number.isSafeInteger(resource.revision) || resource.revision < 1 ||
-        JSON.stringify(resource.command) !== JSON.stringify(argv) || !['SHARED', 'EXCLUSIVE'].includes(resource.admission_class) || !(resource.M_bytes === null || (Number.isSafeInteger(resource.M_bytes) && resource.M_bytes >= 0)) ||
-        !(resource.C === null || (Number.isSafeInteger(resource.C) && resource.C > 0)) || !resource.worker_caps ||
-        !Array.isArray(resource.named_claims) || resource.named_claims.length || !Array.isArray(resource.evidence)) return { admission_class: 'SHARED', reason: 'unprofiled' };
+    if (!resource) return { admission_class: 'SHARED', reason: 'unprofiled' };
+    if (resource.rejection) return reject(resource.rejection.check, resource.rejection.profile_id);
+    const checks = [
+      [recipeCheck, !recipeCheck],
+      ['id', typeof resource.id === 'string' && /^[\w:./-]+$/.test(resource.id)],
+      ['revision', Number.isSafeInteger(resource.revision) && resource.revision >= 1],
+      ['command', JSON.stringify(resource.command) === JSON.stringify(argv)],
+      ['admission_class', ['SHARED', 'EXCLUSIVE'].includes(resource.admission_class)],
+      ['M_bytes', resource.M_bytes === null || (Number.isSafeInteger(resource.M_bytes) && resource.M_bytes >= 0)],
+      ['C', resource.C === null || (Number.isSafeInteger(resource.C) && resource.C > 0)],
+      ['worker_caps', resource.worker_caps && typeof resource.worker_caps === 'object' && !Array.isArray(resource.worker_caps)],
+      ['named_claims', Array.isArray(resource.named_claims) && !resource.named_claims.length],
+      ['evidence', Array.isArray(resource.evidence)],
+    ];
+    const failed = checks.find(([, valid]) => !valid);
+    if (failed) return reject(failed[0]);
     let target = null;
     try { target = execFileSync('git', ['-C', cwd, 'rev-parse', 'HEAD^{tree}'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { try { target = { release_commit: fs.readFileSync(path.join(cwd, '.release-commit'), 'utf8').trim() }; } catch { /* No invented input identity. */ } }
     // Environment values may be credentials. Bind all execution inputs by hash.
@@ -55,5 +83,5 @@ export function resolveResource(argv, { cwd = process.cwd(), env = process.env, 
       node: { executable: process.execPath, version: process.version }, platform: process.platform, arch: process.arch,
       environment_sha256: hash(environment), worker_caps: resource.worker_caps };
     return { reason: 'profiled', admission_class: resource.admission_class, profile: { ...resource, binding, binding_sha256: hash(binding) } };
-  } catch { return { admission_class: 'SHARED', reason: 'unprofiled' }; }
+  } catch { return resource ? reject('profile_binding') : { admission_class: 'SHARED', reason: 'unprofiled' }; }
 }

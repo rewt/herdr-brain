@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
-import { planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
+import { chainFor, planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
 import { readDeclaredReferences, readLiveReferences } from '../supervisor/retire.mjs';
 import { retirementDeadline } from '../lib/retire-lock.mjs';
 import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
@@ -114,8 +114,8 @@ for (const variant of ['report-file-only', 'report-before-review', 'blocked', 'n
   const s = fixture(), r = s.record.runs.get('R-1'), a = s.agents[0];
   if (variant === 'report-file-only') { r.report = null; r.report_path = '/exists/report.md'; }
   if (variant === 'report-before-review') s.record.items.get('ENG-1').closed = null;
-  if (variant === 'blocked') r.report.outcome = 'blocked';
-  if (variant === 'needs-human') r.report.outcome = 'needs_human';
+  if (variant === 'blocked') { r.report.outcome = 'blocked'; s.record.items.get('ENG-1').closed = null; }
+  if (variant === 'needs-human') { r.report.outcome = 'needs_human'; s.record.items.get('ENG-1').closed = null; }
   if (['working', 'unknown'].includes(variant)) a.agent_status = variant;
   if (variant === 'wrong-common') s.git[0].common = '/another/.git';
   if (variant === 'wrong-head') s.git[0].integrated = false;
@@ -132,6 +132,73 @@ for (const variant of ['report-file-only', 'report-before-review', 'blocked', 'n
   if (variant === 'operator') s.workspaces[0].operator = true;
   if (variant === 'missing-process') delete s.panes[0].process_info;
   assert.ok(kept(s));
+});
+
+for (const as of ['dropped', 'done']) for (const outcome of ['blocked', 'needs_human', 'failed'])
+  test(`explicit ${as} disposition supersedes a ${outcome} report for tab and lane retirement`, () => {
+    const s = fixture(), item = s.record.items.get('ENG-1');
+    item.closed.as = as; s.record.runs.get('R-1').report.outcome = outcome;
+    assert.equal(planRetirement(s).close.length, 1);
+    const vacant = () => ({ ...s, tabs: [], panes: [], agents: [] });
+    assert.equal(laneRemovalReason(vacant(), '/repo/lane'), null);
+    item.closed = null;
+    assert.match(kept(s), /R-1 awaits correction or disposition/);
+    assert.match(laneRemovalReason(vacant(), '/repo/lane'), /chain is still open/);
+  });
+
+for (const transport of ['blocked_by', 'links']) test(`closed ${transport} blocker is checked without expanding its chain`, () => {
+  const s = fixture(), run = s.record.runs.get('R-1');
+  const blocker = { id: 'ENG-2', role: 'engineer', closed: { as: 'done' }, blocked_by: ['ENG-3'] };
+  s.record.items.set(blocker.id, blocker);
+  s.record.items.set('HUM-1', { id: 'HUM-1', role: 'human', parent: blocker.id });
+  s.record.items.set('ENG-3', { id: 'ENG-3', role: 'engineer' });
+  if (transport === 'blocked_by') s.record.items.get(run.item).blocked_by = [blocker.id];
+  else {
+    delete blocker.blocked_by;
+    s.record.links = [{ blocked: run.item, blocker: blocker.id }, { blocked: blocker.id, blocker: 'ENG-3' }];
+  }
+  assert.deepEqual([...chainFor(s.record, run).ids].sort(), ['ENG-1', 'ENG-2']);
+  assert.equal(planRetirement(s).close.length, 1);
+  const vacant = () => ({ ...s, tabs: [], panes: [], agents: [] });
+  assert.equal(laneRemovalReason(vacant(), '/repo/lane'), null);
+  s.references.push({ item: blocker.id, kind: 'callback' });
+  assert.match(kept(s), /callback reference/);
+  s.references = [];
+  s.record.runs.set('R-2', { id: 'R-2', item: blocker.id, started: { seq: 5 } });
+  assert.match(kept(s), /open run on ENG-2/);
+  s.record.runs.delete('R-2');
+  blocker.meta = { answer: 'no' };
+  assert.match(kept(s), /declined blocker ENG-2/);
+  delete blocker.meta;
+  blocker.closed = null;
+  assert.deepEqual([...chainFor(s.record, run).ids].sort(), ['ENG-1', 'ENG-2', 'ENG-3', 'HUM-1']);
+  assert.match(kept(s), /ENG-2 has no recorded disposition/);
+  assert.match(laneRemovalReason(vacant(), '/repo/lane'), /ENG-2 has no recorded disposition/);
+});
+
+test('a closed blocker reached later through the root subtree still expands; reviewer roots climb to the engineer', () => {
+  const s = fixture(), run = s.record.runs.get('R-1');
+  const root = s.record.items.get(run.item);
+  root.blocked_by = ['ENG-2'];
+  s.record.items.set('ENG-2', { id: 'ENG-2', role: 'engineer', parent: 'ENG-3', closed: { as: 'done' } });
+  s.record.items.set('ENG-3', { id: 'ENG-3', role: 'engineer', parent: root.id, closed: { as: 'done' } });
+  s.record.items.set('HUM-1', { id: 'HUM-1', role: 'human', parent: 'ENG-2' });
+  s.record.items.set('REV-1', { id: 'REV-1', role: 'reviewer', parent: root.id });
+  const reviewer = { id: 'R-2', item: 'REV-1', started: { seq: 5 }, report: { seq: 6, outcome: 'done', extra: { verdict: 'PASS' } } };
+  s.record.runs.set(reviewer.id, reviewer);
+  assert.equal(chainFor(s.record, reviewer).root.id, root.id);
+  assert.ok(chainFor(s.record, reviewer).ids.has('HUM-1'));
+  assert.match(kept(s), /HUM-1 has no recorded disposition/);
+  root.closed = null;
+  assert.match(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), /chain is still open/);
+});
+
+test('a closed engineer does not discharge an open correction with a blocked report', () => {
+  const s = fixture();
+  s.record.items.set('ENG-2', { id: 'ENG-2', role: 'engineer', parent: 'ENG-1' });
+  s.record.runs.set('R-2', { id: 'R-2', item: 'ENG-2', started: { seq: 5 }, report: { seq: 6, outcome: 'blocked' } });
+  assert.match(kept(s), /ENG-2 awaits correction or disposition/);
+  assert.match(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), /ENG-2 awaits correction or disposition/);
 });
 
 test('pending review and NEEDS-WORK preserve the engineer across a fix gap', () => {

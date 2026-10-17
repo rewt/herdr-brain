@@ -340,6 +340,27 @@ test('an empty unmerged lane retains its recoverable archive and immutable recor
   assert.equal(f.git(['rev-parse','archive/lane/topic']),f.head); assert.equal(fs.readFileSync(f.eventFile,'utf8'),f.eventBytes);
 });
 
+test('dropped blocked lane closes its tab and unmerged work only after a verified archive', t => {
+  const f = fixture(t, { merged: false });
+  const events = loadEvents(f.org).events;
+  events.find(e => e.type === 'report.ingested').report.outcome = 'blocked';
+  events.find(e => e.type === 'item.closed').as = 'dropped';
+  const bytes = events.map(e => JSON.stringify(e) + '\n').join('');
+  fs.writeFileSync(f.eventFile, bytes);
+  assert.match(f.retirement().plan().keep[0].why, /not clean and integrated or archived/);
+  f.git(['tag', 'archive/lane/topic', 'main']);
+  const collision = f.close(false);
+  assert.notEqual(collision.status, 0); assert.match(collision.stderr, /archive tag collision/);
+  assert.equal(fs.existsSync(f.lane), true); assertNoRemoval(f);
+  f.git(['tag', '-d', 'archive/lane/topic']);
+  f.git(['tag', 'archive/lane/topic', f.head]);
+  const closed = f.close(false); assert.equal(closed.status, 0, closed.stdout + closed.stderr);
+  assert.equal(fs.existsSync(f.lane), false);
+  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), bytes);
+});
+
 test('promotion keeps integrated success on a live reference and retries cleanup only after it disappears', t => {
   const f = fixture(t), queue = f.queue(), ref = path.join(f.org,'references/host.json');
   fs.writeFileSync(ref,JSON.stringify({schema:'herdr-reference/v1',owner:'tool',kind:'host-job',job:'pending',state:'pending',item:'ENG-1',created_at:'2026-01-01T00:00:00Z',expires_at:'2999-01-01T00:00:00Z'}));

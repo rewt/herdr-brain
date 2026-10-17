@@ -108,6 +108,13 @@ review/correction/integration chain; a file or verdict notification cannot
 release a pane. Git must be clean and integrated (or a verified archived tip).
 Historical report/evidence links are retained but do not create live holds.
 
+An explicit closed item disposition (including `dropped`) supersedes its runs'
+latest blocked, needs-human or failed outcome; an open item still keeps. A closed
+blocker reached through a dependency link is checked itself without expanding
+its children or blockers. Open blockers still expand, as does the root's own
+subtree, and reviewer roots still climb to their engineer's chain. All other
+retirement guards remain in force.
+
 Adopted standard slots add a KEEP input from canonical
 `<git-common-dir>/sessions/standard-slots.json`, independent of manifests,
 tab labels and `.lane/sessions.json.d`. The history binds common directory,

@@ -41,7 +41,7 @@ for (const verification of [1, 2]) test(`empty workspace keeps when removed tip 
   const retirement = createRetirement({ cwd: f.repo, org: f.org, herdr: f.job.herdr, env: f.env, command });
   const result = retirement.removeLane({ lane: f.lane, branch: 'lane/topic', expectedTip: f.head, gitOnly: true });
   assert.equal(verified, verification, 'the initial and final empty-workspace observations must recheck ancestry');
-  assert.equal(result.pending.length, 1); assert.match(result.pending[0], /merge-base/);
+  assert.equal(result.pending.length, 1); assert.match(result.pending[0], /exit 1$/);
   assert.equal(fs.existsSync(f.lane), false, 'the worktree was already retired before integration changed');
   assert.equal(f.read().workspaces.length, 1, 'failed re-verification must retain the empty workspace');
   assert.deepEqual(f.read().actions, []); assert.equal(fs.readFileSync(f.eventFile, 'utf8'), bytes);

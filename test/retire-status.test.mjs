@@ -101,6 +101,7 @@ const reasonCases = [
   ['unknown or mismatched recorded launch identity for ${agent.name}', 'UNKNOWN', 'unknown or mismatched recorded launch identity for worker'],
   ['unknown recorded native session identity for ${agent.name}', 'UNKNOWN', 'unknown recorded native session identity for worker'],
   ['retained successor for handoff from ${incoming.from}', 'ACTIVE', 'retained successor for handoff from R-2'],
+  ['release for ${run.id} is stale: head moved', 'UNKNOWN', 'release for R-1 is stale: head moved'],
   ['${run.id} report is not ingested', 'ACTIVE', 'R-1 report is not ingested'],
   ['${run.id} awaits correction or disposition', 'WAITING', 'R-1 awaits correction or disposition'],
   ['handoff successor is not retained with its recorded launch identity', 'UNKNOWN'],
@@ -140,14 +141,18 @@ test('every planner reason expression is enumerated and mapped; source drift fai
   const emitted = [...policy.matchAll(/\b(?:return|reason\s*(?:\?\?=|=))\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g)].map(m => m[1].slice(1, -1));
   assert.deepEqual([...new Set(emitted)].sort(), reasonCases.map(([expression]) => expression).sort());
   const s = fixture(); item(s).closed = null; s.references.push({ kind: 'host-check', job: 'job', owner: 'owner' });
-  for (const [expression, expected, sample = expression] of reasonCases)
-    assert.equal(classifyRetirement({ decision: 'keep', why: sample }, { snapshot: s, agents: s.agents }).class, expected, expression);
+  for (const [expression, expected, sample = expression] of reasonCases) {
+    const result = classifyRetirement({ decision: 'keep', why: sample }, { snapshot: s, agents: s.agents });
+    assert.equal(result.class, expected, expression);
+    if (expected === 'UNKNOWN') assert.equal(result.nextAction, `keep; ${sample}`, expression);
+  }
   const releaseReasons = [
     'recorded ${callback.kind} callback complete; unchanged process and shell identity',
+    "record release for ${released.join(', ')}; exact session and head",
     "${agents.map(a => matchingRun(a, snapshot.record.runs)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
     'lane removal preconditions verified',
   ];
-  const releases = [...policy.matchAll(/why: reason \?\? (?:\(callback \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
+  const releases = [...policy.matchAll(/why: reason \?\? (?:\(callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());
   for (const why of releases) assert.equal(classifyRetirement({ decision: 'release', why }).class, 'TERMINAL');
 });

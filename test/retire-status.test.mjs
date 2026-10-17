@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fold } from '../lib/state.mjs';
 import { planRetirement } from '../lib/retire.mjs';
 import { classifyRetirement, retirementStatus, renderRetirementStatus, RETIREMENT_CLASSES } from '../lib/retire-status.mjs';
-import { readRetirementStatus, writeRetirementStatus } from '../lib/retire-runtime.mjs';
+import { readRetirementStatus, readRetirementWorktrees, writeRetirementStatus } from '../lib/retire-runtime.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -200,12 +200,13 @@ test('background-process keeps display extra kernel comm names and no argv', () 
   const s = fixture(), info = s.panes[0].process_info;
   info.process_tree.push(...['codex-code-mode-host', 'node', 'node_repl'].map((name, i) => ({ pid: 3 + i, identity: name, state: 'S', command: `[${name}]`, argv0: 'PLANTED-ARGV' })));
   info.process_tree.push({ pid: 6, identity: 'helper', state: 'S', command: '[helper with spaces]' },
-    { pid: 7, identity: 'not-comm', state: 'S', command: 'node PLANTED-ARGV' });
+    { pid: 7, identity: 'not-comm', state: 'S', command: 'node PLANTED-ARGV' },
+    { pid: 8, identity: 'absolute-argv', state: 'S', command: '/opt/PLANTED-EXECUTABLE/bin/helper' });
   const row = tab(s);
   assert.equal(row.class, 'UNKNOWN');
   assert.match(row.reason, /extra kernel processes: codex-code-mode-host, node, node_repl/);
-  assert.match(row.reason, /node_repl, helper with spaces/);
-  assert.doesNotMatch(JSON.stringify(retirementStatus(s)), /PLANTED-ARGV/);
+  assert.match(row.reason, /node_repl, helper with spaces, 2 unnamed$/);
+  assert.doesNotMatch(JSON.stringify(retirementStatus(s)), /PLANTED-ARGV|PLANTED-EXECUTABLE/);
 });
 
 test('one row per tab and pane, including bare tabs and split panes; labels grant no protection', () => {
@@ -219,7 +220,7 @@ test('one row per tab and pane, including bare tabs and split panes; labels gran
   assert.match(rows[0].reason, /unrecorded shell occupant/);
 });
 
-function runtimeFixture(t) {
+function runtimeFixture(t, integrationBranch = 'main') {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'retire-status-')));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'repo'), lane = path.join(scratch, 'lane'), empty = path.join(scratch, 'empty'), org = path.join(scratch, 'record');
@@ -229,7 +230,7 @@ function runtimeFixture(t) {
   const git = (args, cwd = repo) => {
     const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
   };
-  git(['init', '-qb', 'main']); git(['config', 'user.name', 'Fixture']); git(['config', 'user.email', 'fixture@example.invalid']); git(['config', 'commit.gpgsign', 'false']);
+  git(['init', '-qb', integrationBranch]); git(['config', 'user.name', 'Fixture']); git(['config', 'user.email', 'fixture@example.invalid']); git(['config', 'commit.gpgsign', 'false']);
   fs.writeFileSync(path.join(repo, 'seed'), 'base'); fs.writeFileSync(path.join(repo, '.gitignore'), '*.ignored\n');
   git(['add', '.']); git(['commit', '-qm', 'base']); git(['worktree', 'add', '-b', 'lane/topic', lane]); git(['worktree', 'add', '-b', 'lane/empty', empty]);
   git(['tag', 'archive/lane/empty']);
@@ -278,6 +279,33 @@ test('status JSON uses the shared snapshot and inventories every canonical workt
   fs.writeFileSync(path.join(f.empty, 'seed'), 'new commit'); f.git(['commit', '-am', 'unintegrated'], f.empty);
   const changed = JSON.parse(f.cli(['--json']).stdout).rows.find(r => r.worktree === f.empty);
   assert.equal(changed.integrated, false); assert.equal(changed.archiveMatchesHead, false);
+});
+
+test('worktree integration follows the resolved trunk branch, including beside a stale main', async t => {
+  const f = runtimeFixture(t, 'trunk'), base = f.git(['rev-parse', 'HEAD']);
+  fs.writeFileSync(path.join(f.empty, 'seed'), 'merged into trunk');
+  f.git(['commit', '-am', 'merged lane'], f.empty);
+  f.git(['merge', '--ff-only', 'lane/empty']);
+  const check = () => {
+    const r = f.cli(['--json']); assert.equal(r.status, 0, r.stderr);
+    const row = JSON.parse(r.stdout).rows.find(r => r.type === 'worktree' && r.worktree === f.empty);
+    assert.equal(row.paneCount, 0); assert.equal(row.integrated, true, row.reason);
+  };
+  await t.test('without a main branch', check);
+  f.git(['branch', 'main', base]);
+  await t.test('with main behind the merged lane', check);
+});
+
+test('unavailable integration branches leave worktree integration unknown with a concrete error', t => {
+  const f = runtimeFixture(t);
+  for (const main of [undefined, 'missing-branch']) {
+    const rows = readRetirementWorktrees(f.common, { main, env: f.env });
+    assert.equal(rows.length, 3);
+    for (const row of rows) {
+      assert.equal(row.integrated, null);
+      assert.match(row.error, /Git inventory: .+/);
+    }
+  }
 });
 
 test('read-only proof: every fake Herdr invocation is a read, Git disables optional locks, and record/index/receipts stay byte-identical', async t => {

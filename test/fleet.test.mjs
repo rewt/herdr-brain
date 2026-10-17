@@ -7,7 +7,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 import { findOrgDir, initOrg, loadEvents } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { projectFleet } from '../lib/fleet.mjs';
+import { projectFleet, readFleet } from '../lib/fleet.mjs';
 import { gitProject } from '../lib/project.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
@@ -326,17 +326,88 @@ test('join adopts a legacy console.json mapping without writing its record', t =
   assert.equal(fs.existsSync(path.join(legacy, '.org')), false);
 });
 
-test('explicit ORG_DIR validates the fleet without launching Git on record commands', t => {
+test('explicit ORG_DIR isolates unrelated settings without launching Git on record commands', t => {
   const f = fixture(t), cwd = f.repo('app'); f.join(cwd);
+  f.join(f.repo('other'));
   const record = f.read().projects.app.record, bin = path.join(f.scratch, 'bin'), marker = path.join(f.scratch, 'git-ran');
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, 'git'), '#!/bin/sh\n: > "$GIT_PROBE_MARKER"\nexit 77\n', { mode: 0o755 });
   const env = { ...f.env, ORG_DIR: record, GIT_PROBE_MARKER: marker, PATH: `${bin}${path.delimiter}${f.env.PATH}` };
+  const fleet = f.read(), file = path.join(f.fleetHome, 'fleet.json');
+  fleet.projects.other.layers = 'damaged'; delete fleet.projects.other.worktrees;
+  fs.writeFileSync(file, JSON.stringify(fleet));
+  const bytes = fs.readFileSync(file), log = fs.readFileSync(path.join(record, 'events.jsonl'));
+  assert.equal(findOrgDir({ cwd, env }), record);
   const result = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd, env, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr); assert.equal(fs.existsSync(marker), false);
-  fs.writeFileSync(path.join(f.fleetHome, 'fleet.json'), '{');
+  const initialized = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'init', record], { cwd, env, encoding: 'utf8' });
+  assert.equal(initialized.status, 0, initialized.stderr);
+  assert.throws(() => readFleet(env), /other.worktrees/);
+  assert.deepEqual(fs.readFileSync(file), bytes);
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), log);
+  fs.writeFileSync(file, '{');
   assert.throws(() => findOrgDir({ cwd, env }), /invalid fleet/);
   assert.equal(fs.existsSync(marker), false);
+});
+
+test('a bound project and its linked checkout isolate unrelated malformed settings', t => {
+  const f = fixture(t), cwd = f.repo('app'), layer = path.join(f.scratch, 'app-routes.json');
+  fs.writeFileSync(layer, JSON.stringify({ routes: { engineer: { kind: 'codex', model: 'project-model' } } }));
+  const own = f.join(cwd, ['--layer', layer]).project;
+  f.join(f.repo('other'));
+  const lane = path.join(f.scratch, 'linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/test', lane]);
+  const fleet = f.read(), file = path.join(f.fleetHome, 'fleet.json');
+  fleet.projects.other.layers = null; fleet.projects.other.worktrees = 42;
+  fs.writeFileSync(file, JSON.stringify(fleet));
+  const bytes = fs.readFileSync(file);
+  for (const entered of [cwd, lane]) {
+    assert.equal(findOrgDir({ cwd: entered, env: f.env }), own.record);
+    assert.deepEqual(projectFleet(entered, f.env).project, { ...own, name: 'app' });
+    assert.deepEqual(loadDiscoveredRoutes({ cwd: entered, env: f.env }).files, [layer]);
+    const cli = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd: entered, env: f.env, encoding: 'utf8' });
+    assert.equal(cli.status, 0, cli.stderr);
+  }
+  assert.notEqual(f.run(cwd, ['show']).status, 0, 'fleet-wide inspection still reports unrelated corruption');
+  assert.notEqual(f.run(cwd, ['join']).status, 0, 'writers never publish a partially validated fleet');
+  assert.deepEqual(fs.readFileSync(file), bytes);
+});
+
+test('malformed selected project fields refuse explicit and discovered record operations', t => {
+  const f = fixture(t), cwd = f.repo('app'), own = f.join(cwd).project;
+  const fleet = f.read(), file = path.join(f.fleetHome, 'fleet.json');
+  const log = fs.readFileSync(path.join(own.record, 'events.jsonl'));
+  for (const key of ['identity', 'checkout', 'record', 'worktrees', 'layers']) {
+    const damaged = structuredClone(fleet); damaged.projects.app[key] = null;
+    fs.writeFileSync(file, JSON.stringify(damaged));
+    assert.throws(() => findOrgDir({ cwd, env: f.env }), /invalid fleet.*app/);
+    assert.throws(() => findOrgDir({ cwd, env: { ...f.env, ORG_DIR: own.record } }), /invalid fleet.*app/);
+    for (const args of [['status', '--json'], ['init', own.record]]) {
+      const cli = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), ...args], {
+        cwd, env: { ...f.env, ORG_DIR: own.record }, encoding: 'utf8',
+      });
+      assert.notEqual(cli.status, 0); assert.match(cli.stderr, /invalid fleet.*app/);
+    }
+    assert.deepEqual(fs.readFileSync(path.join(own.record, 'events.jsonl')), log);
+  }
+});
+
+test('ambiguous ownership and unidentifiable entries refuse rather than guessing a binding', t => {
+  const f = fixture(t), cwd = f.repo('app'), own = f.join(cwd).project;
+  f.join(f.repo('other'));
+  const fleet = f.read(), file = path.join(f.fleetHome, 'fleet.json');
+  const alias = path.join(f.scratch, 'record-alias'); fs.symlinkSync(own.record, alias);
+  for (const key of ['identity', 'checkout', 'record']) {
+    const damaged = structuredClone(fleet); damaged.projects.other[key] = key === 'record' ? alias : own[key];
+    fs.writeFileSync(file, JSON.stringify(damaged));
+    for (const env of [f.env, { ...f.env, ORG_DIR: own.record }])
+      assert.throws(() => findOrgDir({ cwd, env }), /ambiguous projects.*app.*other/);
+  }
+  for (const unknown of [null, { identity: own.identity }, { ...fleet.projects.other, identity: 'relative' }]) {
+    const damaged = structuredClone(fleet); damaged.projects.other = unknown;
+    fs.writeFileSync(file, JSON.stringify(damaged));
+    for (const env of [f.env, { ...f.env, ORG_DIR: own.record }])
+      assert.throws(() => findOrgDir({ cwd, env }), /cannot isolate project "?other/);
+  }
 });
 
 test('a moved checkout can explicitly replace its stale mapping while retaining its external record', t => {

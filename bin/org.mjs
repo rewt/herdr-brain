@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
-import { readFleet, FleetError } from '../lib/fleet.mjs';
+import { checkFleetRecord, FleetError } from '../lib/fleet.mjs';
 import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
@@ -271,9 +271,9 @@ function checkBudget(key, value) {
 }
 
 function init(argv) {
-  readFleet();
   const { positionals } = args(argv, {}, { max: 1, usage: 'record init [dir]' });
   const dir = path.resolve(positionals[0] ?? process.env.ORG_DIR ?? '.org');
+  checkFleetRecord(dir);
   if (isOrgDir(dir)) {
     out(`${dir} is already a record\n`);
     return 0;

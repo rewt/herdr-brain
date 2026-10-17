@@ -45,11 +45,13 @@ invalid JSON, an invalid version/projects/session-limit envelope, or ownership
 fields that cannot be resolved safely. Explicit record reads (including
 `record init PATH`) validate the entry selected by its canonical record path;
 registered-project reads validate the entry selected by fresh Git identity.
-Both inspect every entry's absolute identity, checkout and record paths to rule
-out conflicting ownership. Only the selected entry's worktrees and layers are
-validated. Malformed unrelated worktrees/layers cannot stop that local operation.
+Both require every entry to be a named object with an absolute record path.
+When a project is selected, every entry's identity and checkout must also be
+absolute for the ownership comparison; an unregistered explicit record does not
+depend on those unrelated fields. Only the selected entry's worktrees and layers
+are validated. Malformed unrelated worktrees/layers cannot stop that local operation.
 A malformed selected entry refuses, as do overlapping identity/checkout/record
-claims (including symlink aliases). An entry missing usable ownership paths
+claims (including symlink aliases). An entry missing paths needed for selection or comparison
 refuses with `cannot isolate project NAME`; no name or basename is used to guess.
 These scoped reads never repair, register, or rewrite the fleet. Unregistered
 legacy discovery, `fleet show`, project-chat selection, and fleet writes still

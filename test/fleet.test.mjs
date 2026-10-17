@@ -372,6 +372,32 @@ test('a bound project and its linked checkout isolate unrelated malformed settin
   assert.deepEqual(fs.readFileSync(file), bytes);
 });
 
+for (const field of ['identity', 'checkout']) test(`an unregistered explicit record isolates an unrelated relative ${field}`, t => {
+  const f = fixture(t), cwd = f.repo('unregistered'), record = path.join(f.scratch, 'explicit-record');
+  initOrg(record); f.join(f.repo('other'));
+  const fleet = f.read(), file = path.join(f.fleetHome, 'fleet.json'), env = { ...f.env, ORG_DIR: record };
+  fleet.projects.other[field] = 'relative';
+  fs.writeFileSync(file, JSON.stringify(fleet));
+  const bytes = fs.readFileSync(file), log = fs.readFileSync(path.join(record, 'events.jsonl'));
+  assert.equal(findOrgDir({ cwd, env }), record);
+  const status = () => spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd, env, encoding: 'utf8' });
+  const result = status(); assert.equal(result.status, 0, result.stderr);
+  assert.throws(() => readFleet(env), new RegExp(`other\\.${field} must be an absolute path`));
+  assert.deepEqual(fs.readFileSync(file), bytes);
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), log);
+
+  // The same malformed entry must refuse as soon as it claims this record.
+  fleet.projects.other.record = record;
+  fs.writeFileSync(file, JSON.stringify(fleet));
+  assert.throws(() => findOrgDir({ cwd, env }), new RegExp(`other\\.${field} must be an absolute path`));
+  const refused = status(); assert.notEqual(refused.status, 0); assert.match(refused.stderr, /invalid fleet/);
+  fleet.projects.selected = { identity: gitProject(cwd).identity, checkout: cwd, record,
+    worktrees: path.join(f.scratch, 'selected-worktrees'), layers: [] };
+  fs.writeFileSync(file, JSON.stringify(fleet));
+  assert.throws(() => findOrgDir({ cwd, env: f.env }), new RegExp(`other: ${field} must be an absolute path`), 'a malformed overlapping entry still refuses a bound project');
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), log);
+});
+
 test('malformed selected project fields refuse explicit and discovered record operations', t => {
   const f = fixture(t), cwd = f.repo('app'), own = f.join(cwd).project;
   const fleet = f.read(), file = path.join(f.fleetHome, 'fleet.json');
@@ -402,7 +428,7 @@ test('ambiguous ownership and unidentifiable entries refuse rather than guessing
     for (const env of [f.env, { ...f.env, ORG_DIR: own.record }])
       assert.throws(() => findOrgDir({ cwd, env }), /ambiguous projects.*app.*other/);
   }
-  for (const unknown of [null, { identity: own.identity }, { ...fleet.projects.other, identity: 'relative' }]) {
+  for (const unknown of [null, { identity: own.identity }, { ...fleet.projects.other, identity: 'relative' }, { ...fleet.projects.other, checkout: 'relative' }]) {
     const damaged = structuredClone(fleet); damaged.projects.other = unknown;
     fs.writeFileSync(file, JSON.stringify(damaged));
     for (const env of [f.env, { ...f.env, ORG_DIR: own.record }])

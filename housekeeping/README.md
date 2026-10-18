@@ -100,6 +100,13 @@ for canonical-supervisor startup and the manual one-time backlog procedure.
   jobs, Git path/head/common directory, pane, terminal and native session against
   the plan. It logs the current refusal if anything changed. Unknown, lab-owned,
   persistent and operator sessions stay; display metadata cannot supply authority.
+- After a recorded agent exits through the shared executor, its observed terminal,
+  pane and shell birth identity are saved under `ORG/retirement/exits/`. A cleanup
+  retry or settled housekeeping pass can close that single bare shell after Herdr
+  unregisters the agent. It rechecks the original run's release policy, clean and
+  integrated Git, references, focus and holds. A changed terminal or shell, extra
+  pane or remaining child process keeps the tab. Successful close prunes the
+  receipt; lane removal still uses the existing guarded merged-lane path.
 - Recovery requires an open run, idle/done Codex, a current `■ Conversation
   interrupted` (or `■ Turn interrupted`) banner at the end of the visible output,
   and only SGR wheel junk (`<64` through `<67`; coordinates; `M`/`m`) in the composer.

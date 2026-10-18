@@ -13,6 +13,9 @@ import { fileURLToPath } from 'node:url';
 import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from '../housekeeping.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+import { exitFixture } from '../../test/helpers/retire-exit-fixture.mjs';
+import { isolatedEnv, hold } from '../../test/helpers/retire-fixture.mjs';
+import { finishCleanup, retryCleanup } from '../../promote/promote.mjs';
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
@@ -79,6 +82,49 @@ test('recorded promoted workers close through the shared tidy planner', (t) => {
   assert.equal(plan.close.length, 1); assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
   assert.match(f.logs.find((x) => x.action === 'closed').why, /R-1/);
 });
+
+for (const guard of ['unchanged', 'changed shell birth', 'second pane', 'child process', 'hold']) {
+  test(`housekeeping consumes a promotion exit receipt: ${guard}`, t => {
+    const f = exitFixture(t, { bound: true }); isolatedEnv(t, f);
+    const bytes = fs.readFileSync(f.eventFile), queue = f.queue();
+    f.state.failClose = true; f.save();
+    const result = finishCleanup(f.job, { outcome: 'promoted', tip: f.head, workspace: f.lane }, queue, { now: 1000 });
+    assert.equal(result.cleanup.state, 'pending'); assert.match(result.cleanup.last_refusal, /injected tab failure/);
+    queue.transaction(data => data.results.push({ ...f.job, ...result }));
+    const receipts = path.join(f.org, 'retirement/exits');
+    assert.equal(fs.readdirSync(receipts).length, 1, 'exit was saved before the failed close');
+    const state = f.read(); state.failClose = false;
+    assert.equal(state.agents.length, 0, 'Herdr has unregistered the exited bound worker');
+    if (guard === 'changed shell birth') state.info.process_tree[0].identity = 'replacement shell';
+    if (guard === 'second pane') state.panes.push({ ...state.panes[0], pane_id: 'w:q', terminal_id: 'other-terminal' });
+    if (guard === 'child process') state.info.process_tree.push({ pid: 99, ppid: 1, identity: 'child', command: '[node]', state: 'S' });
+    if (guard === 'hold') hold(f);
+    fs.writeFileSync(f.file, JSON.stringify(state));
+    const logs = [];
+    // No drain or new record event intervenes: this is the settled cleanup pass.
+    const runner = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.job.herdr, selfTab: null,
+      log: row => logs.push(row) });
+    const plan = runner.tick({ cleanup: true, resume: false });
+    if (guard === 'unchanged') {
+      assert.equal(plan.close[0].decision, 'release');
+      assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+      assert.ok(logs.some(row => row.action === 'closed' && /recorded agent exit/.test(row.why)));
+      assert.deepEqual(fs.readdirSync(receipts), []);
+      // The pending queue checkpoint uses the existing guarded merged-lane path.
+      retryCleanup(queue, { now: result.cleanup.next_attempt_at });
+      assert.equal(queue.load().results[0].cleanup.state, 'complete');
+      assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+      assert.equal(f.read().workspaces.length, 0);
+      assert.equal(f.read().actions.filter(a => a[0] === 'agent' && a[1] === 'prompt').length, 1, 'cleanup never repeats the exit');
+    } else {
+      assert.equal(plan.close.length, 0);
+      assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
+      assert.equal(fs.existsSync(f.lane), true); assert.equal(fs.readdirSync(receipts).length, 1);
+      assert.ok(plan.keep[0].why);
+    }
+    assert.deepEqual(fs.readFileSync(f.eventFile), bytes);
+  });
+}
 
 test('only canonical cleanup ticks refresh the owner summary after cleanup; previews and scoped ticks never publish', t => {
   const f = fixture(t), summary = path.join(f.root, 'published/summary.json');

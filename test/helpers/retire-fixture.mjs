@@ -71,6 +71,7 @@ else if (s.exitMode && a[0] === 'pane' && a[1] === 'read') { process.stdout.writ
 else if (s.exitMode && a[0] === 'agent' && a[1] === 'prompt') {
   s.actions.push(a);
   if(s.exitMode==='exit') s.info={shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}],process_tree_complete:true,process_tree:[s.info.process_tree[0]]};
+  if(s.exitMode==='exit'&&s.unregisterOnExit) s.agents=[];
   fs.writeFileSync(file,JSON.stringify(s));out({});
 }
 else if (a[0] === 'tab' && a[1] === 'close') {

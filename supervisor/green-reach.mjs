@@ -13,12 +13,15 @@ const unsupported = detail => { throw Error(`outside closed source profile: ${de
 // in this profile. A failed scan retains both its error and all preceding tokens.
 function lex(source) {
   const tokens = []; let i = 0;
+  // Keep the refusal while still inventorying known imports before/around
+  // harmless display text. Never discard this error in favor of a parse result.
+  const sourceError = /[^\x09\x0a\x0d\x20-\x7e]/.test(source) ? Error('outside closed source profile: non-ASCII/control source') : undefined;
   const add = (value, type) => {
     if (tokens.length >= 100000) unsupported('token limit');
     tokens.push({ value, type });
   };
   const lineEnd = () => {
-    const offset = source.slice(i).search(/[\r\n]/);
+    const offset = source.slice(i).search(/[\r\n\u2028\u2029]/);
     i = offset < 0 ? source.length : i + offset;
   };
   const quoted = quote => {
@@ -49,8 +52,6 @@ function lex(source) {
     unsupported('unterminated string');
   };
   try {
-    // Do not let a non-ASCII line terminator change comment/string boundaries.
-    if (/[^\x09\x0a\x0d\x20-\x7e]/.test(source)) unsupported('non-ASCII/control source');
     while (i < source.length) {
       const c = source[i];
       if (/\s/.test(c)) { i++; continue; }
@@ -70,7 +71,7 @@ function lex(source) {
       if ('{}[](),;:=.*-+?!~<>&|^%'.includes(c)) { add(c, 'punctuation'); i++; continue; }
       unsupported(c === '/' ? 'regex/division syntax' : 'lexical token');
     }
-    return { tokens };
+    return { tokens, error: sourceError };
   } catch (error) { return { tokens, error }; }
 }
 

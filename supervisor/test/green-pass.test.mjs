@@ -319,6 +319,10 @@ test('source scanning never executes a candidate and refuses regexes and templat
   const result = sourceReach('entry.mjs', "// import('./absent.mjs')\nconst pattern = /import\\('fake'\\)/;\nconst text = `${import('./lib/a.mjs')}`;\nthrow Error('candidate must never run');\n", files);
   assert.ok(result.unknown.length);
 });
+test('a source-level lexical refusal preserves earlier known imports', () => {
+  const result = sourceReach('entry.mjs', "import './lib/a.mjs'; const display = 'caf\u00e9';\n", new Map([['lib/a.mjs', {}]]));
+  assert.deepEqual(result.dependencies, ['lib/a.mjs']); assert.ok(result.unknown.some(edge => /non-ASCII/.test(edge.reason)));
+});
 test('constant shadowing cannot resolve an unknown dynamic import to the outer constant', () => {
   const result = sourceReach('entry.mjs', "const file = './lib/a.mjs';\nfunction load(file) { return import(file); }\n", new Map([['lib/a.mjs', {}]]));
   assert.ok(result.unknown.length);

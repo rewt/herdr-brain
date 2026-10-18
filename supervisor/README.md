@@ -1,5 +1,57 @@
 # Supervisor
 
+## Slot handoffs and safe-point observations
+
+```sh
+node bin/org.mjs handoffs template > /tmp/handoff.md
+# Fill in the draft, then record a fresh immutable copy:
+node bin/org.mjs handoffs check --file /tmp/handoff.md
+ORG_ACTOR=supervisor-name node bin/org.mjs handoffs write --workspace w34E --slot supervisor --file /tmp/handoff.md
+node bin/org.mjs handoffs latest --workspace w34E --slot supervisor --json
+node supervisor/supervisor.mjs brief --repo CHECKOUT --org RECORD --workspace w34E
+node supervisor/supervisor.mjs safe-point --repo CHECKOUT --org RECORD --pane w34E:p1 --json
+```
+
+Workspace and slot are explicit single identifiers, not checkout paths. `ORG_DIR`
+selects the record as usual. Each write stores the draft's exact bytes at
+`ORG/handoffs/WORKSPACE/SLOT/UTC-TIMESTAMP.md` and appends one `handoff.recorded`
+event with its relative path, SHA-256, workspace, slot and author (`ORG_ACTOR`,
+otherwise the usual record writer). Files are created exclusively, read-only,
+and synced before the event. A repeated write, collision or backward clock uses
+a new timestamp; old copies and crash-left unrecorded files are never replaced.
+Readers select by record order, ignore unrecorded files, and refuse missing,
+changed, redirected or nonregular recorded files. No latest pointer or status
+is stored; older folds ignore the new event. This is separate from the existing
+`record handoff R-old --to R-new` retained-run command.
+
+The template/check covers in-flight work, background jobs with re-arm commands,
+decisions not yet recorded, peers and addresses, and first steps. The check
+recognizes the template's Markdown headings, case-insensitively, outside fenced
+examples. Missing headings are advisory and never prevent writing or reading.
+The brief includes one verified line for each workspace's latest `supervisor`
+slot handoff; `--workspace` selects one workspace. A damaged latest handoff is
+recovery evidence, with no silent fallback to an older file. Brief generation
+does not create handoffs or advance a reading cursor.
+
+`safe-point` is a foreground read-only observation, returning exit 0 for SAFE
+and 1 for HOLD or uncertainty. It uses pane/agent reads and the complete OS
+process source to find live descendants below the foreground harness root,
+including background jobs and grandchildren. It excludes only the checker’s
+own process ancestry and observation helpers, keeping sibling jobs visible. It uses no provider or
+harness allowlist: an opaque nested harness child is conservatively reported
+for inspection too. An ambiguous/missing root or unavailable process source
+reports uncertainty. The pane's named agent binding is checked again at the end.
+
+Any present record lock holds, including one whose owner is unknown or stale;
+the check never acquires or recovers it. It reads the existing
+`ORG/supervisor/inbox.log` without its locks and reports pending/uncertain
+notices addressed to the observed agent name. `sent` is Herdr's delivery
+acknowledgement; it does not prove model consumption. `handled` has an existing
+model-free disposition. Neither is reported as undelivered. Unreadable or torn
+notice evidence holds. Notice formats and transport behavior are unchanged.
+SAFE is a point-in-time observation, not permission or a reset controller:
+the command never clears, closes, renames, prompts or re-arms anything.
+
 ## Read-only lanes view
 
 ```sh

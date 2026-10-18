@@ -7,7 +7,8 @@ import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, readConfig, now } from '../lib/store.mjs';
 import { fold, itemStatus, openRuns, isResolved, attention } from '../lib/state.mjs';
 import { lessonsJson } from '../lib/lessons.mjs';
-import { describeEvent, approxTokens, renderLessonClaim } from '../lib/render.mjs';
+import { describeEvent, approxTokens, renderLessonClaim, renderHandoff } from '../lib/render.mjs';
+import { readHandoff } from '../lib/handoffs.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { candidateRows } from '../lib/release-record.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
@@ -18,7 +19,7 @@ export const receiptDirectory = (org, identity) => path.join(org, 'supervisor', 
 const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const line = (value, length = 160) => sanitizeTerminal(String(value ?? '')).replace(/\s+/g, ' ').trim().slice(0, length);
 
-export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env, memory = readMemory(), readProcess } = {}) {
+export function coldStart({ cwd = process.cwd(), org, sinceSeq, workspace, env = process.env, memory = readMemory(), readProcess } = {}) {
   const project = gitProject(cwd);
   org = org ? path.resolve(org) : findOrgDir({ cwd, env });
   if (!org) throw new Error('no record discovered; initialize one with record init or monitor fleet join');
@@ -34,6 +35,11 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const after = sinceSeq ?? cursor?.through ?? 0;
   if (!Number.isInteger(after) || after < 0 || after > through) throw new Error('decision cursor must be an existing event sequence or zero');
   const recovery = [];
+  const handoffs = [];
+  for (const entry of state.handoffs.values()) if (entry.slot === 'supervisor' && (!workspace || entry.workspace === workspace)) {
+    try { handoffs.push(readHandoff(org, entry)); }
+    catch (error) { recovery.push({ file: entry.path, reason: error.message }); }
+  }
   const receipt = (file) => {
     try { return read(file); } catch (e) { recovery.push({ file, reason: e.message }); return null; }
   };
@@ -140,13 +146,14 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const config = readConfig(org), clock = now(env);
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));
   return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
-    lessons, goals, running, reports, waiting, held, ready, decisions, next, recovery,
+    lessons, handoffs, goals, running, reports, waiting, held, ready, decisions, next, recovery,
     approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, housekeeping,
     host: { memory, reason: memoryReason(memory) } };
 }
 
 export function renderColdStart(doc, { limit = 6 } = {}) {
   const out = [`Supervisor cold start · ${doc.project.canonical}`, `Record ${doc.project.org} · events through ${doc.project.through}; decisions after ${doc.project.after}`];
+  for (const handoff of doc.handoffs ?? []) out.push(renderHandoff(handoff));
   if (doc.housekeeping) out.push(`Housekeeping: ${doc.housekeeping.process}${doc.housekeeping.pid ? ` (pid ${doc.housekeeping.pid})` : ''}; enabled=${doc.housekeeping.config?.enabled ?? '?'} resume=${doc.housekeeping.config?.resume ?? '?'}${doc.housekeeping.configError ? `; ${line(doc.housekeeping.configError)}` : ''}${doc.housekeeping.warnings.length ? `; ${line(doc.housekeeping.warnings.join('; '))}` : ''}`);
   if (doc.project.stopped) out.push('STOP exists: inspect only; do not dispatch, settle or promote.');
   if (doc.project.torn_tail) out.push('Record has an incomplete final event; inspect before writes.');

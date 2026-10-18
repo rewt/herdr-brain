@@ -14,6 +14,8 @@ import { verifyTrainResult } from '../promote/train.mjs';
 import { recordedBatchCompletion } from '../promote/completion.mjs';
 import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
+import { safePoint } from './safe-point.mjs';
+import { renderSafePoint } from '../lib/render.mjs';
 
 const local = (name) => fileURLToPath(new URL(name, import.meta.url));
 export function noticeRun(notice) {
@@ -30,9 +32,10 @@ const completedJob = (queue, id) => {
 };
 const jobAttempt = (receipt, id) => attempts(receipt).find((a) => a.queue?.jobs?.some((j) => j.id === id));
 export function main(argv = process.argv.slice(2)) {
-  const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|status|entry|checkpoint|handle|promote [OPTIONS]", args: argv, allowPositionals: true, options: {
+  const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|safe-point|status|entry|checkpoint|handle|promote [OPTIONS]", args: argv, allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
     json: { type: 'boolean' }, 'since-seq': { type: 'string' }, through: { type: 'string' },
+    workspace: { type: 'string' }, pane: { type: 'string' }, herdr: { type: 'string' },
     notice: { type: 'string' }, why: { type: 'string' }, to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || undefined }, brief: { type: 'string' },
     'review-route': { type: 'string' }, 'fix-route': { type: 'string' }, timeout: { type: 'string' },
     'existing-worker': { type: 'boolean' }, retry: { type: 'boolean' }, 'review-again': { type: 'boolean' },
@@ -42,13 +45,19 @@ export function main(argv = process.argv.slice(2)) {
   const [action = 'brief', requested] = positionals;
   if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
   if ((opt['fix-findings'] || opt['review-round-cap'] !== undefined) && action !== 'handle') throw new Error('--fix-findings and --review-round-cap belong to handle');
-  if (positionals.length > 2 || !['brief', 'status', 'entry', 'checkpoint', 'handle', 'promote'].includes(action)) throw new Error('usage: supervisor.mjs brief|status [--json] | entry --role supervisor | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT; mutations require --role supervisor');
+  if (positionals.length > 2 || !['brief', 'safe-point', 'status', 'entry', 'checkpoint', 'handle', 'promote'].includes(action)) throw new Error('usage: supervisor.mjs brief|status [--json] | safe-point --pane ID [--json] | entry --role supervisor | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT; mutations require --role supervisor');
+  if (action === 'safe-point') {
+    const doc = safePoint({ cwd: opt.repo, org: opt.org, pane: opt.pane, herdr: opt.herdr });
+    process.stdout.write(opt.json ? JSON.stringify(doc) + '\n' : renderSafePoint(doc));
+    if (!doc.safe) process.exitCode = 1;
+    return;
+  }
   if (action === 'status') {
     const status = supervisorStatus({ cwd: opt.repo, org: opt.org });
     process.stdout.write(opt.json ? JSON.stringify(status) + '\n' : renderStatus(status)); return;
   }
   if (action === 'entry') { enterSupervisor({ cwd: opt.repo, org: opt.org, role: opt.role, to: opt.to }); return; }
-  const doc = coldStart({ cwd: opt.repo, org: opt.org, sinceSeq: opt['since-seq'] === undefined ? undefined : Number(opt['since-seq']) });
+  const doc = coldStart({ cwd: opt.repo, org: opt.org, workspace: opt.workspace, sinceSeq: opt['since-seq'] === undefined ? undefined : Number(opt['since-seq']) });
   const project = doc.project;
   const print = (value) => process.stdout.write(JSON.stringify(value) + '\n');
   if (action === 'brief') {

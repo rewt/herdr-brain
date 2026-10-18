@@ -23,6 +23,7 @@ import { renderToday, todayJson } from '../lib/today.mjs';
 import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { completeBatchCommand } from '../lib/completion.mjs';
 import { releasesCommand } from '../lib/release-record.mjs';
+import { handoffsCommand } from '../lib/handoffs-command.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
   renderSnapshot, renderStatus, statusJson, truncate, renderLessons,
@@ -68,6 +69,12 @@ Lessons (durable knowledge, separate from work items)
                                           states: proposed, active, retired, superseded, all
 
 Runs and reports
+  record handoffs write --workspace W --slot S --file PATH [--json]
+                                          save immutable handoff bytes and one sha256 event
+  record handoffs latest --workspace W --slot S [--json]
+                                          verify and name the latest recorded handoff
+  record handoffs template | check --file PATH [--json]
+                                          standard headings; missing sections are advisory
   record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [--workspace DIR]
           [--report PATH] [--escalation] [--meta key=value]... [--if-current-run R-n]
   record worker <R-n> --agent NAME --pane ID --worker-workspace ID --cwd DIR
@@ -985,6 +992,7 @@ const COMMANDS = {
   lesson, lessons,
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
   releases: argv => releasesCommand(argv, { openOrg, out }),
+  handoffs: argv => handoffsCommand(argv, { openOrg, mutate, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
   start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.

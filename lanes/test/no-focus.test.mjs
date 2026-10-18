@@ -37,7 +37,7 @@ test("lane closure cannot invoke Herdr's parent-focusing worktree removal", () =
   for (const [file, text] of modules) removalIsGitOnly(file, text);
   const executor = modules.get('lib/retire-runtime.mjs');
   assert.match(source, /retirement\.removeLane\(/);
-  assert.match(executor, /for \(const id of workspaces\) try \{ closeEmptyWorkspace\(id, lane\);/);
+  assert.match(executor, /for \(const id of workspaces\) try \{ closeEmptyWorkspace\(id, lane(?:, proof)?\);/);
   assert.match(executor, /closeWorkspace: workspace => invoke\(herdr, \['workspace', 'close', workspace\]\)/);
   // Exercise the actual close call's forbidden replacement, not a vacuous scan.
   const unsafe = executor.replace("['workspace', 'close', workspace]", "['worktree', 'remove', '--workspace', workspace]");

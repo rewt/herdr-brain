@@ -201,12 +201,13 @@ test('slot waiting consumes none of a short command deadline', { timeout: loadTi
     `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},'ready');const end=Date.now()+${loadTimeout(5000)};while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<end)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);`]), { cwd: s.root, env: s.env });
   await until(() => fs.existsSync(ready));
   const waiter = spawnChild(t, process.execPath, provingRun([cli, 'run', 'waiter', '--project-common', s.root, '--wait', String(Math.ceil(loadTimeout(5000) / 1000)), '--poll-ms', '20', '--wait-receipt-path', waitReceipt, '--timeout-seconds', '.3', '--result-path', s.result, '--', process.execPath, '-e',
-    `const fs=require('fs');fs.writeFileSync(${JSON.stringify(clock + '.tmp')},'1050000000');fs.renameSync(${JSON.stringify(clock + '.tmp')},${JSON.stringify(clock)});`]), { cwd: s.root, env: { ...s.env, NODE_OPTIONS: `${s.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` } });
+    `const fs=require('fs'),temporary=${JSON.stringify(clock)}+'.'+process.pid+'.'+Math.random().toString(36).slice(2)+'.tmp';fs.writeFileSync(temporary,'1050000000');fs.renameSync(temporary,${JSON.stringify(clock)});`]), { cwd: s.root, env: { ...s.env, NODE_OPTIONS: `${s.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` } });
   let waited = false;
   waiter.stderr.on('data', data => { waited ||= String(data).includes('TEST_SLOT_WAIT:'); });
   await until(() => waited);
-  fs.writeFileSync(clock + '.tmp', '1000000000'); // One second waiting exceeds the .3s command limit.
-  fs.renameSync(clock + '.tmp', clock);
+  const temporary = `${clock}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+  fs.writeFileSync(temporary, '1000000000'); // One second waiting exceeds the .3s command limit.
+  fs.renameSync(temporary, clock);
   fs.writeFileSync(release, 'release');
   const result = await waitForExit(waiter), ownerResult = await waitForExit(owner);
   assert.equal(ownerResult.code, 0, ownerResult.stderr);

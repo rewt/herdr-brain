@@ -260,8 +260,9 @@ for (const command of ['rev-parse', 'ls-tree', 'show']) test(`a settings git ${c
   fs.writeFileSync(preload, `const fs=require('node:fs'),cp=require('node:child_process'),original=cp.spawnSync;
 cp.spawnSync=function(cmd,args,options){
   if(process.argv[1]===${JSON.stringify(path.join(source, 'promote/promote.mjs'))} && cmd==='git' && args[2]===${JSON.stringify(command)}) {
-    fs.writeFileSync(${JSON.stringify(marker + '.tmp')},JSON.stringify({timeout:options.timeout,locked:fs.existsSync(${JSON.stringify(path.join(f.queue.directory, 'queue.lock'))})}));
-    fs.renameSync(${JSON.stringify(marker + '.tmp')},${JSON.stringify(marker)});
+    const temporary=${JSON.stringify(marker)}+'.'+process.pid+'.'+Math.random().toString(36).slice(2)+'.tmp';
+    fs.writeFileSync(temporary,JSON.stringify({timeout:options.timeout,locked:fs.existsSync(${JSON.stringify(path.join(f.queue.directory, 'queue.lock'))})}));
+    fs.renameSync(temporary,${JSON.stringify(marker)});
     return original.call(this,process.execPath,['-e','setTimeout(()=>{},60000)'],options);
   }
   return original.apply(this,arguments);
@@ -462,7 +463,7 @@ test('a crash with a train notice queued resumes its saved outcome without repea
 test('interrupted validation preserves main and drain resumes the batch', async t => {
   const f = fixture(t); f.lane('first'); f.lane('second'); f.add('first'); f.add('second');
   const before = f.git(['rev-parse', 'main']), marker = path.join(f.root, 'killed');
-  fs.writeFileSync(f.checker, `const fs=require('fs');fs.writeFileSync(${JSON.stringify(marker + '.tmp')},JSON.stringify({pid:process.pid}));fs.renameSync(${JSON.stringify(marker + '.tmp')},${JSON.stringify(marker)});setTimeout(()=>{},60000);`);
+  fs.writeFileSync(f.checker, `const fs=require('fs'),temporary=${JSON.stringify(marker)}+'.'+process.pid+'.'+Math.random().toString(36).slice(2)+'.tmp';fs.writeFileSync(temporary,JSON.stringify({pid:process.pid}));fs.renameSync(temporary,${JSON.stringify(marker)});setTimeout(()=>{},60000);`);
   const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
   const done = waitForExit(worker);
   const deadline = Date.now() + 10000;

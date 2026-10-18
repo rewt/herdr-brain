@@ -172,8 +172,9 @@ test('fixture teardown waits for post-release catch-up before removing its root'
   fs.writeFileSync(f.herdr, `#!${process.execPath}
 import fs from 'node:fs'; const args=process.argv.slice(2);
 if(args[0]==='agent'&&args[1]==='list') {
-  fs.writeFileSync(${JSON.stringify(reached + '.tmp')},String(process.pid));
-  fs.renameSync(${JSON.stringify(reached + '.tmp')},${JSON.stringify(reached)});
+  const temporary=${JSON.stringify(reached)}+'.'+process.pid+'.'+Math.random().toString(36).slice(2)+'.tmp';
+  fs.writeFileSync(temporary,String(process.pid));
+  fs.renameSync(temporary,${JSON.stringify(reached)});
   const deadline=Date.now()+${loadTimeout(10000)};
   while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
   fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');

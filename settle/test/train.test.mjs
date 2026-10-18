@@ -6,6 +6,7 @@ import { fixture } from './fixture.mjs';
 import { enqueue, queueFor } from '../../promote/promote.mjs';
 import { verifyTrainResult } from '../../promote/train.mjs';
 import { gitProject } from '../../lib/project.mjs';
+import { moveMainOnSave } from './auto-retry-fixture.mjs';
 
 const receipt = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`)));
 const result = r => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
@@ -22,7 +23,9 @@ test('settle only reviews code and never executes a configured suite', t => {
   assert.match(fs.readFileSync(path.join(f.root, 'review-prompt'), 'utf8'), /promotion.*queue|batch.*promotion/i);
 });
 
-test('retry recaptures moving main and keeps a completed independent review', t => {
+for (const repeated of [true, false]) test(repeated
+  ? 'retry recaptures moving main and keeps a completed independent review'
+  : 'one move at decide automatically recaptures main and keeps a completed independent review', t => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
   const adapter = path.join(f.root, 'moving-record.mjs'), marker = path.join(f.root, 'moved');
   fs.writeFileSync(adapter, `#!${process.execPath}
@@ -35,15 +38,26 @@ if(args[0]==='status'&&fs.existsSync(file)&&!fs.existsSync(${JSON.stringify(mark
 }
 const r=spawnSync(process.execPath,[process.env.SETTLE_TEST_RECORD,...args],{stdio:'inherit'});process.exit(r.status??1);
 `, { mode: 0o755 });
+  if (repeated) moveMainOnSave(f, run, 'ready', { afterAutomaticRecapture: true });
   const first = f.settle(run, ['--org-cli', adapter]);
-  assert.equal(first.status, 1); assert.match(first.stderr, /base branch moved/);
+  assert.equal(first.status, repeated ? 1 : 0, first.stderr);
+  if (repeated) assert.match(first.stderr, /base branch moved/);
+  else assert.equal(JSON.parse(first.stdout).result, 'promotable');
   const before = receipt(f, run), reviews = f.calls().filter(a => a[1] === 'start').length;
+  assert.equal(reviews, 1);
+  assert.equal(before.automaticBaseRetry.stage, 'rebase');
+  assert.equal(before.recaptures.length, 1);
+  assert.equal(before.recaptures[0].onto, before.automaticBaseRetry.onto);
+  assert.equal(before.recaptures[0].onto === f.git(['rev-parse', 'main']), !repeated);
   const resumed = result(f.retry(run)); assert.equal(resumed.result, 'promotable');
   assert.equal(receipt(f, run).review.sha256, before.review.sha256);
+  assert.deepEqual(receipt(f, run).automaticBaseRetry, before.automaticBaseRetry);
+  assert.equal(receipt(f, run).recaptures.length, repeated ? 2 : 1);
   assert.equal(f.calls().filter(a => a[1] === 'start').length, reviews);
   assert.equal(f.show(f.show(run).item).runs.length, 1);
   assert.equal(f.git(['merge-base', 'main', resumed.head]), f.git(['rev-parse', 'main']));
   assert.equal(fs.readFileSync(path.join(f.workspace, 'upstream'), 'utf8'), 'new main\n');
+  if (repeated) assert.equal(fs.readFileSync(path.join(f.workspace, 'second-upstream.txt'), 'utf8'), 'upstream change\n');
 });
 
 test('retry refuses dirty or conflicting lanes while main moves', t => {
@@ -122,10 +136,15 @@ if(r.status===0&&args[0]==='agent'&&args[1]==='prompt'&&args[3]?.includes('Priva
  execFileSync('git',['-C',${JSON.stringify(f.repo)},'add','upstream']);execFileSync('git',['-C',${JSON.stringify(f.repo)},'commit','-qm','Move main during review']);
 }
 process.exit(r.status??1);`, { mode: 0o755 });
+  moveMainOnSave(f, run, 'ready', { afterAutomaticRecapture: true });
   assert.equal(f.settle(run).status, 1);
-  const before = receipt(f, run); assert.equal(before.stage, 'commit-review'); assert.equal(before.review.verdict, 'PASS');
+  const before = receipt(f, run); assert.equal(before.stage, 'ready'); assert.equal(before.review.verdict, 'PASS');
+  assert.equal(before.automaticBaseRetry.stage, 'commit-review'); assert.equal(before.recaptures.length, 1);
+  assert.notEqual(before.mainHead, f.git(['rev-parse', 'main']));
   const resumed = result(f.retry(run)); assert.equal(resumed.result, 'promotable');
   assert.equal(receipt(f, run).review.sha256, before.review.sha256);
+  assert.deepEqual(receipt(f, run).automaticBaseRetry, before.automaticBaseRetry);
+  assert.equal(receipt(f, run).recaptures.length, 2);
   assert.equal(f.calls().filter(a => a[1] === 'start').length, 1);
 });
 

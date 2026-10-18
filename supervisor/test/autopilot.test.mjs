@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fixture } from '../../settle/test/fixture.mjs';
+import { moveMainOnSave } from '../../settle/test/auto-retry-fixture.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { receiptDirectory } from '../context.mjs';
 import { liveNativeWorker } from '../../promote/native-context.mjs';
@@ -565,7 +566,9 @@ for (const [awaited, scopedTests, recordClaim, withProposal] of [[false, false],
   }
   } finally { releaseWorker(); await releaseWorker.done; }
 });
-test('real CLIs retry an exit-one base-moved refusal with the saved request and land once', { timeout: 60000 }, async t => {
+for (const repeated of [true, false]) test(repeated
+  ? 'real CLIs retry an exit-one base-moved refusal with the saved request and land once'
+  : 'real CLIs land one automatic base retry without an autopilot retry', { timeout: 60000 }, async t => {
   const f = setup(t); f.commit('correct\n');
   const releaseWorker = await existingWorker(t, f);
   const state = () => fold(loadEvents(f.org).events);
@@ -584,6 +587,7 @@ if(r.status===0&&args[0]==='agent'&&args[1]==='prompt'&&args[3]?.includes('Priva
  fs.writeFileSync(${JSON.stringify(marker)},'moved');
 }
 process.exit(r.status??1);`, { mode: 0o755 });
+  const secondMove = repeated ? moveMainOnSave(f, f.run, 'ready', { afterAutomaticRecapture: true }) : null;
   const runner = path.join(f.root, 'autopilot.mjs');
   fs.writeFileSync(runner, `import {autopilotNotice} from ${JSON.stringify(path.join(f.source, 'supervisor/autopilot.mjs'))};\nconsole.log(JSON.stringify(autopilotNotice(${JSON.stringify(f.entry)})));\n`);
   const r = f.exec(process.execPath, [runner]); assert.equal(r.status, 0, r.stderr);
@@ -591,16 +595,23 @@ process.exit(r.status??1);`, { mode: 0o755 });
   releaseWorker();
   assert.equal(result.disposition, 'handled', fs.readFileSync(result.receipt, 'utf8'));
   const saved = JSON.parse(fs.readFileSync(result.receipt));
-  assert.equal(saved.retry_used, true); assert.equal(saved.actions.length, 3);
+  assert.equal(!!saved.retry_used, repeated); assert.equal(saved.actions.length, repeated ? 3 : 2);
   const [first, retry] = saved.actions;
-  assert.equal(first.exit_code, 1); assert.equal(first.phase, 'acknowledged');
-  assert.equal(first.result.result, 'escalate'); assert.match(first.stderr, /base branch moved/);
+  assert.equal(first.exit_code, repeated ? 1 : 0); assert.equal(first.phase, 'acknowledged');
+  assert.equal(first.result.result, repeated ? 'escalate' : 'promotable');
   assert.equal(first.result.journal, path.join(f.org, 'settle', `${f.run}.json`));
-  assert.ok(fs.existsSync(first.result.handoff));
-  assert.equal(retry.exit_code, 0); assert.equal(retry.result.result, 'promotable');
-  assert.ok(retry.args.includes('--retry')); assert.ok(!retry.args.includes('--to'));
+  if (repeated) {
+    assert.match(first.stderr, /base branch moved/); assert.ok(fs.existsSync(first.result.handoff));
+    assert.equal(retry.exit_code, 0); assert.equal(retry.result.result, 'promotable');
+    assert.ok(retry.args.includes('--retry')); assert.ok(!retry.args.includes('--to'));
+    const beforeSecondMove = JSON.parse(fs.readFileSync(secondMove));
+    assert.equal(beforeSecondMove.stage, 'ready'); assert.equal(beforeSecondMove.recaptures.length, 1);
+    assert.equal(beforeSecondMove.mainHead, beforeSecondMove.automaticBaseRetry.onto);
+  } else assert.ok(saved.actions.every(action => !action.args.includes('--retry')));
   const settled = JSON.parse(fs.readFileSync(first.result.journal));
-  assert.equal(settled.to, f.entry.to); assert.equal(settled.recaptures.length, 1);
+  assert.equal(settled.to, f.entry.to); assert.equal(settled.recaptures.length, repeated ? 2 : 1);
+  assert.equal(settled.automaticBaseRetry.stage, 'commit-review');
+  assert.equal(settled.recaptures[0].onto, settled.automaticBaseRetry.onto);
   assert.equal(settled.review.verdict, 'PASS');
   assert.equal(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'start').length, 1, 'retry reuses independent review');
   await releaseWorker.done;
@@ -608,6 +619,7 @@ process.exit(r.status??1);`, { mode: 0o755 });
   assert.equal(state().items.get(f.item).closed?.as, 'done', JSON.stringify(JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')))));
   assert.ok(!fs.existsSync(path.join(directory, 'worker.lock')));
   assert.equal(fs.readFileSync(path.join(f.repo, 'upstream'), 'utf8'), 'new main\n');
+  if (repeated) assert.equal(fs.readFileSync(path.join(f.repo, 'second-upstream.txt'), 'utf8'), 'upstream change\n');
   assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
   const queue = JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')));
   const promoted = queue.results.filter(j => j.run === f.run);
@@ -736,7 +748,7 @@ test('a worker exiting after autopilot precheck leaves a confirmed no-op that ba
       return f.exec(process.execPath, [file, ...args]);
     } });
     assert.equal(result.disposition, 'wake');
-    assert.equal(JSON.parse(fs.readFileSync(result.receipt)).exception, 'AUTOPILOT_NO_NATIVE_WORKER');
+    assert.equal(JSON.parse(fs.readFileSync(result.receipt)).exception, 'AUTOPILOT_NO_NATIVE_WORKER', fs.readFileSync(result.receipt, 'utf8'));
     const journal = path.join(receiptDirectory(f.org, f.entry.project.identity), `${f.run}.json`);
     const refused = JSON.parse(fs.readFileSync(journal));
     assert.equal(refused.phase, 'not-queued'); assert.equal(refused.refusal.code, 'AUTOPILOT_NO_NATIVE_WORKER');

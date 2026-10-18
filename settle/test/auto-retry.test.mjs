@@ -3,9 +3,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fixture } from './fixture.mjs';
+import { moveMainOnSave } from './auto-retry-fixture.mjs';
 
 const receipt = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`)));
-const result = r => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
+function diagnostic(r) {
+  if (!r.stderr?.includes('independent review did not complete')) return r.stderr;
+  try {
+    const saved = JSON.parse(fs.readFileSync(JSON.parse(r.stdout).journal));
+    return `${r.stderr}\n${fs.readFileSync(saved.reviewLog, 'utf8')}`;
+  } catch { return r.stderr; }
+}
+const result = r => { assert.equal(r.status, 0, diagnostic(r)); return JSON.parse(r.stdout); };
 const reviews = f => f.calls().filter(a => a[1] === 'start');
 const workers = f => f.calls().filter(a => a[1] === 'prompt' && a[3]?.startsWith('You are run '));
 
@@ -26,7 +34,6 @@ if (args[0] === 'review') {
     fs.writeFileSync(path.join(workspace, 'concurrent.txt'), 'concurrent work\\n');
     git(workspace, ['add', 'concurrent.txt']); git(workspace, ['commit', '-qm', 'Concurrent lane work']);
   }
-  if (${JSON.stringify(mutation)} === 'dirty') fs.writeFileSync(path.join(workspace, 'concurrent.txt'), 'keep this edit\\n');
 }
 process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1);
 `, { mode: 0o755 });
@@ -87,7 +94,7 @@ git -C '${f.repo}' -c core.hooksPath=/dev/null commit -qm 'Move main again durin
 `, { mode: 0o755 });
   f.git(['config', 'core.hooksPath', hooks]);
   const stopped = f.settle(run, moveDuringReview(f));
-  assert.equal(stopped.status, 1); assert.match(stopped.stderr, /base branch moved; use --retry/);
+  assert.equal(stopped.status, 1); assert.match(diagnostic(stopped), /base branch moved; use --retry/);
   assert.equal(JSON.parse(stopped.stdout).result, 'escalate');
   const saved = receipt(f, run);
   assert.equal(saved.mainHead, base); assert.equal(saved.recaptures, undefined);
@@ -103,21 +110,65 @@ git -C '${f.repo}' -c core.hooksPath=/dev/null commit -qm 'Move main again durin
   assert.equal(reviews(f).length, 1); assert.equal(workers(f).length, 0);
 });
 
-for (const mutation of ['head', 'dirty', 'superseded']) test(`a moved main never bypasses the ${mutation} refusal`, t => {
+for (const mutation of ['head', 'superseded']) test(`a moved main never bypasses the ${mutation} refusal`, t => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
   const head = f.git(['rev-parse', 'HEAD'], f.workspace), base = f.git(['rev-parse', 'main']);
   if (mutation === 'superseded') fs.writeFileSync(path.join(f.root, 'review-record-action.json'),
     JSON.stringify(['start', f.show(run).item, '--workspace', f.workspace]));
   const stopped = f.settle(run, moveDuringReview(f, { mutation }));
   assert.equal(stopped.status, 1);
-  assert.match(stopped.stderr, mutation === 'head' ? /HEAD or branch moved/ : mutation === 'dirty' ? /worktree changed/ : /superseded/);
+  assert.match(diagnostic(stopped), mutation === 'head' ? /HEAD or branch moved/ : /superseded/);
   const saved = receipt(f, run);
   assert.equal(saved.mainHead, base); assert.equal(saved.recapture, undefined); assert.equal(saved.rebase, undefined);
   assert.equal(saved.automaticBaseRetry === undefined, mutation !== 'superseded');
   if (mutation === 'head') assert.equal(fs.readFileSync(path.join(f.workspace, 'concurrent.txt'), 'utf8'), 'concurrent work\n');
   else assert.equal(f.git(['rev-parse', 'HEAD'], f.workspace), head);
-  if (mutation === 'dirty') assert.equal(fs.readFileSync(path.join(f.workspace, 'concurrent.txt'), 'utf8'), 'keep this edit\n');
   assert.equal(reviews(f).length, 1); assert.equal(workers(f).length, 0);
+});
+
+test('automatic recapture rechecks a dirty lane after the review was committed', t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  const reviewed = f.git(['rev-parse', 'HEAD'], f.workspace), base = f.git(['rev-parse', 'main']);
+  const marker = moveMainOnSave(f, run, 'decide', { dirty: true });
+  const stopped = f.settle(run);
+  assert.equal(stopped.status, 1); assert.match(diagnostic(stopped), /lane worktree changed; inspect the retained evidence/);
+  assert.equal(JSON.parse(stopped.stdout).result, 'escalate');
+  const saved = receipt(f, run), beforeMove = JSON.parse(fs.readFileSync(marker));
+  assert.equal(saved.automaticBaseRetry.stage, 'decide');
+  assert.equal(saved.automaticBaseRetry.from, base); assert.equal(saved.automaticBaseRetry.onto, f.git(['rev-parse', 'main']));
+  assert.equal(saved.error, 'lane worktree changed; inspect the retained evidence');
+  assert.equal(saved.mainHead, base); assert.equal(saved.recapture, undefined); assert.equal(saved.rebase, undefined);
+  assert.equal(saved.finalHead, beforeMove.finalHead); assert.equal(f.git(['rev-parse', 'HEAD'], f.workspace), beforeMove.finalHead);
+  assert.equal(f.git(['rev-parse', 'HEAD^'], f.workspace), reviewed);
+  assert.equal(f.git(['show', `${saved.finalHead}:${saved.reviewRelative}`]), saved.review.text.trimEnd());
+  assert.equal(fs.readFileSync(path.join(f.workspace, 'concurrent.txt'), 'utf8'), 'keep this edit\n');
+  assert.equal(f.git(['status', '--porcelain'], f.workspace), '?? concurrent.txt');
+  assert.equal(f.retry(run).status, 1);
+  assert.deepEqual(receipt(f, run).automaticBaseRetry, saved.automaticBaseRetry);
+  assert.equal(reviews(f).length, 1); assert.equal(workers(f).length, 0);
+});
+
+for (const stage of ['validate', 'review', 'decide', 'rebase', 'ready']) test(`a clean move at ${stage} uses one automatic retry and one review`, t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  const source = f.git(['rev-parse', 'HEAD'], f.workspace), base = f.git(['rev-parse', 'main']);
+  moveMainOnSave(f, run, stage);
+  const ready = result(f.settle(run, ['--review-round-cap', '1'])), saved = receipt(f, run);
+  const unreviewed = ['validate', 'review'].includes(stage), main = f.git(['rev-parse', 'main']);
+  assert.equal(ready.result, 'promotable'); assert.equal(saved.automaticBaseRetry.stage, stage);
+  assert.equal(saved.automaticBaseRetry.from, base); assert.equal(saved.automaticBaseRetry.onto, main);
+  assert.equal(saved.recaptures.length, 1); assert.equal(saved.mainHead, main); assert.equal(saved.recapture, undefined);
+  assert.equal(saved.head !== source, unreviewed, 'only unreviewed work is recaptured before review');
+  assert.equal(ready.reviewed_commit, saved.head); assert.equal(saved.review.verdict, 'PASS');
+  assert.equal(saved.round, 1); assert.equal(ready.review_policy.cap, 1); assert.equal(ready.review_policy.round, 1);
+  assert.equal(f.git(['merge-base', main, ready.head]), main);
+  assert.equal(f.git(['show', `${ready.head}:${saved.reviewRelative}`]), saved.review.text.trimEnd());
+  assert.equal(fs.readFileSync(path.join(f.workspace, 'upstream.txt'), 'utf8'), 'upstream change\n');
+  assert.equal(fs.readFileSync(path.join(f.workspace, 'work.txt'), 'utf8'), 'correct\n');
+  assert.equal(f.git(['status', '--porcelain'], f.workspace), '');
+  const prompt = fs.readFileSync(path.join(f.root, 'review-prompt'), 'utf8');
+  assert.ok(prompt.includes(`Reviewed commit: ${saved.head}`));
+  assert.ok(prompt.includes(`Base commit: ${unreviewed ? main : base}`));
+  assert.equal(reviews(f).length, 1); assert.equal(workers(f).length, 0); assert.equal(ready.validation.executed, false);
 });
 
 test('a moved main does not automatically restart an uncertain reviewer', t => {

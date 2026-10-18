@@ -2,11 +2,11 @@
 // fleet home; project files and records are only read by this launcher.
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { stripVTControlCharacters } from 'node:util';
 import { spawnSync } from 'node:child_process';
 import { readFleet, staleProject } from '../lib/fleet.mjs';
-import { writeFileAtomic } from '../lib/files.mjs';
+import { plainDirectory, writeFileAtomic } from '../lib/files.mjs';
 import { withInstallationLock } from '../lib/install-lock.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { entryPolicy } from '../discovery/policy.mjs';
@@ -188,10 +188,12 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     waitForShell(herdr, receipt, project, { now, sleep, startupMs });
     const root = fileURLToPath(new URL('../', import.meta.url));
     const policy = entryPolicy({ canonical: project.checkout, org: project.record, role: 'chat' }, root);
-    const native = nativeArguments(launch, policy);
+    const instructionsFile = path.join(home, 'sessions/contexts', `${randomUUID()}.instructions.md`);
+    const native = nativeArguments(launch, policy, undefined, instructionsFile);
     try {
       // Agent start waits for harness readiness and reads account selectors from
       // its caller, so it needs both the chat environment and a longer deadline.
+      writeInstructions(launch, instructionsFile, policy);
       herdr(['agent', 'start', chat, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs), '--', ...native],
         { env: { ...env, ...Object.fromEntries(pairs) }, timeout: startupMs + 10000 });
     } catch (error) {
@@ -214,19 +216,34 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
 
 // Shared launch owner for enrolled standard slots. The controller supplies a
 // resolved route and materialized instructions, never executable/native argv.
-function nativeArguments(launch, instructions, resume) {
+function nativeArguments(launch, instructions, resume, instructionsFile) {
   const native = [...launch.args];
   if (resume) native.push(...(launch.kind === 'codex' ? ['resume', resume] : ['--resume', resume]));
   if (launch.model) native.push('--model', launch.model);
   if (launch.effort) native.push(...(launch.kind === 'codex' ? ['-c', `model_reasoning_effort=${launch.effort}`] : ['--effort', launch.effort]));
-  native.push(...(launch.kind === 'claude' ? ['--append-system-prompt', instructions] : ['-c', `developer_instructions=${JSON.stringify(instructions)}`]));
+  native.push(...(launch.kind === 'claude' ? ['--append-system-prompt-file', instructionsFile] : ['-c', `developer_instructions=${JSON.stringify(instructions)}`]));
+  if (native.some(arg => typeof arg !== 'string' || /[\x00-\x1f\x7f-\x9f]/u.test(arg))) throw Error('native launch arguments contain a control character or non-string value');
   return native;
 }
+function writeInstructions(launch, instructionsFile, instructions) {
+  if (launch.kind === 'claude') {
+    const directory = path.dirname(instructionsFile);
+    plainDirectory(path.dirname(directory));
+    try { fs.mkdirSync(directory, { mode: 0o700 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    plainDirectory(directory, { create: false });
+    // Retain exact context bytes even after an uncertain launch. Never replace
+    // the instructions belonging to an earlier attempt of this operation.
+    const fd = fs.openSync(instructionsFile, 'wx', 0o600);
+    try { fs.writeFileSync(fd, instructions); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  }
+}
 export function openStandardSession({ target, launch, name, instructions, resume, create = false,
+  common, operationId = randomUUID(),
   role, record, beforeMutation = () => {}, env = process.env, herdr, now = Date.now, sleep = pause, startupMs = 30000 }) {
   if (typeof herdr !== 'function') throw Error('standard launch requires the controller Herdr edge');
   if (!['chat', 'supervisor'].includes(role) || !['codex', 'claude'].includes(launch.kind) ||
-      !record || !path.isAbsolute(record) || !instructions?.trim() || !/^[a-z][a-z0-9_-]{0,31}$/u.test(name)) throw Error('unsupported standard session launch');
+      !record || !path.isAbsolute(record) || !instructions?.trim() || !/^[a-z][a-z0-9_-]{0,31}$/u.test(name) ||
+      !/^[a-zA-Z0-9_-]+$/u.test(operationId)) throw Error('unsupported standard session launch');
   const pairs = Object.fromEntries(launch.env.map(pair => {
     if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0')) throw Error('invalid standard launch environment');
     const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
@@ -234,7 +251,9 @@ export function openStandardSession({ target, launch, name, instructions, resume
   Object.assign(pairs, { ORG_DIR: record, ORG_ACTOR: name, HERDR_AGENT_NAME: name, MONITOR_SESSION_ROLE: role });
   if (role === 'supervisor') pairs.MONITOR_SUPERVISOR_AGENT = name;
   // Both standard roles are human-typed conversations and never receive hooks.
-  const native = nativeArguments(launch, instructions, resume);
+  const instructionsFile = launch.kind === 'claude'
+    ? path.join(common ?? gitProject(target.checkout).identity, 'sessions/contexts', `${operationId}.instructions.md`) : undefined;
+  const native = nativeArguments(launch, instructions, resume, instructionsFile);
   let receipt = { workspace: target.workspace, tab: target.tab, pane: target.pane, terminalId: target.terminalId };
   if (create) {
     beforeMutation();
@@ -247,6 +266,7 @@ export function openStandardSession({ target, launch, name, instructions, resume
   }
   waitForShell(herdr, receipt, { checkout: target.checkout }, { now, sleep, startupMs, beforeInput: beforeMutation });
   beforeMutation(receipt);
+  writeInstructions(launch, instructionsFile, instructions);
   herdr(['agent', 'start', name, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs),
     '--', ...native], { env: { ...env, ...pairs }, timeout: startupMs + 10000 });
   return { ...receipt, name, checkout: target.checkout, kind: launch.kind };

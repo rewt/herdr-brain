@@ -1,0 +1,363 @@
+TAP version 13
+# Subtest: chat claude: real adapter and fake CLI start, observed exact binding, no replay
+ok 1 - chat claude: real adapter and fake CLI start, observed exact binding, no replay
+  ---
+  duration_ms: 3294.236084
+  ...
+# Subtest: chat codex: real adapter and fake CLI start, observed exact binding, no replay
+ok 2 - chat codex: real adapter and fake CLI start, observed exact binding, no replay
+  ---
+  duration_ms: 3046.776542
+  ...
+# Subtest: supervisor claude: real adapter and fake CLI start, observed exact binding, no replay
+ok 3 - supervisor claude: real adapter and fake CLI start, observed exact binding, no replay
+  ---
+  duration_ms: 2972.439917
+  ...
+# Subtest: supervisor codex: real adapter and fake CLI start, observed exact binding, no replay
+ok 4 - supervisor codex: real adapter and fake CLI start, observed exact binding, no replay
+  ---
+  duration_ms: 3031.905833
+  ...
+# Subtest: fake Herdr rejects old inline multiline and control arguments before starting a session
+ok 5 - fake Herdr rejects old inline multiline and control arguments before starting a session
+  ---
+  duration_ms: 437.165417
+  ...
+# Subtest: Claude instructions are exclusive per operation, including a repeated launch attempt
+not ok 6 - Claude instructions are exclusive per operation, including a repeated launch attempt
+  ---
+  duration_ms: 2689.622667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-launch-args/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + Comparison {}
+    - Comparison {
+    -   code: 'EEXIST'
+    - }
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    code: 'EEXIST'
+  actual:
+  error: 'pane is not confirmed empty'
+  stack: |-
+    fail (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-launch-args/sessions/live.mjs:25:32)
+    layout (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-launch-args/sessions/live.mjs:89:138)
+    Object.start (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-launch-args/sessions/live.mjs:220:14)
+    async waitForActual (node:assert:533:5)
+    async Function.rejects (node:assert:654:25)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-launch-args/test/session-live.test.mjs:189:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  operator: 'rejects'
+  stack: |-
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-launch-args/test/session-live.test.mjs:189:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: lost start reply holds with no second launch, even if native occupant appeared
+ok 7 - lost start reply holds with no second launch, even if native occupant appeared
+  ---
+  duration_ms: 3158.354292
+  ...
+# Subtest: pane run accepts only successful empty output and other commands remain strict JSON
+ok 8 - pane run accepts only successful empty output and other commands remain strict JSON
+  ---
+  duration_ms: 503.155416
+  ...
+# Subtest: an empty failing pane run stops the live start before launching
+ok 9 - an empty failing pane run stops the live start before launching
+  ---
+  duration_ms: 3180.846042
+  ...
+# Subtest: never-started disposition succeeds through unrelated workspace and agent churn
+ok 10 - never-started disposition succeeds through unrelated workspace and agent churn
+  ---
+  duration_ms: 3266.095917
+  ...
+# Subtest: plan and apply launch the exact target through unrelated workspace and agent churn
+ok 11 - plan and apply launch the exact target through unrelated workspace and agent churn
+  ---
+  duration_ms: 3036.588417
+  ...
+# Subtest: never-started disposition holds on target changes between observations without changing the journal
+ok 12 - never-started disposition holds on target changes between observations without changing the journal
+  ---
+  duration_ms: 9554.501458
+  ...
+# Subtest: explicit never-started disposition retains the intent and permits a newly planned start once
+ok 13 - explicit never-started disposition retains the intent and permits a newly planned start once
+  ---
+  duration_ms: 6150.15725
+  ...
+# Subtest: CLI dispose-start records only the explicitly named never-started intent before re-planning
+ok 14 - CLI dispose-start records only the explicitly named never-started intent before re-planning
+  ---
+  duration_ms: 3198.953458
+  ...
+# Subtest: never-started disposition refuses uncertain claims, stale/foreign evidence, sources, receipts and launch context
+ok 15 - never-started disposition refuses uncertain claims, stale/foreign evidence, sources, receipts and launch context
+  ---
+  duration_ms: 5797.925958
+  ...
+# Subtest: never-started disposition and planning hold with an agent, session, pending launch, busy or changed pane
+ok 16 - never-started disposition and planning hold with an agent, session, pending launch, busy or changed pane
+  ---
+  duration_ms: 6892.887458
+  ...
+# Subtest: exact tab close refuses a multi-owner tab in the real adapter
+ok 17 - exact tab close refuses a multi-owner tab in the real adapter
+  ---
+  duration_ms: 2804.018667
+  ...
+# Subtest: close and respawn bind a new incarnation, with one action per apply
+ok 18 - close and respawn bind a new incarnation, with one action per apply
+  ---
+  duration_ms: 6546.556791
+  ...
+# Subtest: claude resume delegates the same native reference only after confirmed exit
+ok 19 - claude resume delegates the same native reference only after confirmed exit
+  ---
+  duration_ms: 5258.647042
+  ...
+# Subtest: codex resume delegates the same native reference only after confirmed exit
+ok 20 - codex resume delegates the same native reference only after confirmed exit
+  ---
+  duration_ms: 5417.433333
+  ...
+# Subtest: apply refusals are read-only without authorization, under STOP/hold, on expiry/mismatch, and after plan drift
+ok 21 - apply refusals are read-only without authorization, under STOP/hold, on expiry/mismatch, and after plan drift
+  ---
+  duration_ms: 1943.825875
+  ...
+# Subtest: authorize validates record reference, role, workspace and durable receipt without invoking Herdr
+ok 22 - authorize validates record reference, role, workspace and durable receipt without invoking Herdr
+  ---
+  duration_ms: 509.32275
+  ...
+# Subtest: authorize refuses auto answers, supervisor decision notes and other machine or unattributed answers
+ok 23 - authorize refuses auto answers, supervisor decision notes and other machine or unattributed answers
+  ---
+  duration_ms: 510.935
+  ...
+# Subtest: operator approval binds the workspace and actions before the answer and is rechecked on use
+ok 24 - operator approval binds the workspace and actions before the answer and is rechecked on use
+  ---
+  duration_ms: 760.044458
+  ...
+# Subtest: real adapters reject work items, reviewers and triage before the physical seam
+ok 25 - real adapters reject work items, reviewers and triage before the physical seam
+  ---
+  duration_ms: 233.576334
+  ...
+# Subtest: respawn then stage-8 role inbox transfer retains IDs and open questions without a prompt
+ok 26 - respawn then stage-8 role inbox transfer retains IDs and open questions without a prompt
+  ---
+  duration_ms: 9374.474375
+  ...
+# Subtest: stage-8 transfer never redirects exact-session addresses and never mutates a live root
+ok 27 - stage-8 transfer never redirects exact-session addresses and never mutates a live root
+  ---
+  duration_ms: 2578.172125
+  ...
+# Subtest: logs viewer uses the existing foreground viewer and never starts a model
+ok 28 - logs viewer uses the existing foreground viewer and never starts a model
+  ---
+  duration_ms: 4148.425209
+  ...
+# Subtest: CLI authorize only records, and apply requires explicit workspace, receipt and current saved plan
+ok 29 - CLI authorize only records, and apply requires explicit workspace, receipt and current saved plan
+  ---
+  duration_ms: 3085.916708
+  ...
+# Subtest: STOP or terminal replacement during shell readiness prevents agent start
+ok 30 - STOP or terminal replacement during shell readiness prevents agent start
+  ---
+  duration_ms: 8715.74575
+  ...
+# Subtest: unconfirmed exit, native restore ownership and changed context receipts cannot resume
+ok 31 - unconfirmed exit, native restore ownership and changed context receipts cannot resume
+  ---
+  duration_ms: 5081.971792
+  ...
+# Subtest: a copied receipt, stale saved plan and missing enrollment never grant action authority
+ok 32 - a copied receipt, stale saved plan and missing enrollment never grant action authority
+  ---
+  duration_ms: 1018.73375
+  ...
+# Subtest: the real adapter cannot invoke a launcher without its exact durable intent
+ok 33 - the real adapter cannot invoke a launcher without its exact durable intent
+  ---
+  duration_ms: 485.351292
+  ...
+# Subtest: stage-8 handover excludes an active receiver offer through its existing delivery lock
+ok 34 - stage-8 handover excludes an active receiver offer through its existing delivery lock
+  ---
+  duration_ms: 2597.242917
+  ...
+# Subtest: A2 opted-in supervisor and chat launches remain human-typed and hook-free
+ok 35 - A2 opted-in supervisor and chat launches remain human-typed and hook-free
+  ---
+  duration_ms: 5031.599666
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: default chat launches the native Codex harness with no sandbox preflight or Claude fallback
+ok 36 - default chat launches the native Codex harness with no sandbox preflight or Claude fallback
+  ---
+  duration_ms: 950.385125
+  ...
+# Subtest: one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+ok 37 - one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+  ---
+  duration_ms: 1519.35875
+  ...
+# Subtest: operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+ok 38 - operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+  ---
+  duration_ms: 974.872375
+  ...
+# Subtest: failed or uncertain startup retains one tab and never launches again on reopen
+ok 39 - failed or uncertain startup retains one tab and never launches again on reopen
+  ---
+  duration_ms: 1175.541917
+  ...
+# Subtest: agent start can wait beyond ten seconds within the requested startup window
+ok 40 - agent start can wait beyond ten seconds within the requested startup window
+  ---
+  duration_ms: 11352.975541
+  ...
+# Subtest: agent start failure explains the retained tab and reopening never repeats the launch
+ok 41 - agent start failure explains the retained tab and reopening never repeats the launch
+  ---
+  duration_ms: 948.629167
+  ...
+# Subtest: codex agent start caller receives the resolved chat environment over the launcher environment
+ok 42 - codex agent start caller receives the resolved chat environment over the launcher environment
+  ---
+  duration_ms: 888.7335
+  ...
+# Subtest: claude agent start caller receives the resolved chat environment over the launcher environment
+ok 43 - claude agent start caller receives the resolved chat environment over the launcher environment
+  ---
+  duration_ms: 875.548583
+  ...
+# Subtest: shell readiness fails before sending input and retains a recoverable tab
+ok 44 - shell readiness fails before sending input and retains a recoverable tab
+  ---
+  duration_ms: 1558.581583
+  ...
+# Subtest: an unnamed detected launch is recovered only in the receipt pane with the same harness and checkout
+ok 45 - an unnamed detected launch is recovered only in the receipt pane with the same harness and checkout
+  ---
+  duration_ms: 1218.757833
+  ...
+# Subtest: late detection after timeout recovers the unnamed chat without replaying launch
+ok 46 - late detection after timeout recovers the unnamed chat without replaying launch
+  ---
+  duration_ms: 1363.672584
+  ...
+# Subtest: an oh-my-zsh builtin update question never receives shell input
+ok 47 - an oh-my-zsh builtin update question never receives shell input
+  ---
+  duration_ms: 1489.052833
+  ...
+# Subtest: startup waits through an update question before proving prompt and command execution
+ok 48 - startup waits through an update question before proving prompt and command execution
+  ---
+  duration_ms: 1109.584042
+  ...
+# Subtest: echoed probe input is not execution proof and cannot launch an agent
+ok 49 - echoed probe input is not execution proof and cannot launch an agent
+  ---
+  duration_ms: 1013.147041
+  ...
+# Subtest: the named prototype in chats is adopted unchanged and other projects join that workspace
+ok 50 - the named prototype in chats is adopted unchanged and other projects join that workspace
+  ---
+  duration_ms: 1302.94975
+  ...
+# Subtest: prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+ok 51 - prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+  ---
+  duration_ms: 768.837833
+  ...
+# Subtest: chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+ok 52 - chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+  ---
+  duration_ms: 1429.693042
+  ...
+# Subtest: a closed chat tab can be recreated while the other project remains in the same workspace
+ok 53 - a closed chat tab can be recreated while the other project remains in the same workspace
+  ---
+  duration_ms: 2190.540291
+  ...
+# Subtest: an existing named control workspace is reused and ambient recipients never cross project boundaries
+ok 54 - an existing named control workspace is reused and ambient recipients never cross project boundaries
+  ---
+  duration_ms: 843.966583
+  ...
+# Subtest: committed read/scoped chat settings and older receipts with any herdr_mode open full chats
+ok 55 - committed read/scoped chat settings and older receipts with any herdr_mode open full chats
+  ---
+  duration_ms: 1793.22725
+  ...
+# Subtest: unknown and stale fleet projects fail before Herdr mutations while retired entry settings are ignored
+ok 56 - unknown and stale fleet projects fail before Herdr mutations while retired entry settings are ignored
+  ---
+  duration_ms: 886.866416
+  ...
+# Subtest: standard supervisor and chat argv are byte-identical with disabled, enabled or invalid hook config
+ok 57 - standard supervisor and chat argv are byte-identical with disabled, enabled or invalid hook config
+  ---
+  duration_ms: 3715.892
+  ...
+# Subtest: standard launch argument failure occurs before tab creation
+ok 58 - standard launch argument failure occurs before tab creation
+  ---
+  duration_ms: 264.987875
+  ...
+# Subtest: standard session proves the marker with empty or whitespace pane run output
+ok 59 - standard session proves the marker with empty or whitespace pane run output
+  ---
+  duration_ms: 1570.459167
+  ...
+# Subtest: empty failing pane run and empty agent list fail, and malformed pane run stays strict
+ok 60 - empty failing pane run and empty agent list fail, and malformed pane run stays strict
+  ---
+  duration_ms: 751.691625
+  ...
+# Subtest: fake Herdr rejects inline multiline and control arguments before starting a chat
+ok 61 - fake Herdr rejects inline multiline and control arguments before starting a chat
+  ---
+  duration_ms: 497.940625
+  ...
+# Subtest: claude standard launch preserves multiline instructions without control characters in argv
+ok 62 - claude standard launch preserves multiline instructions without control characters in argv
+  ---
+  duration_ms: 699.073875
+  ...
+# Subtest: codex standard launch preserves multiline instructions without control characters in argv
+ok 63 - codex standard launch preserves multiline instructions without control characters in argv
+  ---
+  duration_ms: 735.6905
+  ...
+# Subtest: standard launch refuses control characters in route arguments before creating a tab
+ok 64 - standard launch refuses control characters in route arguments before creating a tab
+  ---
+  duration_ms: 294.858708
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..64
+# tests 64
+# suites 0
+# pass 63
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 126441.880875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

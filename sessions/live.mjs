@@ -154,7 +154,8 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     }
     const made = opener({ ...launchOptions, target, role: spec.role, record: findOrgDir({ cwd: project.root, env }), launch: spec.resolvedRoute,
       name: resume ? target.agentName : `slot-${createHash('sha256').update(op.id).digest('hex').slice(0, 24)}`,
-      instructions, beforeMutation: receipt => physicalPermit(op, receipt, create), resume: resume ? target.nativeSessionId : undefined, create, env, herdr });
+      instructions, common: project.common, operationId: op.id,
+      beforeMutation: receipt => physicalPermit(op, receipt, create), resume: resume ? target.nativeSessionId : undefined, create, env, herdr });
     return { ...made, instructionsSha256: createHash('sha256').update(instructions).digest('hex') };
   };
   function physicalObservation(op) {

@@ -53,12 +53,17 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   state.screen = (state.screen || '') + '\\n' + run.stdout + '\\ncheckout % ';
   runReply();
 } else if (a[0] === 'agent' && a[1] === 'start') {
+  const native = a.includes('--') ? a.slice(a.indexOf('--') + 1) : [];
+  if (native.some(arg => /[\\x00-\\x1f\\x7f-\\x9f]/u.test(arg)))
+    fail(JSON.stringify({error:{code:'invalid_agent_argument',message:'agent arguments cannot be encoded safely for the target shell'}}));
   if (state.startDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, state.startDelayMs);
   const pane = state.panes.find(p => p.pane_id === value('--pane'));
   const callerEnv = Object.fromEntries(['ORG_DIR', 'ORG_ACTOR', 'HERDR_AGENT_NAME', 'HERDR_MONITOR_FLEET',
     'MONITOR_SUPERVISOR_AGENT', 'MONITOR_SESSION_ROLE', 'LANE_CONFIG', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR',
     'CHAT_LAUNCHER_ONLY'].map(key => [key, process.env[key]]));
-  state.launches.push({kind: value('--kind'), args: a.slice(a.indexOf('--') + 1), env: state.env[pane.pane_id], callerEnv});
+  const instructions = value('--kind') === 'claude' ? fs.readFileSync(native.at(-1), 'utf8')
+    : JSON.parse(native.at(-1).slice('developer_instructions='.length));
+  state.launches.push({kind: value('--kind'), args: native, instructions, env: state.env[pane.pane_id], callerEnv});
   if (!state.noDetect) state.agents.push({pane_id: pane.pane_id, agent: state.detectKind || value('--kind'),
     name: state.unnamed ? null : a[2], cwd: state.wrongCwd || pane.foreground_cwd});
   result({});
@@ -157,8 +162,10 @@ test('operator CLI works without entry, selects an existing control workspace, a
   const receipt = JSON.parse(r.stdout); assert.equal(receipt.workspace, 'chosen'); assert.equal(receipt.to, 'ops-explicit');
   const launch = f.state().launches[0]; assert.equal(launch.kind, 'claude');
   assert.deepEqual(launch.args.slice(0, 6), ['--plugin-dir', "/space and quotes/it's-plugin", '--model', 'model-chat', '--effort', 'high']);
-  assert.equal(launch.args[6], '--append-system-prompt');
-  assert.match(launch.args[7], /project chat/);
+  assert.equal(launch.args[6], '--append-system-prompt-file');
+  assert.match(launch.instructions, /project chat/);
+  assert.equal(fs.statSync(launch.args[7]).mode & 0o777, 0o600);
+  assert.equal(path.dirname(launch.args[7]), path.join(f.env.HERDR_MONITOR_FLEET, 'sessions/contexts'));
   assert.equal(launch.env.MONITOR_SUPERVISOR_AGENT, 'ops-explicit'); assert.equal(f.state().focus, 'operator-work');
   assert.equal(f.state().calls.some(a => a[0] === 'workspace' && a[1] === 'create'), false);
   assert.throws(() => f.open(f.projects[1], {workspace: 'other'}), /already use control workspace/);
@@ -198,6 +205,8 @@ for (const kind of ['codex', 'claude']) test(`${kind} agent start caller receive
     CODEX_HOME: '/foreign/codex', CLAUDE_CONFIG_DIR: '/foreign/claude', CHAT_LAUNCHER_ONLY: 'inherited'});
   const receipt = f.open(p, {route: 'account', to: 'ops-explicit'});
   const launch = f.state().launches[0];
+  assert.match(launch.instructions, /\n/u);
+  assert.equal(launch.args.some(arg => /[\x00-\x1f\x7f-\x9f]/u.test(arg)), false);
   const expected = {ORG_DIR: p.record, ORG_ACTOR: receipt.name, HERDR_AGENT_NAME: receipt.name,
     HERDR_MONITOR_FLEET: f.env.HERDR_MONITOR_FLEET, MONITOR_SUPERVISOR_AGENT: 'ops-explicit',
     MONITOR_SESSION_ROLE: 'chat', LANE_CONFIG: '', CODEX_HOME: '/route/codex', CLAUDE_CONFIG_DIR: '/route/claude'};
@@ -374,9 +383,10 @@ test('standard supervisor and chat argv are byte-identical with disabled, enable
         launch: { kind: 'claude', args: ['--settings', 'owner settings'], env: [], model: 'model', effort: 'high' },
         name: 'standard-conversation', role, record: project.record, instructions: 'Conversation',
         env: f.env, herdr: herdrCommand(f.env), startupMs: 1000 });
-      const args = f.state().launches.at(-1).args;
+      const launch = f.state().launches.at(-1), args = launch.args.slice(0, -1);
       expected ??= JSON.stringify(args); assert.equal(JSON.stringify(args), expected);
-      assert.deepEqual(args, ['--settings', 'owner settings', '--model', 'model', '--effort', 'high', '--append-system-prompt', 'Conversation']);
+      assert.deepEqual(args, ['--settings', 'owner settings', '--model', 'model', '--effort', 'high', '--append-system-prompt-file']);
+      assert.equal(launch.instructions, 'Conversation');
     }
   }
   assert.equal(fs.existsSync(path.join(project.identity, 'sessions/hook-pull')), false);
@@ -408,4 +418,43 @@ test('empty failing pane run and empty agent list fail, and malformed pane run s
   assert.throws(()=>herdrCommand(f.env)(['pane','run',f.state().panes[0].pane_id,"printf '%s' 'marker'"]),SyntaxError);
   f.change(s=>s.emptyAgentList=true);
   assert.throws(()=>herdrCommand(f.env)(['agent','list']),SyntaxError);
+});
+
+test('fake Herdr rejects inline multiline and control arguments before starting a chat', t => {
+  const f = fixture(t), herdr = herdrCommand(f.env);
+  for (const control of ['\n', '\r', '\t', '\x01', '\x7f', '\x85']) {
+    assert.throws(() => herdr(['agent', 'start', 'inline', '--kind', 'claude', '--pane', 'unused',
+      '--', '--append-system-prompt', 'first' + control + 'second']), /invalid_agent_argument/);
+  }
+  assert.equal(f.state().launches.length, 0);
+  assert.equal(f.state().agents.length, 0);
+});
+
+for (const kind of ['claude', 'codex']) test(kind + ' standard launch preserves multiline instructions without control characters in argv', t => {
+  const f = fixture(t), p = f.projects[0], instructions = 'First line\nSecond line\r\nTabs\tand controls \x01; Unicode café 🐑';
+  openStandardSession({ target: { workspace: 'standard', checkout: p.checkout }, create: true,
+    launch: { kind, args: [], env: [] }, name: 'standard-conversation', role: 'chat', record: p.record,
+    instructions, operationId: 'multiline-launch', common: p.identity,
+    env: f.env, herdr: herdrCommand(f.env), startupMs: 1000 });
+  const launch = f.state().launches.at(-1);
+  assert.equal(launch.instructions, instructions);
+  assert.equal(launch.args.some(arg => /[\x00-\x1f\x7f-\x9f]/u.test(arg)), false);
+  if (kind === 'claude') {
+    assert.equal(launch.args.at(-2), '--append-system-prompt-file');
+    assert.equal(launch.args.at(-1), path.join(p.identity, 'sessions/contexts/multiline-launch.instructions.md'));
+    assert.equal(fs.statSync(launch.args.at(-1)).mode & 0o777, 0o600);
+  } else {
+    assert.equal(launch.args.at(-2), '-c');
+    assert.match(launch.args.at(-1), /developer_instructions=.*\\n.*\\r\\n.*\\t.*\\u0001/u);
+  }
+});
+
+test('standard launch refuses control characters in route arguments before creating a tab', t => {
+  const f = fixture(t), p = f.projects[0];
+  for (const kind of ['claude', 'codex']) assert.throws(() => openStandardSession({
+    target: { workspace: 'standard', checkout: p.checkout }, create: true,
+    launch: { kind, args: ['--example', 'bad\nargument'], env: [] },
+    name: 'standard-conversation', role: 'chat', record: p.record, instructions: 'Conversation',
+    env: f.env, herdr: herdrCommand(f.env) }), /control character/);
+  assert.deepEqual(f.state().calls, []);
 });

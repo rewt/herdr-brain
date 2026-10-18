@@ -1,0 +1,187 @@
+TAP version 13
+# Subtest: chat claude: real adapter and fake CLI start, observed exact binding, no replay
+ok 1 - chat claude: real adapter and fake CLI start, observed exact binding, no replay # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.55925
+  ...
+# Subtest: chat codex: real adapter and fake CLI start, observed exact binding, no replay
+ok 2 - chat codex: real adapter and fake CLI start, observed exact binding, no replay # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038834
+  ...
+# Subtest: supervisor claude: real adapter and fake CLI start, observed exact binding, no replay
+ok 3 - supervisor claude: real adapter and fake CLI start, observed exact binding, no replay # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03025
+  ...
+# Subtest: supervisor codex: real adapter and fake CLI start, observed exact binding, no replay
+ok 4 - supervisor codex: real adapter and fake CLI start, observed exact binding, no replay # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.063709
+  ...
+# Subtest: fake Herdr rejects old inline multiline and control arguments before starting a session
+ok 5 - fake Herdr rejects old inline multiline and control arguments before starting a session # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036583
+  ...
+# Subtest: Claude instructions are exclusive per operation, including a repeated launch attempt
+ok 6 - Claude instructions are exclusive per operation, including a repeated launch attempt
+  ---
+  duration_ms: 3230.495583
+  ...
+# Subtest: lost start reply holds with no second launch, even if native occupant appeared
+ok 7 - lost start reply holds with no second launch, even if native occupant appeared # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.108334
+  ...
+# Subtest: pane run accepts only successful empty output and other commands remain strict JSON
+ok 8 - pane run accepts only successful empty output and other commands remain strict JSON # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.081917
+  ...
+# Subtest: an empty failing pane run stops the live start before launching
+ok 9 - an empty failing pane run stops the live start before launching # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.112458
+  ...
+# Subtest: never-started disposition succeeds through unrelated workspace and agent churn
+ok 10 - never-started disposition succeeds through unrelated workspace and agent churn # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.05725
+  ...
+# Subtest: plan and apply launch the exact target through unrelated workspace and agent churn
+ok 11 - plan and apply launch the exact target through unrelated workspace and agent churn # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034375
+  ...
+# Subtest: never-started disposition holds on target changes between observations without changing the journal
+ok 12 - never-started disposition holds on target changes between observations without changing the journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036625
+  ...
+# Subtest: explicit never-started disposition retains the intent and permits a newly planned start once
+ok 13 - explicit never-started disposition retains the intent and permits a newly planned start once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067167
+  ...
+# Subtest: CLI dispose-start records only the explicitly named never-started intent before re-planning
+ok 14 - CLI dispose-start records only the explicitly named never-started intent before re-planning # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030709
+  ...
+# Subtest: never-started disposition refuses uncertain claims, stale/foreign evidence, sources, receipts and launch context
+ok 15 - never-started disposition refuses uncertain claims, stale/foreign evidence, sources, receipts and launch context # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.072084
+  ...
+# Subtest: never-started disposition and planning hold with an agent, session, pending launch, busy or changed pane
+ok 16 - never-started disposition and planning hold with an agent, session, pending launch, busy or changed pane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031875
+  ...
+# Subtest: exact tab close refuses a multi-owner tab in the real adapter
+ok 17 - exact tab close refuses a multi-owner tab in the real adapter # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.107917
+  ...
+# Subtest: close and respawn bind a new incarnation, with one action per apply
+ok 18 - close and respawn bind a new incarnation, with one action per apply # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03475
+  ...
+# Subtest: claude resume delegates the same native reference only after confirmed exit
+ok 19 - claude resume delegates the same native reference only after confirmed exit # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060375
+  ...
+# Subtest: codex resume delegates the same native reference only after confirmed exit
+ok 20 - codex resume delegates the same native reference only after confirmed exit # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03225
+  ...
+# Subtest: apply refusals are read-only without authorization, under STOP/hold, on expiry/mismatch, and after plan drift
+ok 21 - apply refusals are read-only without authorization, under STOP/hold, on expiry/mismatch, and after plan drift # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023208
+  ...
+# Subtest: authorize validates record reference, role, workspace and durable receipt without invoking Herdr
+ok 22 - authorize validates record reference, role, workspace and durable receipt without invoking Herdr # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023458
+  ...
+# Subtest: authorize refuses auto answers, supervisor decision notes and other machine or unattributed answers
+ok 23 - authorize refuses auto answers, supervisor decision notes and other machine or unattributed answers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023417
+  ...
+# Subtest: operator approval binds the workspace and actions before the answer and is rechecked on use
+ok 24 - operator approval binds the workspace and actions before the answer and is rechecked on use # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021875
+  ...
+# Subtest: real adapters reject work items, reviewers and triage before the physical seam
+ok 25 - real adapters reject work items, reviewers and triage before the physical seam # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020625
+  ...
+# Subtest: respawn then stage-8 role inbox transfer retains IDs and open questions without a prompt
+ok 26 - respawn then stage-8 role inbox transfer retains IDs and open questions without a prompt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020042
+  ...
+# Subtest: stage-8 transfer never redirects exact-session addresses and never mutates a live root
+ok 27 - stage-8 transfer never redirects exact-session addresses and never mutates a live root # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020667
+  ...
+# Subtest: logs viewer uses the existing foreground viewer and never starts a model
+ok 28 - logs viewer uses the existing foreground viewer and never starts a model # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020041
+  ...
+# Subtest: CLI authorize only records, and apply requires explicit workspace, receipt and current saved plan
+ok 29 - CLI authorize only records, and apply requires explicit workspace, receipt and current saved plan # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025042
+  ...
+# Subtest: STOP or terminal replacement during shell readiness prevents agent start
+ok 30 - STOP or terminal replacement during shell readiness prevents agent start # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020292
+  ...
+# Subtest: unconfirmed exit, native restore ownership and changed context receipts cannot resume
+ok 31 - unconfirmed exit, native restore ownership and changed context receipts cannot resume # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020042
+  ...
+# Subtest: a copied receipt, stale saved plan and missing enrollment never grant action authority
+ok 32 - a copied receipt, stale saved plan and missing enrollment never grant action authority # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.084333
+  ...
+# Subtest: the real adapter cannot invoke a launcher without its exact durable intent
+ok 33 - the real adapter cannot invoke a launcher without its exact durable intent # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068209
+  ...
+# Subtest: stage-8 handover excludes an active receiver offer through its existing delivery lock
+ok 34 - stage-8 handover excludes an active receiver offer through its existing delivery lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023916
+  ...
+# Subtest: A2 opted-in supervisor and chat launches remain human-typed and hook-free
+ok 35 - A2 opted-in supervisor and chat launches remain human-typed and hook-free # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..35
+# tests 35
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 34
+# todo 0
+# duration_ms 3355.814875
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

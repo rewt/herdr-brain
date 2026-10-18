@@ -72,6 +72,12 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   const ids=s.panes.filter(p=>p.tab_id===a[2]).map(p=>p.pane_id);
   s.tabs=s.tabs.filter(t=>t.tab_id!==a[2]);s.panes=s.panes.filter(p=>!ids.includes(p.pane_id));s.agents=s.agents.filter(g=>!ids.includes(g.pane_id));out({});
 } else if(a[0]==='agent' && a[1]==='start') {
+  const argv=a.includes('--')?a.slice(a.indexOf('--')+1):[];
+  if(argv.some(arg=>/[\\x00-\\x1f\\x7f-\\x9f]/u.test(arg))) {
+    save();console.error(JSON.stringify({error:{code:'invalid_agent_argument',message:'agent arguments cannot be encoded safely for the target shell'}}));process.exit(1);
+  }
+  s.instructionsAtStart=value('--kind')==='claude'?fs.readFileSync(argv.at(-1),'utf8')
+    :JSON.parse(argv.at(-1).slice('developer_instructions='.length));
   s.launchEnvironment={role:process.env.MONITOR_SESSION_ROLE,name:process.env.HERDR_AGENT_NAME,actor:process.env.ORG_ACTOR,record:process.env.ORG_DIR};
   const p=s.panes.find(p=>p.pane_id===value('--pane')), n=++s.counter;
   const idx=a.indexOf('--resume'), ri=a.indexOf('resume'), native=idx>=0?a[idx+1]:ri>=0?a[ri+1]:'native-'+n;
@@ -83,7 +89,7 @@ else if (a[0] === 'pane' && a[1] === 'run') {
 } else { save();console.error('unexpected fake CLI '+JSON.stringify(a));process.exit(1); }
 `;
 const document = m => `## Manifest\n\`\`\`json\n${JSON.stringify(m)}\n\`\`\`\n`;
-function fixture(t, role = 'chat') {
+function fixture(t, role = 'chat', kind = 'claude') {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'live-session-')));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const cwd = path.join(scratch, 'repo'); fs.mkdirSync(cwd);
@@ -105,6 +111,7 @@ function fixture(t, role = 'chat') {
   execFileSync(process.execPath,[path.join(root,'bin/org.mjs'),'answer','HUM-1','yes'],{cwd,env:{...env,ORG_ACTOR:'human'},stdio:['ignore','pipe','pipe']});
   const m = JSON.parse(fs.readFileSync(path.join(root, `sessions/templates/${role === 'logs' ? 'logs-viewer' : role}.md`), 'utf8').split('```json')[1].split('```')[0]);
   m.spec.workspaceRef = 'w';
+  if (kind === 'codex') m.spec.route = 'engineer';
   const file = path.join(scratch, 'manifest.md'); fs.writeFileSync(file, document(m));
   const inspection = inspect({ cwd, files: [file], env }), project = inspection.project;
   assert.equal(inspection.valid, true, JSON.stringify(inspection.diagnostics));
@@ -142,15 +149,46 @@ function fixture(t, role = 'chat') {
 }
 const starts = f => f.read().calls.filter(a=>a[0]==='agent'&&a[1]==='start');
 const mutations = f => f.read().calls.filter(a=>['start','run','create','close'].includes(a[1]));
+const startInstructions = args => args.includes('--append-system-prompt-file')
+  ? fs.readFileSync(args.at(-1), 'utf8') : JSON.parse(args.at(-1).slice('developer_instructions='.length));
+function checkInstructionsReceipt(f) {
+  const op = readControllerJournal(f.project.common).operations.at(-1), args = starts(f).at(-1);
+  const receipt = JSON.parse(fs.readFileSync(path.join(f.project.common, 'sessions/contexts', op.id + '.json')));
+  const instructions = startInstructions(args);
+  assert.equal(instructions, f.read().instructionsAtStart);
+  assert.equal(createHash('sha256').update(instructions).digest('hex'), receipt.instructionsSha256);
+  assert.equal(args.some(arg => /[\x00-\x1f\x7f-\x9f]/u.test(arg)), false);
+  if (args.includes('--append-system-prompt-file')) {
+    assert.equal(args.at(-1), path.join(f.project.common, 'sessions/contexts', op.id + '.instructions.md'));
+    assert.equal(fs.statSync(args.at(-1)).mode & 0o777, 0o600);
+    assert.equal(createHash('sha256').update(fs.readFileSync(args.at(-1))).digest('hex'), receipt.instructionsSha256);
+  }
+}
 
-for (const role of ['chat','supervisor']) test(`${role}: real adapter and fake CLI start, observed exact binding, no replay`, async t => {
-  const f=fixture(t,role), result=await f.apply();
+for (const role of ['chat','supervisor']) for (const kind of ['claude','codex']) test(role + ' ' + kind + ': real adapter and fake CLI start, observed exact binding, no replay', async t => {
+  const f=fixture(t,role,kind), result=await f.apply();
   assert.equal(result.apply.state,'attempted',JSON.stringify(result)); assert.equal(result.decisions[0].decision,'KEEP',JSON.stringify(result));
   assert.equal(starts(f).length,1); assert.equal(readControllerJournal(f.project.common).operations[0].state,'acknowledged');
   assert.equal((await f.apply()).apply.state,'observed'); assert.equal(starts(f).length,1);
   assert.deepEqual(f.read().launchEnvironment,{role,name:f.binding().agentName,actor:f.binding().agentName,record:f.org});
-  const args=starts(f)[0]; assert.ok(args.includes('--model'));assert.match(args.join(' '),new RegExp(role==='chat'?'project chat':'supervisor'));
-  assert.match(args.join(' '),/Host memory: available unknown/);
+  const args=starts(f)[0]; assert.ok(args.includes('--model'));assert.match(startInstructions(args),new RegExp(role==='chat'?'project chat':'supervisor'));
+  assert.match(startInstructions(args),/Host memory: available unknown/);
+  checkInstructionsReceipt(f);
+});
+test('fake Herdr rejects old inline multiline and control arguments before starting a session', t => {
+  const f=fixture(t), herdr=herdrEdge(f.env);
+  for(const control of ['\n','\r','\t','\x01','\x7f','\x85']) assert.throws(()=>herdr([
+    'agent','start','inline','--kind','claude','--pane','pane','--','--append-system-prompt','first'+control+'second']),/invalid_agent_argument/);
+  assert.equal(f.read().agents.length,0);
+});
+test('Claude instructions are exclusive per operation, including a repeated launch attempt', async t => {
+  const f=fixture(t);await f.apply();checkInstructionsReceipt(f);
+  const op=readControllerJournal(f.project.common).operations[0], file=starts(f)[0].at(-1), original=fs.readFileSync(file);
+  f.change(s=>{s.agents=[];s.screen='fixture % ';});
+  const observe=async()=>{const s=f.read();return {...s,panes:s.panes.map(p=>({...p,emptyConfirmed:true}))};};
+  const actions=createLiveActions({project:f.project,workspace:'w',authorization:f.auth().file,env:f.env,permit:()=>{},observe});
+  await assert.rejects(actions.start(op),{code:'EEXIST'});
+  assert.deepEqual(fs.readFileSync(file),original);assert.equal(starts(f).length,1);
 });
 test('lost start reply holds with no second launch, even if native occupant appeared', async t => {
   const f=fixture(t);f.change(s=>s.lostStart=true);
@@ -347,10 +385,11 @@ test('close and respawn bind a new incarnation, with one action per apply', asyn
   const spawned=await f.apply();assert.equal(starts(f).length,2,JSON.stringify(spawned));
   const b=f.binding();assert.notEqual(b.tab,old.tab);assert.notEqual(b.nativeSessionId,old.nativeSessionId);
   assert.equal(readControllerJournal(f.project.common).operations.at(-1).state,'acknowledged');
-  assert.match(starts(f).at(-1).join(' '),/Verified handoff/);
+  assert.match(startInstructions(starts(f).at(-1)),/Verified handoff/);
+  checkInstructionsReceipt(f);
 });
-test('resume delegates the same native reference only after confirmed exit', async t => {
-  const f=fixture(t);await f.apply();const b=f.binding(), spec=inspect(f.options).entries[0].resolvedSpec;
+for (const kind of ['claude','codex']) test(kind + ' resume delegates the same native reference only after confirmed exit', async t => {
+  const f=fixture(t,'chat',kind);await f.apply();const b=f.binding(), spec=inspect(f.options).entries[0].resolvedSpec;
   f.change(s=>{s.agents=[];s.screen='fixture % ';});
   f.updateEvidence(e=>{
     e.losses=[{binding:b,state:'confirmed-exit',ref:'exit-receipt',processConfirmedGone:true,restore:{state:'none'},failures:0,backoffReady:true}];
@@ -358,6 +397,7 @@ test('resume delegates the same native reference only after confirmed exit', asy
   });
   const result=await f.apply();assert.equal(starts(f).length,2,JSON.stringify(result));assert.equal(f.binding().nativeSessionId,b.nativeSessionId);
   assert.notEqual(f.binding().terminalId,b.terminalId);assert.equal(readControllerJournal(f.project.common).operations.at(-1).state,'acknowledged');
+  checkInstructionsReceipt(f);
 });
 test('apply refusals are read-only without authorization, under STOP/hold, on expiry/mismatch, and after plan drift', async t => {
   const f=fixture(t), before=fs.readdirSync(path.join(f.project.common,'sessions'));

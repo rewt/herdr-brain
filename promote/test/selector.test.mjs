@@ -62,6 +62,63 @@ test('unknown, unmapped, helper, package, config, deleted, renamed and unsafe pa
   assert.equal(selectTests({ root: f.repo, files: f.files, changed: change('leaf.mjs') }).pick, 'full');
 });
 
+test('unreferenced documentation contributes zero tests beside a code change or by itself', t => {
+  const f = fixture(t), documents = ['docs/reviews/topic/head-r1.md', 'docs/guide.md', 'docs/config-guide.md', 'module/docs/REFERENCE.md', 'module/README.md', 'README.md'];
+  for (const file of documents) f.write(file, '# Unreferenced documentation');
+  const options = { root: f.repo, files: [...f.files, ...documents] };
+  const code = selectTests({ ...options, changed: change('leaf.mjs') }).pick;
+  assert.ok(Array.isArray(code) && code.length > 0, 'the code change must produce a nonempty subset');
+  for (const file of documents) {
+    assert.deepEqual(selectTests({ ...options, changed: [...change('leaf.mjs'), ...change(file)] }).pick, code, file);
+    assert.deepEqual(selectTests({ ...options, changed: change(file) }).pick, [], file);
+  }
+  assert.equal(selectTests({ ...options, changed: change('docs/unknown.md') }).pick, 'full');
+  f.write('notes.md', '# Outside the documentation exemption');
+  assert.equal(selectTests({ ...options, files: [...options.files, 'notes.md'], changed: change('notes.md') }).pick, 'full');
+  for (const file of ['test/helpers/README.md', 'docs/reviews/config.json', 'docs/reviews/package.json']) {
+    f.write(file, '{}');
+    assert.equal(selectTests({ ...options, files: [...options.files, file], changed: change(file) }).pick, 'full', file);
+  }
+});
+
+test('documents read through literal paths still select full, including transitive helper readers', t => {
+  const f = fixture(t);
+  const sources = {
+    'docs/root.md': '# Root path', 'docs/relative.md': '# Relative path', 'module/README.md': '# Basename',
+    'docs/indirect.md': '# Helper read', 'docs/reviews/topic/read.md': '# Referenced review',
+    'document.test.mjs': "fs.readFileSync(path.join(root, 'docs/root.md')); fs.readFileSync(new URL('./docs/relative.md', import.meta.url)); fs.readFileSync(path.join(root, 'module', 'README.md')); fs.readFileSync('docs/reviews/topic/read.md'); import './reader.mjs';",
+    'reader.mjs': "fs.readFileSync('docs/indirect.md');",
+  };
+  for (const [file, content] of Object.entries(sources)) f.write(file, content);
+  const options = { root: f.repo, files: [...f.files, ...Object.keys(sources)] };
+  for (const file of Object.keys(sources).filter(file => file.endsWith('.md'))) {
+    const selection = selectTests({ ...options, changed: change(file) });
+    assert.equal(selection.pick, 'full', file); assert.match(selection.reason, /test-referenced document/);
+  }
+  fs.unlinkSync(path.join(f.repo, 'docs/root.md')); fs.symlinkSync('../leaf.mjs', path.join(f.repo, 'docs/root.md'));
+  assert.equal(selectTests({ ...options, changed: change('docs/root.md') }).pick, 'full');
+});
+
+test('spawned root-relative and basename CLI literals participate in transitive selection', t => {
+  const f = fixture(t);
+  const sources = {
+    'cli/entry.mjs': "import '../leaf.mjs';",
+    'root-cli.test.mjs': "spawnSync(process.execPath, [path.join(source, 'cli/entry.mjs')]);",
+    'basename-cli.test.mjs': "spawnSync(process.execPath, [path.join(source, 'cli', 'entry.mjs')]);",
+    'backtick-cli.test.mjs': 'spawnSync(process.execPath, [path.join(source, `cli/entry.mjs`)]);',
+    'cli/tool.js': '', 'cli/tool.cjs': '', 'cli/tool.sh': '',
+    'scripts.test.mjs': "spawnSync('node', ['cli/tool.js']); spawnSync('node', [path.join(source, 'cli', 'tool.cjs')]); spawnSync('bash', ['cli/tool.sh']);",
+    'other-cli.test.mjs': "spawnSync('node', ['unrelated.mjs']);",
+  };
+  for (const [file, content] of Object.entries(sources)) f.write(file, content);
+  const options = { root: f.repo, files: [...f.files, ...Object.keys(sources)] };
+  const cliTests = ['backtick-cli.test.mjs', 'basename-cli.test.mjs', 'root-cli.test.mjs'];
+  assert.deepEqual(selectTests({ ...options, changed: change('cli/entry.mjs') }).pick, cliTests);
+  assert.deepEqual(selectTests({ ...options, changed: change('leaf.mjs') }).pick,
+    [...cliTests, 'direct.test.mjs', 'dynamic.test.mjs', 'require.test.mjs', 'transitive.test.mjs', 'url.test.mjs'].sort());
+  for (const file of ['cli/tool.js', 'cli/tool.cjs', 'cli/tool.sh']) assert.deepEqual(selectTests({ ...options, changed: change(file) }).pick, ['scripts.test.mjs'], file);
+});
+
 function adapter(f, text = "console.log(JSON.stringify({pick:['direct.test.mjs'],reason:'fixture adapter'}));") {
   f.write('.promotion-selector.json', JSON.stringify({ schema: 'promotion-selector/v1', adapter: 'adapter.mjs' }));
   f.write('adapter.mjs', text);

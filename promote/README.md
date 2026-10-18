@@ -436,7 +436,7 @@ The adapter only reads the candidate and returns one JSON object on stdout:
 `{"pick":["test/example.test.mjs"],"reason":"affected importers"}` or
 `{"pick":"full","reason":"unmapped path"}`. Lists contain unique relative test
 file paths (`.test` or `.spec`, JavaScript or TypeScript), at most 10,000 files.
-Unknown/unmapped paths, package/config files and test helpers must select `full`.
+Unknown paths, unmapped modules, package/config files and test helpers select `full`.
 Adapter failure, invalid output, missing code or the 20-second planning timeout
 are recorded as conservative full fallbacks and never change the gate outcome.
 
@@ -444,8 +444,17 @@ Brain's `test/helpers/select-tests.mjs` computes its map from tracked candidate
 sources on every observation, bounded to 10,000 paths and 32 MiB. It follows
 static imports and re-exports transitively, handles cycles, and adds conservative
 edges for literal dynamic imports, CommonJS requires and `new URL` references.
-Changed `.test.mjs` files include themselves. Helpers, fixtures, configuration,
-non-module paths, symlinks and modules without a reachable test select full.
+Root-relative and basename `.mjs`, `.js`, `.cjs` and `.sh` literals also add edges
+for spawned CLIs, including `path.join(source, 'lanes/lane.mjs')`, following the
+existing additive planner's literal-path rules. These edges are transitive too.
+Changed `.test.mjs` files include themselves. Known regular documentation includes
+`docs/reviews/**`, Markdown under `docs/` directories and `README.md` files.
+These documents contribute zero tests when no test reaches them through literal paths. Thus a
+code change plus its unreferenced review record retains the code's subset.
+Documents referenced by tests, directly or through helpers, still select full;
+relative, root-relative and basename literals conservatively identify readers.
+Unknown paths, helpers, fixtures, package/config files, other non-module paths,
+symlinks and modules without a reachable test select full.
 Computed runtime references are outside this static graph; real shadow misses
 are evidence for improving the adapter before any switch-on. There is no budget
 or file cap that defers part of a static pick.

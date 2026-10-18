@@ -38,7 +38,15 @@ for a ternary array literal (`condition ? [] : value`). Computed-key detection
 now checks its object/class position rather than treating every array followed
 by a colon as a computed definition. A positive fixture was added.
 
-These two corrections and the added cases **postdate the test run**. Node 20.19.4
+Further static inspection confined environment capability reads and refused
+environment escaping/mutation, including indirect `Object.assign(process.env,
+...)` injection of inherited child-loader settings. Unrecognized process
+capabilities, including native signal-based debugger activation, also refuse.
+Crypto namespace confinement was also extended to re-exports and dynamic loads,
+which could otherwise escape the static namespace-use check. Negative fixtures
+were added for these forms.
+
+These corrections and the added cases **postdate the test run**. Node 20.19.4
 syntax checks passed for the changed scanner and fixture, but no second test run
 was started, honoring the ask's once-only limit. There is no passing-suite claim
 for the final head. Fresh focused validation is still required.

@@ -13,7 +13,7 @@ const unsupported = detail => { throw Error(`outside closed source profile: ${de
 const leafModules = new Set(('fs fs/promises path path/posix path/win32 crypto os url util util/types assert assert/strict events stream stream/promises stream/consumers stream/web buffer timers timers/promises string_decoder querystring punycode zlib readline readline/promises tty console constants async_hooks diagnostics_channel perf_hooks').split(' '));
 const regexPrefix = new Set(('return throw case break continue debugger delete void typeof instanceof in new yield await else do extends default of = => ( [ { , : ; ! ~ ? + - * / ** % & | ^ && || ?? == === != !== < > <= >= << >> >>> ... += -= *= /= **= %= &= |= ^= &&= ||= ??= <<= >>= >>>=').split(' '));
 const reflection = new Set(['eval', 'Function', 'require', 'createRequire', 'getBuiltinModule', 'dlopen', 'binding', 'mainModule', 'constructor', '__proto__', 'prototype', 'Reflect', 'WebAssembly', 'global', 'globalThis', 'execArgv', 'NODE_OPTIONS', 'getPrototypeOf', 'setPrototypeOf', 'getOwnPropertyDescriptor', 'getOwnPropertyDescriptors', 'defineProperty', 'defineProperties', '__lookupGetter__', '__lookupSetter__', '__defineGetter__', '__defineSetter__', 'setEngine']);
-const processLeaves = new Set(('env argv argv0 execPath pid ppid platform arch versions version cwd chdir exit exitCode stdin stdout stderr uptime hrtime memoryUsage cpuUsage resourceUsage kill on once off removeListener removeAllListeners emit nextTick getuid geteuid getgid getegid getgroups send connected disconnect title release features config').split(' '));
+const processLeaves = new Set(('env argv argv0 execPath pid ppid platform arch versions version cwd chdir exit exitCode stdin stdout stderr uptime hrtime memoryUsage cpuUsage resourceUsage on once off removeListener removeAllListeners emit nextTick getuid geteuid getgid getegid getgroups send connected disconnect title release features config').split(' '));
 // crypto also exposes a native engine loader. Namespace objects cannot escape
 // into enumeration/aliasing and recover it without mentioning its property.
 const cryptoLeaves = new Set(('constants createHash createHmac createPrivateKey createPublicKey createSecretKey createSign createVerify createCipheriv createDecipheriv createECDH createDiffieHellman createDiffieHellmanGroup randomUUID randomBytes randomFill randomFillSync randomInt getRandomValues timingSafeEqual sign verify hash webcrypto subtle generateKey generateKeySync generateKeyPair generateKeyPairSync hkdf hkdfSync pbkdf2 pbkdf2Sync scrypt scryptSync getHashes getCiphers getCurves getCipherInfo getDiffieHellman diffieHellman checkPrime checkPrimeSync generatePrime generatePrimeSync secureHeapUsed getFips setFips publicEncrypt publicDecrypt privateEncrypt privateDecrypt Certificate X509Certificate').split(' '));
@@ -257,6 +257,7 @@ export function sourceReach(file, source, files, { root } = {}) {
       if (reserved.has(part.local) && !(url && part.local === 'URL' && part.imported === 'URL')) unsupported('reserved import binding');
       if (reflection.has(part.imported)) unsupported(`imported loader/reflection capability: ${part.imported}`);
       if (native && !launchers.has(part.imported)) unsupported('unrecognized child_process import');
+      if (['crypto', 'node:crypto'].includes(spec) && !['default', '*'].includes(part.imported) && !cryptoLeaves.has(part.imported)) unsupported('unrecognized crypto capability');
       if (native || url && part.imported === 'fileURLToPath') bind(part.local, native ? { kind: 'launcher', method: part.imported } : { kind: 'fileURLToPath' });
       else if (['crypto', 'node:crypto'].includes(spec) && ['default', '*'].includes(part.imported)) bind(part.local, { kind: 'crypto' });
     }
@@ -348,15 +349,24 @@ export function sourceReach(file, source, files, { root } = {}) {
       }
       if (key === 'process' && !['.', '?.'].includes(previous) && next !== '.') unsupported('escaped/shadowed process binding');
       if (key === 'process' && next === '.' && !processLeaves.has(syntax(ts[i + 2]))) unsupported(`unrecognized process capability: ${syntax(ts[i + 2])}`);
+      if (key === 'process' && next === '.' && syntax(ts[i + 2]) === 'env') {
+        const member = syntax(ts[i + 3]), field = syntax(ts[i + 4]), following = syntax(ts[i + 5]);
+        if (!['.', '?.'].includes(member) || !/^[A-Z][A-Z0-9_]*$/.test(field ?? '')) unsupported('escaped environment capability');
+        if (previous === 'delete' || ['=', '+=', '-=', '*=', '/=', '**=', '%=', '&=', '|=', '^=', '&&=', '||=', '??=', '<<=', '>>=', '>>>=', '++', '--'].includes(following) || ['++', '--'].includes(previous)) unsupported('environment mutation can change child execution');
+      }
       if (key === 'URL' && previous !== 'new' && !['.', '?.'].includes(previous)) unsupported('escaped/shadowed URL binding');
       if (key === 'execPath' && previous === '.' && !['(', ')', ',', ';', ']', '}'].includes(next) && next !== undefined) unsupported('mutable executable binding');
       if (key === 'import' && next === '(' && !['.', '?.'].includes(previous)) {
-        at = i + 1; take('('); moduleTarget(text()); take(')');
+        at = i + 1; take('('); const spec = text(); moduleTarget(spec); take(')');
+        if (['crypto', 'node:crypto'].includes(spec)) unsupported('unconfined dynamic crypto namespace');
       }
       if (key === 'export' && ['{', '*'].includes(next)) {
-        at = i + 1;
-        if (next === '{') named(); else { take('*'); if (peek() === 'as') { take('as'); name(); } }
-        if (peek() === 'from') { take('from'); moduleTarget(text()); }
+        at = i + 1; let parts = [];
+        if (next === '{') parts = named(); else { take('*'); if (peek() === 'as') { take('as'); name(); } }
+        if (peek() === 'from') {
+          take('from'); const spec = text(); moduleTarget(spec);
+          if (['crypto', 'node:crypto'].includes(spec) && (next === '*' || parts.some(part => !cryptoLeaves.has(part.imported)))) unsupported('re-exported crypto loader/namespace capability');
+        }
       }
       const binding = bindings.get(key);
       if (binding?.kind === 'launcher') {

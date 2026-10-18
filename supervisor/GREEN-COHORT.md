@@ -104,10 +104,14 @@ The execution-edge profile recognizes these forms:
   constructor/prototype reads and global reflection remain unknown. The process
   object has its own explicit metadata/non-loader member allowlist; unrecognized
   native capabilities and escaping/shadowing that object refuse.
+  Environment access is limited to direct uppercase variable reads; escaping or
+  mutating the environment refuses, so inherited child-loader settings cannot
+  be smuggled through an ordinary call such as `Object.assign(process.env, ...)`.
 
 The crypto namespace is confined to explicitly listed non-loader properties and
 cannot escape into aliasing or enumeration. Its native `setEngine` loader is
-unknown, including named-import aliases. This exception matters because Node
+unknown, including named-import aliases. Star/default namespace re-exports and
+unconfined dynamic crypto namespaces also refuse. This exception matters because Node
 20.19.4 permits an engine path to name a shared library, as documented in
 [crypto.setEngine](https://nodejs.org/download/release/v20.19.4/docs/api/crypto.html#cryptosetengineengine-flags).
 

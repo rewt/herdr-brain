@@ -396,12 +396,15 @@ for (const body of [
   'return import(spec);', 'return require(spec);', 'return eval(text);', 'return Function(text);',
   'return process.dlopen(module, file);', 'return process.binding(name);', 'return target[key];',
   'return process._linkedBinding(name);', 'return target?.[key];',
+  "Object.assign(process.env, {['NODE_' + 'OPTIONS']: code});",
+  'const environment = process.env; return environment;', 'process.env.LD_PRELOAD = file;',
+  "process.kill(process.pid, 'SIGUSR1');",
   "return Object.getOwnPropertyDescriptor(Object.getPrototypeOf(() => {}), 'constructor').value(text);",
   'return target.constructor(text);', 'return `${import(spec)}`;', 'return `${`${import(spec)}`}`;',
 ]) test(`execution edge inside an ordinary function refuses: ${body}`, () => {
   assert.ok(sourceReach('entry.mjs', `export function ordinary(spec) { ${body} }`, new Map()).unknown.length);
 });
-for (const source of ["import {setEngine as load} from 'node:crypto'; load(file);", "import crypto from 'node:crypto'; const load = crypto.setEngine; load(file);", "import crypto from 'node:crypto'; Object.values(crypto)[0](file);"]) {
+for (const source of ["import {setEngine as load} from 'node:crypto'; load(file);", "import crypto from 'node:crypto'; const load = crypto.setEngine; load(file);", "import crypto from 'node:crypto'; Object.values(crypto)[0](file);", "export * from 'node:crypto';", "export {default as crypto} from 'node:crypto';", "import('node:crypto').then(ns => Object.values(ns)[0](file));"]) {
   test('native engine loading is not a crypto leaf operation', () => {
     assert.ok(sourceReach('entry.mjs', source, new Map()).unknown.length);
   });

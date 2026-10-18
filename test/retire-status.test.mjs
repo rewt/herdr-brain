@@ -120,6 +120,13 @@ const reasonCases = [
   ['callback report is not ingested', 'ACTIVE'],
   ['watcher has no recorded run', 'UNKNOWN'],
   ['open run uses callback checkout', 'ACTIVE'],
+  ['agent exit topology changed', 'UNKNOWN'],
+  ['agent exit terminal identity changed or unknown', 'UNKNOWN'],
+  ['agent exit occupant identity changed', 'UNKNOWN'],
+  ['agent exit shell identity changed or another process remains', 'UNKNOWN'],
+  ['agent exit recorded launch identity changed', 'UNKNOWN'],
+  ['agent exit checkout is not clean and integrated', 'UNKNOWN'],
+  ['ambiguous agent exit receipts', 'UNKNOWN'],
   ['operator focus or this tab', 'PROTECTED'],
   ['persistent, operator or lab workspace', 'PROTECTED'],
   ['persistent or detached desk workspace', 'PROTECTED'],
@@ -149,14 +156,41 @@ test('every planner reason expression is enumerated and mapped; source drift fai
   }
   const releaseReasons = [
     'recorded idle agent and its descendants; exit before closing the shell',
+    '${exited.run}: recorded agent exit; unchanged terminal and shell identity',
     'recorded ${callback.kind} callback complete; unchanged process and shell identity',
     "record release for ${released.join(', ')}; exact session and head",
     "${agents.map(a => matchingRun(a, snapshot.record)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
     'lane removal preconditions verified',
   ];
-  const releases = [...policy.matchAll(/why: reason \?\? (?:\(needsExit \? ('[^']*') : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
+  const releases = [...policy.matchAll(/why: reason \?\? (?:\(needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());
   for (const why of releases) assert.equal(classifyRetirement({ decision: 'release', why }).class, 'TERMINAL');
+});
+
+test('an exited worker shell is TERMINAL while changed exit evidence is UNKNOWN with its keep reason', () => {
+  const s = fixture(), a = s.agents[0], p = s.panes[0], shell = p.process_info.process_tree[0];
+  s.exits = [{ schema: 'retirement-exit/v1', common: s.common, cwd: a.cwd, workspace: 'w', tab: 'w:t', pane: 'w:p', run: 'R-1',
+    occupant: { name: a.name, agent: a.agent, pane_id: a.pane_id, workspace_id: a.workspace_id, cwd: a.cwd,
+      terminal_id: a.terminal_id, agent_session_id: a.agent_session.value },
+    shell: { pid: shell.pid, identity: shell.identity, command: shell.command } }];
+  s.agents = []; p.terminal_id = 'term'; p.shellOnly = true;
+  p.process_info.process_tree = [shell]; p.process_info.foreground_processes = [{ pid: shell.pid, name: 'zsh' }];
+  const pending = tab(s);
+  assert.equal(pending.class, 'TERMINAL'); assert.match(pending.reason, /recorded agent exit/);
+  assert.equal(pending.nextAction, 'terminal; retire through the guarded executor');
+  for (const change of [
+    current => { current.panes.push({ ...current.panes[0], pane_id: 'w:q' }); },
+    current => { current.panes[0].terminal_id = 'replacement'; },
+    current => { current.agents.push({ ...a, terminal_id: 'replacement' }); },
+    current => { current.panes[0].process_info.process_tree[0].identity = 'replacement'; },
+    current => { run(current).meta.terminal_id = 'replacement'; },
+    current => { current.git[0].clean = false; },
+    current => { current.exits.push(structuredClone(current.exits[0])); },
+  ]) {
+    const current = structuredClone(s); change(current);
+    const row = tab(current);
+    assert.equal(row.class, 'UNKNOWN'); assert.equal(row.nextAction, `keep; ${row.reason}`);
+  }
 });
 
 test('latest worker and reviewer name the next actor; older idle contexts are release candidates', () => {

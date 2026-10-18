@@ -650,7 +650,7 @@ Before removal, close verifies the exact tip is integrated or freshly resolves
 its recoverable archive tag; a different existing tag target refuses only when
 the lane is unmerged and needs that archive. Integrated lanes preserve older
 archive tags unchanged. Planner KEEP and process-cwd checks precede any tag or
-copy. A size-only inventory measures ignored/untracked content before mutation;
+copy. A size-only inventory measures copied ignored/untracked content before mutation;
 the default budget is 256 MiB, optionally overridden by the nonnegative integer
 byte count `LANE_EVIDENCE_MAX_BYTES`. Over-budget content retains the lane without
 a copy or tag and reports the size and required explicit disposition. Close probes
@@ -661,6 +661,50 @@ the lane. Git status must be clean, and index flags that can hide local changes
 are refused. Recorded non-code and parked work needs explicit disposition; age
 never authorizes deletion. Canonical `HOLD-WORKER-TAB-CLOSE` stops every mode.
 See the [close preconditions](../README.md) for process, job and record guards.
+
+### Lane evidence preservation
+
+Tracked files remain recoverable through the freshly verified exact Git tip in
+main or its archive tag. The filesystem archive preserves every untracked file,
+symlink target and empty directory, including ignored unique or unknown content,
+except the following explicitly disposable output. The byte bound counts file
+payloads and symlink-target bytes actually copied; it never truncates an archive.
+
+Metadata-only retention requires Git ignore confirmation **and** a directory
+component named exactly `node_modules`, `dist`, `build`, `.cache`, `coverage` or
+`target`. This includes nested package output. A file merely named `build`, or
+untracked output that is not ignored, is preserved in full. Each omitted path has
+`path`, `type`, `size` (its `lstat` size, including directory/symlink metadata size)
+and `metadataOnly: true` in `lane-evidence/v2`. It has no payload hash or symlink
+target. These entries do not consume the copied-byte budget. Parent directories
+may be recreated solely to hold evidence preserved within an otherwise omitted tree.
+
+Evidence overrides the disposable-name rule. Components named `.lane`, `.org`,
+`evidence`, `report(s)`, `diagnostic(s)`, `reference(s)`, `artifact(s)`, `receipt(s)`
+or `log(s)`, including dot/dash/underscore suffixes such as `report.json`, are
+preserved. Declared record artifact/evidence/reference/file paths and reference
+JSON claims also preserve the claimed file or directory subtree. Relative record
+claims apply to runs/items associated with this lane; absolute paths into the lane
+apply regardless of run. Claims are reread during verification, so a new claim
+invalidates an earlier omission. Unreadable, malformed or incomplete claim sources
+keep the lane. Existing live-reference guards still run before preservation.
+
+Protected names keep the lane without reading their payloads or creating an
+archive, even inside a disposable tree or when tracked. Case-insensitive component
+names `.local-live`, `.live`, `.ssh`, `.aws`, `.gnupg`, `local-live`, `live`,
+`live-state`, `wallet(s)`, `wallet-state`, `keystore`, `secret(s)`, `private-key(s)`
+or `private_key(s)`, and `mnemonic` are protected, including dot/dash/underscore
+suffixes. File suffixes `.secret`, `.secrets`, `.secret.*`, `.secrets.*`, `.wallet`,
+`.key`, `.pem`, and `.env`/`.env.*` are protected too; `.env.example`, `.env.sample`
+and `.env.template` are examples rather than live-state names. These conservative
+name checks can keep benign content; the refusal names the path for explicit
+disposition. They do not inspect content to discover secrets under arbitrary names.
+
+The manifest SHA-256 and all preserved content hashes are verified against both
+archive and unchanged source. Omitted paths are checked for path/type/size changes;
+their payload contents are deliberately never read or hashed. Symlinks are
+inventoried with `lstat` and preserved as links, without traversing external trees.
+Unknown Git ignore classification or unsupported special files keep the lane.
 
 Only after those Git operations succeed, close writes done markers for every known
 session matching the canonical repository and exact topic, even when workspace

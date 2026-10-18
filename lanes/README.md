@@ -241,13 +241,24 @@ retry. An integrated lane leaves any older archive tag untouched.
 Before deleting anything, close probes writes, renames and removal in the affected
 Git metadata directories and copies ignored/untracked evidence (including `.lane/`)
 to `GIT_COMMON_DIR/lane-archive/<topic>/<unique timestamp>/`. Its `sha256.json`
-manifest records file hashes and symlink targets. The copy and unchanged source
+manifest records file hashes and symlink targets. Tracked content remains preserved
+by the verified integrated tip or exact archive tag, without a duplicate payload copy.
+The copy and unchanged source
 are verified against that manifest before removal; any failure keeps the lane.
 Planner KEEP and process-cwd refusals run before tagging or copying. A size-only
-inventory also runs first: the default evidence budget is 256 MiB. Optional
+inventory also runs first: the default evidence budget is 256 MiB of copied bytes. Optional
 `LANE_EVIDENCE_MAX_BYTES` overrides it with a nonnegative integer byte count for
 the attempt. Content over that budget keeps the lane, copies nothing, and reports
 its size and the need for explicit disposition; it never permits an unverified sweep.
+Only Git-ignored paths under directories named exactly `node_modules`, `dist`,
+`build`, `.cache`, `coverage` or `target` may omit payloads. These disposable paths
+are recorded individually in the `lane-evidence/v2` manifest by path, type and
+`lstat` size, with `metadataOnly: true`; their bytes do not consume the copy budget.
+Evidence and reference claims override omission. Ignored reports, diagnostics,
+unknown content and `.lane/` evidence retain full verified copies. Protected wallet,
+secret or live-state paths keep the lane before payload reads or archive creation;
+this operation never copies them. See the [preservation boundary](docs/REFERENCE.md#lane-evidence-preservation)
+for exact names and claim sources.
 Ordinary untracked changes still fail the clean Git requirement. Close refuses
 `assume-unchanged` and `skip-worktree` index flags because they can hide unique
 local bytes from Git status.

@@ -158,8 +158,10 @@ export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', ag
       actions: saved.actions.map(a => ({ name: a.name, phase: a.phase, at: a.finished ?? a.at })) }));
   let enabled = false, reason;
   try {
-    enabled = autopilotSettings(project.canonical).enabled;
+    const settings = autopilotSettings(project.canonical);
+    enabled = settings.enabled;
     if (!enabled) reason = 'project kill switch';
+    else if (settings.cohort !== 'clean-pass') { enabled = false; reason = `cohort ${settings.cohort ?? 'unset'}`; }
     else if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) { enabled = false; reason = 'STOP'; }
     else if (!housekeepingConfig(path.join(project.canonical, '.housekeeping.json')).enabled) { enabled = false; reason = 'housekeeping paused'; }
     else if (approvalPolicy(readConfig(org), 'tooling') !== 'auto') { enabled = false; reason = 'tooling requires operator authority'; }

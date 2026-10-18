@@ -42,12 +42,13 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     const unpassed = reviewsWithoutPass(state, item.id);
     if (unpassed.length) throw new Error(`${run} review ${unpassed.join(', ')} has no recorded PASS verdict; record one or drop the review; nothing merged`);
     const blockers = blockersOf(state, item.id);
-    // Optional follow-ups already present at admission do not hold promotion.
-    // Legacy/direct requests use report intake as their conservative snapshot,
-    // including the proposals created by that same immutable report.
+    // Ordinary enqueues use admission as the supervisor's snapshot. Autopilot
+    // and legacy/direct requests use report intake, excluding that report's
+    // own proposals so only later engineering scope holds promotion here.
+    const useReport = existingWorker || admittedSeq === undefined;
     const unfinished = children(state, item.id).filter(child => roleIs(child, 'ENG') && !child.closed &&
-      child.created.seq > (admittedSeq ?? current.report.seq) &&
-      !(admittedSeq === undefined && child.created.run === run));
+      child.created.seq > (useReport ? current.report.seq : admittedSeq) &&
+      !(useReport && child.created.run === run));
     if (unfinished.length) throw new Error(`${run} has open engineer children ${unfinished.map(child => child.id).join(', ')}; nothing merged`);
     // Pre-existing blocking children use the ordinary dependency release rules.
     const blocked = blockers.some((id) => !releases(state, id, itemStatus(state, id, new Set(), item.id)));

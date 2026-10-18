@@ -9,6 +9,29 @@ import { supervisorStatus, renderStatus } from '../status.mjs';
 import { autopilotNotice, POLICY } from '../autopilot.mjs';
 import { receiptDirectory } from '../context.mjs';
 
+test('status disables missing and unknown cohorts and enables only clean-pass', t => {
+  const f = fixture(t);
+  const config = JSON.parse(fs.readFileSync(path.join(f.org, 'config.json')));
+  config.approvals.categories.tooling = 'auto';
+  fs.writeFileSync(path.join(f.org, 'config.json'), JSON.stringify(config));
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  for (const [enabled, cohort, reason] of [
+    [true, undefined, 'cohort unset'], [true, 'unknown', 'cohort unknown'],
+    [true, 'clean-pass', null], [false, 'clean-pass', 'project kill switch'],
+  ]) {
+    const file = path.join(f.repo, '.supervisor.json');
+    const settings = JSON.stringify({ autopilot: { enabled, cohort } });
+    fs.writeFileSync(file, settings);
+    const doc = supervisorStatus({ cwd: f.workspace, org: f.org, agents: [] });
+    assert.equal(doc.autopilot.enabled, reason === null);
+    assert.equal(doc.autopilot.reason, reason);
+    assert.ok(renderStatus(doc).includes(`Autopilot: ${reason === null ? 'enabled' : `disabled (${reason})`}\n`));
+    assert.equal(fs.readFileSync(file, 'utf8'), settings);
+  }
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  assert.deepEqual(f.calls(), []);
+});
+
 test('status derives all lane stages and timing without record mutations or model calls', t => {
   const f = fixture(t), run = f.start(), project = gitProject(f.repo);
   const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));

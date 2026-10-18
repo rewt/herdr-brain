@@ -758,6 +758,55 @@ test('a worker exiting after autopilot precheck leaves a confirmed no-op that ba
   } finally { release(); }
 });
 
+for (const fromReport of [false, true]) test(`automatic queue ${fromReport ? 'promotes its own non-blocking report proposal' : 'refuses an engineer child filed during handle after report intake'}`, { timeout: 30000 }, async t => {
+  const f = setup(t, [], { ingest: false }), queue = queueFor(f.repo);
+  f.commit('correct\n');
+  if (fromReport) {
+    const report = f.show(f.run).report_path;
+    fs.writeFileSync(report, fs.readFileSync(report, 'utf8').replace('proposals: []', 'proposals:\n  - role: engineer\n    title: Optional improvement\n    why: Separate follow-up\n    blocking: false'));
+  } else {
+    // The scripted reviewer files this while real handle is settling the
+    // ingested report, before autopilot requests queue admission.
+    fs.writeFileSync(path.join(f.root, 'review-record-action.json'), JSON.stringify([
+      'add', 'New engineering scope', '--role', 'engineer', '--parent', f.item,
+    ]));
+  }
+  const release = await existingWorker(t, f);
+  try {
+    assert.equal(f.show(f.run).report, null);
+    const result = autopilotNotice(f.entry, { execute: (file, args) => {
+      const r = f.exec(process.execPath, [file, ...args]);
+      assert.equal(r.status, 0, r.stderr); return r.stdout;
+    } });
+    const receipt = JSON.parse(fs.readFileSync(result.receipt));
+    assert.equal(result.disposition, 'handled', JSON.stringify(receipt));
+    assert.equal(receipt.actions[0].result.result, 'promotable');
+    const admitted = queue.load().pending.find(job => job.run === f.run);
+    assert.ok(admitted); assert.equal(admitted.existingWorker, true);
+    const state = fold(loadEvents(f.org).events);
+    const child = [...state.items.values()].find(item => item.parent === f.item);
+    assert.ok(child); assert.equal(child.role, 'engineer'); assert.equal(child.closed, null);
+    assert.equal(child.created.run, fromReport ? f.run : null);
+    assert.ok(child.created.seq > state.runs.get(f.run).report.seq, 'child was filed after intake');
+    assert.ok(child.created.seq <= admitted.admittedSeq, 'child was already present at admission');
+    release();
+    const deadline = Date.now() + loadTimeout(20000);
+    while (Date.now() < deadline && fs.existsSync(path.join(queue.directory, 'worker.lock'))) await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(fs.existsSync(path.join(queue.directory, 'worker.lock')), false, 'finite promotion owner exited');
+    const job = queue.load().results.find(job => job.run === f.run);
+    assert.ok(job); assert.equal(job.outcome, fromReport ? 'promoted' : 'refused', job.reason);
+    if (!fromReport) {
+      assert.match(job.reason, /open engineer children/);
+      assert.ok(job.reason.includes(child.id));
+      assert.ok(fs.existsSync(f.workspace));
+      assert.equal(loadEvents(f.org).events.some(event => event.type === 'promotion.reconciled'), false);
+    }
+    assert.equal(f.show(f.item).closed?.as ?? null, fromReport ? 'done' : null);
+    assert.equal(f.show(child.id).closed, null);
+    assert.equal(fs.readFileSync(path.join(f.repo, 'brain/output.txt'), 'utf8'), fromReport ? 'correct\n' : 'base\n');
+  } finally { release(); }
+});
+
 for (const change of ['stale-PASS', 'kill-switch', 'pause']) test(`automatic queue rechecks ${change} at final integration`, { timeout: 30000 }, async t => {
   const f = setup(t, [], { ingest: false }), gate = path.join(f.root, 'change-at-gate.cjs');
   const mutation = change === 'stale-PASS'

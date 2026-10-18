@@ -58,6 +58,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     const proposals = options.proposals?.length ? `proposals:\n${options.proposals.map(p => Object.entries(p).map(([key, value], i) => `${i ? '    ' : '  - '}${key}: ${JSON.stringify(value)}`).join('\n')).join('\n')}\n` : '';
     fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Implemented ${topic}\nheadline: Implemented ${topic}\n${proposals}${options.questions ? "questions:\n  - question: Does this behavior need adjustment?\n    category: design\n    recommend: no\n    why: The implementation is complete\n" : ""}---\n`);
     record(['ingest', report]);
+    if (options.childBeforeAdmission) record(['add', 'New engineering scope', '--role', 'engineer', '--parent', item]);
     const head = git(['rev-parse', 'HEAD'], workspace);
     const job = enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0,
       laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, expectedHead: head, superseded })[0];
@@ -586,6 +587,17 @@ for (const [blocking, resolved] of [[false, false], [true, false], [true, true]]
   assert.equal(f.show(child.id).closed, null);
   assert.equal(f.show(m.item).closed?.as ?? null, refused ? null : 'done');
   if (refused) assert.equal(f.git(['rev-parse', 'main']), base);
+});
+
+test('ordinary enqueue admits a non-blocking engineer child filed after intake but before admission', t => {
+  const f = fixture(t), m = f.lane('supervised', false, { childBeforeAdmission: true });
+  const child = f.events().find(e => e.type === 'item.added' && e.parent === m.item);
+  assert.ok(child); assert.equal(child.from_run, undefined);
+  assert.ok(child.seq > f.show(m.run).report.seq);
+  assert.ok(child.seq <= f.queue.load().pending[0].admittedSeq);
+  f.drain();
+  assert.equal(f.queue.load().results[0].outcome, 'promoted');
+  assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(f.show(child.id).closed, null);
 });
 
 test('an engineer child created after queue admission refuses before train capture', t => {

@@ -151,7 +151,7 @@ test('every planner reason expression is enumerated and mapped; source drift fai
     'recorded idle agent and its descendants; exit before closing the shell',
     'recorded ${callback.kind} callback complete; unchanged process and shell identity',
     "record release for ${released.join(', ')}; exact session and head",
-    "${agents.map(a => matchingRun(a, snapshot.record.runs)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
+    "${agents.map(a => matchingRun(a, snapshot.record)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
     'lane removal preconditions verified',
   ];
   const releases = [...policy.matchAll(/why: reason \?\? (?:\(needsExit \? ('[^']*') : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));

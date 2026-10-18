@@ -14,6 +14,7 @@ import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { promotionWorkers } from '../../test/helpers/promotion-worker.mjs';
 import { promotionMemoryFixture, healthyMemory, pressuredMemory } from '../../test/helpers/promotion-memory-fixture.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
@@ -33,7 +34,13 @@ function fixture(t) {
   for (const k of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(k)) delete env[k];
   env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
   env.PROMOTE_TEST_COMPOSER = path.join(root, 'composer');
-  const exec = (file, args, cwd = repo) => spawnSync(file, args, { cwd, env, encoding: 'utf8', [commandAllowance]: 60000 });
+  const workers = promotionWorkers(repo);
+  const exec = (file, args, cwd = repo) => {
+    const result = spawnSync(file, args, { cwd, env, encoding: 'utf8', [commandAllowance]: 60000 });
+    let reply; try { reply = JSON.parse(result.stdout); } catch { /* Not a launch acknowledgement. */ }
+    workers.remember(reply);
+    return result;
+  };
   const git = (args, cwd = repo) => { const r = exec('git', args, cwd); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
   git(['init', '-qb', 'main']); git(['config', 'user.name', 'Train']); git(['config', 'user.email', 'train@example.invalid']);
   const counts = path.join(root, 'checks');
@@ -57,7 +64,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     laneCLI: path.join(source, 'lanes/lane.mjs'), org: null, expectedHead: git(['rev-parse', `lane/${topic}`]), ...extra });
   const drain = () => exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain']);
   const runs = () => fs.existsSync(counts) ? fs.readFileSync(counts, 'utf8').trim().split('\n').length : 0;
-  t.after(async () => { await waitForInboxIdle(path.join(repo, '.git/supervisor/inbox.log')); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await workers.wait(); await waitForInboxIdle(path.join(repo, '.git/supervisor/inbox.log')); fs.rmSync(root, { recursive: true, force: true }); });
   const messages = () => fs.existsSync(path.join(root, 'notices')) ? fs.readFileSync(path.join(root, 'notices'), 'utf8').trim().split('\n').map(JSON.parse) : [];
   return { root, repo, env, exec, git, queue, lane, add, drain, runs, checker, messages };
 }

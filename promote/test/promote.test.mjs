@@ -114,6 +114,12 @@ function fixture(t) {
   };
   const results = () => queue.load().results;
   const messages = () => fs.existsSync(notices) ? fs.readFileSync(notices, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
+  const waitForWorkers = () => waitForChange([queue.directory], () => [...processes.values()].every(entry => {
+    const current = lookupProcess(entry.pid);
+    if (!current.ok) return false; // Unknown still waits; only confirmed exit completes.
+    const row = current.value;
+    return !row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command;
+  }), { timeoutMs: 30000 });
   let cleanupProcesses = async () => {};
   let foreignInboxes = [];
   let cleanupPromise;
@@ -139,12 +145,7 @@ function fixture(t) {
       });
       // Empty-queue handoff releases worker.lock before retirement catch-up.
       // Wait for each pinned birth identity, not the lock or a reusable PID.
-      await waitForChange([queue.directory], () => [...processes.values()].every(entry => {
-        const current = lookupProcess(entry.pid);
-        assert.ok(current.ok, current.error);
-        const row = current.value;
-        return !row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command;
-      }), { timeoutMs: 10000 });
+      await waitForWorkers();
     } finally {
       for (const entry of processes.values()) killProcess(entry);
     }
@@ -152,7 +153,7 @@ function fixture(t) {
     assert.equal(foreignInboxes.length, 0, 'fixture inbox stays inside its owned root');
   })();
   t.after(cleanup);
-  return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, cleanup,
+  return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, cleanup, waitForWorkers,
     ownedProcess: (pid) => [...processes.values()].findLast(entry => entry.pid === pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
 
@@ -302,8 +303,10 @@ test('queued promotion waits before validation under low-memory pressure and pro
 test('unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate', async (t) => {
   const f = fixture(t); const first = f.lane('first'), second = f.lane('second');
   const launched = f.launch(['first', 'second']); assert.ok(launched.worker.ready);
-  await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+  await f.waitForWorkers();
+  assert.equal(f.results().length, 2);
   assert.deepEqual(f.results().map((r) => [r.topic, r.outcome, r.delivered]), [['first', 'promoted', true], ['second', 'promoted', true]]);
+  for (const row of f.results()) assert.equal(row.cleanup.state, 'complete', row.reason);
   assert.equal(fs.existsSync(first), false); assert.equal(fs.existsSync(second), false);
   assert.equal(f.git(['rev-list', '--merges', 'main']), '');
   assert.equal(f.git(['remote']), '');

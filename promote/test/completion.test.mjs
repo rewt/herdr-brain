@@ -19,6 +19,7 @@ import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
+import { promotionWorkers } from '../../test/helpers/promotion-worker.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -96,8 +97,9 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
   const show = id => JSON.parse(record(['show', id, '--json']));
   const gates = () => fs.existsSync(count) ? fs.readFileSync(count, 'utf8').trim().split('\n').length : 0;
   const events = () => fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  t.after(async () => { await waitForInboxIdle(path.join(org, 'supervisor/inbox.log')); fs.rmSync(root, { recursive: true, force: true }); });
-  return { root, repo, org, env, git, record, queue, lane, drain, show, gates, events, fault, members, checker, preload };
+  const workers = promotionWorkers(repo);
+  t.after(async () => { await workers.wait(); await waitForInboxIdle(path.join(org, 'supervisor/inbox.log')); fs.rmSync(root, { recursive: true, force: true }); });
+  return { root, repo, org, env, git, record, queue, lane, drain, show, gates, events, fault, members, checker, preload, workers };
 }
 
 for (const size of [1, 3]) test(`native ${size}-member batch reconciles atomically before cleanup and duplicate recovery`, t => {
@@ -305,12 +307,12 @@ for (const mode of ['complete', 'missing-member', 'wrong-head', 'reopened', 'new
     const retry = spawnSync(process.execPath, [path.join(source, 'supervisor/supervisor.mjs'), 'promote', first.run,
       '--repo', f.repo, '--org', f.org, '--role', 'supervisor', '--retry', '--why', 'Inspected manual reconciliation'],
       { cwd: f.repo, env: f.env, encoding: 'utf8' });
-    assert.equal(retry.status, 0, retry.stderr); assert.equal(JSON.parse(retry.stdout).result, 'resuming_completion');
-    const deadline = Date.now() + loadTimeout(10000);
-    while (f.queue.load().current || (f.queue.load().interrupted ?? []).length) {
-      assert.ok(Date.now() < deadline, 'normal resume worker completes bookkeeping');
-      await new Promise(resolve => setTimeout(resolve, 20));
-    }
+    assert.equal(retry.status, 0, retry.stderr);
+    const reply = JSON.parse(retry.stdout);
+    assert.equal(reply.result, 'resuming_completion');
+    f.workers.remember(reply);
+    await f.workers.wait();
+    assert.equal(f.queue.load().current, null, 'normal resume worker completes bookkeeping');
   } else f.drain();
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
   assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
@@ -319,6 +321,7 @@ for (const mode of ['complete', 'missing-member', 'wrong-head', 'reopened', 'new
     const row = f.queue.load().results.findLast(r => r.id === m.job.id);
     assert.equal(row.reconciliation.recovered.batch, 'manual-recovery');
     assert.equal(recordedBatchCompletion({ result: row, project: { ...f.queue.project, org: f.org }, run: { id: m.run, item: m.item } }), true);
+    if (mode === 'complete') assert.equal(row.cleanup.state, 'complete', row.reason);
     assert.equal(fs.existsSync(m.workspace), m === first && mode !== 'complete');
   }
   const before = f.events(); f.drain(); assert.equal(f.gates(), 1); assert.deepEqual(f.events(), before);

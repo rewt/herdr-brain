@@ -22,6 +22,7 @@ import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { enqueue, queueFor } from '../../promote/promote.mjs';
 import { resolveGateProfile } from '../../promote/gate-profile.mjs';
 import { resolveValidation, validateValidation } from '../../lanes/validation.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
 function scratch(t) {
@@ -184,19 +185,36 @@ for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records ti
 });
 
 async function until(predicate) {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + loadTimeout(5000);
   while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(predicate(), 'fixture became ready');
 }
-test('slot waiting consumes none of a short command deadline', { timeout: 10000 }, async t => {
-  const s = scratch(t), ready = path.join(s.root, 'ready');
-  const owner = spawnChild(t, process.execPath, provingRun([cli, 'run', 'owner', '--project-common', s.root, '--timeout-seconds', '3', '--', process.execPath, '-e',
-    `require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setTimeout(()=>{},1000);`]), { cwd: s.root, env: s.env });
+test('slot waiting consumes none of a short command deadline', { timeout: loadTimeout(10000) }, async t => {
+  const s = scratch(t), ready = path.join(s.root, 'ready'), release = path.join(s.root, 'release');
+  const clock = path.join(s.root, 'clock'), preload = path.join(s.root, 'clock.mjs'), waitReceipt = path.join(s.root, 'wait.json');
+  fs.writeFileSync(clock, '0');
+  // Advance the product's monotonic clock at protocol boundaries. Real command
+  // startup/scheduling cannot spend the .3s contract in this clock witness.
+  // The other watchdog cases exercise the real clock and actual overruns.
+  fs.writeFileSync(preload, `import fs from 'node:fs';if(process.argv[1]===${JSON.stringify(cli)})process.hrtime.bigint=()=>BigInt(fs.readFileSync(${JSON.stringify(clock)},'utf8'));`);
+  const owner = spawnChild(t, process.execPath, provingRun([cli, 'run', 'owner', '--project-common', s.root, '--', process.execPath, '-e',
+    `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},'ready');const end=Date.now()+${loadTimeout(5000)};while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<end)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);`]), { cwd: s.root, env: s.env });
   await until(() => fs.existsSync(ready));
-  const waiter = spawnChild(t, process.execPath, provingRun([cli, 'run', 'waiter', '--project-common', s.root, '--wait', '3', '--timeout-seconds', '.3', '--result-path', s.result, '--', process.execPath, '-e', 'setTimeout(()=>{},50)']), { cwd: s.root, env: s.env });
-  const began = Date.now(), result = await waitForExit(waiter); await waitForExit(owner);
-  assert.equal(result.code, 0, result.stderr); assert.ok(Date.now() - began > 800);
-  const receipt = JSON.parse(fs.readFileSync(s.result)); assert.ok(receipt.duration_s < .3);
+  const waiter = spawnChild(t, process.execPath, provingRun([cli, 'run', 'waiter', '--project-common', s.root, '--wait', String(Math.ceil(loadTimeout(5000) / 1000)), '--poll-ms', '20', '--wait-receipt-path', waitReceipt, '--timeout-seconds', '.3', '--result-path', s.result, '--', process.execPath, '-e',
+    `require('fs').writeFileSync(${JSON.stringify(clock)},'1050000000');`]), { cwd: s.root, env: { ...s.env, NODE_OPTIONS: `${s.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` } });
+  let waited = false;
+  waiter.stderr.on('data', data => { waited ||= String(data).includes('TEST_SLOT_WAIT:'); });
+  await until(() => waited);
+  fs.writeFileSync(clock, '1000000000'); // One second waiting exceeds the .3s command limit.
+  fs.writeFileSync(release, 'release');
+  const result = await waitForExit(waiter), ownerResult = await waitForExit(owner);
+  assert.equal(ownerResult.code, 0, ownerResult.stderr);
+  assert.equal(result.code, 0, result.stderr);
+  const wait = JSON.parse(fs.readFileSync(waitReceipt));
+  assert.equal(wait.state, 'acquired'); assert.ok(wait.waits.length > 0);
+  const receipt = JSON.parse(fs.readFileSync(s.result)); assert.ok(Math.abs(receipt.duration_s - .05) < 1e-9);
+  assert.ok(receipt.duration_s < .3);
+  assert.equal(receipt.limits.wall_seconds, .3);
   assert.equal(receipt.gate_timeout, null); assert.equal(fs.existsSync(s.lock), false);
 });
 async function nativeGroupScenario(t, mode) {

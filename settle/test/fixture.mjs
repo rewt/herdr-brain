@@ -8,7 +8,7 @@ import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { spawnChild, spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createProcessTracker, killProcess } from '../../test/helpers/processes.mjs';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
@@ -148,8 +148,8 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   const settle = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--brief', brief, ...args]);
   const retry = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--retry', ...args]);
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
-  const concurrent = (id, executable = path.join(source, 'settle/settle.mjs'), args = ['--brief', brief]) => {
-    const child = spawnChild(t, process.execPath, [executable, id, ...args], { cwd: repo, env });
+  const concurrent = (id, executable = path.join(source, 'settle/settle.mjs'), args = ['--brief', brief], { scenario = false } = {}) => {
+    const child = (scenario ? spawnScenarioChild : spawnChild)(t, process.execPath, [executable, id, ...args], { cwd: repo, env });
     const done = waitForExit(child).then(result => { rememberWatchers(); return result; });
     done.catch(() => {});
     pending.push(done);

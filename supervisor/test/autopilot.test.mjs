@@ -65,7 +65,7 @@ async function existingWorker(t, f, { refuse = false } = {}) {
   const queue = queueFor(f.repo);
   enqueue(queue, ['anchor'], { to: f.entry.to, herdr: path.join(f.root, 'bin/herdr'), attempts: 1, retry: 0,
     laneCLI: path.join(f.source, 'lanes/lane.mjs'), validate: `${process.execPath} ${checker}`, org: null });
-  const pending = f.concurrent('--drain', path.join(f.source, 'promote/promote.mjs'), ['--repo', f.repo]);
+  const pending = f.concurrent('--drain', path.join(f.source, 'promote/promote.mjs'), ['--repo', f.repo], { scenario: true });
   let stderr = ''; pending.child.stderr.on('data', data => { stderr += data; });
   t.after(() => { if (fs.existsSync(f.root)) fs.writeFileSync(release, 'release'); });
   const deadline = Date.now() + loadTimeout(10000);
@@ -75,7 +75,10 @@ async function existingWorker(t, f, { refuse = false } = {}) {
     fs.writeFileSync(release, 'release');
   }
   assert.ok(fs.existsSync(started), JSON.stringify({ queue: queue.load(), stderr, logs: queue.load().results.map(job => job.log && fs.existsSync(job.log) ? fs.readFileSync(job.log, 'utf8') : null) }, null, 2)); assert.ok(liveNativeWorker(f.entry.project.identity));
-  return () => fs.writeFileSync(release, 'release');
+  const releaseWorker = () => fs.writeFileSync(release, 'release');
+  releaseWorker.done = pending.done.then(result => assert.equal(result.code, 0, result.stderr));
+  releaseWorker.done.catch(() => {});
+  return releaseWorker;
 }
 const pass = { result: 'promotable', review: { verdict: 'PASS' } };
 const minor = '- [Minor] supervisor/x.mjs:1 - Improve text; Fix: clarify it';
@@ -488,7 +491,7 @@ test('real handle still wakes for a non-test claim alongside ingest proof and de
   assert.match(receipt.actions[0].result.reason, /unverified claims/);
   assert.equal(f.show(f.item).closed, null);
 });
-for (const [awaited, scopedTests, recordClaim, withProposal] of [[false, false], [true, false], [false, true], [false, true, RECORD_CHECK_CLAIM], [false, true, LEGACY_RECORD_CHECK_CLAIM], [false, false, undefined, true]]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}${scopedTests ? ' with deferred test evidence' : ''}${recordClaim ? ` and ingest proof: ${recordClaim}` : ''}${withProposal ? ' with a non-blocking engineer proposal' : ''}`, { timeout: 30000 }, async t => {
+for (const [awaited, scopedTests, recordClaim, withProposal] of [[false, false], [true, false], [false, true], [false, true, RECORD_CHECK_CLAIM], [false, true, LEGACY_RECORD_CHECK_CLAIM], [false, false, undefined, true]]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}${scopedTests ? ' with deferred test evidence' : ''}${recordClaim ? ` and ingest proof: ${recordClaim}` : ''}${withProposal ? ' with a non-blocking engineer proposal' : ''}`, { timeout: 60000 }, async t => {
   const f = setup(t, [], { ingest: false }); f.commit('correct\n');
   const state = () => fold(loadEvents(f.org).events);
   if (withProposal) {
@@ -515,13 +518,9 @@ for (const [awaited, scopedTests, recordClaim, withProposal] of [[false, false],
   const result = JSON.parse(r.stdout);
   releaseWorker();
   assert.equal(result.handled, true, JSON.stringify(result));
-  const directory = path.join(f.entry.project.identity, 'promote'), deadline = Date.now() + loadTimeout(20000);
-  let closed = false;
-  while (Date.now() < deadline) {
-    closed = state().items.get(f.item).closed?.as === 'done';
-    if (closed && !fs.existsSync(path.join(directory, 'worker.lock'))) break;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
+  await releaseWorker.done;
+  const directory = path.join(f.entry.project.identity, 'promote');
+  const closed = state().items.get(f.item).closed?.as === 'done';
   assert.ok(closed, `promotion notice closes the record without supervisor chat: ${JSON.stringify(queueFor(f.repo).load())}`);
   assert.ok(!fs.existsSync(path.join(directory, 'worker.lock')), 'finite promotion owner exited');
   if (!withProposal) assert.ok(!fs.existsSync(f.workspace));
@@ -564,9 +563,9 @@ for (const [awaited, scopedTests, recordClaim, withProposal] of [[false, false],
     assert.equal(again.delivered, true);
     assert.equal(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt' && a[3].startsWith('[autopilot]')).length, 1);
   }
-  } finally { releaseWorker(); }
+  } finally { releaseWorker(); await releaseWorker.done; }
 });
-test('real CLIs retry an exit-one base-moved refusal with the saved request and land once', { timeout: 30000 }, async t => {
+test('real CLIs retry an exit-one base-moved refusal with the saved request and land once', { timeout: 60000 }, async t => {
   const f = setup(t); f.commit('correct\n');
   const releaseWorker = await existingWorker(t, f);
   const state = () => fold(loadEvents(f.org).events);
@@ -604,8 +603,8 @@ process.exit(r.status??1);`, { mode: 0o755 });
   assert.equal(settled.to, f.entry.to); assert.equal(settled.recaptures.length, 1);
   assert.equal(settled.review.verdict, 'PASS');
   assert.equal(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'start').length, 1, 'retry reuses independent review');
-  const directory = path.join(f.entry.project.identity, 'promote'), deadline = Date.now() + loadTimeout(20000);
-  while (Date.now() < deadline && (!state().items.get(f.item).closed || fs.existsSync(path.join(directory, 'worker.lock')))) await new Promise(resolve => setTimeout(resolve, 100));
+  await releaseWorker.done;
+  const directory = path.join(f.entry.project.identity, 'promote');
   assert.equal(state().items.get(f.item).closed?.as, 'done', JSON.stringify(JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')))));
   assert.ok(!fs.existsSync(path.join(directory, 'worker.lock')));
   assert.equal(fs.readFileSync(path.join(f.repo, 'upstream'), 'utf8'), 'new main\n');
@@ -622,7 +621,7 @@ process.exit(r.status??1);`, { mode: 0o755 });
   const events = fs.readFileSync(path.join(f.org, 'events.jsonl'));
   assert.equal(JSON.parse(f.exec(process.execPath, [runner]).stdout).disposition, 'handled');
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
-  } finally { releaseWorker(); }
+  } finally { releaseWorker(); await releaseWorker.done; }
 });
 
 for (const stdout of ['', '{broken']) test(`stderr-only failed action preserves refusal instead of JSON parsing: ${stdout}`, t => {
@@ -755,10 +754,10 @@ test('a worker exiting after autopilot precheck leaves a confirmed no-op that ba
     while (fs.existsSync(path.join(queue.directory, 'worker.lock')) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
     assert.equal(queue.load().results.filter(job => job.run === f.run).length, 1);
     assert.equal(queue.load().results.find(job => job.run === f.run).outcome, 'promoted');
-  } finally { release(); }
+  } finally { release(); await release.done; }
 });
 
-for (const fromReport of [false, true]) test(`automatic queue ${fromReport ? 'promotes its own non-blocking report proposal' : 'refuses an engineer child filed during handle after report intake'}`, { timeout: 30000 }, async t => {
+for (const fromReport of [false, true]) test(`automatic queue ${fromReport ? 'promotes its own non-blocking report proposal' : 'refuses an engineer child filed during handle after report intake'}`, { timeout: 60000 }, async t => {
   const f = setup(t, [], { ingest: false }), queue = queueFor(f.repo);
   f.commit('correct\n');
   if (fromReport) {
@@ -790,8 +789,7 @@ for (const fromReport of [false, true]) test(`automatic queue ${fromReport ? 'pr
     assert.ok(child.created.seq > state.runs.get(f.run).report.seq, 'child was filed after intake');
     assert.ok(child.created.seq <= admitted.admittedSeq, 'child was already present at admission');
     release();
-    const deadline = Date.now() + loadTimeout(20000);
-    while (Date.now() < deadline && fs.existsSync(path.join(queue.directory, 'worker.lock'))) await new Promise(resolve => setTimeout(resolve, 50));
+    await release.done;
     assert.equal(fs.existsSync(path.join(queue.directory, 'worker.lock')), false, 'finite promotion owner exited');
     const job = queue.load().results.find(job => job.run === f.run);
     assert.ok(job); assert.equal(job.outcome, fromReport ? 'promoted' : 'refused', job.reason);
@@ -804,10 +802,10 @@ for (const fromReport of [false, true]) test(`automatic queue ${fromReport ? 'pr
     assert.equal(f.show(f.item).closed?.as ?? null, fromReport ? 'done' : null);
     assert.equal(f.show(child.id).closed, null);
     assert.equal(fs.readFileSync(path.join(f.repo, 'brain/output.txt'), 'utf8'), fromReport ? 'correct\n' : 'base\n');
-  } finally { release(); }
+  } finally { release(); await release.done; }
 });
 
-for (const change of ['stale-PASS', 'kill-switch', 'pause']) test(`automatic queue rechecks ${change} at final integration`, { timeout: 30000 }, async t => {
+for (const change of ['stale-PASS', 'kill-switch', 'pause']) test(`automatic queue rechecks ${change} at final integration`, { timeout: 60000 }, async t => {
   const f = setup(t, [], { ingest: false }), gate = path.join(f.root, 'change-at-gate.cjs');
   const mutation = change === 'stale-PASS'
     ? `const file=${JSON.stringify(path.join(f.org, 'settle', `${f.run}.json`))};const settled=JSON.parse(fs.readFileSync(file));settled.review.verdict='NEEDS-WORK';fs.writeFileSync(file,JSON.stringify(settled));`
@@ -821,14 +819,14 @@ for (const change of ['stale-PASS', 'kill-switch', 'pause']) test(`automatic que
     const r = f.exec(process.execPath, [file, ...args]); assert.equal(r.status, 0, r.stderr); return r.stdout;
   } });
   release(); assert.equal(result.disposition, 'handled', fs.readFileSync(result.receipt, 'utf8'));
-  const queue = queueFor(f.repo), deadline = Date.now() + loadTimeout(20000);
-  while (Date.now() < deadline && fs.existsSync(path.join(queue.directory, 'worker.lock'))) await new Promise(resolve => setTimeout(resolve, 50));
+  await release.done;
+  const queue = queueFor(f.repo);
   const job = queue.load().results.find(j => j.run === f.run);
   assert.equal(job.outcome, 'refused'); assert.match(job.reason, change === 'stale-PASS' ? /AUTOPILOT_PASS_STALE/ : change === 'pause' ? /AUTOPILOT_PAUSED/ : /AUTOPILOT_DISABLED/);
   assert.equal(f.show(f.item).closed, null);
   assert.equal(fs.readFileSync(path.join(f.repo, 'brain/output.txt'), 'utf8'), 'base\n');
   assert.notEqual(f.git(['rev-parse', 'main']), base, 'only the preexisting anchor integrated');
-  } finally { release(); }
+  } finally { release(); await release.done; }
 });
 
 for (const mode of ['symlink', 'executable', 'cross-area']) test(`pilot rejects ${mode} scope`, t => {

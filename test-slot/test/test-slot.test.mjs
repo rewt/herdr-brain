@@ -231,8 +231,16 @@ describe("a dead holder is recovered", () => {
     assert.equal(refused.code, REFUSED_EXIT);
     assert.match(refused.stderr, new RegExp(`^${HELD_CODE}: second refused: first `, "u"));
 
-    process.kill(-first.commandPid, "SIGKILL");
-    await until(() => !exists(-first.commandPid), "the orphaned group to exit");
+    const current = lookupProcess(first.commandPid);
+    assert.ok(current.ok, current.error);
+    assert.ok(current.value?.command.includes(s.file('first.ready')), 'the orphan is still our fixture');
+    // The suite runner contains children in its own group; direct invocations
+    // allow the product to detach. Signal the group only when this command is
+    // its leader, and prove the actual orphan is gone in both environments.
+    const target = current.value.pgid === first.commandPid ? -first.commandPid : first.commandPid;
+    process.kill(target, "SIGKILL");
+    await until(() => !exists(target), "the orphaned command to exit");
+    assert.equal(exists(first.commandPid), false);
     const slot = await acquireTestSlot("recovered", { lockPath: s.lockPath, env: ENV, waitSeconds: 0 });
     assert.equal(slot.nested, false);
     assert.equal(readLock(s.lockPath).label, "recovered");

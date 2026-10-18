@@ -13,6 +13,16 @@ worktree copies, edited/untracked configuration, project labels, and inherited
 release/Git selector variables do not select a different pin. A damaged accepted
 pin fails closed. No pin, or `{"release":null}`, preserves global `current`.
 
+A verified no-pin fast path uses no Git subprocess. A filesystem pre-check
+follows Git markers and `commondir` to the canonical checkout and proves that its
+HEAD tree has no pin using hash-verified loose commit/tree objects (including
+loose objects in alternates and refs in `packed-refs`). It never infers absence
+from the working file or index alone. A committed pin deleted from the canonical
+working tree fails closed, including a staged deletion: restore the file or
+commit its removal. Packed objects, separate Git directories, unusual configuration
+and uncertain metadata retain full Git verification; they never authorize an
+absence guess. Pin-present admissions retain the committed-tree verification.
+
 From the canonical project, prepare adoption or rollback with:
 
 ```sh

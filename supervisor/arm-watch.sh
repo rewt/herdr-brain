@@ -7,11 +7,11 @@
 set -eu
 RUN=${1:?usage: arm-watch.sh R-n [--org RECORD] [--cwd PROJECT] [--to NAME]}
 shift
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-HERE=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+HERE=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)
 # Discovery uses the caller's project, never this installed release's checkout.
 MODE=--spawn
 for ARG in "$@"; do
   case "$ARG" in --detach|--dry-run|--spawn) MODE= ;; esac
 done
-exec node "$HERE/watch/watch.mjs" "$RUN" "$@" ${MODE:+"$MODE"}
+exec node "$HERE/herdr/releases.mjs" run watch/watch.mjs "$RUN" "$@" ${MODE:+"$MODE"}

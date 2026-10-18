@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Project housekeeping: a deterministic schedule, with record/Git authority.
 import { ownerAlive, ownerIdentity } from '../lib/process-owner.mjs';
+import { bundleRelease, forwardRelease } from '../lib/releases.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -209,11 +210,14 @@ async function main() {
     herdr: { type: 'string', default: 'herdr' }, 'org-cli': { type: 'string' },
     resume: { type: 'boolean' }, once: { type: 'boolean' }, loop: { type: 'boolean' }, start: { type: 'boolean' }, 'dry-run': { type: 'boolean', default: false },
   } });
+  const forwarded = forwardRelease('housekeeping/housekeeping.mjs', opt.cwd);
+  if (forwarded !== null) { process.exitCode = forwarded; return; }
   if ([opt.once, opt.loop, opt.start].filter(Boolean).length !== 1) throw new Error('usage: housekeeping.mjs (--start|--once|--loop) [--cwd PROJECT] [--org DIR] [--config FILE] [--dry-run] [--state-dir DIR]');
   if (opt.resume && !opt.start) throw new Error('--resume requires --start');
   const project = discoverProject(opt.cwd, opt.org);
   if (!project?.org) { process.stdout.write(`${JSON.stringify({ action: project ? 'no-record' : 'no-project', cwd: project?.cwd ?? opt.cwd })}\n`); return; }
   const script = fs.realpathSync(SELF);
+  const admittedRelease = bundleRelease();
   const recordCLI = opt['org-cli'] ? [executablePath(opt['org-cli'])] : [fs.realpathSync(process.execPath), fs.realpathSync(LOCAL_RECORD)];
   if (!opt['dry-run']) {
     for (const file of [script, ...recordCLI]) requireStableRuntime(file);
@@ -230,7 +234,7 @@ async function main() {
   if (!config.enabled && !opt['dry-run']) { process.stdout.write(`${JSON.stringify({ action: 'disabled' })}\n`); return; }
   fs.mkdirSync(stateDir, { recursive: true });
   const log = (entry) => {
-    const line = `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`;
+    const line = `${JSON.stringify({ at: new Date().toISOString(), release: admittedRelease, ...entry })}\n`;
     fs.appendFileSync(path.join(stateDir, 'actions.jsonl'), line);
     process.stdout.write(line);
   };
@@ -285,7 +289,7 @@ async function main() {
   const identity = ownerIdentity(process.pid);
   fs.mkdirSync(lock); // Fail closed on overlap or an unrecovered crash.
   fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, identity, cwd, org: project.org, config: configFile,
-    script, record_cli: recordCLI }));
+    script, record_cli: recordCLI, release: admittedRelease }));
   let stopped = false, wake;
   const stop = () => { stopped = true; wake?.(); };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);

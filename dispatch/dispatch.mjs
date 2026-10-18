@@ -13,6 +13,7 @@ import { fold } from '../lib/state.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { readTiming, timedMemoryWait, timingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { bundleRelease, forwardRelease, continueRelease, operationFile } from '../lib/releases.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
@@ -199,6 +200,16 @@ async function main() {
     lockJob();
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
+    if (saved.release && saved.release.root !== bundleRelease().root) {
+      operationFile('dispatch/dispatch.mjs', saved.release);
+      // Read under the existing lock. Only transfer the bundle identity;
+      // the receiving retry takes the lock and reads fresh progress again.
+      if (fs.readFileSync(lock, 'utf8') !== String(process.pid)) throw Error('dispatch lock changed before release handoff');
+      fs.unlinkSync(lock); ownsLock = false;
+      fs.unlinkSync(contender); contender = null;
+      process.exitCode = continueRelease('dispatch/dispatch.mjs', saved.release);
+      return;
+    }
     job = saved;
     if (opt['from-run'] !== undefined) {
       if (job.fromRun && job.fromRun !== opt['from-run']) throw new Error('--from-run cannot replace the saved origin');
@@ -207,6 +218,8 @@ async function main() {
       job.fromRun = opt['from-run'];
     }
   } else {
+    const forwarded = forwardRelease('dispatch/dispatch.mjs', opt.repo);
+    if (forwarded !== null) { process.exitCode = forwarded; return; }
     if (opt.adopt || opt.fresh || opt.resend || opt['accept-delivered'] || opt['recover-run']) throw new Error('recovery flags require --retry');
     if (positionals.length !== 1 || !opt.lane || !opt.route || !opt.brief) throw new Error('usage: dispatch.mjs ITEM --org DIR --lane TOPIC --route ROUTE --brief FILE [--report FILE] [--to AGENT] [--base REF] [--reuse R-n] [--extra TEXT] | --retry R-n|JOURNAL | --status R-n|JOURNAL');
     if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(opt.lane)) throw new Error('lane must be short kebab-case');
@@ -234,7 +247,7 @@ async function main() {
     const directory = path.join(org, 'dispatch');
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
-    job = { token, repo, org, common, item: positionals[0], lane: opt.lane, route: opt.route,
+    job = { token, repo, org, common, release: bundleRelease(), item: positionals[0], lane: opt.lane, route: opt.route,
       brief, report: opt.report ?? null, to: opt.to,
       base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null,
       declared: { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null },

@@ -11,6 +11,9 @@ bash herdr/release.sh activate TAG
 bash herdr/release.sh ship TAG   # build + activate + check; rolls back on failure
 bash herdr/release.sh rollback
 bash herdr/release.sh status
+bash herdr/release.sh pin TAG /canonical/project  # commit .herdr-release.json to accept
+bash herdr/release.sh unpin /canonical/project   # commit to return to current
+bash herdr/release.sh exec supervisor/supervisor.mjs brief
 ```
 
 Agents release with `ship`. Activation moves the retired Brain watch LaunchAgent
@@ -27,13 +30,15 @@ inspection and cannot be activated or rebuilt in place. `--live` adds the live
 acceptance harness after the offline gate; it is optional and never run in lanes.
 Every release retains `contrib/settle-watch.mjs` and `lib/cli-help.mjs`.
 
-Activation updates `previous` and `current` and links `~/.local/bin/{org,record}`
-to `current/bin/org.mjs` and `lane` to `current/lanes/lane.mjs`. Existing regular
+Activation updates `previous` and `current` and installs project-aware resolvers
+for `~/.local/bin/{org,record,lane}`. A committed canonical `.herdr-release.json`
+selects a complete immutable bundle; unpinned projects keep using `current`.
+See [release pins](RELEASE-PINS.md) for acceptance, rollback, compatibility,
+operation inventory and the deferred BCH adapters. Existing regular
 files are refused before switching. Repeating activation preserves the previous
 release. Rollback selects it. The operator controls activation and publishing.
 The retired `rewt.herdr-monitor` plugin is unlinked if still registered; a failure
-warns. Activation refuses while the old Brain LaunchAgent plist exists: the
-operator must stop and remove that retired job first.
+warns. Complete releases and routing generations are retained; there is no pruning.
 
 Set `HERDR_MONITOR_HOME`, `HERDR_MONITOR_BIN` and `HERDR_MONITOR_REPO` to choose
 release, launcher and source locations. `HERDR_MONITOR_PLIST` selects the retired

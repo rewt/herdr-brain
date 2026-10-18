@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Immutable local releases. The project supervisor ships them (see supervisor/PROTOCOL.md).
 # Usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status
+#        release.sh pin TAG [PROJECT] | unpin [PROJECT] | exec ENTRY [ARGS...]
 # ship = build (release gate in the archive) + activate + check the installed launchers; it rolls
 # back to the previous release if that check fails. Agents run it as one bare command. A built tag is
 # never rebuilt: after a failed ship cut a new tag; if a build succeeded but activation never ran,
@@ -15,6 +16,7 @@ LEGACY_PLIST=${HERDR_MONITOR_PLIST-$HOME/Library/LaunchAgents/com.rewt.herdr-bra
 # launchctl acts on the real login session whatever HOME says, so only the account's own plist may stop it.
 REAL_PLIST="$(eval echo "~$(id -un)")/Library/LaunchAgents/com.rewt.herdr-brain.plist"
 LAUNCHERS="org:bin/org.mjs record:bin/org.mjs lane:lanes/lane.mjs"
+TOOLS="$(cd "$(dirname "$0")" && pwd -P)/releases.mjs"
 die() { echo "release: $*" >&2; exit 1; }
 say() { echo "release: $*"; }
 valid_tag() {
@@ -61,6 +63,7 @@ NODE
   if [ "$live" = --live ]; then
     (cd "$dir.partial" && node acceptance/run.mjs --candidate "$dir.partial")
   fi
+  node "$TOOLS" manifest "$dir.partial"
   mv "$dir.partial" "$dir"
   chmod -R a-w "$dir"
   say "built $tag at $dir ($(cut -c1-8 "$dir/.release-commit"))"
@@ -94,8 +97,8 @@ retire_brain_service() {
 verify_installed() {
   # The launchers projects call must run from the new current release.
   local out
-  out=$(node "$BIN_DIR/org" help 2>&1) || { echo "release: installed org failed to start: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
-  out=$(node "$BIN_DIR/lane" --help 2>&1) || { echo "release: installed lane failed to start: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
+  out=$(cd "$HOME_DIR" && node "$BIN_DIR/org" help 2>&1) || { echo "release: installed org failed to start: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
+  out=$(cd "$HOME_DIR" && node "$BIN_DIR/lane" --help 2>&1) || { echo "release: installed lane failed to start: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
   out=$(node --check "$HOME_DIR/current/contrib/settle-watch.mjs" 2>&1) || { echo "release: installed settle-watch does not load: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
 }
 ship() {
@@ -125,7 +128,7 @@ activate() {
     ln -sfn "$(readlink "$HOME_DIR/current")" "$HOME_DIR/previous"
   fi
   ln -sfn "$dir" "$HOME_DIR/current"
-  for l in $LAUNCHERS; do ln -sfn "$HOME_DIR/current/${l#*:}" "$BIN_DIR/${l%%:*}"; done
+  node "$TOOLS" install "$HOME_DIR" "$BIN_DIR"
   retire_plugin
   say "active: $tag"
 }
@@ -149,5 +152,8 @@ case "${1:-}" in
   ship) [ $# -eq 2 ] || die "usage: release.sh ship TAG"; ship "$2" ;;
   rollback) [ $# -eq 1 ] || die "usage: release.sh rollback"; rollback ;;
   status) [ $# -eq 1 ] || die "usage: release.sh status"; status ;;
-  *) die "usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status" ;;
+  pin) [ $# -ge 2 ] && [ $# -le 3 ] || die "usage: release.sh pin TAG [PROJECT]"; node "$TOOLS" pin "$HOME_DIR" "${3:-$PWD}" "$2" ;;
+  unpin) [ $# -le 2 ] || die "usage: release.sh unpin [PROJECT]"; node "$TOOLS" unpin "$HOME_DIR" "${2:-$PWD}" ;;
+  exec) [ $# -ge 2 ] || die "usage: release.sh exec ENTRY [ARGS...]"; shift; node "$TOOLS" run "$@" ;;
+  *) die "usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status | pin TAG [PROJECT] | unpin [PROJECT] | exec ENTRY [ARGS...]" ;;
 esac

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
 import { checkFleetRecord, FleetError } from '../lib/fleet.mjs';
+import { forwardRelease } from '../lib/releases.mjs';
 import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
@@ -1023,7 +1024,8 @@ process.stdout.on('error', (error) => {
 });
 
 try {
-  process.exitCode = await main(process.argv.slice(2));
+  const forwarded = ['help', '--help', '-h'].includes(process.argv[2]) ? null : forwardRelease('bin/org.mjs', process.cwd());
+  process.exitCode = forwarded ?? await main(process.argv.slice(2));
 } catch (error) {
   if (error instanceof UserError || error instanceof FleetError || String(error.code).startsWith('ERR_PARSE_ARGS')) {
     err(`record: ${error.message}\n`);

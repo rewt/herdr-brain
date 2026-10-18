@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { gitProject } from '../lib/project.mjs';
+import { bundleRelease } from '../lib/releases.mjs';
 import { findOrgDir, loadEvents, readConfig, now } from '../lib/store.mjs';
 import { fold, itemStatus, openRuns, isResolved, attention } from '../lib/state.mjs';
 import { lessonsJson } from '../lib/lessons.mjs';
@@ -145,7 +146,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, workspace, env =
   catch (e) { recovery.push({ file: path.join(project.canonical, '.housekeeping.json'), reason: `Housekeeping: ${e.message}` }); }
   const config = readConfig(org), clock = now(env);
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));
-  return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
+  return { project: { ...project, org, release: bundleRelease(), as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
     lessons, handoffs, goals, running, reports, waiting, held, ready, decisions, next, recovery,
     approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, housekeeping,
     host: { memory, reason: memoryReason(memory) } };
@@ -154,6 +155,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, workspace, env =
 export function renderColdStart(doc, { limit = 6 } = {}) {
   const out = [`Supervisor cold start · ${doc.project.canonical}`, `Record ${doc.project.org} · events through ${doc.project.through}; decisions after ${doc.project.after}`];
   for (const handoff of doc.handoffs ?? []) out.push(renderHandoff(handoff));
+  if (doc.project.release) out.push(`Bundle ${doc.project.release.id ?? 'source'} · ${doc.project.release.root}`);
   if (doc.housekeeping) out.push(`Housekeeping: ${doc.housekeeping.process}${doc.housekeeping.pid ? ` (pid ${doc.housekeeping.pid})` : ''}; enabled=${doc.housekeeping.config?.enabled ?? '?'} resume=${doc.housekeeping.config?.resume ?? '?'}${doc.housekeeping.configError ? `; ${line(doc.housekeeping.configError)}` : ''}${doc.housekeeping.warnings.length ? `; ${line(doc.housekeeping.warnings.join('; '))}` : ''}`);
   if (doc.project.stopped) out.push('STOP exists: inspect only; do not dispatch, settle or promote.');
   if (doc.project.torn_tail) out.push('Record has an incomplete final event; inspect before writes.');

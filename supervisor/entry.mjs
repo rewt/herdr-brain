@@ -10,6 +10,7 @@ import { gitProject } from '../lib/project.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { coldStart, receiptDirectory } from './context.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
+import { operationFile } from '../lib/releases.mjs';
 
 const local = name => fileURLToPath(new URL(name, import.meta.url));
 const hash = identity => createHash('sha256').update(identity).digest('hex').slice(0, 20);
@@ -110,6 +111,7 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
       if (gitProject(current.workspace).identity !== project.identity) throw new Error('run repository binding changed');
       if (current.meta.watcher_pid != null && ownerAlive({ pid: Number(current.meta.watcher_pid), identity: current.meta.watcher_identity }, readOwner)) return;
       let recipient = to;
+      let watcher = local('../watch/watch.mjs');
       if (current.meta.dispatch_journal) {
         let receipt;
         try { receipt = JSON.parse(fs.readFileSync(current.meta.dispatch_journal, 'utf8')); }
@@ -117,10 +119,11 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
         if (receipt) {
           if (receipt.run !== run.run || (receipt.to != null && (typeof receipt.to !== 'string' || !receipt.to.trim()))) throw new Error('dispatch recipient receipt is invalid; inspect');
           recipient = receipt.to ?? recipient;
+          if (receipt.release) watcher = operationFile('watch/watch.mjs', receipt.release);
         }
       }
       recipient = (typeof recipient === 'string' && recipient.trim()) || 'supervisor-herdr';
-      const watched = JSON.parse(call(local('../watch/watch.mjs'), [run.run, '--org', org, '--to', recipient,
+      const watched = JSON.parse(call(watcher, [run.run, '--org', org, '--to', recipient,
         '--cwd', project.canonical, '--detach', '--log', path.join(org, 'dispatch', `${run.run}.watch.log`)]));
       if (watched.run !== run.run || typeof watched.log !== 'string' || !ownerAlive(watched, readOwner)) throw new Error('watcher startup receipt is invalid or owner died; inspect before retry');
       call(local('../bin/org.mjs'), ['set', run.run, `watcher_pid=${watched.pid}`, `watcher_identity=${watched.identity}`, `watcher_log=${watched.log}`]);

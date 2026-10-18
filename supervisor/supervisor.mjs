@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { bundleRelease, forwardRelease } from '../lib/releases.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { writeFileAtomic } from '../lib/store.mjs';
@@ -42,6 +43,8 @@ export function main(argv = process.argv.slice(2)) {
     'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'accept-findings': { type: 'boolean' },
     'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
   } });
+  const forwarded = forwardRelease('supervisor/supervisor.mjs', opt.repo);
+  if (forwarded !== null) { process.exitCode = forwarded; return; }
   const [action = 'brief', requested] = positionals;
   if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
   if ((opt['fix-findings'] || opt['review-round-cap'] !== undefined) && action !== 'handle') throw new Error('--fix-findings and --review-round-cap belong to handle');
@@ -208,7 +211,7 @@ export function main(argv = process.argv.slice(2)) {
     const result = JSON.parse(call(settle, settleArgs));
     if (!['promotable', 'promotable_with_findings'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
-    const saved = { identity: project.identity, org: project.org, run: id, lane: result.lane,
+    const saved = { identity: project.identity, org: project.org, run: id, lane: result.lane, release: bundleRelease(),
       reviewed_commit: result.reviewed_commit, head: result.head,
       ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',
       ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),

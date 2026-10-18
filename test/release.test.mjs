@@ -37,7 +37,7 @@ else if(a[1]==='unlink'){if(process.env.FIXTURE_UNLINK_FAIL)process.exit(9);fs.w
   fs.renameSync(herdr, `${herdr}.cjs`);
   const plist = path.join(root, 'old.plist');
   const env = releaseEnvironment(process.env, { HOME: root, HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home,
-    HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist, HERDR_BIN_PATH: `${herdr}.cjs` });
+    HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist, HERDR_BIN_PATH: `${herdr}.cjs`, HERDR_MONITOR_FLEET: path.join(root, 'fleet') });
   const run = (a, extra = {}) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 30000 });
   const ok = (a, extra) => { const r = run(a, extra); assert.equal(r.status, 0, r.stdout + r.stderr); return r; };
   const release = tag => path.join(home, 'releases', tag);
@@ -112,8 +112,11 @@ test('--live is explicit, follows the offline gate, and a live failure prevents 
 test('activation switches three launchers, retires the old plugin once, and rollback preserves previous on repeat', t => {
   const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']);
   f.ok(['activate', 't1']);
-  for (const [name, file] of [['org', 'bin/org.mjs'], ['record', 'bin/org.mjs'], ['lane', 'lanes/lane.mjs']])
-    assert.equal(fs.readlinkSync(path.join(f.bin, name)), path.join(f.home, 'current', file));
+  for (const name of ['org', 'record', 'lane']) {
+    assert.ok(fs.readlinkSync(path.join(f.bin, name)).startsWith(path.join(f.home, 'routing') + path.sep));
+    const result = spawnSync(process.execPath, [path.join(f.bin, name), '--help'], { cwd: f.root, env: f.env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr); assert.match(result.stdout, /t1/);
+  }
   f.ok(['activate', 't2']); f.ok(['activate', 't2']);
   assert.equal(fs.readlinkSync(path.join(f.home, 'previous')), f.release('t1'));
   f.ok(['rollback']); assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t1'));
@@ -190,7 +193,7 @@ test('failed plugin unlink warns and leaves the launchers usable', t => {
 });
 test('distribution inventory retains bch-cloak launch dependencies', () => {
   const files = productFiles(path.resolve(import.meta.dirname, '..'));
-  for (const file of ['.nvmrc', 'contrib/settle-watch.mjs', 'lib/cli-help.mjs', 'supervisor/reconcile.mjs', 'supervisor/request.mjs']) assert.ok(files.includes(file));
+  for (const file of ['.nvmrc', 'contrib/settle-watch.mjs', 'lib/cli-help.mjs', 'supervisor/reconcile.mjs', 'supervisor/request.mjs', 'lib/releases.mjs', 'herdr/releases.mjs']) assert.ok(files.includes(file));
   assert.ok(!files.some(file => file.startsWith('release/')));
 });
 
@@ -208,8 +211,35 @@ test('installed release commands can inspect and switch launchers without Git me
   installed(['rollback']);
   assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t1'));
   assert.equal(fs.readlinkSync(path.join(f.home, 'previous')), f.release('t2'));
-  for (const [name, file] of [['org', 'bin/org.mjs'], ['record', 'bin/org.mjs'], ['lane', 'lanes/lane.mjs']])
-    assert.equal(fs.readlinkSync(path.join(f.bin, name)), path.join(f.home, 'current', file));
+  for (const name of ['org', 'record', 'lane'])
+    assert.ok(fs.readlinkSync(path.join(f.bin, name)).startsWith(path.join(f.home, 'routing') + path.sep));
+});
+
+test('pin validates a complete bundle and only a canonical commit accepts activation or rollback', t => {
+  const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']); f.ok(['activate', 't2']);
+  const project = path.join(f.root, 'project'); fs.mkdirSync(project);
+  const git = (...args) => execFileSync('git', ['-C', project, ...args], { env: f.env, encoding: 'utf8' });
+  git('init', '-qb', 'main'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid');
+  git('commit', '--allow-empty', '-qm', 'initial');
+  const launch = () => spawnSync(process.execPath, [path.join(f.bin, 'record'), 'help'], { cwd: project, env: f.env, encoding: 'utf8' });
+  const commit = () => { git('add', '.herdr-release.json'); git('commit', '-qm', 'accept pin'); };
+  f.ok(['pin', 't1', project]); assert.equal(launch().stdout.trim(), 't2');
+  commit(); assert.equal(launch().stdout.trim(), 't1');
+  f.ok(['pin', 't2', project]); commit(); assert.equal(launch().stdout.trim(), 't2');
+  f.ok(['pin', 't1', project]); commit(); assert.equal(launch().stdout.trim(), 't1');
+  f.ok(['unpin', project]); commit(); assert.equal(launch().stdout.trim(), 't2');
+  assert.notEqual(f.run(['pin', 'missing', project]).status, 0);
+  fs.chmodSync(path.join(f.release('t1'), 'bin'), 0o755); fs.unlinkSync(path.join(f.release('t1'), 'bin/org.mjs'));
+  assert.notEqual(f.run(['pin', 't1', project]).status, 0);
+});
+
+test('activation and rollback retain every pinned or operation-referenced release', t => {
+  const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']);
+  f.write('.herdr-release.json', JSON.stringify({ release: 't1' }));
+  fs.writeFileSync(path.join(f.root, 'operation.json'), JSON.stringify({ release: { root: f.release('t2') } }));
+  for (const args of [['activate', 't1'], ['activate', 't2'], ['rollback']]) f.ok(args);
+  for (const tag of ['t1', 't2']) assert.ok(fs.existsSync(path.join(f.release(tag), '.release-manifest.json')));
+  assert.notEqual(f.run(['prune']).status, 0, 'there is deliberately no release deletion command');
 });
 test('build refuses a tag missing the installed settle-watch dependency before spending a gate', t => {
   const f = scratch(t); f.git('rm', 'contrib/settle-watch.mjs'); f.git('commit', '-qm', 'Incomplete distribution'); f.git('tag', 'missing');

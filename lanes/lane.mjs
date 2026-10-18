@@ -12,6 +12,7 @@
 // (see README).
 
 import { cliHelp } from '../lib/cli-help.mjs';
+import { forwardRelease } from '../lib/releases.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { retirementHold } from '../lib/retire-hold.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
@@ -56,6 +57,8 @@ import {
 } from "./routes.mjs";
 
 cliHelp(import.meta.url, 'Usage: lane open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|close [TOPIC] [OPTIONS]');
+const forwardedRelease = forwardRelease('lanes/lane.mjs', process.cwd());
+if (forwardedRelease !== null) process.exit(forwardedRelease);
 
 const IS_REVIEW_COMMAND = process.argv[2] === "review";
 const CALLER_CWD = process.cwd();

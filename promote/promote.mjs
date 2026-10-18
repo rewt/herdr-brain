@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
+import { bundleRelease, forwardRelease, operationFile } from '../lib/releases.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { consumeRetirement } from '../lib/retire-trigger.mjs';
@@ -63,7 +64,7 @@ function invoke(command, args, options = {}) {
   const r = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, ...commandOptions });
   onOutput?.(r.stdout ?? '');
   if (r.error || r.status !== 0) throw new Error(singleLine(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`));
-  return r.stdout.trim();
+  return (r.stdout ?? '').trim();
 }
 function git(cwd, args) { return invoke('git', ['-C', cwd, ...args]); }
 function settingsRefusal(code, reason) {
@@ -131,6 +132,7 @@ function settings(project, opt) {
 }
 
 export function enqueue(queue, topics, options) {
+  options = { ...options, release: bundleRelease() };
   if (options.requiredTests !== undefined && (!Array.isArray(options.requiredTests) || options.requiredTests.length > 512 || options.requiredTests.some(f => typeof f !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(f) || f.split('/').includes('..') || path.isAbsolute(f)))) throw Error('invalid required test files');
   if (options.expectedHead !== undefined && (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.expectedHead) || topics.length !== 1)) throw new Error('expected head requires one lane and a full commit hash');
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
@@ -369,6 +371,10 @@ export function retryCleanup(queue, { now = Date.now() } = {}) {
     let revision;
     try { revision = cleanupRevision(saved, queue); } catch (e) { revision = `unreadable:${e.message}`; }
     if (saved.cleanup.revision === revision && ((saved.cleanup.attempts ?? 0) >= 5 || now < saved.cleanup.next_attempt_at)) continue;
+    if (saved.release && saved.release.root !== bundleRelease().root) {
+      invoke(process.execPath, [operationFile('promote/promote.mjs', saved.release), '--cleanup-job', saved.id, '--repo', queue.project.canonical]);
+      continue;
+    }
     const result = finishCleanup(saved, saved, queue, { now });
     queue.transaction(data => {
       const row = data.results.findLast(r => r.id === saved.id);
@@ -467,8 +473,9 @@ async function deliver(job, result, queue) {
   return { ...delivery, delivery_id: deliveryId };
 }
 
-export async function drain(queue) {
+export async function drain(queue, { attempted = new Set() } = {}) {
   let release;
+  let handedOff = false;
   // Serialize the startup/empty-exit handoff with enqueuers. A worker releases
   // ownership while still holding queue.lock, so an enqueue cannot be stranded.
   queue.transaction(() => {
@@ -476,8 +483,9 @@ export async function drain(queue) {
     try { release = acquireLock(lock); }
     catch (error) {
       const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
-      if (!Number.isInteger(owner.pid) || owner.pid < 1 || owner.argv?.[1] !== SELF) throw error;
-      // EPERM means the owner exists but this caller may not signal it.
+      if (!Number.isInteger(owner.pid) || owner.pid < 1 || (owner.argv?.[1] !== SELF &&
+          !(owner.project === queue.project.identity && owner.release?.root && owner.argv?.[1] === path.join(owner.release.root, 'promote/promote.mjs')))) throw error;
+      // EPERM means the owner exists but this caller (another user or a sandbox) may not signal it.
       try { process.kill(owner.pid, 0); } catch (signal) { if (signal.code !== 'EPERM') throw error; }
     }
     if (release) {
@@ -486,8 +494,10 @@ export async function drain(queue) {
     }
   });
   if (!release) { process.send?.({ ready: true, already_running: true }); return; }
+  const ownerFile = path.join(queue.directory, 'worker.lock', 'owner.json');
+  const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+  writeFileAtomic(ownerFile, JSON.stringify({ ...owner, project: queue.project.identity, release: bundleRelease() }) + '\n');
   let acknowledged = false;
-  const attempted = new Set();
   try {
     for (;;) {
       // Git can be slow. Read a committed snapshot without queue.lock so
@@ -499,6 +509,11 @@ export async function drain(queue) {
         catch (error) { policy = { error }; }
       }
       const entry = queue.transaction((data) => {
+        const candidate = data.current ?? (data.interrupted ?? []).find(batch => !attempted.has(batch.id)) ?? data.pending[0];
+        const admitted = candidate?.release ?? candidate?.jobs?.[0]?.release;
+        // Transfer before dequeuing: persisting a new job as "promoting"
+        // would make the receiving worker classify its first attempt as a crash.
+        if (admitted && admitted.root !== bundleRelease().root) return { handoff: admitted };
         if (data.current) {
           // Old workers leaked freshness into their promoted checkpoint. Never
           // trust a persisted flag to authorize replay of an external effect.
@@ -567,6 +582,16 @@ export async function drain(queue) {
         if (!entry) { consumeRequests(queue); retryCleanup(queue); }
       }
       if (!entry) break;
+      if (entry.handoff) {
+        const admitted = entry.handoff;
+        const worker = operationFile('promote/promote.mjs', admitted);
+        // The shared worker lock serializes versions. Transfer only after the
+        // durable queue checkpoint, and never resolve the project's new pin.
+        release(); release = null; handedOff = true;
+        invoke(process.execPath, [worker, '--drain', '--repo', queue.project.canonical,
+          '--attempted-batches', JSON.stringify([...attempted])], { stdio: 'inherit' });
+        return;
+      }
       const { job, newlyDequeued } = entry;
       if (job.jobs) {
         let batch = job;
@@ -640,7 +665,7 @@ export async function drain(queue) {
       process.stdout.write(JSON.stringify({ id: job.id, topic: job.topic, ...result, ...delivery }) + '\n');
     }
   } finally {
-    try { consumeRequests(queue); retryCleanup(queue); } finally { release?.(); }
+    try { if (!handedOff) { consumeRequests(queue); retryCleanup(queue); } } finally { release?.(); }
   }
 }
 
@@ -648,7 +673,11 @@ async function start(queue) {
   const output = fs.openSync(path.join(queue.directory, 'worker.log'), 'a');
   const env = { ...process.env };
   for (const key of ['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID', 'LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR']) delete env[key];
-  const child = spawn(process.execPath, [SELF, '--drain', '--repo', queue.project.canonical], {
+  const snapshot = queue.load();
+  const first = snapshot.current ?? snapshot.interrupted?.[0] ?? snapshot.pending[0];
+  const admitted = first?.release ?? first?.jobs?.[0]?.release;
+  const worker = admitted ? operationFile('promote/promote.mjs', admitted) : SELF;
+  const child = spawn(process.execPath, [worker, '--drain', '--repo', queue.project.canonical], {
     cwd: queue.project.canonical, detached: true, stdio: ['ignore', output, output, 'ipc'], env,
   });
   fs.closeSync(output);
@@ -675,11 +704,31 @@ async function main() {
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },
     'superseded-runs': { type: 'string' }, 'required-tests': { type: 'string' }, 'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
     'existing-worker': { type: 'boolean' }, resume: { type: 'boolean' }, drain: { type: 'boolean' }, status: { type: 'boolean' },
+    'cleanup-job': { type: 'string' },
+    'attempted-batches': { type: 'string' },
   } });
   if (opt['existing-worker'] && (opt.resume || opt.drain)) throw Error('--existing-worker is enqueue-only; it never starts or resumes a worker');
+  // --drain/--cleanup-job are continuations of recorded operations, not new
+  // admissions. Their immutable path chooses the bundle even after a re-pin.
+  if (!opt.drain && !opt['cleanup-job']) {
+    const forwarded = forwardRelease('promote/promote.mjs', opt.repo);
+    if (forwarded !== null) { process.exitCode = forwarded; return; }
+  }
   const queue = queueFor(opt.repo);
+  if (opt['cleanup-job']) {
+    const saved = queue.load().results.findLast(row => row.id === opt['cleanup-job']);
+    if (!saved || saved.release?.root !== bundleRelease().root || saved.cleanup?.state !== 'pending' || saved.reconciliation?.state === 'pending') throw Error('cleanup continuation does not match this bundle and pending receipt');
+    const result = finishCleanup(saved, saved, queue);
+    queue.transaction(data => Object.assign(data.results.findLast(row => row.id === saved.id), result));
+    return;
+  }
   if (opt.status) { process.stdout.write(JSON.stringify({ queue: queue.file, ...queue.load() }, null, 2) + '\n'); return; }
-  if (opt.drain) { await drain(queue); return; }
+  if (opt['attempted-batches'] !== undefined && !opt.drain) throw Error('--attempted-batches requires --drain');
+  if (opt.drain) {
+    const attempted = JSON.parse(opt['attempted-batches'] ?? '[]');
+    if (!Array.isArray(attempted) || attempted.some(id => typeof id !== 'string' || !id)) throw Error('invalid attempted batch continuation');
+    await drain(queue, { attempted: new Set(attempted) }); return;
+  }
   if (opt.resume) {
     if (positionals.length) throw Error('--resume takes no lane topics');
     // Only an explicit native resume may release a capability refusal. Ordinary

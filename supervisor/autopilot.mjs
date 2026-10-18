@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gitProject } from '../lib/project.mjs';
 import { loadEvents, readConfig, writeFileAtomic } from '../lib/store.mjs';
+import { bundleRelease } from '../lib/releases.mjs';
 import { fold } from '../lib/state.mjs';
 import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, reportCategoryFlags } from '../lib/discernment.mjs';
@@ -97,7 +98,7 @@ export function autopilotNotice(entry, { execute: call = execute, nativeWorker: 
   // completions are distinct producer notice IDs, despite sharing a job ID.
   const key = report ? `report:${report[1]}` : `notice:${entry.id}`;
   const file = path.join(receiptDirectory(project.org, project.identity), 'autopilot', `${digest(key)}.json`);
-  let receipt = { policy: POLICY, key, project, notice: entry.message, notice_id: entry.id, actions: [], started: new Date().toISOString() }, release;
+  let receipt = { policy: POLICY, key, project, release: bundleRelease(), notice: entry.message, notice_id: entry.id, actions: [], started: new Date().toISOString() }, release;
   const save = () => writeFileAtomic(file, JSON.stringify(receipt, null, 2) + '\n', 0o600);
   // Classified report/promotion exceptions retain foreground policy evidence.
   // Every other notice and classification failure keeps the original payload.

@@ -9,6 +9,7 @@ import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs
 import { acquireLock } from './promotion-lock.mjs';
 import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 import { resolveResource } from '../test-slot/resources.mjs';
+import { bundleRelease } from '../lib/releases.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
 
@@ -108,13 +109,14 @@ function unchanged(cwd, before, label) {
 }
 
 export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds }) {
+  const admittedRelease = bundleRelease();
   env = validationEnvironment(env);
   const before = captured(cwd, label);
   const usesSlot = tier === 'promotion';
   const fingerprint = environmentFingerprint({ env, prepare, environment });
   // Identical commands across tiers prove the same thing. Tier names describe
   // who runs a check; they do not force a second execution of identical inputs.
-  const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint });
+  const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint, release: admittedRelease });
   const directory = plainDirectory(path.join(common, 'lane-validation'));
   const receipt = path.join(directory, `${key}.json`);
   const release = acquireLock(path.join(directory, `${key}.lock`));
@@ -152,7 +154,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     const startedAt = new Date(), started = process.hrtime.bigint();
     let run;
     try {
-      onStart?.({ command, started_at: startedAt.toISOString(), log, execution_receipt: executionReceipt,
+      onStart?.({ command, release: admittedRelease, started_at: startedAt.toISOString(), log, execution_receipt: executionReceipt,
         ...(usesSlot ? { slot_receipt: slotReceipt } : {}) });
       // Hold one slot for the chain; only its leaf steps may spend a retry.
       const execute = usesSlot ? runTestSlotSync : runGateSync;
@@ -177,7 +179,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     if (usesSlot) {
       try { execution = JSON.parse(readPlainFile(executionReceipt)); } catch { /* A refusal has no command clocks. */ }
     }
-    const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, environment_fingerprint: fingerprint,
+    const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, release: admittedRelease, environment_fingerprint: fingerprint,
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
       duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
       execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits,

@@ -9,6 +9,7 @@ import { parseArgs } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
+import { bundleRelease, forwardRelease, continueRelease } from '../lib/releases.mjs';
 import { readReport } from '../lib/report.mjs';
 import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { itemStatus, laterRuns, releases } from '../lib/state.mjs';
@@ -545,6 +546,9 @@ function main() {
   // Resolve explicit selection once, relative to this invocation, before any
   // child changes directory. A receipt also pins discovery (null) on retries.
   const previous = fs.existsSync(journal) ? JSON.parse(fs.readFileSync(journal, 'utf8')) : {};
+  const forwarded = previous.release ? continueRelease('settle/settle.mjs', previous.release)
+    : fs.existsSync(journal) ? null : forwardRelease('settle/settle.mjs', opt.repo);
+  if (forwarded !== null) { process.exitCode = forwarded; return; }
   if (!Object.hasOwn(previous, 'laneConfig') && process.env.LANE_CONFIG !== undefined) laneConfig = path.resolve(process.cwd(), process.env.LANE_CONFIG);
   bindLaneConfig(previous);
   const run = show(id);
@@ -630,7 +634,7 @@ function main() {
     if (parsed.errors.length || parsed.report.run !== id) throw new Error(`invalid report for ${id}: ${parsed.errors.join('; ') || 'run field mismatch'}`);
     if (run.report && hash(reportText) !== run.report.sha256) throw new Error('recorded report bytes changed');
     const policy = reviewPolicy(item, settings, identity);
-    job = { run: id, item: run.item, org: opt.org, repo, common: identity, workspace, lane, laneConfig,
+    job = { run: id, item: run.item, org: opt.org, repo, common: identity, workspace, lane, laneConfig, release: bundleRelease(),
       main: config.main ?? 'main', head: git(['rev-parse', 'HEAD'], workspace),
       mainHead: git(['rev-parse', config.main ?? 'main'], repo), ask, reviewRoute, fixRoute, timeout,
       reuse: opt.reuse ?? settings.reuse ?? false, to: opt.to ?? settings.to ?? 'supervisor-herdr',

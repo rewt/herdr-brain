@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { validationEnvironment } from '../lanes/validation.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
+import { bundleRelease } from '../lib/releases.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
 
@@ -109,6 +110,9 @@ export function checkCompetingProcesses(profile) {
 }
 
 export function runProjectGateSync({ canonical, receipt, argv, settings, ...options }) {
+  const evidence = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  evidence.release ??= bundleRelease();
+  writeFileAtomic(receipt, JSON.stringify(evidence, null, 2) + '\n', 0o600);
   const profile = resolveGateProfile(canonical, options.env, { settings });
   if (!profile) return spawnSync(process.execPath, argv, options);
   const plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));

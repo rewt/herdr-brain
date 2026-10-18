@@ -382,6 +382,7 @@ for (const source of [
   'try { ordinaryCall(); } catch (error) { report(error.message); } finally { cleanup(); }',
   'const a = {x: 1}; const b = a.x; const c = a?.x; const xs = [1]; const d = xs[0]; const e = xs[-1];',
   'const value = 12 / 2; const pattern = /ordinary[0-9]+/i; const text = `value ${value}`;',
+  'const values = condition ? [1, 2] : []; const other = condition ? [] : [3];',
   "const text = 'caf\u00e9'; // Unicode display text is data\nexport default text;",
 ]) test(`ordinary code stays known: ${source.slice(0, 70)}`, () => {
   assert.deepEqual(sourceReach('entry.mjs', source, new Map()).unknown, []);
@@ -433,7 +434,8 @@ for (const source of [
   assert.ok(sourceReach('entry.mjs', source, new Map()).unknown.length);
 });
 for (const prefix of ['{', 'typeof', 'else', 'do', 'in', 'of', 'await', 'yield', 'void', 'delete', 'new', 'return', 'case', 'throw',
-  '=', '===', '!==', '==', '!=', '+', '-', '*', '**', '/', '%', '&', '|', '^', '&&', '||', '??', '<', '>', '<=', '>=', '<<', '>>', '>>>', 'instanceof', 'default', '...', 'extends']) {
+  '=', '===', '!==', '==', '!=', '+', '-', '*', '**', '/', '%', '&', '|', '^', '&&', '||', '??', '<', '>', '<=', '>=', '<<', '>>', '>>>', 'instanceof', 'default', '...', 'extends',
+  '+=', '-=', '*=', '/=', '**=', '%=', '&=', '|=', '^=', '&&=', '||=', '??=', '<<=', '>>=', '>>>=']) {
   test(`regex prefix ${prefix} keeps a following loader visible or unknown`, () => {
     const frames = {
       '{': "{ /'/.test(s); import(spec); // '\n}\n",

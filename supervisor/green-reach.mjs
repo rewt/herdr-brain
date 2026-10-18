@@ -11,7 +11,7 @@ const unsupported = detail => { throw Error(`outside closed source profile: ${de
 // Leaf imports are explicit: being a Node builtin does not make a module safe.
 // Loader, debugger, worker, REPL and test-runner modules are deliberately absent.
 const leafModules = new Set(('fs fs/promises path path/posix path/win32 crypto os url util util/types assert assert/strict events stream stream/promises stream/consumers stream/web buffer timers timers/promises string_decoder querystring punycode zlib readline readline/promises tty console constants async_hooks diagnostics_channel perf_hooks').split(' '));
-const regexPrefix = new Set(('return throw case break continue debugger delete void typeof instanceof in new yield await else do extends default of = => ( [ { , : ; ! ~ ? + - * ** % & | ^ && || ?? == === != !== < > <= >= << >> >>> ...').split(' '));
+const regexPrefix = new Set(('return throw case break continue debugger delete void typeof instanceof in new yield await else do extends default of = => ( [ { , : ; ! ~ ? + - * / ** % & | ^ && || ?? == === != !== < > <= >= << >> >>> ... += -= *= /= **= %= &= |= ^= &&= ||= ??= <<= >>= >>>=').split(' '));
 const reflection = new Set(['eval', 'Function', 'require', 'createRequire', 'getBuiltinModule', 'dlopen', 'binding', 'mainModule', 'constructor', '__proto__', 'prototype', 'Reflect', 'WebAssembly', 'global', 'globalThis', 'execArgv', 'NODE_OPTIONS', 'getPrototypeOf', 'setPrototypeOf', 'getOwnPropertyDescriptor', 'getOwnPropertyDescriptors', 'defineProperty', 'defineProperties', '__lookupGetter__', '__lookupSetter__', '__defineGetter__', '__defineSetter__', 'setEngine']);
 const processLeaves = new Set(('env argv argv0 execPath pid ppid platform arch versions version cwd chdir exit exitCode stdin stdout stderr uptime hrtime memoryUsage cpuUsage resourceUsage kill on once off removeListener removeAllListeners emit nextTick getuid geteuid getgid getegid getgroups send connected disconnect title release features config').split(' '));
 // crypto also exposes a native engine loader. Namespace objects cannot escape
@@ -83,8 +83,9 @@ function lex(source) {
       if (template && c === '}' && braces === 0) { i++; nesting--; return; }
       if (c === '/') {
         const previous = tokens.at(-1), before = v(tokens.at(-2)), member = ['.', '?.', '#'].includes(before);
-        if (!member && [')', '}', 'of'].includes(v(previous))) unsupported('ambiguous regex/division syntax');
+        if (!member && [')', '}', 'of', 'yield', 'await', '++', '--'].includes(v(previous))) unsupported('ambiguous regex/division syntax');
         if (previous?.type === 'identifier' && ['break', 'continue'].includes(before)) unsupported('ambiguous slash after a jump label');
+        if (previous?.type === 'punctuation' && ![']'].includes(v(previous)) && !regexPrefix.has(v(previous))) unsupported('unrecognized slash context');
         if (!previous || !member && previous.type !== 'string' && regexPrefix.has(v(previous))) {
           i++; let bracket = false, closed = false;
           while (i < source.length && !/[\r\n\u2028\u2029]/.test(source[i])) {
@@ -337,7 +338,9 @@ export function sourceReach(file, source, files, { root } = {}) {
     try {
       const constructorMethod = key === 'constructor' && ['{', ';', '}'].includes(previous) && next === '(';
       if (token.type === 'identifier' && reflection.has(key) && !constructorMethod) unsupported(`unresolved loader/reflection capability: ${key}`);
-      if (key === '[' && (endsValue(ts[i - 1]) || previous === '?.' || [':', '('].includes(syntax(ts[(closing.get(i) ?? i) + 1])))) {
+      const computedDefinition = ['{', ',', ';', 'static', 'get', 'set', 'async', '*'].includes(previous) &&
+        [':', '('].includes(syntax(ts[(closing.get(i) ?? i) + 1]));
+      if (key === '[' && (endsValue(ts[i - 1]) || previous === '?.' || computedDefinition)) {
         const end = closing.get(i);
         const numeric = end === i + 2 && ts[i + 1]?.type === 'number' ||
           end === i + 3 && ['-', '+'].includes(syntax(ts[i + 1])) && ts[i + 2]?.type === 'number';

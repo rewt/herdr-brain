@@ -1,0 +1,3141 @@
+{
+  "implementation_head": "ae09ba4e",
+  "schema": "green-main-probe/v1",
+  "main": "716984441f16cd6cebbd93b95c06acfa8f260605",
+  "stage": "execution scope; full admission also requires canonical identity, matching policy bytes and evidence",
+  "readiness": "blocked",
+  "main_policy_present": false,
+  "candidate": {
+    "file": "board/render.mjs",
+    "old_line": "export function render(snapshot, { width = 120, height = Infinity, now = Date.now() } = {}) {",
+    "new_line": "export function render(snapshot, { width = 121, height = Infinity, now = Date.now() } = {}) {",
+    "reach": {
+      "paths": [
+        "board/render.mjs",
+        "board/rows.mjs"
+      ],
+      "unknown": [
+        {
+          "file": "board/render.mjs",
+          "line": 8,
+          "reason": "outside closed source profile: ambiguous regex/division syntax"
+        },
+        {
+          "file": "board/render.mjs",
+          "line": 8,
+          "reason": "unbalanced expression"
+        },
+        {
+          "file": "board/rows.mjs",
+          "line": 45,
+          "reason": "outside closed source profile: computed member/key access"
+        }
+      ]
+    }
+  },
+  "outcomes": [
+    {
+      "label": "ordinary",
+      "file": "board/render.mjs",
+      "eligible": false,
+      "code": "GREEN_REACH_UNKNOWN",
+      "reason": "unresolved inventory or authority execution edge",
+      "before_sha256": "5ba08446d07656efe5982525cd2d5501cf60b3d099b8f59a49d1fe65a9a761a8",
+      "after_sha256": "2dc97396ae64b948c235994e2ef2d5c6103ed437086d08933436b4e134f10d5d",
+      "running_authority": {
+        "paths": [
+          ".lane.json",
+          ".lane.validation.json",
+          "acceptance/cases.mjs",
+          "acceptance/cleanup.mjs",
+          "acceptance/commands.mjs",
+          "acceptance/deadline.mjs",
+          "acceptance/environment.mjs",
+          "acceptance/focus.mjs",
+          "acceptance/herdr.mjs",
+          "acceptance/housekeeping.mjs",
+          "acceptance/limits.mjs",
+          "acceptance/load.mjs",
+          "acceptance/notice-budget.mjs",
+          "acceptance/poll.mjs",
+          "acceptance/probe.mjs",
+          "acceptance/producers.mjs",
+          "acceptance/receipts.mjs",
+          "acceptance/results.mjs",
+          "acceptance/run.mjs",
+          "acceptance/settle.mjs",
+          "acceptance/signal-cleanup.mjs",
+          "acceptance/snapshot.mjs",
+          "acceptance/supervisor.mjs",
+          "acceptance/temp.mjs",
+          "acceptance/test/cases.test.mjs",
+          "acceptance/test/deadlines.test.mjs",
+          "acceptance/test/environment.test.mjs",
+          "acceptance/test/load.test.mjs",
+          "acceptance/test/probe.test.mjs",
+          "acceptance/test/results.test.mjs",
+          "acceptance/test/signal.test.mjs",
+          "acceptance/test/snapshot.test.mjs",
+          "acceptance/worker.mjs",
+          "bin/org.mjs",
+          "board/brain.mjs",
+          "board/rows.mjs",
+          "board/source.mjs",
+          "contrib/settle-watch.mjs",
+          "discovery/client.mjs",
+          "discovery/lessons.mjs",
+          "discovery/policy.mjs",
+          "discovery/test/lessons.test.mjs",
+          "dispatch/dispatch.mjs",
+          "dispatch/hook-review.mjs",
+          "dispatch/metrics.mjs",
+          "dispatch/record-worker.mjs",
+          "dispatch/session-bind-command.mjs",
+          "dispatch/session-bind.mjs",
+          "dispatch/test/retired-flags.test.mjs",
+          "dispatch/test/timing.test.mjs",
+          "docs/archive/bch-cloak-pilot-2026-09-16/continue.sh",
+          "docs/reports/ENG-135-suite-pass-evidence-20261003/measurements.json",
+          "docs/reports/ENG-157-fast-ci-evidence-20261004/summary.json",
+          "docs/reports/ENG-183-banner-flake-evidence-20261004/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-20261001/main/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-20261001/v0.1.3/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r2-20261001/main/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r2-20261001/v0.1.3/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r3-20261001/lane-discovery/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r3-20261001/main/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r3-20261001/v0.1.3/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r4-20261001/lane-discovery/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r4-20261001/main/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r5-20261001/lane-discovery/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r5-20261001/main/summary.json",
+          "docs/reports/ENG-74-acceptance-evidence-r5-20261001/v0.1.3/summary.json",
+          "docs/reports/ENG-78-acceptance-evidence-20261001/main/summary.json",
+          "docs/reports/ENG-78-acceptance-evidence-20261001/v0.1.3/summary.json",
+          "docs/reports/ENG-78-acceptance-evidence-r2-20261001/main/summary.json",
+          "docs/reports/ENG-78-acceptance-evidence-r2-20261001/v0.1.3/summary.json",
+          "docs/reports/ENG-78-acceptance-evidence-r3-20261001/main/summary.json",
+          "docs/reports/ENG-78-acceptance-evidence-r3-20261001/v0.1.3/summary.json",
+          "docs/reports/ENG-78-acceptance-evidence-r4-20261001/main/summary.json",
+          "docs/reports/ENG-79-workspace-identity-evidence-20261001/lane-workspace-identity/summary.json",
+          "docs/reports/ENG-79-workspace-identity-evidence-20261001/main/summary.json",
+          "docs/reports/ENG-80-plugin-install-evidence-20261002/summary.json",
+          "docs/reports/ENG-80-plugin-install-r2-evidence-20261002/summary.json",
+          "docs/reports/ENG-80-plugin-install-r3-evidence-20261002/summary.json",
+          "docs/reports/ENG-80-plugin-install-r4-evidence-20261002/summary.json",
+          "docs/reports/ENG-81-claude-discovery-evidence-20261002/summary.json",
+          "docs/reports/ENG-90-acceptance-evidence-20261002/main-offline/summary.json",
+          "docs/reports/ENG-90-acceptance-evidence-20261002/v0.1.4/summary.json",
+          "docs/reports/ENG-90-acceptance-evidence-r2-20261002/main/summary.json",
+          "docs/reports/ENG-90-acceptance-evidence-r2-20261002/v0.1.4/summary.json",
+          "docs/reports/ENG-98-operator-focus-evidence-20261002/candidate/summary.json",
+          "docs/reports/ENG-98-operator-focus-r2-evidence-20261002/candidate/focus-summary.json",
+          "docs/reports/ENG-98-operator-focus-r2-evidence-20261002/candidate/summary.json",
+          "docs/reports/ENG-98-operator-focus-r3-evidence-20261002/candidate/summary.json",
+          "docs/reports/evidence/ARCH-17-R151/workspace.mjs",
+          "docs/reports/evidence/ENG-105-no-compiler/corrected-gate/summary.json",
+          "docs/reports/evidence/ENG-105-no-compiler/initial-gate/summary.json",
+          "docs/reports/evidence/ENG-133/inbox-cleanup.json",
+          "docs/reports/evidence/ENG-97-discovery-regression-r2/first-r112-gate/summary.json",
+          "docs/reports/evidence/ENG-97-discovery-regression-r2/lane-candidate/summary.json",
+          "docs/reports/evidence/ENG-97-discovery-regression/lane-candidate/summary.json",
+          "docs/reports/evidence/ENG-97-discovery-regression/lifetime-first-bad/summary.json",
+          "docs/reports/evidence/ENG-97-discovery-regression/lifetime-parent-good/summary.json",
+          "docs/reports/evidence/ENG-97-discovery-regression/v014-good/summary.json",
+          "herdr/release.sh",
+          "housekeeping/command.mjs",
+          "housekeeping/config.mjs",
+          "housekeeping/housekeeping.mjs",
+          "housekeeping/retirement-notices.mjs",
+          "housekeeping/test/helpers/cli-fixture.mjs",
+          "lanes/board/herdr-client.mjs",
+          "lanes/board/registry.mjs",
+          "lanes/composer.mjs",
+          "lanes/lane.mjs",
+          "lanes/package.json",
+          "lanes/preset.mjs",
+          "lanes/promotion-lock.mjs",
+          "lanes/review-evidence.mjs",
+          "lanes/routes-command.mjs",
+          "lanes/routes.mjs",
+          "lanes/test/fixtures/bch-cloak-routing.json",
+          "lanes/test/fixtures/pre-profile-validation.mjs",
+          "lanes/test/herdr-client.test.mjs",
+          "lanes/test/no-focus.test.mjs",
+          "lanes/test/routes.test.mjs",
+          "lanes/test/validation.test.mjs",
+          "lanes/validation.mjs",
+          "lib/cli-help.mjs",
+          "lib/completion.mjs",
+          "lib/deadline.mjs",
+          "lib/discernment.mjs",
+          "lib/files.mjs",
+          "lib/fleet.mjs",
+          "lib/handoffs-command.mjs",
+          "lib/handoffs.mjs",
+          "lib/install-lock.mjs",
+          "lib/lane-removal.mjs",
+          "lib/lessons.mjs",
+          "lib/memory.mjs",
+          "lib/native/manifest.json",
+          "lib/process-owner.mjs",
+          "lib/processes.mjs",
+          "lib/product-files.mjs",
+          "lib/project-summary.mjs",
+          "lib/project.mjs",
+          "lib/release-record.mjs",
+          "lib/releases.mjs",
+          "lib/render.mjs",
+          "lib/report.mjs",
+          "lib/retire-age.mjs",
+          "lib/retire-command.mjs",
+          "lib/retire-hold.mjs",
+          "lib/retire-lock.mjs",
+          "lib/retire-runtime.mjs",
+          "lib/retire-status.mjs",
+          "lib/retire-trigger.mjs",
+          "lib/retire.mjs",
+          "lib/roles.mjs",
+          "lib/run-timing.mjs",
+          "lib/sanitize.mjs",
+          "lib/shell.mjs",
+          "lib/state.mjs",
+          "lib/store.mjs",
+          "lib/today.mjs",
+          "lib/worker-identity.mjs",
+          "logs/inputs.mjs",
+          "logs/journal.mjs",
+          "logs/logs.mjs",
+          "logs/rules.mjs",
+          "logs/view.mjs",
+          "messages/classify.mjs",
+          "messages/fixture.mjs",
+          "messages/hook-pull.mjs",
+          "messages/hook-session.mjs",
+          "messages/journal.mjs",
+          "messages/mirror.mjs",
+          "messages/receiver.mjs",
+          "messages/schema.mjs",
+          "messages/session-transfer.mjs",
+          "package.json",
+          "promote/completion.mjs",
+          "promote/evidence.mjs",
+          "promote/gate-profile.mjs",
+          "promote/guard.mjs",
+          "promote/host-gate.mjs",
+          "promote/memory-gate.mjs",
+          "promote/metrics.mjs",
+          "promote/native-context.mjs",
+          "promote/promote.mjs",
+          "promote/test-plan.mjs",
+          "promote/test/promote.test.mjs",
+          "promote/test/train.test.mjs",
+          "promote/test/workflow-train.test.mjs",
+          "promote/train.mjs",
+          "sessions/apply.mjs",
+          "sessions/authorization.mjs",
+          "sessions/close-safety.mjs",
+          "sessions/disposition.mjs",
+          "sessions/json.mjs",
+          "sessions/lifecycle-evidence.mjs",
+          "sessions/lifecycle.mjs",
+          "sessions/live-observe.mjs",
+          "sessions/live.mjs",
+          "sessions/manifest.mjs",
+          "sessions/observe.mjs",
+          "sessions/plan.mjs",
+          "sessions/project.mjs",
+          "sessions/receipts.mjs",
+          "sessions/reconcile.mjs",
+          "sessions/runtime.mjs",
+          "sessions/sessions.mjs",
+          "settle/config.mjs",
+          "settle/desks-command.mjs",
+          "settle/lock.mjs",
+          "settle/record-state.mjs",
+          "settle/replace-lane-head.mjs",
+          "settle/report-evidence.mjs",
+          "settle/settle.mjs",
+          "settle/test-evidence.mjs",
+          "settle/test-plan.mjs",
+          "settle/test/fixture.mjs",
+          "settle/test/helpers/detached-inbox.mjs",
+          "settle/test/helpers/ref-transaction.mjs",
+          "settle/test/rebase-paths.test.mjs",
+          "settle/test/rebase-review.test.mjs",
+          "settle/test/rebase-safety.test.mjs",
+          "settle/test/rebase.test.mjs",
+          "settle/test/record-recovery.test.mjs",
+          "settle/test/record-safety.test.mjs",
+          "settle/test/ref-wallclock.test.mjs",
+          "settle/test/train.test.mjs",
+          "supervisor/arm-watch.sh",
+          "supervisor/autopilot.mjs",
+          "supervisor/chats.mjs",
+          "supervisor/clean-pass.mjs",
+          "supervisor/composer.mjs",
+          "supervisor/context.mjs",
+          "supervisor/entry.mjs",
+          "supervisor/fast-path-timing.mjs",
+          "supervisor/green-contracts.json",
+          "supervisor/green-pass.mjs",
+          "supervisor/green-reach.mjs",
+          "supervisor/herdr-edge.mjs",
+          "supervisor/notice-lock.mjs",
+          "supervisor/prompt-supervisor.mjs",
+          "supervisor/protocol.mjs",
+          "supervisor/reconcile.mjs",
+          "supervisor/request.mjs",
+          "supervisor/retire.mjs",
+          "supervisor/safe-point.mjs",
+          "supervisor/status.mjs",
+          "supervisor/supervisor.mjs",
+          "supervisor/test/autopilot.test.mjs",
+          "supervisor/test/chats.test.mjs",
+          "supervisor/test/green-pass.test.mjs",
+          "supervisor/test/reconcile.test.mjs",
+          "supervisor/test/request.test.mjs",
+          "supervisor/tidy-tabs.mjs",
+          "test-slot/limits.mjs",
+          "test-slot/lock-support.mjs",
+          "test-slot/measurement.mjs",
+          "test-slot/occupancy.mjs",
+          "test-slot/resources.mjs",
+          "test-slot/retention.mjs",
+          "test-slot/run.mjs",
+          "test-slot/test-slot.mjs",
+          "test-slot/test/helpers/detached-watchdog.mjs",
+          "test-slot/test/helpers/proving.mjs",
+          "test-slot/ticket-queue.mjs",
+          "test-slot/validation-resources.json",
+          "test-slot/watchdog.mjs",
+          "test/activation-seam.test.mjs",
+          "test/approvals.test.mjs",
+          "test/bch-cloak-contract.test.mjs",
+          "test/deadline-boundaries.test.mjs",
+          "test/discernment.test.mjs",
+          "test/file-wait.test.mjs",
+          "test/fixtures/state-v0.mjs",
+          "test/flow.test.mjs",
+          "test/git-seed.test.mjs",
+          "test/helpers.mjs",
+          "test/helpers/affected-tests.mjs",
+          "test/helpers/bounded-test.mjs",
+          "test/helpers/child.mjs",
+          "test/helpers/command-allowance.mjs",
+          "test/helpers/detached-fixture.mjs",
+          "test/helpers/file-wait.mjs",
+          "test/helpers/fixture-lifetime.mjs",
+          "test/helpers/fixture-policy.mjs",
+          "test/helpers/gate-history.mjs",
+          "test/helpers/git-seed.mjs",
+          "test/helpers/inbox.mjs",
+          "test/helpers/memory-fixture.mjs",
+          "test/helpers/native-group-fixture.mjs",
+          "test/helpers/offline-herdr.mjs",
+          "test/helpers/processes.mjs",
+          "test/helpers/promotion-memory-fixture.mjs",
+          "test/helpers/pty.mjs",
+          "test/helpers/receipts.mjs",
+          "test/helpers/release-suites.mjs",
+          "test/helpers/retire-fixture.mjs",
+          "test/helpers/run.mjs",
+          "test/helpers/suite.mjs",
+          "test/helpers/test-durations.json",
+          "test/helpers/test-slot-env.mjs",
+          "test/helpers/tier.mjs",
+          "test/inbox.test.mjs",
+          "test/lessons.test.mjs",
+          "test/main-module.test.mjs",
+          "test/memory.test.mjs",
+          "test/name-alias.test.mjs",
+          "test/no-setuid-processes.test.mjs",
+          "test/offline-herdr.test.mjs",
+          "test/one-watcher.test.mjs",
+          "test/processes.test.mjs",
+          "test/pty-cache.test.mjs",
+          "test/report.test.mjs",
+          "test/retire-status.test.mjs",
+          "test/review-children.test.mjs",
+          "test/sanitization.test.mjs",
+          "test/suite.test.mjs",
+          "test/tidy-tabs.test.mjs",
+          "test/tier-plan.test.mjs",
+          "test/today.test.mjs",
+          "watch/lock.mjs",
+          "watch/notice.mjs",
+          "watch/test/lock.test.mjs",
+          "watch/test/watch.test.mjs",
+          "watch/watch.mjs"
+        ],
+        "unknown": [
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 49,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 50,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 50,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 63,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 63,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 77,
+            "reason": "outside closed source profile: unrecognized value: file"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 96,
+            "reason": "outside closed source profile: launcher executable"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 139,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 139,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 166,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 166,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 167,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 193,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 193,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 209,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 221,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 221,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 225,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 225,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 226,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 226,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/supervisor.mjs",
+            "line": 230,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 144,
+            "reason": "outside closed source profile: ambiguous regex/division syntax"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 144,
+            "reason": "unbalanced expression"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 59,
+            "reason": "outside closed source profile: unrecognized value: herdr"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 95,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 97,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 99,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 101,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 103,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 103,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/status.mjs",
+            "line": 104,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/context.mjs",
+            "line": 118,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 32,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 64,
+            "reason": "outside closed source profile: unrecognized value: command"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 78,
+            "reason": "outside closed source profile: launcher executable"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 114,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 115,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 119,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 120,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 121,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 127,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 128,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 128,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 128,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 129,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 129,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 129,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 193,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 194,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 195,
+            "reason": "outside closed source profile: unrecognized value: args"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 229,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 236,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 239,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 271,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 271,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 272,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 273,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 277,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 285,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 289,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 299,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 421,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 642,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "promote/promote.mjs",
+            "line": 695,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 229,
+            "reason": "outside closed source profile: ambiguous regex/division syntax"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 229,
+            "reason": "unbalanced expression"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 109,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 114,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 114,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 114,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 114,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 115,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 115,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 115,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 126,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 127,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 127,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 127,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 127,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 127,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 129,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 129,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 130,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 133,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/prompt-supervisor.mjs",
+            "line": 135,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/herdr-edge.mjs",
+            "line": 6,
+            "reason": "outside closed source profile: unrecognized value: herdr"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 15,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 21,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 21,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 43,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 58,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 58,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 60,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 63,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 63,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 64,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "lanes/composer.mjs",
+            "line": 67,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/autopilot.mjs",
+            "line": 28,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/autopilot.mjs",
+            "line": 29,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/autopilot.mjs",
+            "line": 29,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/autopilot.mjs",
+            "line": 36,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/autopilot.mjs",
+            "line": 43,
+            "reason": "outside closed source profile: unrecognized value: file"
+          },
+          {
+            "file": "supervisor/autopilot.mjs",
+            "line": 140,
+            "reason": "outside closed source profile: launcher executable"
+          },
+          {
+            "file": "supervisor/green-pass.mjs",
+            "line": 32,
+            "reason": "outside closed source profile: nested regular-expression character class"
+          },
+          {
+            "file": "supervisor/green-pass.mjs",
+            "line": 32,
+            "reason": "unbalanced expression"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 37,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 39,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 41,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 43,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 46,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 55,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 57,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 65,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 90,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 91,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 99,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 103,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 161,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 168,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 170,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 189,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 215,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 216,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 219,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 219,
+            "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 227,
+            "reason": "outside closed source profile: computed member/key access"
+          },
+          {
+            "file": "supervisor/green-reach.mjs",
+            "line": 243,
+            "reason": "outside closed source profile: computed member/key access"
+          }
+        ]
+      }
+    },
+    {
+      "label": "inventory",
+      "file": "supervisor/reconcile.mjs",
+      "eligible": false,
+      "code": "GREEN_SELF_AUTHORITY",
+      "reason": "eligibility/evidence execution input: supervisor/reconcile.mjs",
+      "before_sha256": "f00d3ee4a35dcf985c05ecd67f865ee199a0312bf5d0e45be7c7bebf37072932",
+      "after_sha256": "c87f696eaa6b6550e6fd3e461d2c82a309820058092febf5939fbd3ac4a9f6f6"
+    },
+    {
+      "label": "authority",
+      "file": "housekeeping/config.mjs",
+      "eligible": false,
+      "code": "GREEN_SELF_AUTHORITY",
+      "reason": "eligibility/evidence execution input: housekeeping/config.mjs",
+      "before_sha256": "0de84e595c2663ade19ff668e0e558e47f52776931d9fc851b3a5922f6cce7d6",
+      "after_sha256": "f76e3bfb78243eceb9e5e6cacb7397be415cd783c2db47aa2cfaf47ce1f87f64"
+    }
+  ],
+  "inventory": {
+    "paths": [
+      ".lane.json",
+      ".lane.validation.json",
+      "acceptance/cases.mjs",
+      "acceptance/cleanup.mjs",
+      "acceptance/commands.mjs",
+      "acceptance/deadline.mjs",
+      "acceptance/environment.mjs",
+      "acceptance/focus.mjs",
+      "acceptance/herdr.mjs",
+      "acceptance/housekeeping.mjs",
+      "acceptance/limits.mjs",
+      "acceptance/load.mjs",
+      "acceptance/notice-budget.mjs",
+      "acceptance/poll.mjs",
+      "acceptance/probe.mjs",
+      "acceptance/producers.mjs",
+      "acceptance/receipts.mjs",
+      "acceptance/results.mjs",
+      "acceptance/run.mjs",
+      "acceptance/settle.mjs",
+      "acceptance/signal-cleanup.mjs",
+      "acceptance/snapshot.mjs",
+      "acceptance/supervisor.mjs",
+      "acceptance/temp.mjs",
+      "acceptance/test/cases.test.mjs",
+      "acceptance/test/deadlines.test.mjs",
+      "acceptance/test/environment.test.mjs",
+      "acceptance/test/load.test.mjs",
+      "acceptance/test/probe.test.mjs",
+      "acceptance/test/results.test.mjs",
+      "acceptance/test/signal.test.mjs",
+      "acceptance/test/snapshot.test.mjs",
+      "acceptance/worker.mjs",
+      "bin/org.mjs",
+      "board/brain.mjs",
+      "board/rows.mjs",
+      "board/source.mjs",
+      "contrib/settle-watch.mjs",
+      "discovery/client.mjs",
+      "discovery/lessons.mjs",
+      "discovery/policy.mjs",
+      "discovery/test/lessons.test.mjs",
+      "dispatch/dispatch.mjs",
+      "dispatch/hook-review.mjs",
+      "dispatch/metrics.mjs",
+      "dispatch/session-bind-command.mjs",
+      "dispatch/session-bind.mjs",
+      "dispatch/test/retired-flags.test.mjs",
+      "dispatch/test/timing.test.mjs",
+      "docs/archive/bch-cloak-pilot-2026-09-16/continue.sh",
+      "docs/reports/ENG-135-suite-pass-evidence-20261003/measurements.json",
+      "docs/reports/ENG-157-fast-ci-evidence-20261004/summary.json",
+      "docs/reports/ENG-183-banner-flake-evidence-20261004/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r2-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r2-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r3-20261001/lane-discovery/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r3-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r3-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r4-20261001/lane-discovery/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r4-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r5-20261001/lane-discovery/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r5-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r5-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-20261001/main/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r2-20261001/main/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r2-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r3-20261001/main/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r3-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r4-20261001/main/summary.json",
+      "docs/reports/ENG-79-workspace-identity-evidence-20261001/lane-workspace-identity/summary.json",
+      "docs/reports/ENG-79-workspace-identity-evidence-20261001/main/summary.json",
+      "docs/reports/ENG-80-plugin-install-evidence-20261002/summary.json",
+      "docs/reports/ENG-80-plugin-install-r2-evidence-20261002/summary.json",
+      "docs/reports/ENG-80-plugin-install-r3-evidence-20261002/summary.json",
+      "docs/reports/ENG-80-plugin-install-r4-evidence-20261002/summary.json",
+      "docs/reports/ENG-81-claude-discovery-evidence-20261002/summary.json",
+      "docs/reports/ENG-90-acceptance-evidence-20261002/main-offline/summary.json",
+      "docs/reports/ENG-90-acceptance-evidence-20261002/v0.1.4/summary.json",
+      "docs/reports/ENG-90-acceptance-evidence-r2-20261002/main/summary.json",
+      "docs/reports/ENG-90-acceptance-evidence-r2-20261002/v0.1.4/summary.json",
+      "docs/reports/ENG-98-operator-focus-evidence-20261002/candidate/summary.json",
+      "docs/reports/ENG-98-operator-focus-r2-evidence-20261002/candidate/focus-summary.json",
+      "docs/reports/ENG-98-operator-focus-r2-evidence-20261002/candidate/summary.json",
+      "docs/reports/ENG-98-operator-focus-r3-evidence-20261002/candidate/summary.json",
+      "docs/reports/evidence/ARCH-17-R151/workspace.mjs",
+      "docs/reports/evidence/ENG-105-no-compiler/corrected-gate/summary.json",
+      "docs/reports/evidence/ENG-105-no-compiler/initial-gate/summary.json",
+      "docs/reports/evidence/ENG-133/inbox-cleanup.json",
+      "docs/reports/evidence/ENG-97-discovery-regression-r2/first-r112-gate/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression-r2/lane-candidate/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression/lane-candidate/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression/lifetime-first-bad/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression/lifetime-parent-good/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression/v014-good/summary.json",
+      "herdr/release.sh",
+      "housekeeping/command.mjs",
+      "housekeeping/config.mjs",
+      "housekeeping/housekeeping.mjs",
+      "housekeeping/retirement-notices.mjs",
+      "housekeeping/test/helpers/cli-fixture.mjs",
+      "lanes/board/herdr-client.mjs",
+      "lanes/board/registry.mjs",
+      "lanes/composer.mjs",
+      "lanes/lane.mjs",
+      "lanes/package.json",
+      "lanes/preset.mjs",
+      "lanes/promotion-lock.mjs",
+      "lanes/review-evidence.mjs",
+      "lanes/routes-command.mjs",
+      "lanes/routes.mjs",
+      "lanes/test/fixtures/bch-cloak-routing.json",
+      "lanes/test/fixtures/pre-profile-validation.mjs",
+      "lanes/test/herdr-client.test.mjs",
+      "lanes/test/no-focus.test.mjs",
+      "lanes/test/routes.test.mjs",
+      "lanes/test/validation.test.mjs",
+      "lanes/validation.mjs",
+      "lib/cli-help.mjs",
+      "lib/completion.mjs",
+      "lib/deadline.mjs",
+      "lib/discernment.mjs",
+      "lib/files.mjs",
+      "lib/fleet.mjs",
+      "lib/handoffs-command.mjs",
+      "lib/handoffs.mjs",
+      "lib/initial-shell.mjs",
+      "lib/install-lock.mjs",
+      "lib/lane-removal.mjs",
+      "lib/lessons.mjs",
+      "lib/memory.mjs",
+      "lib/native/manifest.json",
+      "lib/process-owner.mjs",
+      "lib/processes.mjs",
+      "lib/product-files.mjs",
+      "lib/project-summary.mjs",
+      "lib/project.mjs",
+      "lib/release-record.mjs",
+      "lib/releases.mjs",
+      "lib/render.mjs",
+      "lib/report.mjs",
+      "lib/retire-age.mjs",
+      "lib/retire-command.mjs",
+      "lib/retire-hold.mjs",
+      "lib/retire-lock.mjs",
+      "lib/retire-runtime.mjs",
+      "lib/retire-status.mjs",
+      "lib/retire-trigger.mjs",
+      "lib/retire.mjs",
+      "lib/roles.mjs",
+      "lib/run-timing.mjs",
+      "lib/sanitize.mjs",
+      "lib/shell.mjs",
+      "lib/state.mjs",
+      "lib/store.mjs",
+      "lib/today.mjs",
+      "lib/worker-identity.mjs",
+      "logs/journal.mjs",
+      "logs/rules.mjs",
+      "messages/classify.mjs",
+      "messages/fixture.mjs",
+      "messages/hook-pull.mjs",
+      "messages/hook-session.mjs",
+      "messages/journal.mjs",
+      "messages/mirror.mjs",
+      "messages/receiver.mjs",
+      "messages/schema.mjs",
+      "package.json",
+      "promote/completion.mjs",
+      "promote/evidence.mjs",
+      "promote/gate-profile.mjs",
+      "promote/guard.mjs",
+      "promote/host-gate.mjs",
+      "promote/memory-gate.mjs",
+      "promote/metrics.mjs",
+      "promote/native-context.mjs",
+      "promote/promote.mjs",
+      "promote/test-plan.mjs",
+      "promote/test/promote.test.mjs",
+      "promote/test/train.test.mjs",
+      "promote/test/workflow-train.test.mjs",
+      "promote/train.mjs",
+      "sessions/json.mjs",
+      "sessions/lifecycle-evidence.mjs",
+      "sessions/manifest.mjs",
+      "sessions/project.mjs",
+      "sessions/receipts.mjs",
+      "sessions/runtime.mjs",
+      "settle/config.mjs",
+      "settle/desks-command.mjs",
+      "settle/lock.mjs",
+      "settle/record-state.mjs",
+      "settle/replace-lane-head.mjs",
+      "settle/report-evidence.mjs",
+      "settle/settle.mjs",
+      "settle/test-evidence.mjs",
+      "settle/test-plan.mjs",
+      "settle/test/fixture.mjs",
+      "settle/test/helpers/detached-inbox.mjs",
+      "settle/test/helpers/ref-transaction.mjs",
+      "settle/test/rebase-paths.test.mjs",
+      "settle/test/rebase-review.test.mjs",
+      "settle/test/rebase-safety.test.mjs",
+      "settle/test/rebase.test.mjs",
+      "settle/test/record-recovery.test.mjs",
+      "settle/test/record-safety.test.mjs",
+      "settle/test/ref-wallclock.test.mjs",
+      "settle/test/train.test.mjs",
+      "supervisor/arm-watch.sh",
+      "supervisor/autopilot.mjs",
+      "supervisor/chats.mjs",
+      "supervisor/clean-pass.mjs",
+      "supervisor/composer.mjs",
+      "supervisor/context.mjs",
+      "supervisor/entry.mjs",
+      "supervisor/fast-path-timing.mjs",
+      "supervisor/herdr-edge.mjs",
+      "supervisor/notice-lock.mjs",
+      "supervisor/prompt-supervisor.mjs",
+      "supervisor/protocol.mjs",
+      "supervisor/reconcile.mjs",
+      "supervisor/request.mjs",
+      "supervisor/retire.mjs",
+      "supervisor/safe-point.mjs",
+      "supervisor/status.mjs",
+      "supervisor/supervisor.mjs",
+      "supervisor/test/autopilot.test.mjs",
+      "supervisor/test/chats.test.mjs",
+      "supervisor/test/reconcile.test.mjs",
+      "supervisor/test/request.test.mjs",
+      "supervisor/tidy-tabs.mjs",
+      "test-slot/limits.mjs",
+      "test-slot/lock-support.mjs",
+      "test-slot/measurement.mjs",
+      "test-slot/occupancy.mjs",
+      "test-slot/resources.mjs",
+      "test-slot/retention.mjs",
+      "test-slot/run.mjs",
+      "test-slot/test-slot.mjs",
+      "test-slot/test/helpers/detached-watchdog.mjs",
+      "test-slot/test/helpers/proving.mjs",
+      "test-slot/ticket-queue.mjs",
+      "test-slot/validation-resources.json",
+      "test-slot/watchdog.mjs",
+      "test/activation-seam.test.mjs",
+      "test/approvals.test.mjs",
+      "test/bch-cloak-contract.test.mjs",
+      "test/deadline-boundaries.test.mjs",
+      "test/discernment.test.mjs",
+      "test/file-wait.test.mjs",
+      "test/fixtures/state-v0.mjs",
+      "test/flow.test.mjs",
+      "test/git-seed.test.mjs",
+      "test/helpers.mjs",
+      "test/helpers/affected-tests.mjs",
+      "test/helpers/bounded-test.mjs",
+      "test/helpers/child.mjs",
+      "test/helpers/command-allowance.mjs",
+      "test/helpers/detached-fixture.mjs",
+      "test/helpers/file-wait.mjs",
+      "test/helpers/fixture-lifetime.mjs",
+      "test/helpers/fixture-policy.mjs",
+      "test/helpers/gate-history.mjs",
+      "test/helpers/git-seed.mjs",
+      "test/helpers/inbox.mjs",
+      "test/helpers/memory-fixture.mjs",
+      "test/helpers/native-group-fixture.mjs",
+      "test/helpers/offline-herdr.mjs",
+      "test/helpers/processes.mjs",
+      "test/helpers/promotion-memory-fixture.mjs",
+      "test/helpers/pty.mjs",
+      "test/helpers/receipts.mjs",
+      "test/helpers/release-suites.mjs",
+      "test/helpers/retire-fixture.mjs",
+      "test/helpers/run.mjs",
+      "test/helpers/suite.mjs",
+      "test/helpers/test-durations.json",
+      "test/helpers/test-slot-env.mjs",
+      "test/helpers/tier.mjs",
+      "test/inbox.test.mjs",
+      "test/lessons.test.mjs",
+      "test/main-module.test.mjs",
+      "test/memory.test.mjs",
+      "test/name-alias.test.mjs",
+      "test/no-setuid-processes.test.mjs",
+      "test/offline-herdr.test.mjs",
+      "test/one-watcher.test.mjs",
+      "test/processes.test.mjs",
+      "test/pty-cache.test.mjs",
+      "test/report.test.mjs",
+      "test/retire-status.test.mjs",
+      "test/review-children.test.mjs",
+      "test/sanitization.test.mjs",
+      "test/suite.test.mjs",
+      "test/tidy-tabs.test.mjs",
+      "test/tier-plan.test.mjs",
+      "test/today.test.mjs",
+      "watch/lock.mjs",
+      "watch/notice.mjs",
+      "watch/test/lock.test.mjs",
+      "watch/test/watch.test.mjs",
+      "watch/watch.mjs"
+    ],
+    "unknown": [
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 19,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 36,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 38,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 50,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 79,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 92,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 108,
+        "reason": "outside closed source profile: unrecognized value: receipt"
+      },
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 109,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/reconcile.mjs",
+        "line": 109,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/project.mjs",
+        "line": 21,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 42,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 72,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 185,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 198,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 235,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 235,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 271,
+        "reason": "outside closed source profile: unrecognized value: p"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 279,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 280,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 219,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 230,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 272,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 319,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 434,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 434,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 441,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 441,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 539,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 547,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 549,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 563,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 582,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 583,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 615,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 616,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 618,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 618,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 642,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 646,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 650,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 660,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 660,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 660,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 666,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 667,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 669,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/desks-command.mjs",
+        "line": 20,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/desks-command.mjs",
+        "line": 30,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/desks-command.mjs",
+        "line": 42,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/desks-command.mjs",
+        "line": 42,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/desks-command.mjs",
+        "line": 42,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/config.mjs",
+        "line": 16,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/config.mjs",
+        "line": 16,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/config.mjs",
+        "line": 16,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/config.mjs",
+        "line": 21,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "settle/config.mjs",
+        "line": 21,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 13,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 32,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 32,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 90,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 90,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 107,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 108,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 115,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 144,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 148,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 176,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 204,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 223,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 229,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 262,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 263,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 264,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 266,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 271,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "lanes/routes.mjs",
+        "line": 296,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 124,
+        "reason": "outside closed source profile: ambiguous regex/division syntax"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 124,
+        "reason": "unbalanced expression"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 29,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 75,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 76,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 77,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 88,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 98,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/render.mjs",
+        "line": 98,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 513,
+        "reason": "outside closed source profile: ambiguous regex/division syntax"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 512,
+        "reason": "unbalanced expression"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 87,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 87,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 88,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 140,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 140,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 182,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 276,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 287,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 408,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 419,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 460,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/state.mjs",
+        "line": 460,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/worker-identity.mjs",
+        "line": 7,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/worker-identity.mjs",
+        "line": 7,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/worker-identity.mjs",
+        "line": 9,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/worker-identity.mjs",
+        "line": 27,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/worker-identity.mjs",
+        "line": 27,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/worker-identity.mjs",
+        "line": 28,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/roles.mjs",
+        "line": 8,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/discernment.mjs",
+        "line": 22,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/discernment.mjs",
+        "line": 55,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/discernment.mjs",
+        "line": 55,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/discernment.mjs",
+        "line": 56,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 55,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 56,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 60,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 77,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 78,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 146,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 147,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 186,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 186,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 211,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 213,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 226,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/report.mjs",
+        "line": 235,
+        "reason": "outside closed source profile: computed member/key access"
+      }
+    ]
+  },
+  "authority": {
+    "paths": [
+      ".lane.json",
+      ".lane.validation.json",
+      "acceptance/cases.mjs",
+      "acceptance/cleanup.mjs",
+      "acceptance/commands.mjs",
+      "acceptance/deadline.mjs",
+      "acceptance/environment.mjs",
+      "acceptance/focus.mjs",
+      "acceptance/herdr.mjs",
+      "acceptance/housekeeping.mjs",
+      "acceptance/limits.mjs",
+      "acceptance/load.mjs",
+      "acceptance/notice-budget.mjs",
+      "acceptance/poll.mjs",
+      "acceptance/probe.mjs",
+      "acceptance/producers.mjs",
+      "acceptance/receipts.mjs",
+      "acceptance/results.mjs",
+      "acceptance/run.mjs",
+      "acceptance/settle.mjs",
+      "acceptance/signal-cleanup.mjs",
+      "acceptance/snapshot.mjs",
+      "acceptance/supervisor.mjs",
+      "acceptance/temp.mjs",
+      "acceptance/test/cases.test.mjs",
+      "acceptance/test/deadlines.test.mjs",
+      "acceptance/test/environment.test.mjs",
+      "acceptance/test/load.test.mjs",
+      "acceptance/test/probe.test.mjs",
+      "acceptance/test/results.test.mjs",
+      "acceptance/test/signal.test.mjs",
+      "acceptance/test/snapshot.test.mjs",
+      "acceptance/worker.mjs",
+      "bin/org.mjs",
+      "board/brain.mjs",
+      "board/rows.mjs",
+      "board/source.mjs",
+      "contrib/settle-watch.mjs",
+      "discovery/client.mjs",
+      "discovery/lessons.mjs",
+      "discovery/policy.mjs",
+      "discovery/test/lessons.test.mjs",
+      "dispatch/dispatch.mjs",
+      "dispatch/hook-review.mjs",
+      "dispatch/metrics.mjs",
+      "dispatch/session-bind-command.mjs",
+      "dispatch/session-bind.mjs",
+      "dispatch/test/retired-flags.test.mjs",
+      "dispatch/test/timing.test.mjs",
+      "docs/archive/bch-cloak-pilot-2026-09-16/continue.sh",
+      "docs/reports/ENG-135-suite-pass-evidence-20261003/measurements.json",
+      "docs/reports/ENG-157-fast-ci-evidence-20261004/summary.json",
+      "docs/reports/ENG-183-banner-flake-evidence-20261004/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r2-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r2-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r3-20261001/lane-discovery/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r3-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r3-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r4-20261001/lane-discovery/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r4-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r5-20261001/lane-discovery/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r5-20261001/main/summary.json",
+      "docs/reports/ENG-74-acceptance-evidence-r5-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-20261001/main/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r2-20261001/main/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r2-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r3-20261001/main/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r3-20261001/v0.1.3/summary.json",
+      "docs/reports/ENG-78-acceptance-evidence-r4-20261001/main/summary.json",
+      "docs/reports/ENG-79-workspace-identity-evidence-20261001/lane-workspace-identity/summary.json",
+      "docs/reports/ENG-79-workspace-identity-evidence-20261001/main/summary.json",
+      "docs/reports/ENG-80-plugin-install-evidence-20261002/summary.json",
+      "docs/reports/ENG-80-plugin-install-r2-evidence-20261002/summary.json",
+      "docs/reports/ENG-80-plugin-install-r3-evidence-20261002/summary.json",
+      "docs/reports/ENG-80-plugin-install-r4-evidence-20261002/summary.json",
+      "docs/reports/ENG-81-claude-discovery-evidence-20261002/summary.json",
+      "docs/reports/ENG-90-acceptance-evidence-20261002/main-offline/summary.json",
+      "docs/reports/ENG-90-acceptance-evidence-20261002/v0.1.4/summary.json",
+      "docs/reports/ENG-90-acceptance-evidence-r2-20261002/main/summary.json",
+      "docs/reports/ENG-90-acceptance-evidence-r2-20261002/v0.1.4/summary.json",
+      "docs/reports/ENG-98-operator-focus-evidence-20261002/candidate/summary.json",
+      "docs/reports/ENG-98-operator-focus-r2-evidence-20261002/candidate/focus-summary.json",
+      "docs/reports/ENG-98-operator-focus-r2-evidence-20261002/candidate/summary.json",
+      "docs/reports/ENG-98-operator-focus-r3-evidence-20261002/candidate/summary.json",
+      "docs/reports/evidence/ARCH-17-R151/workspace.mjs",
+      "docs/reports/evidence/ENG-105-no-compiler/corrected-gate/summary.json",
+      "docs/reports/evidence/ENG-105-no-compiler/initial-gate/summary.json",
+      "docs/reports/evidence/ENG-133/inbox-cleanup.json",
+      "docs/reports/evidence/ENG-97-discovery-regression-r2/first-r112-gate/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression-r2/lane-candidate/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression/lane-candidate/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression/lifetime-first-bad/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression/lifetime-parent-good/summary.json",
+      "docs/reports/evidence/ENG-97-discovery-regression/v014-good/summary.json",
+      "herdr/release.sh",
+      "housekeeping/command.mjs",
+      "housekeeping/config.mjs",
+      "housekeeping/housekeeping.mjs",
+      "housekeeping/retirement-notices.mjs",
+      "housekeeping/test/helpers/cli-fixture.mjs",
+      "lanes/board/herdr-client.mjs",
+      "lanes/board/registry.mjs",
+      "lanes/composer.mjs",
+      "lanes/lane.mjs",
+      "lanes/package.json",
+      "lanes/preset.mjs",
+      "lanes/promotion-lock.mjs",
+      "lanes/review-evidence.mjs",
+      "lanes/routes-command.mjs",
+      "lanes/routes.mjs",
+      "lanes/test/fixtures/bch-cloak-routing.json",
+      "lanes/test/fixtures/pre-profile-validation.mjs",
+      "lanes/test/herdr-client.test.mjs",
+      "lanes/test/no-focus.test.mjs",
+      "lanes/test/routes.test.mjs",
+      "lanes/test/validation.test.mjs",
+      "lanes/validation.mjs",
+      "lib/cli-help.mjs",
+      "lib/completion.mjs",
+      "lib/deadline.mjs",
+      "lib/discernment.mjs",
+      "lib/files.mjs",
+      "lib/fleet.mjs",
+      "lib/handoffs-command.mjs",
+      "lib/handoffs.mjs",
+      "lib/initial-shell.mjs",
+      "lib/install-lock.mjs",
+      "lib/lane-removal.mjs",
+      "lib/lessons.mjs",
+      "lib/memory.mjs",
+      "lib/native/manifest.json",
+      "lib/process-owner.mjs",
+      "lib/processes.mjs",
+      "lib/product-files.mjs",
+      "lib/project-summary.mjs",
+      "lib/project.mjs",
+      "lib/release-record.mjs",
+      "lib/releases.mjs",
+      "lib/render.mjs",
+      "lib/report.mjs",
+      "lib/retire-age.mjs",
+      "lib/retire-command.mjs",
+      "lib/retire-hold.mjs",
+      "lib/retire-lock.mjs",
+      "lib/retire-runtime.mjs",
+      "lib/retire-status.mjs",
+      "lib/retire-trigger.mjs",
+      "lib/retire.mjs",
+      "lib/roles.mjs",
+      "lib/run-timing.mjs",
+      "lib/sanitize.mjs",
+      "lib/shell.mjs",
+      "lib/state.mjs",
+      "lib/store.mjs",
+      "lib/today.mjs",
+      "lib/worker-identity.mjs",
+      "logs/journal.mjs",
+      "logs/rules.mjs",
+      "messages/classify.mjs",
+      "messages/fixture.mjs",
+      "messages/hook-pull.mjs",
+      "messages/hook-session.mjs",
+      "messages/journal.mjs",
+      "messages/mirror.mjs",
+      "messages/receiver.mjs",
+      "messages/schema.mjs",
+      "package.json",
+      "promote/completion.mjs",
+      "promote/evidence.mjs",
+      "promote/gate-profile.mjs",
+      "promote/guard.mjs",
+      "promote/host-gate.mjs",
+      "promote/memory-gate.mjs",
+      "promote/metrics.mjs",
+      "promote/native-context.mjs",
+      "promote/promote.mjs",
+      "promote/test-plan.mjs",
+      "promote/test/promote.test.mjs",
+      "promote/test/train.test.mjs",
+      "promote/test/workflow-train.test.mjs",
+      "promote/train.mjs",
+      "sessions/json.mjs",
+      "sessions/lifecycle-evidence.mjs",
+      "sessions/manifest.mjs",
+      "sessions/project.mjs",
+      "sessions/receipts.mjs",
+      "sessions/runtime.mjs",
+      "settle/config.mjs",
+      "settle/desks-command.mjs",
+      "settle/lock.mjs",
+      "settle/record-state.mjs",
+      "settle/replace-lane-head.mjs",
+      "settle/report-evidence.mjs",
+      "settle/settle.mjs",
+      "settle/test-evidence.mjs",
+      "settle/test-plan.mjs",
+      "settle/test/fixture.mjs",
+      "settle/test/helpers/detached-inbox.mjs",
+      "settle/test/helpers/ref-transaction.mjs",
+      "settle/test/rebase-paths.test.mjs",
+      "settle/test/rebase-review.test.mjs",
+      "settle/test/rebase-safety.test.mjs",
+      "settle/test/rebase.test.mjs",
+      "settle/test/record-recovery.test.mjs",
+      "settle/test/record-safety.test.mjs",
+      "settle/test/ref-wallclock.test.mjs",
+      "settle/test/train.test.mjs",
+      "supervisor/arm-watch.sh",
+      "supervisor/autopilot.mjs",
+      "supervisor/chats.mjs",
+      "supervisor/clean-pass.mjs",
+      "supervisor/composer.mjs",
+      "supervisor/context.mjs",
+      "supervisor/entry.mjs",
+      "supervisor/fast-path-timing.mjs",
+      "supervisor/green-pass.mjs",
+      "supervisor/herdr-edge.mjs",
+      "supervisor/notice-lock.mjs",
+      "supervisor/prompt-supervisor.mjs",
+      "supervisor/protocol.mjs",
+      "supervisor/reconcile.mjs",
+      "supervisor/request.mjs",
+      "supervisor/retire.mjs",
+      "supervisor/safe-point.mjs",
+      "supervisor/status.mjs",
+      "supervisor/supervisor.mjs",
+      "supervisor/test/autopilot.test.mjs",
+      "supervisor/test/chats.test.mjs",
+      "supervisor/test/reconcile.test.mjs",
+      "supervisor/test/request.test.mjs",
+      "supervisor/tidy-tabs.mjs",
+      "test-slot/limits.mjs",
+      "test-slot/lock-support.mjs",
+      "test-slot/measurement.mjs",
+      "test-slot/occupancy.mjs",
+      "test-slot/resources.mjs",
+      "test-slot/retention.mjs",
+      "test-slot/run.mjs",
+      "test-slot/test-slot.mjs",
+      "test-slot/test/helpers/detached-watchdog.mjs",
+      "test-slot/test/helpers/proving.mjs",
+      "test-slot/ticket-queue.mjs",
+      "test-slot/validation-resources.json",
+      "test-slot/watchdog.mjs",
+      "test/activation-seam.test.mjs",
+      "test/approvals.test.mjs",
+      "test/bch-cloak-contract.test.mjs",
+      "test/deadline-boundaries.test.mjs",
+      "test/discernment.test.mjs",
+      "test/file-wait.test.mjs",
+      "test/fixtures/state-v0.mjs",
+      "test/flow.test.mjs",
+      "test/git-seed.test.mjs",
+      "test/helpers.mjs",
+      "test/helpers/affected-tests.mjs",
+      "test/helpers/bounded-test.mjs",
+      "test/helpers/child.mjs",
+      "test/helpers/command-allowance.mjs",
+      "test/helpers/detached-fixture.mjs",
+      "test/helpers/file-wait.mjs",
+      "test/helpers/fixture-lifetime.mjs",
+      "test/helpers/fixture-policy.mjs",
+      "test/helpers/gate-history.mjs",
+      "test/helpers/git-seed.mjs",
+      "test/helpers/inbox.mjs",
+      "test/helpers/memory-fixture.mjs",
+      "test/helpers/native-group-fixture.mjs",
+      "test/helpers/offline-herdr.mjs",
+      "test/helpers/processes.mjs",
+      "test/helpers/promotion-memory-fixture.mjs",
+      "test/helpers/pty.mjs",
+      "test/helpers/receipts.mjs",
+      "test/helpers/release-suites.mjs",
+      "test/helpers/retire-fixture.mjs",
+      "test/helpers/run.mjs",
+      "test/helpers/suite.mjs",
+      "test/helpers/test-durations.json",
+      "test/helpers/test-slot-env.mjs",
+      "test/helpers/tier.mjs",
+      "test/inbox.test.mjs",
+      "test/lessons.test.mjs",
+      "test/main-module.test.mjs",
+      "test/memory.test.mjs",
+      "test/name-alias.test.mjs",
+      "test/no-setuid-processes.test.mjs",
+      "test/offline-herdr.test.mjs",
+      "test/one-watcher.test.mjs",
+      "test/processes.test.mjs",
+      "test/pty-cache.test.mjs",
+      "test/report.test.mjs",
+      "test/retire-status.test.mjs",
+      "test/review-children.test.mjs",
+      "test/sanitization.test.mjs",
+      "test/suite.test.mjs",
+      "test/tidy-tabs.test.mjs",
+      "test/tier-plan.test.mjs",
+      "test/today.test.mjs",
+      "watch/lock.mjs",
+      "watch/notice.mjs",
+      "watch/test/lock.test.mjs",
+      "watch/test/watch.test.mjs",
+      "watch/watch.mjs"
+    ],
+    "unknown": [
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 49,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 50,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 50,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 63,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 63,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 77,
+        "reason": "outside closed source profile: unrecognized value: file"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 96,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 139,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 139,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 166,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 166,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 167,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 193,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 193,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 209,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 221,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 221,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 225,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 225,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 226,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 226,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/supervisor.mjs",
+        "line": 230,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 144,
+        "reason": "outside closed source profile: ambiguous regex/division syntax"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 144,
+        "reason": "unbalanced expression"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 59,
+        "reason": "outside closed source profile: unrecognized value: herdr"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 95,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 97,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 99,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 101,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 103,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 103,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/status.mjs",
+        "line": 104,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/context.mjs",
+        "line": 118,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 32,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 64,
+        "reason": "outside closed source profile: unrecognized value: command"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 78,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 114,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 115,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 119,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 120,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 121,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 127,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 128,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 128,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 128,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 129,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 129,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 129,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 193,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 194,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 195,
+        "reason": "outside closed source profile: unrecognized value: args"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 229,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 236,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 239,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 271,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 271,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 272,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 273,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 277,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 285,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 289,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 299,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 421,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 642,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "promote/promote.mjs",
+        "line": 695,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 229,
+        "reason": "outside closed source profile: ambiguous regex/division syntax"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 229,
+        "reason": "unbalanced expression"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 109,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 114,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 114,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 114,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 114,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 115,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 115,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 115,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 126,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 127,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 127,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 127,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 127,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 127,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 129,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 129,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 130,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 133,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/prompt-supervisor.mjs",
+        "line": 135,
+        "reason": "outside closed source profile: unresolved loader/reflection capability: binding"
+      },
+      {
+        "file": "supervisor/herdr-edge.mjs",
+        "line": 6,
+        "reason": "outside closed source profile: unrecognized value: herdr"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 15,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 21,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 21,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 43,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 58,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 58,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 60,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 63,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 63,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 64,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lanes/composer.mjs",
+        "line": 67,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/autopilot.mjs",
+        "line": 26,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/autopilot.mjs",
+        "line": 27,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/autopilot.mjs",
+        "line": 27,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "supervisor/autopilot.mjs",
+        "line": 41,
+        "reason": "outside closed source profile: unrecognized value: file"
+      },
+      {
+        "file": "supervisor/autopilot.mjs",
+        "line": 130,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "supervisor/fast-path-timing.mjs",
+        "line": 15,
+        "reason": "outside closed source profile: ambiguous regex/division syntax"
+      },
+      {
+        "file": "lib/project.mjs",
+        "line": 21,
+        "reason": "outside closed source profile: launcher executable"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 42,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 72,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 185,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 198,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 235,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 235,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 271,
+        "reason": "outside closed source profile: unrecognized value: p"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 279,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "lib/fleet.mjs",
+        "line": 280,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 219,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 230,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 272,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 319,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 434,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 434,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 441,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 441,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 535,
+        "reason": "outside closed source profile: computed member/key access"
+      },
+      {
+        "file": "bin/org.mjs",
+        "line": 539,
+        "reason": "outside closed source profile: computed member/key access"
+      }
+    ]
+  },
+  "entry_diagnostics": [
+    {
+      "file": "supervisor/autopilot.mjs",
+      "unknown": [
+        {
+          "file": "supervisor/autopilot.mjs",
+          "line": 26,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/autopilot.mjs",
+          "line": 27,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/autopilot.mjs",
+          "line": 27,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/autopilot.mjs",
+          "line": 41,
+          "reason": "outside closed source profile: unrecognized value: file"
+        },
+        {
+          "file": "supervisor/autopilot.mjs",
+          "line": 130,
+          "reason": "outside closed source profile: launcher executable"
+        }
+      ]
+    },
+    {
+      "file": "supervisor/green-pass.mjs",
+      "unknown": [
+        {
+          "file": "supervisor/green-pass.mjs",
+          "reason": "missing execution input on main"
+        }
+      ]
+    },
+    {
+      "file": "supervisor/supervisor.mjs",
+      "unknown": [
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 49,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 50,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 50,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 63,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 63,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 77,
+          "reason": "outside closed source profile: unrecognized value: file"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 96,
+          "reason": "outside closed source profile: launcher executable"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 139,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 139,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 166,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 166,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 167,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 193,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 193,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 209,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 221,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 221,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 225,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 225,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 226,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 226,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/supervisor.mjs",
+          "line": 230,
+          "reason": "outside closed source profile: computed member/key access"
+        }
+      ]
+    },
+    {
+      "file": "supervisor/reconcile.mjs",
+      "unknown": [
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 19,
+          "reason": "outside closed source profile: launcher executable"
+        },
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 36,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 38,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 50,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 79,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 92,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 108,
+          "reason": "outside closed source profile: unrecognized value: receipt"
+        },
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 109,
+          "reason": "outside closed source profile: computed member/key access"
+        },
+        {
+          "file": "supervisor/reconcile.mjs",
+          "line": 109,
+          "reason": "outside closed source profile: computed member/key access"
+        }
+      ]
+    }
+  ]
+}

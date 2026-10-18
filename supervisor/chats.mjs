@@ -167,6 +167,10 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       if (focus) herdr(['tab', 'focus', receipt.tab]);
       return { ...receipt, project: name, reused: true, available: true };
     }
+    const root = fileURLToPath(new URL('../', import.meta.url));
+    const policy = entryPolicy({ canonical: project.checkout, org: project.record, role: 'chat' }, root);
+    const instructionsFile = path.join(home, 'sessions/contexts', `${randomUUID()}.instructions.md`);
+    const native = nativeArguments(launch, policy, undefined, instructionsFile);
     for (const [key, value] of Object.entries({ ORG_DIR: project.record, ORG_ACTOR: chat, HERDR_AGENT_NAME: chat,
       HERDR_MONITOR_FLEET: home, MONITOR_SUPERVISOR_AGENT: ops,
       MONITOR_SESSION_ROLE: 'chat', LANE_CONFIG: '' })) pairs.set(key, value);
@@ -186,10 +190,6 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     // never types a second launch into an uncertain pane or creates a duplicate.
     writeFileAtomic(file, JSON.stringify(state, null, 2) + '\n', 0o600);
     waitForShell(herdr, receipt, project, { now, sleep, startupMs });
-    const root = fileURLToPath(new URL('../', import.meta.url));
-    const policy = entryPolicy({ canonical: project.checkout, org: project.record, role: 'chat' }, root);
-    const instructionsFile = path.join(home, 'sessions/contexts', `${randomUUID()}.instructions.md`);
-    const native = nativeArguments(launch, policy, undefined, instructionsFile);
     try {
       // Agent start waits for harness readiness and reads account selectors from
       // its caller, so it needs both the chat environment and a longer deadline.
@@ -221,7 +221,12 @@ function nativeArguments(launch, instructions, resume, instructionsFile) {
   if (resume) native.push(...(launch.kind === 'codex' ? ['resume', resume] : ['--resume', resume]));
   if (launch.model) native.push('--model', launch.model);
   if (launch.effort) native.push(...(launch.kind === 'codex' ? ['-c', `model_reasoning_effort=${launch.effort}`] : ['--effort', launch.effort]));
-  native.push(...(launch.kind === 'claude' ? ['--append-system-prompt-file', instructionsFile] : ['-c', `developer_instructions=${JSON.stringify(instructions)}`]));
+  if (launch.kind === 'claude') native.push('--append-system-prompt-file', instructionsFile);
+  else {
+    const encoded = JSON.stringify(instructions).replace(/[\x7f-\x9f]/gu,
+      character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`);
+    native.push('-c', `developer_instructions=${encoded}`);
+  }
   if (native.some(arg => typeof arg !== 'string' || /[\x00-\x1f\x7f-\x9f]/u.test(arg))) throw Error('native launch arguments contain a control character or non-string value');
   return native;
 }

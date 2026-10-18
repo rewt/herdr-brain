@@ -458,3 +458,35 @@ test('standard launch refuses control characters in route arguments before creat
     env: f.env, herdr: herdrCommand(f.env) }), /control character/);
   assert.deepEqual(f.state().calls, []);
 });
+
+test('project chat refuses control characters in route arguments before any Herdr mutation', t => {
+  for (const kind of ['claude', 'codex']) for (const existingWorkspace of [false, true]) {
+    const f = fixture(t), p = f.projects[0], config = JSON.parse(fs.readFileSync(p.layers[0]));
+    config.routes.invalid = { kind, args: ['--example', 'bad\nargument'] };
+    fs.writeFileSync(p.layers[0], JSON.stringify(config));
+    if (existingWorkspace) f.change(s => s.spaces.push({ workspace_id: 'control', label: 'chats' }));
+    const before = f.state();
+    assert.throws(() => f.open(p, { route: 'invalid' }), /control character/);
+    const after = f.state();
+    assert.deepEqual(after.spaces, before.spaces);
+    assert.deepEqual(after.tabs, []);
+    assert.deepEqual(after.panes, []);
+    assert.deepEqual(after.launches, []);
+    assert.equal(after.calls.every(a => a[1] === 'list'), true);
+    assert.equal(fs.existsSync(path.join(f.env.HERDR_MONITOR_FLEET, 'chats.json')), false);
+    assert.equal(fs.existsSync(path.join(f.env.HERDR_MONITOR_FLEET, 'sessions/contexts')), false);
+  }
+});
+
+test('Codex launches instructions containing DEL and C1 using lossless Unicode escapes', t => {
+  const f = fixture(t), p = f.projects[0], instructions = 'DEL \x7f and C1 \x85\nEnd.';
+  openStandardSession({ target: { workspace: 'standard', checkout: p.checkout }, create: true,
+    launch: { kind: 'codex', args: [], env: [] }, name: 'standard-conversation', role: 'chat',
+    record: p.record, instructions, env: f.env, herdr: herdrCommand(f.env), startupMs: 1000 });
+  assert.equal(f.state().launches.length, 1);
+  const launch = f.state().launches[0];
+  assert.equal(launch.instructions, instructions);
+  assert.match(launch.args.at(-1), /\\u007f/u);
+  assert.match(launch.args.at(-1), /\\u0085/u);
+  assert.equal(launch.args.some(arg => /[\x00-\x1f\x7f-\x9f]/u.test(arg)), false);
+});

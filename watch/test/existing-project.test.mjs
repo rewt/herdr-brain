@@ -7,13 +7,14 @@ import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { waitForInboxIdle, stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
+import { noticeLock, ownerPid } from '../../supervisor/notice-lock.mjs';
 import { gitProject } from '../../lib/project.mjs';
 
 const monitor = path.resolve(import.meta.dirname, '../..');
 const arm = path.join(monitor, 'supervisor/arm-watch.sh');
 const cli = path.join(monitor, 'bin/org.mjs');
 
-function fixture(t, outcome = 'done') {
+function fixture(t, outcome = 'done', { autopilot = true } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bch-notices-')));
   const repo = path.join(root, 'bastian/bch-cloak'), org = path.join(root, 'bastian/.org');
   const lane = path.join(root, 'worktrees/lane-notices'), bin = path.join(root, 'bin');
@@ -36,6 +37,12 @@ function fixture(t, outcome = 'done') {
   fs.writeFileSync(path.join(repo, 'work.txt'), 'base');
   runCommand('git', ['add', 'work.txt']); runCommand('git', ['commit', '-qm', 'Base']);
   runCommand('git', ['worktree', 'add', '-qb', 'lane/notices', lane]);
+  // ENG-381 requires an explicit opt-in and a nonempty, mapped candidate diff.
+  // An unconfigured project must retain the ordinary supervisor delivery path.
+  if (autopilot) fs.writeFileSync(path.join(repo, '.supervisor.json'), JSON.stringify({ autopilot: { enabled: true, cohort: 'clean-pass' } }));
+  fs.writeFileSync(path.join(lane, 'README.md'), 'Offline worker result.\n');
+  runCommand('git', ['add', 'README.md'], lane);
+  runCommand('git', ['commit', '-qm', 'Document offline worker result'], lane);
   record(['init']);
   const config = JSON.parse(fs.readFileSync(path.join(org, 'config.json')));
   config.approvals.categories.tooling = 'auto';
@@ -124,6 +131,36 @@ test('an existing project exception reaches its named supervisor through its own
   const prompts = f.calls().filter(a => a[1] === 'prompt');
   assert.equal(prompts.length, 1); assert.equal(prompts[0][2], 'supervisor-opus');
   assert.match(prompts[0][3], /outcome=blocked/); assert.equal(f.actions().length, 0);
+});
+
+test('an opted-in existing project handles a done notice while a live drainer holds the inbox lock', async t => {
+  const f = fixture(t), lock = `${f.inbox}.drain.lock`, release = noticeLock(lock);
+  try {
+    const child = spawnChild(t, process.execPath, [path.join(monitor, 'watch/watch.mjs'), ...f.args.slice(1)], { cwd: monitor, env: f.env });
+    const finished = await waitForExit(child);
+    assert.equal(finished.code, 0, finished.stderr);
+    assert.equal(readInbox(f.inbox)[0].state, 'handled');
+    assert.equal(f.actions().length, 1);
+    assert.equal(f.calls().some(a => a[1] === 'prompt'), false);
+    assert.equal(ownerPid(lock), process.pid, 'policy must leave the live drain owner intact');
+  } finally { release(); }
+});
+
+test('an unconfigured existing project retains its done notice for a busy supervisor without automatic intake', async t => {
+  const f = fixture(t, 'done', { autopilot: false });
+  const child = spawnChild(t, process.execPath, [path.join(monitor, 'watch/watch.mjs'), ...f.args.slice(1)], {
+    cwd: monitor, env: { ...f.env, SUPERVISOR_INPUT_WAIT_SECONDS: '0' },
+  });
+  const finished = await waitForExit(child);
+  assert.equal(finished.code, 1, finished.stderr);
+  const [entry] = readInbox(f.inbox);
+  assert.equal(entry.state, 'pending'); assert.equal(entry.to, 'supervisor-opus');
+  assert.equal(entry.autopilot.disposition, 'wake');
+  assert.equal(entry.autopilot.summary, entry.message);
+  assert.equal(JSON.parse(fs.readFileSync(entry.autopilot.receipt)).exception, 'AUTOPILOT_DISABLED');
+  assert.equal(f.actions().length, 0);
+  assert.equal(f.calls().some(a => a[1] === 'prompt'), false);
+  assert.equal(JSON.parse(f.record(['show', f.run, '--json'])).report, null);
 });
 
 test('arming discovers the caller record and adapter recipient and dry-runs detached settings', t => {

@@ -319,8 +319,14 @@ Snapshot absence alone cannot prove process exit, restore ownership, quiescence
 or a completed handoff. Experiment evidence must record those assertions with
 source references; fresh native process/topology checks still apply. Known-native
 resume additionally verifies the prior launch owner's immutable context receipt,
-route, manifest digest and native reference. Its new terminal/incarnation is
-observed before acknowledgement. Unknown/lost acknowledgements hold without an
+route, manifest digest and native reference. For Claude, planning checks only
+the known session ID's transcript file metadata under the launch configuration's
+`projects/<checkout-slug>/<session-id>.jsonl`; it never opens the file or searches
+other projects. An absent file holds with
+`native session has no persisted conversation; resume impossible; use declared-boundary reconstruct`.
+Apply rechecks before native input. Codex has no equivalent cheap direct-ID file
+check in this adapter; its recovery behavior is unchanged. The new
+terminal/incarnation is observed before acknowledgement. Unknown/lost acknowledgements hold without an
 automatic retry.
 
 A reset request in `facts.resetRequests[uid]` names a boundary and a handoff.
@@ -770,8 +776,17 @@ new exact enrollment and scoped operator authorization are required.
    the incarnation before re-planning and applying logical-role inbox transfer.
    Verify the same pending IDs, cursor and unanswered questions survive; exact
    worker replies retain their old address. Do not use native `/clear`.
-4. **Exit and recovery (#3).** Determine the installed harness's supported exit
-   command from its own help; exit only this throwaway conversation. Capture
+4. **Exit and recovery (#3).** First give the respawned throwaway conversation
+   one minimal recorded turn: type the operator-visible greeting
+   `Hello. Reply with hello only.` and wait for its reply and idle readiness.
+   This is a real turn in the disposable conversation; capture its completion
+   and, for Claude, the known ID's transcript file existence by metadata only.
+   HUM-35 trial 2 on 2026-10-18 UTC reached this step without a turn: Claude
+   had not persisted the conversation, so `--resume` printed “No conversation
+   found with session ID” and the 30 s launch timed out. Source finding:
+   `.org/evidence/A2-EXPERIMENT-20261017/RESULT-trial2.txt` in the identity root.
+   Determine the installed harness's supported exit command from its own help;
+   exit only this throwaway conversation. Capture
    confirmed process exit plus agent and shell evidence without retrying work.
    Distinguish disconnect/readiness uncertainty and native restore
    pending/resumed/none; designate exactly one spawn owner. The research's step 8

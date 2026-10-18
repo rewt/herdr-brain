@@ -59,7 +59,7 @@ export async function apply(options = {}) {
       const experiment = experimentEvidence(options.evidence, project, receipt.workspace);
       if (!experiment) throw Error('current lifecycle experiment evidence required');
       const entry = current.entries.find(e => e.manifest.metadata.uid === op.uid);
-      const veto = lifecycleEdgeVeto(entry, { inspection: current,
+      const veto = lifecycleEdgeVeto(entry, { inspection: current, env,
         facts: { ...facts, quiescence: experiment.quiescence },
         observation: { agents: [], viewers: [], losses: experiment.losses } }, op);
       if (veto) throw Error(veto);

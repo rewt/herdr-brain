@@ -19,6 +19,7 @@ import { agentBinding } from './observe.mjs';
 import { lastTabCloseVeto, unexpectedWorkspaceRemoval } from './close-safety.mjs';
 import { checkAuthorization } from './authorization.mjs';
 import { safeProjectPath } from './project.mjs';
+import { nativeResumeVeto } from './native-conversation.mjs';
 import { digest, equalBinding, validBinding, verifyHandoff, validCloseReceipt, validMaterializationReceipt, validInboxReceipt } from './lifecycle-evidence.mjs';
 
 const product = fileURLToPath(new URL('../', import.meta.url));
@@ -144,6 +145,10 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
       ({ 'close-intent': 'close', 'respawn-intent': 'respawn', 'resume-intent': 'resume', 'inbox-intent': 'transfer' })[op.state] };
     const r = checkAuthorization({ file: authorization, project, workspace: workspaceRef, action, env });
     if (['server', 'workspace', 'checkout'].some(k => op.target[k] !== r.workspace[k])) fail('adapter target is outside authorization');
+    if (op.mode === 'resume') {
+      const veto = nativeResumeVeto(op.participants[0], env);
+      if (veto) fail(veto);
+    }
     return gate(op);
   };
   const before = async op => { safeStandard(op); await permit(op); return observe(); };

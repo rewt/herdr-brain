@@ -29,6 +29,7 @@ function fixture(t, role = 'chat') {
     return validateManifest(m, { project, config: ROUTE_PRESET });
   });
   const inspection = { project, entries, valid: true, diagnostics: [] }, journal = emptyJournal(project.common);
+  const env = { CLAUDE_CONFIG_DIR: path.join(scratch, 'claude') };
   const observation = { server: path.join(scratch, 'fixture.sock'), complete: true,
     workspaces: [{ workspace_id: 'w', worktree: { repo_key: project.common, checkout_path: cwd } }],
     tabs: [{ tab_id: 'tab-old', workspace_id: 'w' }, { tab_id: 'keep-tab', workspace_id: 'w' }],
@@ -68,7 +69,7 @@ function fixture(t, role = 'chat') {
   durableWrite(runtimePaths(project.common).journal, journal);
   const f = { scratch, cwd, project, inspection, observation, facts, calls: [], uid: entries[0].manifest.metadata.uid };
   f.journal = () => readControllerJournal(project.common);
-  f.read = async () => ({ enrollment: readStandardSlots(project.common), observation: structuredClone(observation), facts: structuredClone(facts) });
+  f.read = async () => ({ enrollment: readStandardSlots(project.common), observation: structuredClone(observation), facts: structuredClone(facts), env });
   f.preview = async () => planSessions({ inspection, ...await f.read(), journal: f.journal() });
   f.binding = uid => f.journal().incarnations.filter(i => i.uid === uid).at(-1)?.binding ??
     f.journal().bindings.find(b => b.uid === uid)?.binding ?? f.journal().operations.find(op => op.uid === uid).receipt.binding;
@@ -87,6 +88,10 @@ function fixture(t, role = 'chat') {
   };
   f.loss = (state = 'confirmed-exit') => {
     const binding = f.binding(f.uid);
+    if (entries.find(e => e.manifest.metadata.uid === f.uid).resolvedSpec.resolvedRoute?.kind === 'claude') {
+      const file = path.join(env.CLAUDE_CONFIG_DIR, 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'), `${binding.nativeSessionId}.jsonl`);
+      fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'opaque fixture conversation');
+    }
     observation.agents = observation.agents.filter(a => a.name !== binding.agentName);
     observation.viewers = observation.viewers.filter(v => v.binding.pane !== binding.pane);
     observation.panes.find(p => p.pane_id === binding.pane).emptyConfirmed = true;

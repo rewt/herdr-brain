@@ -19,6 +19,7 @@ import { digest, persistHandoff } from '../sessions/lifecycle-evidence.mjs';
 import { Receiver, addressKey } from '../messages/receiver.mjs';
 import { transferSessionInbox } from '../messages/session-transfer.mjs';
 import { LogJournal } from '../logs/journal.mjs';
+import { nativeResumeVeto } from '../sessions/native-conversation.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const cli = path.join(root, 'sessions/sessions.mjs');
@@ -62,6 +63,7 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   if(a[3].startsWith('printf ')) { const parts = [...a[3].matchAll(/'([^']*)'/g)]; s.screen = parts.slice(-2).map(m=>m[1]).join('')+'\\nfixture % '; }
   else { s.viewer = a[3]; s.viewerOutput = execFileSync('/bin/sh', ['-c', a[3]], {encoding:'utf8'}); s.screen = s.viewerOutput+'\\nfixture % '; }
   if(s.stopOnMarker) fs.writeFileSync(s.stopOnMarker,'STOP');
+  if(s.removeOnMarker) fs.unlinkSync(s.removeOnMarker);
   if(s.replaceOnMarker) s.panes.find(p=>p.pane_id===a[2]).terminal_id='other-terminal';
   save();process.stdout.write(s.paneRunOutput ?? '');process.exit(s.paneRunExit ?? 0);
 } else if(a[0]==='tab' && a[1]==='create') {
@@ -109,6 +111,7 @@ function fixture(t, role = 'chat', kind = 'claude') {
   const bin = path.join(scratch, 'fake-herdr.mjs'), state = path.join(scratch, 'native.json');
   fs.writeFileSync(bin, fake, { mode: 0o755 });
   const env = { ...process.env, ORG_DIR: org, LANE_CONFIG: undefined, HERDR_BIN_PATH: bin, SESSION_FAKE_STATE: state,
+    CLAUDE_CONFIG_DIR: path.join(scratch, 'claude'),
     HERDR_SOCKET_PATH: path.join(scratch, 'native.sock'), HERDR_MONITOR_FLEET: path.join(scratch, 'fleet'), BRAIN_SHADOW_ROOT: path.join(scratch, 'shadow'), BRAIN_IDENTITY:'fixture' };
   // Use the real operator-answer producer, with an explicit simulated human.
   execFileSync(process.execPath,[path.join(root,'bin/org.mjs'),'answer','HUM-1','yes'],{cwd,env:{...env,ORG_ACTOR:'human'},stdio:['ignore','pipe','pipe']});
@@ -143,6 +146,24 @@ function fixture(t, role = 'chat', kind = 'claude') {
     return apply({...options,authorization,planFile});
   };
   f.binding = () => { const j=readControllerJournal(project.common); return j.incarnations.at(-1)?.binding ?? j.operations.findLast(op=>op.state==='acknowledged')?.receipt?.binding; };
+  f.transcript = (b = f.binding(), config = env.CLAUDE_CONFIG_DIR) => path.join(config, 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'), `${b.nativeSessionId}.jsonl`);
+  f.persistConversation = (b = f.binding()) => {
+    const file = f.transcript(b); fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'opaque fixture conversation; not valid JSON\n', { mode: 0o000 }); return file;
+  };
+  f.loss = () => {
+    const b = f.binding(), source = readControllerJournal(project.common).operations[0];
+    const contextRef = path.join(project.common, 'sessions/contexts', source.id + '.json');
+    const route = inspect(options).entries[0].resolvedSpec.resolvedRoute;
+    change(s => { s.agents = []; s.screen = 'fixture % '; });
+    updateEvidence(e => {
+      e.losses = [{ binding: b, state: 'confirmed-exit', ref: 'exit-receipt', processConfirmedGone: true,
+        restore: { state: 'none' }, failures: 0, backoffReady: true }];
+      e.recovery[f.uid] = { mode: 'resume', contextRef, contextVerified: true,
+        contextHash: digest(JSON.parse(fs.readFileSync(contextRef))), nativeSessionId: b.nativeSessionId, route };
+    });
+    return b;
+  };
   f.boundary = async (pending = []) => {
     const b=f.binding(), h=persistHandoff({file:path.join(scratch,'handoff.md'),markdown:'# Handoff\nPreserve fixture question.\n',recordRefs:['ENG-1'],unresolvedMessageIds:pending,inboxCursor:'transport:0'});
     updateEvidence(e=>{
@@ -475,6 +496,7 @@ test('close and respawn bind a new incarnation, with one action per apply', asyn
 });
 for (const kind of ['claude','codex']) test(kind + ' resume delegates the same native reference only after confirmed exit', async t => {
   const f=fixture(t,'chat',kind);await f.apply();const b=f.binding(), spec=inspect(f.options).entries[0].resolvedSpec;
+  if (kind === 'claude') f.persistConversation(b);
   f.change(s=>{s.agents=[];s.screen='fixture % ';});
   f.updateEvidence(e=>{
     e.losses=[{binding:b,state:'confirmed-exit',ref:'exit-receipt',processConfirmedGone:true,restore:{state:'none'},failures:0,backoffReady:true}];
@@ -483,6 +505,84 @@ for (const kind of ['claude','codex']) test(kind + ' resume delegates the same n
   const result=await f.apply();assert.equal(starts(f).length,2,JSON.stringify(result));assert.equal(f.binding().nativeSessionId,b.nativeSessionId);
   assert.notEqual(f.binding().terminalId,b.terminalId);assert.equal(readControllerJournal(f.project.common).operations.at(-1).state,'acknowledged');
   checkInstructionsReceipt(f);
+});
+test('Claude recovery without a persisted conversation holds at plan time before intent or native input', async t => {
+  const f = fixture(t); await f.apply(); const b = f.loss();
+  // Same ID elsewhere, another ID in this project and a name-based match do
+  // not establish persistence of this exact conversation.
+  for (const file of [f.transcript({ nativeSessionId: 'different-native' }),
+    path.join(f.env.CLAUDE_CONFIG_DIR, 'projects', 'other-project', `${b.nativeSessionId}.jsonl`)]) {
+    fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, b.agentName);
+  }
+  const journalFile = runtimePaths(f.project.common).journal, original = fs.readFileSync(journalFile), before = mutations(f);
+  const reason = 'native session has no persisted conversation; resume impossible; use declared-boundary reconstruct';
+  const preview = await f.plan();
+  assert.equal(preview.decisions[0].decision, 'Hold'); assert.equal(preview.decisions[0].reason, reason);
+  assert.equal(preview.action, null); assert.deepEqual(fs.readFileSync(journalFile), original);
+  const result = await f.apply();
+  assert.equal(result.decisions[0].decision, 'Hold'); assert.equal(result.decisions[0].reason, reason);
+  assert.deepEqual(fs.readFileSync(journalFile), original); assert.deepEqual(mutations(f), before);
+});
+test('Claude recovery checks only file metadata and resumes an unreadable opaque conversation', async t => {
+  const f = fixture(t); await f.apply(); const b = f.loss(), transcript = f.persistConversation(b);
+  const metadata = [], lstat = fs.lstatSync;
+  t.mock.method(fs, 'lstatSync', function(file, ...args) {
+    if (String(file).startsWith(f.env.CLAUDE_CONFIG_DIR + path.sep)) metadata.push(String(file));
+    return lstat.call(this, file, ...args);
+  });
+  for (const method of ['readFileSync', 'openSync', 'createReadStream', 'readdirSync']) {
+    const original = fs[method];
+    t.mock.method(fs, method, function(file, ...args) {
+      assert.equal(String(file).startsWith(f.env.CLAUDE_CONFIG_DIR), false, `native conversation ${method} forbidden`);
+      return original.call(this, file, ...args);
+    });
+  }
+  const preview = await f.plan(); assert.equal(preview.action.stage, 'resume', JSON.stringify(preview));
+  const result = await f.apply();
+  assert.equal(result.decisions[0].decision, 'KEEP', JSON.stringify(result));
+  assert.equal(starts(f).length, 2); assert.equal(f.binding().nativeSessionId, b.nativeSessionId);
+  assert.notEqual(f.binding().terminalId, b.terminalId); assert.ok(metadata.length > 1);
+  assert.deepEqual([...new Set(metadata)], [transcript]);
+});
+test('a Claude transcript disappearing after a saved plan holds without a launch', async t => {
+  const f = fixture(t); await f.apply(); f.loss(); const transcript = f.persistConversation();
+  const planFile = path.join(f.scratch, 'saved-resume.json'), preview = await f.plan();
+  assert.equal(preview.action.stage, 'resume'); fs.writeFileSync(planFile, JSON.stringify(preview));
+  const journalFile = runtimePaths(f.project.common).journal, original = fs.readFileSync(journalFile), before = mutations(f);
+  fs.unlinkSync(transcript);
+  const result = await apply({ ...f.options, authorization: f.auth().file, planFile });
+  assert.equal(result.apply.state, 'refused'); assert.match(result.decisions[0].reason, /native session has no persisted conversation/);
+  assert.deepEqual(fs.readFileSync(journalFile), original); assert.deepEqual(mutations(f), before);
+});
+test('Claude resume rechecks persistence after shell readiness before agent start', async t => {
+  const f = fixture(t); await f.apply(); f.loss(); const transcript = f.persistConversation();
+  f.change(s => { s.removeOnMarker = transcript; });
+  const result = await f.apply();
+  assert.match(result.adapterError, /native session has no persisted conversation/, JSON.stringify(result));
+  assert.equal(result.decisions[0].decision, 'Hold'); assert.equal(starts(f).length, 1);
+  assert.equal(readControllerJournal(f.project.common).operations.at(-1).state, 'resume-intent');
+  await f.apply(); assert.equal(starts(f).length, 1, 'uncertain resume intent never permits a second launch');
+});
+test('Claude conversation lookup follows the launch environment and refuses non-files and unsafe IDs', t => {
+  const f = fixture(t), checkout = path.join(f.cwd, '.worktrees', 'with.dots_and spaces');
+  const participant = { binding: { checkout, nativeSessionId: 'known-native' }, spec: { resolvedRoute: { kind: 'claude', env: [] } } };
+  const slug = checkout.replace(/[^A-Za-z0-9]/g, '-');
+  const fileAt = config => path.join(config, 'projects', slug, 'known-native.jsonl');
+  const persist = file => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'opaque'); };
+  const fallback = fileAt(path.join(f.scratch, 'home', '.claude')); persist(fallback);
+  assert.equal(nativeResumeVeto(participant, { HOME: path.join(f.scratch, 'home') }), null);
+  assert.match(nativeResumeVeto(participant, { HOME: path.join(f.scratch, 'home'), CLAUDE_CONFIG_DIR: f.env.CLAUDE_CONFIG_DIR }), /no persisted conversation/);
+  participant.spec.resolvedRoute.env = ['CLAUDE_CONFIG_DIR=../../../route-config'];
+  const routeFile = fileAt(path.resolve(checkout, '../../../route-config')); persist(routeFile);
+  assert.equal(nativeResumeVeto(participant, f.env), null);
+  fs.unlinkSync(routeFile); fs.mkdirSync(routeFile);
+  assert.match(nativeResumeVeto(participant, f.env), /not a regular file/);
+  fs.rmdirSync(routeFile); fs.symlinkSync(fallback, routeFile);
+  assert.match(nativeResumeVeto(participant, f.env), /not a regular file/);
+  participant.binding.nativeSessionId = '../known-native';
+  assert.match(nativeResumeVeto(participant, f.env), /location unknown/);
+  participant.spec.resolvedRoute.kind = 'codex';
+  assert.equal(nativeResumeVeto(participant, f.env), null);
 });
 test('apply refusals are read-only without authorization, under STOP/hold, on expiry/mismatch, and after plan drift', async t => {
   const f=fixture(t), before=fs.readdirSync(path.join(f.project.common,'sessions'));
@@ -629,6 +729,7 @@ test('STOP or terminal replacement during shell readiness prevents agent start',
 });
 test('unconfirmed exit, native restore ownership and changed context receipts cannot resume', async t => {
   const f=fixture(t);await f.apply();const b=f.binding(),op=readControllerJournal(f.project.common).operations[0],contextRef=path.join(f.project.common,'sessions/contexts',op.id+'.json');
+  f.persistConversation(b);
   const contextHash=digest(JSON.parse(fs.readFileSync(contextRef))),spec=inspect(f.options).entries[0].resolvedSpec;
   f.change(s=>{s.agents=[];s.screen='fixture % ';});
   f.updateEvidence(e=>{e.losses=[{binding:b,state:'unknown',ref:'exit-1',processConfirmedGone:false,restore:{state:'none'},failures:0,backoffReady:true}];e.recovery[f.uid]={mode:'resume',contextRef,contextHash,contextVerified:true,nativeSessionId:b.nativeSessionId,route:spec.resolvedRoute};});

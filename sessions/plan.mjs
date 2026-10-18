@@ -30,7 +30,7 @@ export function planInputs({ files = [], cwd = process.cwd(), workspace = 'home'
       ? await observeLive({ observer, project, workspace, evidence, env })
       : { observation: await observer.observe(), experiment: null };
     if (experiment) for (const key of ['resetRequests', 'recovery', 'quiescence']) facts[key] = experiment[key];
-    return { enrollment, facts, observation };
+    return { enrollment, facts, observation, env };
   };
   return { inspection, read, observer, close() { if (owned) observer.close(); } };
 }

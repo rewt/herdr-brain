@@ -2,6 +2,7 @@
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding } from './observe.mjs';
 import { lastTabCloseVeto, unexpectedWorkspaceRemoval } from './close-safety.mjs';
+import { nativeResumeVeto } from './native-conversation.mjs';
 import { digest, specDigest, equalBinding, validBinding, strings, sameStrings, text, verifyHandoff,
   validCloseReceipt, validMaterializationReceipt, validInboxReceipt, validLifecycleOperation } from './lifecycle-evidence.mjs';
 
@@ -210,6 +211,7 @@ function recoveryVeto(entry, input, p, request) {
   const policy = entry.manifest.spec.lifecycle;
   if (request.mode === 'resume' && p.kind === 'Session' && policy.recovery?.knownNativeSession !== 'resume' &&
       policy.restartPolicy !== 'on-confirmed-exit-resume-known-session') return 'adopted manifest does not authorize native resume';
+  if (request.mode === 'resume' && loss.restore.state === 'none' && p.kind === 'Session') return nativeResumeVeto(p, input.env);
   return null;
 }
 

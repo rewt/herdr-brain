@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "authorityEntries": ["supervisor/autopilot.mjs", "supervisor/green-pass.mjs"],
+  "authorityEntries": ["supervisor/autopilot.mjs", "supervisor/green-pass.mjs", "supervisor/supervisor.mjs"],
   "entries": [
     { "project": "brain", "path": "supervisor/reconcile.mjs" }
   ],

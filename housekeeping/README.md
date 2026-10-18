@@ -46,7 +46,8 @@ Each tick also consumes a newer `retirement/request.json` revision through the
 guarded executor, without waiting for the cleanup interval. Requests coalesce;
 a request written during apply remains pending, as does a request under the
 project HOLD. A preview never acknowledges a request. No schedule is added.
-Dry-run previews the plan without closing tabs.
+Dry-run previews the plan without closing tabs or removing worktrees, including
+`would-remove-lane` rows for eligible integrated lanes.
 Each canonical live cleanup pass also refreshes the owner's
 [`record summary`](../docs/PROJECT-SUMMARY.md), reusing its observed retirement
 snapshot after cleanup and recovery. Recovery-only ticks, scoped checks and dry-run
@@ -110,6 +111,19 @@ for canonical-supervisor startup and the manual one-time backlog procedure.
   bounded cleanup retry under its shared `cleanup.lock`, so the integrated lane
   leaves through the existing guarded merged-lane path without a later drain.
   Previews, scoped checks and recovery-only ticks do not run queue retries.
+- Each canonical settled cleanup pass also inventories registered linked
+  `lane/<topic>` worktrees, including lanes merged outside the promotion queue.
+  After eligible occupants retire, the sweep requires clean Git, the exact tip
+  integrated in the base branch, a terminal chain or established absence of a
+  chain, zero panes and no live process/job references. Missing or ambiguous
+  record/reference evidence keeps the lane. The existing lifecycle lock and
+  guarded removal executor recheck identity, ancestry and canonical HOLD and
+  verify evidence preservation outside the lane before removal. Unmerged and
+  archive retirement are excluded. Pending queue cleanup retains its existing
+  retry limits. The sweep has the same finite 30-second foreground allowance as
+  retirement catch-up and attempts each lane at most once per pass. The lanes
+  view and action log show keep reasons; scoped and recovery-only ticks do not
+  sweep.
 - Recovery requires an open run, idle/done Codex, a current `■ Conversation
   interrupted` (or `■ Turn interrupted`) banner at the end of the visible output,
   and only SGR wheel junk (`<64` through `<67`; coordinates; `M`/`m`) in the composer.

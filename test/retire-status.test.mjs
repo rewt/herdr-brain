@@ -142,6 +142,10 @@ const reasonCases = [
   ['agent kind has no declared exit command', 'UNKNOWN'],
   ['open recorded run uses lane', 'ACTIVE'],
   ['occupied lane; retire panes before removing the worktree', 'UNKNOWN'],
+  ['unknown or mismatched registered lane identity', 'UNKNOWN'],
+  ['lane worktree is not clean', 'UNKNOWN'],
+  ['lane tip is not integrated in main', 'UNKNOWN'],
+  ['promotion queue cleanup pending; retry through queue', 'UNKNOWN'],
 ];
 test('every planner reason expression is enumerated and mapped; source drift fails', () => {
   const source = fs.readFileSync(new URL('../lib/retire.mjs', import.meta.url), 'utf8');
@@ -161,6 +165,7 @@ test('every planner reason expression is enumerated and mapped; source drift fai
     "record release for ${released.join(', ')}; exact session and head",
     "${agents.map(a => matchingRun(a, snapshot.record)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
     'lane removal preconditions verified',
+    'integrated lane eligible; preservation verified on apply',
   ];
   const releases = [...policy.matchAll(/why: reason \?\? (?:\(needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());

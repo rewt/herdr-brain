@@ -15,6 +15,8 @@ import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { exitFixture } from '../../test/helpers/retire-exit-fixture.mjs';
 import { isolatedEnv, hold } from '../../test/helpers/retire-fixture.mjs';
+import { fixture as retirementFixture } from '../../test/helpers/retire-fixture.mjs';
+import { sweepCommands } from '../../test/helpers/retire-sweep-fixture.mjs';
 import { finishCleanup } from '../../promote/promote.mjs';
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
@@ -674,4 +676,42 @@ test('promotion cleanup inspects and closes only the requested lane workspace', 
   f.actions = [];
   f.runner().tick({ workspacePath: f.root, resume: false });
   assert.deepEqual(f.actions, []);
+});
+
+for (const topology of ['recorded occupant', 'no recorded chain', 'Git-only lane']) {
+  test(`settled housekeeping alone removes an externally merged lane: ${topology}`, t => {
+    const f = retirementFixture(t, { occupied: topology === 'recorded occupant' }); isolatedEnv(t, f);
+    if (topology !== 'recorded occupant') fs.writeFileSync(f.eventFile, '');
+    if (topology === 'Git-only lane') { f.state.workspaces = []; f.save(); }
+    const bytes = fs.readFileSync(f.eventFile), logs = [], commands = sweepCommands(f);
+    assert.equal(fs.existsSync(path.join(f.common, 'promote/queue.json')), false);
+    const runner = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.job.herdr, selfTab: null,
+      command: commands.command, log: row => logs.push(row) });
+    runner.tick({ cleanup: true, resume: false });
+    assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+    assert.equal(logs.filter(row => row.action === 'lane-removed').length, 1);
+    const removed = commands.calls.findIndex(row => row.exe === 'git' && row.args.includes('remove'));
+    assert.equal(commands.calls[removed].locked, true);
+    if (topology === 'recorded occupant') {
+      const closed = commands.calls.findIndex(row => row.exe === f.job.herdr && row.args[0] === 'tab' && row.args[1] === 'close');
+      assert.ok(closed >= 0 && closed < removed, 'eligible occupant retires before worktree removal');
+    }
+    assert.deepEqual(fs.readFileSync(f.eventFile), bytes);
+    runner.tick({ cleanup: true, resume: false });
+    assert.equal(logs.filter(row => row.action === 'lane-removed').length, 1, 'no duplicate removal on a later tick');
+  });
+}
+
+test('housekeeping previews integrated removal, while scoped and recovery-only passes keep the lane', t => {
+  const f = retirementFixture(t, { occupied: false }); isolatedEnv(t, f);
+  const logs = [], commands = sweepCommands(f);
+  const runner = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.job.herdr, selfTab: null,
+    command: commands.command, log: row => logs.push(row) });
+  runner.tick({ cleanup: true, dryRun: true, resume: false });
+  assert.equal(logs.filter(row => row.action === 'would-remove-lane').length, 1);
+  runner.tick({ cleanup: false, resume: false });
+  runner.tick({ cleanup: true, workspacePath: f.lane, resume: false });
+  assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []);
+  assert.equal(commands.calls.some(row => row.exe === 'git' && row.args.includes('remove')), false);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
 });

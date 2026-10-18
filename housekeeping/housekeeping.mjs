@@ -185,6 +185,12 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
         log({ action: 'resumed', run: run.id, pane: agent.pane_id, seq: agent.state_change_seq, why: 'interrupted open run with only mouse-wheel escape text in the composer' });
       } catch (error) { log({ action: 'resume-failed', run: run.id, pane: agent.pane_id, error: error.message }); }
     }
+    if (cleanup && !workspacePath) try {
+      // The same finite foreground allowance as retirement catch-up. Queue-owned
+      // pending cleanup keeps its own retry bounds and is not retried here.
+      createRetirement({ cwd, org, main, herdr, record, command, selfTab, log, requireRecord: true,
+        deadline: Date.now() + loadTimeout(30000) }).sweepIntegratedLanes({ dryRun, initialSnapshot: snapshot });
+    } catch (error) { log({ action: 'lane-sweep-failed', error: error.message }); }
     if (cleanup && !workspacePath && !dryRun) try {
       const summary = publishProjectSummary({ cwd, org, snapshot, command, main, now, refreshSeconds: cleanupSeconds });
       log({ action: 'summary-published', generated_at: summary.generated_at });

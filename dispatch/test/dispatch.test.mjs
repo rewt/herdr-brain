@@ -12,6 +12,7 @@ import { ownerAlive } from '../../lib/process-owner.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { hookReviewDialog, codexProfile } from '../hook-review.mjs';
 import { runMetrics } from '../metrics.mjs';
+import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -30,8 +31,11 @@ function result(r) { process.stdout.write(JSON.stringify(r)+'\\n'); }
 function git(args) { const r=spawnSync('git',args,{encoding:'utf8'}); if(r.status) throw new Error(r.stderr); return r.stdout.trim(); }
 const entry=()=>git(['worktree','list','--porcelain']).split('\\n\\n').find(x=>x.includes('branch refs/heads/lane/topic'))?.split('\\n')[0].slice(9);
 if(type==='org') {
+ if(fail==='after-prompt' && a[0]==='note' && a[2]?.startsWith('Dispatch: prompt sent')) {console.error('lost process after saved delivery');process.exit(1);}
  if(process.env.TEST_TIMING_FAILURE && a[0]==='set' && a[2]?.startsWith('dispatch_waits=')) { console.error('injected timing set failure');process.exit(1); }
- const r=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...a],{stdio:'inherit'});process.exit(r.status??1);
+ const r=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...a],{stdio:'inherit'});
+ if(fail==='bind-lost-reply' && a[0]==='session-bind') {console.error('lost bind reply');process.exit(1);}
+ process.exit(r.status??1);
 } else if(type==='lane') {
  if(fail===a[0]) { console.error('injected '+fail); process.exit(1); }
  if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,'lane'),a.slice(2).find(x=>!x.startsWith('--'))??'HEAD']);
@@ -39,11 +43,11 @@ if(type==='org') {
  if(a[0]==='prepare' && process.env.TEST_MEMORY_WORKER_PRESSURE) fs.writeFileSync(process.env.TEST_MEMORY_FILE,JSON.stringify({available:128*1024**2,swap_used:0}));
  if(a[0]==='dispatch') {
   const n='worker-'+(Object.keys(workers).length+1), cwd=entry();
-  workers[n]={name:n,pane_id:'w:p'+n,workspace_id:'w',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle'};save();
+  workers[n]={name:n,agent:'codex',pane_id:'w:p'+n,workspace_id:'w',cwd,terminal_id:'t-'+n,agent_session:process.env.TEST_LATE_SESSION?null:{value:'s-'+n},agent_status:'idle'};save();
   const snap=JSON.parse(fs.readFileSync(a[a.indexOf('--route-config')+1]));
   fs.writeFileSync(path.join(root,'launch-route'),JSON.stringify(snap.routes.engineer));
   if(fail==='uncertain-launch') process.exit(1);
-  result({agentName:n,pane:workers[n].pane_id,workspaceId:'w',terminalId:'t-'+n,agentSessionId:'s-'+n,cwd});
+  result({agentName:n,pane:workers[n].pane_id,workspaceId:'w',terminalId:'t-'+n,agentSessionId:workers[n].agent_session?.value??null,cwd});
  }
  if(a[0]==='verify-agent') { if(!workers[a[1]] || fs.realpathSync(workers[a[1]].cwd)!==fs.realpathSync(a[2])) process.exit(1); }
 } else if(type==='watch') {
@@ -53,11 +57,22 @@ if(type==='org') {
  const { ownerIdentity } = await import(${JSON.stringify(new URL('../../lib/process-owner.mjs', import.meta.url).href)});
  result({run:a[0],pid:child.pid,identity:ownerIdentity(child.pid),log:path.join(root,a[0]+'.log')});
 } else {
+ if(a[0]==='pane' && a[1]==='process-info') {
+  const prompted=Object.values(workers).some(w=>w.agent_status==='working');
+  const replacement=(process.env.TEST_LATE_SESSION==='replacement'&&prompted)||
+   (process.env.TEST_LATE_SESSION==='replacement-before-prompt'&&fs.existsSync(path.join(root,'pids')));
+  const pid=replacement?Number(fs.readFileSync(path.join(root,'pids'),'utf8').trim().split('\\n')[0]):Number(process.env.TEST_NATIVE_PID);
+  result({result:{process_info:{shell_pid:1,foreground_processes:[{name:'codex',pid}]}}});
+ }
  if(a[0]==='pane' && a[1]==='read') {
   if(fail==='screen') {console.error('injected screen read failure');process.exit(1);}
   process.stdout.write(fs.existsSync(path.join(root,'screen'))?fs.readFileSync(path.join(root,'screen'),'utf8'):'› Ready for a task');
  }
  if(a[0]==='agent' && a[1]==='get') {
+  if(workers[a[2]]?.agent_status==='working' && process.env.TEST_LATE_SESSION) {
+   const w=workers[a[2]];w.reads=(w.reads??0)+1;
+   if(w.reads>=3) w.agent_session={value:'s-'+a[2]};save();
+  }
   const agent=['supervisor-herdr','ops-project','ops-explicit'].includes(a[2])?{name:a[2]}:workers[a[2]];
   if(!agent) {console.error(JSON.stringify({error:{code:'agent_not_found'}}));process.exit(1);}
   result({result:{agent}});
@@ -129,12 +144,13 @@ for (const source of ['fake watcher receipt', 'real watcher journal']) {
     receipts.cleanup(); assert.deepEqual(signals, [101]);
   });
 }
-function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure } = {}) {
+function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure, lateSession = '' } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = path.join(root, 'repo'), org = path.join(root, 'org'), bin = path.join(root, 'bin');
   fs.mkdirSync(repo);fs.mkdirSync(bin);
   const env = { ...process.env, ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
     MONITOR_SUPERVISOR_AGENT: noticeRecipient, HERDR_AGENT_NAME: 'chat-operator',
+    TEST_LATE_SESSION: lateSession, TEST_NATIVE_PID: String(process.pid),
     HERDR_MONITOR_FLEET: path.join(root, 'fleet.json'), TEST_TIMING_FAILURE: timingFailure ? '1' : '',
     PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
     HERDR_PANE_ID:'supervisor:pane', HERDR_TAB_ID:'supervisor:tab', HERDR_WORKSPACE_ID:'supervisor:w' };
@@ -174,6 +190,65 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
   return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
+
+test('delayed native session binds separately before same-session continuation reuses it', t => {
+  const f = fixture(t, { lateSession: 'delayed', timingRecord: true });
+  const first = f.start(); assert.equal(first.status, 0, first.stderr);
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0])), run = f.show(job.run);
+  assert.equal(run.meta.agent_session_id, undefined, 'receipt remains terminal-only');
+  assert.equal(run.session_bindings.length, 1);
+  assert.equal(effectiveWorkerIdentity(run).agent_session_id, 's-worker-1');
+  assert.equal(job.sessionBinding.status, 'bound');
+  assert.equal(Date.parse(job.sessionBinding.deadline) - Date.parse(job.sessionBinding.prompted_at), 60000);
+  const calls = f.calls(), receipt = calls.findIndex(c => c.type === 'org' && c.a[0] === 'worker');
+  assert.ok(receipt < calls.findIndex(c => c.type === 'herdr' && c.a[1] === 'prompt'));
+  f.rec(['abandon', job.run]);
+  const file = path.join(f.root, 'workers'), workers = JSON.parse(fs.readFileSync(file));
+  workers['worker-1'].agent_status = 'idle'; fs.writeFileSync(file, JSON.stringify(workers));
+  const next = f.start(['--reuse', job.run]); assert.equal(next.status, 0, next.stderr);
+  const nextRun = f.show(JSON.parse(next.stdout).run);
+  assert.equal(nextRun.meta.agent_session_id, 's-worker-1');
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+  assert.equal(promptCalls(f).length, 2);
+});
+
+test('ambiguous delivery confirmation never opens a binding opportunity or replays the prompt', t => {
+  const f = fixture(t, { lateSession: 'delayed' }); f.fail('prompt');
+  assert.equal(f.start().status, 1);
+  const before = JSON.parse(fs.readFileSync(f.jobs()[0])); assert.equal(before.stage, 'prompting');
+  f.fail(''); const retry = f.dispatch(['--retry', before.run, '--accept-delivered']); assert.equal(retry.status, 0, retry.stderr);
+  const after = JSON.parse(fs.readFileSync(f.jobs()[0]));
+  assert.equal(after.sessionBinding.status, 'unbound'); assert.match(after.sessionBinding.reason, /ambiguous/);
+  assert.equal(after.sessionBinding.deadline, before.sessionBinding.deadline);
+  assert.equal(f.show(before.run).session_bindings, undefined); assert.equal(promptCalls(f).length, 1);
+});
+
+for (const mode of ['replacement', 'replacement-before-prompt']) test(`same-terminal ${mode} keeps the original launch unbound despite matching topology`, t => {
+  const f = fixture(t, { lateSession: mode }), result = f.start();
+  assert.equal(result.status, 0, result.stderr);
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
+  assert.equal(job.sessionBinding.status, 'unbound'); assert.match(job.sessionBinding.reason, /process changed/);
+  assert.equal(f.show(job.run).session_bindings, undefined);
+  assert.equal(promptCalls(f).length, 1);
+});
+
+for (const fault of ['after-prompt', 'bind-lost-reply']) test(`${fault} recovers within the saved opportunity without replaying delivery`, t => {
+  const f = fixture(t, { lateSession: 'delayed', timingRecord: true }); f.fail(fault);
+  const first = f.start(); assert.equal(first.status, fault === 'after-prompt' ? 1 : 0, first.stderr);
+  const file = f.jobs()[0], before = JSON.parse(fs.readFileSync(file));
+  assert.equal(before.stage, 'complete');
+  if (fault === 'bind-lost-reply') {
+    assert.ok(before.sessionBinding.proposed);
+    f.rec(['abandon', before.run]); // Exact reply recovery also works after finishing.
+  }
+  f.fail('');
+  const retry = f.dispatch(['--retry', before.run]); assert.equal(retry.status, 0, retry.stderr);
+  const after = JSON.parse(fs.readFileSync(file));
+  assert.equal(after.sessionBinding.deadline, before.sessionBinding.deadline);
+  assert.equal(after.sessionBinding.status, 'bound');
+  assert.equal(f.show(before.run).session_bindings.length, 1);
+  assert.equal(promptCalls(f).length, 1);
+});
 
 test('dispatch journals both memory gates and mirrors allowlisted events into run metadata', t => {
   const f = fixture(t);

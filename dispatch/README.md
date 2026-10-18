@@ -67,6 +67,17 @@ tab or workspace ID. `--to` selects the supervisor; the default is
 the adapter's `MONITOR_SUPERVISOR_AGENT`, then `supervisor-herdr`. Project chat
 launches bind that variable to ops separately from their `chat-` agent name.
 The core stays foreground and never calls a model.
+When the immutable pre-prompt receipt has no native session, dispatch pins the
+native foreground PID and kernel birth identity before delivery, then observes
+for the remainder of one saved launch deadline (at most 60 seconds). A verified
+late session becomes a separate `run.session_bound` event through
+`record session-bind --journal FILE`; the launch receipt is never enriched.
+Dispatch alone writes this fact. Retirement, reuse, handoff, pane-release and
+status derive the same effective identity and reject conflicting evidence.
+Unavailable continuity, replacement, timeout or uncertain prompt delivery leaves
+the run unbound. There is no backfill, background binder or ingestion delay.
+Retry cannot renew the deadline or replay a prompt to obtain a session. A saved
+bind proposal can recover an exact lost reply even after report ingestion.
 Correction and completion notices go through watch's
 [shared supervisor input gate](../supervisor/README.md), which journals notices
 and waits for two empty-composer reads while the supervisor is idle. Dispatch's

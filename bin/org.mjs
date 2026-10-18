@@ -80,6 +80,7 @@ Runs and reports
   record worker <R-n> --agent NAME --pane ID --worker-workspace ID --cwd DIR
           [--terminal-id ID] [--agent-session-id ID]
                                           launcher receipt; use dispatch/record-worker.mjs at launch
+  record session-bind --journal FILE      dispatch's one-time late native session fact
   record check <report.md>                validate a report without recording anything
   record ingest <report.md> [--run R-n] [--if-current-run R-n]
                                           record a report; optional guard checked under the log lock
@@ -998,6 +999,7 @@ const COMMANDS = {
   // Module views load only when used, so a fault in one of them cannot break every record command.
   handoff: lazy('../lib/retire-command.mjs', 'handoffCommand'),
   'pane-release': lazy('../lib/retire-command.mjs', 'releaseCommand'),
+  'session-bind': lazy('../dispatch/session-bind-command.mjs', 'sessionBindCommand'),
   desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
   routes: lazy('../lanes/routes-command.mjs', 'routesCommand'),
   housekeeping: lazy('../housekeeping/command.mjs', 'housekeepingCommand'),

@@ -15,6 +15,7 @@ import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { approvalPolicy } from '../lib/discernment.mjs';
 import { publishedSummaryStatus } from '../lib/project-summary.mjs';
 import { renderPublishedSummaryStatus } from '../lib/render.mjs';
+import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const timestamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
@@ -102,8 +103,10 @@ export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', ag
     if (binding && binding !== project.identity) continue;
     if (!binding) warnings.push(`${run.id}: repository binding unavailable; inspect ${run.workspace ?? 'record-only lane'}`);
     const candidates = agents.filter(a => samePath(a.cwd, run.workspace));
-    const worker = candidates.find(a => occupantMatches(run.meta, a) &&
-      (run.meta.agent_session_id || run.meta.terminal_id || a.name === run.meta.agent));
+    const identity = effectiveWorkerIdentity(run);
+    if (identity.identity_conflict) warnings.push(`${run.id}: conflicting recorded worker identity`);
+    const worker = !identity.identity_conflict && candidates.find(a => occupantMatches(identity, a) &&
+      (identity.agent_session_id || identity.terminal_id || a.name === identity.agent));
     const sessionFor = (a, route) => sessions.filter(s => s.name === a.name && occupantMatches(s, a) && (!route || (s.route ?? s.role) === route))
       .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))[0];
     const reviewRoute = saved?.reviewRoute ?? saved?.review?.route ?? 'review';

@@ -9,6 +9,9 @@ import { chainFor, planRetirement, executeRetirement, laneRemovalReason } from '
 import { readDeclaredReferences, readLiveReferences } from '../supervisor/retire.mjs';
 import { retirementDeadline } from '../lib/retire-lock.mjs';
 import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
+import { sessionBindFact } from './helpers/session-bind.mjs';
+import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
+import { retirementStatus } from '../lib/retire-status.mjs';
 
 function fixture() {
   const events = [
@@ -31,6 +34,61 @@ function fixture() {
   return snapshot;
 }
 const kept = s => { const p = planRetirement(s); assert.equal(p.close.length, 0); assert.equal(p.keep.length, 1); return p.keep[0].why; };
+
+function lateBound(s) {
+  const r = s.record.runs.get('R-1');
+  delete r.meta.agent_session_id;
+  Object.assign(r.meta, { dispatch_attempt: 'attempt', dispatch_journal: '/repo/.org/dispatch/attempt.json',
+    dispatch_project: '/repo/.git', dispatch_record: '/repo/.org' });
+  r.worker_receipt = { seq: 3, agent: 'worker', pane: 'w:p', worker_workspace: 'w', terminal_id: 'terminal' };
+  r.report.seq = 5;
+  r.session_bindings = [sessionBindFact(r, { seq: 4 })];
+  return r;
+}
+
+test('a finished late-bound worker has the same retirement classification as a native-session reviewer', () => {
+  const worker = fixture(), reviewer = fixture();
+  const r = lateBound(worker);
+  assert.equal(effectiveWorkerIdentity(r).agent_session_id, 'session');
+  reviewer.record.items.get('ENG-1').role = 'reviewer';
+  reviewer.record.runs.get('R-1').report.extra = { verdict: 'PASS' };
+  for (const [snapshot, kind] of [[worker, 'codex'], [reviewer, 'claude']]) {
+    snapshot.agents[0].agent = kind;
+    snapshot.panes[0].process_info.foreground_processes[0].name = kind;
+    snapshot.panes[0].process_info.process_tree[1].command = `[${kind}]`;
+  }
+  assert.equal(planRetirement(worker).panes[0].decision, planRetirement(reviewer).panes[0].decision);
+  assert.equal(planRetirement(worker).close.length, 1);
+  assert.equal(retirementStatus(worker).rows[0].class, 'TERMINAL');
+  assert.equal(retirementStatus(reviewer).rows[0].class, 'TERMINAL');
+  // Binding supplies identity alone; every pre-existing keep still applies.
+  for (const change of [s => { s.record.runs.get('R-1').report = null; },
+    s => { s.record.items.get('ENG-1').closed = null; }, s => { s.git[0].clean = false; },
+    s => { s.retirementHold = 'retirement held'; }, s => { s.agents[0].agent_status = 'working'; }]) {
+    const s = fixture(); lateBound(s); change(s); assert.equal(planRetirement(s).close.length, 0);
+  }
+});
+
+test('a late-bound older round status recommends pane-release with its effective native session', () => {
+  const s = fixture(), r = lateBound(s);
+  s.record.items.get('ENG-1').closed = null;
+  s.record.runs.set('R-2', { ...r, id: 'R-2', started: { seq: 6 }, session_bindings: [],
+    meta: { ...r.meta, agent: 'next', pane: 'w:q', terminal_id: 'next-terminal', agent_session_id: 'next-session' },
+    report: { seq: 7, outcome: 'failed' } });
+  const row = retirementStatus(s).rows.find(row => row.type === 'tab');
+  assert.equal(row.class, 'IDLE-NONTERMINAL');
+  assert.match(row.recommendation, /record pane-release R-1 --session 'session' --terminal 'terminal'/);
+});
+
+test('late binding conflicts and replacement sessions stay KEEP while legacy terminal-only KEEP is unchanged', () => {
+  const s = fixture(), r = lateBound(s), good = structuredClone(r.session_bindings);
+  for (const bad of [() => { r.session_bindings[0].session = 'replacement'; },
+    () => { r.session_bindings[0].receipt.terminal_id = 'replacement'; },
+    () => { r.session_bindings.push({ ...r.session_bindings[0], session: 'other' }); }]) {
+    r.session_bindings = structuredClone(good); bad(); assert.match(kept(s), /identity/);
+  }
+  r.session_bindings = []; assert.match(kept(s), /unknown recorded native session identity/);
+});
 
 test('ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation', () => {
   const s = fixture(), before = JSON.stringify([...s.record.runs.values()]);

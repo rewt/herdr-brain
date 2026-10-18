@@ -13,6 +13,9 @@ import { waitForMemory } from '../lib/memory.mjs';
 import { readTiming, timedMemoryWait, timingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
+import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
+import { lookupProcess } from '../lib/processes.mjs';
+import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL", allowPositionals: true, options: {
@@ -30,7 +33,7 @@ const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [pro
 const recordCLI = cli('org', '../bin/org.mjs');
 const laneCLI = cli('lane', '../lanes/lane.mjs');
 const watchCLI = cli('watch', '../watch/watch.mjs');
-let job, journal, lock, contender, ownsLock = false;
+let job, journal, lock, contender, ownsLock = false, observationDeadline;
 const atomic = (file, value) => {
   const temp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -38,9 +41,12 @@ const atomic = (file, value) => {
 };
 const save = () => atomic(journal, job);
 function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
+  const remaining = observationDeadline === undefined ? undefined : observationDeadline - Date.now();
+  if (remaining !== undefined && remaining <= 0) throw Error('session observation deadline expired');
   const result = spawnSync(argv[0], [...argv.slice(1), ...args], {
     cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, ORG_DIR: job?.org ?? opt.org },
+    ...(remaining === undefined ? {} : { timeout: Math.max(1, remaining), killSignal: 'SIGKILL' }),
   });
   if (result.error || result.status !== 0) {
     const error = new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
@@ -91,12 +97,43 @@ function worktree() {
 function liveWorker(worker) {
   lane(['verify-agent', worker.agentName, job.workspace]);
   const agent = herdr(['agent', 'get', worker.agentName]).agent;
-  if (!agent || agent.pane_id !== worker.pane || agent.workspace_id !== worker.workspaceId ||
+  if (!agent || agent.name !== worker.agentName || agent.pane_id !== worker.pane || agent.workspace_id !== worker.workspaceId ||
+      fs.realpathSync(agent.cwd) !== job.workspace ||
       (worker.terminalId && agent.terminal_id !== worker.terminalId) ||
       (worker.agentSessionId && agent.agent_session?.value !== worker.agentSessionId)) {
     throw new Error('worker occupant identity changed; inspect it before recovery');
   }
   return agent;
+}
+function observeNative() {
+  const agent = liveWorker(job.worker);
+  const readNative = a => nativeProcess(a, herdr(['pane', 'process-info', '--pane', job.worker.pane]).process_info,
+    pid => lookupProcess(pid, { identityOnly: true,
+      allowance: ms => observationDeadline === undefined ? ms : Math.max(1, Math.min(ms, observationDeadline - Date.now())), pause: () => {} }));
+  const native = readNative(agent);
+  const after = liveWorker(job.worker);
+  if (agent.agent_session?.value && agent.agent_session.value !== after.agent_session?.value) throw Error('native session changed during observation');
+  if (after.agent_session?.value) {
+    const checked = readNative(after);
+    if (checked.pid !== native.pid || checked.identity !== native.identity) throw Error('native process changed during observation');
+  }
+  return { process: native, session: after.agent_session?.value };
+}
+function captureLaunchProcess() {
+  // Pin once alongside the original worker identity, before its receipt and
+  // watcher. Recovery never replaces missing or old continuity evidence.
+  job.launchProcess = null;
+  if (!job.worker.agentSessionId) try { job.launchProcess = observeNative().process; } catch {}
+}
+async function bindSession() {
+  const binding = job.sessionBinding;
+  if (!binding || ['bound', 'unbound'].includes(binding.status)) return;
+  // An exact saved proposal may be retried after the deadline. Observation may not.
+  observationDeadline = binding.proposed ? undefined : Date.parse(binding.deadline);
+  try {
+    await observeSessionBinding({ job: { ...job, journal }, save, observe: observeNative,
+      record: () => record(['session-bind', '--journal', journal]) });
+  } finally { observationDeadline = undefined; }
 }
 function capture(name) {
   lane(['verify-agent', name, job.workspace]);
@@ -247,6 +284,7 @@ async function main() {
     let output;
     try { output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
+      '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`,
       ...(job.fromRun ? ['--if-current-run', job.fromRun] : []),
       ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
     catch (error) { job.startRefused = error.recordRefusal === true; save(); throw error; }
@@ -256,9 +294,22 @@ async function main() {
     note(`run started; request ${journal}`);
   }
   const run = json(record(['show', job.run, '--json']));
-  if (run.abandoned || run.report) throw new Error('run is already abandoned or reported; start a new run');
+  if ((run.abandoned || run.report) && job.stage !== 'complete') throw new Error('run is already abandoned or reported; start a new run');
   if (run.item !== job.item || run.meta?.dispatch_journal !== journal || fs.realpathSync(run.workspace) !== job.workspace) throw new Error('run no longer matches dispatch request');
   if (run.meta?.route !== job.route || Object.entries(job.declared).some(([key, value]) => (run.meta?.[key] ?? null) !== value)) throw new Error('run routing metadata changed; inspect before recovery');
+  if (job.stage === 'complete' && (run.report || run.abandoned)) {
+    if (job.sessionBinding && !job.sessionBinding.proposed) {
+      job.sessionBinding.status = 'unbound'; job.sessionBinding.reason = 'run finished before binding';
+    }
+    await bindSession();
+    delete job.error; save();
+    outputReceipt(); return;
+  }
+  if (job.stage === 'complete') {
+    const identity = effectiveWorkerIdentity(run);
+    if (identity.identity_conflict) throw Error('conflicting worker session identity; inspect before recovery');
+    liveWorker({ ...job.worker, agentSessionId: identity.agent_session_id ?? job.worker.agentSessionId });
+  }
   dispatchWaits = run.meta?.dispatch_waits;
   syncTiming();
   // start may have committed the run before failing to materialize its brief.
@@ -270,7 +321,7 @@ async function main() {
       note('caller requested a fresh launch after inspecting the uncertain prior attempt');
     } else {
       if (!opt.adopt) throw new Error('worker launch outcome is unknown; inspect lane, then use --adopt AGENT or --fresh (never auto-relaunch)');
-      job.worker = capture(opt.adopt); job.stage = 'record-worker'; save();
+      job.worker = capture(opt.adopt); captureLaunchProcess(); job.stage = 'record-worker'; save();
       note(`caller adopted worker ${opt.adopt} after uncertain launch`);
     }
   }
@@ -278,13 +329,14 @@ async function main() {
     memoryGate('memory_worker', 'dispatch worker', checkStop);
     if (job.reuse) {
       const prior = json(record(['show', job.reuse, '--json']));
+      const identity = effectiveWorkerIdentity(prior);
       if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');
       if (prior.item !== job.item || prior.meta?.lane !== job.lane || prior.meta?.route !== job.route ||
           fs.realpathSync(prior.workspace) !== job.workspace ||
           Object.entries(job.declared).some(([key, value]) => (prior.meta?.[key] ?? null) !== value)) throw new Error('reuse run must match item, lane, route and declared harness/model/effort; use a fresh worker');
-      if (!prior.meta.agent_session_id && !prior.meta.terminal_id) throw new Error('reuse needs recorded occupant identity; use a fresh worker');
-      job.worker = { agentName: prior.meta.agent, pane: prior.meta.pane, workspaceId: prior.meta.worker_workspace,
-        terminalId: prior.meta.terminal_id, agentSessionId: prior.meta.agent_session_id };
+      if (identity.identity_conflict || (!identity.agent_session_id && !identity.terminal_id)) throw new Error('reuse needs consistent recorded occupant identity; use a fresh worker');
+      job.worker = { agentName: identity.agent, pane: identity.pane, workspaceId: identity.worker_workspace,
+        terminalId: identity.terminal_id, agentSessionId: identity.agent_session_id };
       const agent = liveWorker(job.worker);
       if (!['idle', 'done'].includes(agent.agent_status)) throw new Error('reuse worker must be idle or done');
     } else {
@@ -299,6 +351,7 @@ async function main() {
       }
       job.worker = json(output);
     }
+    captureLaunchProcess();
     job.stage = 'record-worker'; save();
   }
   if (job.stage === 'record-worker') {
@@ -331,6 +384,7 @@ async function main() {
     if (job.stage === 'watch') note(`watcher ready (pid ${job.watcher.pid}); prompt not sent`);
     if (job.stage === 'watch') { job.stage = 'prompt'; save(); }
     if (job.stage === 'prompting' && opt['accept-delivered']) {
+      if (job.sessionBinding) { job.sessionBinding.status = 'unbound'; job.sessionBinding.reason = 'ambiguous prompt delivery'; }
       job.stage = 'complete'; save();
       note('caller confirmed the uncertain prompt was delivered; no resend');
     }
@@ -351,13 +405,25 @@ async function main() {
         }
       }
       const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.${job.extra ? `\n\n${job.extra}` : ''}`;
+      if (job.stage === 'prompt' && !job.sessionBinding && !job.worker.agentSessionId && run.meta.dispatch_attempt === job.token) {
+        const current = json(record(['show', job.run, '--json']));
+        const prompted = Date.now();
+        job.sessionBinding = { status: 'observing', process: job.launchProcess ?? null, receipt: workerReceipt(current),
+          prompted_at: new Date(prompted).toISOString(), deadline: new Date(prompted + 60000).toISOString() };
+      } else if (job.stage === 'prompting' && job.sessionBinding) {
+        job.sessionBinding.status = 'unbound'; job.sessionBinding.reason = 'ambiguous prompt delivery';
+      }
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
       job.stage = 'complete'; save();
       note(`prompt sent; worker ${job.worker.agentName} and watcher ${job.watcher.pid} started`);
     }
   }
+  await bindSession();
   delete job.error; save();
+  outputReceipt();
+}
+function outputReceipt() {
   process.stdout.write(`${JSON.stringify({ run: job.run, item: job.item, lane: job.lane, route: job.route, ...job.declared,
     agent: job.worker.agentName, pane: job.worker.pane, watcher: job.watcher, journal })}\n`);
 }

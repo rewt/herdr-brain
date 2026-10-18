@@ -44,7 +44,12 @@ is `"schema": "occupancy/v1"`. Fields are:
 
 `project` remains a string in `occupancy/v1`; older records with directory labels
 remain readable. Promotion scratch checkouts under `.git/promote/batches/*/scratch-N`
-resolve through Git to their owning project's common directory.
+resolve through worktree metadata to their owning project's common directory.
+
+The occupancy project value is resolved from filesystem metadata only: walk to
+the `.git` marker, follow a `gitdir:` file and optional `commondir`, then use the
+real common directory. Results, including basename fallbacks for uncertain
+metadata, are cached per process and cwd. This discovery starts no subprocess.
 
 No command text or token is recorded. Publication writes complete bytes to a
 hidden temporary file in the same directory, then renames it atomically; group

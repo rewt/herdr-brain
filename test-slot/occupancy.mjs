@@ -4,8 +4,48 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { processStartRecord } from './lock-support.mjs';
-import { projectCommon } from './limits.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
+
+const projects = new Map();
+// Informational identity only: never spawn Git on the occupancy write path.
+export function occupancyProject(cwd = process.cwd()) {
+  if (projects.has(cwd)) return projects.get(cwd);
+  let project = path.basename(cwd);
+  try {
+    const text = file => {
+      const stat = fs.statSync(file);
+      if (!stat.isFile() || stat.size > 65536) throw Error('unreadable Git metadata');
+      const value = fs.readFileSync(file, 'utf8').replace(/\r?\n$/, '');
+      if (!value || /[\0\r\n]/.test(value)) throw Error('malformed Git metadata');
+      return value;
+    };
+    let directory = fs.realpathSync(cwd);
+    for (;;) {
+      const marker = path.join(directory, '.git');
+      if (fs.lstatSync(marker, { throwIfNoEntry: false })) {
+        let gitdir = marker;
+        if (!fs.statSync(marker).isDirectory()) {
+          const match = /^gitdir: (.+)$/.exec(text(marker));
+          if (!match) throw Error('malformed Git marker');
+          gitdir = path.resolve(directory, match[1]);
+        }
+        gitdir = fs.realpathSync(gitdir);
+        const commonFile = path.join(gitdir, 'commondir');
+        const common = fs.realpathSync(fs.lstatSync(commonFile, { throwIfNoEntry: false })
+          ? path.resolve(gitdir, text(commonFile)) : gitdir);
+        if (!fs.statSync(path.join(gitdir, 'HEAD')).isFile() || !fs.statSync(path.join(common, 'objects')).isDirectory())
+          throw Error('incomplete Git directory');
+        project = common;
+        break;
+      }
+      const parent = path.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  } catch { /* Uncertain metadata retains the legacy directory label. */ }
+  projects.set(cwd, project);
+  return project;
+}
 
 const positive = value => Number.isSafeInteger(value) && value > 0;
 export function occupancyState(record, { kill = process.kill, startRecord = processStartRecord } = {}) {
@@ -68,7 +108,7 @@ export function sharedOccupancy(lockPath, label, resource) {
   const cwd = process.cwd();
   const holder = { schema: 'occupancy/v1', pid: process.pid, processStart: identity.start, processBirth: identity.birth,
     pgid: null, groupStart: null, groupBirth: null, label, cwd, host: os.hostname(),
-    project: projectCommon(cwd) ?? path.basename(cwd), acquiredAt: new Date().toISOString(), class: 'shared', reason: resource.reason,
+    project: occupancyProject(cwd), acquiredAt: new Date().toISOString(), class: 'shared', reason: resource.reason,
     ...(resource.profile ? { profile_id: resource.profile.id } : {}) };
   holder.startedAt = holder.acquiredAt;
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });

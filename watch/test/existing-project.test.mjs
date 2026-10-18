@@ -153,6 +153,7 @@ test('an unconfigured existing project retains its done notice for a busy superv
   });
   const finished = await waitForExit(child);
   assert.equal(finished.code, 1, finished.stderr);
+  assert.match(finished.stderr, /could not deliver to supervisor-opus/);
   const [entry] = readInbox(f.inbox);
   assert.equal(entry.state, 'pending'); assert.equal(entry.to, 'supervisor-opus');
   assert.equal(entry.autopilot.disposition, 'wake');

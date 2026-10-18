@@ -74,7 +74,7 @@ for (const guard of ['dirty', 'unintegrated', 'archived unintegrated', 'job refe
       fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join('')); pattern = /chain is still open/;
     }
     if (guard === 'bad references') { fs.writeFileSync(path.join(f.org, 'references/bad.json'), '{}'); pattern = /invalid herdr-reference/; }
-    if (guard === 'missing record') { fs.unlinkSync(f.eventFile); pattern = /ENOENT|missing or unreadable/; }
+    if (guard === 'missing record') { fs.unlinkSync(f.eventFile); pattern = /^retirement record is missing or unreadable; lane kept$/; }
     if (guard === 'unreadable record') { fs.rmSync(f.eventFile); fs.mkdirSync(f.eventFile); pattern = /missing or unreadable/; }
     if (['wrong record', 'ambiguous record'].includes(guard)) {
       const entry = { identity: f.common, checkout: f.repo, record: f.org, worktrees: f.scratch, layers: [] };
@@ -166,4 +166,57 @@ test('a finite sweep stops when its foreground deadline is reached', t => {
   const f = fixture(t, { occupied: false });
   assert.throws(() => sweep(f, { retirement: { deadline: Date.now() - 1 } }), /retirement deadline reached/);
   assert.equal(fs.existsSync(f.lane), true);
+});
+
+test('repeated post-preservation removal failures discard only the unused verified evidence copy', t => {
+  const f = fixture(t, { occupied: false });
+  fs.writeFileSync(path.join(f.common, 'info/exclude'), '.lane/\n');
+  fs.mkdirSync(path.join(f.lane, '.lane')); const source = path.join(f.lane, '.lane/report.md');
+  fs.writeFileSync(source, 'unique evidence');
+  const topicArchive = path.join(f.common, 'lane-archive/topic');
+  fs.mkdirSync(path.join(topicArchive, 'prior-evidence'), { recursive: true });
+  fs.writeFileSync(path.join(topicArchive, 'prior-evidence/report.md'), 'older recovery evidence');
+  for (let pass = 0; pass < 3; pass++) {
+    const result = sweep(f, { before(exe, args) {
+      if (exe === 'git' && args[2] === 'worktree' && args[3] === 'remove') throw Error('injected worktree removal refusal');
+    } });
+    assert.equal(result.results[0].action, 'keep'); assert.match(result.results[0].why, /worktree removal refusal/);
+    assert.equal(result.logs.filter(row => row.action === 'lane-preflight').length, 1);
+    assert.equal(result.calls.filter(row => row.exe === 'git' && row.args.includes('remove')).length, 1, 'one removal attempt per lane per pass');
+    assert.equal(result.logs.filter(row => row.action === 'lane-evidence-discarded').length, 1);
+    assert.deepEqual(fs.readdirSync(topicArchive), ['prior-evidence']);
+    assert.equal(fs.readFileSync(source, 'utf8'), 'unique evidence');
+    assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head);
+    assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);
+  }
+  assert.equal(fs.readFileSync(path.join(topicArchive, 'prior-evidence/report.md'), 'utf8'), 'older recovery evidence');
+  const recovered = sweep(f);
+  assert.equal(recovered.results[0].action, 'lane-removed'); assert.equal(fs.existsSync(f.lane), false);
+  assert.equal(fs.readFileSync(path.join(recovered.results[0].evidence.directory, 'files/.lane/report.md'), 'utf8'), 'unique evidence');
+});
+
+test('a branch deletion failure retains evidence after the source worktree has been removed', t => {
+  const f = fixture(t, { occupied: false });
+  fs.writeFileSync(path.join(f.common, 'info/exclude'), '.lane/\n');
+  fs.mkdirSync(path.join(f.lane, '.lane')); fs.writeFileSync(path.join(f.lane, '.lane/report.md'), 'unique evidence');
+  const result = sweep(f, { before(exe, args) {
+    if (exe === 'git' && args[2] === 'branch' && args[3] === '-D') throw Error('injected branch deletion refusal');
+  } });
+  assert.match(result.results[0].why, /branch deletion refusal/); assert.equal(fs.existsSync(f.lane), false);
+  const proof = result.logs.find(row => row.action === 'lane-preflight').evidence;
+  assert.equal(fs.readFileSync(path.join(proof.directory, 'files/.lane/report.md'), 'utf8'), 'unique evidence');
+  assert.equal(result.logs.some(row => row.action === 'lane-evidence-discarded'), false);
+  assert.deepEqual(sweep(f).results, [], 'absent worktrees are never recopied or retried by the sweep');
+});
+
+test('failed removal retains the preserved snapshot when its source evidence changes', t => {
+  const f = fixture(t, { occupied: false });
+  fs.writeFileSync(path.join(f.common, 'info/exclude'), '.lane/\n');
+  fs.mkdirSync(path.join(f.lane, '.lane')); const source = path.join(f.lane, '.lane/report.md'); fs.writeFileSync(source, 'original evidence');
+  const result = sweep(f, { log(row) { if (row.action === 'lane-preflight') fs.writeFileSync(source, 'new evidence'); } });
+  kept(f, result, /evidence copy hash or inventory mismatch/);
+  const proof = result.logs.find(row => row.action === 'lane-preflight').evidence;
+  assert.equal(fs.readFileSync(path.join(proof.directory, 'files/.lane/report.md'), 'utf8'), 'original evidence');
+  assert.equal(fs.readFileSync(source, 'utf8'), 'new evidence');
+  assert.equal(result.logs.some(row => row.action === 'lane-evidence-discarded'), false);
 });

@@ -65,7 +65,8 @@ function fixture(t, name = 'project') {
   ] };
   fs.writeFileSync(path.join(project.identity, 'promote/queue.json'), JSON.stringify(queue));
   fs.symlinkSync(path.join(releaseHome, 'releases/green-1'), path.join(releaseHome, 'current'));
-  const env = { ...process.env, ORG_DIR: org, ORG_NOW: NOW, HERDR_MONITOR_HOME: releaseHome, ORG_ACTOR: 'summary-fixture' };
+  const env = { ...process.env, ORG_DIR: org, ORG_NOW: NOW, HERDR_MONITOR_HOME: releaseHome, ORG_ACTOR: 'summary-fixture',
+    HERDR_MONITOR_FLEET: path.join(root, 'fleet'), MONITOR_TEST_SLOT_PATH: path.join(root, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'slot'), XDG_STATE_HOME: path.join(root, 'state') };
   const calls = [];
   const command = (exe, args, options) => {
     calls.push([exe, args]);
@@ -232,6 +233,24 @@ test('published promotion classes match the lanes view for pending jobs and expi
   assert.deepEqual(published.lanes.oldest_unresolved.map(r => [r.items, r.class]), [[['ENG-2'], 'ACTIVE']]);
   assert.equal(published.lanes.counts.UNKNOWN, 0);
   assert.ok(!published.exceptions.some(e => e.name === 'lanes-unknown'));
+});
+
+test('published lane counts match detailed status with clean integrated and dirty lanes and no false unknown exceptions', async t => {
+  const f = fixture(t), clean = path.join(f.root, 'clean'), dirty = path.join(f.root, 'dirty');
+  f.git(['worktree', 'add', '-b', 'lane/clean', clean]);
+  f.git(['worktree', 'add', '-b', 'lane/dirty', dirty]); fs.writeFileSync(path.join(dirty, 'seed'), 'work in progress');
+  const command = (exe, args, options) => exe === '/usr/sbin/lsof' ? { status: 0, stderr: '', stdout: `p${process.pid}\0n${f.repo}\0\n` } : f.command(exe, args, options);
+  const published = f.publish({ command });
+  assert.ok(f.calls.every(([exe, args]) => exe !== 'git' || (!args.includes('ls-files') && !args.includes('--untracked-files=all'))));
+  const lanes = await readRetirementStatus({ cwd: f.repo, org: f.org, herdr: 'fixture-herdr', command, env: f.env });
+  const trees = lanes.rows.filter(row => row.type === 'worktree' && row.branch?.startsWith('lane/'));
+  assert.equal(trees.length, 2); assert.ok(trees.every(row => row.class === null));
+  assert.equal(trees.find(row => row.worktree === clean).clean, true);
+  assert.match(trees.find(row => row.worktree === dirty).nextAction, /lane worktree is not clean/);
+  assert.deepEqual(published.lanes.counts, lanes.counts); assert.equal(published.lanes.counts.UNKNOWN, 0);
+  assert.deepEqual(published.lanes.oldest_unresolved, []);
+  assert.ok(!published.exceptions.some(e => ['lanes-unknown', 'unresolved-owner-unknown', 'unresolved-age-unknown'].includes(e.name)));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.org, 'published/summary.json'))).lanes.counts, lanes.counts);
 });
 
 test('synchronous summary source shares train, attempt and matching gate facts with the cached lanes source', async t => {

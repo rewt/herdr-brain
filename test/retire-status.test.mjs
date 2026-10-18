@@ -143,8 +143,8 @@ const reasonCases = [
   ['open recorded run uses lane', 'ACTIVE'],
   ['occupied lane; retire panes before removing the worktree', 'UNKNOWN'],
   ['unknown or mismatched registered lane identity', 'UNKNOWN'],
-  ['lane worktree is not clean', 'UNKNOWN'],
-  ['lane tip is not integrated in main', 'UNKNOWN'],
+  ['lane worktree is not clean', null],
+  ['lane tip is not integrated in main', null],
   ['promotion queue cleanup pending; retry through queue', 'UNKNOWN'],
 ];
 test('every planner reason expression is enumerated and mapped; source drift fails', () => {
@@ -156,7 +156,7 @@ test('every planner reason expression is enumerated and mapped; source drift fai
   for (const [expression, expected, sample = expression] of reasonCases) {
     const result = classifyRetirement({ decision: 'keep', why: sample }, { snapshot: s, agents: s.agents });
     assert.equal(result.class, expected, expression);
-    if (expected === 'UNKNOWN') assert.equal(result.nextAction, `keep; ${sample}`, expression);
+    if (expected === 'UNKNOWN' || expected === null) assert.equal(result.nextAction, `keep; ${sample}`, expression);
   }
   const releaseReasons = [
     'recorded idle agent and its descendants; exit before closing the shell',
@@ -321,11 +321,61 @@ test('status JSON uses the shared snapshot and inventories every canonical workt
   assert.equal(unoccupied.integrated, true); assert.equal(unoccupied.clean, false);
   assert.equal(unoccupied.archiveTag, 'archive/lane/empty'); assert.equal(unoccupied.archiveMatchesHead, true);
   assert.equal(unoccupied.untracked, 1); assert.equal(unoccupied.ignored, 1);
+  assert.equal(unoccupied.class, null); assert.match(unoccupied.nextAction, /keep; lane worktree is not clean/);
   assert.equal(trees.find(r => r.worktree === f.lane).paneCount, 1);
   fs.writeFileSync(path.join(f.empty, 'seed'), 'new commit'); f.git(['commit', '-am', 'unintegrated'], f.empty);
   const changed = JSON.parse(f.cli(['--json']).stdout).rows.find(r => r.worktree === f.empty);
   assert.equal(changed.integrated, false); assert.equal(changed.archiveMatchesHead, false);
 });
+
+test('ordinary dirty and unintegrated lanes stay unclassified; compact inventories never infer a sweep keep', () => {
+  const snapshot = { common: '/repo/.git', workspaces: [], tabs: [], panes: [], agents: [], references: [], record: fold([]) };
+  const lane = { worktree: '/repo/lane', identity: snapshot.common, linked: true, branch: 'lane/topic', tip: 'a'.repeat(40), head: 'a'.repeat(12), clean: true, integrated: true };
+  for (const [delta, reason] of [[{ clean: false }, 'lane worktree is not clean'], [{ integrated: false }, 'lane tip is not integrated in main']]) {
+    const status = retirementStatus(snapshot, { worktrees: [{ ...lane, ...delta }] }), row = status.rows[0];
+    assert.equal(row.class, null); assert.equal(status.counts.UNKNOWN, 0);
+    assert.ok(row.reason.startsWith(reason)); assert.equal(row.nextAction, `keep; ${reason}`);
+  }
+  const row = retirementStatus(snapshot, { worktrees: [{ ...lane, clean: null }] }).rows[0];
+  assert.equal(row.class, null); assert.doesNotMatch(row.reason, /not clean/); assert.match(row.nextAction, /inventory only/);
+});
+
+for (const problem of ['no discovered record', 'missing record file', 'ambiguous binding', 'wrong record binding', 'fleet discovery error']) {
+  test(`status retains tab and pane inventory with ${problem}`, async t => {
+    const f = runtimeFixture(t);
+    fs.unlinkSync(path.join(f.empty, 'one.untracked'));
+    let org = f.org, reason;
+    if (problem === 'no discovered record') { org = undefined; f.env.ORG_DIR = ''; reason = /retirement record is missing or unreadable; lane kept/; }
+    if (problem === 'missing record file') { fs.unlinkSync(f.eventFile); reason = /retirement record is missing or unreadable; lane kept/; }
+    if (['ambiguous binding', 'wrong record binding'].includes(problem)) {
+      const entry = { identity: f.common, checkout: f.repo, record: f.org, worktrees: f.scratch, layers: [] };
+      fs.mkdirSync(f.env.HERDR_MONITOR_FLEET);
+      fs.writeFileSync(path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'), JSON.stringify({ version: 1, session_limit: 6,
+        projects: { project: entry, ...(problem === 'ambiguous binding' ? { duplicate: entry } : {}) } }));
+      if (problem === 'wrong record binding') {
+        org = path.join(f.scratch, 'other-record'); fs.mkdirSync(org); fs.writeFileSync(path.join(org, 'events.jsonl'), f.eventBytes);
+      }
+      reason = /ambiguous projects|differs from canonical project record/;
+    }
+    if (problem === 'fleet discovery error') {
+      org = undefined; f.env.ORG_DIR = '';
+      fs.mkdirSync(f.env.HERDR_MONITOR_FLEET); fs.writeFileSync(path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'), '{}');
+      reason = /invalid fleet/;
+    }
+    const status = await readRetirementStatus({ cwd: f.repo, org, herdr: f.herdr, env: f.env });
+    assert.equal(status.rows.filter(row => row.type === 'tab').length, 1);
+    assert.equal(status.rows.filter(row => row.type === 'pane').length, 1);
+    const tree = status.rows.find(row => row.type === 'worktree' && row.worktree === f.empty);
+    assert.equal(tree.class, 'UNKNOWN'); assert.match(tree.reason, reason); assert.match(tree.nextAction, reason);
+    if (problem.includes('binding')) {
+      assert.equal(status.rows.find(row => row.type === 'tab').class, 'TERMINAL', 'strict sweep binding does not replace ordinary pane classification');
+      assert.equal(status.rows.some(row => row.type === 'diagnostic' && reason.test(row.reason)), false);
+    }
+    if (problem.includes('record')) assert.doesNotMatch(JSON.stringify(status), /ENOENT|stat '/);
+    const calls = fs.readFileSync(f.log, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.ok(calls.every(args => ['list', 'process-info'].includes(args[1])), 'status remains read only');
+  });
+}
 
 test('worktree integration follows the resolved trunk branch, including beside a stale main', async t => {
   const f = runtimeFixture(t, 'trunk'), base = f.git(['rev-parse', 'HEAD']);

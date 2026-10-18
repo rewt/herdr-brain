@@ -283,6 +283,22 @@ If the Herdr executable is
 absent, its inventory is empty and Git-only removal can proceed with the record
 and job guards. An installed CLI whose server cannot be read refuses closure.
 
+Lane creation records the initial shell's canonical worktree, workspace, tab,
+pane, terminal and process birth in the Git common directory's
+`retirement/initial-shells/`. This receipt supplies identity only. Dispatch marks
+it claimed before reusing that pane; it never backfills receipts for existing
+or concurrently opened workspaces. An unchanged, unclaimed initial shell may
+retire only as its tab's sole pane, in a clean integrated lane, with complete
+process inventory, no jobs, a terminal recorded chain (or a successful record
+read establishing no chain), and no references, focus or HOLD.
+
+Receipt-less shells use the same guards under Astra's 2026-10-18 legacy inert
+shell rule. The executor requires stable observations at planning and the close
+edge, and records `legacy inert-shell retirement` with both observed identities.
+A changed identity, agent claim or incomplete observation keeps the tab. Closing
+the last inert pane is allowed; empty-workspace removal remains a separate guard
+that cannot close a surviving pane. These paths never force-kill a process.
+
 ## Commands
 
 | Command | Purpose |

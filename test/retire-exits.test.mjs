@@ -53,7 +53,7 @@ test('an exit receipt rechecks every ordinary guard and cannot close with a stal
     ['unmerged Git', s => { s.git[0].integrated = false; }, /not clean and integrated/],
     ['focus', s => { s.tabs[0].focused = true; }, /focus/],
     ['hold', s => { s.retirementHold = 'operator hold'; }, /operator hold/],
-    ['no receipt', s => { s.exits = []; }, /unrecorded shell/],
+    ['no receipt', s => { s.exits = []; }, /inert shell/],
     ['duplicate receipts', s => { s.exits.push(structuredClone(s.exits[0])); }, /ambiguous/],
   ];
   for (const [name, change, expected] of cases) {
@@ -101,7 +101,7 @@ test('the bounded queue retry closes an exited worker and removes its integrated
 test('an unregistered shell without an observed terminal never receives exit authority', t => {
   const f = exitFixture(t); delete f.state.panes[0].terminal_id; f.save();
   const retirement = f.retirement(), result = retirement.apply(retirement.plan());
-  assert.equal(result[0].action, 'skip-close'); assert.match(result[0].why, /unrecorded shell/);
+  assert.equal(result[0].action, 'skip-close'); assert.match(result[0].why, /inert shell/);
   assert.equal(fs.existsSync(path.join(f.org, 'retirement/exits')), false);
   assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
 });

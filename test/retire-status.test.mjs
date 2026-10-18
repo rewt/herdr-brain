@@ -127,6 +127,16 @@ const reasonCases = [
   ['agent exit recorded launch identity changed', 'UNKNOWN'],
   ['agent exit checkout is not clean and integrated', 'UNKNOWN'],
   ['ambiguous agent exit receipts', 'UNKNOWN'],
+  ['inert shell is not the sole pane of its tab', 'UNKNOWN'],
+  ['inert shell process or terminal observation is incomplete', 'UNKNOWN'],
+  ['inert shell terminal identity is unknown', 'UNKNOWN'],
+  ['inert shell foreground is not the login shell or another process remains', 'UNKNOWN'],
+  ['inert shell cwd differs from lane', 'UNKNOWN'],
+  ['initial shell launch identity changed', 'UNKNOWN'],
+  ['inert shell has a later occupant claim', 'UNKNOWN'],
+  ['inert shell record or references were not read', 'UNKNOWN'],
+  ['inert shell checkout is not clean and integrated', 'UNKNOWN'],
+  ['ambiguous initial shell receipts', 'UNKNOWN'],
   ['operator focus or this tab', 'PROTECTED'],
   ['persistent, operator or lab workspace', 'PROTECTED'],
   ['persistent or detached desk workspace', 'PROTECTED'],
@@ -161,6 +171,8 @@ test('every planner reason expression is enumerated and mapped; source drift fai
     if (expected === 'UNKNOWN' || expected === null) assert.equal(result.nextAction, `keep; ${sample}`, expression);
   }
   const releaseReasons = [
+    'recorded initial shell; unchanged terminal and shell identity',
+    'legacy inert-shell retirement',
     'recorded idle agent and its descendants; exit before closing the shell',
     '${exited.run}: recorded agent exit; unchanged terminal and shell identity',
     'recorded ${callback.kind} callback complete; unchanged process and shell identity',
@@ -169,7 +181,7 @@ test('every planner reason expression is enumerated and mapped; source drift fai
     'lane removal preconditions verified',
     'integrated lane eligible; preservation verified on apply',
   ];
-  const releases = [...policy.matchAll(/why: reason \?\? (?:\(needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
+  const releases = [...policy.matchAll(/why: reason \?\? (?:\(inert \? initial \? ('[^']*') : ('[^']*') : needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());
   for (const why of releases) assert.equal(classifyRetirement({ decision: 'release', why }).class, 'TERMINAL');
 });

@@ -15,6 +15,7 @@ import { cliHelp } from '../lib/cli-help.mjs';
 import { forwardRelease } from '../lib/releases.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { retirementHold } from '../lib/retire-hold.mjs';
+import { recordInitialShell, claimInitialShell } from '../lib/initial-shell.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
@@ -801,12 +802,23 @@ function openWorkspaceIdFor(path, { refuseStale = true, onMismatch, workspaces, 
 // workspace"), so a lane opened from another lane gets a git worktree and no
 // herdr workspace. Open from the canonical parent explicitly, using its path
 // when it has no workspace yet. Retain opaque IDs and verify repository identity.
-function ensureHerdrWorkspace(path, label, workspaces, deadline) {
+function ensureHerdrWorkspace(path, label, workspaces, deadline, created) {
   // Worktree creation/opening and workspace discovery are separate Herdr
   // snapshots. Refetch here so newly visible metadata is never judged against
   // the caller's pre-creation listing.
   let id = openWorkspaceIdFor(path, { deadline });
-  if (id !== undefined) return { workspaceId: id };
+  const recordInitial = opened => {
+    if (opened?.workspace?.workspace_id !== id) return;
+    try {
+      const receipt = recordInitialShell({ common: REPO_IDENTITY, cwd: path, created: opened,
+        h: args => herdrJson(args, { deadline }) });
+      if (!receipt) process.stderr.write('initial shell receipt unavailable; retirement requires the guarded legacy rule\n');
+    } catch (error) { process.stderr.write(`initial shell receipt unavailable: ${error.message}\n`); }
+  };
+  if (id !== undefined) {
+    if (created) recordInitial(created);
+    return { workspaceId: id };
+  }
   const parent = parentWorkspaceId(workspaces);
   const opened = herdrJson([
     "worktree", "open",
@@ -816,6 +828,7 @@ function ensureHerdrWorkspace(path, label, workspaces, deadline) {
   const refreshed = herdrJson(["workspace", "list"], { deadline })?.workspaces;
   id = openWorkspaceIdFor(path, { workspaces: refreshed, deadline });
   if (id === undefined) return undefined;
+  if (opened?.already_open === false) recordInitial(opened);
   // Only the native creation receipt authorizes initial-pane reuse. In
   // particular, a concurrent opener's already_open receipt is not ours.
   const initial = opened?.already_open === false && opened.workspace?.workspace_id === id &&
@@ -979,7 +992,9 @@ function open(topic, base = MAIN, { gitOnly = false } = {}) {
     workspaces = herdrJson(["workspace", "list"])?.workspaces ?? [];
   }
   assertCreatedWorktree(path, branch);
-  const workspaceId = gitOnly ? undefined : ensureHerdrWorkspace(path, label, workspaces)?.workspaceId;
+  let created;
+  if (herdr?.status === 0) try { const parsed = JSON.parse(herdr.stdout); if (!parsed.error) created = parsed.result; } catch {}
+  const workspaceId = gitOnly ? undefined : ensureHerdrWorkspace(path, label, workspaces, undefined, created)?.workspaceId;
   process.stdout.write(
     `lane open: ${branch}\n` +
     `  worktree: ${path}\n` +
@@ -1184,6 +1199,7 @@ function dispatch(topic, promptText, options = {}) {
   const initial = workspace.initial && supportsInitialEnvironment(workspace.initial.pane, options.deadline)
     ? workspace.initial : undefined;
   let pane = initial?.pane, tabId = initial?.tabId;
+  if (initial) claimInitialShell(REPO_IDENTITY, tabId);
   if (initial === undefined) {
     const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
     for (const pair of resolved.env) tabArgs.push("--env", pair);

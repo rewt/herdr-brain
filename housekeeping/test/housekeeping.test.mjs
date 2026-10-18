@@ -18,6 +18,7 @@ import { isolatedEnv, hold } from '../../test/helpers/retire-fixture.mjs';
 import { fixture as retirementFixture } from '../../test/helpers/retire-fixture.mjs';
 import { sweepCommands } from '../../test/helpers/retire-sweep-fixture.mjs';
 import { finishCleanup } from '../../promote/promote.mjs';
+import { recordInitialShell } from '../../lib/initial-shell.mjs';
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
@@ -56,6 +57,7 @@ function fixture(t, { promoted = true, reported = true } = {}) {
     if (args[0] === 'workspace') return result({ workspaces: f.ws });
     if (args[0] === 'tab' && args[1] === 'list') return result({ tabs: f.tabs });
     if (args[0] === 'pane' && args[1] === 'list') return result({ panes: f.panes });
+    if (args[0] === 'pane' && args[1] === 'get') return result({ pane: f.panes.find(p => p.pane_id === args[2]) });
     if (args[0] === 'pane' && args[1] === 'process-info') return result({ process_info: { shell_pid: 1,
       foreground_processes: [{ pid: f.shell ? 1 : 2, name: f.shell ? 'zsh' : 'node' }], process_tree_complete: true, process_tree: [{pid:1,identity:'shell',state:'S',command:'[zsh]'}, ...(f.shell ? [] : [{pid:2,identity:'extra',state:'S',command:'[node]'}])] } });
     if (args[0] === 'agent' && args[1] === 'list') return result({ agents: f.agents });
@@ -83,6 +85,26 @@ test('recorded promoted workers close through the shared tidy planner', (t) => {
   const f = fixture(t); const plan = f.runner().tick();
   assert.equal(plan.close.length, 1); assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
   assert.match(f.logs.find((x) => x.action === 'closed').why, /R-1/);
+});
+
+for (const receipted of [true, false]) test(`settled housekeeping retires a ${receipted ? 'receipted initial' : 'legacy inert'} shell through the shared executor`, t => {
+  const f = fixture(t), bytes = fs.readFileSync(path.join(f.root, 'events.jsonl'));
+  f.agents = []; f.panes[0] = { pane_id: 'w:initial', tab_id: 'w:t', workspace_id: 'w',
+    terminal_id: 'initial-terminal', foreground_cwd: f.lane };
+  if (receipted) recordInitialShell({ common: f.common, cwd: f.lane,
+    created: { already_open: false, workspace: { workspace_id: 'w' }, tab: { ...f.tabs[0], workspace_id: 'w' }, root_pane: f.panes[0] },
+    h: args => args[1] === 'get' ? { pane: f.panes[0] } : { process_info: { shell_pid: 1,
+      foreground_processes: [{ pid: 1, name: 'zsh' }], process_tree_complete: true,
+      process_tree: [{ pid: 1, identity: 'shell', state: 'S', command: '[zsh]' }] } } });
+  const runner = f.runner();
+  const preview = runner.tick({ resume: false, dryRun: true });
+  assert.equal(preview.close.length, 1); assert.deepEqual(f.actions, []);
+  const plan = runner.tick({ resume: false });
+  assert.equal(plan.close.length, 1); assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
+  const closed = f.logs.find(row => row.action === 'closed');
+  assert.equal(closed.rule, receipted ? 'initial-shell/v1' : 'legacy inert-shell retirement');
+  assert.equal(closed.observations.length, 2); assert.equal(closed.observed.cwd, fs.realpathSync(f.lane));
+  assert.deepEqual(fs.readFileSync(path.join(f.root, 'events.jsonl')), bytes);
 });
 
 for (const guard of ['unchanged', 'changed shell birth', 'second pane', 'child process', 'hold']) {

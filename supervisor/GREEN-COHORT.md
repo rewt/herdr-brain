@@ -49,6 +49,13 @@ approve their own edits (`GREEN_SELF_AUTHORITY`). Candidate declarations are nev
 loaded as policy; the Brain base and candidate declaration bytes must match the
 running checker.
 
+Self-authority also includes the complete static import closure of the running
+autopilot and green checker, derived from trusted source on each admission. This
+covers the paused-housekeeping gate and transitive helpers such as dispatch
+metrics without maintaining a duplicate file list. An incomplete authority
+inventory refuses admission. Self-authority takes precedence when a module also
+serves another declared contract.
+
 The checker inventories both committed trees and the complete diff, with renames
 represented by deletion plus addition. It computes execution closures from Git
 objects. Relative static imports/re-exports, literal dynamic imports, literal
@@ -57,6 +64,15 @@ dispatch tables contribute edges transitively. All targets of a dispatch table a
 included, including every lazy command in `bin/org.mjs`. Shared dependencies are
 ordinary scope even if only the base tree reaches them. Touching the union is
 `GREEN_BCH_CONSUMED`.
+
+`fork` uses the same repository script resolution as Node spawns; unresolved
+argument/options overloads and executable overrides remain unknown. Child-process
+re-exports and exported imported-launcher bindings retain an unknown edge;
+consumers cannot hide a launcher behind a relative helper. Native addon loads
+through `process.dlopen` are unsupported. After an ambiguous closing parenthesis
+or brace, the lexer compares regex and division readings and refuses differing
+strings or identifiers, including renamed loader bindings. Bounded analysis also
+refuses if it cannot establish equivalent reach tokens.
 
 This is deliberately a limited source scanner, not a complete JavaScript
 interpreter. Escaping launchers, computed imports/calls, reflection, shell commands,

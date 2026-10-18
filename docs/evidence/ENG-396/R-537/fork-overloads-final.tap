@@ -1,0 +1,642 @@
+TAP version 13
+# Subtest: a real lifecycle module outside the cross-project closure is eligible with bound control evidence
+ok 1 - a real lifecycle module outside the cross-project closure is eligible with bound control evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 1.177459
+  ...
+# Subtest: the base/candidate union refuses a consumed module modify
+ok 2 - the base/candidate union refuses a consumed module modify # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058333
+  ...
+# Subtest: the base/candidate union refuses a consumed module delete
+ok 3 - the base/candidate union refuses a consumed module delete # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036917
+  ...
+# Subtest: the base/candidate union refuses a consumed module rename
+ok 4 - the base/candidate union refuses a consumed module rename # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.098708
+  ...
+# Subtest: a module reached only by a spawned entry is refused transitively
+ok 5 - a module reached only by a spawned entry is refused transitively # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038
+  ...
+# Subtest: a literal fork target contributes its complete execution closure
+ok 6 - a literal fork target contributes its complete execution closure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027958
+  ...
+# Subtest: a computed fork target refuses an unrelated candidate
+ok 7 - a computed fork target refuses an unrelated candidate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027084
+  ...
+# Subtest: a computed fork as launch target refuses an unrelated candidate
+ok 8 - a computed fork as launch target refuses an unrelated candidate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036042
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export { spawnSync as run } from 'node:child_process';
+ok 9 - launcher re-exports refuse computed calls through a relative helper: export { spawnSync as run } from 'node:child_process'; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.123084
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export { spawnSync } from 'node:child_process';
+ok 10 - launcher re-exports refuse computed calls through a relative helper: export { spawnSync } from 'node:child_process'; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.095292
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export * from 'node:child_process';
+ok 11 - launcher re-exports refuse computed calls through a relative helper: export * from 'node:child_process'; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.079875
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export { ChildProcess as run } from 'node:child_process';
+ok 12 - launcher re-exports refuse computed calls through a relative helper: export { ChildProcess as run } from 'node:child_process'; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030625
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: import { spawnSync as launch } from 'node:child_process'; export { launch as run };
+ok 13 - launcher re-exports refuse computed calls through a relative helper: import { spawnSync as launch } from 'node:child_process'; export { launch as run }; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028875
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export { launch as run }; import { spawnSync as launch } from 'node:child_process';
+ok 14 - launcher re-exports refuse computed calls through a relative helper: export { launch as run }; import { spawnSync as launch } from 'node:child_process'; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.059875
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: import { spawnSync as launch } from 'node:child_process'; export default launch;
+ok 15 - launcher re-exports refuse computed calls through a relative helper: import { spawnSync as launch } from 'node:child_process'; export default launch; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0335
+  ...
+# Subtest: a regex after a closing brace cannot hide a dynamic import from admission
+ok 16 - a regex after a closing brace cannot hide a dynamic import from admission # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067666
+  ...
+# Subtest: a computed native-addon load refuses an unrelated candidate
+ok 17 - a computed native-addon load refuses an unrelated candidate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031
+  ...
+# Subtest: a closed dispatch table includes every lazy command, not only the invoked command
+ok 18 - a closed dispatch table includes every lazy command, not only the invoked command # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.121625
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: export const load = name => import(name);
+ok 19 - unknown execution reach refuses an unrelated candidate: export const load = name => import(name); # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.076584
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: import { spawnSync } from 'node:child_process';
+ok 20 - unknown execution reach refuses an unrelated candidate: import { spawnSync } from 'node:child_process'; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029875
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: import { execSync } from 'node:child_process';
+ok 21 - unknown execution reach refuses an unrelated candidate: import { execSync } from 'node:child_process'; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.052833
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: import { spawnSync } from 'node:child_process';
+ok 22 - unknown execution reach refuses an unrelated candidate: import { spawnSync } from 'node:child_process'; # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025833
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: const lazy = file => import(file);
+ok 23 - unknown execution reach refuses an unrelated candidate: const lazy = file => import(file); # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023417
+  ...
+# Subtest: a new unknown load in the affected green path also uses the ordinary route
+ok 24 - a new unknown load in the affected green path also uses the ordinary route # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026
+  ...
+# Subtest: removing an unknown load cannot erase the base tree execution uncertainty
+ok 25 - removing an unknown load cannot erase the base tree execution uncertainty # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0655
+  ...
+# Subtest: declared contract supervisor/green-contracts.json refuses with GREEN_SELF_AUTHORITY
+ok 26 - declared contract supervisor/green-contracts.json refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021166
+  ...
+# Subtest: declared contract supervisor/green-pass.mjs refuses with GREEN_SELF_AUTHORITY
+ok 27 - declared contract supervisor/green-pass.mjs refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019167
+  ...
+# Subtest: declared contract supervisor/green-reach.mjs refuses with GREEN_SELF_AUTHORITY
+ok 28 - declared contract supervisor/green-reach.mjs refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019209
+  ...
+# Subtest: declared contract supervisor/autopilot.mjs refuses with GREEN_SELF_AUTHORITY
+ok 29 - declared contract supervisor/autopilot.mjs refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018708
+  ...
+# Subtest: declared contract housekeeping/config.mjs refuses with GREEN_SELF_AUTHORITY
+ok 30 - declared contract housekeeping/config.mjs refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019541
+  ...
+# Subtest: declared contract dispatch/metrics.mjs refuses with GREEN_SELF_AUTHORITY
+ok 31 - declared contract dispatch/metrics.mjs refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028917
+  ...
+# Subtest: declared contract test-slot/ticket-queue.mjs refuses with GREEN_SELF_AUTHORITY
+ok 32 - declared contract test-slot/ticket-queue.mjs refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060042
+  ...
+# Subtest: declared contract messages/receiver.mjs refuses with GREEN_SELF_AUTHORITY
+ok 33 - declared contract messages/receiver.mjs refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.074334
+  ...
+# Subtest: declared contract .housekeeping.json refuses with GREEN_SELF_AUTHORITY
+ok 34 - declared contract .housekeeping.json refuses with GREEN_SELF_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021042
+  ...
+# Subtest: declared contract blue/hotfix.mjs refuses with GREEN_BLUE_HOTFIX
+ok 35 - declared contract blue/hotfix.mjs refuses with GREEN_BLUE_HOTFIX # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020417
+  ...
+# Subtest: declared contract discovery/native-sandbox.mjs refuses with GREEN_NATIVE_ISOLATION
+ok 36 - declared contract discovery/native-sandbox.mjs refuses with GREEN_NATIVE_ISOLATION # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022458
+  ...
+# Subtest: declared contract test-slot/shared-admission.mjs refuses with GREEN_HOST_RESOURCE
+ok 37 - declared contract test-slot/shared-admission.mjs refuses with GREEN_HOST_RESOURCE # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021
+  ...
+# Subtest: declared contract sessions/authorization.mjs refuses with GREEN_CROSS_PROJECT_AUTHORITY
+ok 38 - declared contract sessions/authorization.mjs refuses with GREEN_CROSS_PROJECT_AUTHORITY # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027709
+  ...
+# Subtest: declared contract herdr/release.sh refuses with GREEN_GLOBAL_RELEASE
+ok 39 - declared contract herdr/release.sh refuses with GREEN_GLOBAL_RELEASE # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021291
+  ...
+# Subtest: declared contract watch/notice.mjs refuses with GREEN_SHARED_RUNTIME
+ok 40 - declared contract watch/notice.mjs refuses with GREEN_SHARED_RUNTIME # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020375
+  ...
+# Subtest: blue operation metadata refuses a change outside a blue-named path
+ok 41 - blue operation metadata refuses a change outside a blue-named path # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022542
+  ...
+# Subtest: text evidence is eligible without lifecycle checks or tests: docs/evidence/new.txt
+ok 42 - text evidence is eligible without lifecycle checks or tests: docs/evidence/new.txt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01825
+  ...
+# Subtest: text evidence is eligible without lifecycle checks or tests: docs/evidence/results.tap
+ok 43 - text evidence is eligible without lifecycle checks or tests: docs/evidence/results.tap # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02
+  ...
+# Subtest: text evidence is eligible without lifecycle checks or tests: docs/evidence/run.json
+ok 44 - text evidence is eligible without lifecycle checks or tests: docs/evidence/run.json # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02175
+  ...
+# Subtest: binary or executable evidence stays ordinary: docs/evidence/binary.txt
+ok 45 - binary or executable evidence stays ordinary: docs/evidence/binary.txt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019
+  ...
+# Subtest: binary or executable evidence stays ordinary: docs/evidence/image.png
+ok 46 - binary or executable evidence stays ordinary: docs/evidence/image.png # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021542
+  ...
+# Subtest: binary or executable evidence stays ordinary: docs/evidence/program.mjs
+ok 47 - binary or executable evidence stays ordinary: docs/evidence/program.mjs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019625
+  ...
+# Subtest: an executable-mode evidence change is refused before treating it as text
+ok 48 - an executable-mode evidence change is refused before treating it as text # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019584
+  ...
+# Subtest: canonical admission refuses record mismatch
+ok 49 - canonical admission refuses record mismatch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029125
+  ...
+# Subtest: canonical admission refuses identity mismatch
+ok 50 - canonical admission refuses identity mismatch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021
+  ...
+# Subtest: canonical admission refuses foreign mismatch
+ok 51 - canonical admission refuses foreign mismatch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036167
+  ...
+# Subtest: canonical admission refuses source mismatch
+ok 52 - canonical admission refuses source mismatch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02125
+  ...
+# Subtest: canonical admission refuses workspace mismatch
+ok 53 - canonical admission refuses workspace mismatch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019375
+  ...
+# Subtest: lab admission uses its own canonical identity and discovered record
+ok 54 - lab admission uses its own canonical identity and discovered record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022042
+  ...
+# Subtest: a lane-local record mismatch is kept even when its Git identity is correct
+ok 55 - a lane-local record mismatch is kept even when its Git identity is correct # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028417
+  ...
+# Subtest: lifecycle evidence refuses missing
+ok 56 - lifecycle evidence refuses missing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02775
+  ...
+# Subtest: lifecycle evidence refuses stale-head
+ok 57 - lifecycle evidence refuses stale-head # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017917
+  ...
+# Subtest: lifecycle evidence refuses stale-base
+ok 58 - lifecycle evidence refuses stale-base # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018875
+  ...
+# Subtest: lifecycle evidence refuses stale-run
+ok 59 - lifecycle evidence refuses stale-run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018
+  ...
+# Subtest: lifecycle evidence refuses digest
+ok 60 - lifecycle evidence refuses digest # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028333
+  ...
+# Subtest: lifecycle evidence refuses failed
+ok 61 - lifecycle evidence refuses failed # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01925
+  ...
+# Subtest: lifecycle evidence refuses missing-control
+ok 62 - lifecycle evidence refuses missing-control # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01675
+  ...
+# Subtest: lifecycle evidence refuses symlink
+ok 63 - lifecycle evidence refuses symlink # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016625
+  ...
+# Subtest: settle may append exactly its hashed review after lifecycle evidence capture
+ok 64 - settle may append exactly its hashed review after lifecycle evidence capture # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015625
+  ...
+# Subtest: dirty candidates and untracked reach inputs are refused
+ok 65 - dirty candidates and untracked reach inputs are refused # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0155
+  ...
+# Subtest: the live autopilot accepts declared lab evidence and retains clean PASS promotion checks
+ok 66 - the live autopilot accepts declared lab evidence and retains clean PASS promotion checks # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017833
+  ...
+# Subtest: source scanning never executes a candidate and handles comments, regexes and template loads
+ok 67 - source scanning never executes a candidate and handles comments, regexes and template loads # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014375
+  ...
+# Subtest: constant shadowing cannot resolve an unknown dynamic import to the outer constant
+ok 68 - constant shadowing cannot resolve an unknown dynamic import to the outer constant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01725
+  ...
+# Subtest: a referenced non-JavaScript launcher is retained as unknown rather than dropped
+ok 69 - a referenced non-JavaScript launcher is retained as unknown rather than dropped # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016209
+  ...
+# Subtest: escaped imports and literal URL spawns resolve without executing either target
+ok 70 - escaped imports and literal URL spawns resolve without executing either target # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016333
+  ...
+# Subtest: regex prefix { keeps a following loader visible or unknown
+ok 71 - regex prefix { keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018833
+  ...
+# Subtest: regex prefix typeof keeps a following loader visible or unknown
+ok 72 - regex prefix typeof keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018042
+  ...
+# Subtest: regex prefix else keeps a following loader visible or unknown
+ok 73 - regex prefix else keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0545
+  ...
+# Subtest: regex prefix do keeps a following loader visible or unknown
+ok 74 - regex prefix do keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014625
+  ...
+# Subtest: regex prefix in keeps a following loader visible or unknown
+ok 75 - regex prefix in keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017709
+  ...
+# Subtest: regex prefix of keeps a following loader visible or unknown
+ok 76 - regex prefix of keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01675
+  ...
+# Subtest: regex prefix await keeps a following loader visible or unknown
+ok 77 - regex prefix await keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016459
+  ...
+# Subtest: regex prefix yield keeps a following loader visible or unknown
+ok 78 - regex prefix yield keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016542
+  ...
+# Subtest: regex prefix void keeps a following loader visible or unknown
+ok 79 - regex prefix void keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014916
+  ...
+# Subtest: regex prefix delete keeps a following loader visible or unknown
+ok 80 - regex prefix delete keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015041
+  ...
+# Subtest: regex prefix new keeps a following loader visible or unknown
+ok 81 - regex prefix new keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015542
+  ...
+# Subtest: regex prefix return keeps a following loader visible or unknown
+ok 82 - regex prefix return keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015167
+  ...
+# Subtest: regex prefix case keeps a following loader visible or unknown
+ok 83 - regex prefix case keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015125
+  ...
+# Subtest: regex prefix throw keeps a following loader visible or unknown
+ok 84 - regex prefix throw keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014
+  ...
+# Subtest: regex prefix = keeps a following loader visible or unknown
+ok 85 - regex prefix = keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016042
+  ...
+# Subtest: regex prefix === keeps a following loader visible or unknown
+ok 86 - regex prefix === keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020084
+  ...
+# Subtest: regex prefix !== keeps a following loader visible or unknown
+ok 87 - regex prefix !== keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015125
+  ...
+# Subtest: regex prefix == keeps a following loader visible or unknown
+ok 88 - regex prefix == keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015625
+  ...
+# Subtest: regex prefix != keeps a following loader visible or unknown
+ok 89 - regex prefix != keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022958
+  ...
+# Subtest: regex prefix + keeps a following loader visible or unknown
+ok 90 - regex prefix + keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016666
+  ...
+# Subtest: regex prefix - keeps a following loader visible or unknown
+ok 91 - regex prefix - keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015667
+  ...
+# Subtest: regex prefix * keeps a following loader visible or unknown
+ok 92 - regex prefix * keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016542
+  ...
+# Subtest: regex prefix ** keeps a following loader visible or unknown
+ok 93 - regex prefix ** keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014958
+  ...
+# Subtest: regex prefix / keeps a following loader visible or unknown
+ok 94 - regex prefix / keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014958
+  ...
+# Subtest: regex prefix % keeps a following loader visible or unknown
+ok 95 - regex prefix % keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013458
+  ...
+# Subtest: regex prefix & keeps a following loader visible or unknown
+ok 96 - regex prefix & keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022083
+  ...
+# Subtest: regex prefix | keeps a following loader visible or unknown
+ok 97 - regex prefix | keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018125
+  ...
+# Subtest: regex prefix ^ keeps a following loader visible or unknown
+ok 98 - regex prefix ^ keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015583
+  ...
+# Subtest: regex prefix && keeps a following loader visible or unknown
+ok 99 - regex prefix && keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025
+  ...
+# Subtest: regex prefix || keeps a following loader visible or unknown
+ok 100 - regex prefix || keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016875
+  ...
+# Subtest: regex prefix ?? keeps a following loader visible or unknown
+ok 101 - regex prefix ?? keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016125
+  ...
+# Subtest: regex prefix < keeps a following loader visible or unknown
+ok 102 - regex prefix < keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017208
+  ...
+# Subtest: regex prefix > keeps a following loader visible or unknown
+ok 103 - regex prefix > keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014666
+  ...
+# Subtest: regex prefix <= keeps a following loader visible or unknown
+ok 104 - regex prefix <= keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016625
+  ...
+# Subtest: regex prefix >= keeps a following loader visible or unknown
+ok 105 - regex prefix >= keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013583
+  ...
+# Subtest: regex prefix << keeps a following loader visible or unknown
+ok 106 - regex prefix << keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01475
+  ...
+# Subtest: regex prefix >> keeps a following loader visible or unknown
+ok 107 - regex prefix >> keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014958
+  ...
+# Subtest: regex prefix >>> keeps a following loader visible or unknown
+ok 108 - regex prefix >>> keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015041
+  ...
+# Subtest: regex prefix instanceof keeps a following loader visible or unknown
+ok 109 - regex prefix instanceof keeps a following loader visible or unknown # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016209
+  ...
+# Subtest: a regex after a closing parenthesis cannot hide a loader in a fake string
+ok 110 - a regex after a closing parenthesis cannot hide a loader in a fake string # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0155
+  ...
+# Subtest: unambiguous division and equivalent numeric slash readings retain static imports
+ok 111 - unambiguous division and equivalent numeric slash readings retain static imports # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015292
+  ...
+# Subtest: fork overloads resolve literal argv/options and refuse unresolved executable options
+ok 112 - fork overloads resolve literal argv/options and refuse unresolved executable options
+  ---
+  duration_ms: 2.181584
+  ...
+# Subtest: static authority imports derive transitive helpers again after the source graph changes
+ok 113 - static authority imports derive transitive helpers again after the source graph changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.041916
+  ...
+# Subtest: unsupported indirect execution fails closed: import('node:child_process').then(cp => cp.spawnSy
+ok 114 - unsupported indirect execution fails closed: import('node:child_process').then(cp => cp.spawnSy # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026417
+  ...
+# Subtest: unsupported indirect execution fails closed: import cp from 'node:child_process'; cp['spawn' +
+ok 115 - unsupported indirect execution fails closed: import cp from 'node:child_process'; cp['spawn' +  # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023583
+  ...
+# Subtest: unsupported indirect execution fails closed: const loader = (() => {})['constructor']; loader(t
+ok 116 - unsupported indirect execution fails closed: const loader = (() => {})['constructor']; loader(t # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022333
+  ...
+# Subtest: unsupported indirect execution fails closed: const operations = [load]; operations[index]();
+ok 117 - unsupported indirect execution fails closed: const operations = [load]; operations[index](); # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028958
+  ...
+# Subtest: unsupported indirect execution fails closed: const target = './lib/a.mjs'; function launch(targ
+ok 118 - unsupported indirect execution fails closed: const target = './lib/a.mjs'; function launch(targ # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026375
+  ...
+# Subtest: unsupported indirect execution fails closed: const COMMANDS = { run: fn }; const alias = COMMAN
+ok 119 - unsupported indirect execution fails closed: const COMMANDS = { run: fn }; const alias = COMMAN # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0225
+  ...
+# Subtest: unsupported indirect execution fails closed: const COMMANDS = { run: fn }; COMMANDS[other] = un
+ok 120 - unsupported indirect execution fails closed: const COMMANDS = { run: fn }; COMMANDS[other] = un # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023291
+  ...
+# Subtest: unsupported indirect execution fails closed: import {spawnSync} from 'node:child_process'; spaw
+ok 121 - unsupported indirect execution fails closed: import {spawnSync} from 'node:child_process'; spaw # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022542
+  ...
+# Subtest: unsupported indirect execution fails closed: import {spawnSync} from 'node:child_process'; spaw
+ok 122 - unsupported indirect execution fails closed: import {spawnSync} from 'node:child_process'; spaw # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020958
+  ...
+# Subtest: unsupported indirect execution fails closed: process.dlopen(module, addonPath);
+ok 123 - unsupported indirect execution fails closed: process.dlopen(module, addonPath); # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022625
+  ...
+# Subtest: unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork(comp
+ok 124 - unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork(comp # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02175
+  ...
+# Subtest: unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork('./w
+ok 125 - unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork('./w # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02775
+  ...
+# Subtest: unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork('git
+ok 126 - unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork('git # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..126
+# tests 126
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 125
+# todo 0
+# duration_ms 144.748125
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

@@ -36,10 +36,15 @@ is `"schema": "occupancy/v1"`. Fields are:
 
 - `class: "shared"`, `pid`, nullable `processStart`, nullable `processBirth`;
 - nullable `pgid`, `groupStart` and `groupBirth` for the command group;
-- `acquiredAt` and `startedAt` (the same ISO time), `project` (project directory
-  label), `label` (job label), `cwd` (the holder's working directory, matching
-  the legacy holder field) and `host`;
+- `acquiredAt` and `startedAt` (the same ISO time), `project` (the real Git common
+  directory, shared by ordinary lanes and promotion scratch worktrees; the cwd
+  basename if Git discovery is unavailable), `label` (job label), `cwd` (the
+  holder's working directory, matching the legacy holder field) and `host`;
 - `reason` (`profiled`, `unprofiled` or a coded profile rejection) and optional `profile_id`.
+
+`project` remains a string in `occupancy/v1`; older records with directory labels
+remain readable. Promotion scratch checkouts under `.git/promote/batches/*/scratch-N`
+resolve through Git to their owning project's common directory.
 
 No command text or token is recorded. Publication writes complete bytes to a
 hidden temporary file in the same directory, then renames it atomically; group

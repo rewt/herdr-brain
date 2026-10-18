@@ -33,9 +33,9 @@ function fixture(t) {
     const done = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal, stdout, stderr })));
     return { child, done };
   };
-  const run = (command, extra = []) => spawnSync(process.execPath, [cli, 'run', 'shared fixture',
+  const run = (command, extra = [], cwd = root) => spawnSync(process.execPath, [cli, 'run', 'shared fixture',
     '--result-path', path.join(root, 'result.json'), ...extra, '--', ...command],
-  { cwd: root, env, encoding: 'utf8', timeout: loadTimeout(15000) });
+  { cwd, env, encoding: 'utf8', timeout: loadTimeout(15000) });
   t.after(async () => {
     for (const row of readTestSlotOccupancy(lock)) if (row.record?.pgid) try { process.kill(-row.record.pgid, 'SIGKILL'); } catch {}
     for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
@@ -65,6 +65,50 @@ test('occupancy publishes complete occupancy/v1 bytes by same-directory rename, 
   assert.equal(published, true); assert.equal(readTestSlotOccupancy(f.lock)[0].state, 'live');
   assert.equal(fs.readdirSync(`${f.lock}.occupancy`).length, 1);
   slot.release(); assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+});
+
+for (const location of ['project', 'subdirectory', 'linked worktree', 'promotion scratch', 'symlink', 'non-Git'])
+  test(`shared occupancy names the canonical project from a ${location} cwd`, t => {
+    const f = fixture(t), repo = path.join(f.root, 'project');
+    const git = args => {
+      const result = spawnSync('git', args, { cwd: f.root, env: f.env, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+    };
+    let cwd = f.root, expected = path.basename(f.root);
+    if (location !== 'non-Git') {
+      git(['init', '-q', '-b', 'main', repo]);
+      expected = fs.realpathSync(path.join(repo, '.git'));
+      cwd = repo;
+      if (location === 'subdirectory') {
+        cwd = path.join(repo, 'nested'); fs.mkdirSync(cwd);
+      } else if (location === 'linked worktree' || location === 'promotion scratch') {
+        git(['-C', repo, '-c', 'user.name=Occupancy fixture', '-c', 'user.email=occupancy@example.invalid',
+          '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-qm', 'fixture']);
+        cwd = location === 'promotion scratch' ? path.join(expected, 'promote/batches/fixture/scratch-0')
+          : path.join(f.root, 'linked');
+        git(['-C', repo, 'worktree', 'add', '--detach', cwd, 'HEAD']);
+      } else if (location === 'symlink') {
+        cwd = path.join(f.root, 'alias'); fs.symlinkSync(repo, cwd, 'dir');
+      }
+    }
+    const result = f.run([process.execPath, '-e',
+      "process.stdout.write(require('fs').readFileSync(process.env.MONITOR_TEST_SLOT_OCCUPANCY_PATH, 'utf8'))"], [], cwd);
+    assert.equal(result.status, 0, result.stderr);
+    const record = JSON.parse(result.stdout);
+    assert.equal(record.schema, 'occupancy/v1'); assert.equal(record.class, 'shared');
+    assert.equal(record.project, expected); assert.equal(record.cwd, fs.realpathSync(cwd));
+    assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+    for (const file of [f.lock, f.compat, `${f.lock}.queue`]) assert.equal(fs.existsSync(file), false);
+  });
+
+test('occupancy readers accept both legacy project labels and canonical project paths', t => {
+  const f = fixture(t), slot = sharedOccupancy(f.lock, 'project gate', { reason: 'unprofiled' });
+  t.after(() => slot.release());
+  const legacy = { ...slot.holder, project: 'scratch-0' };
+  fs.writeFileSync(path.join(`${f.lock}.occupancy`, 'legacy.json'), JSON.stringify(legacy));
+  const rows = readTestSlotOccupancy(f.lock);
+  assert.equal(rows.length, 2); assert.ok(rows.every(row => row.state === 'live'));
+  assert.deepEqual(new Set(rows.map(row => row.record.project)), new Set([slot.holder.project, 'scratch-0']));
 });
 
 test('Brain gate starts with legacy holders and a queue waiting, without any lock or queue writes or polls', async t => {

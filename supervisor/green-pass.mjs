@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir } from '../lib/store.mjs';
-import { executionClosure, staticImportClosure } from './green-reach.mjs';
+import { executionClosure } from './green-reach.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const contractFile = 'supervisor/green-contracts.json';
@@ -34,9 +34,9 @@ const matches = (file, patterns) => patterns.some(p => contractMatch(file, p));
 const refusal = (code, reason, extra = {}) => ({ eligible: false, code, reason, ...extra });
 const identityError = reason => { throw Error(`GREEN_IDENTITY_MISMATCH: ${reason}`); };
 
-function runningAuthority() {
-  const source = fs.realpathSync(root); let bytes = 0;
-  return staticImportClosure({ read(file) {
+function runningAuthority(sourceRoot) {
+  const source = fs.realpathSync(sourceRoot), inventory = readTree(gitAt(source), 'HEAD', source); let bytes = 0;
+  return executionClosure({ files: inventory.files, root: source, read(file) {
     if (!safePath(file)) throw Error('unsafe authority source path');
     const target = path.join(source, file), stat = fs.lstatSync(target);
     if (!stat.isFile() || fs.realpathSync(target) !== target || stat.size > 2 * 1024 * 1024) throw Error('non-regular or oversized authority input');
@@ -53,7 +53,7 @@ function gitAt(workspace) {
     return raw ? r.stdout : utf8(r.stdout);
   };
 }
-function readTree(git, ref) {
+function readTree(git, ref, root) {
   const entries = git(['ls-tree', '-r', '-z', ref]).split('\0');
   if (entries.pop() !== '') throw Error('truncated Git tree');
   const files = new Map(), cache = new Map(); let total = 0;
@@ -63,7 +63,7 @@ function readTree(git, ref) {
     files.set(m[4], { mode: m[1], oid: m[3] });
   }
   if (files.size > 10000) throw Error('Git tree exceeds 10000 files');
-  return { files, read(file) {
+  return { files, root, read(file) {
     if (!cache.has(file)) {
       const entry = files.get(file);
       if (!entry || !['100644', '100755'].includes(entry.mode)) throw Error(`non-regular input: ${file}`);
@@ -84,8 +84,8 @@ function declaredPair(pair) {
   return pair;
 }
 
-// sourceRoot is constructor injection for private fixture repositories. The
-// live autopilot uses the singleton below, never a configurable source root.
+// sourceRoot injects a trusted running checkout for private fixtures, including
+// its authority graph. The live singleton has no configurable source root.
 export function createGreenCohort(sourceRoot = root) {
   function identity({ repo, org, identity: expected, bindings }) {
     try {
@@ -124,28 +124,31 @@ export function createGreenCohort(sourceRoot = root) {
         if (!m || !safePath(file)) throw Error('unknown diff entry');
         changes.push({ file, before: m[1], after: m[2], status: m[3] });
       }
-      // Refuse authority edits before interpreting any candidate declaration.
-      // Derive from trusted running modules on each admission so newly imported
-      // authority helpers cannot escape a hand-maintained path list or cache.
-      const authority = runningAuthority(), authorityPaths = new Set(authority.paths);
+      // Refuse policy edits before interpreting any candidate declaration.
+      // Derive the remaining frozen authority inputs below from execution reach.
       for (const change of changes) {
-        if (authorityPaths.has(change.file) || matches(change.file, GREEN_CONTRACTS.exclusions[0].paths)) return refusal('GREEN_SELF_AUTHORITY', `eligibility/evidence authority: ${change.file}`);
-        if (![change.before, change.after].every(m => ['000000', '100644', '100755'].includes(m)) ||
-            (change.before !== '000000' && change.after !== '000000' && change.before !== change.after) ||
-            (change.after === '100755' && change.before !== '100755')) return refusal('GREEN_NATIVE_ISOLATION', `file type or executable mode: ${change.file}`);
+        if (matches(change.file, GREEN_CONTRACTS.exclusions[0].paths)) return refusal('GREEN_SELF_AUTHORITY', `eligibility/evidence authority: ${change.file}`);
       }
-      if (authority.unknown.length) return refusal('GREEN_SELF_AUTHORITY', 'running authority import closure is incomplete', { authority });
-      const before = readTree(git, base), after = readTree(git, head);
+      const before = readTree(git, base, binding.repo), after = readTree(git, head, binding.repo);
       if (binding.kind === 'brain') for (const tree of [before, after]) {
         if (tree.read(contractFile) !== contractBytes) return refusal('GREEN_SELF_AUTHORITY', 'inventory/contract declaration differs from the running checker');
       }
+      const authority = { running: runningAuthority(sourceRoot), ...(binding.kind === 'brain' ? {
+        base: executionClosure(before, GREEN_CONTRACTS.authorityEntries),
+        candidate: executionClosure(after, GREEN_CONTRACTS.authorityEntries),
+      } : {}) };
+      const authorityPaths = new Set(Object.values(authority).flatMap(reach => reach.paths));
+      for (const { file } of changes) if (authorityPaths.has(file)) return refusal('GREEN_SELF_AUTHORITY', `eligibility/evidence execution input: ${file}`, { authority });
       const entries = GREEN_CONTRACTS.entries.filter(e => e.project === binding.kind).map(e => e.path);
       const oldReach = executionClosure(before, entries), newReach = executionClosure(after, entries);
       const consumed = new Set([...oldReach.paths, ...newReach.paths]);
       const evidence = { base: oldReach, candidate: newReach };
       for (const { file } of changes) if (consumed.has(file)) return refusal('GREEN_BCH_CONSUMED', `cross-project execution input: ${file}`, { reach: evidence });
+      for (const change of changes) if (![change.before, change.after].every(m => ['000000', '100644', '100755'].includes(m)) ||
+          (change.before !== '000000' && change.after !== '000000' && change.before !== change.after) ||
+          (change.after === '100755' && change.before !== '100755')) return refusal('GREEN_NATIVE_ISOLATION', `file type or executable mode: ${change.file}`);
       for (const { file } of changes) for (const rule of GREEN_CONTRACTS.exclusions.slice(1)) if (matches(file, rule.paths)) return refusal(rule.code, `declared contract: ${file}`);
-      if (oldReach.unknown.length || newReach.unknown.length) return refusal('GREEN_REACH_UNKNOWN', 'unresolved cross-project execution edge', { reach: evidence });
+      if (Object.values(authority).some(reach => reach.unknown.length) || oldReach.unknown.length || newReach.unknown.length) return refusal('GREEN_REACH_UNKNOWN', 'unresolved inventory or authority execution edge', { reach: evidence, authority });
       let lifecycle = false, evidenceOnly = true; const paths = [];
       for (const change of changes) {
         const { file } = change; paths.push(file);
@@ -172,7 +175,7 @@ export function createGreenCohort(sourceRoot = root) {
         try { controls = lifecycleEvidence({ report, run, reportRoot, binding, base, head, review, workspace, git, after }); }
         catch (error) { return refusal('GREEN_LIFECYCLE_EVIDENCE', error.message); }
       }
-      return { eligible: true, cohort: 'green-pass', area: evidenceOnly ? 'evidence-only' : lifecycle ? 'green-lifecycle' : 'green', base, head, paths, repo, binding, reach: evidence,
+      return { eligible: true, cohort: 'green-pass', area: evidenceOnly ? 'evidence-only' : lifecycle ? 'green-lifecycle' : 'green', base, head, paths, repo, binding, reach: evidence, authority,
         ...(controls ? { lifecycle: controls } : {}) };
     } catch (error) {
       const named = /^(GREEN_[A-Z_]+):\s*/.exec(error.message);

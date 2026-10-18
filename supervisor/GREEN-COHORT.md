@@ -49,39 +49,62 @@ approve their own edits (`GREEN_SELF_AUTHORITY`). Candidate declarations are nev
 loaded as policy; the Brain base and candidate declaration bytes must match the
 running checker.
 
-Self-authority also includes the complete static import closure of the running
-autopilot and green checker, derived from trusted source on each admission. This
-covers the paused-housekeeping gate and transitive helpers such as dispatch
-metrics without maintaining a duplicate file list. An incomplete authority
-inventory refuses admission. Self-authority takes precedence when a module also
-serves another declared contract.
+The first principle is that closure files are frozen for this cohort. The checker
+inventories both committed trees and the complete diff, with renames represented
+by deletion plus addition. Any edit to the base-or-candidate execution closure of
+a cross-project entry refuses as `GREEN_BCH_CONSUMED`. Any edit to the execution
+closure of an authority entry refuses as `GREEN_SELF_AUTHORITY`. A candidate
+cannot introduce an execution edge into a frozen file through this cohort.
 
-The checker inventories both committed trees and the complete diff, with renames
-represented by deletion plus addition. It computes execution closures from Git
-objects. Relative static imports/re-exports, literal dynamic imports, literal
-repository file references, resolvable Node subprocess entry paths and closed lazy
-dispatch tables contribute edges transitively. All targets of a dispatch table are
-included, including every lazy command in `bin/org.mjs`. Shared dependencies are
-ordinary scope even if only the base tree reaches them. Touching the union is
-`GREEN_BCH_CONSUMED`.
+Authority entries are `supervisor/autopilot.mjs`, `supervisor/green-pass.mjs` and
+`supervisor/supervisor.mjs`, including the spawned handle/evidence relay. Their
+imports, literal repository references and supported subprocess targets are
+followed transitively in the running trusted checkout and both Brain Git trees.
+This includes helpers such as the paused-housekeeping gate, dispatch metrics,
+supervisor entry, status and safe-point modules. Self-authority takes precedence
+when a file also serves another declared contract. Candidate modules are never
+imported or executed to compute either closure.
 
-`fork` uses the same repository script resolution as Node spawns; unresolved
-argument/options overloads and executable overrides remain unknown. Child-process
-re-exports and exported imported-launcher bindings retain an unknown edge;
-consumers cannot hide a launcher behind a relative helper. Native addon loads
-through `process.dlopen` are unsupported. After an ambiguous closing parenthesis
-or brace, the lexer compares regex and division readings and refuses differing
-strings or identifiers, including renamed loader bindings. Bounded analysis also
-refuses if it cannot establish equivalent reach tokens.
+The second principle is recognition by a closed allowlist. Every token of a file
+must belong to the supported grammar; falling outside it records unknown reach.
+This is a small source profile, not a JavaScript parser that assumes unfamiliar
+constructs are harmless. Its supported forms are:
 
-This is deliberately a limited source scanner, not a complete JavaScript
-interpreter. Escaping launchers, computed imports/calls, reflection, shell commands,
-unsupported launchers/configuration, missing paths, unsupported syntax or resource
-limits retain an unknown edge. Changed green modules' affected closures are also
-checked. Any such uncertainty is `GREEN_REACH_UNKNOWN`; it never means absence.
-No candidate code runs during admission. Some current source paths may therefore
-remain ordinary until their reach can be resolved through ordinary reviewed work.
-There is no override or evidence assertion that waives unknown reach.
+- Semicolon-terminated static relative imports/re-exports, closed constant data
+  and constant exports, and standalone literal `import()`/`await import()` loads.
+  Constant data comprises scalars, arrays, explicit object fields and numeric
+  indexing of a known literal array. Imported arbitrary values cannot be called,
+  aliased as loaders or used to infer a script target.
+- Named imports of the seven child-process launchers, and `fileURLToPath` from
+  `node:url`. No other child-process specifier or builtin import form is accepted.
+  Child-process re-exports and exports of launcher bindings remain unknown.
+- Fixed `fork` or Node `spawn`/`spawnSync`/`execFile`/`execFileSync` calls. Script
+  targets must be anchored by `new URL(literal, import.meta.url)` (converted by
+  the imported `fileURLToPath` for argv) or be absolute paths inside the bound
+  source tree. A cwd-relative script string is never credited to the calling
+  module's directory. Fork argv and process options must be inline literals.
+- Closed process options with the explicitly typed keys `silent`, `detached`,
+  `windowsHide`, `encoding`, `stdio`, `timeout` and `maxBuffer`. Every other key
+  refuses, including `env`, `cwd`, `shell`, `execPath` and `execArgv`, even when
+  its value looks literal. Spreads, computed keys, accessors and option bindings
+  are outside the grammar.
+
+There are no speculative lexer branches. Code slashes (regex or division),
+interpolated templates, escaped identifiers, non-ASCII source and any lexical
+error refuse. Functions, general calls, control flow, nonnumeric bracket member
+reads, reflection, native addons, shell commands, `eval`, `Function`, `require`
+and unsupported code-loader modules all fall outside the accepted grammar.
+There is no loader denylist whose omissions imply safety.
+
+Literal repository references are conservative inventory edges even when a file
+is unknown. For example, every literal lazy-command target may be frozen while
+the function/dispatch implementation itself still refuses; the former broad
+lazy-wrapper recognizer no longer makes such a file eligible. The running source
+has unresolved execution edges today. ENG-422 must resolve those through ordinary
+reviewed refactoring before enablement, rather than widening admission around
+them. An unknown inventory or authority edge, missing input or resource limit
+refuses as `GREEN_REACH_UNKNOWN`. Changed green modules' affected closures are
+also checked. No evidence assertion or override waives uncertainty.
 
 The other named refusals are declared over contract paths:
 

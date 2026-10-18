@@ -575,8 +575,8 @@ for (const repeated of [true, false]) test(repeated
   try {
   const herdr = path.join(f.root, 'bin/herdr'), original = `${herdr}-original`, marker = path.join(f.root, 'base-moved');
   fs.renameSync(herdr, original);
-  // Only the offline reviewer transport moves main. All handle, intake, retry,
-  // rebase and promotion responses below come from the actual product CLIs.
+  // The offline reviewer transport injects the first main move; the stage
+  // fixture below can inject a second. All responses use the real product CLIs.
   fs.writeFileSync(herdr, `#!${process.execPath}
 import fs from 'node:fs'; import {spawnSync,execFileSync} from 'node:child_process';
 const args=process.argv.slice(2),r=spawnSync(${JSON.stringify(original)},args,{stdio:'inherit'});

@@ -522,7 +522,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
         catch (error) { policy = { error }; }
       }
       const entry = queue.transaction((data) => {
-        const candidate = data.current ?? (data.interrupted ?? []).find(batch => !attempted.has(batch.id)) ?? data.pending[0];
+        const candidate = data.current ?? (data.interrupted ?? []).find(batch => !batch.native_refusal && !attempted.has(batch.id)) ?? data.pending[0];
         const admitted = candidate?.release ?? candidate?.jobs?.[0]?.release;
         // Transfer before dequeuing: persisting a new job as "promoting"
         // would make the receiving worker classify its first attempt as a crash.

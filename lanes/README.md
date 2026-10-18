@@ -304,8 +304,10 @@ recorded chain names the lane. Unknown branch history also keeps without such a
 chain, including for Git-only opens.
 
 When dispatch creates a workspace, it holds the retirement tab lock through
-agent registration and publishes the receipt already claimed. A missing or
-unavailable receipt retains that initial pane and uses a separate agent tab.
+the shell compatibility check and agent registration. It claims the receipt
+only when reusing the initial pane; a separate-tab fallback leaves the receipt
+unclaimed. A missing or unavailable receipt retains that initial pane and uses
+a separate agent tab.
 Receipts publish atomically with mode 0600, survive claim updates with that mode,
 and can be replaced by a new creation with a different terminal or shell birth.
 Guarded cleanup prunes them only after fresh native absence checks; a malformed

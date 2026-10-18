@@ -802,7 +802,7 @@ function openWorkspaceIdFor(path, { refuseStale = true, onMismatch, workspaces, 
 // workspace"), so a lane opened from another lane gets a git worktree and no
 // herdr workspace. Open from the canonical parent explicitly, using its path
 // when it has no workspace yet. Retain opaque IDs and verify repository identity.
-function ensureHerdrWorkspace(path, label, workspaces, deadline, { created, claimed = false, holdInitial } = {}) {
+function ensureHerdrWorkspace(path, label, workspaces, deadline, { created, requireInitialReceipt = false, holdInitial } = {}) {
   // Worktree creation/opening and workspace discovery are separate Herdr
   // snapshots. Refetch here so newly visible metadata is never judged against
   // the caller's pre-creation listing.
@@ -811,7 +811,7 @@ function ensureHerdrWorkspace(path, label, workspaces, deadline, { created, clai
     if (opened?.workspace?.workspace_id !== id) return;
     try {
       const receipt = recordInitialShell({ common: REPO_IDENTITY, cwd: path, created: opened,
-        claimed, locked: claimed, deadline, h: args => herdrJson(args, { deadline }) });
+        locked: Boolean(holdInitial), deadline, h: args => herdrJson(args, { deadline }) });
       if (!receipt) process.stderr.write('initial shell receipt unavailable; retirement requires the guarded legacy rule\n');
       return receipt;
     } catch (error) { process.stderr.write(`initial shell receipt unavailable: ${error.message}\n`); }
@@ -833,7 +833,7 @@ function ensureHerdrWorkspace(path, label, workspaces, deadline, { created, clai
   const receipt = opened?.already_open === false ? recordInitial(opened) : null;
   // Only the native creation receipt authorizes initial-pane reuse. In
   // particular, a concurrent opener's already_open receipt is not ours.
-  const initial = (!claimed || receipt) && opened?.already_open === false && opened.workspace?.workspace_id === id &&
+  const initial = (!requireInitialReceipt || receipt) && opened?.already_open === false && opened.workspace?.workspace_id === id &&
     opened.tab?.workspace_id === id && opened.root_pane?.workspace_id === id &&
     typeof opened.tab.tab_id === "string" && typeof opened.root_pane.pane_id === "string" &&
     opened.root_pane.tab_id === opened.tab.tab_id
@@ -1200,7 +1200,7 @@ function dispatch(topic, promptText, options = {}) {
     process.removeListener('exit', unlockInitial);
     const release = releaseInitial; releaseInitial = undefined; release?.();
   };
-  const workspace = ensureHerdrWorkspace(path, label, workspaces, options.deadline, { claimed: true, holdInitial: tab => {
+  const workspace = ensureHerdrWorkspace(path, label, workspaces, options.deadline, { requireInitialReceipt: true, holdInitial: tab => {
     releaseInitial = initialShellLock(REPO_IDENTITY, tab, { deadline: options.deadline });
     process.once('exit', unlockInitial);
   } });
@@ -1210,6 +1210,8 @@ function dispatch(topic, promptText, options = {}) {
   }
   let initial = workspace.initial && supportsInitialEnvironment(workspace.initial.pane, options.deadline)
     ? workspace.initial : undefined;
+  // The tab lock protects the unclaimed creation receipt while deciding reuse.
+  // A separate-tab fallback leaves this untouched shell eligible for retirement.
   if (initial) try { claimInitialShell(REPO_IDENTITY, initial.tabId, { locked: true }); }
   catch (error) { process.stderr.write(`${error.message}; dispatch will use a separate tab\n`); initial = undefined; }
   let pane = initial?.pane, tabId = initial?.tabId;

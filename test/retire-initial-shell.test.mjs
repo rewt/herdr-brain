@@ -2,10 +2,12 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { planRetirement, executeRetirement } from '../lib/retire.mjs';
 import { recordInitialShell, initialShellFile, claimInitialShell, recordLaneOpen, initialShellLock } from '../lib/initial-shell.mjs';
 import { fixture, hold, isolatedEnv } from './helpers/retire-fixture.mjs';
 import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
+import { retirementDeadline } from '../lib/retire-lock.mjs';
 import { fileURLToPath } from 'node:url';
 
 function shellSnapshot(receipted = false) {
@@ -132,19 +134,22 @@ function initialFixture(t) {
   return { ...f, state, save, record, receiptFile: initialShellFile(f.common, 'w:t') };
 }
 
-test('housekeeping during the dispatch receipt-to-claim window keeps the already claimed shell', t => {
+for (const claimed of [false, true]) test(`housekeeping during the dispatch receipt-to-claim window cannot close the locked initial shell (claimed: ${claimed})`, t => {
   const f = initialFixture(t); isolatedEnv(t, f);
   const retirement = f.retirement(), stalePlan = retirement.plan(), unlock = initialShellLock(f.common, 'w:t');
   assert.equal(stalePlan.close.length, 1);
   try {
-    f.record({ claimed: true, locked: true });
+    f.record({ claimed, locked: true });
     const runner = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.env.HERDR_RETIRE_HERDR, selfTab: null,
       record: [process.execPath, fileURLToPath(new URL('../bin/org.mjs', import.meta.url))] });
     const plan = runner.tick({ resume: false });
-    assert.equal(plan.close.length, 0); assert.match(plan.keep[0].why, /occupant claim/);
-    assert.deepEqual(f.read().actions, []); assert.equal(JSON.parse(fs.readFileSync(f.receiptFile)).claimed, true);
+    assert.equal(plan.close.length, claimed ? 0 : 1);
+    if (claimed) assert.match(plan.keep[0].why, /occupant claim/);
+    assert.deepEqual(f.read().actions, []); assert.equal(JSON.parse(fs.readFileSync(f.receiptFile)).claimed, claimed ? true : undefined);
     const stale = retirement.apply(stalePlan); assert.match(stale[0].why, /locked:/);
     assert.deepEqual(f.read().actions, [], 'a stale pre-dispatch plan cannot cross the shared tab lock');
+    claimInitialShell(f.common, 'w:t', { locked: true });
+    const claimedPlan = retirement.plan(); assert.equal(claimedPlan.close.length, 0); assert.match(claimedPlan.keep[0].why, /occupant claim/);
   } finally { unlock(); }
 });
 
@@ -225,6 +230,46 @@ test('initial receipts are pruned after close or freshly verified absence, with 
   f.save(); const clear = hold(f); retirement.apply(retirement.plan());
   assert.ok(fs.existsSync(f.receiptFile)); clear();
   retirement.apply(retirement.plan()); assert.equal(fs.existsSync(f.receiptFile), false);
+});
+
+for (const failure of ['tab lock', 'Herdr listing', 'unlink', 'deadline']) test(`pre-execution initial receipt pruning handles ${failure} without bypassing retirement guards`, t => {
+  const f = initialFixture(t); f.record();
+  f.state.tabs = [{ tab_id: 'w:other', workspace_id: 'w' }];
+  f.state.panes = [{ ...f.state.panes[0], tab_id: 'w:other', pane_id: 'w:other:p', terminal_id: 'other-terminal' }]; f.save();
+  const logs = []; let failPrune = false;
+  const retirement = f.retirement({ log: row => logs.push(row), command(exe, args, options) {
+    if (failPrune && exe === f.job.herdr && args[0] === 'workspace' && args[1] === 'list') {
+      failPrune = false;
+      if (failure === 'deadline') throw retirementDeadline();
+      return { status: 1, stderr: 'injected pruning listing failure' };
+    }
+    return spawnSync(exe, args, options);
+  } });
+  const snapshot = retirement.observe(), plan = planRetirement(snapshot), unlink = fs.unlinkSync;
+  assert.deepEqual(plan.close.map(row => row.tab_id), ['w:other']);
+  assert.equal(snapshot.initialPruning[0].absent, true);
+  const unlock = failure === 'tab lock' ? initialShellLock(f.common, 'w:t') : null;
+  if (failure === 'unlink') fs.unlinkSync = file => {
+    if (file === f.receiptFile) throw Object.assign(Error('injected pruning unlink failure'), { code: 'EACCES' });
+    return unlink(file);
+  };
+  failPrune = failure === 'Herdr listing' || failure === 'deadline';
+  try {
+    if (failure === 'deadline') {
+      assert.throws(() => retirement.apply(plan, undefined, snapshot), { code: 'RETIREMENT_DEADLINE' });
+      assert.deepEqual(f.read().actions, [], 'a deadline still stops the pass');
+      assert.deepEqual(retirement.diagnostics, []);
+    } else {
+      const results = retirement.apply(plan, undefined, snapshot);
+      assert.equal(results[0].action, 'closed');
+      assert.deepEqual(f.read().actions, [['tab', 'close', 'w:other']]);
+      const diagnostic = retirement.diagnostics.find(row => row.action === 'receipt-pruning-diagnostic');
+      assert.equal(diagnostic.file, f.receiptFile); assert.equal(diagnostic.tab_id, 'w:t');
+      assert.match(diagnostic.reason, /locked:|injected pruning/);
+      assert.ok(logs.includes(diagnostic), 'the pruning failure is logged');
+    }
+    assert.ok(fs.existsSync(f.receiptFile), 'failed pruning retains the receipt');
+  } finally { fs.unlinkSync = unlink; unlock?.(); }
 });
 
 test('malformed initial receipts keep only their filename-bound tab while another tab retires', t => {

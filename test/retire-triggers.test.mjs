@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fixture, isolatedEnv, hold, assertNoRemoval } from './helpers/retire-fixture.mjs';
+import { sweepCommands } from './helpers/retire-sweep-fixture.mjs';
 import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
 import { noticeIdleRetirement } from '../housekeeping/retirement-notices.mjs';
 import { requestRetirement } from '../lib/retire-trigger.mjs';
@@ -17,24 +18,26 @@ import { enqueueSupervisor, readInbox } from '../supervisor/prompt-supervisor.mj
 const root = path.resolve(import.meta.dirname, '..');
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const saveEvents = (f, events) => fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
-function runner(t, f) {
+function runner(t, f, { command = spawnSync } = {}) {
   isolatedEnv(t, f);
   const logs = [], calls = [];
   const run = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.job.herdr, selfTab: null,
     log: entry => logs.push(entry), command(exe, args, options) {
-      calls.push([exe, args]); return spawnSync(exe, args, { ...options, env: { ...options.env, ...f.env } });
+      calls.push([exe, args]); return command(exe, args, { ...options, env: { ...options.env, ...f.env } });
     } });
   return { tick: extra => run.tick({ cleanup: false, resume: false, ...extra }), logs, calls };
 }
 
-test('housekeeping coalesces requests before cleanup is due and retains a request written during apply', t => {
-  const f = fixture(t), r = runner(t, f);
+for (const cleanup of [false, true]) test(`housekeeping coalesces requests and retains a request written during apply (cleanup due: ${cleanup})`, t => {
+  const f = fixture(t), r = runner(t, f, sweepCommands(f));
   for (const eventSeq of [2, 3, 4]) requestRetirement({ org: f.org, eventSeq, source: 'many completions' });
   f.state.triggerOnClose = true; f.save();
-  r.tick({ cleanup: true });
-  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
+  r.tick({ cleanup });
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t'], ...(cleanup ? [['workspace', 'close', 'w']] : [])]);
+  assert.equal(fs.existsSync(f.lane), !cleanup, 'only a due cleanup tick sweeps the integrated lane');
   assert.equal(r.logs.filter(e => e.action === 'retirement-consumed').length, 1);
-  assert.equal(r.logs.filter(e => e.action === 'closed').length, 1);
+  assert.equal(r.logs.filter(e => e.action === 'closed' && e.tab_id === 'w:t').length, 1);
+  assert.equal(r.logs.filter(e => e.action === 'closed').length, cleanup ? 2 : 1);
   assert.equal(read(path.join(f.org, 'retirement/handled.json')).revision, 4);
   assert.equal(read(path.join(f.org, 'retirement/request.json')).revision, 5);
   r.tick();

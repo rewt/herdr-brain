@@ -4,9 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { collectCycleTime, renderCycleTime, publishCycleTime } from '../cycle-time.mjs';
+import { receiptDirectory } from '../context.mjs';
+import { projectSummary, writeProjectSummary } from '../../lib/project-summary.mjs';
+import { fold } from '../../lib/state.mjs';
 
 const cli = fileURLToPath(new URL('../cycle-time.mjs', import.meta.url));
 const at = seconds => new Date(Date.parse('2026-10-10T00:00:00Z') + seconds * 1000).toISOString();
@@ -50,12 +52,13 @@ function fixture(t) {
   }
   const land = (r, second = 81, batch = `b-${r.id}`) => event(second, { type: 'promotion.reconciled', identity, batch, heads: [{ run: r.id, item: r.item, head: 'abc' }] });
   const action = (r, eligible, extra = {}) => {
-    const file = path.join(org, 'supervisor', createHash('sha256').update(identity).digest('hex').slice(0, 20), 'autopilot', `${r.id}.json`);
+    const file = path.join(receiptDirectory(org, identity), 'autopilot', `${r.id}.json`);
     write(file, { policy: 'notice-autopilot/v1', project: { identity, org, repo }, key: `report:${r.id}`, finished: at(45),
       scope: { eligible }, ...extra }); return file;
   };
   const metrics = options => { save(); return collectCycleTime({ project: repo, org, since: at(0), until: at(1000), now: at(1000), ...options }); };
-  return { root, repo, org, identity, events, event, write, save, run, review, train, land, action, metrics };
+  const summary = (now = at(1000)) => projectSummary({ project: { identity, canonical: repo }, state: fold(events), now });
+  return { root, repo, org, identity, events, event, write, save, run, review, train, land, action, metrics, summary };
 }
 
 test('known clocks give exact stage times, separate cohorts, median and nearest-rank p90', t => {
@@ -138,6 +141,23 @@ test('a later landing cycle starts after its preceding landing and replays do no
   assert.equal(m.items[1].clocks.dispatch, at(100)); assert.deepEqual(m.items[1].runs, ['R-2']);
 });
 
+for (const source of ['late reconciliation', 'train receipt only']) {
+  test(`a preceding landing known from ${source} excludes its runs from the next cycle`, t => {
+    const f = fixture(t), a = f.run(1); f.review(a); f.train(a);
+    const b = f.run(2, { item: a.item, start: 100, report: 110 });
+    f.review(b, { start: 120, end: 130 });
+    if (source === 'late reconciliation') f.land(a, 131);
+    f.train(b, { queue: 140, gateStart: 150, gateEnd: 170, main: 180 }); f.land(b, 181);
+    const m = f.metrics(), row = m.items[1];
+    assert.equal(m.items.length, 2);
+    assert.deepEqual(row.runs, ['R-2']); assert.equal(row.clocks.dispatch, at(100));
+    assert.equal(row.stages_s.dispatch_to_main_s, 80);
+    assert.equal(row.waits.dispatch.length, 1); assert.equal(row.waits.review_rounds, 1);
+    assert.equal(row.waits.gate_executions, 1);
+    assert.deepEqual(f.metrics({ since: at(100) }).items[0].runs, ['R-2'], 'boundary includes landings outside the window');
+  });
+}
+
 test('foreign receipts, malformed timing and mismatched usable observations supply no clocks', t => {
   const f = fixture(t), r = f.run(1);
   f.review(r, { extra: { common: '/foreign' } });
@@ -152,7 +172,7 @@ test('foreign receipts, malformed timing and mismatched usable observations supp
   assert.ok(m.warnings.some(w => w.includes('invalid fast path timing')));
 });
 
-test('plain CLI prints only; publish writes matching Markdown and JSON atomically without changing record or receipts', t => {
+test('plain CLI prints only; cycle-first publishing allows later summary refreshes without changing the record', t => {
   const f = fixture(t), r = f.run(1); f.review(r); f.train(r); f.land(r); f.save();
   const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
   const args = [cli, '--project', f.repo, '--org', f.org, '--since', at(0), '--until', at(100)];
@@ -165,11 +185,71 @@ test('plain CLI prints only; publish writes matching Markdown and JSON atomicall
   assert.equal(fs.readFileSync(files.markdown, 'utf8'), result.stdout);
   assert.equal(fs.readFileSync(files.markdown, 'utf8'), renderCycleTime(data));
   assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
+  assert.ok(fs.lstatSync(path.join(f.org, 'published')).isSymbolicLink());
+  for (const now of [at(1000), at(1001), at(1002)]) {
+    writeProjectSummary(f.org, f.summary(now));
+    assert.equal(JSON.parse(fs.readFileSync(path.join(f.org, 'published/summary.json'), 'utf8')).generated_at, now);
+    assert.equal(fs.readFileSync(files.markdown, 'utf8'), renderCycleTime(data));
+    assert.deepEqual(JSON.parse(fs.readFileSync(files.json, 'utf8')), data);
+  }
+  assert.equal(fs.readdirSync(path.join(f.org, '.published-summaries')).length, 2);
   assert.equal(fs.readdirSync(path.join(f.org, 'published')).filter(n => n.endsWith('.tmp')).length, 0);
   assert.ok(files.json.startsWith(path.join(f.org, 'published')));
 });
 
-test('publishing rejects redirected directories and a torn record refuses a partial report', t => {
+test('summary-first publishing switches complete pairs and keeps the latest cycle-time pair across refreshes', t => {
+  const f = fixture(t), r = f.run(1); f.train(r); f.land(r);
+  const data = f.metrics(); writeProjectSummary(f.org, f.summary());
+  const publicPath = path.join(f.org, 'published'), previous = fs.readlinkSync(publicPath);
+  const summary = fs.readFileSync(path.join(publicPath, 'summary.json'), 'utf8');
+  const rename = fs.renameSync;
+  fs.renameSync = (from, to) => {
+    assert.equal(to, publicPath);
+    assert.equal(fs.readlinkSync(publicPath), previous);
+    assert.deepEqual(fs.readdirSync(publicPath).sort(), ['summary.json', 'summary.md']);
+    assert.equal(fs.readFileSync(path.join(from, 'summary.json'), 'utf8'), summary);
+    const json = fs.readdirSync(from).find(n => n.startsWith('cycle-time-') && n.endsWith('.json'));
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(from, json), 'utf8')), data);
+    assert.equal(fs.readFileSync(path.join(from, json.replace(/\.json$/, '.md')), 'utf8'), renderCycleTime(data));
+    throw Error('injected cycle-time switch failure');
+  };
+  try { assert.throws(() => publishCycleTime(data), /injected cycle-time switch failure/); }
+  finally { fs.renameSync = rename; }
+  assert.equal(fs.readlinkSync(publicPath), previous);
+  assert.equal(fs.existsSync(path.join(f.org, '.summary-publish.lock')), false);
+  const first = publishCycleTime(data);
+  assert.equal(fs.readFileSync(path.join(publicPath, 'summary.json'), 'utf8'), summary);
+  assert.equal(fs.readFileSync(first.markdown, 'utf8'), renderCycleTime(data));
+  const nextData = { ...data, generated_at: at(1001) }, next = publishCycleTime(nextData);
+  assert.notEqual(next.json, first.json);
+  assert.equal(fs.existsSync(first.json), false, 'published exposes only the latest cycle-time pair');
+  for (const now of [at(1002), at(1003), at(1004)]) writeProjectSummary(f.org, f.summary(now));
+  assert.deepEqual(JSON.parse(fs.readFileSync(next.json, 'utf8')), nextData);
+  assert.equal(fs.readFileSync(next.markdown, 'utf8'), renderCycleTime(nextData));
+  assert.equal(fs.readdirSync(publicPath).length, 4);
+  assert.equal(fs.readdirSync(path.join(f.org, '.published-summaries')).length, 2);
+});
+
+test('cycle-time and summary share the publication lock and reject foreign project ownership', t => {
+  const f = fixture(t), r = f.run(1); f.train(r); f.land(r);
+  const data = f.metrics(); writeProjectSummary(f.org, f.summary());
+  const publicPath = path.join(f.org, 'published'), before = fs.readlinkSync(publicPath);
+  const lock = path.join(f.org, '.summary-publish.lock'); fs.mkdirSync(lock);
+  assert.throws(() => publishCycleTime(data), /EEXIST/);
+  assert.equal(fs.readlinkSync(publicPath), before); fs.rmdirSync(lock);
+  assert.throws(() => publishCycleTime({ ...data, project: { ...data.project, identity: '/foreign' } }), /different canonical project/);
+  assert.equal(fs.readlinkSync(publicPath), before);
+  const files = publishCycleTime(data);
+  assert.throws(() => writeProjectSummary(f.org, { ...f.summary(), project: { id: 'foreign' } }), /different canonical project/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(files.json, 'utf8')), data);
+
+  const other = fixture(t), otherRun = other.run(1); other.train(otherRun); other.land(otherRun);
+  publishCycleTime(other.metrics());
+  assert.throws(() => writeProjectSummary(other.org, { ...other.summary(), project: { id: 'foreign' } }), /different canonical project/);
+  writeProjectSummary(other.org, other.summary());
+});
+
+test('publishing rejects foreign generation links and a torn record refuses a partial report', t => {
   const f = fixture(t), r = f.run(1); f.train(r); f.land(r);
   const m = f.metrics(), outside = path.join(f.root, 'outside'); fs.mkdirSync(outside);
   fs.symlinkSync(outside, path.join(f.org, 'published'));

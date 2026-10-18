@@ -5,11 +5,12 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isMain } from '../lib/cli-help.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
-import { writeFileAtomic } from '../lib/files.mjs';
+import { writeProjectPublication } from '../lib/project-publication.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { fold } from '../lib/state.mjs';
 import { runMetrics } from '../dispatch/metrics.mjs';
 import { collectMetrics, stats } from '../promote/metrics.mjs';
+import { receiptDirectory } from './context.mjs';
 
 const clock = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 const elapsed = (a, b) => a && b && Date.parse(b) >= Date.parse(a) ? (Date.parse(b) - Date.parse(a)) / 1000 : null;
@@ -64,7 +65,7 @@ export function collectCycleTime({ project = process.cwd(), org, since, until, n
   if (tornTail) throw Error('incomplete record tail; no cycle-time report produced');
   const state = fold(events), train = collectMetrics({ project }), warnings = [...train.warnings];
   const lanes = train.lanes.filter(l => l.org === org && state.runs.has(l.run));
-  const directory = path.join(org, 'supervisor', createHash('sha256').update(git.identity).digest('hex').slice(0, 20), 'autopilot');
+  const directory = path.join(receiptDirectory(org, git.identity), 'autopilot');
   const actions = [];
   for (const name of fs.existsSync(directory) ? fs.readdirSync(directory).filter(n => n.endsWith('.json')).sort() : []) {
     const file = path.join(directory, name), action = readJSON(file, warnings);
@@ -113,8 +114,12 @@ export function collectCycleTime({ project = process.cwd(), org, since, until, n
     if (!selection) { missingWindowClock++; continue; }
     if (selection < window.since || selection >= window.until) continue;
     // Count the whole item cycle, including correction runs, not just the final
-    // short fix run. A previous recorded landing starts a new cycle boundary.
-    const preceding = reconciled.filter(e => e.seq < run.started.seq && e.heads?.some(h => h.item === item.id)).at(-1)?.seq ?? 0;
+    // short fix run. Boundaries follow landed runs, including receipt-only or
+    // late-reconciled landings, rather than the order of reconciliation events.
+    const preceding = [...landings.values()].filter(l => l.item === item.id).reduce((seq, l) => {
+      const started = state.runs.get(l.run).started.seq;
+      return started < run.started.seq ? Math.max(seq, started) : seq;
+    }, 0);
     const cycleRuns = item.runs.map(id => state.runs.get(id)).filter(r => r.started.seq > preceding && r.started.seq <= run.started.seq);
     const runIds = new Set(cycleRuns.map(r => r.id));
     const cycleLanes = lanes.filter(l => runIds.has(l.run));
@@ -185,7 +190,7 @@ export function collectCycleTime({ project = process.cwd(), org, since, until, n
     summary: summary(rows), cohorts: Object.fromEntries(['in', 'out', 'unknown'].map(c => [c, summary(rows.filter(r => r.cohort === c))])),
     missing_window_clock: missingWindowClock, items: rows, warnings,
     limitations: [
-      'One row per landed item cycle. Dispatch is its first run after the preceding recorded landing; report/review/queue are the landed run. Correction and retry loops remain in end-to-end time and named waits.',
+      'One row per landed item cycle. Dispatch is its first run after the preceding landed run, whether recorded by train receipt or reconciliation; report/review/queue are the landed run. Correction and retry loops remain in end-to-end time and named waits.',
       'Main comes only from integration receipts or retained fast path clocks. A reconciliation selects an otherwise untimed landing without fabricating main. Missing window clocks are excluded and counted.',
       'Report availability uses retained Fast path timing snapshots, then current report-file mtime (an observation, not engineer completion). Ingest is a separate record event.',
       'Usable requires an explicit adapter observation with identity, run, item, at and evidence. Brain has no durable installed/usable clock. Main, reconciliation, release cut and release gate do not prove usability.',
@@ -231,12 +236,12 @@ export function renderCycleTime(data) {
 export function publishCycleTime(data) {
   const directory = path.join(data.project.org, 'published');
   const key = createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 24);
-  const base = path.join(directory, `cycle-time-${key}`);
-  // Immutable, generation-specific pairs; there is no mutable 'latest' pointer
-  // that could pair Markdown and JSON from different concurrent reports.
-  writeFileAtomic(`${base}.json`, JSON.stringify(data, null, 2) + '\n');
-  writeFileAtomic(`${base}.md`, renderCycleTime(data));
-  return { json: `${base}.json`, markdown: `${base}.md` };
+  const base = `cycle-time-${key}`;
+  writeProjectPublication(data.project.org, {
+    projectId: createHash('sha256').update(data.project.identity).digest('hex'),
+    files: { [`${base}.json`]: JSON.stringify(data, null, 2) + '\n', [`${base}.md`]: renderCycleTime(data) },
+  });
+  return { json: path.join(directory, `${base}.json`), markdown: path.join(directory, `${base}.md`) };
 }
 export function main(args = process.argv.slice(2)) {
   const options = {}; let json = false, publish = false;

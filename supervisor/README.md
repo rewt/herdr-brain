@@ -4,9 +4,13 @@
 
 The supervisor runs this foreground report when publishing the weekly project
 measurement. The plain command prints Markdown; `--json` prints the same data as
-JSON. Only `--publish` writes files, using `lib/files.mjs` atomic writes into the
-selected record's `published/` directory. It creates a content-addressed Markdown
-and JSON pair and prints their paths on stderr. There is no scheduler, model call,
+JSON. Only `--publish` writes files, using the summary publisher's shared lock and
+atomic generation switch into the selected record's `published/` directory. It
+creates a content-addressed Markdown and JSON pair and prints their paths on
+stderr. Each publisher carries the other's latest pair forward, so summary
+refreshes preserve cycle-time files. A new cycle-time publication replaces the
+previous cycle-time pair in `published/`; readers can pin the resolved generation
+to read a pair from one refresh. There is no scheduler, model call,
 record event, validation, promotion or live pane mutation.
 
 ```sh
@@ -24,8 +28,10 @@ its main clock stays null. Landings with neither clock are excluded and counted.
 Git common-directory identity and the exact record path bind promotion receipts;
 foreign receipts never contribute clocks. A torn record refuses the report.
 
-Each landed item cycle starts at its first run after its previous recorded
-landing, including correction runs. The report/review/queue clocks describe the
+Each landed item cycle starts at its first run after its previous landed run,
+including correction runs. Train receipts and reconciliations both establish
+that boundary, even when reconciliation arrives after the next dispatch. The
+report/review/queue clocks describe the
 landed run. Adjacent intervals, dispatch-to-main and dispatch-to-usable have
 median, nearest-rank p90, sample and missing counts, both overall and separately
 for historical autopilot cohort **in**, **out** and **unknown**. Scope eligibility

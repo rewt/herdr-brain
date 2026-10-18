@@ -52,8 +52,10 @@ are flattened and bounded; common credential markers and paths/URLs are redacted
 as additional protection. These editorial fields should always be plain summaries.
 
 `published` is a publisher-owned relative symlink to a content-addressed generation
-under `ORG/.published-summaries`. Both files are complete before one atomic rename
-switches the link. Identical source facts, observation time and timezone produce
+under `ORG/.published-summaries`. The summary and cycle-time publishers share
+`lib/project-publication.mjs`: each replaces its own pair and carries the other's
+latest pair forward under the same lock. All files are complete before one atomic
+rename switches the link. Identical source facts, observation time and timezone produce
 identical bytes. The current and prior generations are retained; older generated
 files are removed on a successful refresh. Existing ordinary `published`
 directories, foreign generation links and a different publisher identity are

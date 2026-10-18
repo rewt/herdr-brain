@@ -127,7 +127,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     if (!interruptedComposer(invoke(herdr, ['agent', 'read', agent.pane_id, '--source', 'visible']))) return null;
     return run;
   }
-  function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath,
+  function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath, cleanupSeconds,
     now = new Date().toISOString() } = {}) {
     let consumed;
     // A hint is only a reason to re-observe through the guarded executor. Do
@@ -140,10 +140,6 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       } catch (error) { log({ action: 'retirement-failed', error: error.message }); }
     }
     const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
-    if (!workspacePath && !dryRun) try {
-      const summary = publishProjectSummary({ cwd, org, snapshot, command, main, now });
-      log({ action: 'summary-published', generated_at: summary.generated_at });
-    } catch (error) { log({ action: 'summary-publish-failed', error: error.message }); }
     if (!workspacePath) try {
       noticeIdleRetirement({ status: retirementStatus(snapshot, { generatedAt: now }), snapshot,
         stateDir, cwd, org, herdr, dryRun, log });
@@ -181,6 +177,10 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
         log({ action: 'resumed', run: run.id, pane: agent.pane_id, seq: agent.state_change_seq, why: 'interrupted open run with only mouse-wheel escape text in the composer' });
       } catch (error) { log({ action: 'resume-failed', run: run.id, pane: agent.pane_id, error: error.message }); }
     }
+    if (cleanup && !workspacePath && !dryRun) try {
+      const summary = publishProjectSummary({ cwd, org, snapshot, command, main, now, refreshSeconds: cleanupSeconds });
+      log({ action: 'summary-published', generated_at: summary.generated_at });
+    } catch (error) { log({ action: 'summary-publish-failed', error: error.message }); }
     return plan;
   }
   return { tick, common };
@@ -308,7 +308,7 @@ async function main() {
           if (pid) log({ action: 'supervisor-inbox-owned', pid });
         }
         const cleanup = Date.now() - lastCleanup >= config.cleanup_seconds * 1000;
-        runner.tick({ cleanup, resume: config.resume !== false, dryRun: opt['dry-run'], seen,
+        runner.tick({ cleanup, cleanupSeconds: config.cleanup_seconds, resume: config.resume !== false, dryRun: opt['dry-run'], seen,
           remember: (key) => fs.appendFileSync(seenFile, `${JSON.stringify(key)}\n`) });
         if (cleanup) lastCleanup = Date.now();
       } catch (error) {

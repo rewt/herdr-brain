@@ -80,21 +80,35 @@ test('recorded promoted workers close through the shared tidy planner', (t) => {
   assert.match(f.logs.find((x) => x.action === 'closed').why, /R-1/);
 });
 
-test('canonical housekeeping ticks refresh the owner summary on the existing cadence; previews and scoped ticks never publish', t => {
+test('only canonical cleanup ticks refresh the owner summary after cleanup; previews and scoped ticks never publish', t => {
   const f = fixture(t), summary = path.join(f.root, 'published/summary.json');
   const bytes = fs.readFileSync(path.join(f.root, 'events.jsonl'));
   const runner = f.runner();
-  runner.tick({ cleanup: false, resume: false, dryRun: true, now: '2026-01-01T00:00:00Z' });
+  runner.tick({ cleanup: true, resume: false, dryRun: true, now: '2026-01-01T00:00:00Z' });
   assert.equal(fs.existsSync(summary), false);
-  runner.tick({ cleanup: false, resume: false, workspacePath: f.lane, now: '2026-01-01T00:00:00Z' });
+  runner.tick({ cleanup: true, resume: false, workspacePath: f.lane, now: '2026-01-01T00:00:00Z' });
   assert.equal(fs.existsSync(summary), false);
   runner.tick({ cleanup: false, resume: false, now: '2026-01-01T00:01:00Z' });
-  assert.equal(JSON.parse(fs.readFileSync(summary)).generated_at, '2026-01-01T00:01:00.000Z');
-  runner.tick({ cleanup: false, resume: false, now: '2026-01-01T00:02:00Z' });
+  assert.equal(fs.existsSync(summary), false);
+  f.actions.length = 0; f.logs.length = 0;
+  const command = f.command;
+  const cleanupRunner = f.runner({ command(exe, args, options) {
+    if (exe === 'git' && args.includes('--untracked-files=no')) {
+      assert.deepEqual(f.actions, [['tab', 'close', 'w:t']], 'cleanup must complete before summary inventory');
+    }
+    return command(exe, args, options);
+  } });
+  cleanupRunner.tick({ cleanup: true, cleanupSeconds: 1200, resume: false, now: '2026-01-01T00:02:00Z' });
   assert.equal(JSON.parse(fs.readFileSync(summary)).generated_at, '2026-01-01T00:02:00.000Z');
+  assert.equal(JSON.parse(fs.readFileSync(summary)).stale_after_seconds, 3600, 'freshness follows the active cleanup interval');
+  cleanupRunner.tick({ cleanup: false, resume: false, now: '2026-01-01T00:03:00Z' });
+  assert.equal(JSON.parse(fs.readFileSync(summary)).generated_at, '2026-01-01T00:02:00.000Z');
+  f.actions.length = 0;
+  cleanupRunner.tick({ cleanup: true, resume: false, now: '2026-01-01T00:04:00Z' });
+  assert.equal(JSON.parse(fs.readFileSync(summary)).generated_at, '2026-01-01T00:04:00.000Z');
   assert.equal(f.logs.filter(e => e.action === 'summary-published').length, 2);
   assert.deepEqual(fs.readFileSync(path.join(f.root, 'events.jsonl')), bytes);
-  assert.deepEqual(f.actions, []);
+  assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
 });
 
 test('a summary publication failure never blocks guarded cleanup or interruption recovery', t => {
@@ -105,6 +119,7 @@ test('a summary publication failure never blocks guarded cleanup or interruption
   f.runner().tick();
   assert.ok(f.logs.some(e => e.action === 'summary-publish-failed'));
   assert.ok(f.logs.some(e => e.action === 'resumed'));
+  assert.ok(f.logs.findIndex(e => e.action === 'summary-publish-failed') > f.logs.findIndex(e => e.action === 'resumed'));
   assert.equal(fs.readFileSync(path.join(f.root, 'published/owner-file'), 'utf8'), 'preserve');
   assert.equal(fs.existsSync(path.join(f.root, '.summary-publish.lock')), false);
 });

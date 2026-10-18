@@ -9,6 +9,9 @@ import { gitProject } from '../lib/project.mjs';
 import { projectSummary, publishProjectSummary, writeProjectSummary, publishedSummaryStatus, readProjectReleaseIds } from '../lib/project-summary.mjs';
 import { renderProjectSummary } from '../lib/render.mjs';
 import { supervisorStatus, renderStatus } from '../supervisor/status.mjs';
+import { readRetirementStatus } from '../lib/retire-runtime.mjs';
+import { brainSource, brainSourceSync } from '../board/brain.mjs';
+import { brainFixture } from './helpers/board-fixture.mjs';
 import { BIN } from './helpers.mjs';
 
 const NOW = '2026-10-17T18:00:00.000Z', EARLIER = '2026-10-17T16:00:00.000Z';
@@ -140,12 +143,12 @@ test('freshness reports exact age, stale and missing without inventing contents 
   assert.equal(f.cli(['--json']).status, 0); assert.equal(JSON.parse(f.cli(['--json']).stdout).status, 'missing');
   assert.equal(fs.existsSync(path.join(f.org, 'published')), false);
   f.publish();
-  assert.deepEqual(publishedSummaryStatus(f.org, { now: '2026-10-17T18:05:01Z' }), {
-    status: 'stale', generated_at: NOW, age_seconds: 301, stale_after_seconds: 300,
+  assert.deepEqual(publishedSummaryStatus(f.org, { now: '2026-10-17T18:30:01Z' }), {
+    status: 'stale', generated_at: NOW, age_seconds: 1801, stale_after_seconds: 1800,
   });
-  assert.equal(publishedSummaryStatus(f.org, { now: '2026-10-17T18:05:00Z' }).status, 'fresh');
-  const doc = supervisorStatus({ cwd: f.repo, org: f.org, agents: [], now: '2026-10-17T18:05:01Z' });
-  assert.equal(doc.published_summary.status, 'stale'); assert.match(renderStatus(doc), /stale; age 301s/);
+  assert.equal(publishedSummaryStatus(f.org, { now: '2026-10-17T18:30:00Z' }).status, 'fresh');
+  const doc = supervisorStatus({ cwd: f.repo, org: f.org, agents: [], now: '2026-10-17T18:30:01Z' });
+  assert.equal(doc.published_summary.status, 'stale'); assert.match(renderStatus(doc), /stale; age 1801s/);
   assert.equal(publishedSummaryStatus(f.org, { now: '2026-10-17T17:59:00Z' }).status, 'invalid');
   fs.writeFileSync(path.join(f.org, 'published/summary.json'), '{bad');
   assert.equal(publishedSummaryStatus(f.org, { now: NOW }).status, 'invalid');
@@ -210,4 +213,41 @@ test('conflicting publishers preserve the previous generation and a later retry 
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'published/summary.json')), before);
   fs.rmdirSync(lock); f.publish();
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'published/summary.json')), before);
+});
+
+test('published promotion classes match the lanes view for pending jobs and expired incomplete reconciliation', async t => {
+  const f = fixture(t);
+  const queue = { identity: f.project.identity, pending: [
+    { id: 'pending', run: 'R-2', org: f.org, topic: 'topic', queued: EARLIER },
+  ], results: [
+    { id: 'old-reconcile', run: 'R-1', org: f.org, outcome: 'promoted',
+      finished: '2020-01-01T00:00:00Z', reconciliation: { state: 'pending' } },
+  ] };
+  fs.writeFileSync(path.join(f.project.identity, 'promote/queue.json'), JSON.stringify(queue));
+  const published = f.publish();
+  assert.ok(f.calls.every(([exe, args]) => exe !== 'git' || (!args.includes('ls-files') && !args.includes('--untracked-files=all'))));
+  const lanes = await readRetirementStatus({ cwd: f.repo, org: f.org, herdr: 'fixture-herdr', command: f.command, env: f.env });
+  assert.deepEqual(lanes.rows.filter(r => r.type === 'promotion').map(r => [r.id, r.class, r.status]), [['pending', 'ACTIVE', 'queued']]);
+  assert.deepEqual(published.lanes.counts, lanes.counts);
+  assert.deepEqual(published.lanes.oldest_unresolved.map(r => [r.items, r.class]), [[['ENG-2'], 'ACTIVE']]);
+  assert.equal(published.lanes.counts.UNKNOWN, 0);
+  assert.ok(!published.exceptions.some(e => e.name === 'lanes-unknown'));
+});
+
+test('synchronous summary source shares train, attempt and matching gate facts with the cached lanes source', async t => {
+  const f = brainFixture(t), state = fold(events(f.root));
+  let reads = 0;
+  const show = (_project, _job, key) => { reads++; return (key?.startsWith('R-') ? state.runs : state.items).get(key) ?? null; };
+  const options = { now: f.now, logClocks: false, show, records: new Map() };
+  const sync = brainSourceSync(f.project, options), async = await brainSource(f.project, options);
+  assert.deepEqual(sync, async);
+  assert.equal(sync.rows.find(r => r.id === 'job-active').phase, 'stage');
+  assert.equal(sync.rows.find(r => r.id === 'job-active').phaseAt, f.receipt.command_started_at);
+  assert.equal(sync.rows.find(r => r.id === 'job-queued').phase, 'queued');
+  const before = reads;
+  assert.deepEqual(await brainSource(f.project, options), async);
+  assert.equal(reads, before, 'the async source retains its record cache');
+  f.receipt.head = 'e'.repeat(40); f.save();
+  const unmatched = brainSourceSync(f.project, options);
+  assert.equal(unmatched.rows.find(r => r.id === 'job-active').phaseAt, f.train.attempts[0].gate.started_at);
 });

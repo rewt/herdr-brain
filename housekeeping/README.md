@@ -47,9 +47,10 @@ guarded executor, without waiting for the cleanup interval. Requests coalesce;
 a request written during apply remains pending, as does a request under the
 project HOLD. A preview never acknowledges a request. No schedule is added.
 Dry-run previews the plan without closing tabs.
-Each canonical live tick also refreshes the owner's
+Each canonical live cleanup pass also refreshes the owner's
 [`record summary`](../docs/PROJECT-SUMMARY.md), reusing its observed retirement
-snapshot. Scoped checks and dry-run previews never publish. A publication failure
+snapshot after cleanup and recovery. Recovery-only ticks, scoped checks and dry-run
+previews never publish. A publication failure
 is logged as `summary-publish-failed` and does not stop cleanup or recovery.
 A loop covers interruptions while watch waits,
 and catches promotion/closure long after watch's final notice. Herdr events alone

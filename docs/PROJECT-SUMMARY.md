@@ -28,6 +28,9 @@ The JSON schema is `project-summary/v1`. Its explicit field allowlist is:
   queue time. Unknown owners/ages remain null with named exceptions. WAITING and
   IDLE-NONTERMINAL use the projection's next actor when known. This is display
   data and supplies no lifecycle authority.
+  Promotion rows use the same validated Brain source as the lanes view, including
+  pending phases, train/attempt/gate facts and the recent-results window. Summary
+  worktree inventory skips untracked and ignored file enumeration.
 - `releases.current`, `releases.pinned`: release ids only. Main had no per-project
   pin helper when this was implemented. `readProjectReleaseIds` is the single
   ENG-386 integration seam. Until that helper lands, current means the unpinned
@@ -57,10 +60,11 @@ directories, foreign generation links and a different publisher identity are
 refused. A `.summary-publish.lock` directory serializes writers; a crash leaves
 the lock for owner inspection instead of silently replacing an uncertain writer.
 
-Housekeeping refreshes on its existing canonical live tick, without a new daemon
-or schedule. It reuses its retirement observation; previews and workspace-scoped
-checks never publish. Publication failure is logged and cleanup/recovery continue.
-The stale allowance is the larger of five minutes or three configured tick
+Housekeeping refreshes on its existing canonical live cleanup pass, without a new
+daemon or schedule. Publication follows cleanup and recovery and reuses that pass's
+retirement observation; recovery-only ticks, previews and workspace-scoped checks
+never publish. Publication failure is logged and cleanup/recovery continue.
+The stale allowance is the larger of five minutes or three configured cleanup
 intervals. A stopped/failed publisher leaves the last observation on disk.
 
 `record summary` (or `--json`) reads only the published JSON and reports `fresh`,

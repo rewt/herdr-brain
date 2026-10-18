@@ -51,7 +51,9 @@ export function brainPhase({ job, result, train, attempt, gate }) {
   if (['batching', 'promoting'].includes(job.phase) || train?.phase === 'pending' || ['preparing', 'prepared', 'rebasing'].includes(attempt?.phase)) return 'admission';
   return 'unknown';
 }
-export async function brainSource(project, { now = Date.now(), recentMs = 86400000, limit = 20, show = recordShow, records = new Map() } = {}) {
+// Shared synchronous projection; the drivers below supply either cached async
+// record reads or an already observed fold. Selection and phase facts stay here.
+function* brainProjection(project, { now = Date.now(), recentMs = 86400000, limit = 20, logClocks = true } = {}) {
   const common = project.identity, directory = path.join(common, 'promote'), queuePath = path.join(directory, 'queue.json');
   if (!fs.existsSync(queuePath)) return null;
   try {
@@ -63,21 +65,6 @@ export async function brainSource(project, { now = Date.now(), recentMs = 864000
     const recent = queue.results.filter(j => Date.parse(j.finished) >= now - recentMs).slice(-limit);
     for (const j of [...recent, ...(queue.interrupted ?? []).flatMap(members), ...members(queue.current), ...queue.pending.map(j => ({ ...j, phase: 'pending' }))]) jobs.set(j.id, j);
     const rows = [];
-    const retained = new Set();
-    const get = (job, key, finished) => {
-      const cacheKey = JSON.stringify([project.identity, job.org ?? null, job.id, key]);
-      retained.add(cacheKey);
-      let entry = records.get(cacheKey);
-      if (!entry || entry.finished !== finished || (!entry.finished && now - entry.at >= 5000)) {
-        // Keep only the record fields used by rows, not notes, reports or tokens.
-        const value = Promise.resolve(show(project, job, key)).then(data => data ? {
-          id: data.id, item: data.item, workspace: data.workspace, meta: { pane: data.meta?.pane },
-        } : null);
-        entry = { value, at: now, finished };
-        records.set(cacheKey, entry);
-      }
-      return entry.value;
-    };
     for (const job of jobs.values()) {
       const batch = id(job.batch) ? path.join(directory, 'batches', job.batch) : null;
       const loaded = batch ? localJSON(path.join(batch, 'train.json'), common) : null;
@@ -95,14 +82,14 @@ export async function brainSource(project, { now = Date.now(), recentMs = 864000
       }
       const phase = brainPhase({ job, result, train, attempt, gate });
       const finished = ['landed', 'failed', 'interrupted'].includes(phase) && Boolean(result);
-      const run = await get(job, job.run, finished);
-      const item = run?.item ? await get(job, run.item, finished) : null;
+      const run = yield { job, key: job.run, finished };
+      const item = run?.item ? yield { job, key: run.item, finished } : null;
       const log = result?.log ?? (batch ? path.join(batch, 'train.log') : id(job.id) ? path.join(directory, `${job.id}.log`) : null);
       const clocks = [];
       if (Number.isFinite(result?.report_to_main_s) && result.report_to_main_s >= 0) clocks.push({ label: 'report to main', seconds: Math.floor(result.report_to_main_s), legacy: false });
       if (Number.isFinite(gate?.duration_s) && gate.duration_s >= 0) clocks.push({ label: 'gate', seconds: Math.floor(gate.duration_s), legacy: false });
       // Only numeric timing leaves parseLog; neither text nor log completions classify a job.
-      if (safeLog(log, [common]) !== WITHHELD) {
+      if (logClocks && safeLog(log, [common]) !== WITHHELD) {
         try {
           if (fs.statSync(log).size <= 1024 * 1024) {
             const parsed = parseLog(fs.readFileSync(log, 'utf8'));
@@ -125,7 +112,39 @@ export async function brainSource(project, { now = Date.now(), recentMs = 864000
         worktree: result?.workspace ?? attempt?.scratch ?? run?.workspace ?? project.worktrees?.find(w => w.topic === job.topic)?.cwd ?? null,
       });
     }
-    for (const key of records.keys()) if (!retained.has(key)) records.delete(key);
     return { schema: 'board-rows/v1', project: project.name, generatedAt: new Date(now).toISOString(), rows };
   } catch { return errorDocument(project.name, 'source-read'); }
+}
+
+// Keep only the fields the projection uses, never notes, reports or tokens.
+const recordFacts = data => data ? { id: data.id, item: data.item, workspace: data.workspace, meta: { pane: data.meta?.pane } } : null;
+
+export async function brainSource(project, { now = Date.now(), show = recordShow, records = new Map(), ...options } = {}) {
+  const projection = brainProjection(project, { ...options, now }), retained = new Set();
+  let step = projection.next();
+  while (!step.done) {
+    const { job, key, finished } = step.value;
+    const cacheKey = JSON.stringify([project.identity, job.org ?? null, job.id, key]);
+    retained.add(cacheKey);
+    let entry = records.get(cacheKey);
+    if (!entry || entry.finished !== finished || (!entry.finished && now - entry.at >= 5000)) {
+      entry = { value: Promise.resolve().then(() => show(project, job, key)).then(recordFacts), at: now, finished };
+      records.set(cacheKey, entry);
+    }
+    try { step = projection.next(await entry.value); }
+    catch (error) { step = projection.throw(error); }
+  }
+  for (const key of records.keys()) if (!retained.has(key)) records.delete(key);
+  return step.value;
+}
+
+export function brainSourceSync(project, { show, ...options } = {}) {
+  const projection = brainProjection(project, options);
+  let step = projection.next();
+  while (!step.done) {
+    const { job, key } = step.value;
+    try { step = projection.next(recordFacts(show(project, job, key))); }
+    catch (error) { step = projection.throw(error); }
+  }
+  return step.value;
 }

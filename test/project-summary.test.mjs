@@ -9,6 +9,7 @@ import { gitProject } from '../lib/project.mjs';
 import { projectSummary, publishProjectSummary, writeProjectSummary, publishedSummaryStatus, readProjectReleaseIds } from '../lib/project-summary.mjs';
 import { renderProjectSummary } from '../lib/render.mjs';
 import { supervisorStatus, renderStatus } from '../supervisor/status.mjs';
+import { collectCycleTime, publishCycleTime, renderCycleTime } from '../supervisor/cycle-time.mjs';
 import { readRetirementStatus } from '../lib/retire-runtime.mjs';
 import { brainSource, brainSourceSync } from '../board/brain.mjs';
 import { brainFixture } from './helpers/board-fixture.mjs';
@@ -214,6 +215,72 @@ test('conflicting publishers preserve the previous generation and a later retry 
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'published/summary.json')), before);
   fs.rmdirSync(lock); f.publish();
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'published/summary.json')), before);
+});
+
+for (const damage of ['missing', 'empty']) for (const first of ['summary', 'cycle-time']) {
+  test(`${first} repairs a ${damage} linked generation and both output pairs remain usable`, t => {
+    const f = fixture(t), summary = projectSummary({ project: f.project, state: fold(events(f.repo)), now: NOW });
+    const cycle = collectCycleTime({ project: f.repo, org: f.org, since: EARLIER, until: NOW, now: NOW });
+    const summaryWriter = () => writeProjectSummary(f.org, summary), cycleWriter = () => publishCycleTime(cycle);
+    const writers = first === 'summary' ? [summaryWriter, cycleWriter] : [cycleWriter, summaryWriter];
+    writers[0]();
+    const publicPath = path.join(f.org, 'published'), target = fs.readlinkSync(publicPath);
+    const directory = path.join(f.org, target);
+    if (damage === 'missing') fs.rmSync(directory, { recursive: true });
+    else for (const name of fs.readdirSync(directory)) fs.rmSync(path.join(directory, name));
+    assert.equal(fs.readlinkSync(publicPath), target);
+    const write = fs.writeFileSync;
+    fs.writeFileSync = (file, ...options) => {
+      if (path.dirname(file) === directory) assert.equal(fs.existsSync(publicPath), false, 'repair does not expose a partial pair');
+      return write(file, ...options);
+    };
+    try { writers[0](); }
+    finally { fs.writeFileSync = write; }
+    assert.equal(fs.readlinkSync(publicPath), target, 'identical input rebuilds the same generation');
+    assert.equal(fs.readdirSync(publicPath).length, 2);
+    writers[1]();
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(publicPath, 'summary.json'), 'utf8')), summary);
+    assert.equal(fs.readFileSync(path.join(publicPath, 'summary.md'), 'utf8'), renderProjectSummary(summary));
+    const pair = publishCycleTime(cycle);
+    assert.deepEqual(JSON.parse(fs.readFileSync(pair.json, 'utf8')), cycle);
+    assert.equal(fs.readFileSync(pair.markdown, 'utf8'), renderCycleTime(cycle));
+    assert.equal(fs.readdirSync(publicPath).length, 4);
+    assert.equal(fs.existsSync(path.join(f.org, '.summary-publish.lock')), false);
+    assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), f.eventBytes);
+  });
+}
+
+test('a previous generation disappearing before readdir is repaired on refresh', t => {
+  const f = fixture(t); f.publish();
+  const publicPath = path.join(f.org, 'published'), directory = fs.realpathSync(publicPath);
+  const readdir = fs.readdirSync;
+  let removed = false;
+  fs.readdirSync = (location, ...options) => {
+    if (location === directory && !removed) {
+      removed = true;
+      fs.rmSync(directory, { recursive: true });
+    }
+    return readdir(location, ...options);
+  };
+  try { f.publish(); }
+  finally { fs.readdirSync = readdir; }
+  assert.equal(removed, true);
+  assert.equal(fs.readdirSync(publicPath).length, 2);
+  assert.equal(publishedSummaryStatus(f.org, { now: NOW }).status, 'fresh');
+});
+
+test('an incomplete non-empty generation still refuses both writers and preserves its contents', t => {
+  const f = fixture(t); f.publish();
+  const publicPath = path.join(f.org, 'published'), target = fs.readlinkSync(publicPath);
+  const json = fs.readFileSync(path.join(publicPath, 'summary.json'), 'utf8');
+  fs.rmSync(path.join(publicPath, 'summary.md'));
+  const cycle = collectCycleTime({ project: f.repo, org: f.org, since: EARLIER, until: NOW, now: NOW });
+  assert.throws(() => f.publish(), /incomplete publication generation/);
+  assert.throws(() => publishCycleTime(cycle), /incomplete publication generation/);
+  assert.equal(fs.readlinkSync(publicPath), target);
+  assert.equal(fs.readFileSync(path.join(publicPath, 'summary.json'), 'utf8'), json);
+  assert.deepEqual(fs.readdirSync(publicPath), ['summary.json']);
+  assert.equal(fs.existsSync(path.join(f.org, '.summary-publish.lock')), false);
 });
 
 test('published promotion classes match the lanes view for pending jobs and expired incomplete reconciliation', async t => {

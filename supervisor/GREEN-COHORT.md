@@ -65,46 +65,82 @@ supervisor entry, status and safe-point modules. Self-authority takes precedence
 when a file also serves another declared contract. Candidate modules are never
 imported or executed to compute either closure.
 
-The second principle is recognition by a closed allowlist. Every token of a file
-must belong to the supported grammar; falling outside it records unknown reach.
-This is a small source profile, not a JavaScript parser that assumes unfamiliar
-constructs are harmless. Its supported forms are:
+The second principle is a closed profile for execution edges, not for all
+JavaScript syntax. Functions, closures, classes (including constructors), control
+flow, ordinary calls, literals and identifier/numeric member access are known
+when they contain no unresolved execution capability. Every body and branch is
+scanned; calling a function is never required to discover its edges. This is an
+execution inventory, not a JavaScript syntax validator or evaluator. Normal code
+validation and independent review remain required.
 
-- Semicolon-terminated static relative imports/re-exports, closed constant data
-  and constant exports, and standalone literal `import()`/`await import()` loads.
-  Constant data comprises scalars, arrays, explicit object fields and numeric
-  indexing of a known literal array. Imported arbitrary values cannot be called,
-  aliased as loaders or used to infer a script target.
-- Named imports of the seven child-process launchers, and `fileURLToPath` from
-  `node:url`. No other child-process specifier or builtin import form is accepted.
-  Child-process re-exports and exports of launcher bindings remain unknown.
-- Fixed `fork` or Node `spawn`/`spawnSync`/`execFile`/`execFileSync` calls. Script
-  targets must be anchored by `new URL(literal, import.meta.url)` (converted by
-  the imported `fileURLToPath` for argv) or be absolute paths inside the bound
-  source tree. A cwd-relative script string is never credited to the calling
-  module's directory. Fork argv and process options must be inline literals.
-- Closed process options with the explicitly typed keys `silent`, `detached`,
-  `windowsHide`, `encoding`, `stdio`, `timeout` and `maxBuffer`. Every other key
-  refuses, including `env`, `cwd`, `shell`, `execPath` and `execArgv`, even when
-  its value looks literal. Spreads, computed keys, accessors and option bindings
-  are outside the grammar.
+The execution-edge profile recognizes these forms:
 
-There are no speculative lexer branches. Code slashes (regex or division),
-interpolated templates, escaped identifiers, non-ASCII source and any lexical
-error refuse. Functions, general calls, control flow, nonnumeric bracket member
-reads, reflection, native addons, shell commands, `eval`, `Function`, `require`
-and unsupported code-loader modules all fall outside the accepted grammar.
-There is no loader denylist whose omissions imply safety.
+- Static relative imports/re-exports and literal `import()` loads follow their
+  repository modules transitively. An explicit leaf-module allowlist admits
+  non-loader builtins such as `node:fs`, `node:path`, `node:crypto`, `node:os`,
+  `node:url`, `node:util`, `node:assert`, `node:events`, `node:stream`,
+  `node:buffer`, `node:timers` and their listed safe subpaths. Bare builtin names
+  use the same list. Unknown builtins and package imports refuse; builtin status
+  alone grants no admission. Loader/debugger modules including `node:vm`,
+  `node:module`, `node:worker_threads`, `node:inspector`, `node:wasi`, REPL and
+  test-runner modules are not leaves.
+- Only named child-process launcher imports are understood. Namespace/default,
+  default-as, class imports and launcher re-exports refuse. Each launcher use
+  must be a recognized direct call; escaping, aliasing or shadowing a launcher
+  refuses. Shell-launcher calls remain unknown.
+- Fixed `fork` or Node `spawn`/`spawnSync`/`execFile`/`execFileSync` calls require
+  script targets anchored by `new URL(literal, import.meta.url)` (converted by
+  imported `fileURLToPath` for argv) or absolute paths inside the bound source
+  tree. Closed constants can hold those values, but aliases, mutation and
+  parameter shadowing cannot borrow an outer constant's value. A cwd-relative
+  target refuses. Fork argv and process options must be inline literals.
+- Closed process options accept only explicitly typed `silent`, `detached`,
+  `windowsHide`, `encoding`, `stdio`, `timeout` and `maxBuffer`. All other keys
+  refuse, including `env`, `cwd`, `shell`, `execPath` and `execArgv`. Spreads,
+  computed keys, accessors and option bindings are outside that grammar.
+- Computed member/key accesses with nonnumeric keys refuse, including optional
+  chains and stored reads. Reflection and loader capabilities such as `eval`,
+  `Function`, `require`, `createRequire`, `process.dlopen`, `process.binding`,
+  constructor/prototype reads and global reflection remain unknown. The process
+  object has its own explicit metadata/non-loader member allowlist; unrecognized
+  native capabilities and escaping/shadowing that object refuse.
 
-Literal repository references are conservative inventory edges even when a file
-is unknown. For example, every literal lazy-command target may be frozen while
-the function/dispatch implementation itself still refuses; the former broad
-lazy-wrapper recognizer no longer makes such a file eligible. The running source
-has unresolved execution edges today. ENG-422 must resolve those through ordinary
-reviewed refactoring before enablement, rather than widening admission around
-them. An unknown inventory or authority edge, missing input or resource limit
-refuses as `GREEN_REACH_UNKNOWN`. Changed green modules' affected closures are
-also checked. No evidence assertion or override waives uncertainty.
+The crypto namespace is confined to explicitly listed non-loader properties and
+cannot escape into aliasing or enumeration. Its native `setEngine` loader is
+unknown, including named-import aliases. This exception matters because Node
+20.19.4 permits an engine path to name a shared library, as documented in
+[crypto.setEngine](https://nodejs.org/download/release/v20.19.4/docs/api/crypto.html#cryptosetengineengine-flags).
+
+Lexing retains uncertainty without selecting a convenient fallback. Unambiguous
+regex literals and division are understood; slash contexts requiring a deeper
+statement/expression parse (such as after `)` or `}`), nested regex character
+classes and Unicode-sets regexes refuse. Escaped/non-ASCII identifiers and lexical
+errors refuse. Unicode display strings/comments are data. Template interpolation
+is recursively scanned, including nested templates; it cannot hide a load.
+
+Literal repository references remain conservative inventory edges even when a
+file is unknown. Every literal lazy-command target may therefore be frozen while
+its computed import/dispatch still refuses. The running source and real-main
+probe can retain unresolved launch targets, executable options, computed member
+accesses and lexical ambiguity. ENG-422 must resolve those concrete execution
+edges before enablement. Ordinary function bodies and leaf imports no longer
+make the cohort inert by construction. Any further profile extension requires
+ordinary independent review of the affected edge contract.
+
+An unknown inventory or authority edge, missing input or resource limit refuses
+as `GREEN_REACH_UNKNOWN`. Changed green modules' affected closures are also
+checked. No evidence assertion or override waives uncertainty. Contract rules are
+selected by their code; reordering the JSON exclusion array does not change the
+self-authority pre-check or assign its code to another rule.
+
+`supervisor/test/green-main.test.mjs` probes committed real `main` with candidate
+bytes held only in memory. It records the main commit, a one-line ordinary-module
+candidate and inventory/authority refusal controls, plus exact reach diagnostics.
+It uses the same read-only execution stage as full admission. An execution-stage
+refusal proves full admission cannot succeed; execution-stage success alone does
+not waive canonical identity, matching policy bytes, lifecycle evidence or review.
+A blocked ordinary control is reported as blocked readiness, even if the fixture
+and refusal tests pass. No real Git ref, configuration, record or source is changed.
 
 The other named refusals are declared over contract paths:
 

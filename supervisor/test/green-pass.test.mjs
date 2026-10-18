@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { gitProject } from '../../lib/project.mjs';
-import { createGreenCohort, LIFECYCLE_CASES } from '../green-pass.mjs';
+import { createGreenCohort, greenContractRefusal, LIFECYCLE_CASES } from '../green-pass.mjs';
 import { sourceReach, executionClosure } from '../green-reach.mjs';
 import { autopilotNotice, autopilotSettings } from '../autopilot.mjs';
 import { receiptDirectory } from '../context.mjs';
@@ -72,6 +72,20 @@ test('a real lifecycle module outside the cross-project closure is eligible with
   assert.equal(result.eligible, true, JSON.stringify(result)); assert.equal(result.area, 'green-lifecycle');
   assert.deepEqual(result.reach.base.paths, ['lib/a.mjs', 'supervisor/reconcile.mjs']);
   assert.deepEqual(Object.keys(result.lifecycle.controls), Object.keys(LIFECYCLE_CASES));
+});
+test('ordinary functions and builtin leaves admit a real changed lifecycle module', t => {
+  const f = setup(t, { entry: "import fs from 'node:fs'; import path from 'node:path'; import '../lib/a.mjs';\nexport function read(file) { try { return fs.readFileSync(path.resolve(file), 'utf8'); } catch { return null; } }\n",
+    extra: { 'supervisor/entry.mjs': "import {createHash} from 'node:crypto'; export const digest = value => createHash('sha256').update(value).digest('hex');\n" } });
+  f.change('sessions/retirement-policy.mjs', 'export function retirementDelay(value) { const delays = [1, 2]; if (value) return delays[0]; return delays[1]; }\n');
+  assert.equal(f.scope({ report: f.evidence() }).eligible, true);
+});
+test('reordered contract JSON retains authority and ordinary refusal codes', () => {
+  const reordered = JSON.parse(contracts);
+  reordered.exclusions.push(reordered.exclusions.shift());
+  for (const [file, code] of [['supervisor/green-pass.mjs', 'GREEN_SELF_AUTHORITY'], ['blue/fix.mjs', 'GREEN_BLUE_HOTFIX'], ['lib/state.mjs', 'GREEN_SHARED_RUNTIME']]) {
+    assert.equal(greenContractRefusal(file, { contracts: reordered, authority: code === 'GREEN_SELF_AUTHORITY' }).code, code);
+  }
+  assert.equal(greenContractRefusal('blue/fix.mjs', { contracts: reordered, authority: true }), undefined);
 });
 for (const operation of ['modify', 'delete', 'rename']) test(`the base/candidate union refuses a consumed module ${operation}`, t => {
   const f = setup(t);
@@ -163,7 +177,7 @@ test('an authority target reached only by a spawned script is frozen', t => {
   assert.ok(result.authority.candidate.paths.includes('lib/authority-helper.mjs'));
 });
 test('an unknown unchanged authority closure refuses even evidence-only admission', t => {
-  const f = setup(t, { extra: { 'supervisor/entry.mjs': 'export function authority() { return true; }\n' } });
+  const f = setup(t, { extra: { 'supervisor/entry.mjs': 'export function authority(spec) { return import(spec); }\n' } });
   f.change('docs/evidence/new.txt', 'captured\n'); const result = f.scope();
   assert.equal(result.code, 'GREEN_REACH_UNKNOWN');
   assert.ok(result.authority.base.unknown.some(edge => edge.file === 'supervisor/entry.mjs'));
@@ -177,7 +191,7 @@ for (const [file, code] of [['housekeeping/config.mjs', 'GREEN_SELF_AUTHORITY'],
   f.git(['add', file], f.workspace); f.git(['commit', '-qm', 'Change frozen mode'], f.workspace);
   assert.equal(f.scope().code, code);
 });
-test('literal dispatch references are frozen and unsupported functions remain unknown', t => {
+test('literal dispatch references are frozen and unresolved dynamic dispatch remains unknown', t => {
   const f = setup(t, { entry: "const lazy = (file, name) => async (argv) => (await import(file))[name](argv);\nconst COMMANDS = { one: lazy('../lib/a.mjs', 'one'), two: lazy('../lib/b.mjs', 'two') };\nif (Object.hasOwn(COMMANDS, command)) COMMANDS[command](argv);\n",
     extra: { 'lib/b.mjs': 'export const two = 1;\n' } });
   f.change('lib/b.mjs', 'export const two = 2;\n'); assert.equal(f.scope().code, 'GREEN_BCH_CONSUMED');
@@ -314,13 +328,13 @@ test('the live autopilot accepts declared lab evidence and retains clean PASS pr
   assert.ok(result.receipt.startsWith(receiptDirectory(f.org, lab.identity)));
 });
 
-test('source scanning never executes a candidate and refuses regexes and template loads', () => {
+test('source scanning never executes a candidate and follows literal loads inside templates', () => {
   const files = new Map([['lib/a.mjs', {}]]);
   const result = sourceReach('entry.mjs', "// import('./absent.mjs')\nconst pattern = /import\\('fake'\\)/;\nconst text = `${import('./lib/a.mjs')}`;\nthrow Error('candidate must never run');\n", files);
-  assert.ok(result.unknown.length);
+  assert.deepEqual(result.unknown, []); assert.deepEqual(result.dependencies, ['lib/a.mjs']);
 });
 test('a source-level lexical refusal preserves earlier known imports', () => {
-  const result = sourceReach('entry.mjs', "import './lib/a.mjs'; const display = 'caf\u00e9';\n", new Map([['lib/a.mjs', {}]]));
+  const result = sourceReach('entry.mjs', "import './lib/a.mjs'; const caf\u00e9 = 1;\n", new Map([['lib/a.mjs', {}]]));
   assert.deepEqual(result.dependencies, ['lib/a.mjs']); assert.ok(result.unknown.some(edge => /non-ASCII/.test(edge.reason)));
 });
 test('constant shadowing cannot resolve an unknown dynamic import to the outer constant', () => {
@@ -353,14 +367,69 @@ test('absolute script paths must map inside the bound source tree', () => {
     assert.ok(sourceReach('entry.mjs', header + `spawnSync(process.execPath, [${JSON.stringify(target)}]);`, files, {root: '/source'}).unknown.length);
   }
 });
+for (const module of ['fs', 'path', 'crypto', 'os', 'url', 'util', 'assert', 'events', 'stream', 'buffer', 'timers', 'fs/promises', 'stream/promises', 'assert/strict']) {
+  test(`ordinary builtin leaf ${module} is known`, () => {
+    for (const prefix of ['', 'node:']) {
+      const result = sourceReach('entry.mjs', `import * as leaf from '${prefix}${module}'; export const known = true;`, new Map());
+      assert.deepEqual(result.unknown, []); assert.deepEqual(result.dependencies, []);
+    }
+  });
+}
 for (const source of [
-  'export function ordinary() { return 1; }', 'export const ordinary = class {};',
-  'const x = 1; x += 1;', 'const x = 1 + 2;', 'if (true) {}',
-  'const x = new Unrecognized();', 'arbitraryCall();', 'const a = [1]; const b = a[key];',
-  'const a = {x: 1}; const b = a.x;', 'const a = [1]; const b = a["0"];',
-  "'const' ordinary = 1;", "'export' const ordinary = 1;",
-  'const a = `${arbitraryCall()}`;', "// comment\u2028import(spec);", "// comment\rimport(spec);", "const name = '\\u{110000}';",
-]) test(`unrecognized constructs refuse without a loader denylist: ${source.slice(0, 60)}`, () => {
+  'export function ordinary(value) { const f = x => x + 1; if (value) return f(value); else return 0; }',
+  'export class Counter { constructor(value) { this.value = value; } next() { return this.value + 1; } }',
+  'let x = 1; x += 1; for (const v of [1, 2]) { x += v; } while (x < 5) { x++; }',
+  'try { ordinaryCall(); } catch (error) { report(error.message); } finally { cleanup(); }',
+  'const a = {x: 1}; const b = a.x; const c = a?.x; const xs = [1]; const d = xs[0]; const e = xs[-1];',
+  'const value = 12 / 2; const pattern = /ordinary[0-9]+/i; const text = `value ${value}`;',
+  "const text = 'caf\u00e9'; // Unicode display text is data\nexport default text;",
+]) test(`ordinary code stays known: ${source.slice(0, 70)}`, () => {
+  assert.deepEqual(sourceReach('entry.mjs', source, new Map()).unknown, []);
+});
+for (const module of ['vm', 'module', 'worker_threads', 'inspector', 'wasi', 'repl', 'test', 'unknown-future-builtin']) {
+  test(`non-leaf builtin ${module} refuses`, () => {
+    assert.ok(sourceReach('entry.mjs', `import * as edge from 'node:${module}';`, new Map()).unknown.length);
+  });
+}
+for (const body of [
+  'return import(spec);', 'return require(spec);', 'return eval(text);', 'return Function(text);',
+  'return process.dlopen(module, file);', 'return process.binding(name);', 'return target[key];',
+  'return process._linkedBinding(name);', 'return target?.[key];',
+  "return Object.getOwnPropertyDescriptor(Object.getPrototypeOf(() => {}), 'constructor').value(text);",
+  'return target.constructor(text);', 'return `${import(spec)}`;', 'return `${`${import(spec)}`}`;',
+]) test(`execution edge inside an ordinary function refuses: ${body}`, () => {
+  assert.ok(sourceReach('entry.mjs', `export function ordinary(spec) { ${body} }`, new Map()).unknown.length);
+});
+for (const source of ["import {setEngine as load} from 'node:crypto'; load(file);", "import crypto from 'node:crypto'; const load = crypto.setEngine; load(file);", "import crypto from 'node:crypto'; Object.values(crypto)[0](file);"]) {
+  test('native engine loading is not a crypto leaf operation', () => {
+    assert.ok(sourceReach('entry.mjs', source, new Map()).unknown.length);
+  });
+}
+for (const source of [
+  "const entry = new URL('./worker.mjs', import.meta.url); function run(entry) { fork(entry); }",
+  "const entry = new URL('./worker.mjs', import.meta.url); const alias = entry; fork(entry);",
+  "const entry = new URL('./worker.mjs', import.meta.url); entry.pathname = other; fork(entry);",
+  "const entry = new URL('./worker.mjs', import.meta.url); function run() { const fork = 1; } fork(entry);",
+  "function run(URL) { fork(new URL('./worker.mjs', import.meta.url)); }",
+  "function run(process) { spawnSync(process.execPath, ['/source/worker.mjs']); }",
+]) test(`launcher capability cannot borrow a shadowed or escaped binding: ${source.slice(0, 70)}`, () => {
+  const header = "import {fork,spawnSync} from 'node:child_process'; ";
+  assert.ok(sourceReach('entry.mjs', header + source, new Map([['worker.mjs', {}]]), {root: '/source'}).unknown.length);
+});
+for (const source of [
+  "while (x) { break\n/'/.test(s); import(spec); // '\n}",
+  "while (x) { continue\n/'/.test(s); import(spec); // '\n}",
+  "outer: while (x) { if (y) break outer\n/'/.test(s); import(spec); // '\n}",
+  "outer: while (x) { if (y) continue outer\n/'/.test(s); import(spec); // '\n}",
+  "debugger\n/'/.test(s); import(spec); // '\n",
+  "const pattern = /[[a]/']/v; import(spec); // '\n",
+]) test(`lexical context keeps execution tokens visible or unknown: ${source.slice(0, 55)}`, () => {
+  assert.ok(sourceReach('entry.mjs', source, new Map()).unknown.length);
+});
+for (const source of [
+  'const a = [1]; const b = a[key];', 'const a = [1]; const b = a["0"];',
+  "// comment\u2028import(spec);", "// comment\rimport(spec);", "const name = '\\u{110000}';",
+]) test(`unresolved execution constructs refuse: ${source.slice(0, 60)}`, () => {
   assert.ok(sourceReach('entry.mjs', source, new Map()).unknown.length);
 });
 for (const prefix of ['{', 'typeof', 'else', 'do', 'in', 'of', 'await', 'yield', 'void', 'delete', 'new', 'return', 'case', 'throw',

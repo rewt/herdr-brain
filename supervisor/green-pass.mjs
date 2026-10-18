@@ -34,6 +34,14 @@ const matches = (file, patterns) => patterns.some(p => contractMatch(file, p));
 const refusal = (code, reason, extra = {}) => ({ eligible: false, code, reason, ...extra });
 const identityError = reason => { throw Error(`GREEN_IDENTITY_MISMATCH: ${reason}`); };
 
+// Shared by the pre-declaration authority check and the remaining path checks.
+// Policy identity is its code; JSON array order carries no authority meaning.
+export function greenContractRefusal(file, { contracts = GREEN_CONTRACTS, authority = false } = {}) {
+  const rules = contracts.exclusions.filter(rule => (rule.code === 'GREEN_SELF_AUTHORITY') === authority);
+  const rule = rules.find(rule => matches(file, rule.paths));
+  return rule && refusal(rule.code, `${authority ? 'eligibility/evidence authority' : 'declared contract'}: ${file}`);
+}
+
 function runningAuthority(sourceRoot) {
   const source = fs.realpathSync(sourceRoot), inventory = readTree(gitAt(source), 'HEAD', source); let bytes = 0;
   return executionClosure({ files: inventory.files, root: source, read(file) {
@@ -84,6 +92,31 @@ function declaredPair(pair) {
   return pair;
 }
 
+// Read-only execution stage shared by admission and Git-snapshot probes. This
+// does not grant identity, policy-byte, evidence, review or promotion authority.
+export function greenExecutionScope(before, after, { sourceRoot = root, project = 'brain', changes }) {
+  const authority = { running: runningAuthority(sourceRoot), ...(project === 'brain' ? {
+    base: executionClosure(before, GREEN_CONTRACTS.authorityEntries),
+    candidate: executionClosure(after, GREEN_CONTRACTS.authorityEntries),
+  } : {}) };
+  const authorityPaths = new Set(Object.values(authority).flatMap(reach => reach.paths));
+  for (const { file } of changes) if (authorityPaths.has(file)) return refusal('GREEN_SELF_AUTHORITY', `eligibility/evidence execution input: ${file}`, { authority });
+  const entries = GREEN_CONTRACTS.entries.filter(e => e.project === project).map(e => e.path);
+  const oldReach = executionClosure(before, entries), newReach = executionClosure(after, entries);
+  const consumed = new Set([...oldReach.paths, ...newReach.paths]);
+  const evidence = { base: oldReach, candidate: newReach };
+  for (const { file } of changes) if (consumed.has(file)) return refusal('GREEN_BCH_CONSUMED', `cross-project execution input: ${file}`, { reach: evidence });
+  for (const change of changes) if (![change.before, change.after].every(m => ['000000', '100644', '100755'].includes(m)) ||
+      (change.before !== '000000' && change.after !== '000000' && change.before !== change.after) ||
+      (change.after === '100755' && change.before !== '100755')) return refusal('GREEN_NATIVE_ISOLATION', `file type or executable mode: ${change.file}`);
+  for (const { file } of changes) {
+    const denied = greenContractRefusal(file);
+    if (denied) return denied;
+  }
+  if (Object.values(authority).some(reach => reach.unknown.length) || oldReach.unknown.length || newReach.unknown.length) return refusal('GREEN_REACH_UNKNOWN', 'unresolved inventory or authority execution edge', { reach: evidence, authority });
+  return { eligible: true, reach: evidence, authority };
+}
+
 // sourceRoot injects a trusted running checkout for private fixtures, including
 // its authority graph. The live singleton has no configurable source root.
 export function createGreenCohort(sourceRoot = root) {
@@ -127,28 +160,16 @@ export function createGreenCohort(sourceRoot = root) {
       // Refuse policy edits before interpreting any candidate declaration.
       // Derive the remaining frozen authority inputs below from execution reach.
       for (const change of changes) {
-        if (matches(change.file, GREEN_CONTRACTS.exclusions[0].paths)) return refusal('GREEN_SELF_AUTHORITY', `eligibility/evidence authority: ${change.file}`);
+        const denied = greenContractRefusal(change.file, { authority: true });
+        if (denied) return denied;
       }
       const before = readTree(git, base, binding.repo), after = readTree(git, head, binding.repo);
       if (binding.kind === 'brain') for (const tree of [before, after]) {
         if (tree.read(contractFile) !== contractBytes) return refusal('GREEN_SELF_AUTHORITY', 'inventory/contract declaration differs from the running checker');
       }
-      const authority = { running: runningAuthority(sourceRoot), ...(binding.kind === 'brain' ? {
-        base: executionClosure(before, GREEN_CONTRACTS.authorityEntries),
-        candidate: executionClosure(after, GREEN_CONTRACTS.authorityEntries),
-      } : {}) };
-      const authorityPaths = new Set(Object.values(authority).flatMap(reach => reach.paths));
-      for (const { file } of changes) if (authorityPaths.has(file)) return refusal('GREEN_SELF_AUTHORITY', `eligibility/evidence execution input: ${file}`, { authority });
-      const entries = GREEN_CONTRACTS.entries.filter(e => e.project === binding.kind).map(e => e.path);
-      const oldReach = executionClosure(before, entries), newReach = executionClosure(after, entries);
-      const consumed = new Set([...oldReach.paths, ...newReach.paths]);
-      const evidence = { base: oldReach, candidate: newReach };
-      for (const { file } of changes) if (consumed.has(file)) return refusal('GREEN_BCH_CONSUMED', `cross-project execution input: ${file}`, { reach: evidence });
-      for (const change of changes) if (![change.before, change.after].every(m => ['000000', '100644', '100755'].includes(m)) ||
-          (change.before !== '000000' && change.after !== '000000' && change.before !== change.after) ||
-          (change.after === '100755' && change.before !== '100755')) return refusal('GREEN_NATIVE_ISOLATION', `file type or executable mode: ${change.file}`);
-      for (const { file } of changes) for (const rule of GREEN_CONTRACTS.exclusions.slice(1)) if (matches(file, rule.paths)) return refusal(rule.code, `declared contract: ${file}`);
-      if (Object.values(authority).some(reach => reach.unknown.length) || oldReach.unknown.length || newReach.unknown.length) return refusal('GREEN_REACH_UNKNOWN', 'unresolved inventory or authority execution edge', { reach: evidence, authority });
+      const execution = greenExecutionScope(before, after, { sourceRoot, project: binding.kind, changes });
+      if (!execution.eligible) return execution;
+      const { reach: evidence, authority } = execution;
       let lifecycle = false, evidenceOnly = true; const paths = [];
       for (const change of changes) {
         const { file } = change; paths.push(file);

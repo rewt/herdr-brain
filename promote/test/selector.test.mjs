@@ -84,9 +84,9 @@ test('unreferenced documentation contributes zero tests beside a code change or 
 test('documents read through literal paths still select full, including transitive helper readers', t => {
   const f = fixture(t);
   const sources = {
-    'docs/root.md': '# Root path', 'docs/relative.md': '# Relative path', 'module/README.md': '# Basename',
+    'docs/root.md': '# Root path', 'docs/relative.md': '# Relative path', 'module/README.md': '# Root-relative README',
     'docs/indirect.md': '# Helper read', 'docs/reviews/topic/read.md': '# Referenced review',
-    'document.test.mjs': "fs.readFileSync(path.join(root, 'docs/root.md')); fs.readFileSync(new URL('./docs/relative.md', import.meta.url)); fs.readFileSync(path.join(root, 'module', 'README.md')); fs.readFileSync('docs/reviews/topic/read.md'); import './reader.mjs';",
+    'document.test.mjs': "fs.readFileSync(path.join(root, 'docs/root.md')); fs.readFileSync(new URL('./docs/relative.md', import.meta.url)); fs.readFileSync(path.join(root, 'module/README.md')); fs.readFileSync('docs/reviews/topic/read.md'); import './reader.mjs';",
     'reader.mjs': "fs.readFileSync('docs/indirect.md');",
   };
   for (const [file, content] of Object.entries(sources)) f.write(file, content);
@@ -97,6 +97,58 @@ test('documents read through literal paths still select full, including transiti
   }
   fs.unlinkSync(path.join(f.repo, 'docs/root.md')); fs.symlinkSync('../leaf.mjs', path.join(f.repo, 'docs/root.md'));
   assert.equal(selectTests({ ...options, changed: change('docs/root.md') }).pick, 'full');
+});
+
+test('bare document basenames do not mark unrelated READMEs as test-referenced', t => {
+  const f = fixture(t), moduleReadme = path.posix.join('promote', 'README.md');
+  const sources = {
+    [moduleReadme]: '# Module documentation', 'README.md': '# Root documentation',
+    'test/fixture.test.mjs': 'fs.writeFileSync(path.join(temporaryRepo, "README.md"), "fixture");',
+  };
+  for (const [file, content] of Object.entries(sources)) f.write(file, content);
+  const options = { root: f.repo, files: [...f.files, ...Object.keys(sources)] };
+  const code = selectTests({ ...options, changed: change('leaf.mjs') }).pick;
+  assert.ok(Array.isArray(code) && code.length > 0);
+  for (const file of [moduleReadme, 'README.md']) {
+    assert.deepEqual(selectTests({ ...options, changed: change(file) }).pick, [], file);
+    assert.deepEqual(selectTests({ ...options, changed: [...change('leaf.mjs'), ...change(file)] }).pick, code, file);
+  }
+});
+
+test('directory-based document paths reference only the resolved README', t => {
+  const f = fixture(t), laneReadme = path.posix.join('lanes', 'README.md'), otherReadme = path.posix.join('promote', 'README.md');
+  // Assemble the generated reader so this fixture does not itself appear to
+  // read the README above this test file in the real repository's graph.
+  const here = ['HE', 'RE'].join(''), dirname = ['__', 'dirname'].join('');
+  const sources = {
+    [laneReadme]: '# Reader target', [otherReadme]: '# Other module', 'README.md': '# Root',
+    'lanes/test/lane.test.mjs': `const ${here} = dirname(fileURLToPath(import.meta.url)); readFileSync(resolve(${here}, "..", "README.md"), "utf8");`,
+  };
+  for (const [file, content] of Object.entries(sources)) f.write(file, content);
+  const options = { root: f.repo, files: [...f.files, ...Object.keys(sources)] };
+  assert.equal(selectTests({ ...options, changed: change(laneReadme) }).pick, 'full');
+  for (const file of [otherReadme, 'README.md']) assert.deepEqual(selectTests({ ...options, changed: change(file) }).pick, [], file);
+  f.write('lanes/test/lane.test.mjs', `readFileSync(path.join(${dirname}, '..', 'README.md'), 'utf8');`);
+  assert.equal(selectTests({ ...options, changed: change(laneReadme) }).pick, 'full');
+  assert.deepEqual(selectTests({ ...options, changed: change(otherReadme) }).pick, []);
+});
+
+test('suffix-anchored literals recover script and document paths inside template interpolations', t => {
+  const f = fixture(t);
+  const sources = {
+    'cli/entry.mjs': "import '../leaf.mjs';",
+    'interpolation.test.mjs': "const code = `import {run} from ${JSON.stringify(path.join(source, 'cli/entry.mjs'))};`;",
+    'cli/runner.sh': '',
+    'shell.test.mjs': "const code = `launch ${JSON.stringify(path.join(source, 'cli/runner.sh'))}`;",
+    'docs/interpolated.md': '# Document', 'docs/reviews/topic/receipt': 'Review record',
+    'document-template.test.mjs': "const code = `read(${JSON.stringify(path.join(root, 'docs/interpolated.md'))}); read(${JSON.stringify(path.join(root, 'docs/reviews/topic/receipt'))});`;",
+  };
+  for (const [file, content] of Object.entries(sources)) f.write(file, content);
+  const options = { root: f.repo, files: [...f.files, ...Object.keys(sources)] };
+  assert.deepEqual(selectTests({ ...options, changed: change('cli/entry.mjs') }).pick, ['interpolation.test.mjs']);
+  assert.ok(selectTests({ ...options, changed: change('leaf.mjs') }).pick.includes('interpolation.test.mjs'));
+  assert.deepEqual(selectTests({ ...options, changed: change('cli/runner.sh') }).pick, ['shell.test.mjs']);
+  for (const file of ['docs/interpolated.md', 'docs/reviews/topic/receipt']) assert.equal(selectTests({ ...options, changed: change(file) }).pick, 'full', file);
 });
 
 test('spawned root-relative and basename CLI literals participate in transitive selection', t => {

@@ -449,10 +449,15 @@ for spawned CLIs, including `path.join(source, 'lanes/lane.mjs')`, following the
 existing additive planner's literal-path rules. These edges are transitive too.
 Changed `.test.mjs` files include themselves. Known regular documentation includes
 `docs/reviews/**`, Markdown under `docs/` directories and `README.md` files.
-These documents contribute zero tests when no test reaches them through literal paths. Thus a
-code change plus its unreferenced review record retains the code's subset.
+These documents contribute zero tests when no test reaches them through literal
+paths. Thus a code change plus its unreferenced review record retains the code's subset.
 Documents referenced by tests, directly or through helpers, still select full;
-relative, root-relative and basename literals conservatively identify readers.
+explicit relative and repository-relative path literals identify readers. Static
+`join`/`resolve` calls with `HERE` or `__dirname` and literal components resolve
+against the reader's directory, so `resolve(HERE, '..', 'README.md')` in
+`lanes/test/lane.test.mjs` references only `lanes/README.md`. Bare basenames map
+globally only to modules and scripts, never to documents. The literal patterns
+anchor accepted path suffixes so paths inside template interpolations are found.
 Unknown paths, helpers, fixtures, package/config files, other non-module paths,
 symlinks and modules without a reachable test select full.
 Computed runtime references are outside this static graph; real shadow misses

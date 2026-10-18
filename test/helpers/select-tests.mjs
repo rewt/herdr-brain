@@ -30,7 +30,7 @@ export function selectTests({ root, changed, files }) {
   }
   const reverse = new Map();
   const basenames = new Map();
-  for (const file of files.filter(file => sourceFile(file) || documentFile(file))) {
+  for (const file of files.filter(file => sourceFile(file) && !documentFile(file))) {
     const name = path.posix.basename(file), targets = basenames.get(name) ?? [];
     targets.push(file); basenames.set(name, targets);
   }
@@ -59,13 +59,30 @@ export function selectTests({ root, changed, files }) {
     }
     // Mirror affected-tests.mjs: root-relative and basename literals account
     // for path.join(source, 'lanes/lane.mjs') and split CLI path construction.
-    // Include documents so a test reading one prevents the zero-test exemption.
-    for (const match of source.matchAll(/['"`]([^'"`\n]+)['"`]/g)) {
+    // Anchor suffixes so an outer template quote cannot consume the opening
+    // quote of a path inside an interpolation and shift subsequent pairing.
+    for (const match of source.matchAll(/['"`]([^'"`\n]+\.(?:mjs|js|cjs|sh))['"`]/g)) {
       const literal = match[1];
       for (const target of [path.posix.normalize(path.posix.join(path.posix.dirname(file), literal)), literal]) {
-        if (sourceFile(target) || documentFile(target)) edge(target, file);
+        edge(target, file);
       }
       if (!literal.includes('/')) for (const target of basenames.get(literal) ?? []) edge(target, file);
+    }
+    // Document names never fan out by basename. Only explicit paths and
+    // statically resolved calls from the reader's directory identify documents.
+    for (const match of source.matchAll(/['"`]([^'"`\n]+\.md|(?:\.{1,2}\/)*docs\/reviews\/[^'"`\n]+)['"`]/gi)) {
+      const literal = match[1];
+      if (!literal.includes('/')) continue;
+      for (const target of [path.posix.normalize(path.posix.join(path.posix.dirname(file), literal)), literal]) {
+        if (documentFile(target)) edge(target, file);
+      }
+    }
+    const directoryCalls = /\b(?:path\s*\.\s*)?(?:join|resolve)\s*\(\s*(?:HERE|__dirname)\s*,\s*((?:['"`][^'"`\r\n]*['"`]\s*,\s*)*['"`][^'"`\r\n]*['"`]\s*)\)/g;
+    for (const match of source.matchAll(directoryCalls)) {
+      const parts = [...match[1].matchAll(/(['"`])([^'"`\r\n]*)\1/g)].map(part => part[2]);
+      if (!parts.length || parts.some(part => path.posix.isAbsolute(part) || part.includes('${'))) continue;
+      const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), ...parts));
+      if (documentFile(target)) edge(target, file);
     }
   }
   const picked = new Set();

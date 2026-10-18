@@ -246,3 +246,12 @@ test('build refuses a tag missing the installed settle-watch dependency before s
   assert.match(f.run(['build', 'missing']).stderr, /release is missing contrib\/settle-watch.mjs/);
   assert.equal(fs.existsSync(f.gateLog), false); assert.equal(fs.existsSync(f.release('missing')), false);
 });
+
+test('build verifies its full manifest before publishing the immutable directory', t => {
+  const f = scratch(t), probe = path.join(f.root, 'change-after-manifest.mjs');
+  fs.writeFileSync(probe, `import fs from 'node:fs';import path from 'node:path';import {syncBuiltinESMExports} from 'node:module';const write=fs.writeFileSync;fs.writeFileSync=function(file,...args){const result=write.call(this,file,...args);if(process.argv[2]==='manifest'&&path.basename(String(file))==='.release-manifest.json'){fs.appendFileSync(path.join(path.dirname(file),'lib/state.mjs'),'\\n// changed after manifest\\n');}return result};syncBuiltinESMExports();`);
+  const failed = f.run(['build', 't1'], { NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(probe)}` });
+  assert.notEqual(failed.status, 0); assert.match(failed.stderr, /incomplete release t1\.partial: lib\/state\.mjs/);
+  assert.equal(fs.existsSync(f.release('t1')), false); assert.ok(fs.existsSync(`${f.release('t1')}.partial`));
+  f.ok(['build', 't2']); assert.ok(fs.existsSync(path.join(f.release('t2'), '.release-manifest.json')));
+});

@@ -13,7 +13,7 @@ import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 
 import { loadTimeout } from '../../lib/deadline.mjs';
-import { drain } from '../promote.mjs';
+import { drain, retryCleanup } from '../promote.mjs';
 
 // These fixtures do not consume the shared host's FSEvents registrations.
 async function waitForChange(files, predicate, { timeoutMs = 10000 } = {}) {
@@ -810,4 +810,38 @@ test('an unborn canonical branch has no gate profile, whatever its working tree 
   assert.equal(spawnSync('git', ['-C', repo, 'init', '-q', '-b', 'main']).status, 0);
   fs.writeFileSync(path.join(repo, '.promote.json'), JSON.stringify({ gate: { env: { NODE_OPTIONS: '--import=x' } } }));
   assert.equal(resolveGateProfile(repo), null);
+});
+
+test('cross-bundle cleanup failures stay pending with backoff and do not skip later rows', t => {
+  const f = fixture(t), org = path.join(f.root, 'record'), calls = path.join(f.root, 'cleanup-calls');
+  fs.mkdirSync(org); const events = path.join(org, 'events.jsonl'); fs.writeFileSync(events, '');
+  const stat = fs.statSync(events), revision = `${stat.size}:${stat.mtimeMs}:0`, now = 1000000;
+  const release = (id, commit, actual = commit) => {
+    const root = path.join(f.root, id);
+    if (actual) { fs.mkdirSync(root); fs.writeFileSync(path.join(root, '.release-commit'), actual + '\n'); }
+    return { root, id, commit, protocol: 1 };
+  };
+  const missing = release('missing', '1'.repeat(40), null);
+  const changed = release('changed', '1'.repeat(40), '2'.repeat(40));
+  const refused = release('refused', '3'.repeat(40));
+  fs.mkdirSync(path.join(refused.root, 'promote'));
+  fs.writeFileSync(path.join(refused.root, 'promote/promote.mjs'), `import fs from 'node:fs';fs.appendFileSync(${JSON.stringify(calls)},'attempt\\n');console.error('fixture cleanup child refused');process.exitCode=9;`);
+  const row = (id, bundle) => ({ id, topic: id, org, outcome: 'promoted', ...(bundle ? { release: bundle } : {}),
+    warnings: ['velocity record: retained diagnostic', 'old cleanup refusal'],
+    cleanup: { state: 'pending', revision, attempts: 2, next_attempt_at: 0 } });
+  f.queue.transaction(data => data.results.push(row('missing', missing), row('changed', changed), row('refused', refused), row('later')));
+  assert.doesNotThrow(() => retryCleanup(f.queue, { now }));
+  const rows = f.results();
+  for (const [index, error] of [/ENOENT/, /release identity changed/, /fixture cleanup child refused/].entries()) {
+    const saved = rows[index];
+    assert.equal(saved.outcome, 'promoted'); assert.equal(saved.cleanup.state, 'pending');
+    assert.equal(saved.cleanup.attempts, 3); assert.equal(saved.cleanup.attempted_at, now);
+    assert.equal(saved.cleanup.next_attempt_at, now + 240000); assert.match(saved.cleanup.last_refusal, error);
+    assert.equal(saved.cleanup.revision, revision); assert.equal(saved.warnings[0], 'velocity record: retained diagnostic');
+  }
+  assert.equal(rows[3].cleanup.state, 'complete', 'later local cleanup still runs after each foreign failure');
+  assert.equal(fs.readFileSync(calls, 'utf8'), 'attempt\n');
+  retryCleanup(f.queue, { now: now + 1 });
+  assert.deepEqual(f.results().slice(0, 3).map(row => row.cleanup.attempts), [3, 3, 3]);
+  assert.equal(fs.readFileSync(calls, 'utf8'), 'attempt\n', 'backoff prevents another child invocation');
 });

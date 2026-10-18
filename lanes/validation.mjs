@@ -116,7 +116,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
   const fingerprint = environmentFingerprint({ env, prepare, environment });
   // Identical commands across tiers prove the same thing. Tier names describe
   // who runs a check; they do not force a second execution of identical inputs.
-  const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint, release: admittedRelease });
+  const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint });
   const directory = plainDirectory(path.join(common, 'lane-validation'));
   const receipt = path.join(directory, `${key}.json`);
   const release = acquireLock(path.join(directory, `${key}.lock`));

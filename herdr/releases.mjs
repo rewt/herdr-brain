@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { cliHelp } from '../lib/cli-help.mjs';
 import { productFiles } from '../lib/product-files.mjs';
-import { PIN_FILE, checkRelease, releaseProject, releaseHome, runRelease } from '../lib/releases.mjs';
+import { PIN_FILE, checkBundle, checkRelease, releaseProject, releaseHome, runRelease } from '../lib/releases.mjs';
 cliHelp(import.meta.url, 'Usage: node herdr/releases.mjs manifest ROOT | install HOME BIN | pin HOME PROJECT TAG | unpin HOME PROJECT | exec HOME ENTRY [ARGS...] | run ENTRY [ARGS...]');
 
 const [action, home, target, ...rest] = process.argv.slice(2);
@@ -14,6 +14,7 @@ try {
     const commit = fs.readFileSync(path.join(home, '.release-commit'), 'utf8').trim();
     const files = Object.fromEntries(productFiles(home).map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(home, file))).digest('hex')]));
     fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, commit, files }, null, 2) + '\n');
+    checkBundle(home, { verifyFiles: true });
   } else if (action === 'install') {
     // Content-address the small router: activation never rewrites an admitted
     // launcher's code, including when rolling current back to a legacy bundle.
@@ -32,7 +33,7 @@ try {
   } else if (action === 'pin' || action === 'unpin') {
     const project = releaseProject(target);
     if (project.checkout !== project.canonical) throw Error('set release pins from the canonical checkout');
-    const release = action === 'pin' ? checkRelease(home, rest[0]).id : null;
+    const release = action === 'pin' ? checkRelease(home, rest[0], { verifyFiles: true }).id : null;
     const file = path.join(project.canonical, PIN_FILE);
     if (fs.existsSync(file) && !fs.lstatSync(file).isFile()) throw Error('pin configuration must be a regular file');
     const temporary = `${file}.${randomUUID()}`;

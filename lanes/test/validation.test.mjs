@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
+import { copyProduct } from '../../lib/product-files.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { waitForFile } from '../../test/helpers/file-wait.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
@@ -338,4 +340,31 @@ test('bch-cloak-compatible holder refuses declared-exclusive proving promotion w
   f.good(f.lane(['check'], f.workspace, env)); // Fast checks remain available.
   assert.deepEqual(f.count(), ['fast']);
   holder.kill('SIGTERM'); await waitForExit(holder);
+});
+
+test('validation reuses proof across bundle roots and preserves pre-pin green receipt keys', async t => {
+  const f = fixture(t), starts = [];
+  const roots = ['blue', 'green'].map((name, index) => {
+    const root = path.join(f.root, name);
+    copyProduct(fileURLToPath(new URL('../../', import.meta.url)), root);
+    fs.writeFileSync(path.join(root, '.release-commit'), String(index + 1).repeat(40) + '\n');
+    return root;
+  });
+  const [blue, green] = await Promise.all(roots.map(root => import(pathToFileURL(path.join(root, 'lanes/validation.mjs')).href)));
+  const options = { cwd: f.workspace, common: path.join(f.repo, '.git'), command: 'node check.cjs same', env: f.env,
+    onStart: evidence => starts.push(evidence) };
+  const first = blue.validateTree({ ...options, tier: 'fast' });
+  const oldKey = createHash('sha256').update(JSON.stringify({ schema: 'lane-validation/v1', tree: first.tree,
+    command: first.command, fingerprint: first.environment_fingerprint })).digest('hex');
+  assert.equal(first.key, oldKey, 'keep the exact pre-pin cache key');
+  assert.equal(first.release.root, roots[0]); assert.equal(starts[0].release.root, roots[0]);
+  const second = green.validateTree({ ...options, tier: 'promotion' });
+  assert.equal(second.reused, true); assert.equal(second.key, first.key);
+  assert.equal(second.release.root, roots[0], 'reused evidence names the bundle that executed the proof');
+  assert.equal(starts.length, 1); assert.deepEqual(f.count(), ['same']);
+  const receipt = path.join(f.repo, '.git/lane-validation', `${oldKey}.json`);
+  const legacy = JSON.parse(fs.readFileSync(receipt, 'utf8')); delete legacy.release;
+  fs.writeFileSync(receipt, JSON.stringify(legacy));
+  assert.equal(green.validateTree({ ...options, tier: 'fast' }).reused, true, 'older receipts without release metadata remain reusable');
+  assert.equal(starts.length, 1); assert.deepEqual(f.count(), ['same']);
 });

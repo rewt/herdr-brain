@@ -43,9 +43,11 @@ bash /path/to/bundle/herdr/release.sh exec supervisor/supervisor.mjs brief --jso
 bash /path/to/bundle/herdr/release.sh exec housekeeping/housekeeping.mjs --start
 ```
 
-Only the canonical supervisor starts real housekeeping. Source commands and the
-mutable `current` paths for record, lane, supervisor, promotion, dispatch and
-settlement also honor accepted pins. An explicit immutable bundle path means
+Only the canonical supervisor starts real housekeeping. Source commands from
+the target project's own checkout or lanes execute that source tree, as bound
+by their shared Git common directory. Source commands from other projects and
+the mutable `current` paths for record, lane, supervisor, promotion, dispatch and
+settlement honor accepted pins. An explicit immutable bundle path means
 the operation has already selected that bundle; continuations use that path and
 never read `current` or the pin again. Use `exec` when admitting through other
 module paths rather than storing a mutable `current` path in an adapter.
@@ -65,10 +67,11 @@ to build/install/pin tooling, never to these operation admissions.
 | Promotion validation, host lock/slot children | Train and host receipts include release; host adapter self-spawns via import.meta.url, never argv's mutable path; lane, gate and record adapters are relative to the executing bundle |
 | Promotion reconciliation/replacement/cleanup retries | Run inside the saved job's bundle; pending cleanup explicitly re-enters that bundle. Existing completion receipts/locks and reconcile command surface remain unchanged |
 | Housekeeping start/loop/tick | Start action, owner receipt and activity include release; detached loop, tidy-tabs, retirement, record and inbox children use absolute bundle paths |
-| Dispatch and retry | Journal includes release; retry re-enters its saved bundle before taking its lock; lane, record and watch children use the bundle paths |
+| Dispatch and retry | Journal includes release; retry reads the saved bundle under its lock, then a receiving bundle relocks and reads fresh progress; lane, record and watch children use the bundle paths |
+| `dispatch/record-worker.mjs` | Captures the launched occupant and invokes its bundle-relative `bin/org.mjs`; it has no pin selection when invoked directly through `current`. Admit from the target project through `release.sh exec dispatch/record-worker.mjs` or the project-aware router before freezing its bundle path; `--cwd` binds the occupant, not release selection |
 | Watch detach/spawn and cold-start re-arm | Existing self/record children derive from import.meta.url; cold-start re-arm uses the dispatch journal's saved bundle |
 | Settlement and retry | Journal includes release; existing receipt re-enters that bundle before locking; review, dispatch, record and validation adapters derive from its bundle |
-| Validation library/adapter | Evidence includes release, also salted into cache identity; canonical lane CLI, watchdog and slot children use that bundle |
+| Validation library/adapter | Gate and onStart evidence include the producing bundle; tree, command and fingerprint identify reusable validation across bundle roots and tiers. Canonical lane CLI, watchdog and slot children use the executing bundle |
 | Foreground notice/inbox/autopilot | Existing module-relative owner/children remain in their launch bundle; new autopilot receipt includes release (no policy/notice-format change) |
 | Other foreground tools (board, brain, sessions, verify, request, tidy, test-slot) | Admit through `release.sh exec MODULE`; their module-relative children stay in the resolved bundle. Explicit immutable invocations remain supported |
 
@@ -92,6 +95,8 @@ with operation protocol 1 and runtime file hashes. Releases built before this
 format (including frozen A') are **not eligible project pins**. They keep working
 through unpinned global current, including rollback/activation. A pin-aware
 maintenance build is needed before a project can explicitly pin that lineage.
+Build and pin verify every runtime hash; each launch checks only the manifest
+schema, commit and mandatory entry files.
 No project state migration is introduced. A future incompatible record, queue,
 receipt or host protocol requires a bounded project migration and an explicit
 coordinated protocol exception; changing a pin alone cannot authorize one.

@@ -194,3 +194,35 @@ const original=cp.spawnSync;cp.spawnSync=function(command,args,options){if(args?
   assert.deepEqual(fs.readFileSync(trace, 'utf8').trim().split('\n').map(line => JSON.parse(line).id), ['blue', 'green']);
   assert.equal(JSON.parse(fs.readFileSync(handoffs, 'utf8')), 2);
 });
+
+test('a pinned project runs its own canonical and lane source while installed launchers run the pin', t => {
+  const f = fixture(t), repo = f.project('source-project');
+  copyProduct(source, repo); f.pin(repo, 'blue');
+  f.git(repo, 'add', '.'); f.git(repo, 'commit', '-qm', 'track source runtime');
+  const lane = path.join(f.root, 'source-lane'); f.git(repo, 'worktree', 'add', '-b', 'lane/development', lane);
+  for (const [index, checkout] of [repo, lane].entries()) {
+    const record = path.join(f.root, `source-record-${index}`);
+    const output = f.node([path.join(checkout, 'bin/org.mjs'), 'init', record], checkout);
+    assert.match(output, /initialized /); assert.ok(fs.existsSync(path.join(record, 'events.jsonl')));
+    assert.equal(f.node([path.join(f.bin, 'record'), 'help'], checkout), 'blue');
+  }
+  const foreign = f.project('foreign-project'); f.pin(foreign, 'blue');
+  const account = path.join(f.root, 'fixture-account.mjs');
+  fs.writeFileSync(account, `import os from 'node:os';import {syncBuiltinESMExports} from 'node:module';const original=os.userInfo;os.userInfo=(...args)=>({...original(...args),homedir:${JSON.stringify(f.root)}});syncBuiltinESMExports();`);
+  const output = f.node([path.join(repo, 'bin/org.mjs'), 'init', path.join(f.root, 'foreign-record')], foreign,
+    { NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(pathToFileURL(account).href)}` });
+  assert.equal(output, 'blue', 'another project still selects its pin when calling this source bundle');
+  assert.equal(fs.existsSync(path.join(f.root, 'foreign-record')), false);
+});
+
+test('launch checks avoid payload reads while pinning verifies the full runtime hashes', t => {
+  const f = fixture(t), repo = f.project('project'); f.pin(repo, 'blue');
+  const payload = path.join(f.releases.blue, 'lib/state.mjs');
+  fs.appendFileSync(payload, '\n// fixture payload changed after acceptance\n');
+  const probe = path.join(f.root, 'no-payload-read.mjs');
+  fs.writeFileSync(probe, `import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';const read=fs.readFileSync;fs.readFileSync=function(file,...args){if(String(file)===${JSON.stringify(payload)})throw Error('launch read non-entry payload');return read.call(this,file,...args)};syncBuiltinESMExports();`);
+  assert.equal(f.node([path.join(f.bin, 'record'), 'help'], repo,
+    { NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(pathToFileURL(probe).href)}` }), 'blue');
+  const rejected = f.run(process.execPath, [path.join(source, 'herdr/releases.mjs'), 'pin', f.home, repo, 'blue']);
+  assert.notEqual(rejected.status, 0); assert.match(rejected.stderr, /incomplete release blue: lib\/state\.mjs/);
+});

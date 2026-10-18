@@ -372,7 +372,20 @@ export function retryCleanup(queue, { now = Date.now() } = {}) {
     try { revision = cleanupRevision(saved, queue); } catch (e) { revision = `unreadable:${e.message}`; }
     if (saved.cleanup.revision === revision && ((saved.cleanup.attempts ?? 0) >= 5 || now < saved.cleanup.next_attempt_at)) continue;
     if (saved.release && saved.release.root !== bundleRelease().root) {
-      invoke(process.execPath, [operationFile('promote/promote.mjs', saved.release), '--cleanup-job', saved.id, '--repo', queue.project.canonical]);
+      try {
+        invoke(process.execPath, [operationFile('promote/promote.mjs', saved.release), '--cleanup-job', saved.id, '--repo', queue.project.canonical]);
+      } catch (error) {
+        queue.transaction(data => {
+          const row = data.results.findLast(r => r.id === saved.id);
+          if (!row) return;
+          const warnings = [`lane cleanup: ${error.message}`];
+          const attempts = (row.cleanup?.revision === revision ? row.cleanup.attempts ?? 0 : 0) + 1;
+          Object.assign(row, { warnings: [...(row.warnings ?? []).filter(w => w.startsWith('velocity record:')), ...warnings],
+            cleanup: { state: 'pending', warnings, revision, attempts, attempted_at: now,
+              next_attempt_at: now + Math.min(3600000, 60000 * 2 ** (attempts - 1)), last_refusal: warnings.join('; ') },
+            reason: `integrated-but-cleanup-pending: ${warnings.join('; ')}` });
+        });
+      }
       continue;
     }
     const result = finishCleanup(saved, saved, queue, { now });

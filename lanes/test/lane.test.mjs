@@ -341,10 +341,12 @@ if (args[0] === "workspace" && args[1] === "list") {
   result("cli:workspace:list", { type: "workspace_list", workspaces });
 } else if (args[0] === "tab" && args[1] === "list") {
   if (args.at(-1) === "w-lane") stallObservation('tab');
-  result("cli:tab:list", { tabs: process.env.FAKE_RETIREMENT_OWNER && state.agent && args.at(-1) === "w-lane"
+  result("cli:tab:list", { tabs: process.env.FAKE_HERDR_INITIAL_INVENTORY && args.at(-1) === 'w-lane'
+    ? [{ tab_id: 'w-lane:t1', workspace_id: 'w-lane' }] : process.env.FAKE_RETIREMENT_OWNER && state.agent && args.at(-1) === "w-lane"
     ? [{ tab_id: "w-lane:t2", workspace_id: "w-lane" }] : [] });
 } else if (args[0] === "pane" && args[1] === "list") {
-  result("cli:pane:list", { panes: process.env.FAKE_RETIREMENT_OWNER && state.agent && args.at(-1) === "w-lane"
+  result("cli:pane:list", { panes: process.env.FAKE_HERDR_INITIAL_INVENTORY && args.at(-1) === 'w-lane'
+    ? [{ pane_id: 'w-lane:p1', tab_id: 'w-lane:t1', workspace_id: 'w-lane', terminal_id: 'fixture-terminal-1', foreground_cwd: process.env.FAKE_HERDR_LANE_PATH }] : process.env.FAKE_RETIREMENT_OWNER && state.agent && args.at(-1) === "w-lane"
     ? [{ pane_id: state.agentPane, tab_id: "w-lane:t2", workspace_id: "w-lane" }] : [] });
 } else if (args[0] === "worktree" && args[1] === "list") {
   const openId = state.opened ? "w-lane" : process.env.FAKE_HERDR_STALE_ID;
@@ -415,8 +417,15 @@ if (args[0] === "workspace" && args[1] === "list") {
 } else if (args[0] === "pane" && args[1] === "process-info") {
   const shellPid = Number(process.env.FAKE_HERDR_SHELL_PID || 123456789);
   if (process.env.FAKE_HERDR_INITIAL_RECEIPT === '1') {
+    state.initialInfoReads = (state.initialInfoReads || 0) + 1;
+    if (process.env.FAKE_HERDR_INITIAL_LOCK && state.initialInfoReads === 1) state.initialLockDuringCapture = existsSync(process.env.FAKE_HERDR_INITIAL_LOCK);
+    if (state.initialInfoReads === 2 && process.env.FAKE_HERDR_INITIAL_FILE) {
+      state.initialClaimAtSupports = JSON.parse(readFileSync(process.env.FAKE_HERDR_INITIAL_FILE, 'utf8')).claimed === true;
+      if (process.env.FAKE_HERDR_DROP_INITIAL_RECEIPT) rmSync(process.env.FAKE_HERDR_INITIAL_FILE);
+    }
+    save();
     result('cli:pane:process-info', { process_info: { shell_pid: shellPid,
-      foreground_processes: [{ pid: shellPid, name: 'zsh' }], process_tree_complete: true,
+      foreground_processes: process.env.FAKE_HERDR_INITIAL_UNAVAILABLE ? [] : [{ pid: shellPid, name: 'zsh' }], process_tree_complete: true,
       process_tree: [{ pid: shellPid, identity: 'initial-shell-birth', command: '[zsh]', state: 'S' }] } });
     process.exit(0);
   }
@@ -2124,6 +2133,42 @@ for (const nativeCreate of [true, false]) test(`lane open records its invocation
   } finally { fixture.cleanup(); }
 });
 
+test('a fresh git-only lane initial shell stays open without a recorded terminal chain', () => {
+  const fixture = makeFixture();
+  try {
+    ignoreLaneState(fixture);
+    const path = lanePath(fixture, 'fresh-shell');
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: 'lane/fresh-shell', initiallyOpened: true });
+    fixture.env.FAKE_HERDR_INITIAL_INVENTORY = '1'; fixture.env.FAKE_HERDR_INITIAL_RECEIPT = '1';
+    fixture.env.ORG_DIR = join(fixture.root, 'record'); mkdirSync(fixture.env.ORG_DIR);
+    writeFileSync(join(fixture.env.ORG_DIR, 'events.jsonl'), '');
+    const opened = lane(fixture, ['open', 'fresh-shell', '--git-only']); assert.equal(opened.status, 0, opened.stderr);
+    const retirement = createRetirement({ cwd: fixture.repo, org: fixture.env.ORG_DIR, env: fixture.env,
+      herdr: join(fixture.bin, 'herdr'), selfTab: null });
+    const plan = retirement.plan();
+    assert.equal(plan.close.length, 0); assert.match(plan.keep.find(row => row.tab_id === 'w-lane:t1').why, /no terminal chain/);
+    retirement.apply(plan);
+    assert.ok(!fake.calls().some(args => args[1] === 'close'));
+  } finally { fixture.cleanup(); }
+});
+
+for (const failure of ['missing', 'unavailable']) test(`dispatch retains the initial pane and falls back when its receipt is ${failure}`, () => {
+  const fixture = makeFixture();
+  try {
+    ignoreLaneState(fixture);
+    const path = lanePath(fixture, 'receipt-fallback');
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: 'lane/receipt-fallback' });
+    fixture.env.FAKE_HERDR_INITIAL_RECEIPT = '1';
+    fixture.env.FAKE_HERDR_INITIAL_FILE = initialShellFile(repositoryIdentity(fixture.repo), 'w-lane:t1');
+    fixture.env[failure === 'missing' ? 'FAKE_HERDR_DROP_INITIAL_RECEIPT' : 'FAKE_HERDR_INITIAL_UNAVAILABLE'] = '1';
+    const opened = lane(fixture, ['open', 'receipt-fallback', '--git-only']); assert.equal(opened.status, 0, opened.stderr);
+    const dispatched = lane(fixture, ['dispatch', 'receipt-fallback', '--json']);
+    assert.equal(dispatched.status, 0, dispatched.stderr); assert.equal(JSON.parse(dispatched.stdout).pane, 'w-lane:p2');
+    assert.match(dispatched.stderr, failure === 'missing' ? /receipt is missing/ : /receipt unavailable/);
+    assert.ok(!fake.calls().some(args => args[1] === 'close'));
+  } finally { fixture.cleanup(); }
+});
+
 test("dispatch opens a single agent tab in the initial pane and keeps fix rounds background", async () => {
   const values = { NORMAL: "plain", QUOTED: "spaces ' \" $HOME $(exit 99) `exit 99`;\nsecond line", EMPTY: "" };
   const fixture = makeFixture({ main: "main", validate: "true", routes: {
@@ -2136,6 +2181,7 @@ test("dispatch opens a single agent tab in the initial pane and keeps fix rounds
     const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/initial-pane" });
     fixture.env.FAKE_HERDR_INITIAL_RECEIPT = '1';
     fixture.env.FAKE_HERDR_INITIAL_FILE = initialShellFile(repositoryIdentity(fixture.repo), 'w-lane:t1');
+    fixture.env.FAKE_HERDR_INITIAL_LOCK = join(repositoryIdentity(fixture.repo), 'retirement/tabs', createHash('sha256').update('w-lane:t1').digest('hex'));
     const opened = lane(fixture, ["open", "initial-pane", "--git-only"]);
     assert.equal(opened.status, 0, opened.stderr);
     assert.match(opened.stdout, /deferred until dispatch/u);
@@ -2147,6 +2193,9 @@ test("dispatch opens a single agent tab in the initial pane and keeps fix rounds
     assert.equal(firstResult.pane, "w-lane:p1");
     assert.equal(firstResult.tabId, "w-lane:t1");
     assert.equal(fake.state().initialClaimBeforeStart, true);
+    assert.equal(fake.state().initialLockDuringCapture, true);
+    assert.equal(fake.state().initialClaimAtSupports, true, 'receipt is published claimed before the first readiness wait');
+    assert.equal(existsSync(fixture.env.FAKE_HERDR_INITIAL_LOCK), false, 'successful dispatch releases its tab lock');
     const shellReceipt = JSON.parse(readFileSync(fixture.env.FAKE_HERDR_INITIAL_FILE, 'utf8'));
     assert.equal(shellReceipt.cwd, path); assert.equal(shellReceipt.shell.identity, 'initial-shell-birth');
     let calls = fake.calls();

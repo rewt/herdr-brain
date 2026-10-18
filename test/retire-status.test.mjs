@@ -137,6 +137,7 @@ const reasonCases = [
   ['inert shell record or references were not read', 'UNKNOWN'],
   ['inert shell checkout is not clean and integrated', 'UNKNOWN'],
   ['ambiguous initial shell receipts', 'UNKNOWN'],
+  ['inert shell has no terminal chain and lane history is fresh or unknown', 'UNKNOWN'],
   ['operator focus or this tab', 'PROTECTED'],
   ['persistent, operator or lab workspace', 'PROTECTED'],
   ['persistent or detached desk workspace', 'PROTECTED'],
@@ -184,6 +185,11 @@ test('every planner reason expression is enumerated and mapped; source drift fai
   const releases = [...policy.matchAll(/why: reason \?\? (?:\(inert \? initial \? ('[^']*') : ('[^']*') : needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());
   for (const why of releases) assert.equal(classifyRetirement({ decision: 'release', why }).class, 'TERMINAL');
+});
+
+test('a scoped malformed initial receipt is UNKNOWN with its explicit keep reason', () => {
+  const why = 'initial shell receipt is malformed or unreadable';
+  assert.deepEqual(classifyRetirement({ decision: 'keep', why }), { class: 'UNKNOWN', nextAction: `keep; ${why}` });
 });
 
 test('an exited worker shell is TERMINAL while changed exit evidence is UNKNOWN with its keep reason', () => {
@@ -455,7 +461,12 @@ test('read-only proof: every fake Herdr invocation is a read, Git disables optio
     const command = args[0] === '-C' || args[0] === '--git-dir' ? args[2] : args[0];
     assert.ok(['rev-parse', 'symbolic-ref', 'worktree', 'merge-base', 'status', 'ls-files', 'reflog'].includes(command), `${exe} ${args}`);
     if (command === 'worktree') assert.ok(args.includes('list'));
-    if (command === 'reflog') assert.ok(args.includes('show'));
+    if (command === 'reflog') {
+      assert.ok(args.includes('show'));
+      assert.deepEqual(args.slice(2, 5), ['reflog', 'show', '--format=%H%x00%gs']);
+      assert.match(args[5], /^refs\/heads\/lane\//);
+      assert.equal(args.length, 6);
+    }
   }
   assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
   assert.deepEqual(fs.readFileSync(index), indexBytes); assert.deepEqual(fs.readFileSync(receipt), receiptBytes);

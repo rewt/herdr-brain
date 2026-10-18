@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { planRetirement, executeRetirement } from '../lib/retire.mjs';
-import { recordInitialShell, initialShellFile, claimInitialShell } from '../lib/initial-shell.mjs';
-import { fixture } from './helpers/retire-fixture.mjs';
+import { recordInitialShell, initialShellFile, claimInitialShell, recordLaneOpen, initialShellLock } from '../lib/initial-shell.mjs';
+import { fixture, hold, isolatedEnv } from './helpers/retire-fixture.mjs';
+import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
+import { fileURLToPath } from 'node:url';
 
 function shellSnapshot(receipted = false) {
   const shell = { pid: 5, ppid: 1, pgid: 5, identity: 'shell-birth', command: '[zsh]', state: 'S' };
@@ -89,6 +91,11 @@ test('a receipt is never used after a claim, and absent-chain authority requires
   const ambiguous = shellSnapshot(true); ambiguous.initialShells.push(structuredClone(ambiguous.initialShells[0]));
   assert.match(planRetirement(ambiguous).keep[0].why, /ambiguous/);
   const empty = shellSnapshot(); empty.record = { runs: [], items: [] };
+  for (const history of ['fresh', 'unknown', undefined]) {
+    empty.git[0].initialShellHistory = history;
+    assert.match(planRetirement(empty).keep[0].why, /no terminal chain/);
+  }
+  empty.git[0].initialShellHistory = 'progressed';
   assert.equal(planRetirement(empty).close.length, 1);
   delete empty.shellEvidence.recordRead;
   assert.match(planRetirement(empty).keep[0].why, /were not read/);
@@ -108,7 +115,129 @@ test('creation receipts bind native identities and are never backfilled or overw
   assert.equal(saved.terminal, pane.terminal_id); assert.equal(saved.common, f.common); assert.equal(saved.cwd, f.lane);
   const bytes = fs.readFileSync(file); assert.throws(() => recordInitialShell(options), /EEXIST/); assert.deepEqual(fs.readFileSync(file), bytes);
   claimInitialShell(f.common, 'w:t'); assert.equal(JSON.parse(fs.readFileSync(file)).claimed, true);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  assert.throws(() => claimInitialShell(f.common, 'missing'), /receipt is missing/);
   assert.deepEqual(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});
+
+function initialFixture(t) {
+  const f = fixture(t), state = f.read();
+  state.agents = []; state.panes = [{ pane_id: 'w:initial', tab_id: 'w:t', workspace_id: 'w', terminal_id: 'initial-terminal', foreground_cwd: f.lane }];
+  state.info = { shell_pid: 5, foreground_processes: [{ pid: 5, name: 'zsh' }], process_tree_complete: true,
+    process_tree: [{ pid: 5, identity: 'birth', command: '[zsh]', state: 'S' }] };
+  const save = () => fs.writeFileSync(f.file, JSON.stringify(state)); save();
+  const record = (extra = {}) => recordInitialShell({ common: f.common, cwd: f.lane,
+    created: { already_open: false, workspace: { workspace_id: 'w' }, tab: state.tabs[0], root_pane: state.panes[0] },
+    h: args => args[1] === 'get' ? { pane: state.panes[0] } : { process_info: state.info }, ...extra });
+  return { ...f, state, save, record, receiptFile: initialShellFile(f.common, 'w:t') };
+}
+
+test('housekeeping during the dispatch receipt-to-claim window keeps the already claimed shell', t => {
+  const f = initialFixture(t); isolatedEnv(t, f);
+  const retirement = f.retirement(), stalePlan = retirement.plan(), unlock = initialShellLock(f.common, 'w:t');
+  assert.equal(stalePlan.close.length, 1);
+  try {
+    f.record({ claimed: true, locked: true });
+    const runner = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.env.HERDR_RETIRE_HERDR, selfTab: null,
+      record: [process.execPath, fileURLToPath(new URL('../bin/org.mjs', import.meta.url))] });
+    const plan = runner.tick({ resume: false });
+    assert.equal(plan.close.length, 0); assert.match(plan.keep[0].why, /occupant claim/);
+    assert.deepEqual(f.read().actions, []); assert.equal(JSON.parse(fs.readFileSync(f.receiptFile)).claimed, true);
+    const stale = retirement.apply(stalePlan); assert.match(stale[0].why, /locked:/);
+    assert.deepEqual(f.read().actions, [], 'a stale pre-dispatch plan cannot cross the shared tab lock');
+  } finally { unlock(); }
+});
+
+for (const receipted of [true, false]) test(`${receipted ? 'recorded' : 'legacy'} creation-only shell needs a terminal lane chain`, t => {
+  const f = initialFixture(t); if (receipted) f.record();
+  const base = f.git(['rev-parse', 'lane/topic@{1}']);
+  f.git(['reset', '--hard', base], f.lane); recordLaneOpen(f.common, f.lane, base);
+  fs.writeFileSync(f.eventFile, '');
+  const retirement = f.retirement(), plan = retirement.plan();
+  assert.equal(plan.close.length, 0); assert.match(plan.keep[0].why, /no terminal chain.*fresh or unknown/);
+  retirement.apply(plan); assert.deepEqual(f.read().actions, []);
+  // Explicit terminal disposition can authorize a fresh lane; it is not age
+  // or the mere fact that its base is already integrated.
+  fs.writeFileSync(f.eventFile, f.eventBytes);
+  assert.equal(retirement.plan().close.length, 1);
+});
+
+test('a creation-only legacy reflog keeps without a lane-open sidecar', t => {
+  const f = initialFixture(t);
+  f.git(['worktree', 'add', '-b', 'lane/fresh', path.join(f.scratch, 'fresh')]);
+  const fresh = path.join(f.scratch, 'fresh');
+  f.state.workspaces[0].worktree.checkout_path = fresh; f.state.panes[0].foreground_cwd = fresh; f.save();
+  fs.writeFileSync(f.eventFile, '');
+  const snapshot = f.retirement().observe();
+  assert.equal(snapshot.git[0].initialShellHistory, 'fresh');
+  assert.match(planRetirement(snapshot).keep[0].why, /no terminal chain/);
+});
+
+test('a native tab ID may be reused only through a new creation identity; receipt writes are atomic and private', t => {
+  const f = initialFixture(t); f.record({ claimed: true });
+  const before = fs.readFileSync(f.receiptFile), rename = fs.renameSync;
+  f.state.panes[0].terminal_id = 'new-terminal'; f.state.info.process_tree[0].identity = 'new-birth';
+  fs.renameSync = (from, to) => {
+    if (to === path.basename(f.receiptFile)) {
+      assert.deepEqual(fs.readFileSync(to), before, 'old complete receipt stays visible until rename');
+      throw Error('injected atomic publication failure');
+    }
+    return rename(from, to);
+  };
+  try { assert.throws(() => f.record(), /atomic publication failure/); }
+  finally { fs.renameSync = rename; }
+  assert.deepEqual(fs.readFileSync(f.receiptFile), before);
+  f.record(); const next = JSON.parse(fs.readFileSync(f.receiptFile));
+  assert.equal(next.terminal, 'new-terminal'); assert.equal(next.shell.identity, 'new-birth');
+  assert.equal(next.claimed, undefined); assert.equal(fs.statSync(f.receiptFile).mode & 0o777, 0o600);
+  assert.deepEqual(fs.readdirSync(path.dirname(f.receiptFile)), [path.basename(f.receiptFile)]);
+});
+
+test('a failed first atomic receipt publication leaves no truncated target or temporary file', t => {
+  const f = initialFixture(t), rename = fs.renameSync;
+  fs.renameSync = (from, to) => {
+    if (to === path.basename(f.receiptFile)) {
+      assert.equal(fs.existsSync(to), false); throw Error('injected first publication failure');
+    }
+    return rename(from, to);
+  };
+  try { assert.throws(() => f.record(), /first publication failure/); }
+  finally { fs.renameSync = rename; }
+  assert.equal(fs.existsSync(f.receiptFile), false);
+  assert.deepEqual(fs.readdirSync(path.dirname(f.receiptFile)), []);
+});
+
+test('initial receipts are pruned after close or freshly verified absence, with HOLD and reappearance checks', t => {
+  const f = initialFixture(t); f.record();
+  const retirement = f.retirement();
+  retirement.apply(retirement.plan()); assert.equal(fs.existsSync(f.receiptFile), false, 'closed tab receipt is pruned');
+  f.save(); f.record();
+  const liveState = structuredClone(f.state);
+  f.state.tabs = []; f.state.panes = []; f.save();
+  const snapshot = retirement.observe(); assert.ok(fs.existsSync(f.receiptFile), 'observe is read-only');
+  fs.writeFileSync(f.file, JSON.stringify(liveState));
+  retirement.apply(planRetirement(snapshot), undefined, snapshot);
+  assert.ok(fs.existsSync(f.receiptFile), 'fresh native reappearance prevents stale absence pruning');
+  f.save(); const old = retirement.observe();
+  fs.writeFileSync(f.receiptFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(f.receiptFile)), claimed: true }));
+  retirement.apply(planRetirement(old), undefined, old);
+  assert.ok(fs.existsSync(f.receiptFile), 'a newer receipt is not erased using old observed contents');
+  f.save(); const clear = hold(f); retirement.apply(retirement.plan());
+  assert.ok(fs.existsSync(f.receiptFile)); clear();
+  retirement.apply(retirement.plan()); assert.equal(fs.existsSync(f.receiptFile), false);
+});
+
+test('malformed initial receipts keep only their filename-bound tab while another tab retires', t => {
+  const f = initialFixture(t); f.record();
+  fs.writeFileSync(f.receiptFile, '{truncated');
+  f.state.tabs.push({ tab_id: 'w:other', workspace_id: 'w' });
+  f.state.panes.push({ ...f.state.panes[0], pane_id: 'w:other:p', tab_id: 'w:other', terminal_id: 'other-terminal' }); f.save();
+  const retirement = f.retirement(), snapshot = retirement.observe(), plan = planRetirement(snapshot);
+  assert.deepEqual(snapshot.errors, []); assert.equal(plan.keep.length, 1);
+  assert.equal(plan.keep[0].tab_id, 'w:t'); assert.match(plan.keep[0].why, /malformed or unreadable/);
+  assert.deepEqual(plan.close.map(row => row.tab_id), ['w:other']);
+  assert.equal(retirement.apply(plan)[0].action, 'closed');
+  assert.deepEqual(f.read().tabs.map(tab => tab.tab_id), ['w:t']);
 });
 
 for (const receipted of [true, false]) test(`runtime closes a ${receipted ? 'recorded' : 'legacy'} last shell while leaving workspace removal separate`, t => {

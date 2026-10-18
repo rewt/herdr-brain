@@ -298,6 +298,18 @@ edge, and records `legacy inert-shell retirement` with both observed identities.
 A changed identity, agent claim or incomplete observation keeps the tab. Closing
 the last inert pane is allowed; empty-workspace removal remains a separate guard
 that cannot close a surviving pane. These paths never force-kill a process.
+Fresh lanes whose tip is still their recorded opening base, or whose branch
+reflog establishes only creation, keep their initial shell unless a terminal
+recorded chain names the lane. Unknown branch history also keeps without such a
+chain, including for Git-only opens.
+
+When dispatch creates a workspace, it holds the retirement tab lock through
+agent registration and publishes the receipt already claimed. A missing or
+unavailable receipt retains that initial pane and uses a separate agent tab.
+Receipts publish atomically with mode 0600, survive claim updates with that mode,
+and can be replaced by a new creation with a different terminal or shell birth.
+Guarded cleanup prunes them only after fresh native absence checks; a malformed
+receipt keeps its filename-bound tab instead of the project.
 
 ## Commands
 

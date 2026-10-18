@@ -2164,7 +2164,7 @@ test('a fresh git-only lane initial shell stays open without a recorded terminal
   } finally { fixture.cleanup(); }
 });
 
-for (const failure of ['missing', 'unavailable']) test(`dispatch retains the initial pane and falls back when its receipt is ${failure}`, () => {
+test('dispatch retains the initial pane and falls back when its receipt is missing', () => {
   const fixture = makeFixture();
   try {
     ignoreLaneState(fixture);
@@ -2172,12 +2172,39 @@ for (const failure of ['missing', 'unavailable']) test(`dispatch retains the ini
     const fake = writeFakeHerdr(fixture, { lanePath: path, branch: 'lane/receipt-fallback' });
     fixture.env.FAKE_HERDR_INITIAL_RECEIPT = '1';
     fixture.env.FAKE_HERDR_INITIAL_FILE = initialShellFile(repositoryIdentity(fixture.repo), 'w-lane:t1');
-    fixture.env[failure === 'missing' ? 'FAKE_HERDR_DROP_INITIAL_RECEIPT' : 'FAKE_HERDR_INITIAL_UNAVAILABLE'] = '1';
+    fixture.env.FAKE_HERDR_DROP_INITIAL_RECEIPT = '1';
     const opened = lane(fixture, ['open', 'receipt-fallback', '--git-only']); assert.equal(opened.status, 0, opened.stderr);
     const dispatched = lane(fixture, ['dispatch', 'receipt-fallback', '--json']);
     assert.equal(dispatched.status, 0, dispatched.stderr); assert.equal(JSON.parse(dispatched.stdout).pane, 'w-lane:p2');
-    assert.match(dispatched.stderr, failure === 'missing' ? /receipt is missing/ : /receipt unavailable/);
+    assert.match(dispatched.stderr, /receipt is missing/);
     assert.ok(!fake.calls().some(args => args[1] === 'close'));
+  } finally { fixture.cleanup(); }
+});
+
+test('dispatch reuses the initial pane when no initial-shell receipt was recorded', async () => {
+  const fixture = makeFixture();
+  try {
+    ignoreLaneState(fixture);
+    const topic = 'no-initial-receipt', path = lanePath(fixture, topic);
+    // The native opener owns p1, but the fake's incomplete process observation
+    // cannot supply the shell birth identity required by a retirement receipt.
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}` });
+    const file = initialShellFile(repositoryIdentity(fixture.repo), 'w-lane:t1');
+    const opened = lane(fixture, ['open', topic, '--git-only']); assert.equal(opened.status, 0, opened.stderr);
+    const dispatched = lane(fixture, ['dispatch', topic, '--json', 'Implement once']);
+    assert.equal(dispatched.status, 0, dispatched.stderr);
+    const result = JSON.parse(dispatched.stdout);
+    assert.equal(result.pane, 'w-lane:p1'); assert.equal(result.tabId, 'w-lane:t1');
+    assert.match(dispatched.stderr, /initial shell receipt unavailable/);
+    assert.doesNotMatch(dispatched.stderr, /receipt is missing|separate tab/);
+    assert.equal(existsSync(file), false, 'reuse must not create or claim a retirement receipt');
+    assert.equal(fake.state().tabCount || 1, 1);
+    const calls = fake.calls();
+    for (const verb of ['run', 'start', 'prompt', 'rename']) assert.equal(calls.filter(args => args[1] === verb).length, 1);
+    assert.ok(!calls.some(args => args[1] === 'create' || args[1] === 'close' || args[1] === 'focus'));
+    const { loadRegistry } = await registryApi();
+    const sessions = loadRegistry(fixture.repo).sessions;
+    assert.equal(sessions.length, 1); assert.equal(sessions[0].pane, 'w-lane:p1');
   } finally { fixture.cleanup(); }
 });
 

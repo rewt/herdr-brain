@@ -13,6 +13,8 @@ import { receiptDirectory } from './context.mjs';
 import { autopilotSettings } from './autopilot.mjs';
 import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { approvalPolicy } from '../lib/discernment.mjs';
+import { publishedSummaryStatus } from '../lib/project-summary.mjs';
+import { renderPublishedSummaryStatus } from '../lib/render.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const timestamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
@@ -162,7 +164,8 @@ export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', ag
     else if (!housekeepingConfig(path.join(project.canonical, '.housekeeping.json')).enabled) { enabled = false; reason = 'housekeeping paused'; }
     else if (approvalPolicy(readConfig(org), 'tooling') !== 'auto') { enabled = false; reason = 'tooling requires operator authority'; }
   } catch (error) { warnings.push(error.message); reason = error.message; }
-  return { project: { ...project, org, as_of: now }, lanes: [...active, ...landed], autopilot: { enabled, reason: reason ?? null, actions }, warnings };
+  return { project: { ...project, org, as_of: now }, lanes: [...active, ...landed], autopilot: { enabled, reason: reason ?? null, actions },
+    published_summary: publishedSummaryStatus(org, { now, project }), warnings };
 }
 
 const line = value => sanitizeTerminal(String(value ?? '?')).replace(/\s+/g, ' ').slice(0, 120);
@@ -172,6 +175,7 @@ export function renderStatus(doc) {
     ...doc.lanes.map(r => [r.run, r.item, r.lane, r.stage, r.provider, r.model, r.started, duration(r.running_seconds)])].map(row => row.map(line));
   const widths = rows[0].map((_, i) => Math.max(...rows.map(r => r[i].length)));
   return [`Supervisor status · ${doc.project.canonical}`, ...rows.map(r => r.map((cell, i) => cell.padEnd(widths[i])).join('  ').trimEnd()),
+    ...(doc.published_summary ? [renderPublishedSummaryStatus(doc.published_summary).trimEnd()] : []),
     `Autopilot: ${doc.autopilot.enabled ? 'enabled' : `disabled (${doc.autopilot.reason})`}`,
     ...doc.autopilot.actions.map(a => `  ${a.at} ${line(a.key)} ${a.disposition}: ${line(a.reason)}${a.actions.length ? ` (${a.actions.map(step => `${step.name}: ${step.phase}`).join('; ')})` : ''} · ${a.receipt}`),
     ...doc.warnings.map(w => `  ${line(w)}`)].join('\n') + '\n';

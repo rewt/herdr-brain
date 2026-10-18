@@ -80,6 +80,35 @@ test('recorded promoted workers close through the shared tidy planner', (t) => {
   assert.match(f.logs.find((x) => x.action === 'closed').why, /R-1/);
 });
 
+test('canonical housekeeping ticks refresh the owner summary on the existing cadence; previews and scoped ticks never publish', t => {
+  const f = fixture(t), summary = path.join(f.root, 'published/summary.json');
+  const bytes = fs.readFileSync(path.join(f.root, 'events.jsonl'));
+  const runner = f.runner();
+  runner.tick({ cleanup: false, resume: false, dryRun: true, now: '2026-01-01T00:00:00Z' });
+  assert.equal(fs.existsSync(summary), false);
+  runner.tick({ cleanup: false, resume: false, workspacePath: f.lane, now: '2026-01-01T00:00:00Z' });
+  assert.equal(fs.existsSync(summary), false);
+  runner.tick({ cleanup: false, resume: false, now: '2026-01-01T00:01:00Z' });
+  assert.equal(JSON.parse(fs.readFileSync(summary)).generated_at, '2026-01-01T00:01:00.000Z');
+  runner.tick({ cleanup: false, resume: false, now: '2026-01-01T00:02:00Z' });
+  assert.equal(JSON.parse(fs.readFileSync(summary)).generated_at, '2026-01-01T00:02:00.000Z');
+  assert.equal(f.logs.filter(e => e.action === 'summary-published').length, 2);
+  assert.deepEqual(fs.readFileSync(path.join(f.root, 'events.jsonl')), bytes);
+  assert.deepEqual(f.actions, []);
+});
+
+test('a summary publication failure never blocks guarded cleanup or interruption recovery', t => {
+  const f = fixture(t, { reported: false });
+  // Occupied publication paths are preserved, rather than replaced or deleted.
+  fs.mkdirSync(path.join(f.root, 'published'));
+  fs.writeFileSync(path.join(f.root, 'published/owner-file'), 'preserve');
+  f.runner().tick();
+  assert.ok(f.logs.some(e => e.action === 'summary-publish-failed'));
+  assert.ok(f.logs.some(e => e.action === 'resumed'));
+  assert.equal(fs.readFileSync(path.join(f.root, 'published/owner-file'), 'utf8'), 'preserve');
+  assert.equal(fs.existsSync(path.join(f.root, '.summary-publish.lock')), false);
+});
+
 for (const failure of ['enqueue', 'corrupt notice state']) test(`notice failure never stalls cleanup or resume: ${failure}`, t => {
   const f = fixture(t, { reported: false }), finishedLane = path.join(f.root, 'finished');
   f.git(['worktree', 'add', '-b', 'lane/finished', finishedLane]);

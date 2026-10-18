@@ -89,6 +89,8 @@ Views (zero inference)
   record show <ID> [--json]               an item or run with its reports and history
   record log [--since 2h|09:00|DATE] [--limit N] [--json]
   record today [--json] [--parked]        what waits on the operator; --parked lists questions older than 7 days
+  record summary [--json]                published summary freshness and age
+  record summary publish [--json]        publish status/today/releases from the canonical checkout
   record housekeeping [--json]            schedule status, last scan and recent activity
   record releases [--json] [--identity DIR] candidates, gate evidence and operator decisions
   record housekeeping pause [--expect REV] save enabled=false for the next tick
@@ -991,6 +993,7 @@ const COMMANDS = {
   desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
   routes: lazy('../lanes/routes-command.mjs', 'routesCommand'),
   housekeeping: lazy('../housekeeping/command.mjs', 'housekeepingCommand'),
+  summary: lazy('../lib/project-summary.mjs', 'summaryCommand'),
 };
 
 async function main(argv) {

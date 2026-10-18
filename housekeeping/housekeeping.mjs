@@ -13,6 +13,7 @@ import { createRetirement } from '../lib/retire-runtime.mjs';
 import { planRetirement } from '../lib/retire.mjs';
 import { consumeRetirement } from '../lib/retire-trigger.mjs';
 import { retirementStatus } from '../lib/retire-status.mjs';
+import { publishProjectSummary } from '../lib/project-summary.mjs';
 import { noticeIdleRetirement } from './retirement-notices.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';
@@ -139,6 +140,10 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       } catch (error) { log({ action: 'retirement-failed', error: error.message }); }
     }
     const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
+    if (!workspacePath && !dryRun) try {
+      const summary = publishProjectSummary({ cwd, org, snapshot, command, main, now });
+      log({ action: 'summary-published', generated_at: summary.generated_at });
+    } catch (error) { log({ action: 'summary-publish-failed', error: error.message }); }
     if (!workspacePath) try {
       noticeIdleRetirement({ status: retirementStatus(snapshot, { generatedAt: now }), snapshot,
         stateDir, cwd, org, herdr, dryRun, log });

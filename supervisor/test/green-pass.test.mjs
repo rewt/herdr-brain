@@ -83,7 +83,7 @@ test('a module reached only by a spawned entry is refused transitively', t => {
   assert.equal(f.scope().code, 'GREEN_BCH_CONSUMED');
 });
 test('a closed dispatch table includes every lazy command, not only the invoked command', t => {
-  const f = setup(t, { entry: "const lazy = (file, name) => async (argv) => (await import(file))[name](argv);\nconst COMMANDS = { one: lazy('../lib/a.mjs', 'one'), two: lazy('../lib/b.mjs', 'two') };\n",
+  const f = setup(t, { entry: "const lazy = (file, name) => async (argv) => (await import(file))[name](argv);\nconst COMMANDS = { one: lazy('../lib/a.mjs', 'one'), two: lazy('../lib/b.mjs', 'two') };\nif (Object.hasOwn(COMMANDS, command)) COMMANDS[command](argv);\n",
     extra: { 'lib/b.mjs': 'export const two = 1;\n' } });
   f.change('lib/b.mjs', 'export const two = 2;\n'); assert.equal(f.scope().code, 'GREEN_BCH_CONSUMED');
   const files = new Map(['supervisor/reconcile.mjs', 'lib/a.mjs', 'lib/b.mjs'].map(file => [file, {}]));
@@ -229,7 +229,7 @@ test('a referenced non-JavaScript launcher is retained as unknown rather than dr
 });
 test('escaped imports and literal URL spawns resolve without executing either target', () => {
   const files = new Map([['lib/a.mjs', {}], ['worker.mjs', {}]]);
-  const source = "import './lib/\\u0061.mjs';\nconst delimiter = '\\0';\nimport { spawnSync as launch } from 'node:child_process';\nconst entry = fileURLToPath(new URL('./worker.mjs', import.meta.url));\nlaunch(process.execPath, [entry]);\n";
+  const source = "import './lib/\\u0061.mjs';\nconst delimiter = '\\0';\nimport { spawnSync as launch } from 'node:child_process';\nconst entry = fileURLToPath(new URL('./worker.mjs', import.meta.url));\nlaunch(process.execPath, [entry], {env: {...process.env}});\n";
   const result = sourceReach('entry.mjs', source, files);
   assert.deepEqual(result.dependencies, ['lib/a.mjs', 'worker.mjs']); assert.deepEqual(result.unknown, []);
 });
@@ -239,6 +239,10 @@ for (const source of [
   "const loader = (() => {})['constructor']; loader(text)();",
   "const operations = [load]; operations[index]();",
   "const target = './lib/a.mjs'; function launch(target) { return import(target); }",
+  "const COMMANDS = { run: fn }; const alias = COMMANDS; COMMANDS[key]();",
+  "const COMMANDS = { run: fn }; COMMANDS[other] = unknown; COMMANDS[key]();",
+  "import {spawnSync} from 'node:child_process'; spawnSync('node', ['./worker.mjs'], {...options});",
+  "import {spawnSync} from 'node:child_process'; spawnSync('node', ['./worker.mjs'], {['sh'+'ell']: true});",
 ]) test(`unsupported indirect execution fails closed: ${source.slice(0, 50)}`, () => {
   assert.ok(sourceReach('entry.mjs', source, new Map([['lib/a.mjs', {}]])).unknown.length);
 });

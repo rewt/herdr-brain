@@ -15,7 +15,7 @@ import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { exitFixture } from '../../test/helpers/retire-exit-fixture.mjs';
 import { isolatedEnv, hold } from '../../test/helpers/retire-fixture.mjs';
-import { finishCleanup, retryCleanup } from '../../promote/promote.mjs';
+import { finishCleanup } from '../../promote/promote.mjs';
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
@@ -104,15 +104,14 @@ for (const guard of ['unchanged', 'changed shell birth', 'second pane', 'child p
     // No drain or new record event intervenes: this is the settled cleanup pass.
     const runner = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.job.herdr, selfTab: null,
       log: row => logs.push(row) });
-    const plan = runner.tick({ cleanup: true, resume: false });
+    const plan = runner.tick({ cleanup: true, resume: false, now: new Date(result.cleanup.next_attempt_at).toISOString() });
     if (guard === 'unchanged') {
       assert.equal(plan.close[0].decision, 'release');
-      assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+      assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
       assert.ok(logs.some(row => row.action === 'closed' && /recorded agent exit/.test(row.why)));
       assert.deepEqual(fs.readdirSync(receipts), []);
-      // The pending queue checkpoint uses the existing guarded merged-lane path.
-      retryCleanup(queue, { now: result.cleanup.next_attempt_at });
       assert.equal(queue.load().results[0].cleanup.state, 'complete');
+      assert.ok(logs.some(row => row.action === 'promotion-cleanup-retried'));
       assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
       assert.equal(f.read().workspaces.length, 0);
       assert.equal(f.read().actions.filter(a => a[0] === 'agent' && a[1] === 'prompt').length, 1, 'cleanup never repeats the exit');
@@ -125,6 +124,24 @@ for (const guard of ['unchanged', 'changed shell birth', 'second pane', 'child p
     assert.deepEqual(fs.readFileSync(f.eventFile), bytes);
   });
 }
+
+test('settled housekeeping retries pending cleanup after an earlier scoped close; previews and recovery do not', t => {
+  const f = exitFixture(t, { bound: true }); isolatedEnv(t, f);
+  f.state.failClose = true; f.save();
+  const queue = f.queue(), result = finishCleanup(f.job, { outcome: 'promoted', tip: f.head, workspace: f.lane }, queue, { now: 1000 });
+  queue.transaction(data => data.results.push({ ...f.job, ...result }));
+  const saved = fs.readFileSync(queue.file), state = f.read(); state.failClose = false; fs.writeFileSync(f.file, JSON.stringify(state));
+  const runner = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.job.herdr, selfTab: null });
+  const due = { resume: false, now: new Date(result.cleanup.next_attempt_at).toISOString() };
+  runner.tick({ ...due, cleanup: true, dryRun: true });
+  runner.tick({ ...due, cleanup: false });
+  runner.tick({ ...due, cleanup: true, workspacePath: f.lane });
+  assert.deepEqual(fs.readFileSync(queue.file), saved, 'preview, recovery and scoped calls never retry promotion cleanup');
+  assert.equal(fs.existsSync(f.lane), true); assert.equal(f.read().tabs.length, 0, 'scoped retirement already closed the shell');
+  runner.tick({ ...due, cleanup: true });
+  assert.equal(queue.load().results[0].cleanup.state, 'complete'); assert.equal(fs.existsSync(f.lane), false);
+  assert.equal(f.read().workspaces.length, 0);
+});
 
 test('only canonical cleanup ticks refresh the owner summary after cleanup; previews and scoped ticks never publish', t => {
   const f = fixture(t), summary = path.join(f.root, 'published/summary.json');

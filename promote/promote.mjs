@@ -366,7 +366,14 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
 }
 
 // Restart/reconciliation retries only the cleanup checkpoint, never the gate.
-export function retryCleanup(queue, { now = Date.now() } = {}) {
+export function retryCleanup(queue, options = {}) {
+  // Housekeeping and the drain share this queue-owned retry lock. Keep the
+  // short queue transactions available to enqueuers and bundle continuations.
+  const release = acquireLock(path.join(queue.directory, 'cleanup.lock'));
+  try { return retryCleanupLocked(queue, options); }
+  finally { release(); }
+}
+function retryCleanupLocked(queue, { now = Date.now() } = {}) {
   for (const saved of queue.load().results.filter(r => r.outcome === 'promoted' && r.cleanup?.state === 'pending' && r.reconciliation?.state !== 'pending')) {
     let revision;
     try { revision = cleanupRevision(saved, queue); } catch (e) { revision = `unreadable:${e.message}`; }

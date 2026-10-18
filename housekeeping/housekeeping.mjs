@@ -20,6 +20,7 @@ import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { resumeInbox, inboxPath } from '../supervisor/prompt-supervisor.mjs';
+import { queueFor, retryCleanup } from '../promote/promote.mjs';
 export { readConfig } from './config.mjs';
 
 const LOCAL_RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -153,6 +154,12 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     for (const diagnostic of plan.diagnostics ?? []) log({ action: 'reference-diagnostic', ...diagnostic });
     if (dryRun) for (const tab of plan.close) log({ action: 'would-close', ...tab });
     else if (!consumed?.results) retirement.apply(plan, workspacePath, snapshot);
+    // A per-tick tidy or this pass may have closed the last pane. Finish only
+    // the existing bounded cleanup checkpoints; no later drain is required.
+    if (cleanup && !workspacePath && !dryRun && fs.existsSync(path.join(common, 'promote/queue.json'))) try {
+      retryCleanup(queueFor(cwd), { now: Date.parse(now) });
+      log({ action: 'promotion-cleanup-retried' });
+    } catch (error) { log({ action: 'promotion-cleanup-failed', error: error.message }); }
     if (resume) for (const agent of snapshot.agents) {
       const run = candidate(snapshot, agent);
       if (!run || seen.has(resumeKey(run, agent))) continue;

@@ -106,7 +106,10 @@ for canonical-supervisor startup and the manual one-time backlog procedure.
   unregisters the agent. It rechecks the original run's release policy, clean and
   integrated Git, references, focus and holds. A changed terminal or shell, extra
   pane or remaining child process keeps the tab. Successful close prunes the
-  receipt; lane removal still uses the existing guarded merged-lane path.
+  receipt. Each canonical settled cleanup pass also runs the promotion queue's
+  bounded cleanup retry under its shared `cleanup.lock`, so the integrated lane
+  leaves through the existing guarded merged-lane path without a later drain.
+  Previews, scoped checks and recovery-only ticks do not run queue retries.
 - Recovery requires an open run, idle/done Codex, a current `■ Conversation
   interrupted` (or `■ Turn interrupted`) banner at the end of the visible output,
   and only SGR wheel junk (`<64` through `<67`; coordinates; `M`/`m`) in the composer.

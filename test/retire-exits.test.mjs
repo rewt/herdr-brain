@@ -2,10 +2,13 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { exitFixture } from './helpers/retire-exit-fixture.mjs';
 import { hold, isolatedEnv } from './helpers/retire-fixture.mjs';
 import { planRetirement, executeRetirement } from '../lib/retire.mjs';
 import { finishCleanup, retryCleanup } from '../promote/promote.mjs';
+import { acquireLock } from '../lanes/promotion-lock.mjs';
+import { RETIREMENT_HOLD_PATH } from '../lib/retire-hold.mjs';
 
 test('an observed native exit records its terminal and shell before closing an unregistered worker', t => {
   const f = exitFixture(t, { bound: true }), logs = [], bytes = fs.readFileSync(f.eventFile);
@@ -81,6 +84,12 @@ test('the bounded queue retry closes an exited worker and removes its integrated
   assert.equal(result.cleanup.state, 'pending'); assert.match(result.cleanup.last_refusal, /injected tab failure/);
   queue.transaction(data => data.results.push({ ...f.job, ...result }));
   const state = f.read(); state.failClose = false; fs.writeFileSync(f.file, JSON.stringify(state));
+  const unlock = acquireLock(path.join(queue.directory, 'cleanup.lock'));
+  try {
+    assert.throws(() => retryCleanup(queue, { now: result.cleanup.next_attempt_at }), /locked:.*cleanup.lock/);
+    assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']], 'another retry owner excludes all cleanup effects');
+    assert.equal(fs.existsSync(f.lane), true);
+  } finally { unlock(); }
   retryCleanup(queue, { now: result.cleanup.next_attempt_at });
   const saved = queue.load().results[0];
   assert.equal(saved.outcome, 'promoted'); assert.equal(saved.cleanup.state, 'complete', saved.reason);
@@ -95,4 +104,64 @@ test('an unregistered shell without an observed terminal never receives exit aut
   assert.equal(result[0].action, 'skip-close'); assert.match(result[0].why, /unrecorded shell/);
   assert.equal(fs.existsSync(path.join(f.org, 'retirement/exits')), false);
   assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
+});
+
+test('an observed exit survives a hold arriving after the agent exits and closes once it is lifted', t => {
+  const f = exitFixture(t, { bound: true }); let clear;
+  const retirement = f.retirement({ command: (exe, args, options) => {
+    const result = spawnSync(exe, args, options);
+    if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'prompt') clear = hold(f);
+    return result;
+  } });
+  const result = retirement.apply(retirement.plan());
+  assert.equal(result[0].action, 'skip-close'); assert.match(result[0].why, /retirement held/);
+  assert.equal(fs.readdirSync(path.join(f.org, 'retirement/exits')).length, 1, 'a hold cannot discard the observed exit');
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
+  clear();
+  const next = f.retirement(); assert.equal(next.apply(next.plan())[0].action, 'closed');
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+});
+
+test('an exit observed just as its retirement deadline expires remains available to the next pass', t => {
+  const f = exitFixture(t), now = Date.now, lstat = fs.lstatSync, deadline = now() + 60000;
+  let prompted = false, expired = false, result;
+  const retirement = f.retirement({ deadline, command: (exe, args, options) => {
+    const result = spawnSync(exe, args, options);
+    if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'prompt') prompted = true;
+    return result;
+  } });
+  const plan = retirement.plan();
+  try {
+    fs.lstatSync = function(file, ...args) {
+      // This is the end of the first post-exit observation, after the shell and
+      // record identities were read, with no more IO needed to save the receipt.
+      if (prompted && !expired && file === path.join(f.repo, RETIREMENT_HOLD_PATH)) {
+        expired = true; Date.now = () => deadline;
+      }
+      return lstat.call(this, file, ...args);
+    };
+    result = retirement.apply(plan);
+  } finally { fs.lstatSync = lstat; Date.now = now; }
+  assert.equal(expired, true); assert.equal(result[0].action, 'deferred');
+  assert.equal(fs.readdirSync(path.join(f.org, 'retirement/exits')).length, 1);
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
+  const next = f.retirement(); assert.equal(next.apply(next.plan())[0].action, 'closed');
+});
+
+test('exit receipt reads ignore stray temporary files and foreign projects while validating local JSON', t => {
+  const f = exitFixture(t); f.state.failClose = true; f.save();
+  const retirement = f.retirement(); retirement.apply(retirement.plan());
+  const directory = path.join(f.org, 'retirement/exits');
+  const temporary = path.join(directory, 'unfinished.json.tmp-12345'), foreign = path.join(directory, 'foreign.json');
+  fs.writeFileSync(temporary, '{unfinished JSON');
+  const foreignBytes = JSON.stringify({ common: path.join(f.scratch, 'another-project/.git'), schema: 'future-foreign-schema', tab: 'w:t' });
+  fs.writeFileSync(foreign, foreignBytes);
+  assert.equal(retirement.plan().close.length, 1, 'stray and foreign data cannot hold this project');
+  const malformed = path.join(directory, 'local-malformed.json'); fs.writeFileSync(malformed, JSON.stringify({ common: f.common }));
+  const kept = retirement.plan(); assert.equal(kept.close.length, 0); assert.match(kept.keep[0].why, /invalid agent exit receipt local-malformed.json/);
+  fs.unlinkSync(malformed);
+  const state = f.read(); state.failClose = false; fs.writeFileSync(f.file, JSON.stringify(state));
+  assert.equal(retirement.apply(retirement.plan())[0].action, 'closed');
+  assert.deepEqual(fs.readdirSync(directory).sort(), ['foreign.json', 'unfinished.json.tmp-12345']);
+  assert.equal(fs.readFileSync(temporary, 'utf8'), '{unfinished JSON'); assert.equal(fs.readFileSync(foreign, 'utf8'), foreignBytes);
 });

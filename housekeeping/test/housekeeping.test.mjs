@@ -702,6 +702,25 @@ for (const topology of ['recorded occupant', 'no recorded chain', 'Git-only lane
   });
 }
 
+test('lane open --git-only followed by a settled housekeeping tick keeps the new lane before dispatch', t => {
+  const f = retirementFixture(t, { occupied: false }); isolatedEnv(t, f);
+  const worktrees = path.join(f.scratch, 'new-lanes'), fresh = path.join(worktrees, 'lane-fresh');
+  const config = path.join(f.scratch, 'open-config.json'); fs.writeFileSync(config, JSON.stringify({ main: 'main' }));
+  const opened = spawnSync(process.execPath, [fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url)), 'open', 'fresh', '--git-only'],
+    { cwd: f.repo, env: { ...f.env, LANE_WORKTREE_ROOT: worktrees, LANE_CONFIG: config }, encoding: 'utf8' });
+  assert.equal(opened.status, 0, opened.stdout + opened.stderr);
+  assert.equal(f.git(['rev-parse', 'refs/heads/lane/fresh']), f.head);
+  assert.equal(f.git(['status', '--porcelain'], fresh), '');
+  assert.equal(f.git(['reflog', 'show', '--format=%H', 'refs/heads/lane/fresh']).split('\n').length, 1);
+  const logs = [], commands = sweepCommands(f), before = fs.readFileSync(f.eventFile);
+  const runner = createHousekeeping({ cwd: f.repo, org: f.org, herdr: f.job.herdr, selfTab: null, command: commands.command, log: row => logs.push(row) });
+  runner.tick({ cleanup: true, resume: false });
+  assert.equal(fs.existsSync(fresh), true); assert.equal(f.git(['rev-parse', 'refs/heads/lane/fresh']), f.head);
+  assert.ok(logs.some(row => row.cwd === fresh && row.action === 'keep' && /no commits of its own/.test(row.why)), JSON.stringify(logs));
+  assert.equal(commands.calls.some(row => row.args.includes('remove') && row.args.includes(fresh)), false);
+  assert.deepEqual(fs.readFileSync(f.eventFile), before);
+});
+
 test('housekeeping previews integrated removal, while scoped and recovery-only passes keep the lane', t => {
   const f = retirementFixture(t, { occupied: false }); isolatedEnv(t, f);
   const logs = [], commands = sweepCommands(f);

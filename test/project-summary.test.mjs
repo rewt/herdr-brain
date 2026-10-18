@@ -235,20 +235,53 @@ test('published promotion classes match the lanes view for pending jobs and expi
   assert.ok(!published.exceptions.some(e => e.name === 'lanes-unknown'));
 });
 
-test('published lane counts match detailed status with clean integrated and dirty lanes and no false unknown exceptions', async t => {
+test('published lane counts match detailed status for clean, dirty, occupied, open-chain and open-run lanes', async t => {
   const f = fixture(t), clean = path.join(f.root, 'clean'), dirty = path.join(f.root, 'dirty');
   f.git(['worktree', 'add', '-b', 'lane/clean', clean]);
   f.git(['worktree', 'add', '-b', 'lane/dirty', dirty]); fs.writeFileSync(path.join(dirty, 'seed'), 'work in progress');
-  const command = (exe, args, options) => exe === '/usr/sbin/lsof' ? { status: 0, stderr: '', stdout: `p${process.pid}\0n${f.repo}\0\n` } : f.command(exe, args, options);
+  const occupied = path.join(f.root, 'occupied'), chain = path.join(f.root, 'chain'), running = path.join(f.root, 'running');
+  for (const [name, cwd] of [['occupied', occupied], ['chain', chain], ['running', running]]) f.git(['worktree', 'add', '-b', `lane/${name}`, cwd]);
+  const meta = { agent: 'busy-worker', worker_workspace: 'w', pane: 'w:p', terminal_id: 'term', agent_session_id: 'session', lane: 'occupied' };
+  const additional = [
+    { type: 'item.added', id: 'ENG-3', role: 'engineer' },
+    { type: 'run.started', id: 'R-3', item: 'ENG-3', workspace: occupied, meta },
+    { type: 'report.ingested', run: 'R-3', report: { outcome: 'done' } },
+    { type: 'item.closed', id: 'ENG-3', as: 'done' },
+    { type: 'item.added', id: 'ENG-4', role: 'engineer' },
+    { type: 'run.started', id: 'R-4', item: 'ENG-4', workspace: chain, meta: { lane: 'chain' } },
+    { type: 'report.ingested', run: 'R-4', report: { outcome: 'done' } },
+    { type: 'item.added', id: 'ENG-5', role: 'engineer' },
+    { type: 'run.started', id: 'R-5', item: 'ENG-5', workspace: running, meta: { lane: 'running' } },
+  ].map((event, i) => ({ ...event, seq: 10 + i, at: EARLIER, by: 'fixture' }));
+  fs.appendFileSync(path.join(f.org, 'events.jsonl'), additional.map(event => JSON.stringify(event) + '\n').join(''));
+  const command = (exe, args, options) => {
+    if (exe === '/usr/sbin/lsof') return { status: 0, stderr: '', stdout: `p${process.pid}\0n${f.repo}\0\n` };
+    if (exe !== 'fixture-herdr') return f.command(exe, args, options);
+    const data = {
+      'workspace list': { workspaces: [{ workspace_id: 'w', worktree: { checkout_path: occupied, repo_root: f.repo, repo_key: f.project.identity, is_linked_worktree: true } }] },
+      'tab list': { tabs: [{ workspace_id: 'w', tab_id: 'w:t' }] },
+      'pane list': { panes: [{ workspace_id: 'w', tab_id: 'w:t', pane_id: 'w:p' }] },
+      'pane process-info': { process_info: { shell_pid: 1, foreground_processes: [{ pid: 2, name: 'native' }], process_tree_complete: true,
+        process_tree: [{ pid: 1, identity: 'shell', command: '[zsh]', state: 'S' }, { pid: 2, ppid: 1, identity: 'worker', command: '[native]', state: 'S' }] } },
+      'agent list': { agents: [{ name: meta.agent, agent: 'native', agent_status: 'working', workspace_id: 'w', tab_id: 'w:t', pane_id: 'w:p',
+        cwd: occupied, terminal_id: 'term', agent_session_id: 'session' }] },
+    }[args.slice(0, 2).join(' ')];
+    assert.ok(data, `unexpected Herdr call: ${args}`);
+    return { status: 0, stdout: JSON.stringify({ result: data }) };
+  };
   const published = f.publish({ command });
   assert.ok(f.calls.every(([exe, args]) => exe !== 'git' || (!args.includes('ls-files') && !args.includes('--untracked-files=all'))));
   const lanes = await readRetirementStatus({ cwd: f.repo, org: f.org, herdr: 'fixture-herdr', command, env: f.env });
   const trees = lanes.rows.filter(row => row.type === 'worktree' && row.branch?.startsWith('lane/'));
-  assert.equal(trees.length, 2); assert.ok(trees.every(row => row.class === null));
+  assert.equal(trees.length, 5); assert.ok(trees.every(row => row.class === null));
   assert.equal(trees.find(row => row.worktree === clean).clean, true);
   assert.match(trees.find(row => row.worktree === dirty).nextAction, /lane worktree is not clean/);
+  assert.match(trees.find(row => row.worktree === occupied).nextAction, /occupied lane/);
+  assert.match(trees.find(row => row.worktree === chain).nextAction, /chain is still open/);
+  assert.match(trees.find(row => row.worktree === running).nextAction, /open recorded run uses lane/);
   assert.deepEqual(published.lanes.counts, lanes.counts); assert.equal(published.lanes.counts.UNKNOWN, 0);
-  assert.deepEqual(published.lanes.oldest_unresolved, []);
+  assert.equal(lanes.counts.ACTIVE, 2, 'only the occupied tab and pane are ACTIVE; worktrees do not duplicate them');
+  assert.deepEqual(published.lanes.oldest_unresolved.map(row => row.runs), [['R-3']]);
   assert.ok(!published.exceptions.some(e => ['lanes-unknown', 'unresolved-owner-unknown', 'unresolved-age-unknown'].includes(e.name)));
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.org, 'published/summary.json'))).lanes.counts, lanes.counts);
 });

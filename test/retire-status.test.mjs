@@ -145,6 +145,8 @@ const reasonCases = [
   ['unknown or mismatched registered lane identity', 'UNKNOWN'],
   ['lane worktree is not clean', null],
   ['lane tip is not integrated in main', null],
+  ['lane has no commits of its own and no recorded terminal chain', null],
+  ['lane branch history is unavailable and no recorded terminal chain', null],
   ['promotion queue cleanup pending; retry through queue', 'UNKNOWN'],
 ];
 test('every planner reason expression is enumerated and mapped; source drift fails', () => {
@@ -340,10 +342,31 @@ test('ordinary dirty and unintegrated lanes stay unclassified; compact inventori
   assert.equal(row.class, null); assert.doesNotMatch(row.reason, /not clean/); assert.match(row.nextAction, /inventory only/);
 });
 
+for (const progress of ['dirty', 'unintegrated']) for (const problem of ['missing record', 'invalid reference']) {
+  test(`${progress} lane inventory stays unclassified with ${problem}`, async t => {
+    const f = runtimeFixture(t);
+    if (progress === 'unintegrated') {
+      fs.unlinkSync(path.join(f.empty, 'one.untracked'));
+      fs.writeFileSync(path.join(f.empty, 'seed'), 'not merged'); f.git(['commit', '-am', 'in progress'], f.empty);
+    }
+    if (problem === 'missing record') fs.unlinkSync(f.eventFile);
+    else {
+      fs.mkdirSync(path.join(f.org, 'references')); fs.writeFileSync(path.join(f.org, 'references/bad.json'), '{}');
+    }
+    const status = await readRetirementStatus({ cwd: f.repo, org: f.org, herdr: f.herdr, env: f.env });
+    const row = status.rows.find(row => row.type === 'worktree' && row.worktree === f.empty);
+    assert.equal(row.class, null); assert.match(row.reason, progress === 'dirty' ? /lane worktree is not clean/ : /lane tip is not integrated in main/);
+    assert.match(row.nextAction, progress === 'dirty' ? /lane worktree is not clean/ : /lane tip is not integrated in main/);
+    assert.ok(status.rows.some(row => row.type === 'diagnostic' && /missing or unreadable|invalid herdr-reference/.test(row.reason)));
+  });
+}
+
 for (const problem of ['no discovered record', 'missing record file', 'ambiguous binding', 'wrong record binding', 'fleet discovery error']) {
   test(`status retains tab and pane inventory with ${problem}`, async t => {
     const f = runtimeFixture(t);
     fs.unlinkSync(path.join(f.empty, 'one.untracked'));
+    fs.writeFileSync(path.join(f.empty, 'seed'), 'completed work'); f.git(['commit', '-am', 'completed work'], f.empty);
+    f.git(['merge', '--ff-only', 'lane/empty']);
     let org = f.org, reason;
     if (problem === 'no discovered record') { org = undefined; f.env.ORG_DIR = ''; reason = /retirement record is missing or unreadable; lane kept/; }
     if (problem === 'missing record file') { fs.unlinkSync(f.eventFile); reason = /retirement record is missing or unreadable; lane kept/; }
@@ -418,8 +441,9 @@ test('read-only proof: every fake Herdr invocation is a read, Git disables optio
   assert.ok(herdrCalls.length >= 5); assert.ok(herdrCalls.every(a => reads.has(a.slice(0, 2).join(' '))));
   for (const [exe, args] of calls.filter(([exe]) => exe === 'git')) {
     const command = args[0] === '-C' || args[0] === '--git-dir' ? args[2] : args[0];
-    assert.ok(['rev-parse', 'symbolic-ref', 'worktree', 'merge-base', 'status', 'ls-files'].includes(command), `${exe} ${args}`);
+    assert.ok(['rev-parse', 'symbolic-ref', 'worktree', 'merge-base', 'status', 'ls-files', 'reflog'].includes(command), `${exe} ${args}`);
     if (command === 'worktree') assert.ok(args.includes('list'));
+    if (command === 'reflog') assert.ok(args.includes('show'));
   }
   assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
   assert.deepEqual(fs.readFileSync(index), indexBytes); assert.deepEqual(fs.readFileSync(receipt), receiptBytes);

@@ -91,7 +91,8 @@ for (const guard of ['dirty', 'unintegrated', 'archived unintegrated', 'job refe
     const result = sweep(f, options); kept(f, result, pattern);
     if (['dirty', 'unintegrated', 'job reference', 'process reference', 'occupied', 'open review', 'open correction', 'bad references'].includes(guard)) {
       const status = await readRetirementStatus({ cwd: f.repo, org: f.org, herdr: f.job.herdr, env: f.env, command: sweepCommands(f, options).command });
-      assert.match(status.rows.find(row => row.type === 'worktree' && row.worktree === f.lane).reason, pattern);
+      const row = status.rows.find(row => row.type === 'worktree' && row.worktree === f.lane);
+      assert.match(row.reason, pattern); assert.equal(row.class, null); assert.match(row.nextAction, pattern);
     }
   });
 }
@@ -166,6 +167,48 @@ test('a finite sweep stops when its foreground deadline is reached', t => {
   const f = fixture(t, { occupied: false });
   assert.throws(() => sweep(f, { retirement: { deadline: Date.now() - 1 } }), /retirement deadline reached/);
   assert.equal(fs.existsSync(f.lane), true);
+});
+
+for (const record of ['none', 'terminal', 'open']) test(`a lane reset to its opening base keeps unless its recorded chain is terminal: ${record}`, t => {
+  const f = fixture(t, { occupied: false }), base = f.git(['rev-parse', `${f.head}^`]);
+  f.git(['reset', '--hard', base], f.lane);
+  if (record === 'none') fs.writeFileSync(f.eventFile, '');
+  if (record === 'open') fs.writeFileSync(f.eventFile, fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse)
+    .filter(e => e.type !== 'item.closed').map(e => JSON.stringify(e) + '\n').join(''));
+  const tree = readRetirementWorktrees(f.common, { main: 'main', env: f.env, sweep: true })[0];
+  assert.equal(tree.baseTip, base); assert.equal(tree.hasOwnCommits, false);
+  const result = sweep(f);
+  if (record === 'terminal') {
+    assert.equal(result.results[0].action, 'lane-removed'); assert.equal(fs.existsSync(f.lane), false);
+  } else {
+    assert.equal(result.results[0].action, 'keep'); assert.equal(fs.existsSync(f.lane), true);
+    assert.match(result.results[0].why, record === 'none' ? /no commits of its own/ : /chain is still open/);
+    assert.equal(result.calls.some(row => row.args.includes('remove')), false);
+  }
+});
+
+test('the sweep rechecks branch work history under the lifecycle lock before removing an unrecorded lane', t => {
+  const f = fixture(t, { occupied: false }); fs.writeFileSync(f.eventFile, '');
+  const result = sweep(f, { log(row) {
+    if (row.action === 'lane-preflight') f.git(['reflog', 'expire', '--expire=now', 'refs/heads/lane/topic']);
+  } });
+  kept(f, result, /lane branch history is unavailable/);
+  assert.equal(result.logs.some(row => row.action === 'lane-preflight'), true);
+});
+
+test('sweep inventory visits only lane rows, includes untracked dirt, and never enumerates ignored or untracked counts', t => {
+  const f = fixture(t, { occupied: false }), ordinary = path.join(f.scratch, 'ordinary');
+  f.git(['worktree', 'add', '-b', 'ordinary', ordinary]);
+  fs.writeFileSync(path.join(f.lane, 'untracked'), 'keep me');
+  fs.writeFileSync(path.join(f.common, 'info/exclude'), 'cache/\n');
+  fs.mkdirSync(path.join(f.lane, 'cache')); fs.writeFileSync(path.join(f.lane, 'cache/ignored'), 'ignored payload');
+  const commands = sweepCommands(f), rows = readRetirementWorktrees(f.common, { main: 'main', env: f.env, command: commands.command, sweep: true });
+  assert.equal(rows.length, 1); assert.equal(rows[0].branch, 'lane/topic'); assert.equal(rows[0].clean, false);
+  assert.equal(rows[0].untracked, null); assert.equal(rows[0].ignored, null); assert.equal(rows[0].hasOwnCommits, true);
+  assert.ok(commands.calls.every(row => !row.args.includes('ls-files') && !row.args.includes('--ignored')));
+  assert.ok(commands.calls.filter(row => row.args[0] === '-C').every(row => row.args[1] === f.lane), 'non-lane worktrees receive no per-tree commands');
+  assert.ok(commands.calls.some(row => row.args.includes('status') && row.args.includes('--untracked-files=all')));
+  kept(f, sweep(f), /not clean/);
 });
 
 test('repeated post-preservation removal failures discard only the unused verified evidence copy', t => {

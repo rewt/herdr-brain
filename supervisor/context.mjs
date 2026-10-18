@@ -8,7 +8,7 @@ import { findOrgDir, loadEvents, readConfig, now } from '../lib/store.mjs';
 import { fold, itemStatus, openRuns, isResolved, attention } from '../lib/state.mjs';
 import { lessonsJson } from '../lib/lessons.mjs';
 import { describeEvent, approxTokens, renderLessonClaim, renderHandoff } from '../lib/render.mjs';
-import { readHandoff } from '../lib/handoffs.mjs';
+import { readHandoff, recordedHandoffs } from '../lib/handoffs.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { candidateRows } from '../lib/release-record.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
@@ -36,7 +36,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, workspace, env =
   if (!Number.isInteger(after) || after < 0 || after > through) throw new Error('decision cursor must be an existing event sequence or zero');
   const recovery = [];
   const handoffs = [];
-  for (const entry of state.handoffs.values()) if (entry.slot === 'supervisor' && (!workspace || entry.workspace === workspace)) {
+  for (const entry of recordedHandoffs(events).values()) if (entry.slot === 'supervisor' && (!workspace || entry.workspace === workspace)) {
     try { handoffs.push(readHandoff(org, entry)); }
     catch (error) { recovery.push({ file: entry.path, reason: error.message }); }
   }

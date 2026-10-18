@@ -5,7 +5,7 @@ import path from 'node:path';
 import { setupOrg, T0 } from './helpers.mjs';
 import { fold, itemStatus } from '../lib/state.mjs';
 import { fold as olderFold, itemStatus as olderStatus } from './fixtures/state-v0.mjs';
-import { handoffDigest, handoffKey, missingHandoffSections, readHandoff } from '../lib/handoffs.mjs';
+import { handoffDigest, handoffKey, missingHandoffSections, readHandoff, recordedHandoffs } from '../lib/handoffs.mjs';
 import { describeEvent, renderHandoffTemplate } from '../lib/render.mjs';
 
 function fixture(t) {
@@ -47,8 +47,24 @@ test('latest uses recorded event order per workspace and slot and ignores unreco
     f.ok(['handoffs', 'write', '--workspace', workspace, '--slot', slot, '--file', f.file]);
   }
   assert.equal(f.latest().path, first.path);
-  assert.equal(fold(f.events()).handoffs.size, 3);
-  assert.equal(fold(f.events()).handoffs.get(handoffKey('w34E', 'supervisor')).sha256, first.sha256);
+  assert.equal(recordedHandoffs(f.events()).size, 3);
+  assert.equal(recordedHandoffs(f.events()).get(handoffKey('w34E', 'supervisor')).sha256, first.sha256);
+});
+
+test('handoff derivation selects the highest record sequence independently of clocks and input order', () => {
+  const first = { type: 'handoff.recorded', seq: 1, at: '2026-10-18T00:00:00Z', workspace: 'w1', slot: 'supervisor', path: 'first' };
+  const latest = { ...first, seq: 3, at: '2026-10-17T00:00:00Z', path: 'latest' };
+  const chat = { ...first, seq: 2, slot: 'chat', path: 'chat' };
+  const other = { ...first, seq: 4, workspace: 'w2', path: 'other' };
+  const unrelated = { type: 'note.added', seq: 5, workspace: 'w1', slot: 'supervisor' };
+  assert.equal(recordedHandoffs([]).size, 0);
+  for (const events of [[first, chat, latest, other, unrelated], [unrelated, other, latest, chat, first]]) {
+    const entries = recordedHandoffs(events);
+    assert.equal(entries.size, 3);
+    assert.deepEqual(entries.get(handoffKey('w1', 'supervisor')), latest);
+    assert.deepEqual(entries.get(handoffKey('w1', 'chat')), chat);
+    assert.deepEqual(entries.get(handoffKey('w2', 'supervisor')), other);
+  }
 });
 
 test('a crash-left file is preserved and never adopted or overwritten', t => {
@@ -113,9 +129,13 @@ test('latest is read-only even while the record lock is held', t => {
 test('frozen old fold ignores the actual handoff event and work status remains derived', t => {
   const f = fixture(t), item = f.ok(['add', 'Existing work', '--role', 'engineer']).trim();
   f.ok(['start', item]); f.save();
-  const events = f.events(), old = olderFold(events), without = olderFold(events.filter(e => e.type !== 'handoff.recorded'));
+  const events = f.events(), ordinary = events.filter(e => e.type !== 'handoff.recorded');
+  const old = olderFold(events), without = olderFold(ordinary), current = fold(events), coreOnly = fold(ordinary);
   assert.deepEqual(old.items, without.items); assert.deepEqual(old.runs, without.runs); assert.deepEqual(old.links, without.links);
   assert.equal(old.eventCount, events.length);
-  assert.equal(olderStatus(old, item), itemStatus(fold(events), item));
-  assert.equal(fold(events).handoffs.size, 1); assert.equal('status' in events.at(-1), false);
+  assert.equal(olderStatus(old, item), itemStatus(current, item));
+  assert.deepEqual(current.items, coreOnly.items); assert.deepEqual(current.runs, coreOnly.runs); assert.deepEqual(current.links, coreOnly.links);
+  assert.equal(Object.hasOwn(current, 'handoffs'), false);
+  assert.deepEqual(Object.keys(current).sort(), Object.keys(coreOnly).sort());
+  assert.equal(recordedHandoffs(events).size, 1); assert.equal('status' in events.at(-1), false);
 });

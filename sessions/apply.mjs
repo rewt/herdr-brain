@@ -25,6 +25,8 @@ export async function apply(options = {}) {
     const brakes = (options.readFacts ?? readSessionFacts)({ project: preview.project, env });
     if (brakes.stopped || brakes.closeHold || brakes.errors.length) throw Error('STOP, close hold or unreadable current facts; observe only');
     if (!planFile) throw Error('a fresh --plan FILE is required');
+    const held = preview.decisions.find(d => d.decision === 'Hold' && d.holdCode);
+    if (held) throw Error(held.reason);
     expected = parseUniqueJson(readPlainFile(planFile));
     const age = now() - Date.parse(expected.observedAt);
     if (!Number.isFinite(age) || age < 0 || age > 60000 || expected.workspace !== workspace ||
@@ -70,7 +72,8 @@ export async function apply(options = {}) {
       checkAuthorization({ file: authorization, project, workspace, action: fresh.action, env, now });
       if (selectionDigest(fresh) !== expected.selectionDigest) throw Error('selected plan drifted under the controller lease');
     } });
-    const rejection = result.errors?.length ? result.errors.join('; ') : result.decision === 'Hold' ? result.reason : null;
+    const rejection = result.errors?.length ? result.errors.join('; ') : result.decision === 'Hold' ? result.reason :
+      result.decisions?.find(d => d.decision === 'Hold' && d.holdCode)?.reason;
     return { ...result, apply: { state: result.attemptedOperation ? 'attempted' : rejection ? 'refused' : 'observed',
       ...(rejection ? { reason: rejection } : {}) } };
   } finally { inputs.close(); }

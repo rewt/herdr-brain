@@ -31,7 +31,8 @@ function fixture(t, role = 'chat') {
   const inspection = { project, entries, valid: true, diagnostics: [] }, journal = emptyJournal(project.common);
   const observation = { server: path.join(scratch, 'fixture.sock'), complete: true,
     workspaces: [{ workspace_id: 'w', worktree: { repo_key: project.common, checkout_path: cwd } }],
-    tabs: [{ tab_id: 'tab-old', workspace_id: 'w' }], panes: [], agents: [], viewers: [], receipts: [], losses: [], errors: [] };
+    tabs: [{ tab_id: 'tab-old', workspace_id: 'w' }, { tab_id: 'keep-tab', workspace_id: 'w' }],
+    panes: [], agents: [], viewers: [], receipts: [], losses: [], errors: [] };
   const facts = { record: { items: [{ id: 'ENG-232', role: 'engineer' }], runs: [], links: [], revision: 7 },
     dispatches: {}, reports: {}, references: [], errors: [], stopped: false, closeHold: null, resetRequests: {}, quiescence: {}, recovery: {} };
   for (const entry of entries) {
@@ -104,6 +105,8 @@ function fixture(t, role = 'chat') {
     observation.panes = observation.panes.filter(p => p.tab_id !== op.target.tab);
     observation.agents = observation.agents.filter(a => a.tab_id !== op.target.tab);
     observation.viewers = observation.viewers.filter(v => v.binding.tab !== op.target.tab);
+    if (!observation.tabs.some(t => t.workspace_id === op.target.workspace))
+      observation.workspaces = observation.workspaces.filter(w => w.workspace_id !== op.target.workspace);
     observation.receipts.push({ operationId: op.id, kind: 'close', uid: op.uid, target: op.target, bindings: op.participants.map(p => p.binding) });
   };
   f.materialize = (op, kind) => {
@@ -142,6 +145,52 @@ function fixture(t, role = 'chat') {
   return f;
 }
 const first = plan => plan.decisions?.[0] ?? plan;
+
+for (const mode of ['reset', 'reconstruct']) test(`${mode} refuses the last tab before intent, including a fresh change under the lease`, async t => {
+  const f = fixture(t, mode === 'reconstruct' ? 'engineer-worker' : 'chat'), request = f.boundary();
+  if (mode === 'reconstruct') {
+    delete f.facts.resetRequests[f.uid]; f.loss();
+    Object.assign(f.facts.recovery[f.uid], request, { mode, disposition: { ref: 'recovery-decision', run: 'R-old', contextLossAccepted: true } });
+  }
+  const journalFile = runtimePaths(f.project.common).journal, original = fs.readFileSync(journalFile);
+  const read = f.read; let reads = 0;
+  f.read = async () => {
+    if (++reads === 2) f.observation.tabs = f.observation.tabs.filter(t => t.tab_id !== 'keep-tab');
+    return read();
+  };
+  assert.equal(first(await f.preview()).action.stage, 'close'); reads = 0;
+  const d = first(await f.run()); assert.equal(d.decision, 'Hold'); assert.match(d.reason, /last-tab close refused: workspace w/);
+  assert.equal(d.holdCode, 'last-tab-close');
+  assert.deepEqual(f.calls, []); assert.deepEqual(fs.readFileSync(journalFile), original);
+  assert.equal(first(await f.preview()).decision, 'Hold');
+  f.read = read; f.observation.tabs.push({ tab_id: 'keep-tab', workspace_id: 'w' });
+  assert.equal(first(await f.preview()).action.stage, 'close', 'any other tab restores eligibility');
+});
+
+test('last-tab refusal also fences the final check after close intent without invoking the delegate', async t => {
+  const f = fixture(t); f.boundary(); const read = f.read; let reads = 0;
+  f.read = async () => {
+    if (++reads === 3) f.observation.tabs = f.observation.tabs.filter(t => t.tab_id !== 'keep-tab');
+    return read();
+  };
+  const d = first(await f.run()); assert.equal(d.decision, 'Hold'); assert.match(d.reason, /last-tab close refused/);
+  assert.deepEqual(f.calls, []); assert.equal(f.journal().operations.at(-1).state, 'withheld');
+});
+
+for (const acknowledged of [false, true]) test(`workspace removal ${acknowledged ? 'after' : 'before'} close acknowledgement holds despite exact absence and receipt`, async t => {
+  const f = fixture(t); f.boundary();
+  if (acknowledged) await f.run();
+  else f.actions.close = async op => {
+    f.calls.push('close'); f.observation.tabs = f.observation.tabs.filter(t => t.tab_id !== 'keep-tab'); f.close(op);
+  };
+  if (acknowledged) { f.observation.workspaces = []; f.observation.tabs = []; }
+  for (let n = 0; n < 2; n++) {
+    const d = first(await f.run()); assert.equal(d.decision, 'Hold'); assert.match(d.reason, /unexpected workspace removal: w/);
+    assert.equal(d.holdCode, 'unexpected-workspace-removal');
+  }
+  assert.deepEqual(f.calls, ['close']); assert.equal(f.journal().incarnations.length, 0);
+  assert.equal(f.journal().operations.at(-1).state, acknowledged ? 'closed-for-reset' : 'close-intent');
+});
 
 test('exact owned-tab close, observed absence, same manifest/handoff respawn, durable new binding, then inbox transfer', async t => {
   const f = fixture(t); f.boundary(); const original = structuredClone(f.journal().operations[0]);

@@ -16,6 +16,7 @@ import { transferSessionInbox } from '../messages/session-transfer.mjs';
 import { parseUniqueJson } from './json.mjs';
 import { durableWrite, readControllerJournal } from './runtime.mjs';
 import { agentBinding } from './observe.mjs';
+import { lastTabCloseVeto, unexpectedWorkspaceRemoval } from './close-safety.mjs';
 import { checkAuthorization } from './authorization.mjs';
 import { safeProjectPath } from './project.mjs';
 import { digest, equalBinding, validBinding, verifyHandoff, validCloseReceipt, validMaterializationReceipt, validInboxReceipt } from './lifecycle-evidence.mjs';
@@ -72,8 +73,10 @@ function workspace(o, project, b) {
   if (!o.complete || o.errors?.length || o.server !== b.server || rows.length !== 1 ||
       rows[0].worktree?.repo_key !== project.common || rows[0].worktree.checkout_path !== b.checkout) fail('exact workspace observation changed');
 }
-function layout(o, project, bindings, { absent = false, empty = false, quiet = false } = {}) {
-  const b = bindings[0]; workspace(o, project, b);
+function layout(o, project, bindings, { absent = false, empty = false, quiet = false, closing = false } = {}) {
+  const b = bindings[0], removed = absent && unexpectedWorkspaceRemoval(o, b);
+  if (removed) fail(removed.reason);
+  workspace(o, project, b);
   const tabs = o.tabs.filter(t => t.tab_id === b.tab), panes = o.panes.filter(p => p.tab_id === b.tab || bindings.some(b => b.pane === p.pane_id));
   if (absent) {
     if (tabs.length || panes.length || o.agents.some(a => a.tab_id === b.tab || bindings.some(b =>
@@ -92,6 +95,8 @@ function layout(o, project, bindings, { absent = false, empty = false, quiet = f
           !(quiet ? ['idle', 'done'] : ['working', 'idle', 'done']).includes(agents[0].agent_status ?? agents[0].status)) fail('exact native occupant changed or is not ready');
     } else if (agents.length || !(o.viewers ?? []).some(v => equalBinding(v.binding, b))) fail('viewer identity changed');
   }
+  const veto = closing && lastTabCloseVeto(o, b);
+  if (veto) fail(veto.reason);
 }
 function materializeContext(project, spec, env, handoff) {
   if (spec.permissions.profileRef !== 'identity-default' || spec.memory.claudeMem?.mode === 'required') fail('native profile or required memory enforcement unavailable; hold');
@@ -225,9 +230,9 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     },
     async close(op) {
       const o = await before(op), bindings = op.participants.map(p => p.binding);
-      verifyHandoff(op.request.handoff); layout(o, project, bindings, { quiet: true });
+      verifyHandoff(op.request.handoff); layout(o, project, bindings, { quiet: true, closing: true });
       await permit(op); // authorization/STOP/hold rechecked at the physical edge.
-      layout(physicalObservation(op), project, bindings, { quiet: true });
+      layout(physicalObservation(op), project, bindings, { quiet: true, closing: true });
       permit(op);
       herdr(['tab', 'close', op.target.tab]);
       layout(await observe(), project, bindings, { absent: true });

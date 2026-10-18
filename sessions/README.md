@@ -359,6 +359,14 @@ both exact owned panes, committed batch evidence and quiescent delivery are
 required. Respawn recreates both panes and carries the viewer position and
 service cursor. No logging service is stopped or second triage replica created.
 An extra or foreign pane vetoes the entire tab close.
+The target must also have another tab in the same workspace. Herdr removes a
+workspace when its last tab closes, so a last-tab close plans Hold with
+`last-tab close refused` before any lifecycle intent. Any other tab (including
+a second owned standard slot) preserves the workspace; ownership of the target
+tab remains mandatory. Apply repeats this check before intent and at the physical
+close edge. If a workspace nevertheless vanishes after close, the controller
+names `unexpected workspace removal`, holds, and never respawns into a substitute
+workspace. Exact tab/pane/agent absence alone cannot acknowledge that close.
 
 The fake executor rechecks before and after journaling intent, closes only the
 fully owned exact tab, and requires both an exact close receipt and an observed
@@ -720,9 +728,19 @@ callbacks, queue references, STOP/hold observations, saved plans, controller and
 adapter journals, context receipts and command results. Save evidence outside any
 workspace that teardown may remove. No transcript or credential read is needed.
 
+The layout must contain at least **two owned standard slots in separate tabs of
+the same workspace**, for example a chat plus a logs viewer in its owned logs
+layout. Preserve the second tab throughout the chat/supervisor reset. In the
+HUM-33 trial on 2026-10-18 UTC, Herdr 0.9.3 removed workspace `w3C2` when step 3a
+closed its only tab. The controller held, but the exact enrollment and operator
+authorization could no longer support respawn. Source finding:
+`.org/evidence/A2-EXPERIMENT-20261017/RESULT-step3a.txt` in the identity root.
+Do not reuse that vanished workspace's authorization for a replacement workspace;
+new exact enrollment and scoped operator authorization are required.
+
 1. **Setup and start (#1).** After approval, the supervisor creates the disposable
    workspace through the existing native workspace opener, proves exact Git and
-   native ownership, and adopts only its standard-slot layout with
+   native ownership, and adopts both owned standard-slot layouts with
    `recordStandardSlot`. Capture a scoped experiment descriptor and record the
    exact `session_authorization` scope above on a human question. Obtain the
    operator's `record answer ID yes` for that scope, then authorize only those
@@ -739,10 +757,13 @@ workspace that teardown may remove. No transcript or credential read is needed.
    binding and record revision. The research's step 7 says: “Persist and verify the
    Markdown handoff, record references, unresolved message IDs and inbox cursor.”
    Commit that exact boundary in the experiment evidence. Independently inspect
-   that every pane in the target tab belongs to this layout.
+   that every pane in the target tab belongs to this layout and that the second
+   owned slot's tab is still present in this same workspace.
 3. **Close and respawn (#1).** Save a fresh plan and apply only the exact-tab close.
    Capture the close receipt and a fresh snapshot proving old tab/panes/agents are
-   absent. The research says: “A tab containing another owner or an unrelated pane
+   absent while the exact enrolled workspace and second owned tab remain present.
+   A last-tab refusal or unexpected workspace removal stops the experiment for
+   inspection. The research says: “A tab containing another owner or an unrelated pane
    must hold for disposition.” Re-plan, then apply one respawn from the same frozen
    manifest and verified handoff. Capture new tab/pane/terminal/native ID, generation,
    resolved model/effort/route and context hash; inspect handoff inclusion. Bind
@@ -769,7 +790,7 @@ workspace that teardown may remove. No transcript or credential read is needed.
    At completion let the authorization expire (or remove only its exact receipt
    after preserving it); disable further applies. Archive receipts/handoffs and
    transfer state. After explicit experiment disposition, withdraw only the
-   disposable slot's adoption via `recordStandardSlot`, then use existing guarded
+   disposable slots' adoptions via `recordStandardSlot`, then use existing guarded
    retirement with freshly verified identities and no live references. Never bulk
    close tabs/workspaces, remove another receipt, clear shared holds, delete unique
    work/evidence, or stop the shared server. If guarded teardown refuses, retain

@@ -1,6 +1,7 @@
 // Stage 4 policy and execution guards. Native mutations stay in live.mjs.
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding } from './observe.mjs';
+import { lastTabCloseVeto, unexpectedWorkspaceRemoval } from './close-safety.mjs';
 import { digest, specDigest, equalBinding, validBinding, strings, sameStrings, text, verifyHandoff,
   validCloseReceipt, validMaterializationReceipt, validInboxReceipt, validLifecycleOperation } from './lifecycle-evidence.mjs';
 
@@ -13,6 +14,7 @@ const liveViewer = (o, b) => (o.viewers ?? []).find(v => equalBinding(v.binding,
 const live = (o, p) => p.kind === 'LogViewer' ? liveViewer(o, p.binding) : liveAgent(o, p.binding);
 const quiet = a => ['idle', 'done'].includes(a?.agent_status ?? a?.status);
 const same = (a, b) => digest(a) === digest(b);
+const reasonText = veto => typeof veto === 'string' ? veto : veto.reason;
 
 // The original record/dispatch binding is immutable, even after a resume.
 function workerSource(entry, input) {
@@ -81,8 +83,10 @@ function chain(input, run) {
   }
   return [...ids].filter(id => !items.find(i => i.id === id)?.closed);
 }
-function topology(input, participants, { absent = false, loss = false, quiescent = false } = {}) {
+function topology(input, participants, { absent = false, loss = false, quiescent = false, closing = false } = {}) {
   const o = input.observation, b = participants[0].binding;
+  const removed = absent && unexpectedWorkspaceRemoval(o, b);
+  if (removed) return removed;
   const w = o.workspaces.find(w => w.workspace_id === b.workspace);
   if (o.server !== b.server || w?.worktree?.repo_key !== input.inspection.project.common || w.worktree.checkout_path !== b.checkout) return 'workspace ownership changed';
   if (absent) return o.tabs.some(t => t.tab_id === b.tab) || o.panes.some(p => p.tab_id === b.tab || participants.some(x => x.binding.pane === p.pane_id)) ||
@@ -103,7 +107,7 @@ function topology(input, participants, { absent = false, loss = false, quiescent
         (quiescent && !quiet(occupant)))) return 'incarnation readiness or quiescence uncertain';
     if (lost && (!pane.emptyConfirmed || pane.launch_pending || pane.restore_error)) return 'lost process pane is not confirmed available';
   }
-  return null;
+  return closing ? lastTabCloseVeto(o, b) : null;
 }
 function processTopology(input, p, lost = false) {
   const o = input.observation, b = p.binding, w = o.workspaces.find(w => w.workspace_id === b.workspace);
@@ -226,7 +230,9 @@ export function planLifecycle(entry, input, slots) {
   if (reset && input.journal.operations.some(op => isLifecycle(op) && op.uid === uid && op.state === 'acknowledged' && op.request.boundary?.ref === reset.boundary?.ref)) reset = null;
   if (current && live(o, current) && !loss) recovery = null;
   const make = (phase, decision, reason, extra = {}) => ({ phase, decision, reason, action: null, ...extra });
-  let hold = reason => make('Hold', 'Hold', reason, { reset: { eligible: false, vetoes: [reason] }, recovery: { state: loss?.state ?? 'unknown' } });
+  let hold = veto => make('Hold', 'Hold', reasonText(veto), {
+    ...(veto.code ? { holdCode: veto.code } : {}),
+    reset: { eligible: false, vetoes: [reasonText(veto)] }, recovery: { state: loss?.state ?? 'unknown' } });
   if (pending.length > 1) return hold('multiple lifecycle operations claim this incarnation');
   if (pending.length) {
     const op = pending[0];
@@ -235,7 +241,7 @@ export function planLifecycle(entry, input, slots) {
     if (['respawn-pending', 'inbox-pending'].includes(op.state)) observed.pendingReason = op.reason;
     const baseHold = hold;
     hold = reason => ({ ...baseHold(reason), observed,
-      ...(['closed-for-reset', 'respawn-pending'].includes(op.state) ? { phase: 'ClosedForReset', reason: `closed session awaiting respawn: ${reason}` } : {}),
+      ...(['closed-for-reset', 'respawn-pending'].includes(op.state) ? { phase: 'ClosedForReset', reason: `closed session awaiting respawn: ${reasonText(reason)}` } : {}),
       recovery: { state: op.kind === 'recovery' ? 'RecoveryRequired' : 'not-required', operationState: op.state, mode: op.mode, contextLoss: op.contextLoss } });
     const result = (phase, decision, reason, extra = {}) => make(phase, decision, reason, { observed, ...extra });
     const action = stage => result(['closed-for-reset', 'respawn-pending'].includes(op.state) ? 'ClosedForReset' : op.state === 'inbox-pending' ? 'Restarted' : op.kind === 'recovery' ? 'RecoveryRequired' : 'ResetPrepared',
@@ -243,6 +249,10 @@ export function planLifecycle(entry, input, slots) {
       { action: { kind: 'lifecycle', stage, operationId: op.id } });
     const update = (phase, state, evidence) => result(phase, 'Observe', `observed ${state}`, { lifecycleUpdate: { operationId: op.id, state, ...evidence } });
     if (['withheld', 'failed'].includes(op.state)) return hold(`${op.state}; delegate never retried: ${op.reason}`);
+    if (op.contextLoss && op.history.includes('close-intent')) {
+      const removed = unexpectedWorkspaceRemoval(o, op.target);
+      if (removed) return hold(removed);
+    }
     if (op.participants.some(p => !input.inspection.entries.some(e => e.manifest.metadata.uid === p.uid &&
         e.manifest.metadata.generation === p.generation && specDigest(e) === p.specDigest))) return hold('manifest changed during lifecycle operation');
     if (op.contextLoss) {
@@ -275,14 +285,14 @@ export function planLifecycle(entry, input, slots) {
       if (veto) return hold(veto);
       if (op.mode === 'native-restore') return hold('native restore resumed without exact incarnation receipt; no controller spawn');
       if (op.mode === 'reconstruct') {
-        const why = topology(input, op.participants, { loss: true, quiescent: true });
+        const why = topology(input, op.participants, { loss: true, quiescent: true, closing: true });
         return why ? hold(why) : action('close');
       }
       const why = processTopology(input, op.participants[0], true);
       return why ? hold(why) : action('resume');
     }
     if (['reset-prepared'].includes(op.state)) {
-      const veto = topology(input, op.participants, { quiescent: true });
+      const veto = topology(input, op.participants, { quiescent: true, closing: true });
       return veto ? hold(veto) : action('close');
     }
     if (['restarted', 'inbox-pending', 'inbox-intent'].includes(op.state)) {
@@ -320,7 +330,7 @@ export function planLifecycle(entry, input, slots) {
       return make('Running', 'KEEP', 'handoff boundary already consumed; no second reset', { observed: { binding: current.binding } });
     }
     request = structuredClone(reset); mode = 'reset'; kind = 'reset';
-    veto = boundaryVeto(entry, input, participants, request) ?? topology(input, participants, { quiescent: true });
+    veto = boundaryVeto(entry, input, participants, request) ?? topology(input, participants, { quiescent: true, closing: true });
   } else {
     request = structuredClone(recovery ?? {}); kind = 'recovery';
     mode = loss?.restore?.state === 'resumed' ? 'native-restore' : request.mode;
@@ -334,7 +344,7 @@ export function planLifecycle(entry, input, slots) {
       (a.agent_session?.value ?? a.agent_session_id) === p.binding.nativeSessionId))) veto = 'known native reference already observed; reconcile native restore owner before spawning';
     if (!veto && mode === 'reconstruct') veto = boundaryVeto(entry, input, participants, request, true);
     if (!veto && mode !== 'native-restore') veto = mode === 'reconstruct'
-      ? topology(input, participants, { loss: true, quiescent: true }) : processTopology(input, participants[0], true);
+      ? topology(input, participants, { loss: true, quiescent: true, closing: true }) : processTopology(input, participants[0], true);
   }
   if (veto) return hold(veto);
   const contextLoss = ['reset', 'reconstruct'].includes(mode);

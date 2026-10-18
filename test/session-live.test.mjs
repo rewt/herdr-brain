@@ -69,8 +69,11 @@ else if (a[0] === 'pane' && a[1] === 'run') {
   const pane={pane_id:'new-pane-'+n,tab_id:tab.tab_id,workspace_id:tab.workspace_id,terminal_id:'new-term-'+n,foreground_cwd:value('--cwd')};
   s.tabs.push(tab);s.panes.push(pane);s.screen='fixture % ';out({tab,root_pane:pane});
 } else if(a[0]==='tab' && a[1]==='close') {
+  const workspace=s.tabs.find(t=>t.tab_id===a[2])?.workspace_id;
   const ids=s.panes.filter(p=>p.tab_id===a[2]).map(p=>p.pane_id);
-  s.tabs=s.tabs.filter(t=>t.tab_id!==a[2]);s.panes=s.panes.filter(p=>!ids.includes(p.pane_id));s.agents=s.agents.filter(g=>!ids.includes(g.pane_id));out({});
+  s.tabs=s.tabs.filter(t=>t.tab_id!==a[2]);s.panes=s.panes.filter(p=>!ids.includes(p.pane_id));s.agents=s.agents.filter(g=>!ids.includes(g.pane_id));
+  if(!s.tabs.some(t=>t.workspace_id===workspace)) s.workspaces=s.workspaces.filter(w=>w.workspace_id!==workspace);
+  out({});
 } else if(a[0]==='agent' && a[1]==='start') {
   const argv=a.includes('--')?a.slice(a.indexOf('--')+1):[];
   if(argv.some(arg=>/[\\x00-\\x1f\\x7f-\\x9f]/u.test(arg))) {
@@ -116,7 +119,9 @@ function fixture(t, role = 'chat', kind = 'claude') {
   const inspection = inspect({ cwd, files: [file], env }), project = inspection.project;
   assert.equal(inspection.valid, true, JSON.stringify(inspection.diagnostics));
   const native = { server: env.HERDR_SOCKET_PATH, complete: true, workspaces: [{workspace_id:'w',worktree:{repo_key:project.common,checkout_path:cwd}}],
-    tabs:[{tab_id:'tab',workspace_id:'w'}],panes:[{pane_id:'pane',tab_id:'tab',workspace_id:'w',terminal_id:'term',foreground_cwd:cwd}],agents:[],receipts:[],errors:[],counter:0,calls:[] };
+    tabs:[{tab_id:'tab',workspace_id:'w'},{tab_id:'keep-tab',workspace_id:'w'}],
+    panes:[{pane_id:'pane',tab_id:'tab',workspace_id:'w',terminal_id:'term',foreground_cwd:cwd},
+      {pane_id:'keep-pane',tab_id:'keep-tab',workspace_id:'w',terminal_id:'keep-term',foreground_cwd:cwd}],agents:[],receipts:[],errors:[],counter:0,calls:[] };
   if (role === 'logs') native.panes.push({pane_id:'triage-pane',tab_id:'tab',workspace_id:'w',terminal_id:'triage-term',foreground_cwd:cwd});
   fs.writeFileSync(state, JSON.stringify(native));
   const read = () => JSON.parse(fs.readFileSync(state)), change = fn => { const s = read(); fn(s); fs.writeFileSync(state, JSON.stringify(s)); };
@@ -371,6 +376,86 @@ test('never-started disposition and planning hold with an agent, session, pendin
   f.change(s=>s.agents.push({name:'unexpected',pane_id:'pane',terminal_id:'term'}));
   assert.equal((await f.plan()).decisions[0].decision,'Hold','even a completed disposition cannot authorize starting over an agent');
 });
+test('fake Herdr removes only the workspace emptied by its last tab close', t => {
+  const f=fixture(t);
+  f.change(s=>{
+    s.tabs=s.tabs.filter(t=>t.tab_id==='tab');s.panes=s.panes.filter(p=>p.tab_id==='tab');
+    s.workspaces.push({workspace_id:'elsewhere'});s.tabs.push({tab_id:'elsewhere-tab',workspace_id:'elsewhere'});
+  });
+  herdrEdge(f.env)(['tab','close','tab']);
+  assert.deepEqual(f.read().workspaces,[{workspace_id:'elsewhere'}]);
+  assert.deepEqual(f.read().tabs,[{tab_id:'elsewhere-tab',workspace_id:'elsewhere'}]);
+  assert.deepEqual(f.read().panes,[]);
+});
+
+test('last-tab plan and apply Hold before intent; an owned second slot permits exactly one close and respawn', async t => {
+  const f=fixture(t);await f.apply();await f.boundary();
+  const planFile=path.join(f.scratch,'eligible-close.json');fs.writeFileSync(planFile,JSON.stringify(await f.plan()));
+  const authorization=f.auth().file;
+  const journalFile=runtimePaths(f.project.common).journal, original=fs.readFileSync(journalFile), count=mutations(f).length;
+  const keeper=f.read().panes.find(p=>p.tab_id==='keep-tab');
+  // A tab in a different workspace cannot preserve the enrolled workspace.
+  f.change(s=>{
+    s.tabs.find(t=>t.tab_id==='keep-tab').workspace_id='elsewhere';
+    s.panes.find(p=>p.tab_id==='keep-tab').workspace_id='elsewhere';
+  });
+  for (const result of [await f.plan(),await f.apply(),await apply({...f.options,authorization,planFile})]) {
+    assert.equal(result.action,null);assert.equal(result.decisions[0].decision,'Hold');
+    assert.equal(result.decisions[0].holdCode,'last-tab-close');
+    assert.match(result.decisions[0].reason,/last-tab close refused: workspace w/);
+    if(result.apply) { assert.equal(result.apply.state,'refused');assert.match(result.apply.reason,/last-tab close refused/); }
+  }
+  assert.deepEqual(fs.readFileSync(journalFile),original,'refusal cannot journal any lifecycle intent');
+  assert.equal(mutations(f).length,count);
+  f.change(s=>{
+    s.tabs.find(t=>t.tab_id==='keep-tab').workspace_id='w';
+    s.panes.find(p=>p.tab_id==='keep-tab').workspace_id='w';
+  });
+  recordStandardSlot({cwd:f.cwd,action:'adopt',uid:'second-owned-slot',actor:'fixture',why:'preserve disposable workspace',slot:{
+    server:f.env.HERDR_SOCKET_PATH,workspace:'w',checkout:f.cwd,tab:'keep-tab',standardSlot:'supervisor',panes:[{pane:'keep-pane',paneSlot:'primary'}]}});
+  assert.equal((await f.plan()).action?.stage,'close');
+  const closed=await f.apply();assert.equal(closed.decisions[0].phase,'ClosedForReset',JSON.stringify(closed));
+  assert.deepEqual(f.read().tabs,[{tab_id:'keep-tab',workspace_id:'w'}]);
+  assert.deepEqual(f.read().panes,[keeper]);assert.equal(f.read().workspaces.length,1);
+  assert.deepEqual(f.read().calls.filter(a=>a[1]==='close'),[['tab','close','tab']]);
+  await f.apply();await f.apply();
+  assert.equal(starts(f).length,2);assert.equal(f.read().tabs.length,2);
+  assert.deepEqual(f.read().panes.find(p=>p.pane_id==='keep-pane'),keeper);
+  assert.equal(readControllerJournal(f.project.common).operations.at(-1).state,'acknowledged');
+  assert.deepEqual(f.read().calls.filter(a=>a[1]==='close'),[['tab','close','tab']]);
+});
+
+test('physical close edge refuses when the surviving tab disappears after the adapter observation', async t => {
+  const f=fixture(t);await f.apply();await f.boundary();
+  const preview=await f.plan(), op={...preview.action.operation,id:'edge-close',state:'close-intent',history:['reset-prepared','close-intent']};
+  const journal=readControllerJournal(f.project.common);journal.operations.push(op);durableWrite(runtimePaths(f.project.common).journal,journal);
+  f.change(s=>s.changeOnCall={command:'tab list',at:1,patch:{
+    tabs:s.tabs.filter(t=>t.tab_id==='tab'),panes:s.panes.filter(p=>p.tab_id==='tab')}});
+  const actions=createLiveActions({project:f.project,workspace:'w',authorization:f.auth().file,env:f.env,permit:()=>{},observe:async()=>f.read()});
+  await assert.rejects(actions.close(op),/last-tab close refused: workspace w/);
+  assert.equal(f.read().changeOnCall.seen,1,'the physical observation reached the race');
+  assert.equal(f.read().calls.filter(a=>a[1]==='close').length,0);
+  assert.equal(f.read().workspaces.length,1);assert.equal(readAdapterReceipts(f.project.common).some(r=>r.kind==='close'),false);
+});
+
+test('unexpected workspace removal after a physical close is named and never respawns or closes twice', async t => {
+  const f=fixture(t);await f.apply();await f.boundary();
+  f.change(s=>s.changeOnCall={command:'tab close',at:1,patch:{
+    tabs:s.tabs.filter(t=>t.tab_id==='tab'),panes:s.panes.filter(p=>p.tab_id==='tab')}});
+  const result=await f.apply();
+  assert.match(result.adapterError,/unexpected workspace removal: w/);
+  assert.equal(result.decisions[0].decision,'Hold');assert.match(result.decisions[0].reason,/unexpected workspace removal: w/);
+  assert.equal(result.decisions[0].holdCode,'unexpected-workspace-removal');
+  assert.deepEqual(f.read().workspaces,[]);assert.deepEqual(f.read().tabs,[]);assert.deepEqual(f.read().panes,[]);assert.deepEqual(f.read().agents,[]);
+  assert.equal(readControllerJournal(f.project.common).operations.at(-1).state,'close-intent');
+  assert.equal(readAdapterReceipts(f.project.common).some(r=>r.kind==='close'),false);
+  for(let n=0;n<2;n++) {
+    const held=await f.apply();assert.equal(held.decisions[0].decision,'Hold');assert.match(held.apply.reason,/unexpected workspace removal/);
+  }
+  assert.deepEqual(f.read().calls.filter(a=>a[1]==='close'),[['tab','close','tab']]);
+  assert.equal(starts(f).length,1);assert.equal(f.read().calls.some(a=>a[1]==='create'),false);
+});
+
 test('exact tab close refuses a multi-owner tab in the real adapter', async t => {
   const f=fixture(t);await f.apply();await f.boundary();
   const preview=await f.plan(), op={...preview.action.operation,id:'manual-close',state:'close-intent',history:['reset-prepared','close-intent']};

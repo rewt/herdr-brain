@@ -23,6 +23,7 @@ test('tier selection covers every current test once in promotion or release and 
   assert.ok(release.includes('test/deadline-boundaries.test.mjs'));
   assert.ok(release.includes('settle/test/ref-wallclock.test.mjs'));
   assert.ok(release.includes('test/pty-cache.test.mjs'));
+  assert.ok(promotion.includes('supervisor/test/green-pass.test.mjs'), 'green admission authority is checked before merge');
   assert.ok(promotion.includes('test/lane-removal-protection.test.mjs'));
   for (const file of ['test/activation-seam.test.mjs', 'test/file-wait.test.mjs', 'test/git-seed.test.mjs', 'test/tier-plan.test.mjs', 'test/retire-status.test.mjs', 'test/session-release.test.mjs', 'promote/test/workflow-train.test.mjs', 'supervisor/test/autopilot.test.mjs', 'test/bch-cloak-contract.test.mjs', 'supervisor/test/request.test.mjs', 'dispatch/test/retired-flags.test.mjs']) assert.ok(promotion.includes(file));
   assert.ok(!tierFiles('fast', root).includes('lanes/test/validation.test.mjs'));

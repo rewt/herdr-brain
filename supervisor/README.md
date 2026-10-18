@@ -455,7 +455,11 @@ damage disable automatic actions. The project kill switch is a canonical
 `.supervisor.json` containing `{"autopilot":{"enabled":false}}`. Absence means
 **off**. The schema accepts `autopilot.enabled` as a boolean and `autopilot.cohort`
 as a string. The pilot requires both `enabled: true` and `cohort: "clean-pass"`;
-a missing/unknown cohort wakes with `AUTOPILOT_COHORT_UNKNOWN`. Tooling must be
+a missing/unknown cohort wakes with `AUTOPILOT_COHORT_UNKNOWN`. A separate
+[`green-pass` cohort](GREEN-COHORT.md) supports pin-bound green work with an
+explicit Brain/lab identity configuration, protected cross-project execution
+inventory, fail-closed reach checks and lifecycle control evidence. Selecting or
+enabling it remains a separate supervisor step after bootstrap review. Tooling must be
 `auto` in the record's approvals config. Operator-reserved/human items,
 publish/priorities categories, other categories routed to `ask`, report questions,
 blockers, unclassified decisions and category warnings wake for judgment. No

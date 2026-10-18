@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "entries": [
+    { "project": "brain", "path": "supervisor/reconcile.mjs" }
+  ],
+  "exclusions": [
+    { "code": "GREEN_SELF_AUTHORITY", "paths": ["supervisor/green-*", "supervisor/clean-pass.mjs", "supervisor/autopilot.mjs", "supervisor/fast-path-timing.mjs", "supervisor/test/green-*", "supervisor/test/autopilot.test.mjs", "supervisor/GREEN-COHORT.md", ".supervisor.json", "settle/**", "promote/**", "lanes/validation.mjs", "test/helpers/**", "acceptance/**"] },
+    { "code": "GREEN_BLUE_HOTFIX", "paths": ["blue/**"] },
+    { "code": "GREEN_NATIVE_ISOLATION", "paths": [".codex/**", ".claude/**", "**/.codex/**", "**/.claude/**", "discovery/native-*", "**/permissions*", "AGENTS.md", "CLAUDE.md"] },
+    { "code": "GREEN_HOST_RESOURCE", "paths": ["test-slot/**", "lanes/promotion-lock.mjs", "lib/retire-lock.mjs", "lib/install-lock.mjs", "lib/memory.mjs"] },
+    { "code": "GREEN_CROSS_PROJECT_AUTHORITY", "paths": ["lib/project.mjs", "lib/fleet.mjs", "lib/lane-removal.mjs", "lib/retire-hold.mjs", "lib/retire.mjs", "lib/retire-runtime.mjs", "sessions/lifecycle.mjs", "sessions/apply.mjs", "sessions/live.mjs", "sessions/project.mjs", "sessions/authorization.mjs", "sessions/close-safety.mjs", "sessions/receipts.mjs", "lanes/lane.mjs", "supervisor/request.mjs", "supervisor/chats.mjs", "supervisor/DECISION-ROUTING.md", "supervisor/PROTOCOL.md", "discovery/policy.mjs"] },
+    { "code": "GREEN_GLOBAL_RELEASE", "paths": ["herdr/**", "lib/releases.mjs", "lib/release-record.mjs", ".herdr-release.json", "package.json", "package-lock.json", ".nvmrc"] },
+    { "code": "GREEN_SHARED_RUNTIME", "paths": ["lib/state.mjs", "lib/store.mjs", "lib/report.mjs", "lib/completion.mjs", "lib/worker-identity.mjs", "lib/retire-trigger.mjs", "lib/discernment.mjs", "messages/**", "sessions/runtime.mjs", "sessions/lifecycle-evidence.mjs", "supervisor/context.mjs", "supervisor/notice-*", "supervisor/prompt-supervisor.mjs", "supervisor/herdr-edge.mjs", "watch/**", "dispatch/record-worker.mjs", "dispatch/session-bind-command.mjs"] }
+  ],
+  "lifecycle": ["sessions/**", "lib/retire*", "lib/lane-*", "supervisor/**", "housekeeping/**", "lanes/**", "dispatch/**"],
+  "code": ["brain/**", "board/**", "logs/**", "lib/**", "sessions/**", "supervisor/**", "housekeeping/**", "lanes/**", "dispatch/**", "test/**"],
+  "evidenceExtensions": [".md", ".txt", ".tap", ".log", ".json", ".jsonl", ".csv", ".tsv"]
+}

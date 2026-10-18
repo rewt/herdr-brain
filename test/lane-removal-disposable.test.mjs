@@ -14,6 +14,7 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const options = f => ({ common: f.common, lane: f.lane, topic: 'topic', tip: f.head, env: f.env,
   tracked: new Set(f.git(['ls-files', '-z'], f.lane).split('\0').filter(Boolean)) });
 const ignore = (f, patterns) => fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n' + patterns.join('\n') + '\n');
+const protect = (f, patterns) => fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ retirement: { protected_paths: patterns } }));
 function write(f, relative, bytes = 'unique evidence') {
   const file = path.join(f.lane, relative);
   fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file;
@@ -23,6 +24,10 @@ const manifest = proof => JSON.parse(fs.readFileSync(proof.manifest));
 test('integrated lane retires with oversized ignored disposable trees, recording metadata without reading or copying their payloads', t => {
   const f = fixture(t, { occupied: false }); ignore(f, disposable.map(name => `${name}/`));
   for (const name of disposable) write(f, `${name}/package/output`, 'rebuildable');
+  for (const relative of ['node_modules/.pnpm/pkg/node_modules/@scope/pkg/build/lib/key/wallet-import-format.js',
+    'node_modules/.pnpm/pkg/node_modules/@scope/pkg/build/lib/schema/wallet-template.js',
+    'node_modules/package/private-key.pem', 'dist/.env', 'target/.local-live/state']) write(f, relative, 'synthetic dependency fixture');
+  protect(f, ['node_modules/**', 'dist/.env', 'target/**']);
   const large = write(f, 'node_modules/package/output\n.bin', ''); fs.truncateSync(large, 256 * 1024 * 1024 + 1);
   fs.mkdirSync(path.join(f.lane, 'node_modules/empty'));
   const external = path.join(f.scratch, 'external'); fs.writeFileSync(external, 'external bytes stay outside the archive');
@@ -146,9 +151,10 @@ test('oversized non-ignored untracked bytes still refuse before payload reads or
   assert.equal(fs.statSync(file).size, 256 * 1024 * 1024 + 1); assert.ok(fs.existsSync(f.lane));
 });
 
-for (const relative of ['.local-live/round.secrets.json', 'wallet/state.json', 'dist/.env', 'node_modules/package/private-key.pem', '.lane/.aws/credentials', '.env']) {
+for (const relative of ['.local-live/round.secrets.json', 'wallet/state.json', 'pinned/checkout/state', '.lane/.aws/credentials', '.env']) {
   test(`protected ${relative} keeps the lane before any payload read or copy`, t => {
     const f = fixture(t, { occupied: false }); ignore(f, ['*']); const file = write(f, relative, 'synthetic protected-state fixture');
+    if (!relative.startsWith('.local-live/')) protect(f, [relative === 'wallet/state.json' ? 'wallet/**' : relative]);
     const o = options(f), open = fs.openSync;
     fs.openSync = (target, ...args) => { if (target === file) assert.fail('protected payload was read'); return open(target, ...args); };
     try {
@@ -161,11 +167,120 @@ for (const relative of ['.local-live/round.secrets.json', 'wallet/state.json', '
   });
 }
 
-test('tracked protected state also refuses rather than being dismissed as Git-recoverable content', t => {
-  const f = fixture(t, { occupied: false }); write(f, '.env', 'synthetic protected-state fixture');
-  f.git(['add', '.env'], f.lane); f.git(['commit', '-qm', 'synthetic tracked state'], f.lane);
-  assert.throws(() => preserveLaneEvidence(options(f)), /protected wallet\/secret\/live state/);
+test('tracked live modules and wallet policy files retire through the verified Git tip', t => {
+  const f = fixture(t, { occupied: false });
+  const files = ['sessions/live.mjs', 'sessions/live-observe.mjs', 'docs/WALLET-POLICY-V1.md', '.local-live/tracked', '.env'];
+  for (const relative of files) write(f, relative, 'tracked fixture');
+  f.git(['add', '.'], f.lane); f.git(['commit', '-qm', 'tracked modules and policy'], f.lane);
+  const tip = f.git(['rev-parse', 'HEAD'], f.lane); f.git(['merge', '--ff-only', tip]);
+  protect(f, ['sessions/**', 'docs/**', '.env']); f.env.LANE_EVIDENCE_MAX_BYTES = '0';
+  assert.equal(measureLaneEvidence(options(f)).bytes, 0);
+  const closed = spawnSync(process.execPath, [cli, 'close', 'topic', '--git-only', '--expected-tip', tip], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(closed.status, 0, closed.stdout + closed.stderr); assert.equal(fs.existsSync(f.lane), false);
+  for (const relative of files) assert.equal(f.git(['show', `main:${relative}`]), 'tracked fixture');
+});
+
+test('a declared non-ignored protected path keeps before payload reads and archive creation', t => {
+  const f = fixture(t, { occupied: false }), file = write(f, 'state/wallet-1/keys.json');
+  protect(f, ['state/wallet-?/keys.json']);
+  const o = options(f), read = fs.readFileSync;
+  fs.readFileSync = (target, ...args) => { if (target === file) assert.fail('protected payload was read'); return read(target, ...args); };
+  try { assert.throws(() => preserveLaneEvidence(o), /protected wallet\/secret\/live state/); }
+  finally { fs.readFileSync = read; }
   assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+});
+
+test('undeclared wallet, secret and live prefixes outside disposable output preserve ordinary bytes', t => {
+  const f = fixture(t, { occupied: false }); ignore(f, ['*']);
+  const files = ['wallet/state.json', 'secrets.json', 'live-notes.txt', '.local-live-notes/summary', '.env'];
+  for (const relative of files) write(f, relative, 'ordinary fixture');
+  const proof = preserveLaneEvidence(options(f));
+  for (const relative of files) assert.equal(fs.readFileSync(path.join(proof.directory, 'files', relative), 'utf8'), 'ordinary fixture');
+});
+
+test('a lane without a discoverable record keeps when ignored disposable output would be omitted', t => {
+  const f = fixture(t, { occupied: false }); ignore(f, ['node_modules/']); write(f, 'node_modules/pkg/output');
+  delete f.env.ORG_DIR;
+  assert.throws(() => measureLaneEvidence(options(f)), /evidence\/reference claims unavailable; lane kept/);
+  assert.throws(() => preserveLaneEvidence(options(f)), /evidence\/reference claims unavailable; lane kept/);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false); assert.ok(fs.existsSync(f.lane));
+});
+
+test('no claim source is needed when evidence names already require full copies', t => {
+  const f = fixture(t, { occupied: false }); ignore(f, ['.lane/']); write(f, '.lane/build/output', 'unique bytes');
+  delete f.env.ORG_DIR;
+  const proof = preserveLaneEvidence(options(f));
+  assert.equal(fs.readFileSync(path.join(proof.directory, 'files/.lane/build/output'), 'utf8'), 'unique bytes');
+});
+
+test('bare words, prose and foreign relative or absolute claims do not capture this lane output', t => {
+  const f = fixture(t, { occupied: false }); ignore(f, disposable.map(name => `${name}/`));
+  for (const name of disposable) write(f, `${name}/output`);
+  const events = fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse);
+  events.find(event => event.type === 'report.ingested').report.artifacts = ['build', 'coverage', 'target', 'See build/output for details'];
+  events.push({ type: 'run.started', id: 'R-foreign', item: 'ENG-1', workspace: path.join(f.scratch, 'foreign') },
+    { type: 'report.ingested', run: 'R-foreign', report: { artifacts: ['build/output', './coverage/'] } });
+  fs.writeFileSync(f.eventFile, events.map(event => JSON.stringify(event) + '\n').join(''));
+  fs.writeFileSync(path.join(f.org, 'references/foreign.json'), JSON.stringify({ cwd: path.join(f.scratch, 'foreign'),
+    artifacts: ['build/output', path.join(f.scratch, 'foreign/node_modules')], description: 'coverage' }));
+  fs.writeFileSync(path.join(f.org, 'references/unscoped.json'), JSON.stringify({ path: 'target/output', artifacts: ['build', 'coverage', 'target'] }));
+  f.env.LANE_EVIDENCE_MAX_BYTES = '0'; const proof = preserveLaneEvidence(options(f));
+  assert.equal(measureLaneEvidence(options(f)).bytes, 0);
+  assert.ok(manifest(proof).entries.every(entry => entry.metadataOnly));
+});
+
+for (const context of ['cwd', 'lane', 'topic']) test(`a relative reference claim bound by ${context} preserves only its exact subtree`, t => {
+  const f = fixture(t, { occupied: false }); ignore(f, ['build/']);
+  write(f, 'build/claimed/output', 'claimed bytes'); write(f, 'build/claimed-sibling/output');
+  fs.writeFileSync(path.join(f.org, 'references/local.json'), JSON.stringify({ [context === 'topic' ? 'lane' : context]: context === 'topic' ? 'topic' : f.lane, path: './build/claimed' }));
+  const proof = preserveLaneEvidence(options(f));
+  assert.equal(fs.readFileSync(path.join(proof.directory, 'files/build/claimed/output'), 'utf8'), 'claimed bytes');
+  assert.equal(fs.existsSync(path.join(proof.directory, 'files/build/claimed-sibling')), false);
+});
+
+test('a claimed disposable directory does not inspect dependency names for protected state', t => {
+  const f = fixture(t, { occupied: false }); ignore(f, ['node_modules/']);
+  write(f, 'node_modules/pkg/.local-live/fixture', 'claimed fixture'); protect(f, ['node_modules/**']);
+  fs.writeFileSync(path.join(f.org, 'references/local.json'), JSON.stringify({ path: path.join(f.lane, 'node_modules/pkg') }));
+  const proof = preserveLaneEvidence(options(f));
+  assert.equal(fs.readFileSync(path.join(proof.directory, 'files/node_modules/pkg/.local-live/fixture'), 'utf8'), 'claimed fixture');
+});
+
+test('protected configuration errors keep before evidence payloads are read', t => {
+  const f = fixture(t, { occupied: false }); write(f, 'scratch');
+  for (const value of ['{', '{"retirement":{"protected_paths":"wallet/**"}}', '{"retirement":{"protected_paths":null}}', '{"retirement":{"protected_paths":["../wallet/**"]}}']) {
+    fs.writeFileSync(path.join(f.repo, '.lane.json'), value);
+    assert.throws(() => preserveLaneEvidence(options(f)), /protected path|retirement.protected_paths/);
+  }
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+});
+
+test('recursive project globs cover root and nested paths and are reread during verification', t => {
+  const f = fixture(t, { occupied: false }); ignore(f, ['*']);
+  write(f, 'round.secrets.json'); write(f, 'rounds/nested/round.secrets.json');
+  write(f, '.lane.json', JSON.stringify({ retirement: { protected_paths: [] } }));
+  const proof = preserveLaneEvidence(options(f)); protect(f, ['**/*.secrets.json']);
+  assert.throws(proof.verify, /protected wallet\/secret\/live state/);
+  fs.unlinkSync(path.join(f.lane, 'round.secrets.json'));
+  assert.throws(() => preserveLaneEvidence(options(f)), /protected wallet\/secret\/live state/);
+});
+
+test('claim indexing inventories a pnpm-sized ignored tree with many declared artifacts', t => {
+  const f = fixture(t, { occupied: false }); ignore(f, ['node_modules/']); protect(f, ['node_modules/**']);
+  const count = 16647, directory = 'node_modules/.pnpm/pkg/node_modules/@scope/pkg/build/lib/schema';
+  fs.mkdirSync(path.join(f.lane, directory), { recursive: true });
+  for (let i = 0; i < count; i++) fs.writeFileSync(path.join(f.lane, directory, `wallet-template-${i}.js`), '');
+  const events = fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse);
+  events.find(event => event.type === 'report.ingested').report.artifacts = Array.from({ length: 2048 }, (_, i) => `build/claimed-${i}`);
+  fs.writeFileSync(f.eventFile, events.map(event => JSON.stringify(event) + '\n').join(''));
+  f.env.LANE_EVIDENCE_MAX_BYTES = '0';
+  const start = performance.now(); assert.equal(measureLaneEvidence(options(f)).bytes, 0);
+  const measured = performance.now(), proof = preserveLaneEvidence(options(f)), end = performance.now();
+  const saved = manifest(proof);
+  assert.equal(saved.entries.filter(entry => entry.type === 'file').length, count);
+  assert.ok(saved.entries.every(entry => entry.metadataOnly));
+  assert.deepEqual(fs.readdirSync(path.join(proof.directory, 'files')), []);
+  t.diagnostic(`${count} files, 2048 claims: measurement ${(measured - start).toFixed(0)}ms; preservation plus source/archive verification ${(end - measured).toFixed(0)}ms`);
 });
 
 for (const source of ['record', 'reference']) test(`an incomplete ${source} claim source keeps the lane instead of omitting output`, t => {
@@ -189,6 +304,6 @@ test('metadata changes and newly appearing protected state invalidate verificati
   const f = fixture(t, { occupied: false }); ignore(f, ['target/']); const file = write(f, 'target/output', 'rebuildable');
   const proof = preserveLaneEvidence(options(f)); fs.writeFileSync(file, 'different size');
   assert.throws(proof.verify, /hash or inventory mismatch/);
-  const fresh = preserveLaneEvidence(options(f)); write(f, 'target/wallet/state', 'synthetic state');
+  const fresh = preserveLaneEvidence(options(f)); write(f, '.local-live/state', 'synthetic state');
   assert.throws(fresh.verify, /protected wallet\/secret\/live state/); assert.ok(fs.existsSync(f.lane));
 });

@@ -255,10 +255,13 @@ Only Git-ignored paths under directories named exactly `node_modules`, `dist`,
 are recorded individually in the `lane-evidence/v2` manifest by path, type and
 `lstat` size, with `metadataOnly: true`; their bytes do not consume the copy budget.
 Evidence and reference claims override omission. Ignored reports, diagnostics,
-unknown content and `.lane/` evidence retain full verified copies. Protected wallet,
-secret or live-state paths keep the lane before payload reads or archive creation;
-this operation never copies them. See the [preservation boundary](docs/REFERENCE.md#lane-evidence-preservation)
-for exact names and claim sources.
+unknown content and `.lane/` evidence retain full verified copies. Outside confirmed
+disposable trees, untracked `.local-live` and paths matching the canonical project's
+`retirement.protected_paths` globs keep the lane before payload reads or archive
+creation. Tracked names remain recoverable through Git. See the
+[preservation boundary](docs/REFERENCE.md#lane-evidence-preservation) for glob
+syntax and exact, lane-scoped claim rules. A missing claim record keeps the lane
+when disposable output would otherwise be omitted.
 Ordinary untracked changes still fail the clean Git requirement. Close refuses
 `assume-unchanged` and `skip-worktree` index flags because they can hide unique
 local bytes from Git status.

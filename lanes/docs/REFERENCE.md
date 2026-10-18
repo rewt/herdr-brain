@@ -67,6 +67,7 @@ Every key is optional. A repository can inherit reusable settings from one paren
 | `selection_policy.primary_implementation_pool` | none | Default opaque pool name used by route selection |
 | `selection_policy.by_task_class` | none | Task class to route, directly or through an opaque pool-to-route map |
 | `seams_doc` | none | Optional task-map path printed by `seams` |
+| `retirement.protected_paths` | `[]` | Project-declared lane-relative protected path globs; read directly from the canonical checkout's `.lane.json`, independently of other config layers or `LANE_CONFIG` |
 
 Legacy `entry`, `chat` and `always_args` fields are accepted and ignored.
 
@@ -683,22 +684,47 @@ Evidence overrides the disposable-name rule. Components named `.lane`, `.org`,
 `evidence`, `report(s)`, `diagnostic(s)`, `reference(s)`, `artifact(s)`, `receipt(s)`
 or `log(s)`, including dot/dash/underscore suffixes such as `report.json`, are
 preserved. Declared record artifact/evidence/reference/file paths and reference
-JSON claims also preserve the claimed file or directory subtree. Relative record
-claims apply to runs/items associated with this lane; absolute paths into the lane
-apply regardless of run. Claims are reread during verification, so a new claim
-invalidates an earlier omission. Unreadable, malformed or incomplete claim sources
-keep the lane. Existing live-reference guards still run before preservation.
+JSON claims also preserve the claimed file or directory subtree. A claim must be
+a whole path value, not a substring in prose. Absolute paths into this lane apply
+regardless of origin. Relative paths apply only to this lane's runs (or events
+whose `workspace`/`cwd` names this lane), and reference JSON whose `cwd` or `lane`
+names this lane. A reference's `lane` may also be the topic recorded for a run in
+this exact lane. Context fields do not themselves claim the whole lane. Bare
+words such as `build`, `coverage` and `target` are not path claims; use `./build`
+or `build/` for a directory, `build/output.bin` for a file, and `.` for the whole
+lane. Paths are normalized and matched exactly, including ancestor-directory
+claims; a foreign absolute path ending in `/node_modules` claims nothing here.
+Claims are indexed once per inventory and reread during verification, so a new
+claim invalidates an earlier omission. Missing records and unreadable, malformed
+or incomplete claim sources keep the lane when disposable ignored output would
+otherwise be omitted. Existing live-reference guards still run before preservation.
 
-Protected names keep the lane without reading their payloads or creating an
-archive, even inside a disposable tree or when tracked. Case-insensitive component
-names `.local-live`, `.live`, `.ssh`, `.aws`, `.gnupg`, `local-live`, `live`,
-`live-state`, `wallet(s)`, `wallet-state`, `keystore`, `secret(s)`, `private-key(s)`
-or `private_key(s)`, and `mnemonic` are protected, including dot/dash/underscore
-suffixes. File suffixes `.secret`, `.secrets`, `.secret.*`, `.secrets.*`, `.wallet`,
-`.key`, `.pem`, and `.env`/`.env.*` are protected too; `.env.example`, `.env.sample`
-and `.env.template` are examples rather than live-state names. These conservative
-name checks can keep benign content; the refusal names the path for explicit
-disposition. They do not inspect content to discover secrets under arbitrary names.
+Protected-state checks apply only to untracked paths outside allowlisted,
+Git-confirmed ignored trees. The one built-in marker is an exact, case-sensitive
+`.local-live` path component. The project declares any other protected paths in
+the canonical checkout's `.lane.json`, for example:
+
+```json
+{ "retirement": { "protected_paths": ["wallet/**", "**/*.secrets.json", ".env", "pinned/**"] } }
+```
+
+Globs are case-sensitive, anchored at the lane root, and match whole paths:
+`*` matches within one component, `?` matches one character, and `**` as a whole
+component matches zero or more components. A matched directory protects its
+subtree. Globs must be relative, without empty, `.` or `..` components; negation,
+brackets, braces and backslashes are unsupported and keep the lane rather than
+silently weakening the declaration. An absent config/list adds no declarations;
+an unreadable or invalid config/list keeps the lane. The canonical safety list
+does not come from a linked worktree's config or `LANE_CONFIG`.
+
+A matching untracked path keeps the lane before evidence payload reads or archive
+creation. Tracked files, including `sessions/live.mjs` and `WALLET-POLICY-V1.md`,
+remain preserved by the verified Git tip. Protected-state matching never runs
+inside confirmed disposable trees, even when an evidence claim requires copying
+part of one. Dependency files such as `wallet-template.js` do not keep a lane.
+There are no wallet/secret/live prefix heuristics or implicit file-extension
+rules: projects must declare their wallet, secret, pinned-checkout and live-state
+locations. The check does not inspect content to discover undeclared secrets.
 
 The manifest SHA-256 and all preserved content hashes are verified against both
 archive and unchanged source. Omitted paths are checked for path/type/size changes;

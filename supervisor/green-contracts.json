@@ -1,10 +1,11 @@
 {
   "version": 1,
+  "authorityEntries": ["supervisor/autopilot.mjs", "supervisor/green-pass.mjs"],
   "entries": [
     { "project": "brain", "path": "supervisor/reconcile.mjs" }
   ],
   "exclusions": [
-    { "code": "GREEN_SELF_AUTHORITY", "paths": ["supervisor/green-*", "supervisor/clean-pass.mjs", "supervisor/autopilot.mjs", "supervisor/fast-path-timing.mjs", "supervisor/test/green-*", "supervisor/test/autopilot.test.mjs", "supervisor/GREEN-COHORT.md", ".supervisor.json", "settle/**", "promote/**", "lanes/validation.mjs", "test/helpers/**", "acceptance/**"] },
+    { "code": "GREEN_SELF_AUTHORITY", "paths": ["supervisor/green-*", "supervisor/clean-pass.mjs", "supervisor/autopilot.mjs", "supervisor/fast-path-timing.mjs", "supervisor/test/green-*", "supervisor/test/autopilot.test.mjs", "supervisor/GREEN-COHORT.md", ".supervisor.json", ".housekeeping.json", "settle/**", "promote/**", "lanes/validation.mjs", "test/helpers/**", "acceptance/**"] },
     { "code": "GREEN_BLUE_HOTFIX", "paths": ["blue/**"] },
     { "code": "GREEN_NATIVE_ISOLATION", "paths": [".codex/**", ".claude/**", "**/.codex/**", "**/.claude/**", "discovery/native-*", "**/permissions*", "AGENTS.md", "CLAUDE.md"] },
     { "code": "GREEN_HOST_RESOURCE", "paths": ["test-slot/**", "lanes/promotion-lock.mjs", "lib/retire-lock.mjs", "lib/install-lock.mjs", "lib/memory.mjs"] },

@@ -1,0 +1,1482 @@
+TAP version 13
+# Subtest: a real lifecycle module outside the cross-project closure is eligible with bound control evidence
+ok 1 - a real lifecycle module outside the cross-project closure is eligible with bound control evidence
+  ---
+  duration_ms: 992.157333
+  ...
+# Subtest: the base/candidate union refuses a consumed module modify
+ok 2 - the base/candidate union refuses a consumed module modify
+  ---
+  duration_ms: 740.701958
+  ...
+# Subtest: the base/candidate union refuses a consumed module delete
+ok 3 - the base/candidate union refuses a consumed module delete
+  ---
+  duration_ms: 694.807791
+  ...
+# Subtest: the base/candidate union refuses a consumed module rename
+ok 4 - the base/candidate union refuses a consumed module rename
+  ---
+  duration_ms: 1019.732791
+  ...
+# Subtest: a module reached only by a spawned entry is refused transitively
+ok 5 - a module reached only by a spawned entry is refused transitively
+  ---
+  duration_ms: 951.0415
+  ...
+# Subtest: a literal fork target contributes its complete execution closure
+ok 6 - a literal fork target contributes its complete execution closure
+  ---
+  duration_ms: 681.495792
+  ...
+# Subtest: a computed fork target refuses an unrelated candidate
+ok 7 - a computed fork target refuses an unrelated candidate
+  ---
+  duration_ms: 736.215208
+  ...
+# Subtest: a computed fork as launch target refuses an unrelated candidate
+ok 8 - a computed fork as launch target refuses an unrelated candidate
+  ---
+  duration_ms: 888.606708
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export { spawnSync as run } from 'node:child_process';
+ok 9 - launcher re-exports refuse computed calls through a relative helper: export { spawnSync as run } from 'node:child_process';
+  ---
+  duration_ms: 753.940167
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export { spawnSync } from 'node:child_process';
+ok 10 - launcher re-exports refuse computed calls through a relative helper: export { spawnSync } from 'node:child_process';
+  ---
+  duration_ms: 714.224292
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export * from 'node:child_process';
+ok 11 - launcher re-exports refuse computed calls through a relative helper: export * from 'node:child_process';
+  ---
+  duration_ms: 842.773417
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export { ChildProcess as run } from 'node:child_process';
+ok 12 - launcher re-exports refuse computed calls through a relative helper: export { ChildProcess as run } from 'node:child_process';
+  ---
+  duration_ms: 846.053292
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: import { spawnSync as launch } from 'node:child_process'; export { launch as run };
+ok 13 - launcher re-exports refuse computed calls through a relative helper: import { spawnSync as launch } from 'node:child_process'; export { launch as run };
+  ---
+  duration_ms: 708.639291
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: export { launch as run }; import { spawnSync as launch } from 'node:child_process';
+ok 14 - launcher re-exports refuse computed calls through a relative helper: export { launch as run }; import { spawnSync as launch } from 'node:child_process';
+  ---
+  duration_ms: 710.7965
+  ...
+# Subtest: launcher re-exports refuse computed calls through a relative helper: import { spawnSync as launch } from 'node:child_process'; export default launch;
+ok 15 - launcher re-exports refuse computed calls through a relative helper: import { spawnSync as launch } from 'node:child_process'; export default launch;
+  ---
+  duration_ms: 1074.070875
+  ...
+# Subtest: a regex after a closing brace cannot hide a dynamic import from admission
+ok 16 - a regex after a closing brace cannot hide a dynamic import from admission
+  ---
+  duration_ms: 611.89625
+  ...
+# Subtest: a computed native-addon load refuses an unrelated candidate
+ok 17 - a computed native-addon load refuses an unrelated candidate
+  ---
+  duration_ms: 731.804792
+  ...
+# Subtest: a closed dispatch table includes every lazy command, not only the invoked command
+ok 18 - a closed dispatch table includes every lazy command, not only the invoked command
+  ---
+  duration_ms: 832.793375
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: export const load = name => import(name);
+ok 19 - unknown execution reach refuses an unrelated candidate: export const load = name => import(name);
+  ---
+  duration_ms: 993.76075
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: import { spawnSync } from 'node:child_process';
+ok 20 - unknown execution reach refuses an unrelated candidate: import { spawnSync } from 'node:child_process';
+  ---
+  duration_ms: 845.267208
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: import { execSync } from 'node:child_process';
+ok 21 - unknown execution reach refuses an unrelated candidate: import { execSync } from 'node:child_process';
+  ---
+  duration_ms: 807.859667
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: import { spawnSync } from 'node:child_process';
+ok 22 - unknown execution reach refuses an unrelated candidate: import { spawnSync } from 'node:child_process';
+  ---
+  duration_ms: 809.802417
+  ...
+# Subtest: unknown execution reach refuses an unrelated candidate: const lazy = file => import(file);
+ok 23 - unknown execution reach refuses an unrelated candidate: const lazy = file => import(file);
+  ---
+  duration_ms: 721.332292
+  ...
+# Subtest: a new unknown load in the affected green path also uses the ordinary route
+ok 24 - a new unknown load in the affected green path also uses the ordinary route
+  ---
+  duration_ms: 1038.297625
+  ...
+# Subtest: removing an unknown load cannot erase the base tree execution uncertainty
+ok 25 - removing an unknown load cannot erase the base tree execution uncertainty
+  ---
+  duration_ms: 937.837667
+  ...
+# Subtest: declared contract supervisor/green-contracts.json refuses with GREEN_SELF_AUTHORITY
+ok 26 - declared contract supervisor/green-contracts.json refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 648.650083
+  ...
+# Subtest: declared contract supervisor/green-pass.mjs refuses with GREEN_SELF_AUTHORITY
+ok 27 - declared contract supervisor/green-pass.mjs refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 615.306417
+  ...
+# Subtest: declared contract supervisor/green-reach.mjs refuses with GREEN_SELF_AUTHORITY
+ok 28 - declared contract supervisor/green-reach.mjs refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 837.288542
+  ...
+# Subtest: declared contract supervisor/autopilot.mjs refuses with GREEN_SELF_AUTHORITY
+ok 29 - declared contract supervisor/autopilot.mjs refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 822.103125
+  ...
+# Subtest: declared contract housekeeping/config.mjs refuses with GREEN_SELF_AUTHORITY
+ok 30 - declared contract housekeeping/config.mjs refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 662.17225
+  ...
+# Subtest: declared contract dispatch/metrics.mjs refuses with GREEN_SELF_AUTHORITY
+ok 31 - declared contract dispatch/metrics.mjs refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 670.894916
+  ...
+# Subtest: declared contract test-slot/ticket-queue.mjs refuses with GREEN_SELF_AUTHORITY
+ok 32 - declared contract test-slot/ticket-queue.mjs refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 991.832541
+  ...
+# Subtest: declared contract messages/receiver.mjs refuses with GREEN_SELF_AUTHORITY
+ok 33 - declared contract messages/receiver.mjs refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 760.591125
+  ...
+# Subtest: declared contract .housekeeping.json refuses with GREEN_SELF_AUTHORITY
+ok 34 - declared contract .housekeeping.json refuses with GREEN_SELF_AUTHORITY
+  ---
+  duration_ms: 573.238333
+  ...
+# Subtest: declared contract blue/hotfix.mjs refuses with GREEN_BLUE_HOTFIX
+ok 35 - declared contract blue/hotfix.mjs refuses with GREEN_BLUE_HOTFIX
+  ---
+  duration_ms: 721.133084
+  ...
+# Subtest: declared contract discovery/native-sandbox.mjs refuses with GREEN_NATIVE_ISOLATION
+ok 36 - declared contract discovery/native-sandbox.mjs refuses with GREEN_NATIVE_ISOLATION
+  ---
+  duration_ms: 833.952375
+  ...
+# Subtest: declared contract test-slot/shared-admission.mjs refuses with GREEN_HOST_RESOURCE
+ok 37 - declared contract test-slot/shared-admission.mjs refuses with GREEN_HOST_RESOURCE
+  ---
+  duration_ms: 732.58825
+  ...
+# Subtest: declared contract sessions/authorization.mjs refuses with GREEN_CROSS_PROJECT_AUTHORITY
+ok 38 - declared contract sessions/authorization.mjs refuses with GREEN_CROSS_PROJECT_AUTHORITY
+  ---
+  duration_ms: 897.321
+  ...
+# Subtest: declared contract herdr/release.sh refuses with GREEN_GLOBAL_RELEASE
+ok 39 - declared contract herdr/release.sh refuses with GREEN_GLOBAL_RELEASE
+  ---
+  duration_ms: 937.688833
+  ...
+# Subtest: declared contract watch/notice.mjs refuses with GREEN_SHARED_RUNTIME
+ok 40 - declared contract watch/notice.mjs refuses with GREEN_SHARED_RUNTIME
+  ---
+  duration_ms: 636.725958
+  ...
+# Subtest: blue operation metadata refuses a change outside a blue-named path
+ok 41 - blue operation metadata refuses a change outside a blue-named path
+  ---
+  duration_ms: 606.060583
+  ...
+# Subtest: text evidence is eligible without lifecycle checks or tests: docs/evidence/new.txt
+ok 42 - text evidence is eligible without lifecycle checks or tests: docs/evidence/new.txt
+  ---
+  duration_ms: 696.814083
+  ...
+# Subtest: text evidence is eligible without lifecycle checks or tests: docs/evidence/results.tap
+ok 43 - text evidence is eligible without lifecycle checks or tests: docs/evidence/results.tap
+  ---
+  duration_ms: 882.31425
+  ...
+# Subtest: text evidence is eligible without lifecycle checks or tests: docs/evidence/run.json
+ok 44 - text evidence is eligible without lifecycle checks or tests: docs/evidence/run.json
+  ---
+  duration_ms: 845.812209
+  ...
+# Subtest: binary or executable evidence stays ordinary: docs/evidence/binary.txt
+ok 45 - binary or executable evidence stays ordinary: docs/evidence/binary.txt
+  ---
+  duration_ms: 757.566292
+  ...
+# Subtest: binary or executable evidence stays ordinary: docs/evidence/image.png
+ok 46 - binary or executable evidence stays ordinary: docs/evidence/image.png
+  ---
+  duration_ms: 825.8435
+  ...
+# Subtest: binary or executable evidence stays ordinary: docs/evidence/program.mjs
+ok 47 - binary or executable evidence stays ordinary: docs/evidence/program.mjs
+  ---
+  duration_ms: 840.681
+  ...
+# Subtest: an executable-mode evidence change is refused before treating it as text
+ok 48 - an executable-mode evidence change is refused before treating it as text
+  ---
+  duration_ms: 713.294458
+  ...
+# Subtest: canonical admission refuses record mismatch
+ok 49 - canonical admission refuses record mismatch
+  ---
+  duration_ms: 693.179959
+  ...
+# Subtest: canonical admission refuses identity mismatch
+ok 50 - canonical admission refuses identity mismatch
+  ---
+  duration_ms: 623.735459
+  ...
+# Subtest: canonical admission refuses foreign mismatch
+ok 51 - canonical admission refuses foreign mismatch
+  ---
+  duration_ms: 629.943166
+  ...
+# Subtest: canonical admission refuses source mismatch
+ok 52 - canonical admission refuses source mismatch
+  ---
+  duration_ms: 543.589708
+  ...
+# Subtest: canonical admission refuses workspace mismatch
+ok 53 - canonical admission refuses workspace mismatch
+  ---
+  duration_ms: 555.915625
+  ...
+# Subtest: lab admission uses its own canonical identity and discovered record
+ok 54 - lab admission uses its own canonical identity and discovered record
+  ---
+  duration_ms: 691.058167
+  ...
+# Subtest: a lane-local record mismatch is kept even when its Git identity is correct
+ok 55 - a lane-local record mismatch is kept even when its Git identity is correct
+  ---
+  duration_ms: 788.236625
+  ...
+# Subtest: lifecycle evidence refuses missing
+ok 56 - lifecycle evidence refuses missing
+  ---
+  duration_ms: 809.964417
+  ...
+# Subtest: lifecycle evidence refuses stale-head
+ok 57 - lifecycle evidence refuses stale-head
+  ---
+  duration_ms: 783.209166
+  ...
+# Subtest: lifecycle evidence refuses stale-base
+ok 58 - lifecycle evidence refuses stale-base
+  ---
+  duration_ms: 755.884708
+  ...
+# Subtest: lifecycle evidence refuses stale-run
+ok 59 - lifecycle evidence refuses stale-run
+  ---
+  duration_ms: 1142.88475
+  ...
+# Subtest: lifecycle evidence refuses digest
+ok 60 - lifecycle evidence refuses digest
+  ---
+  duration_ms: 656.708834
+  ...
+# Subtest: lifecycle evidence refuses failed
+ok 61 - lifecycle evidence refuses failed
+  ---
+  duration_ms: 767.944875
+  ...
+# Subtest: lifecycle evidence refuses missing-control
+ok 62 - lifecycle evidence refuses missing-control
+  ---
+  duration_ms: 770.394208
+  ...
+# Subtest: lifecycle evidence refuses symlink
+ok 63 - lifecycle evidence refuses symlink
+  ---
+  duration_ms: 742.789709
+  ...
+# Subtest: settle may append exactly its hashed review after lifecycle evidence capture
+ok 64 - settle may append exactly its hashed review after lifecycle evidence capture
+  ---
+  duration_ms: 1136.924958
+  ...
+# Subtest: dirty candidates and untracked reach inputs are refused
+ok 65 - dirty candidates and untracked reach inputs are refused
+  ---
+  duration_ms: 635.490625
+  ...
+# Subtest: the live autopilot accepts declared lab evidence and retains clean PASS promotion checks
+ok 66 - the live autopilot accepts declared lab evidence and retains clean PASS promotion checks
+  ---
+  duration_ms: 2505.084334
+  ...
+# Subtest: source scanning never executes a candidate and handles comments, regexes and template loads
+ok 67 - source scanning never executes a candidate and handles comments, regexes and template loads
+  ---
+  duration_ms: 0.24675
+  ...
+# Subtest: constant shadowing cannot resolve an unknown dynamic import to the outer constant
+ok 68 - constant shadowing cannot resolve an unknown dynamic import to the outer constant
+  ---
+  duration_ms: 0.46325
+  ...
+# Subtest: a referenced non-JavaScript launcher is retained as unknown rather than dropped
+ok 69 - a referenced non-JavaScript launcher is retained as unknown rather than dropped
+  ---
+  duration_ms: 0.0705
+  ...
+# Subtest: escaped imports and literal URL spawns resolve without executing either target
+ok 70 - escaped imports and literal URL spawns resolve without executing either target
+  ---
+  duration_ms: 0.146416
+  ...
+# Subtest: regex prefix { keeps a following loader visible or unknown
+ok 71 - regex prefix { keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.091542
+  ...
+# Subtest: regex prefix typeof keeps a following loader visible or unknown
+ok 72 - regex prefix typeof keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.062875
+  ...
+# Subtest: regex prefix else keeps a following loader visible or unknown
+ok 73 - regex prefix else keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.03375
+  ...
+# Subtest: regex prefix do keeps a following loader visible or unknown
+ok 74 - regex prefix do keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.032833
+  ...
+# Subtest: regex prefix in keeps a following loader visible or unknown
+ok 75 - regex prefix in keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.045708
+  ...
+# Subtest: regex prefix of keeps a following loader visible or unknown
+ok 76 - regex prefix of keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.049416
+  ...
+# Subtest: regex prefix await keeps a following loader visible or unknown
+ok 77 - regex prefix await keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.029958
+  ...
+# Subtest: regex prefix yield keeps a following loader visible or unknown
+ok 78 - regex prefix yield keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.035458
+  ...
+# Subtest: regex prefix void keeps a following loader visible or unknown
+ok 79 - regex prefix void keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.026583
+  ...
+# Subtest: regex prefix delete keeps a following loader visible or unknown
+ok 80 - regex prefix delete keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.076292
+  ...
+# Subtest: regex prefix new keeps a following loader visible or unknown
+ok 81 - regex prefix new keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.047583
+  ...
+# Subtest: regex prefix return keeps a following loader visible or unknown
+ok 82 - regex prefix return keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.031
+  ...
+# Subtest: regex prefix case keeps a following loader visible or unknown
+ok 83 - regex prefix case keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.032416
+  ...
+# Subtest: regex prefix throw keeps a following loader visible or unknown
+ok 84 - regex prefix throw keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.024875
+  ...
+# Subtest: regex prefix = keeps a following loader visible or unknown
+ok 85 - regex prefix = keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.031416
+  ...
+# Subtest: regex prefix === keeps a following loader visible or unknown
+ok 86 - regex prefix === keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.039459
+  ...
+# Subtest: regex prefix !== keeps a following loader visible or unknown
+ok 87 - regex prefix !== keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.026416
+  ...
+# Subtest: regex prefix == keeps a following loader visible or unknown
+ok 88 - regex prefix == keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.044375
+  ...
+# Subtest: regex prefix != keeps a following loader visible or unknown
+ok 89 - regex prefix != keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.026
+  ...
+# Subtest: regex prefix + keeps a following loader visible or unknown
+ok 90 - regex prefix + keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.025542
+  ...
+# Subtest: regex prefix - keeps a following loader visible or unknown
+ok 91 - regex prefix - keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.025584
+  ...
+# Subtest: regex prefix * keeps a following loader visible or unknown
+ok 92 - regex prefix * keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.026375
+  ...
+# Subtest: regex prefix ** keeps a following loader visible or unknown
+ok 93 - regex prefix ** keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.025708
+  ...
+# Subtest: regex prefix / keeps a following loader visible or unknown
+ok 94 - regex prefix / keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.028459
+  ...
+# Subtest: regex prefix % keeps a following loader visible or unknown
+ok 95 - regex prefix % keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.026208
+  ...
+# Subtest: regex prefix & keeps a following loader visible or unknown
+ok 96 - regex prefix & keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.026
+  ...
+# Subtest: regex prefix | keeps a following loader visible or unknown
+ok 97 - regex prefix | keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.024959
+  ...
+# Subtest: regex prefix ^ keeps a following loader visible or unknown
+ok 98 - regex prefix ^ keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.029208
+  ...
+# Subtest: regex prefix && keeps a following loader visible or unknown
+ok 99 - regex prefix && keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.030167
+  ...
+# Subtest: regex prefix || keeps a following loader visible or unknown
+ok 100 - regex prefix || keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.025333
+  ...
+# Subtest: regex prefix ?? keeps a following loader visible or unknown
+ok 101 - regex prefix ?? keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.024916
+  ...
+# Subtest: regex prefix < keeps a following loader visible or unknown
+ok 102 - regex prefix < keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.025417
+  ...
+# Subtest: regex prefix > keeps a following loader visible or unknown
+ok 103 - regex prefix > keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.027375
+  ...
+# Subtest: regex prefix <= keeps a following loader visible or unknown
+ok 104 - regex prefix <= keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.025333
+  ...
+# Subtest: regex prefix >= keeps a following loader visible or unknown
+ok 105 - regex prefix >= keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.026
+  ...
+# Subtest: regex prefix << keeps a following loader visible or unknown
+ok 106 - regex prefix << keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.024542
+  ...
+# Subtest: regex prefix >> keeps a following loader visible or unknown
+ok 107 - regex prefix >> keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.024584
+  ...
+# Subtest: regex prefix >>> keeps a following loader visible or unknown
+ok 108 - regex prefix >>> keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.024375
+  ...
+# Subtest: regex prefix instanceof keeps a following loader visible or unknown
+ok 109 - regex prefix instanceof keeps a following loader visible or unknown
+  ---
+  duration_ms: 0.029541
+  ...
+# Subtest: a regex after a closing parenthesis cannot hide a loader in a fake string
+ok 110 - a regex after a closing parenthesis cannot hide a loader in a fake string
+  ---
+  duration_ms: 0.068958
+  ...
+# Subtest: unambiguous division and equivalent numeric slash readings retain static imports
+ok 111 - unambiguous division and equivalent numeric slash readings retain static imports
+  ---
+  duration_ms: 0.095583
+  ...
+# Subtest: static authority imports derive transitive helpers again after the source graph changes
+ok 112 - static authority imports derive transitive helpers again after the source graph changes
+  ---
+  duration_ms: 0.391417
+  ...
+# Subtest: unsupported indirect execution fails closed: import('node:child_process').then(cp => cp.spawnSy
+ok 113 - unsupported indirect execution fails closed: import('node:child_process').then(cp => cp.spawnSy
+  ---
+  duration_ms: 0.137458
+  ...
+# Subtest: unsupported indirect execution fails closed: import cp from 'node:child_process'; cp['spawn' +
+ok 114 - unsupported indirect execution fails closed: import cp from 'node:child_process'; cp['spawn' +
+  ---
+  duration_ms: 0.043291
+  ...
+# Subtest: unsupported indirect execution fails closed: const loader = (() => {})['constructor']; loader(t
+ok 115 - unsupported indirect execution fails closed: const loader = (() => {})['constructor']; loader(t
+  ---
+  duration_ms: 0.039
+  ...
+# Subtest: unsupported indirect execution fails closed: const operations = [load]; operations[index]();
+ok 116 - unsupported indirect execution fails closed: const operations = [load]; operations[index]();
+  ---
+  duration_ms: 0.027834
+  ...
+# Subtest: unsupported indirect execution fails closed: const target = './lib/a.mjs'; function launch(targ
+ok 117 - unsupported indirect execution fails closed: const target = './lib/a.mjs'; function launch(targ
+  ---
+  duration_ms: 0.044375
+  ...
+# Subtest: unsupported indirect execution fails closed: const COMMANDS = { run: fn }; const alias = COMMAN
+ok 118 - unsupported indirect execution fails closed: const COMMANDS = { run: fn }; const alias = COMMAN
+  ---
+  duration_ms: 0.032417
+  ...
+# Subtest: unsupported indirect execution fails closed: const COMMANDS = { run: fn }; COMMANDS[other] = un
+ok 119 - unsupported indirect execution fails closed: const COMMANDS = { run: fn }; COMMANDS[other] = un
+  ---
+  duration_ms: 0.030875
+  ...
+# Subtest: unsupported indirect execution fails closed: import {spawnSync} from 'node:child_process'; spaw
+ok 120 - unsupported indirect execution fails closed: import {spawnSync} from 'node:child_process'; spaw
+  ---
+  duration_ms: 0.034166
+  ...
+# Subtest: unsupported indirect execution fails closed: import {spawnSync} from 'node:child_process'; spaw
+ok 121 - unsupported indirect execution fails closed: import {spawnSync} from 'node:child_process'; spaw
+  ---
+  duration_ms: 0.033833
+  ...
+# Subtest: unsupported indirect execution fails closed: process.dlopen(module, addonPath);
+ok 122 - unsupported indirect execution fails closed: process.dlopen(module, addonPath);
+  ---
+  duration_ms: 0.025166
+  ...
+# Subtest: unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork(comp
+ok 123 - unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork(comp
+  ---
+  duration_ms: 0.025916
+  ...
+# Subtest: unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork('./w
+ok 124 - unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork('./w
+  ---
+  duration_ms: 0.033541
+  ...
+# Subtest: unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork('git
+ok 125 - unsupported indirect execution fails closed: import {fork} from 'node:child_process'; fork('git
+  ---
+  duration_ms: 0.02325
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 126 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 1339.812917
+  ...
+# Subtest: fix_round is left in flight
+ok 127 - fix_round is left in flight
+  ---
+  duration_ms: 983.548083
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 128 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 1294.679792
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 129 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 1209.464833
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 130 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 1065.743167
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 131 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 1008.298167
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 132 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 942.831833
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 133 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 908.872042
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 134 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 1002.623667
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 135 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 905.535167
+  ...
+# Subtest: Moderate and Minor findings use the ordinary path without filing or accepting them
+ok 136 - Moderate and Minor findings use the ordinary path without filing or accepting them
+  ---
+  duration_ms: 1186.600834
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 137 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 1149.81425
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 138 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 923.640208
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 139 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 1080.191792
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 140 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 1040.44375
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 141 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 937.516833
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 142 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 938.549708
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 143 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 977.74925
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 144 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 1178.01575
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 145 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 1003.140833
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 146 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 689.595083
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 147 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 827.843875
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 148 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 916.2415
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 149 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 669.498417
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 150 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 594.973334
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 151 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 732.106166
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 152 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 953.368333
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 153 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 692.951375
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 154 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 985.131167
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 155 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 843.593458
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 156 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 679.468542
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 157 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 883.536584
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 158 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 873.631375
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 159 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 895.72825
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 160 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 1079.807875
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 161 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 1292.020709
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 162 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 1040.453959
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 163 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 954.368208
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 164 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 788.711583
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 165 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 647.698834
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 166 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 805.629958
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 167 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 880.500292
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 168 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 670.158458
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 169 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 616.704958
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 170 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 653.641042
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 171 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 859.696708
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 172 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 746.629167
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 173 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 703.610459
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 174 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 638.606833
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 175 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 996.303375
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 176 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 1024.93975
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 177 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 1267.192208
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+# message shadow: ENOENT: no such file or directory, realpath '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-ikTIoq/project/.git'
+# message shadow: ENOENT: no such file or directory, realpath '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-lKgLkp/project/.git'
+# message shadow: shadow identity is unenrolled; set BRAIN_IDENTITY or use an identity-root checkout
+ok 178 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 666.987958
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 179 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 758.157584
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 180 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 760.958084
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 181 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 806.398167
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 182 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 663.868291
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 183 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 647.110375
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 184 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 852.825666
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 185 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 745.24125
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 186 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 1111.55025
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 187 - runless completion fleet-membership retains an explicit binding diagnostic
+  ---
+  duration_ms: 673.891667
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 188 - runless completion gate-profile retains an explicit binding diagnostic
+  ---
+  duration_ms: 855.811833
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+ok 189 - completion after an interrupted promotion has its own receipt and closes once
+  ---
+  duration_ms: 1006.346083
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 190 - abandoned watch-no-report is journaled without waking or acting
+  ---
+  duration_ms: 517.9885
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 191 - abandoned watch-long-running is journaled without waking or acting
+  ---
+  duration_ms: 505.179292
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 192 - abandoned watch-invalid-report is journaled without waking or acting
+  ---
+  duration_ms: 622.929042
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 193 - abandoned org-report is journaled without waking or acting
+  ---
+  duration_ms: 559.211042
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+ok 194 - awaited promotion closes before waking with one short plan line and later notices stay silent
+  ---
+  duration_ms: 1200.042833
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 195 - awaited PASS queued for promotion stays silent until closure
+  ---
+  duration_ms: 1031.595292
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 196 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+  ---
+  duration_ms: 1386.652416
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 197 - abandoned watcher inbox entry is handled without Herdr delivery
+  ---
+  duration_ms: 980.563542
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 198 - legacy uncertain promotion receipts still forbid command replay after the key upgrade
+  ---
+  duration_ms: 889.60925
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 199 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 1041.030875
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 200 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1583.547
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 201 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1346.907167
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 202 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1388.054708
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 203 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1476.619
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 204 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 1171.010958
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 205 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 6792.652083
+  ...
+# Subtest: actual handle and promotion commands return findings to the supervisor offline
+ok 206 - actual handle and promotion commands return findings to the supervisor offline
+  ---
+  duration_ms: 6775.067
+  ...
+# Subtest: real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+ok 207 - real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+  ---
+  duration_ms: 5720.526375
+  ...
+# message shadow: ENOENT: no such file or directory, realpath '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-gd78ft/project/.git'
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+ok 208 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 17388.42975
+  ...
+# offline pilot: 1 promotion, 1 timing note; all ten clocks present
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+not ok 209 - automatic PASS reaches the real queue, lands and closes with one awaited wake
+  ---
+  duration_ms: 20457.52275
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    {
+      "queue": {
+        "identity": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-qlkMUq/project/.git",
+        "pending": [],
+        "current": null,
+        "results": [
+          {
+            "id": "185be05b-a173-4514-9b79-29d8caf46e64",
+            "topic": "anchor",
+            "queued": false,
+            "to": "supervisor-test",
+            "herdr": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-qlkMUq/bin/herdr",
+            "attempts": 1,
+            "retry": 0,
+            "laneCLI": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort/lanes/lane.mjs",
+            "validate": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-qlkMUq/anchor-check.cjs",
+            "org": null,
+            "release": {
+              "root": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort",
+              "id": null,
+              "commit": null,
+              "protocol": 1
+            },
+            "outcome": "refused",
+            "code": "PROMOTE_NATIVE_PROCESS_SOURCE_REFUSED",
+            "reason": "PROMOTE_NATIVE_PROCESS_SOURCE_REFUSED: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; native permissions remain authoritative; no relaunch",
+            "batch": "07042545-31be-440c-859e-173eb0b0b144",
+            "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-qlkMUq/project/.git/promote/batches/07042545-31be-440c-859e-173eb0b0b144/train.log",
+            "receipt": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-qlkMUq/project/.git/promote/batches/07042545-31be-440c-859e-173eb0b0b144/train.json",
+            "delivered": true,
+            "inbox": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-qlkMUq/project/.org/supervisor/inbox.log",
+            "owner_pid": null,
+            "message": "[promote-queue] id=185be05b-a173-4514-9b79-29d8caf46e64 lane=anchor outcome=refused code=PROMOTE_NATIVE_PROCESS_SOURCE_REFUSED reason=\"PROMOTE_NATIVE_PROCESS_SOURCE_REFUSED: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; native permissions remain authoritative; no relaunch\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-qlkMUq/project/.git/promote/batches/07042545-31be-440c-859e-173eb0b0b144/train.log receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-qlkMUq/project/.git/promote/batches/07042545-31be-440c-859e-173eb0b0b144/train.json",
+            "delivery_id": "promote:185be05b-a173-4514-9b79-29d8caf46e64",
+            "finished": "2026-10-18T17:26:21.261Z"
+          }
+        ]
+      },
+      "stderr": "message shadow: shadow identity is unenrolled; set BRAIN_IDENTITY or use an identity-root checkout\ndelivered after waiting 0.5 s for an empty input box\n",
+      "logs": [
+        null
+      ]
+    }
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    existingWorker (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort/supervisor/test/autopilot.test.mjs:77:10)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort/supervisor/test/autopilot.test.mjs:509:25
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+ok 210 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+  ---
+  duration_ms: 14569.896584
+  ...
+# offline pilot: 1 promotion, 1 timing note; all ten clocks present
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+ok 211 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 15690.138042
+  ...
+# offline pilot: 1 promotion, 1 timing note; all ten clocks present
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 212 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 15017.8125
+  ...
+# offline pilot: 1 promotion, 1 timing note; all ten clocks present
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with a non-blocking engineer proposal
+ok 213 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with a non-blocking engineer proposal
+  ---
+  duration_ms: 16091.2055
+  ...
+# offline pilot: 1 promotion, 1 timing note; all ten clocks present
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 214 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 20443.80875
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing:
+ok 215 - stderr-only failed action preserves refusal instead of JSON parsing:
+  ---
+  duration_ms: 1048.305375
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 216 - stderr-only failed action preserves refusal instead of JSON parsing: {broken
+  ---
+  duration_ms: 1159.549
+  ...
+# Subtest: disabled autopilot preserves the original notice for null
+ok 217 - disabled autopilot preserves the original notice for null
+  ---
+  duration_ms: 906.693208
+  ...
+# Subtest: disabled autopilot preserves the original notice for {"autopilot":{"enabled":false}}
+ok 218 - disabled autopilot preserves the original notice for {"autopilot":{"enabled":false}}
+  ---
+  duration_ms: 924.445458
+  ...
+# Subtest: disabled autopilot preserves the original notice for {"autopilot":{"enabled":false,"cohort":"clean-pass"}}
+ok 219 - disabled autopilot preserves the original notice for {"autopilot":{"enabled":false,"cohort":"clean-pass"}}
+  ---
+  duration_ms: 1007.595791
+  ...
+# Subtest: enabled pilot rejects cohort undefined
+ok 220 - enabled pilot rejects cohort undefined
+  ---
+  duration_ms: 763.510917
+  ...
+# Subtest: enabled pilot rejects cohort unknown
+ok 221 - enabled pilot rejects cohort unknown
+  ---
+  duration_ms: 740.975541
+  ...
+# Subtest: pilot scope routes supervisor/autopilot.mjs to the ordinary path before review
+ok 222 - pilot scope routes supervisor/autopilot.mjs to the ordinary path before review
+  ---
+  duration_ms: 1099.720792
+  ...
+# Subtest: pilot scope routes lib/store.mjs to the ordinary path before review
+ok 223 - pilot scope routes lib/store.mjs to the ordinary path before review
+  ---
+  duration_ms: 1132.294167
+  ...
+# Subtest: pilot scope routes lib/state.mjs to the ordinary path before review
+ok 224 - pilot scope routes lib/state.mjs to the ordinary path before review
+  ---
+  duration_ms: 1372.27325
+  ...
+# Subtest: pilot scope routes lib/report.mjs to the ordinary path before review
+ok 225 - pilot scope routes lib/report.mjs to the ordinary path before review
+  ---
+  duration_ms: 1399.421875
+  ...
+# Subtest: pilot scope routes lib/cli-help.mjs to the ordinary path before review
+ok 226 - pilot scope routes lib/cli-help.mjs to the ordinary path before review
+  ---
+  duration_ms: 1062.403833
+  ...
+# Subtest: pilot scope routes contrib/settle-watch.mjs to the ordinary path before review
+ok 227 - pilot scope routes contrib/settle-watch.mjs to the ordinary path before review
+  ---
+  duration_ms: 1100.915292
+  ...
+# Subtest: pilot scope routes supervisor/reconcile.mjs to the ordinary path before review
+ok 228 - pilot scope routes supervisor/reconcile.mjs to the ordinary path before review
+  ---
+  duration_ms: 1025.232
+  ...
+# Subtest: pilot scope routes herdr/release.sh to the ordinary path before review
+ok 229 - pilot scope routes herdr/release.sh to the ordinary path before review
+  ---
+  duration_ms: 1005.108875
+  ...
+# Subtest: pilot scope routes acceptance/run.mjs to the ordinary path before review
+ok 230 - pilot scope routes acceptance/run.mjs to the ordinary path before review
+  ---
+  duration_ms: 1204.218708
+  ...
+# Subtest: pilot scope routes lanes/validation.mjs to the ordinary path before review
+ok 231 - pilot scope routes lanes/validation.mjs to the ordinary path before review
+  ---
+  duration_ms: 1218.963167
+  ...
+# Subtest: pilot scope routes promote/train.mjs to the ordinary path before review
+ok 232 - pilot scope routes promote/train.mjs to the ordinary path before review
+  ---
+  duration_ms: 1141.855125
+  ...
+# Subtest: pilot scope routes settle/settle.mjs to the ordinary path before review
+ok 233 - pilot scope routes settle/settle.mjs to the ordinary path before review
+  ---
+  duration_ms: 1161.840584
+  ...
+# Subtest: pilot scope routes lib/retire.mjs to the ordinary path before review
+ok 234 - pilot scope routes lib/retire.mjs to the ordinary path before review
+  ---
+  duration_ms: 1218.121
+  ...
+# Subtest: pilot scope routes lib/sessions.mjs to the ordinary path before review
+ok 235 - pilot scope routes lib/sessions.mjs to the ordinary path before review
+  ---
+  duration_ms: 1261.606209
+  ...
+# Subtest: pilot scope routes watch/notice.mjs to the ordinary path before review
+ok 236 - pilot scope routes watch/notice.mjs to the ordinary path before review
+  ---
+  duration_ms: 1056.952416
+  ...
+# Subtest: pilot scope routes .codex/hooks.json to the ordinary path before review
+ok 237 - pilot scope routes .codex/hooks.json to the ordinary path before review
+  ---
+  duration_ms: 1022.610542
+  ...
+# Subtest: pilot scope routes unknown/new.mjs to the ordinary path before review
+ok 238 - pilot scope routes unknown/new.mjs to the ordinary path before review
+  ---
+  duration_ms: 1107.869584
+  ...
+# Subtest: pilot scope routes brain/.codex/hooks.json to the ordinary path before review
+ok 239 - pilot scope routes brain/.codex/hooks.json to the ordinary path before review
+  ---
+  duration_ms: 1144.397458
+  ...
+# Subtest: pilot scope routes brain/vectors/pin.json to the ordinary path before review
+ok 240 - pilot scope routes brain/vectors/pin.json to the ordinary path before review
+  ---
+  duration_ms: 1107.647292
+  ...
+# Subtest: complete scope includes protected delete
+ok 241 - complete scope includes protected delete
+  ---
+  duration_ms: 1154.959
+  ...
+# Subtest: complete scope includes protected rename-away
+ok 242 - complete scope includes protected rename-away
+  ---
+  duration_ms: 1165.533917
+  ...
+# Subtest: complete scope includes protected rename-into
+ok 243 - complete scope includes protected rename-into
+  ---
+  duration_ms: 1132.251333
+  ...
+# Subtest: clean PASS refuses findings after settlement
+ok 244 - clean PASS refuses findings after settlement
+  ---
+  duration_ms: 1020.619625
+  ...
+# Subtest: clean PASS refuses stale-head after settlement
+ok 245 - clean PASS refuses stale-head after settlement
+  ---
+  duration_ms: 1044.021708
+  ...
+# Subtest: clean PASS refuses stale-run after settlement
+ok 246 - clean PASS refuses stale-run after settlement
+  ---
+  duration_ms: 1067.905083
+  ...
+# Subtest: clean PASS refuses stale-PASS after settlement
+ok 247 - clean PASS refuses stale-PASS after settlement
+  ---
+  duration_ms: 1101.655166
+  ...
+# Subtest: no live native worker records one named exception and never starts or enqueues a worker
+ok 248 - no live native worker records one named exception and never starts or enqueues a worker
+  ---
+  duration_ms: 1307.123291
+  ...
+# Subtest: a worker exiting after autopilot precheck leaves a confirmed no-op that bare promotion can recover
+ok 249 - a worker exiting after autopilot precheck leaves a confirmed no-op that bare promotion can recover
+  ---
+  duration_ms: 15521.557291
+  ...
+# Subtest: automatic queue refuses an engineer child filed during handle after report intake
+ok 250 - automatic queue refuses an engineer child filed during handle after report intake
+  ---
+  duration_ms: 11827.880375
+  ...
+# Subtest: automatic queue promotes its own non-blocking report proposal
+ok 251 - automatic queue promotes its own non-blocking report proposal
+  ---
+  duration_ms: 17128.313083
+  ...
+# Subtest: automatic queue rechecks stale-PASS at final integration
+not ok 252 - automatic queue rechecks stale-PASS at final integration
+  ---
+  duration_ms: 7677.217041
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort/test/helpers/bounded-test.mjs:49:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    {
+      "policy": "notice-autopilot/v1",
+      "key": "report:R-1",
+      "project": {
+        "repo": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project",
+        "identity": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.git",
+        "org": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.org"
+      },
+      "release": {
+        "root": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort",
+        "id": null,
+        "commit": null,
+        "protocol": 1
+      },
+      "notice": "[org-report] run=R-1 item=ENG-1 outcome=done headline=Done",
+      "notice_id": "report-1",
+      "actions": [
+        {
+          "name": "handle done report",
+          "file": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort/supervisor/supervisor.mjs",
+          "args": [
+            "handle",
+            "R-1",
+            "--repo",
+            "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project",
+            "--org",
+            "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.org",
+            "--role",
+            "supervisor",
+            "--to",
+            "supervisor-test"
+          ],
+          "phase": "started",
+          "at": "2026-10-18T17:29:25.359Z"
+        }
+      ],
+      "started": "2026-10-18T17:29:25.144Z",
+      "scope": {
+        "eligible": true,
+        "area": "brain",
+        "base": "f8fe5e1cbeac1d3d70e42c81d68678f181f712dc",
+        "head": "17e3835a5e6e10402ae36177d5acdbba81eb98a6",
+        "paths": [
+          "brain/output.txt"
+        ],
+        "repo": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project"
+      },
+      "error": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.org/settle/R-1.review-r1.log\nsupervisor: settle.mjs: exit 1\n\n\n1 !== 0\n",
+      "disposition": "wake",
+      "reason": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.org/settle/R-1.review-r1.log supervisor: settle.mjs: exit 1 1 !== 0",
+      "finished": "2026-10-18T17:29:27.519Z",
+      "measurement": {
+        "clocks": {
+          "dispatch": "2026-10-18T17:29:23.866Z",
+          "report": "2026-10-18T17:29:23.934Z",
+          "ingest": "2026-10-18T17:29:25.848Z",
+          "review_start": "2026-10-18T17:29:26.379Z",
+          "review_end": "2026-10-18T17:29:27.472Z",
+          "queue_admission": null,
+          "gate_start": null,
+          "gate_end": null,
+          "main": null,
+          "reconcile": null
+        },
+        "waits": {
+          "dispatch": {
+            "memory_open": {
+              "seconds": null,
+              "entries": 0,
+              "grants": 0,
+              "stopped": 0,
+              "failed": 0,
+              "pending": false,
+              "invalid": false
+            },
+            "memory_worker": {
+              "seconds": null,
+              "entries": 0,
+              "grants": 0,
+              "stopped": 0,
+              "failed": 0,
+              "pending": false,
+              "invalid": false
+            }
+          },
+          "pending": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.org/settle/R-1.review-r1.log supervisor: settle.mjs: exit 1 1 !== 0",
+          "queue_s": null,
+          "slot_s": null,
+          "external_lock_s": null
+        },
+        "exceptions": [
+          "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.org/settle/R-1.review-r1.log supervisor: settle.mjs: exit 1 1 !== 0"
+        ],
+        "outcome": "settle: independent review did not complete; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.org/settle/R-1.review-r1.log supervisor: settle.mjs: exit 1 1 !== 0",
+        "reused": null,
+        "sources": {
+          "action": "report:R-1",
+          "settle": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-dGVPCd/project/.org/settle/R-1.json",
+          "train": null
+        }
+      }
+    }
+
+    + actual - expected
+
+    + 'wake'
+    - 'handled'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'handled'
+  actual: 'wake'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort/supervisor/test/autopilot.test.mjs:823:21
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: automatic queue rechecks kill-switch at final integration
+ok 253 - automatic queue rechecks kill-switch at final integration
+  ---
+  duration_ms: 13226.590959
+  ...
+# Subtest: automatic queue rechecks pause at final integration
+ok 254 - automatic queue rechecks pause at final integration
+  ---
+  duration_ms: 13982.107959
+  ...
+# Subtest: pilot rejects symlink scope
+ok 255 - pilot rejects symlink scope
+  ---
+  duration_ms: 1033.741042
+  ...
+# Subtest: pilot rejects executable scope
+ok 256 - pilot rejects executable scope
+  ---
+  duration_ms: 846.727791
+  ...
+# Subtest: pilot rejects cross-area scope
+ok 257 - pilot rejects cross-area scope
+  ---
+  duration_ms: 846.852625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..257
+# tests 257
+# suites 0
+# pass 255
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 331870.360542
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins

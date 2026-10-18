@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { createGreenCohort, LIFECYCLE_CASES } from '../green-pass.mjs';
-import { sourceReach, executionClosure } from '../green-reach.mjs';
+import { sourceReach, executionClosure, staticImportClosure } from '../green-reach.mjs';
 import { autopilotNotice, autopilotSettings } from '../autopilot.mjs';
 import { receiptDirectory } from '../context.mjs';
 import { fixture as settleFixture } from '../../settle/test/fixture.mjs';
@@ -82,6 +82,41 @@ test('a module reached only by a spawned entry is refused transitively', t => {
   f.change('lib/spawned.mjs', 'export const value = 2;\n');
   assert.equal(f.scope().code, 'GREEN_BCH_CONSUMED');
 });
+test('a literal fork target contributes its complete execution closure', t => {
+  const f = setup(t, { entry: "import { fork } from 'node:child_process';\nfork('./worker.mjs');\n",
+    extra: { 'supervisor/worker.mjs': "import '../lib/forked.mjs';\n", 'lib/forked.mjs': 'export const value = 1;\n' } });
+  f.change('lib/forked.mjs', 'export const value = 2;\n'); assert.equal(f.scope().code, 'GREEN_BCH_CONSUMED');
+});
+for (const imported of ['fork', 'fork as launch']) test(`a computed ${imported} target refuses an unrelated candidate`, t => {
+  const name = imported.includes(' as ') ? 'launch' : 'fork';
+  const f = setup(t, { entry: `import { ${imported} } from 'node:child_process';\n${name}(computedPath);\n` });
+  f.change(); assert.equal(f.scope({ report: f.evidence() }).code, 'GREEN_REACH_UNKNOWN');
+});
+for (const helper of [
+  "export { spawnSync as run } from 'node:child_process';\n",
+  "export { spawnSync } from 'node:child_process';\n",
+  "export * from 'node:child_process';\n",
+  "export { ChildProcess as run } from 'node:child_process';\n",
+  "import { spawnSync as launch } from 'node:child_process'; export { launch as run };\n",
+  "export { launch as run }; import { spawnSync as launch } from 'node:child_process';\n",
+  "import { spawnSync as launch } from 'node:child_process'; export default launch;\n",
+]) test(`launcher re-exports refuse computed calls through a relative helper: ${helper.trim()}`, t => {
+  const entry = helper.includes('export default') ? "import run from '../lib/launch.mjs';\n" : helper.includes(' as run') ? "import { run } from '../lib/launch.mjs';\n" : "import { spawnSync as run } from '../lib/launch.mjs';\n";
+  const f = setup(t, { entry: entry + 'run(process.execPath, [computedScript]);\n', extra: { 'lib/launch.mjs': helper } });
+  f.change(); const result = f.scope({ report: f.evidence() });
+  assert.equal(result.code, 'GREEN_REACH_UNKNOWN');
+  assert.ok(result.reach.base.unknown.some(e => e.file === 'lib/launch.mjs' && /re-export/.test(e.reason)));
+});
+test('a regex after a closing brace cannot hide a dynamic import from admission', t => {
+  const f = setup(t, { entry: "if (x) {} /'/.test(s); import(spec); // '\n" });
+  f.change(); const result = f.scope({ report: f.evidence() });
+  assert.equal(result.code, 'GREEN_REACH_UNKNOWN');
+  assert.ok(result.reach.base.unknown.some(e => /regex\/division/.test(e.reason)));
+});
+test('a computed native-addon load refuses an unrelated candidate', t => {
+  const f = setup(t, { entry: 'process.dlopen(module, computedAddon);\n' });
+  f.change(); assert.equal(f.scope({ report: f.evidence() }).code, 'GREEN_REACH_UNKNOWN');
+});
 test('a closed dispatch table includes every lazy command, not only the invoked command', t => {
   const f = setup(t, { entry: "const lazy = (file, name) => async (argv) => (await import(file))[name](argv);\nconst COMMANDS = { one: lazy('../lib/a.mjs', 'one'), two: lazy('../lib/b.mjs', 'two') };\nif (Object.hasOwn(COMMANDS, command)) COMMANDS[command](argv);\n",
     extra: { 'lib/b.mjs': 'export const two = 1;\n' } });
@@ -110,9 +145,12 @@ test('removing an unknown load cannot erase the base tree execution uncertainty'
 for (const [file, code] of [
   ['supervisor/green-contracts.json', 'GREEN_SELF_AUTHORITY'], ['supervisor/green-pass.mjs', 'GREEN_SELF_AUTHORITY'],
   ['supervisor/green-reach.mjs', 'GREEN_SELF_AUTHORITY'], ['supervisor/autopilot.mjs', 'GREEN_SELF_AUTHORITY'],
+  ['housekeeping/config.mjs', 'GREEN_SELF_AUTHORITY'], ['dispatch/metrics.mjs', 'GREEN_SELF_AUTHORITY'],
+  ['test-slot/ticket-queue.mjs', 'GREEN_SELF_AUTHORITY'], ['messages/receiver.mjs', 'GREEN_SELF_AUTHORITY'],
+  ['.housekeeping.json', 'GREEN_SELF_AUTHORITY'],
   ['blue/hotfix.mjs', 'GREEN_BLUE_HOTFIX'], ['discovery/native-sandbox.mjs', 'GREEN_NATIVE_ISOLATION'],
-  ['test-slot/ticket-queue.mjs', 'GREEN_HOST_RESOURCE'], ['sessions/authorization.mjs', 'GREEN_CROSS_PROJECT_AUTHORITY'],
-  ['herdr/release.sh', 'GREEN_GLOBAL_RELEASE'], ['messages/receiver.mjs', 'GREEN_SHARED_RUNTIME'],
+  ['test-slot/shared-admission.mjs', 'GREEN_HOST_RESOURCE'], ['sessions/authorization.mjs', 'GREEN_CROSS_PROJECT_AUTHORITY'],
+  ['herdr/release.sh', 'GREEN_GLOBAL_RELEASE'], ['watch/notice.mjs', 'GREEN_SHARED_RUNTIME'],
 ]) test(`declared contract ${file} refuses with ${code}`, t => {
   const f = setup(t); f.change(file, '// Changed contract\n'); assert.equal(f.scope().code, code);
 });
@@ -233,6 +271,63 @@ test('escaped imports and literal URL spawns resolve without executing either ta
   const result = sourceReach('entry.mjs', source, files);
   assert.deepEqual(result.dependencies, ['lib/a.mjs', 'worker.mjs']); assert.deepEqual(result.unknown, []);
 });
+for (const prefix of ['{', 'typeof', 'else', 'do', 'in', 'of', 'await', 'yield', 'void', 'delete', 'new', 'return', 'case', 'throw',
+  '=', '===', '!==', '==', '!=', '+', '-', '*', '**', '/', '%', '&', '|', '^', '&&', '||', '??', '<', '>', '<=', '>=', '<<', '>>', '>>>', 'instanceof']) {
+  test(`regex prefix ${prefix} keeps a following loader visible or unknown`, () => {
+    const frames = {
+      '{': "{ /'/.test(s); import(spec); // '\n}\n",
+      else: "if (x) {} else /'/.test(s); import(spec); // '\n",
+      do: "do /'/.test(s); while (false); import(spec); // '\n",
+      of: "for (const x of /'/.test(s)) {} import(spec); // '\n",
+      yield: "function* g() { yield /'/.test(s); import(spec); // '\n}\n",
+      return: "function g() { return /'/.test(s); import(spec); // '\n}\n",
+      case: "switch (x) { case /'/.test(s): break; } import(spec); // '\n",
+    };
+    const unary = ['typeof', 'await', 'void', 'delete', 'new', 'throw'].includes(prefix);
+    const source = frames[prefix] ?? `${unary ? prefix : `const result = value ${prefix}`} /'/.test(s); import(spec); // '\n`;
+    const result = sourceReach('entry.mjs', source, new Map());
+    assert.ok(result.unknown.some(e => /dynamic import|regex\/division/.test(e.reason)), JSON.stringify(result));
+  });
+}
+test('a regex after a closing parenthesis cannot hide a loader in a fake string', () => {
+  const result = sourceReach('entry.mjs', "if (x) /'/.test(s); import(spec); // '\n", new Map());
+  assert.ok(result.unknown.some(e => /regex\/division/.test(e.reason)));
+});
+test('unambiguous division and equivalent numeric slash readings retain static imports', () => {
+  for (const code of ['const ratio = (12) / 2;\n', 'const ratio = (12) / 2 / 3;\n']) {
+    const result = sourceReach('entry.mjs', code + "import './lib/a.mjs';\n", new Map([['lib/a.mjs', {}]]));
+    assert.deepEqual(result.unknown, []); assert.deepEqual(result.dependencies, ['lib/a.mjs']);
+  }
+});
+test('fork overloads resolve literal argv/options and refuse unresolved executable options', () => {
+  const header = "import { fork } from 'node:child_process';\n", files = new Map([['worker.mjs', {}]]);
+  for (const source of [
+    "fork('./worker.mjs');", "fork('./worker.mjs', []);", "fork('./worker.mjs', {silent: true});",
+    "fork('./worker.mjs', [], {silent: true});", "const argv = []; fork('./worker.mjs', argv);",
+  ]) {
+    const reach = sourceReach('entry.mjs', header + source, files);
+    assert.deepEqual(reach.unknown, [], source); assert.deepEqual(reach.dependencies, ['worker.mjs']);
+  }
+  for (const source of [
+    "fork('./worker.mjs', computedOptions);", "fork('./worker.mjs', {execPath: injected});",
+    "fork('./worker.mjs', [], {execArgv: injected});",
+    "const options = {execPath: injected}; fork('./worker.mjs', options);",
+    "const options = {silent: true}; options.execPath = injected; fork('./worker.mjs', options);",
+  ]) assert.ok(sourceReach('entry.mjs', header + source, files).unknown.length, source);
+});
+test('static authority imports derive transitive helpers again after the source graph changes', () => {
+  const files = new Map([
+    ['authority.mjs', "import './gate.mjs'; export * from './metrics.mjs';\n"],
+    ['gate.mjs', "import fs from 'node:fs'; export const enabled = true;\n"],
+    ['metrics.mjs', "import './clock.mjs';\n"], ['clock.mjs', 'export const now = 1;\n'],
+  ]);
+  const tree = { read(file) { assert.ok(files.has(file), file); return files.get(file); } };
+  const first = staticImportClosure(tree, ['authority.mjs']);
+  assert.deepEqual(first.unknown, []); assert.deepEqual(first.paths, ['authority.mjs', 'clock.mjs', 'gate.mjs', 'metrics.mjs']);
+  files.set('gate.mjs', "import './new-helper.mjs';\n"); files.set('new-helper.mjs', 'export const enabled = false;\n');
+  assert.ok(staticImportClosure(tree, ['authority.mjs']).paths.includes('new-helper.mjs'));
+  files.delete('new-helper.mjs'); assert.ok(staticImportClosure(tree, ['authority.mjs']).unknown.length);
+});
 for (const source of [
   "import('node:child_process').then(cp => cp.spawnSync('node', ['missing']));",
   "import cp from 'node:child_process'; cp['spawn' + 'Sync'](program, argv);",
@@ -243,6 +338,10 @@ for (const source of [
   "const COMMANDS = { run: fn }; COMMANDS[other] = unknown; COMMANDS[key]();",
   "import {spawnSync} from 'node:child_process'; spawnSync('node', ['./worker.mjs'], {...options});",
   "import {spawnSync} from 'node:child_process'; spawnSync('node', ['./worker.mjs'], {['sh'+'ell']: true});",
+  "process.dlopen(module, addonPath);",
+  "import {fork} from 'node:child_process'; fork(computedPath);",
+  "import {fork} from 'node:child_process'; fork('./worker.mjs', [], {execArgv: injected});",
+  "import {fork} from 'node:child_process'; fork('git');",
 ]) test(`unsupported indirect execution fails closed: ${source.slice(0, 50)}`, () => {
   assert.ok(sourceReach('entry.mjs', source, new Map([['lib/a.mjs', {}]])).unknown.length);
 });

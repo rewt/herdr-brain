@@ -5,11 +5,16 @@ import { isBuiltin } from 'node:module';
 
 const script = /\.(?:mjs|cjs|js|sh|json|ya?ml)$/;
 const identifier = /^[A-Za-z_$][\w$]*$/;
+const launcher = /^(?:fork|spawn(?:Sync)?|exec(?:Sync|File|FileSync)?)$/;
 const value = token => token?.v;
+const regexPrefix = new Set(['(', '[', '{', '}', ',', ':', ';', '?', '!', '~', '=>',
+  '=', '+=', '-=', '*=', '**=', '/=', '%=', '<<=', '>>=', '>>>=', '&=', '|=', '^=', '&&=', '||=', '??=',
+  '+', '-', '*', '**', '/', '%', '<<', '>>', '>>>', '<', '>', '<=', '>=', '==', '!=', '===', '!==', '&', '|', '^', '&&', '||', '??',
+  'typeof', 'else', 'do', 'in', 'of', 'instanceof', 'await', 'yield', 'void', 'delete', 'new', 'return', 'case', 'throw']);
 
 // Keep strings, comments, regexes and template expressions separate. Escaped
 // identifiers and syntax outside this scanner's profile fail closed.
-function tokens(source) {
+function lex(source, choices) {
   const out = []; let i = 0;
   const add = (v, type = 'token') => { if (out.length >= 100000) throw Error('source exceeds token limit'); out.push({ v, type }); };
   const quoted = quote => {
@@ -59,7 +64,16 @@ function tokens(source) {
         // Escaped static templates are deliberately unsupported as paths.
         add(raw, dynamic || raw.includes('\\') ? 'template' : 'string'); continue;
       }
-      if (c === '/' && (out.length === 0 || (out.at(-1).type === 'token' && /^(?:[=(\[:,!?;]|=>|return|throw|case|&&|\|\||\?\?)$/.test(value(out.at(-1)))))) {
+      const previous = out.at(-1), member = ['.', '?.'].includes(value(out.at(-2)));
+      let startsRegex = !previous || (previous.type === 'token' && !member && regexPrefix.has(previous.v));
+      if (c === '/' && previous?.type === 'token' && [')', '}', 'of'].includes(previous.v) && !member) {
+        // Braces and parentheses can end either an expression or a statement.
+        // Retain both lexical readings rather than letting a fake string hide
+        // a later loader. Contextual `of` can also be an ordinary identifier.
+        if (!choices.has(i)) throw { slash: i };
+        startsRegex = choices.get(i);
+      }
+      if (c === '/' && startsRegex) {
         i++; let bracket = false, closed = false;
         while (i < source.length && !/[\r\n]/.test(source[i])) {
           const r = source[i++];
@@ -78,12 +92,67 @@ function tokens(source) {
       if (templateExpression && c === '}' && braces === 0) { i++; return; }
       if (c === '{') braces++;
       if (c === '}') braces--;
-      const operator = /^(?:=>|\?\.|\.\.\.|===|!==|==|!=|&&|\|\||\?\?)/.exec(source.slice(i));
+      const operator = /^(?:>>>=|===|!==|\*\*=|<<=|>>=|&&=|\|\|=|\?\?=|>>>|=>|\?\.|\.\.\.|==|!=|<=|>=|<<|>>|\*\*|&&|\|\||\?\?|\+\+|--|[+*/%&|^\-]=)/.exec(source.slice(i));
       add(operator?.[0] ?? c); i += operator?.[0].length ?? 1;
     }
     if (templateExpression) throw Error('unterminated template expression');
   };
-  scan(false); return out;
+  try { scan(false); return { tokens: out }; }
+  catch (error) { return Number.isInteger(error.slash) ? { slash: error.slash } : { error }; }
+}
+
+function tokenReadings(source) {
+  const pending = [new Map()], readings = []; let passes = 0, firstError;
+  while (pending.length) {
+    if (++passes > 64) throw Error('regex/division analysis exceeds work limit');
+    const choices = pending.pop(), result = lex(source, choices);
+    if (result.slash !== undefined) {
+      pending.push(new Map([...choices, [result.slash, true]]), new Map([...choices, [result.slash, false]]));
+    } else if (result.error) firstError ??= result.error;
+    else readings.push(result.tokens);
+  }
+  if (!readings.length) throw firstError ?? Error('source has no supported lexical reading');
+  return readings;
+}
+function tokens(source) {
+  const readings = tokenReadings(source);
+  // Include all identifiers, so renamed launcher bindings are covered too.
+  const signature = ts => JSON.stringify(ts.filter(t => ['string', 'template'].includes(t.type) ||
+    t.type === 'token' && identifier.test(t.v)).map(t => [t.type, t.v]));
+  const expected = signature(readings[0]);
+  if (readings.some(ts => signature(ts) !== expected)) throw Error('ambiguous regex/division execution tokens');
+  return readings[0];
+}
+
+// This derivation reads the trusted running source, not candidate modules.
+// Union static declarations over every lexical reading; unlike execution reach,
+// authority protection only grows when a slash has multiple interpretations.
+export function staticImportClosure(tree, entries) {
+  const paths = new Set(), unknown = [], queue = [...entries];
+  while (queue.length) {
+    const file = queue.pop(); if (paths.has(file)) continue;
+    paths.add(file);
+    if (paths.size > 10000) { unknown.push({ file, reason: 'authority closure exceeds file limit' }); break; }
+    try {
+      for (const ts of tokenReadings(tree.read(file))) for (let i = 0; i < ts.length; i++) {
+        if (ts[i].type !== 'token') continue;
+        const kind = value(ts[i]);
+        if (!(kind === 'import' && !['(', '.'].includes(value(ts[i + 1]))) && kind !== 'export') continue;
+        let end = i + 1, spec;
+        if (kind === 'import' && ts[end]?.type === 'string') spec = ts[end].v;
+        else if (kind === 'import' || ['{', '*'].includes(value(ts[end]))) {
+          while (end < ts.length && !(ts[end].type === 'token' && [';', 'from'].includes(value(ts[end])))) end++;
+          if (value(ts[end]) === 'from' && ts[end + 1]?.type === 'string') spec = ts[end + 1].v;
+        }
+        if (spec === undefined || isBuiltin(spec)) continue;
+        if (!spec.startsWith('.')) throw Error(`unsupported authority import: ${spec}`);
+        const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), spec));
+        if (target.startsWith('../') || path.posix.isAbsolute(target)) throw Error('authority import escapes source tree');
+        queue.push(target);
+      }
+    } catch (error) { unknown.push({ file, reason: error.message }); }
+  }
+  return { paths: [...paths].sort(), unknown };
 }
 
 function group(ts, start, open = '(', close = ')') {
@@ -133,16 +202,23 @@ export function sourceReach(file, source, files) {
           if (value(ts[end]) === 'from' && ts[end + 1]?.type === 'string') {
             const spec = ts[end + 1].v; resolve(spec);
             if (['child_process', 'node:child_process'].includes(spec)) {
+              if (v === 'export') fail('re-export of child_process');
               if (value(ts[i + 1]) !== '{') fail('namespace/default process launcher import');
-              for (let j = i + 1; j < end; j++) if (/^(?:spawn(?:Sync)?|exec(?:Sync|File|FileSync)?)$/.test(value(ts[j]))) {
+              for (let j = i + 1; j < end; j++) if (launcher.test(value(ts[j]))) {
                 native.set(value(ts[j + 1]) === 'as' ? value(ts[j + 2]) : ts[j].v, { method: ts[j].v, declaration: j });
               }
             }
           }
         }
       }
-      if (['eval', 'Function', 'createRequire', 'require', 'globalThis', 'global', 'Reflect', 'WebAssembly', 'getBuiltinModule', 'binding'].includes(v)) fail(`unsupported code loader/reflection: ${v}`);
+      if (['eval', 'Function', 'createRequire', 'require', 'globalThis', 'global', 'Reflect', 'WebAssembly', 'getBuiltinModule', 'binding', 'dlopen'].includes(v)) fail(`unsupported code loader/reflection: ${v}`);
       if (ts[i].type === 'token' && v === 'from' && ['vm', 'node:vm', 'module', 'node:module', 'worker_threads', 'node:worker_threads'].includes(value(ts[i + 1]))) fail(`unsupported code loader module: ${value(ts[i + 1])}`);
+    }
+    // A locally imported launcher may be exported before its import declaration
+    // in source order. Check exports after building the complete registry.
+    for (let i = 0; i < ts.length; i++) if (ts[i].type === 'token' && value(ts[i]) === 'export') {
+      if (value(ts[i + 1]) === '{' && group(ts, i + 1, '{', '}').parts.some(p => native.has(value(p[0])))) fail('re-exported process launcher binding');
+      if (value(ts[i + 1]) === 'default' && native.has(value(ts[i + 2]))) fail('re-exported process launcher binding');
     }
     // Closed dynamic-import wrappers: no aliases, reassignment or escaping
     // helper. Every call contributes its literal first argument, not just the
@@ -237,19 +313,31 @@ export function sourceReach(file, source, files) {
       if (value(ts[i + 1]) !== '(') { fail(`escaped process launcher: ${v}`); continue; }
       const args = group(ts, i + 1), executable = expression(args.parts[0]), method = imported?.method ?? v;
       if (['exec', 'execSync'].includes(method)) { fail('shell execution'); continue; }
-      const options = args.parts[2], optionFields = options?.length && value(options[0]) === '{' ? group(options, 0, '{', '}') : null;
-      if (options?.length && (!optionFields || optionFields.end !== options.length - 1 || optionFields.parts.some(p => ['...', '[', 'get', 'set', 'shell'].includes(value(p[0]))))) { fail('unresolved process options or shell'); continue; }
-      if (['ps', 'kill'].includes(executable)) continue;
-      if (executable === 'git') {
+      let options = args.parts[2];
+      if (method === 'fork' && args.parts[1]?.length) {
+        let second = args.parts[1];
+        // Only a bound literal array has a stable argv/options role. An object
+        // binding may have acquired executable options after its declaration.
+        const bound = second.length === 1 && bindings.get(value(second[0]));
+        if (value(bound?.[0]) === '[') second = bound;
+        if (value(second[0]) === '{') options = second;
+        else if (value(second[0]) !== '[' || group(second, 0, '[', ']').end !== second.length - 1) {
+          fail('unresolved fork argv/options'); continue;
+        }
+      }
+      const optionFields = options?.length && value(options[0]) === '{' ? group(options, 0, '{', '}') : null;
+      if (options?.length && (!optionFields || optionFields.end !== options.length - 1 || optionFields.parts.some(p => ['...', '[', 'get', 'set', 'shell', 'execPath', 'execArgv'].includes(value(p[0]))))) { fail('unresolved process options or shell'); continue; }
+      if (method !== 'fork' && ['ps', 'kill'].includes(executable)) continue;
+      if (method !== 'fork' && executable === 'git') {
         const argv = group(args.parts[1] ?? [], 0, '[', ']');
         const literal = argv?.parts.map(p => p.length === 1 && p[0].type === 'string' ? p[0].v : null);
         if (literal?.length && literal.every(v => v !== null) && ['rev-parse', 'status', 'ls-tree', 'cat-file', 'merge-base', 'log', 'show'].includes(literal[0]) && !literal.some(v => v === '-c' || v.startsWith('--config') || v.startsWith('--exec'))) continue;
         fail('unresolved Git command/configuration'); continue;
       }
-      if (['@node', 'node', 'bash', 'sh'].includes(executable)) {
+      if (method === 'fork' || ['@node', 'node', 'bash', 'sh'].includes(executable)) {
         let argv = args.parts[1];
         if (argv?.length === 1 && bindings.has(value(argv[0]))) argv = bindings.get(value(argv[0]));
-        const first = group(argv ?? [], 0, '[', ']')?.parts[0], target = first && expression(first);
+        const first = group(argv ?? [], 0, '[', ']')?.parts[0], target = method === 'fork' ? executable : first && expression(first);
         if (!target || target.startsWith('-')) { fail('unresolved script argv'); continue; }
         const relative = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
         if (files.has(target)) dependencies.add(target);

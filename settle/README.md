@@ -276,7 +276,17 @@ and retained private evidence; after it stops, `--retry --review-again` explicit
 starts a different round. Malformed retained evidence can trigger the lane CLI's
 prefix collision checks and needs inspection; settle never deletes it. A public
 record published during an uncertain result also needs inspection before retry.
-If main moves during an incomplete settlement, `--retry` captures the new main
+If a base check finds main moved during a pending settlement, settle makes one
+automatic recapture attempt per run. It saves `automaticBaseRetry` in the journal
+before recovery, including the observed old/new base, stage and time, and pins
+that new target so a second move cannot be silently recaptured. Recovery uses the
+same identity, head, report and current-run checks as explicit `--retry`, and the
+review-round cap stays unchanged. A second move, conflict or any other refusal
+still produces the usual handoff. Interrupted or already prepared replays retain
+their existing inspection and explicit-retry requirements. Finished readiness
+receipts also retain explicit `--retry` for a later base move.
+
+An explicit `--retry` captures the new main during an incomplete settlement
 and proves a clean scratch replay before replacing the lane head. A completed
 review remains bound to its original source commit and is retained when the
 replay matches the mechanical merge tree. An unreviewed lane is rebased before

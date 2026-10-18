@@ -119,10 +119,18 @@ function activeWork(except = [], state = recordState()) {
     try { return fs.realpathSync(r.workspace) === job.workspace; } catch { return false; }
   });
 }
+function baseMoved(from, onto) {
+  return Object.assign(new Error('base branch moved; use --retry to recapture and rebase'), {
+    code: 'SETTLE_BASE_MOVED', from, onto,
+  });
+}
 function unchanged({ reviewOnly = false, expectedHead = job.finalHead ?? job.head, movingMain = false } = {}) {
   if (common(job.repo) !== job.common || common(job.workspace) !== job.common) throw new Error('Git common-directory identity changed');
   if (head() !== expectedHead || git(['branch', '--show-current'], job.workspace) !== `lane/${job.lane}`) throw new Error('lane HEAD or branch moved; settle the new run instead');
-  if (!movingMain && git(['rev-parse', job.main], job.repo) !== (job.recapture?.onto ?? job.mainHead)) throw new Error('base branch moved; use --retry to recapture and rebase');
+  if (!movingMain) {
+    const from = job.recapture?.onto ?? job.mainHead, onto = git(['rev-parse', job.main], job.repo);
+    if (onto !== from) throw baseMoved(from, onto);
+  }
   const status = dirty();
   const allowed = reviewOnly ? [`?? ${job.reviewRelative}`, `A  ${job.reviewRelative}`] : [''];
   if (!allowed.includes(status)) throw new Error('lane worktree changed; inspect the retained evidence');
@@ -274,11 +282,12 @@ function reviewCommitHead() {
   }
   return current;
 }
-function recaptureMain() {
+function recaptureMain(expectedMain) {
   // The correction owns the lane now and is settled under its own run. Its
   // dispatch journal, rather than the old review, authorizes recovery.
   if (['fix', 'dispatching'].includes(job.stage)) return;
   const current = git(['rev-parse', job.main], job.repo);
+  if (expectedMain && current !== expectedMain) throw baseMoved(expectedMain, current);
   if (current === job.mainHead && !job.recapture) return;
   if (job.stage === 'reviewing' && !opt['review-again']) throw new Error('review outcome is uncertain; inspect reviewer and retained evidence, then --retry --review-again after it stops');
   // Adopt only our exact prepared replacement if its response was lost.
@@ -646,6 +655,23 @@ function main() {
     job.routeConfig = routesSnapshot(config); save();
     job.report = evidence('report.md', reportText); save();
   }
+  for (;;) {
+    try { settlePending(); return; }
+    catch (error) {
+      // Retry only a base check, never an uncertain review, interrupted replay
+      // or other refusal. The durable attempt bounds this run across invocations.
+      if (error.code !== 'SETTLE_BASE_MOVED' || job.automaticBaseRetry || job.recapture ||
+          (job.rebase && job.rebase.state !== 'applied') ||
+          !['validate', 'review', 'commit-review', 'decide', 'rebase', 'ready'].includes(job.stage)) throw error;
+      job.automaticBaseRetry = { from: error.from, onto: error.onto, stage: job.stage, at: new Date().toISOString() };
+      save();
+      // Pin the observed target: a second move before recapture also escalates.
+      if (recaptureMain(error.onto) === false) return;
+    }
+  }
+}
+function settlePending() {
+  const { repo, workspace, lane } = job;
   if (!job.report) { job.report = evidence('report.md', job.reportText); save(); }
   const state = recordState();
   if (job.stage !== 'record') {

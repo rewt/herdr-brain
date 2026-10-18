@@ -3,6 +3,7 @@ import path from 'node:path';
 import { HerdrClient, herdrSocketPath } from '../lanes/board/herdr-client.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
+import { workerIdentityEvidence } from '../lib/worker-identity.mjs';
 import { readPlainFile } from '../lib/files.mjs';
 import { readReport } from '../lib/report.mjs';
 import { readInbox } from '../supervisor/prompt-supervisor.mjs';
@@ -84,7 +85,8 @@ export function readSessionFacts({ project, env = process.env, items } = {}) {
     kind: 'promotion', job: job.id, item: job.item, run: job.run, cwd: job.cwd });
   const stopped = attempt('STOP', () => [org && path.join(org, 'STOP'), path.join(project.root, '.lane/supervisor/STOP')].filter(Boolean).some(present));
   const closeHold = retirementHold(project.root);
-  return { record: { runs: [...state.runs.values()], items: [...state.items.values()], links: state.links, revision: state.eventCount },
+  return { record: { runs: [...state.runs.values()], items: [...state.items.values()], links: state.links, revision: state.eventCount,
+    ...workerIdentityEvidence(state) },
     dispatches, reports, watches, watchNotices: inbox ?? [], references: references.references,
     stopped: stopped ?? true, closeHold, errors };
 }

@@ -27,10 +27,10 @@ export function sessionBindCommand(argv) {
         proposed.prompted_at !== binding.prompted_at || proposed.deadline !== binding.deadline ||
         !sameReceipt(proposed.receipt, binding.receipt) ||
         JSON.stringify(proposed.process) !== JSON.stringify(binding.process) ||
-        !validSessionBind(run, proposed)) throw new UserError('session bind does not match the original dispatch and launch receipt');
-    const prior = run.session_bindings ?? [];
+        !validSessionBind(run, proposed, state)) throw new UserError('session bind does not match the original dispatch and launch receipt');
+    const prior = state.sessionBindings.get(run.id) ?? [];
     if (prior.length) {
-      if (prior.length !== 1 || effectiveWorkerIdentity(run).identity_conflict ||
+      if (prior.length !== 1 || effectiveWorkerIdentity(run, state).identity_conflict ||
           Object.keys(proposed).some(k => JSON.stringify(proposed[k]) !== JSON.stringify(prior[0][k])))
         throw new UserError('run already has a different or conflicting session bind');
       return { add: [] }; // Lost reply remains recoverable after completion/deadline.
@@ -38,7 +38,7 @@ export function sessionBindCommand(argv) {
     if (run.report || run.abandoned) throw new UserError('session bind requires an open, unreported run');
     if (Date.now() > Date.parse(binding.deadline)) throw new UserError('dispatch session binding deadline expired');
     if ([...state.runs.values()].some(other => other.started.seq > run.started.seq &&
-        (sharesWorker(run, other) || effectiveWorkerIdentity(other).agent_session_id === proposed.session)))
+        (sharesWorker(run, other, state) || effectiveWorkerIdentity(other, state).agent_session_id === proposed.session)))
       throw new UserError('a newer run holds the worker occupant');
     return { add: [proposed] };
   }, { actor: who.actor, unattributed: who.unattributed });

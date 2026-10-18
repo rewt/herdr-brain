@@ -40,16 +40,16 @@ function lateBound(s) {
   delete r.meta.agent_session_id;
   Object.assign(r.meta, { dispatch_attempt: 'attempt', dispatch_journal: '/repo/.org/dispatch/attempt.json',
     dispatch_project: '/repo/.git', dispatch_record: '/repo/.org' });
-  r.worker_receipt = { seq: 3, agent: 'worker', pane: 'w:p', worker_workspace: 'w', terminal_id: 'terminal' };
+  s.record.workerReceipts.set(r.id, { seq: 3, agent: 'worker', pane: 'w:p', worker_workspace: 'w', terminal_id: 'terminal' });
   r.report.seq = 5;
-  r.session_bindings = [sessionBindFact(r, { seq: 4 })];
+  s.record.sessionBindings.set(r.id, [sessionBindFact(r, s.record, { seq: 4 })]);
   return r;
 }
 
 test('a finished late-bound worker has the same retirement classification as a native-session reviewer', () => {
   const worker = fixture(), reviewer = fixture();
   const r = lateBound(worker);
-  assert.equal(effectiveWorkerIdentity(r).agent_session_id, 'session');
+  assert.equal(effectiveWorkerIdentity(r, worker.record).agent_session_id, 'session');
   reviewer.record.items.get('ENG-1').role = 'reviewer';
   reviewer.record.runs.get('R-1').report.extra = { verdict: 'PASS' };
   for (const [snapshot, kind] of [[worker, 'codex'], [reviewer, 'claude']]) {
@@ -72,7 +72,7 @@ test('a finished late-bound worker has the same retirement classification as a n
 test('a late-bound older round status recommends pane-release with its effective native session', () => {
   const s = fixture(), r = lateBound(s);
   s.record.items.get('ENG-1').closed = null;
-  s.record.runs.set('R-2', { ...r, id: 'R-2', started: { seq: 6 }, session_bindings: [],
+  s.record.runs.set('R-2', { ...r, id: 'R-2', started: { seq: 6 },
     meta: { ...r.meta, agent: 'next', pane: 'w:q', terminal_id: 'next-terminal', agent_session_id: 'next-session' },
     report: { seq: 7, outcome: 'failed' } });
   const row = retirementStatus(s).rows.find(row => row.type === 'tab');
@@ -81,13 +81,13 @@ test('a late-bound older round status recommends pane-release with its effective
 });
 
 test('late binding conflicts and replacement sessions stay KEEP while legacy terminal-only KEEP is unchanged', () => {
-  const s = fixture(), r = lateBound(s), good = structuredClone(r.session_bindings);
-  for (const bad of [() => { r.session_bindings[0].session = 'replacement'; },
-    () => { r.session_bindings[0].receipt.terminal_id = 'replacement'; },
-    () => { r.session_bindings.push({ ...r.session_bindings[0], session: 'other' }); }]) {
-    r.session_bindings = structuredClone(good); bad(); assert.match(kept(s), /identity/);
+  const s = fixture(), r = lateBound(s), good = structuredClone(s.record.sessionBindings.get(r.id));
+  for (const bad of [() => { s.record.sessionBindings.get(r.id)[0].session = 'replacement'; },
+    () => { s.record.sessionBindings.get(r.id)[0].receipt.terminal_id = 'replacement'; },
+    () => { s.record.sessionBindings.get(r.id).push({ ...s.record.sessionBindings.get(r.id)[0], session: 'other' }); }]) {
+    s.record.sessionBindings.set(r.id, structuredClone(good)); bad(); assert.match(kept(s), /identity/);
   }
-  r.session_bindings = []; assert.match(kept(s), /unknown recorded native session identity/);
+  s.record.sessionBindings.set(r.id, []); assert.match(kept(s), /unknown recorded native session identity/);
 });
 
 test('ingestion AND terminal chain plus clean integrated Git releases; no report or fold mutation', () => {

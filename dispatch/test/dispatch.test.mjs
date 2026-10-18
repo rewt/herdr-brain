@@ -13,6 +13,7 @@ import { lookupProcess } from '../../lib/processes.mjs';
 import { hookReviewDialog, codexProfile } from '../hook-review.mjs';
 import { runMetrics } from '../metrics.mjs';
 import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
+import { fold } from '../../lib/state.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -187,7 +188,8 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
     const done=waitForExit(child);
     return {child,done};
   };
-  return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
+  const state=()=>fold(fs.readFileSync(path.join(org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse));
+  return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git,state};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
 
@@ -196,8 +198,8 @@ test('delayed native session binds separately before same-session continuation r
   const first = f.start(); assert.equal(first.status, 0, first.stderr);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0])), run = f.show(job.run);
   assert.equal(run.meta.agent_session_id, undefined, 'receipt remains terminal-only');
-  assert.equal(run.session_bindings.length, 1);
-  assert.equal(effectiveWorkerIdentity(run).agent_session_id, 's-worker-1');
+  assert.equal(f.state().sessionBindings.get(job.run).length, 1);
+  assert.equal(effectiveWorkerIdentity(run, f.state()).agent_session_id, 's-worker-1');
   assert.equal(job.sessionBinding.status, 'bound');
   assert.equal(Date.parse(job.sessionBinding.deadline) - Date.parse(job.sessionBinding.prompted_at), 60000);
   const calls = f.calls(), receipt = calls.findIndex(c => c.type === 'org' && c.a[0] === 'worker');
@@ -220,7 +222,7 @@ test('ambiguous delivery confirmation never opens a binding opportunity or repla
   const after = JSON.parse(fs.readFileSync(f.jobs()[0]));
   assert.equal(after.sessionBinding.status, 'unbound'); assert.match(after.sessionBinding.reason, /ambiguous/);
   assert.equal(after.sessionBinding.deadline, before.sessionBinding.deadline);
-  assert.equal(f.show(before.run).session_bindings, undefined); assert.equal(promptCalls(f).length, 1);
+  assert.equal(f.state().sessionBindings.get(before.run), undefined); assert.equal(promptCalls(f).length, 1);
 });
 
 for (const mode of ['replacement', 'replacement-before-prompt']) test(`same-terminal ${mode} keeps the original launch unbound despite matching topology`, t => {
@@ -228,7 +230,7 @@ for (const mode of ['replacement', 'replacement-before-prompt']) test(`same-term
   assert.equal(result.status, 0, result.stderr);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
   assert.equal(job.sessionBinding.status, 'unbound'); assert.match(job.sessionBinding.reason, /process changed/);
-  assert.equal(f.show(job.run).session_bindings, undefined);
+  assert.equal(f.state().sessionBindings.get(job.run), undefined);
   assert.equal(promptCalls(f).length, 1);
 });
 
@@ -239,6 +241,9 @@ for (const fault of ['after-prompt', 'bind-lost-reply']) test(`${fault} recovers
   assert.equal(before.stage, 'complete');
   if (fault === 'bind-lost-reply') {
     assert.ok(before.sessionBinding.proposed);
+    assert.deepEqual(JSON.parse(first.stdout).binding, { status: 'unknown', retry: `node dispatch/dispatch.mjs --retry ${before.run}` });
+    assert.match(first.stderr, new RegExp(`bind reply unknown;.*node dispatch/dispatch.mjs --retry ${before.run}`));
+    assert.equal(f.show(before.run).notes.some(n => /bind reply unknown/.test(n.text)), false);
     f.rec(['abandon', before.run]); // Exact reply recovery also works after finishing.
   }
   f.fail('');
@@ -246,7 +251,30 @@ for (const fault of ['after-prompt', 'bind-lost-reply']) test(`${fault} recovers
   const after = JSON.parse(fs.readFileSync(file));
   assert.equal(after.sessionBinding.deadline, before.sessionBinding.deadline);
   assert.equal(after.sessionBinding.status, 'bound');
-  assert.equal(f.show(before.run).session_bindings.length, 1);
+  assert.equal(f.state().sessionBindings.get(before.run).length, 1);
+  assert.equal(promptCalls(f).length, 1);
+});
+
+test('the saved bind writer finishes without the observation SIGKILL deadline', t => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'bind-writer-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const preload = path.join(scratch, 'near-deadline.cjs');
+  fs.writeFileSync(preload, `if(process.argv[1]===${JSON.stringify(DISPATCH)}) {
+const fs=require('node:fs'), rename=fs.renameSync;
+fs.renameSync=function(from,to) {
+  const result=rename.call(this,from,to);
+  if(String(to).endsWith('.json')) {
+    const job=JSON.parse(fs.readFileSync(to,'utf8'));
+    if(job.sessionBinding?.proposed) Date.now=()=>Date.parse(job.sessionBinding.deadline)-1;
+  }
+  return result;
+};
+}`);
+  const f = fixture(t, { lateSession: 'delayed', preload });
+  const result = f.start(); assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).binding.status, 'bound');
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
+  assert.equal(f.state().sessionBindings.get(job.run).length, 1);
   assert.equal(promptCalls(f).length, 1);
 });
 

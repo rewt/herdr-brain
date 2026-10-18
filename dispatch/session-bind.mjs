@@ -26,7 +26,11 @@ export async function observeSessionBinding({ job, save, observe, record, now = 
     try { record(); finish('bound'); }
     catch (e) {
       if (e.recordRefusal) finish('unbound', e.message);
-      else { b.reason = 'bind reply unknown; retry the saved proposal'; save(); }
+      else {
+        b.reason = `bind reply unknown; retry the saved proposal with node dispatch/dispatch.mjs --retry ${job.run}`;
+        save();
+        process.stderr.write(`dispatch: ${b.reason}\n`);
+      }
     }
   };
   if (b.proposed) { commit(); return; }

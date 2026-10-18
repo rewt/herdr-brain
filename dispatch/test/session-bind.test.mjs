@@ -10,6 +10,8 @@ import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 import { sessionBindFact } from '../../test/helpers/session-bind.mjs';
 import { observeSessionBinding, nativeProcess } from '../session-bind.mjs';
 import { supervisorStatus } from '../../supervisor/status.mjs';
+import { fixture as retirementFixture } from '../../test/helpers/retire-fixture.mjs';
+import { planRetirement } from '../../lib/retire.mjs';
 
 const record = path.resolve('bin/org.mjs');
 function fixture(t) {
@@ -28,26 +30,28 @@ function fixture(t) {
   const worker = id => ok(['worker', id, '--agent', 'worker', '--pane', 'w:p', '--worker-workspace', 'w', '--terminal-id', 'terminal', '--cwd', root]);
   worker(run);
   const show = () => JSON.parse(ok(['show', run, '--json']));
-  const proposed = sessionBindFact(show());
+  const events = () => fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  const state = () => fold(events());
+  const proposed = sessionBindFact(show(), state());
   const job = { run, repo: root, org, common, workspace: root, token: 'attempt', stage: 'complete',
     sessionBinding: { status: 'observing', process: proposed.process, receipt: proposed.receipt,
       prompted_at: proposed.prompted_at, deadline: proposed.deadline, proposed } };
   const save = () => fs.writeFileSync(journal, JSON.stringify(job)); save();
   const bind = () => rec(['session-bind', '--journal', journal]);
-  const events = () => fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   const ingest = () => {
     const file = show().report_path;
     fs.writeFileSync(file, `---\nrun: ${run}\noutcome: done\nsummary: fixture finished\nheadline: Fixture finished\n---\n`);
     ok(['ingest', file]);
   };
-  return { root, org, common, item, run, journal, rec, ok, worker, show, job, proposed, save, bind, events, ingest };
+  return { root, org, common, item, run, journal, rec, ok, worker, show, job, proposed, save, bind, events, state, ingest };
 }
 
 test('record bind is separate and immutable, folds once, and exact retries survive ingestion and expiry', t => {
   const f = fixture(t), before = f.show(), first = f.bind();
   assert.equal(first.status, 0, first.stderr); assert.equal(JSON.parse(first.stdout).recorded, true);
   assert.deepEqual(f.show().meta, before.meta);
-  assert.equal(effectiveWorkerIdentity(f.show()).agent_session_id, 'session');
+  assert.equal(JSON.stringify(f.show()), JSON.stringify(before), 'run bytes stay unchanged by identity evidence');
+  assert.equal(effectiveWorkerIdentity(f.show(), f.state()).agent_session_id, 'session');
   assert.equal(f.bind().status, 0);
   f.ingest(); const events = f.events();
   assert.equal(f.bind().status, 0); assert.deepEqual(f.events(), events);
@@ -55,7 +59,7 @@ test('record bind is separate and immutable, folds once, and exact retries survi
   assert.equal(oldFold(events).runs.get(f.run).meta.agent_session_id, undefined);
   assert.equal(oldFold(events).runs.get(f.run).session_bindings, undefined);
   // Expired exact replies are checked before the fresh-bind deadline guard.
-  assert.equal(effectiveWorkerIdentity(fold(events).runs.get(f.run)).identity_conflict, false);
+  assert.equal(effectiveWorkerIdentity(fold(events).runs.get(f.run), fold(events)).identity_conflict, false);
   const changed = { ...f.proposed, session: 'other' };
   f.job.sessionBinding.proposed = changed; f.save();
   const refusal = f.bind(); assert.equal(refusal.status, 1); assert.match(refusal.stderr, /different or conflicting/);
@@ -108,7 +112,7 @@ test('binding refuses changed receipts, foreign dispatch anchors, renewed deadli
 
 test('fresh expired bind refuses, while an exact expired fact is idempotent after finishing', t => {
   const f = fixture(t), old = Date.now() - 120000;
-  f.job.sessionBinding.proposed = sessionBindFact(f.show(), { at: old });
+  f.job.sessionBinding.proposed = sessionBindFact(f.show(), f.state(), { at: old });
   Object.assign(f.job.sessionBinding, { prompted_at: f.job.sessionBinding.proposed.prompted_at,
     deadline: f.job.sessionBinding.proposed.deadline }); f.save();
   const before = f.events(), result = f.bind(); assert.equal(result.status, 1); assert.match(result.stderr, /deadline expired/);
@@ -125,9 +129,11 @@ test('duplicate/conflicting log evidence and stale receipt anchors are never res
   const events = f.events(), current = fold(events).runs.get(f.run);
   for (const change of [b => { b.receipt.seq++; }, b => { b.dispatch.attempt = 'foreign'; }]) {
     const bad = structuredClone(events); change(bad.at(-1));
-    assert.equal(effectiveWorkerIdentity(fold(bad).runs.get(f.run)).identity_conflict, true);
+    assert.equal(effectiveWorkerIdentity(fold(bad).runs.get(f.run), fold(bad)).identity_conflict, true);
   }
-  assert.equal(effectiveWorkerIdentity({ ...current, session_bindings: [...current.session_bindings, current.session_bindings[0]] }).identity_conflict, true);
+  const duplicate = f.state(), binds = duplicate.sessionBindings.get(f.run);
+  binds.push(binds[0]);
+  assert.equal(effectiveWorkerIdentity(current, duplicate).identity_conflict, true);
 });
 
 test('status and pane-release consume the bound identity; replacement and conflicting evidence stay unknown', t => {
@@ -159,6 +165,22 @@ test('handoff sees bound sessions and refuses a same-session successor hidden be
   assert.equal(f.rec(args).status, 1);
   f.ok(['set', next, 'agent_session_id=different']);
   assert.equal(f.rec(args).status, 0);
+});
+
+test('retirement adapter transports bound identity beside unchanged runs through JSON', t => {
+  const f = retirementFixture(t), base = fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse);
+  const started = base[1]; delete started.meta.agent_session_id;
+  Object.assign(started.meta, { dispatch_attempt: 'attempt', dispatch_journal: path.join(f.org, 'dispatch/attempt.json'),
+    dispatch_project: f.common, dispatch_record: f.org });
+  const launch = [base[0], started, { type: 'run.updated', id: 'R-1', seq: 3, meta: {
+    agent: 'worker', pane: 'w:p', worker_workspace: 'w', terminal_id: 'term' } }];
+  const state = fold(launch), bind = sessionBindFact(state.runs.get('R-1'), state, { seq: 4 });
+  const events = [...launch, bind, { ...base[2], seq: 5 }, { ...base[3], seq: 6 }];
+  fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
+  const snapshot = JSON.parse(JSON.stringify(f.retirement().observe()));
+  assert.equal(snapshot.record.runs[0].session_bindings, undefined);
+  assert.equal(snapshot.record.sessionBindings['R-1'].length, 1);
+  assert.equal(planRetirement(snapshot).close.length, 1);
 });
 
 function observationFixture() {

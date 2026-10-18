@@ -8,7 +8,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
-import { findOrgDir } from '../lib/store.mjs';
+import { findOrgDir, loadEvents } from '../lib/store.mjs';
+import { fold } from '../lib/state.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { readTiming, timedMemoryWait, timingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -57,6 +58,7 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
   return result.stdout.trim();
 }
 const record = (args) => command(recordCLI, args);
+const identityState = () => fold(loadEvents(job.org).events);
 const lane = (args) => command(laneCLI, args);
 const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
@@ -132,7 +134,12 @@ async function bindSession() {
   observationDeadline = binding.proposed ? undefined : Date.parse(binding.deadline);
   try {
     await observeSessionBinding({ job: { ...job, journal }, save, observe: observeNative,
-      record: () => record(['session-bind', '--journal', journal]) });
+      record: () => {
+        // Only observations use the launch-window timeout. The writer checks
+        // its deadline under the record lock and must finish its transaction.
+        observationDeadline = undefined;
+        return record(['session-bind', '--journal', journal]);
+      } });
   } finally { observationDeadline = undefined; }
 }
 function capture(name) {
@@ -306,7 +313,7 @@ async function main() {
     outputReceipt(); return;
   }
   if (job.stage === 'complete') {
-    const identity = effectiveWorkerIdentity(run);
+    const identity = effectiveWorkerIdentity(run, identityState());
     if (identity.identity_conflict) throw Error('conflicting worker session identity; inspect before recovery');
     liveWorker({ ...job.worker, agentSessionId: identity.agent_session_id ?? job.worker.agentSessionId });
   }
@@ -329,7 +336,7 @@ async function main() {
     memoryGate('memory_worker', 'dispatch worker', checkStop);
     if (job.reuse) {
       const prior = json(record(['show', job.reuse, '--json']));
-      const identity = effectiveWorkerIdentity(prior);
+      const identity = effectiveWorkerIdentity(prior, identityState());
       if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');
       if (prior.item !== job.item || prior.meta?.lane !== job.lane || prior.meta?.route !== job.route ||
           fs.realpathSync(prior.workspace) !== job.workspace ||
@@ -408,7 +415,7 @@ async function main() {
       if (job.stage === 'prompt' && !job.sessionBinding && !job.worker.agentSessionId && run.meta.dispatch_attempt === job.token) {
         const current = json(record(['show', job.run, '--json']));
         const prompted = Date.now();
-        job.sessionBinding = { status: 'observing', process: job.launchProcess ?? null, receipt: workerReceipt(current),
+        job.sessionBinding = { status: 'observing', process: job.launchProcess ?? null, receipt: workerReceipt(current, identityState()),
           prompted_at: new Date(prompted).toISOString(), deadline: new Date(prompted + 60000).toISOString() };
       } else if (job.stage === 'prompting' && job.sessionBinding) {
         job.sessionBinding.status = 'unbound'; job.sessionBinding.reason = 'ambiguous prompt delivery';
@@ -424,8 +431,11 @@ async function main() {
   outputReceipt();
 }
 function outputReceipt() {
+  const binding = job.sessionBinding?.proposed && job.sessionBinding.status === 'observing'
+    ? { status: 'unknown', retry: `node dispatch/dispatch.mjs --retry ${job.run}` }
+    : { status: job.sessionBinding?.status ?? (job.worker.agentSessionId ? 'recorded' : 'unbound') };
   process.stdout.write(`${JSON.stringify({ run: job.run, item: job.item, lane: job.lane, route: job.route, ...job.declared,
-    agent: job.worker.agentName, pane: job.worker.pane, watcher: job.watcher, journal })}\n`);
+    agent: job.worker.agentName, pane: job.worker.pane, watcher: job.watcher, journal, binding })}\n`);
 }
 try { await main(); }
 catch (error) {

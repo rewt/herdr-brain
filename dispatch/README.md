@@ -78,6 +78,11 @@ Unavailable continuity, replacement, timeout or uncertain prompt delivery leaves
 the run unbound. There is no backfill, background binder or ingestion delay.
 Retry cannot renew the deadline or replay a prompt to obtain a session. A saved
 bind proposal can recover an exact lost reply even after report ingestion.
+An unknown bind reply prints the exact retry command to stderr and returns
+`binding.status: "unknown"` with that command in the JSON receipt. Record writes
+finish outside the observation timeout and enforce the deadline under the lock.
+Folded identity evidence lives in side tables; run objects and historical
+completion fingerprints retain their original shape.
 Correction and completion notices go through watch's
 [shared supervisor input gate](../supervisor/README.md), which journals notices
 and waits for two empty-composer reads while the supervisor is idle. Dispatch's

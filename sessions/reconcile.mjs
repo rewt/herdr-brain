@@ -1,6 +1,7 @@
 // Foreground policy and single-action journal executor. No scheduling or model calls.
 import { randomUUID, createHash } from 'node:crypto';
 import { matchingRun } from '../lib/retire.mjs';
+import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding, sameBinding } from './observe.mjs';
 import { acquireControllerLease, durableWrite, emptyJournal, readControllerJournal, runtimePaths } from './runtime.mjs';
@@ -62,14 +63,15 @@ function worker(entry, input, slots) {
   const runs = facts.record.runs.filter(r => r.item === item).sort((a, b) => b.started.seq - a.started.seq);
   const latest = runs[0];
   if (!latest || latest.abandoned) return row(entry, 'Undispatched', 'Observe', 'work-item observation only; no active recorded dispatch');
-  const candidates = o.agents.filter(a => a.name === latest.meta?.agent || a.pane_id === latest.meta?.pane ||
-    (latest.meta?.agent_session_id && (a.agent_session?.value ?? a.agent_session_id) === latest.meta.agent_session_id));
-  const a = candidates[0], run = a && matchingRun(a, facts.record.runs);
-  if (candidates.length !== 1 || run?.id !== latest.id || !a.terminal_id || !latest.meta?.terminal_id || !latest.meta.agent_session_id) return row(entry, 'Hold', 'Hold', 'unknown, missing or mismatched work-item occupant; never substitute a worker');
+  const identity = effectiveWorkerIdentity(latest, facts.record);
+  const candidates = o.agents.filter(a => a.name === identity.agent || a.pane_id === identity.pane ||
+    (identity.agent_session_id && (a.agent_session?.value ?? a.agent_session_id) === identity.agent_session_id));
+  const a = candidates[0], run = a && matchingRun(a, facts.record);
+  if (identity.identity_conflict || candidates.length !== 1 || run?.id !== latest.id || !a.terminal_id || !identity.terminal_id || !identity.agent_session_id) return row(entry, 'Hold', 'Hold', 'unknown, missing or mismatched work-item occupant; never substitute a worker');
   const pane = o.panes.find(p => p.pane_id === a.pane_id), tab = o.tabs.find(t => t.tab_id === pane?.tab_id);
   const binding = agentBinding(a, o.server, pane?.tab_id);
-  const recordedBinding = { server: o.server, tab: pane?.tab_id, workspace: run.meta.worker_workspace, pane: run.meta.pane,
-    terminalId: run.meta.terminal_id, agentName: run.meta.agent, nativeSessionId: run.meta.agent_session_id, checkout: run.workspace };
+  const recordedBinding = { server: o.server, tab: pane?.tab_id, workspace: identity.worker_workspace, pane: identity.pane,
+    terminalId: identity.terminal_id, agentName: identity.agent, nativeSessionId: identity.agent_session_id, checkout: run.workspace };
   const workspace = o.workspaces.find(w => w.workspace_id === a.workspace_id);
   if (!sameBinding(binding, recordedBinding) || !pane || pane.terminal_id !== a.terminal_id || pane.workspace_id !== a.workspace_id ||
       pane.tab_id !== binding.tab || tab?.workspace_id !== a.workspace_id ||
@@ -78,12 +80,15 @@ function worker(entry, input, slots) {
   const job = facts.dispatches[run.id];
   if (!job || job.run !== run.id || job.item !== item || job.common !== input.inspection.project.common || job.workspace !== run.workspace ||
       (job.report && job.report !== run.report_path) || job.worker?.agentName !== a.name || job.worker.pane !== a.pane_id ||
-      job.worker.workspaceId !== a.workspace_id || job.worker.terminalId !== a.terminal_id || job.worker.agentSessionId !== binding.nativeSessionId ||
+      job.worker.workspaceId !== a.workspace_id || job.worker.terminalId !== a.terminal_id ||
+      // The journal's pre-prompt receipt stays raw; the bound identity was
+      // already checked against the live occupant through recordedBinding.
+      (job.worker.agentSessionId ?? null) !== (run.meta.agent_session_id ?? null) ||
       job.route !== run.meta.route || ['harness', 'model', 'effort'].some(k => (job.declared?.[k] ?? null) !== (run.meta[k] ?? null)) ||
       !['complete', 'prompting', 'prompt', 'watch'].includes(job.stage)) return row(entry, 'Hold', 'Hold', 'dispatch receipt does not prove this exact work-item incarnation');
   if (job.reuse) {
-    const prior = facts.record.runs.find(r => r.id === job.reuse), p = prior?.meta;
-    if (!prior || prior.item !== run.item || !prior.report || prior.report_path === run.report_path || prior.started.seq >= run.started.seq ||
+    const prior = facts.record.runs.find(r => r.id === job.reuse), p = effectiveWorkerIdentity(prior, facts.record);
+    if (!prior || p.identity_conflict || prior.item !== run.item || !prior.report || prior.report_path === run.report_path || prior.started.seq >= run.started.seq ||
         p.agent !== a.name || p.pane !== a.pane_id || p.worker_workspace !== a.workspace_id || p.terminal_id !== a.terminal_id ||
         p.agent_session_id !== binding.nativeSessionId || prior.workspace !== run.workspace || p.route !== run.meta.route ||
         ['harness', 'model', 'effort'].some(k => (p[k] ?? null) !== (run.meta[k] ?? null))) return row(entry, 'Hold', 'Hold', 'reuse receipt changed item, session, terminal, route or report identity');

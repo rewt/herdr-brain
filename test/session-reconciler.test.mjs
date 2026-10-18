@@ -17,6 +17,9 @@ import { planSessions, reconcileOffline } from '../sessions/reconcile.mjs';
 import { readControllerJournal, runtimePaths, acquireControllerLease } from '../sessions/runtime.mjs';
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { planRetirement } from '../lib/retire.mjs';
+import { fold } from '../lib/state.mjs';
+import { workerIdentityEvidence } from '../lib/worker-identity.mjs';
+import { sessionBindFact } from './helpers/session-bind.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const example = name => parseManifest(fs.readFileSync(path.join(root, `test/fixtures/sessions/${name}.md`), 'utf8'));
@@ -223,6 +226,37 @@ function withWorker(f) {
   }
   return { a, addRun };
 }
+
+test('late-bound worker reconciles from side evidence, retains the raw dispatch receipt and rejects conflicting identity', async t => {
+  const f = fixture(t), { a, addRun } = withWorker(f), run = addRun('R-1', 1, null, false);
+  delete run.meta.agent_session_id;
+  const journal = path.join(f.org, 'dispatch.json');
+  Object.assign(run.meta, { dispatch_attempt: 'attempt', dispatch_journal: journal, dispatch_project: f.project.common, dispatch_record: f.org });
+  const worker = { agent: a.name, pane: a.pane_id, worker_workspace: a.workspace_id, terminal_id: a.terminal_id };
+  const events = [
+    { type: 'item.added', id: run.item, role: 'engineer' },
+    { type: 'run.started', id: run.id, item: run.item, workspace: f.cwd, report_path: run.report_path, meta: run.meta },
+    { type: 'run.updated', id: run.id, meta: worker },
+  ].map((e, i) => ({ ...e, seq: i + 1, at: '2026-10-17T20:00:00Z', by: 'fixture' }));
+  const launch = fold(events), bind = sessionBindFact(launch.runs.get(run.id), launch, { session: a.agent_session.value, seq: 4 });
+  events.push(bind);
+  fs.writeFileSync(path.join(f.org, 'events.jsonl'), events.map(e => JSON.stringify(e) + '\n').join(''));
+  const job = f.facts.dispatches[run.id]; job.worker.agentSessionId = null; job.token = 'attempt';
+  fs.writeFileSync(journal, JSON.stringify(job));
+  const facts = readSessionFacts({ project: f.project, env: f.env });
+  assert.deepEqual(facts.errors, []);
+  f.facts.record = facts.record; f.facts.dispatches = facts.dispatches;
+  assert.deepEqual(f.facts.record.sessionBindings, workerIdentityEvidence(fold(events)).sessionBindings);
+  assert.equal(f.facts.record.runs[0].meta.agent_session_id, undefined);
+  assert.equal(f.facts.record.runs[0].session_bindings, undefined);
+  const p = await f.run(), d = decision(p);
+  assert.equal(d.phase, 'Running', d.reason); assert.equal(d.decision, 'NoOp');
+  assert.equal(d.observed.binding.nativeSessionId, 'warm-native');
+  assert.equal(f.calls.length, 0);
+  f.facts.record.sessionBindings[run.id].push({ ...bind, session: 'replacement', seq: 5 });
+  assert.equal(decision(await f.preview()).decision, 'Hold');
+  assert.equal(f.calls.length, 0);
+});
 
 for (const route of ['review', 'engineer']) test(`declarative reviewer on ${route} never binds the live engineer or fences another slot`, async t => {
   const f = fixture(t), chat = f.inspection.entries[0], { a, addRun } = withWorker(f); addRun('R-1', 1);

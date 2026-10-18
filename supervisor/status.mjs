@@ -103,7 +103,7 @@ export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', ag
     if (binding && binding !== project.identity) continue;
     if (!binding) warnings.push(`${run.id}: repository binding unavailable; inspect ${run.workspace ?? 'record-only lane'}`);
     const candidates = agents.filter(a => samePath(a.cwd, run.workspace));
-    const identity = effectiveWorkerIdentity(run);
+    const identity = effectiveWorkerIdentity(run, state);
     if (identity.identity_conflict) warnings.push(`${run.id}: conflicting recorded worker identity`);
     const worker = !identity.identity_conflict && candidates.find(a => occupantMatches(identity, a) &&
       (identity.agent_session_id || identity.terminal_id || a.name === identity.agent));

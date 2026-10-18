@@ -14,11 +14,39 @@ import { withPromotionGuards } from '../guard.mjs';
 import { completionFingerprint } from '../../lib/completion.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { fold } from '../../lib/state.mjs';
+import { fold as mainFold } from '../../test/fixtures/state-pre-session-bind.mjs';
+import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
+
+test('worker receipt and session bind preserve main run bytes and completion fingerprints', () => {
+  const meta = { dispatch_attempt: 'attempt', dispatch_journal: '/repo/.org/dispatch/attempt.json',
+    dispatch_project: '/repo/.git', dispatch_record: '/repo/.org' };
+  const worker = { agent: 'worker', pane: 'w:p', worker_workspace: 'w', terminal_id: 'terminal' };
+  const events = [
+    { type: 'item.added', id: 'ENG-1', title: 'Stable completion', role: 'engineer' },
+    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: '/repo/lane', meta },
+    { type: 'run.updated', id: 'R-1', meta: worker },
+    { type: 'run.session_bound', run: 'R-1', session: 'late-session',
+      dispatch: { attempt: meta.dispatch_attempt, journal: meta.dispatch_journal, project: meta.dispatch_project, record: meta.dispatch_record },
+      receipt: { run: 'R-1', started_seq: 2, seq: 3, cwd: '/repo/lane', ...worker }, process: { pid: 123, identity: 'native birth' },
+      prompted_at: '2026-10-17T20:00:00Z', observed_at: '2026-10-17T20:00:01Z', deadline: '2026-10-17T20:01:00Z' },
+    { type: 'report.ingested', run: 'R-1', report: { outcome: 'done', summary: 'Completed' }, sha256: 'immutable' },
+  ].map((e, i) => ({ ...e, seq: i + 1, at: '2026-10-17T20:00:01Z', by: 'fixture' }));
+  const state = fold(events), baseline = mainFold(events), run = state.runs.get('R-1');
+  assert.equal(JSON.stringify(run), JSON.stringify(baseline.runs.get('R-1')));
+  assert.equal(completionFingerprint(state, 'ENG-1'), completionFingerprint(baseline, 'ENG-1'));
+  assert.equal(effectiveWorkerIdentity(run, state).agent_session_id, 'late-session');
+  // The oracle must detect the R-492 regression: those fields were on runs.
+  const regressed = mainFold(events);
+  Object.assign(regressed.runs.get('R-1'), { worker_receipt: state.workerReceipts.get('R-1'), session_bindings: state.sessionBindings.get('R-1') });
+  assert.notEqual(JSON.stringify(regressed.runs.get('R-1')), JSON.stringify(run));
+  assert.notEqual(completionFingerprint(regressed, 'ENG-1'), completionFingerprint(baseline, 'ENG-1'));
+});
+
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'batch-complete-'))), repo = path.join(root, 'repo');
   fixtureFleet(t, root); fs.mkdirSync(repo);

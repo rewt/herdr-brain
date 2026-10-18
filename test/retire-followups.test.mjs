@@ -39,6 +39,21 @@ test('integrated nonblocking proposal releases the tab and lane check, with one 
   assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
 });
 
+test('follow-up terminal age uses the same observed lane Git facts as its retirement class', t => {
+  const f = fixture(t); record(f);
+  const snapshot = f.retirement().observe(), generatedAt = '2026-01-01T01:00:00Z';
+  const before = structuredClone(snapshot);
+  const tab = retirementStatus(snapshot, { generatedAt }).rows.find(r => r.type === 'tab');
+  assert.equal(tab.class, 'TERMINAL');
+  assert.equal(tab.terminalAt, '2026-01-01T00:00:00Z'); assert.equal(tab.terminalAgeMs, 3600000);
+  assert.deepEqual(snapshot, before, 'terminal-age projection must not mutate observed authority');
+  const unintegrated = structuredClone(snapshot); unintegrated.git[0].integrated = false;
+  const kept = retirementStatus(unintegrated, { generatedAt }).rows.find(r => r.type === 'tab');
+  assert.notEqual(kept.class, 'TERMINAL'); assert.equal(kept.terminalAt, null); assert.equal(kept.terminalAgeMs, null);
+  const unknown = structuredClone(snapshot); delete unknown.git[0].integrated;
+  assert.equal(retirementStatus(unknown, { generatedAt }).rows.find(r => r.type === 'tab').terminalAt, null);
+});
+
 test('status CLI and table list each follow-up once, with its title, owner role and next action', t => {
   const f = fixture(t); record(f, [proposal,
     { type: 'run.started', id: 'R-2', item: 'ENG-1', workspace: f.lane },

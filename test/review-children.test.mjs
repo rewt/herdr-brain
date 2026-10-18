@@ -238,7 +238,7 @@ test('batch completion and its fingerprint include child reviews without adding 
     extendFold(s, events([{ type: 'item.reopened', id: review }]));
     assert.notEqual(completionFingerprint(s, parent), original);
     assert.throws(() => completionEvents(s, entries, plan, '/record'), /changed since batch preparation/);
-    assert.deepEqual(Object.keys(s).sort(), ['candidates', 'categoryFlags', 'eventCount', 'items', 'lastAt', 'lessons', 'links', 'runs']);
+    assert.deepEqual(Object.keys(s).sort(), ['candidates', 'categoryFlags', 'eventCount', 'items', 'lastAt', 'lessons', 'links', 'runs', 'sessionBindings', 'workerReceipts']);
   }
 });
 

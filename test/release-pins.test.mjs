@@ -226,3 +226,31 @@ test('launch checks avoid payload reads while pinning verifies the full runtime 
   const rejected = f.run(process.execPath, [path.join(source, 'herdr/releases.mjs'), 'pin', f.home, repo, 'blue']);
   assert.notEqual(rejected.status, 0); assert.match(rejected.stderr, /incomplete release blue: lib\/state\.mjs/);
 });
+
+test('scratch source admission bounds Git probes and observes each new canonical pin', t => {
+  const f = fixture(t), runtime = f.project('runtime'), target = f.project('target');
+  const separate = f.project('separate'), separateGit = path.join(f.root, 'separate.git');
+  f.git(separate, 'init', '--separate-git-dir', separateGit);
+  const unborn = path.join(f.root, 'unborn'); fs.mkdirSync(unborn); f.git(unborn, 'init', '-qb', 'main');
+  copyProduct(source, runtime); f.git(runtime, 'add', '.'); f.git(runtime, 'commit', '-qm', 'source bundle');
+  const scratch = path.join(runtime, '.git/promote/batches/fixture/scratch-0');
+  f.git(runtime, 'worktree', 'add', '--detach', scratch);
+  const probe = path.join(f.root, 'source-admission.mjs');
+  fs.writeFileSync(probe, `import assert from 'node:assert/strict';import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+const execute=cp.execFileSync;let calls=0;cp.execFileSync=function(command,...args){if(command==='git')calls++;return execute.call(this,command,...args)};syncBuiltinESMExports();
+const {forwardRelease,bundleRelease,projectPin}=await import(${JSON.stringify(pathToFileURL(path.join(scratch, 'lib/releases.mjs')).href)});
+assert.equal(forwardRelease('bin/org.mjs',${JSON.stringify(target)}),null);
+assert.ok(calls<=4,'unpinned source admission exceeded four Git probes: '+calls);
+assert.deepEqual(bundleRelease(),{root:${JSON.stringify(scratch)},id:null,commit:null,protocol:1});
+fs.writeFileSync(${JSON.stringify(path.join(target, '.herdr-release.json'))},JSON.stringify({release:'blue'}));
+execute('git',['-C',${JSON.stringify(target)},'add','.herdr-release.json']);execute('git',['-C',${JSON.stringify(target)},'commit','-qm','adopt blue']);
+assert.equal(projectPin(${JSON.stringify(target)}).release,'blue');
+fs.writeFileSync(${JSON.stringify(path.join(target, '.herdr-release.json'))},JSON.stringify({release:null}));
+execute('git',['-C',${JSON.stringify(target)},'commit','-qam','rollback to current']);
+assert.equal(projectPin(${JSON.stringify(target)}).release,null);
+assert.equal(projectPin(${JSON.stringify(separate)}).project.identity,${JSON.stringify(separateGit)});
+assert.equal(projectPin(${JSON.stringify(unborn)}).release,null);
+assert.equal(projectPin(${JSON.stringify(f.root)}),null);
+console.log('bounded scratch admission and fresh canonical selection');`);
+  assert.equal(f.node([probe], target), 'bounded scratch admission and fresh canonical selection');
+});

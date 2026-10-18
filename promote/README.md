@@ -398,6 +398,80 @@ job log; they do not produce a refused result.
 
 ### Affected test files
 
+#### Change-aware selector shadow
+
+The selector is a separate observation beside the existing gate and additive
+planner below. It never supplies a command, environment variable, coverage claim,
+pass/fail decision or integration input. Enabling it leaves the declared tier
+and supplemental tests unchanged. Using a selector to choose what actually runs
+requires a separate validation-selection decision and review.
+
+A project opts in with a committed `.promotion-selector.json`:
+
+```json
+{ "schema": "promotion-selector/v1", "adapter": "test/helpers/select-tests.mjs" }
+```
+
+The separate declaration preserves the existing validation declaration format.
+The train reads the declaration, adapter and its imports from a private snapshot
+of the attempt's captured canonical **base** commit. Candidate changes cannot
+replace their own observer. New declarations take effect once present in the
+canonical base. The adapter is a dependency-free Node module invoked as
+`node ADAPTER --select`, with this JSON request on stdin:
+
+```json
+{
+  "schema": "promotion-selector/v1",
+  "root": "/absolute/candidate/worktree",
+  "base": "captured base commit",
+  "head": "captured candidate commit",
+  "changed": [{ "path": "lib/example.mjs", "status": "M" }]
+}
+```
+
+Changes come from `git diff --name-status -z --no-renames base...head` for the
+complete candidate. Renames appear as deletion plus addition. Deleted, renamed,
+type-changed or unknown statuses select `full` before invoking the adapter.
+The adapter only reads the candidate and returns one JSON object on stdout:
+`{"pick":["test/example.test.mjs"],"reason":"affected importers"}` or
+`{"pick":"full","reason":"unmapped path"}`. Lists contain unique relative test
+file paths (`.test` or `.spec`, JavaScript or TypeScript), at most 10,000 files.
+Unknown/unmapped paths, package/config files and test helpers must select `full`.
+Adapter failure, invalid output, missing code or the 20-second planning timeout
+are recorded as conservative full fallbacks and never change the gate outcome.
+
+Brain's `test/helpers/select-tests.mjs` computes its map from tracked candidate
+sources on every observation, bounded to 10,000 paths and 32 MiB. It follows
+static imports and re-exports transitively, handles cycles, and adds conservative
+edges for literal dynamic imports, CommonJS requires and `new URL` references.
+Changed `.test.mjs` files include themselves. Helpers, fixtures, configuration,
+non-module paths, symlinks and modules without a reachable test select full.
+Computed runtime references are outside this static graph; real shadow misses
+are evidence for improving the adapter before any switch-on. There is no budget
+or file cap that defers part of a static pick.
+
+`train.json` retains `attempt.selector_shadow`: base/head, changed paths, adapter,
+pick, reason, and `miss: null` while pending. After validation it adds failing test
+files, `outside_pick`, and `miss: true|false`. A subset misses if any observed
+failure is outside its pick. A failed gate with an unattributed failure or missing
+log conservatively misses for subsets; full covers every file. TAP failure
+locations, file crashes, Vitest failures and runner file timeouts are recognized.
+The exact gate log (including reused evidence) is compared without changing the
+validation receipt. Resumed observations remain in `selector_shadow_history`.
+
+Read saved observations across batches with:
+
+```sh
+node promote/shadow.mjs --project /path/to/project
+node promote/shadow.mjs --project /path/to/project --json
+```
+
+The command reports completed observations, misses, pending observations, full
+and subset picks, and errors; it performs no gate execution or record writes.
+Counts are shadow evidence, not approval to change validation selection.
+
+#### Existing additive planner
+
 A canonical `.lane.validation.json` may declare `promotion_tests`, a relative
 path to a dependency-free Node planner. The train calls it with `--plan` and a
 JSON array containing the union of paths changed by the captured lanes, including

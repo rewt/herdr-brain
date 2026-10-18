@@ -17,6 +17,7 @@ import { probeNativeGate } from './native-context.mjs';
 import { gateHistoryKey } from '../test-slot/limits.mjs';
 import { changedPaths, plannedCommand } from './test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
+import { shadowSelection, completeShadow } from './selector.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
@@ -238,6 +239,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       const covered = [...(attempt.test_plan?.files ?? []), ...(attempt.test_plan?.covered ?? [])];
       if (attempt.jobs.some(job => (job.requiredTests ?? []).some(file => !covered.includes(file)))) throw Error('promotion test plan no longer covers the bound deferred test evidence');
       const command = plannedCommand(validation.tiers.promotion.command, attempt.test_plan);
+      if (attempt.selector_shadow) (attempt.selector_shadow_history ??= []).push(attempt.selector_shadow);
+      attempt.selector_shadow = shadowSelection({ repo: canonical, base: attempt.base, head: attempt.tip, cwd: attempt.scratch, env });
       attempt.prepare.finished_at = new Date().toISOString(); save();
       process.stdout.write(`validating in ${attempt.scratch}: ${validation.tiers.promotion.command}\n`);
       // Publish the clock before the synchronous gate blocks. No exit code is
@@ -252,11 +255,13 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         prepare, timeoutSeconds: profile?.timeoutSeconds ?? validation.tiers.promotion.timeoutSeconds,
         idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? validation.tiers.promotion.idleTimeoutSeconds, environment: validation.environment, env, label: 'train scratch',
         onStart: gate => { attempt.gate = gate; save(); } });
+      attempt.selector_shadow = completeShadow(attempt.selector_shadow, attempt.gate, [attempt.scratch, canonical]);
     } catch (error) {
       if (attempt.prepare && !attempt.prepare.finished_at) attempt.prepare.finished_at = new Date().toISOString();
       // A dirty execution is measurable, but never a completed green proof.
       if (error.gate) attempt.gate = { ...attempt.gate, finished_at: error.gate.finished_at,
         duration_s: error.gate.duration_s, execution: error.gate, error: error.message };
+      if (error.gate) attempt.selector_shadow = completeShadow(attempt.selector_shadow, error.gate, [attempt.scratch, canonical]);
       if (attempt.gate && !attempt.gate.finished_at) {
         attempt.gate.finished_at = new Date().toISOString();
         attempt.gate.duration_s = Math.max(0, (Date.parse(attempt.gate.finished_at) - Date.parse(attempt.gate.started_at)) / 1000);

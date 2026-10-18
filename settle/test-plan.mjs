@@ -11,8 +11,7 @@ function git(repo, args, input) {
   if (r.error || r.status !== 0) throw Error(r.stderr?.toString().trim() || r.error?.message || 'cannot materialize canonical test planner');
   return r.stdout;
 }
-export function canonicalTestPlan({ repo, base, ...options }) {
-  if (!options.planner) return null;
+export function withCanonicalSnapshot({ repo, base }, inspect) {
   if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(base)) throw Error('test planner requires a captured canonical base commit');
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'settle-test-plan-'));
   try {
@@ -40,6 +39,10 @@ export function canonicalTestPlan({ repo, base, ...options }) {
       fs.writeFileSync(target, blobs.subarray(offset, offset + size), { flag: 'wx', mode: file.mode === '100755' ? 0o700 : 0o600 });
       offset += size + 1;
     }
-    return promotionTestPlan({ ...options, plannerRoot: root });
+    return inspect(root);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+export function canonicalTestPlan({ repo, base, ...options }) {
+  if (!options.planner) return null;
+  return withCanonicalSnapshot({ repo, base }, plannerRoot => promotionTestPlan({ ...options, plannerRoot }));
 }

@@ -1,0 +1,4 @@
+{
+  "schema": "promotion-selector/v1",
+  "adapter": "test/helpers/select-tests.mjs"
+}

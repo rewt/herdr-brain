@@ -203,6 +203,25 @@ export function sourceReach(file, source, files) {
         for (const p of args.parts.flat()) if (identifier.test(value(p))) { bindings.delete(value(p)); if (native.has(value(p))) fail('shadowed process launcher'); }
       }
     }
+    // A closed literal command map can dispatch by an input key. Its complete
+    // set of value expressions was already scanned; the selected key does not
+    // remove any edge. Escapes, spreads, computed keys and mutation are unknown.
+    for (const [name, body] of bindings) {
+      if (value(body[0]) !== '{') continue;
+      const object = group(body, 0, '{', '}');
+      if (object.end !== body.length - 1 || object.parts.some(p => ['...', '['].includes(value(p[0])))) continue;
+      const calls = new Set(); let closed = true;
+      for (let i = 0; i < ts.length; i++) if (ts[i].type === 'token' && value(ts[i]) === name) {
+        if (value(ts[i - 1]) === 'const') continue;
+        if (value(ts[i + 1]) === '[') {
+          const key = group(ts, i + 1, '[', ']');
+          if (value(ts[key.end + 1]) === '(') { calls.add(key.end); continue; }
+        }
+        if (joined(ts.slice(Math.max(0, i - 4), i)) === 'Object . hasOwn (' && value(ts[i + 1]) === ',') continue;
+        closed = false;
+      }
+      if (closed) for (const index of calls) dispatchCalls.add(index);
+    }
     for (let i = 0; i < ts.length; i++) {
       if (ts[i].type !== 'token') continue;
       const v = value(ts[i]);
@@ -218,8 +237,8 @@ export function sourceReach(file, source, files) {
       if (value(ts[i + 1]) !== '(') { fail(`escaped process launcher: ${v}`); continue; }
       const args = group(ts, i + 1), executable = expression(args.parts[0]), method = imported?.method ?? v;
       if (['exec', 'execSync'].includes(method)) { fail('shell execution'); continue; }
-      const options = args.parts[2];
-      if (options?.length && (value(options[0]) !== '{' || options.some(t => ['...', 'shell'].includes(t.v)))) { fail('unresolved process options or shell'); continue; }
+      const options = args.parts[2], optionFields = options?.length && value(options[0]) === '{' ? group(options, 0, '{', '}') : null;
+      if (options?.length && (!optionFields || optionFields.end !== options.length - 1 || optionFields.parts.some(p => ['...', '[', 'get', 'set', 'shell'].includes(value(p[0]))))) { fail('unresolved process options or shell'); continue; }
       if (['ps', 'kill'].includes(executable)) continue;
       if (executable === 'git') {
         const argv = group(args.parts[1] ?? [], 0, '[', ']');

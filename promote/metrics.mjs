@@ -200,8 +200,10 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
         const duplicate = !g.reused && seen.has(fingerprint);
         if (!g.reused) seen.add(fingerprint);
         const row = { batch: plan.id, attempt: index, execution: executionIndex, command: g.command, status: outcome, executed: g.executed === true,
-          lanes: jobs.map(j => j.topic), lane_count: jobs.length, reused: g.reused === true, duplicate,
+          lanes: jobs.map(j => j.topic), jobs: jobs.map(j => j.id), lane_count: jobs.length, reused: g.reused === true, duplicate,
           started_at: g.started_at, finished_at: g.finished_at ?? null,
+          command_started_at: g.command_started_at ?? null, command_finished_at: g.command_finished_at ?? null,
+          reason: observation.error ?? attempt.error ?? null,
           duration_s: g.finished_at && finite(g.duration_s) ? g.duration_s : null,
           command_time_s: commandTime(g),
           elapsed_s: !g.finished_at && Number.isFinite(Date.parse(g.started_at)) ? Math.max(0, (Date.parse(now) - Date.parse(g.started_at)) / 1000) : null,
@@ -232,7 +234,15 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
     batch.external_lock_granted_at = plan.external_lock_granted_at ?? null;
     batch.external_lock_required = plan.external_lock_required ?? null;
     for (const job of plan.jobs) {
+      const memberAttempts = attempts.filter(a => a.jobs?.some(j => j.id === job.id));
+      const captured = memberAttempts.flatMap(a => a.jobs).find(j => j.id === job.id);
+      const result = plan.results?.[job.id];
       lanes.push({ batch: plan.id, id: job.id, lane: job.topic, queued_at: job.queued ?? null,
+        run: job.run ?? null, org: job.org ?? null,
+        report_at: result?.report_at ?? captured?.report_at ?? null,
+        outcome: result?.outcome ?? null, integrated_at: result?.integrated_at ?? null,
+        tip: result?.tip ?? null, reason: result?.reason ?? null,
+        attempts: memberAttempts.map(a => ({ index: attempts.indexOf(a), phase: a.phase, reason: a.error ?? null })),
         timing: phaseTiming(plan, attempts.filter(a => a.jobs?.some(j => j.id === job.id || j.topic === job.topic)),
           batchGates.filter(g => g.lanes.includes(job.topic)), [job]) });
     }

@@ -1,5 +1,56 @@
 # Supervisor
 
+## Weekly project cycle time
+
+The supervisor runs this foreground report when publishing the weekly project
+measurement. The plain command prints Markdown; `--json` prints the same data as
+JSON. Only `--publish` writes files, using `lib/files.mjs` atomic writes into the
+selected record's `published/` directory. It creates a content-addressed Markdown
+and JSON pair and prints their paths on stderr. There is no scheduler, model call,
+record event, validation, promotion or live pane mutation.
+
+```sh
+node supervisor/cycle-time.mjs --project CHECKOUT --org RECORD
+node supervisor/cycle-time.mjs --project CHECKOUT --org RECORD --json
+node supervisor/cycle-time.mjs --project CHECKOUT --org RECORD --publish
+node supervisor/cycle-time.mjs --project CHECKOUT --org RECORD --since 2026-10-17T19:30:00-05:00 --until 2026-10-18T11:00:00-05:00
+```
+
+The default window is the last seven days ending now (or at `--until`). Bounds
+are **lower inclusive, upper exclusive**. Selection uses integration time, so a
+long-running item dispatched before the window is still included when it lands.
+A reconciliation event can select a landing whose integration clock is missing;
+its main clock stays null. Landings with neither clock are excluded and counted.
+Git common-directory identity and the exact record path bind promotion receipts;
+foreign receipts never contribute clocks. A torn record refuses the report.
+
+Each landed item cycle starts at its first run after its previous recorded
+landing, including correction runs. The report/review/queue clocks describe the
+landed run. Adjacent intervals, dispatch-to-main and dispatch-to-usable have
+median, nearest-rank p90, sample and missing counts, both overall and separately
+for historical autopilot cohort **in**, **out** and **unknown**. Scope eligibility
+comes from bound autopilot receipts; current configuration does not reconstruct
+historical membership or prove that autopilot performed a promotion. Median
+averages the two middle values when the sample count is even.
+
+The report joins `dispatch/metrics.mjs`, `promote/metrics.mjs`, settle receipts,
+reconciliation events and retained `Fast path timing:` clocks. Dispatch waits,
+promotion queue/slot/lock/preparation/gate time, retained gate failures and causes,
+review rounds, base recaptures, exceptions and scoped hold notes remain named.
+Shared gate costs are shown in full for each item and must not be summed across
+items. Uninstrumented hold durations and overwritten history stay unknown.
+Report availability is a retained timing snapshot or current report-file mtime,
+an observation distinct from the ingestion event. Missing/reversed clocks and
+intervals stay null and are counted; they are never replaced with zero.
+
+Brain currently has no durable installed/usable clock. Reconciliation and release
+cut/gate evidence do not prove usability. A project adapter may supply explicit
+observations through `--usable FILE.json`, a JSON array of
+`{"identity":"/canonical/git/common-dir","run":"R-1","item":"ENG-1","at":"2026-10-18T17:00:00Z","evidence":"adapter receipt path"}`.
+Only exact identity/run/item matches with an evidence reference and a clock at
+or after main contribute. This file is measurement input, never authority to
+install, release or promote.
+
 ## Slot handoffs and safe-point observations
 
 ```sh

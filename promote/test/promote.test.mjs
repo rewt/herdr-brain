@@ -10,6 +10,7 @@ import { queueFor, enqueue } from '../promote.mjs';
 import { resolveGateProfile } from '../gate-profile.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+import { writeFileAtomic } from '../../lib/files.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 
 import { loadTimeout } from '../../lib/deadline.mjs';
@@ -171,7 +172,8 @@ test('fixture teardown waits for post-release catch-up before removing its root'
   fs.writeFileSync(f.herdr, `#!${process.execPath}
 import fs from 'node:fs'; const args=process.argv.slice(2);
 if(args[0]==='agent'&&args[1]==='list') {
-  fs.writeFileSync(${JSON.stringify(reached)},String(process.pid));
+  fs.writeFileSync(${JSON.stringify(reached + '.tmp')},String(process.pid));
+  fs.renameSync(${JSON.stringify(reached + '.tmp')},${JSON.stringify(reached)});
   const deadline=Date.now()+${loadTimeout(10000)};
   while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
   fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');
@@ -278,11 +280,11 @@ test('queued promotion waits before validation under low-memory pressure and pro
   const f = fixture(t), workspace = f.lane('memory-wait'), before = f.git(['rev-parse', 'main']);
   const file = path.join(f.root, 'memory.json');
   const healthy = { available: 8 * 1024 ** 3, swap_used: 0 };
-  fs.writeFileSync(file, JSON.stringify({ ...healthy, available: 128 * 1024 ** 2 }));
+  writeFileAtomic(file, JSON.stringify({ ...healthy, available: 128 * 1024 ** 2 }));
   f.env.TEST_MEMORY_FILE = file;
   // Plain node --test needs the same synthetic memory source as the gate.
   f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(fileURLToPath(new URL('../../test/helpers/memory-fixture.mjs', import.meta.url)))}`;
-  f.onCleanup(async () => { fs.writeFileSync(file, JSON.stringify(healthy)); });
+  f.onCleanup(async () => { writeFileAtomic(file, JSON.stringify(healthy)); });
   const launched = f.launch(['memory-wait']);
   const batch = f.queue.load().current;
   assert.equal(batch.jobs[0].id, launched.jobs[0].id);
@@ -293,7 +295,7 @@ test('queued promotion waits before validation under low-memory pressure and pro
   assert.equal(f.git(['rev-parse', 'main']), before); assert.ok(fs.existsSync(workspace));
   assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false, 'memory waits leave the promotion lock available');
   assert.equal(f.results().length, 0);
-  fs.writeFileSync(file, JSON.stringify(healthy));
+  writeFileAtomic(file, JSON.stringify(healthy));
   await until(() => f.results().length === 1);
   assert.equal(f.results()[0].outcome, 'promoted', f.results()[0].reason);
   assert.match(fs.readFileSync(log, 'utf8'), /cleared; proceeding/);
@@ -643,9 +645,9 @@ cp.spawnSync=function(cmd,args,options){
     assert.equal(JSON.parse(record(['show', run, '--json'])).notes.filter(n => n.text.startsWith('Promotion: report-to-main ')).length, 1);
   }
   // Results are durable before the deferred project-wide catch-up begins.
-  await waitForFile(calls, text => text.trim().split('\n').map(JSON.parse).some(a =>
+  const actionText = await waitForFile(calls, text => text.endsWith('\n') && text.trim().split('\n').map(JSON.parse).some(a =>
     ['pane', 'tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'), { timeoutMs: 30000 });
-  const actions = fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse);
+  const actions = actionText.trim().split('\n').map(JSON.parse);
   assert.deepEqual(actions.filter((a) => a[0] === 'tab' && a[1] === 'close'), [['tab', 'close', 'w:worker']]);
   assert.ok(!actions.some((a) => a[0] === 'worktree' || a[0] === 'workspace' && a[1] !== 'list'));
   assert.ok(actions.some((a) => ['pane','tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'), 'foreground hint catch-up observes the project');

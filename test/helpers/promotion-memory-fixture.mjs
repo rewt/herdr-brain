@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { writeFileAtomic } from '../../lib/files.mjs';
 
 export const healthyMemory = { available: 8 * 1024 ** 3, swap_used: 0 };
 export const pressuredMemory = { ...healthyMemory, available: 128 * 1024 ** 2 };
@@ -9,7 +10,7 @@ export const pressuredMemory = { ...healthyMemory, available: 128 * 1024 ** 2 };
 export function promotionMemoryFixture(f, stage) {
   const file = path.join(f.root, 'memory.json'), ready = path.join(f.root, 'memory-injected');
   const armed = path.join(f.root, 'memory-armed'), preload = path.join(f.root, 'inject-memory.mjs');
-  const set = value => fs.writeFileSync(file, JSON.stringify(value));
+  const set = value => writeFileAtomic(file, JSON.stringify(value));
   set(healthyMemory); fs.writeFileSync(armed, 'armed');
   f.env.TEST_MEMORY_FILE = file;
   fs.writeFileSync(preload, `import fs from 'node:fs';
@@ -17,7 +18,8 @@ import { syncBuiltinESMExports } from 'node:module';
 const inject = () => {
   if (!fs.existsSync(${JSON.stringify(armed)})) return;
   fs.unlinkSync(${JSON.stringify(armed)});
-  fs.writeFileSync(${JSON.stringify(file)}, ${JSON.stringify(JSON.stringify(pressuredMemory))});
+  fs.writeFileSync(${JSON.stringify(file + '.tmp')}, ${JSON.stringify(JSON.stringify(pressuredMemory))});
+  fs.renameSync(${JSON.stringify(file + '.tmp')}, ${JSON.stringify(file)});
   fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
 };
 ${stage === 'project-lock' ? `const original = fs.mkdirSync;

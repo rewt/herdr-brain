@@ -146,7 +146,8 @@ describe("serialized stale takeover (REV-378 I2)", () => {
       };
       const { acquireTestSlot } = await import(${JSON.stringify(MODULE)});
       const slot = await acquireTestSlot("paused-taker", { lockPath: ${JSON.stringify(s.lockPath)}, waitSeconds: 0 });
-      fs.writeFileSync(${JSON.stringify(held)}, JSON.stringify({ nested: slot.nested, token: slot.token }));
+      fs.writeFileSync(${JSON.stringify(held + '.tmp')}, JSON.stringify({ nested: slot.nested, token: slot.token }));
+      fs.renameSync(${JSON.stringify(held + '.tmp')}, ${JSON.stringify(held)});
       setInterval(() => {}, 1000);`;
     const first = spawn(process.execPath, ["--input-type=module", "-e", script], { env: ENV, stdio: ["ignore", "ignore", "inherit"] });
     children.push(first);

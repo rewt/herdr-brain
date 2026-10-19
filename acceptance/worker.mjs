@@ -127,6 +127,12 @@ for await (const raw of input) {
   assertProducing(root);
   const line = raw.replace(/\x1b\[200~|\x1b\[201~/g, '').trim();
   if (!line) continue;
+  if (line === '/exit') {
+    // Native retirement can request a graceful exit when helpers are present.
+    // All commands above are awaited, so their journals have drained by here.
+    fs.appendFileSync(path.join(root, `${role}-input.jsonl`), JSON.stringify({ pane, name, line }) + '\n');
+    input.close(); break;
+  }
   const requested = line.match(/^acceptance-state (working|idle)$/)?.[1];
   const composer = role === 'supervisor' && line.match(/^acceptance-composer (legacy|shaded)(?: (.*))?$/);
   const match = line.match(/You are run (R-\d+).*Write the report to ([^;]+);/);

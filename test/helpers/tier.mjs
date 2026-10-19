@@ -45,6 +45,7 @@ const promotion = [
   'test/flow.test.mjs',
   'test/git-seed.test.mjs',
   'test/inbox.test.mjs',
+  'test/lane-removal-protection.test.mjs',
   'test/lessons.test.mjs',
   'test/main-module.test.mjs',
   'test/memory.test.mjs',

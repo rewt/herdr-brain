@@ -8,6 +8,16 @@ import { sweepCommands } from './helpers/retire-sweep-fixture.mjs';
 import { integratedLaneDecision } from '../lib/retire.mjs';
 import { readRetirementStatus, readRetirementWorktrees } from '../lib/retire-runtime.mjs';
 
+const archivalProbe = ({ exe, args }) => exe === 'git' && (args.includes('cherry') || args.includes('rev-list') ||
+  args.includes('--is-shallow-repository') || args.includes('refs/replace') || args.includes('info/grafts') ||
+  (args.includes('--verify') && args.includes('refs/heads/lane/topic')));
+function boundedSummary(summary) {
+  assert.equal(Object.hasOwn(summary, 'patches'), false);
+  assert.equal(Object.hasOwn(summary, 'uniqueMerges'), false);
+  assert.match(summary.sha256, /^[a-f0-9]{64}$/);
+  assert.ok(Buffer.byteLength(JSON.stringify(summary)) < 1024);
+}
+
 const policy = (f, value = true, extra = {}) => fs.writeFileSync(path.join(f.repo, '.lane.json'),
   JSON.stringify({ retirement: { archival_retirement: value, ...extra } }));
 function landed(t, { method = 'cherry-pick', enabled = true, occupied = false } = {}) {
@@ -62,11 +72,19 @@ for (const method of ['cherry-pick', 'rebase']) for (const record of ['terminal'
     const row = status.rows.find(row => row.type === 'worktree' && row.worktree === f.lane);
     assert.equal(row.integrated, false); assert.equal(row.class, null);
     assert.match(row.nextAction, /eligible for archival retirement/);
+    boundedSummary(row.archival);
     const result = sweep(f), proof = result.results[0];
     assert.equal(proof.action, 'lane-removed', JSON.stringify(result.results));
     assert.equal(proof.eligibility, 'archival-retirement'); assert.equal(proof.integrated, false);
     assert.equal(proof.tip, f.head); assert.equal(proof.mainTip, f.mainTip);
     assert.equal(proof.archiveTag, 'archive/lane/topic');
+    boundedSummary(proof.archival);
+    assert.equal(proof.archival.patchCount, 1); assert.equal(proof.archival.matchedPatchCount, 1);
+    assert.equal(proof.archival.unmatchedPatchCount, 0); assert.equal(proof.archival.mergeCount, 0);
+    assert.equal(proof.archival.firstMismatch, null); assert.equal(proof.archival.sha256, row.archival.sha256);
+    for (const logged of result.logs) if (logged.archival) {
+      boundedSummary(logged.archival); assert.deepEqual(logged.archival, proof.archival);
+    }
     assert.equal(f.git(['rev-parse', `${proof.archiveTag}^{commit}`]), f.head);
     assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
     assert.equal(createHash('sha256').update(fs.readFileSync(proof.evidence.manifest)).digest('hex'), proof.evidence.sha256);
@@ -95,9 +113,81 @@ for (const setting of ['absent', false, 'lane copy', 'environment override']) te
   }
   const result = sweep(f);
   kept(f, result, /archival retirement policy is off/);
-  assert.equal(result.calls.some(row => row.args.includes('cherry')), false);
+  assert.deepEqual(result.calls.filter(archivalProbe), []);
   assert.equal(result.calls.some(row => row.locked), false);
   assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+});
+
+for (const sweepMode of [false, true]) for (const [enabled, dirty] of [[false, false], [false, true], [true, true], [true, false]]) {
+  test(`archival inventory probes only clean enabled lanes (sweep ${sweepMode}, policy ${enabled}, dirty ${dirty})`, t => {
+    const f = landed(t, { enabled });
+    if (dirty) fs.writeFileSync(path.join(f.lane, 'seed'), 'unfinished edit');
+    const commands = sweepCommands(f);
+    const trees = readRetirementWorktrees(f.common, { main: 'main', env: f.env, ...commands,
+      sweep: sweepMode, archivalRetirement: enabled });
+    const tree = trees.find(tree => tree.branch === 'lane/topic');
+    assert.equal(tree.clean, !dirty); assert.equal(tree.integrated, false);
+    const probes = commands.calls.filter(archivalProbe);
+    const mainReads = commands.calls.filter(row => row.args.includes('--verify') && row.args.includes('refs/heads/main'));
+    if (!enabled || dirty) {
+      assert.equal(tree.archival, undefined); assert.deepEqual(probes, []);
+      assert.equal(mainReads.length, trees.length, 'only the ordinary ancestry snapshots read main');
+    } else {
+      assert.equal(tree.archival.complete, true);
+      for (const probe of ['cherry', 'rev-list', '--is-shallow-repository', 'refs/replace', 'info/grafts'])
+        assert.ok(probes.some(row => row.args.includes(probe)), probe);
+      assert.equal(mainReads.length, trees.length + 2, 'archival observation binds main before and after its probes');
+    }
+  });
+}
+
+for (const guard of ['invalid lane name', 'untouched preparation', 'unlinked checkout']) test(`an existing inventory keep skips archival probes: ${guard}`, t => {
+  const f = landed(t);
+  if (guard === 'invalid lane name') f.git(['branch', '-m', 'lane/topic', 'lane/x']);
+  if (guard === 'untouched preparation') {
+    f.git(['branch', '-m', 'lane/topic', 'lane/previous']);
+    f.git(['checkout', '-b', 'lane/topic', f.head], f.lane);
+  }
+  const commands = sweepCommands(f), command = commands.command;
+  if (guard === 'unlinked checkout') commands.command = (exe, args, options) => exe === 'git' && args.includes('--absolute-git-dir') ?
+    { status: 0, stdout: f.common + '\n', stderr: '' } : command(exe, args, options);
+  const tree = readRetirementWorktrees(f.common, { main: 'main', env: f.env, ...commands, sweep: true, archivalRetirement: true })[0];
+  assert.equal(tree.archival, undefined); assert.deepEqual(commands.calls.filter(archivalProbe), []);
+  assert.equal(commands.calls.filter(row => row.args.includes('--verify') && row.args.includes('refs/heads/main')).length, 1);
+});
+
+test('archival decisions and keep logs retain bounded counts, the first mismatch and a digest of the full history', t => {
+  const f = landed(t), commands = sweepCommands(f), command = commands.command, logs = [];
+  const patches = Array.from({ length: 1000 }, (_, index) => ({ sign: index === 3 ? '+' : '-', commit: (index + 1).toString(16).padStart(40, '0') }));
+  commands.command = (exe, args, options) => exe === 'git' && args.includes('cherry') ?
+    { status: 0, stdout: patches.map(patch => `${patch.sign} ${patch.commit}`).join('\n') + '\n', stderr: '' } : command(exe, args, options);
+  const tree = readRetirementWorktrees(f.common, { main: 'main', env: f.env, ...commands, sweep: true, archivalRetirement: true })[0];
+  const before = JSON.stringify(tree.archival), snapshot = f.retirement(commands).observe();
+  const decision = integratedLaneDecision(snapshot, tree), summary = decision.archival;
+  assert.equal(decision.decision, 'keep'); assert.match(decision.why, /unmatched changes/);
+  boundedSummary(summary);
+  assert.equal(summary.patchCount, 1000); assert.equal(summary.matchedPatchCount, 999);
+  assert.equal(summary.unmatchedPatchCount, 1); assert.equal(summary.mergeCount, 0);
+  assert.deepEqual(summary.firstMismatch, { kind: 'patch', ...patches[3] });
+  assert.equal(summary.sha256, createHash('sha256').update(before).digest('hex'));
+  assert.equal(JSON.stringify(tree.archival), before, 'summarizing never mutates executor evidence');
+  const changed = structuredClone(tree); changed.archival.patches.at(-1).commit = 'a'.repeat(40);
+  const changedSummary = integratedLaneDecision(snapshot, changed).archival;
+  assert.notEqual(changedSummary.sha256, summary.sha256, 'the digest includes history beyond the first mismatch');
+  assert.deepEqual({ ...changedSummary, sha256: summary.sha256 }, summary);
+  const merged = structuredClone(tree); merged.archival.uniqueMerges = Array.from({ length: 1000 }, (_, i) => (i + 1001).toString(16).padStart(40, '0'));
+  const mergeDecision = integratedLaneDecision(snapshot, merged);
+  boundedSummary(mergeDecision.archival); assert.match(mergeDecision.why, /unaccounted merge/);
+  assert.equal(mergeDecision.archival.mergeCount, 1000);
+  assert.deepEqual(mergeDecision.archival.firstMismatch, { kind: 'merge', commit: merged.archival.uniqueMerges[0] });
+  assert.equal(mergeDecision.archival.sha256, createHash('sha256').update(JSON.stringify(merged.archival)).digest('hex'));
+  const result = f.retirement({ ...commands, log: row => logs.push(row) }).sweepIntegratedLanes();
+  assert.equal(result[0].decision, 'keep');
+  for (const row of [...result, ...logs]) {
+    assert.deepEqual(row.archival, summary);
+    assert.ok(Buffer.byteLength(JSON.stringify(row)) < 2048, 'receipt size does not grow with the patch inventory');
+  }
+  assert.equal(fs.existsSync(f.lane), true);
 });
 
 for (const config of ['malformed', 'wrong type']) test(`archival policy ${config} fails closed`, t => {

@@ -191,8 +191,10 @@ test('a settle reviewer records its validated verdict and releases independently
   r.recordCallback({ kind: 'settle', pane: 'w:p', agent: 'worker', run: 'R-1' });
   const evidence = path.join(f.scratch, 'validated-review.md'), bytes = '**PASS**\nvalidated by lane review\n';
   fs.writeFileSync(evidence, bytes);
+  const eventBytes = fs.readFileSync(f.eventFile);
   r.recordReviewVerdict({ pane: 'w:p', run: 'R-1', verdict: 'PASS', head: f.head, evidence,
     sha256: createHash('sha256').update(bytes).digest('hex') });
+  assert.deepEqual(fs.readFileSync(f.eventFile), eventBytes, 'review verdict evidence leaves the event log unchanged');
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"release_sessions":false}');
   assertKept(f);
   fs.unlinkSync(path.join(f.repo, '.housekeeping.json'));

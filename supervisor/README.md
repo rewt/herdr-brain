@@ -303,8 +303,9 @@ identity, HOLD and live references remain keeps in the lanes view. Turn off only
 these automatic releases with `record housekeeping set --release-sessions false`.
 No fold keys or session display metadata grant this authority.
 Settle reviewers have no separate worker run: after validating and publishing the
-review, lane review records immutable `retirement.reviewed` evidence bound to its
-launch receipt. Their pane release uses `--reviewer` to bind that exact occupant;
+review, lane review writes an immutable `retirement-review/v1` receipt under
+`ORG/retirement/reviews/`, bound to its launch receipt. Review never appends to the
+event log. Their pane release uses `--reviewer` to bind that exact occupant;
 it cannot release the worker. Unknown legacy reviewers stay kept.
 After guarded tab closure the executor can close an empty policy-released native
 workspace; its Git worktree, branch and open item chain remain intact.

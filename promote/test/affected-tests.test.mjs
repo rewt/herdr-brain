@@ -64,6 +64,25 @@ test('a core-module change selects bounded one-hop extras and defers the expensi
   assert.ok(core.deferred.length > 0);
 });
 
+test('both fixture targets reach all three split lane CLI files with measured budget costs', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
+  const laneFiles = ['lanes/test/lane.test.mjs', 'lanes/test/lane-dispatch.test.mjs', 'lanes/test/lane-review.test.mjs'];
+  for (const changed of ['lanes/lane.mjs', 'lanes/board/herdr-client.mjs']) {
+    const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs', changed: [changed], baseCommand: 'npm run test:promotion' });
+    const rows = [...plan.selected, ...plan.deferred];
+    for (const file of laneFiles) {
+      const matches = rows.filter(row => row.file === file);
+      assert.equal(matches.length, 1, `${changed} must select or defer ${file} exactly once`);
+      assert.equal(matches[0].estimate, 'measured', file);
+      assert.ok(Number.isFinite(Date.parse(matches[0].measured_at)), file);
+      assert.ok(matches[0].estimated_ms > plan.budget.unknown_file_ms, file);
+    }
+    assert.ok(laneFiles.filter(file => plan.files.includes(file)).length <= 1, 'only one split lane CLI file fits in the extras budget');
+    assert.ok(plan.budget.estimated_ms <= DEFAULT_BUDGET_MS);
+    assert.ok(plan.files.length <= DEFAULT_MAX_FILES);
+  }
+});
+
 test('the planner CLI launched through a symlinked directory emits the same plan', t => {
   if (!gitTree) return t.skip(SNAPSHOT);
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'affected-linked-'));

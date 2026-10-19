@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { roleIs } from '../lib/roles.mjs';
 import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { cleanPassScope } from '../supervisor/clean-pass.mjs';
+import { greenPassScope } from '../supervisor/green-pass.mjs';
 import { execFileSync } from 'node:child_process';
 import { loadEvents, withLock } from '../lib/store.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
@@ -59,7 +60,7 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (item.closed || blocked || overlapping || openRuns(state, item.id).some(r => !superseded.includes(r.id)) || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(state, item.id))) throw new Error(`${run} record readiness changed: work, closure, blockers or outcome; nothing merged`);
     if (existingWorker) {
       const settings = JSON.parse(fs.readFileSync(path.join(canonical, '.supervisor.json'), 'utf8'))?.autopilot;
-      if (settings?.enabled !== true || settings.cohort !== 'clean-pass') throw Error('AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged');
+      if (settings?.enabled !== true || !['clean-pass', 'green-pass'].includes(settings.cohort)) throw Error('AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged');
       if (!housekeepingConfig(path.join(canonical, '.housekeeping.json')).enabled) throw Error('AUTOPILOT_PAUSED: housekeeping paused before integration; nothing merged');
       const settled = JSON.parse(fs.readFileSync(path.join(org, 'settle', `${run}.json`), 'utf8'));
       const review = settled.review;
@@ -69,7 +70,10 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
           settled.result.reviewed_commit !== settled.head || review?.verdict !== 'PASS' || clean !== 'None' ||
           review.sha256 !== createHash('sha256').update(review.text).digest('hex') || settled.result.review?.sha256 !== review.sha256)
         throw Error('AUTOPILOT_PASS_STALE: current clean PASS or head changed; nothing merged');
-      const scope = cleanPassScope({ repo: canonical, workspace, base: settled.mainHead, head: expectedHead, review });
+      const scope = settings.cohort === 'green-pass'
+        ? greenPassScope({ repo: canonical, identity, org, workspace, base: settled.mainHead, head: expectedHead, review,
+          bindings: settings.green, report: current.report, run, item, reportRoot: path.dirname(current.report_path) })
+        : cleanPassScope({ repo: canonical, workspace, base: settled.mainHead, head: expectedHead, review });
       if (!scope.eligible) throw Error(`${scope.code}: ${scope.reason}; nothing merged`);
     }
     checkGit();

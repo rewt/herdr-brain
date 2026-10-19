@@ -1,0 +1,131 @@
+{
+  "schema": "green-real-candidates/v1",
+  "node": "v20.19.4",
+  "main": "264dc43c88bfefd5d5becd775ec242198ba2e6fd",
+  "bootstrap": "0251dc51ea9b486c628081350822742a51718ec3",
+  "source": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-green-cohort",
+  "workspace": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/eng396-r566-real-puljun",
+  "bindings": {
+    "brain": {
+      "repo": "/Users/rewt/development/rewt/herdr-brain",
+      "identity": "/Users/rewt/development/rewt/herdr-brain/.git",
+      "org": "/Users/rewt/development/rewt/.org"
+    },
+    "lab": null
+  },
+  "activation": "hypothetical eligibility binding only; no deployment config written",
+  "source_sha256": {
+    "supervisor/green-pass.mjs": "54d5d114e4d54cd348e80c79e237ad365d126ca7e1a75efdaf299d8338b5e8da",
+    "supervisor/green-manifest.mjs": "ea2ab90dd6ce4ead55de7d656d33a3506678ad4e2311e4784de5a62520affa64",
+    "supervisor/green-contracts.json": "b9f95fbf339c83bcae280454e782a1ebfb0ce44d2d4bdd80bf83a5f9c963be28"
+  },
+  "checks": [
+    {
+      "label": "renderer",
+      "head": "90b4c1a07ba32969ce9c33c1cef80fcb82b594bf",
+      "eligible": true,
+      "code": null,
+      "reason": null,
+      "components": [
+        {
+          "path": "board/render.mjs",
+          "profile": "board-default-width/v1",
+          "before": 120,
+          "after": 121
+        }
+      ],
+      "manifest_sha256": "b9f95fbf339c83bcae280454e782a1ebfb0ce44d2d4bdd80bf83a5f9c963be28"
+    },
+    {
+      "label": "environment-GIT_CONFIG_SYSTEM",
+      "head": "90b4c1a07ba32969ce9c33c1cef80fcb82b594bf",
+      "eligible": false,
+      "code": "GREEN_REACH_UNKNOWN",
+      "reason": "loader/environment drift"
+    },
+    {
+      "label": "environment-GIT_R566_NEW_SELECTOR",
+      "head": "90b4c1a07ba32969ce9c33c1cef80fcb82b594bf",
+      "eligible": false,
+      "code": "GREEN_REACH_UNKNOWN",
+      "reason": "loader/environment drift"
+    },
+    {
+      "label": "environment-restored-renderer",
+      "head": "90b4c1a07ba32969ce9c33c1cef80fcb82b594bf",
+      "eligible": true,
+      "code": null,
+      "reason": null,
+      "components": [
+        {
+          "path": "board/render.mjs",
+          "profile": "board-default-width/v1",
+          "before": 120,
+          "after": 121
+        }
+      ],
+      "manifest_sha256": "b9f95fbf339c83bcae280454e782a1ebfb0ce44d2d4bdd80bf83a5f9c963be28"
+    },
+    {
+      "label": "bch-entry",
+      "head": "66e85852f046a41a67be7b39ce4047d0cce4a626",
+      "eligible": false,
+      "code": "GREEN_BCH_CONSUMED",
+      "reason": "reviewed boundary input changed: supervisor/reconcile.mjs"
+    },
+    {
+      "label": "promotion-authority",
+      "head": "051ad9ce593acf2745660b5a2b98b8dd40f00f90",
+      "eligible": false,
+      "code": "GREEN_SELF_AUTHORITY",
+      "reason": "eligibility/evidence authority: test/helpers/run.mjs"
+    },
+    {
+      "label": "manifest",
+      "head": "cb7a7975e7f65777368399ce3dca7420d127962f",
+      "eligible": false,
+      "code": "GREEN_SELF_AUTHORITY",
+      "reason": "eligibility/evidence authority: supervisor/green-contracts.json"
+    },
+    {
+      "label": "boundary",
+      "head": "edecbba0390b1a563ce2af41d85fb24c4d623507",
+      "eligible": false,
+      "code": "GREEN_BOUNDARY_CHANGED",
+      "reason": "reviewed boundary input changed: board/rows.mjs"
+    },
+    {
+      "label": "foreign-project-target",
+      "head": "edecbba0390b1a563ce2af41d85fb24c4d623507",
+      "eligible": false,
+      "code": "GREEN_IDENTITY_MISMATCH",
+      "reason": "admission is outside the declared canonical project and record"
+    },
+    {
+      "label": "expired-activation",
+      "head": "edecbba0390b1a563ce2af41d85fb24c4d623507",
+      "eligible": false,
+      "code": "GREEN_EXPIRED",
+      "reason": "activation is missing, in the future or outside the ten-day interim"
+    }
+  ],
+  "retained_branches": [
+    "proof/R-566-final-renderer",
+    "proof/R-566-final-bch-entry",
+    "proof/R-566-final-promotion-authority",
+    "proof/R-566-final-manifest",
+    "proof/R-566-final-boundary"
+  ],
+  "renderer": {
+    "before_sha256": "5ba08446d07656efe5982525cd2d5501cf60b3d099b8f59a49d1fe65a9a761a8",
+    "after_sha256": "2dc97396ae64b948c235994e2ef2d5c6103ed437086d08933436b4e134f10d5d",
+    "diff": "diff --git a/board/render.mjs b/board/render.mjs\nindex c5b2e110..528118c4 100644\n--- a/board/render.mjs\n+++ b/board/render.mjs\n@@ -10,7 +10,7 @@ const cell = (value, width) => {\n   const text = String(value ?? '');\n   return (text.length > width ? text.slice(0, Math.max(0, width - 1)) + '~' : text).padEnd(width);\n };\n-export function render(snapshot, { width = 120, height = Infinity, now = Date.now() } = {}) {\n+export function render(snapshot, { width = 121, height = Infinity, now = Date.now() } = {}) {\n   width = Math.max(1, Math.floor(width));\n   const clip = line => line.length <= width ? line : line.slice(0, Math.max(0, width - 1)) + '~';\n   const slot = snapshot.slot;",
+    "validation": {
+      "exact_committed_bytes": true,
+      "default_width": 121,
+      "explicit_width": 80
+    }
+  },
+  "success": true,
+  "workspace_removed": true
+}

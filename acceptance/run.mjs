@@ -40,6 +40,24 @@ export function configuredCommands(node, candidate, { repo, org }) {
   };
 }
 
+// Direct lane promotion does not complete record work. The scripted supervisor
+// records that disposition only after integration succeeds, as a real one does.
+export function promoteAndComplete(job, { lane, record }) {
+  lane(['promote', job.lane]);
+  record(['close', job.item, '--if-current-run', job.run, '--note', 'Acceptance supervisor confirmed successful integration']);
+}
+
+// Unresolved fixtures exercise KEEP, then the receipt-owned scratch cleanup
+// disposes of them after all producers drain. Abandonment is not completion.
+export function assertWorkerKept(job, { lane, reason }) {
+  const output = lane(['close', job.lane], undefined, { ok: false });
+  const actions = output.split('\n').filter(line => line.startsWith('{')).map(JSON.parse);
+  assert.ok(actions.some(action => action.action === 'keep' &&
+    action.workspace_id === job.info.meta.worker_workspace && reason.test(action.why)),
+    `${job.run}: expected worker KEEP (${reason}): ${output}`);
+  assert.ok(fs.existsSync(job.info.workspace), `${job.run}: kept worktree remains`);
+}
+
 // A PTY input/ingestion receipt can precede the sender's delivery confirmation.
 // Keep its callback reference until the exact recorded watcher has exited.
 export async function awaitWatcherExit(job, { until, alive = ownerAlive }) {
@@ -61,7 +79,7 @@ export function initializeHerdrOwnership(root, { binary, socketPath, fleetRoot }
     creationRoots: [fs.realpathSync(fleetRoot)], workspaces: [], tabs: [], panes: [] }));
 }
 
-export async function abandonWatcher(job, { record, h, until, read, close, alive = ownerAlive }) {
+export async function abandonWatcher(job, { record, h, until, read, alive = ownerAlive }) {
   record(['abandon', job.run, '--note', 'Acceptance failure path complete']);
   // Notice confirmation may still be running when the PTY receipt arrives.
   // Hold working until the watcher actually observes abandonment, so its next
@@ -70,7 +88,6 @@ export async function abandonWatcher(job, { record, h, until, read, close, alive
   try { await until(() => read(job.watcher.log).includes('was abandoned; stopping'), 'abandoned watcher stops'); }
   finally { h('pane', 'report-agent', job.pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', 'idle', '--seq', '101'); }
   await awaitWatcherExit(job, { until, alive });
-  close(job.lane);
 }
 
 async function main() {
@@ -208,7 +225,7 @@ async function final(job, { ingest = true } = {}) {
   }
   await awaitWatcherExit(job, { until });
 }
-const stopWatcher = job => abandonWatcher(job, { record, h, until, read, close: topic => lane(['close', topic]) });
+const stopWatcher = job => abandonWatcher(job, { record, h, until, read });
 
 function cleanupScope() {
   return cleanupPromise ??= closeScope();
@@ -417,7 +434,7 @@ try {
     fs.unlinkSync(path.join(job.info.workspace, 'dirty'));
     assert.notEqual(node(path.join(candidate, 'lanes/lane.mjs'), ['promote', job.lane], { cwd: fixture.repo, extra: { LANE_VALIDATE: 'false' }, ok: false }).status, 0);
     assert.equal(git(fixture.repo, ['rev-parse', 'main']), before);
-    lane(['promote', job.lane]);
+    promoteAndComplete(job, { lane, record });
     assert.equal(git(fixture.repo, ['rev-parse', 'main']), git(job.info.workspace, ['rev-parse', 'HEAD']));
     assert.equal(git(fixture.repo, ['rev-list', '--merges', 'main']), '');
     lane(['close', job.lane]);
@@ -492,7 +509,8 @@ try {
       process.kill(job.watcher.pid, 0);
       assert.equal(json(record(['show', job.run, '--json'])).report, null);
       await stopWatcher(job);
-      return `${job.run}: matching intermediate notice, watcher alive, no ingestion; abandoned and closed`;
+      assertWorkerKept(job, { lane, reason: /report is not ingested/ });
+      return `${job.run}: matching intermediate notice, watcher alive, no ingestion; abandoned watcher exited, unresolved worker kept for scratch cleanup`;
     });
   }
   await test(cases.fix, async () => {
@@ -501,7 +519,7 @@ try {
     await until(() => ['idle', 'done'].includes(h('agent', 'get', first.agent).agent.agent_status), 'worker idle');
     const second = await dispatch('done', first.lane, { item: first.item, reuse: first.run });
     assert.equal(first.agent, second.agent); assert.equal(first.pane, second.pane); assert.notEqual(first.run, second.run);
-    await final(second); lane(['check'], second.info.workspace); lane(['promote', second.lane]); lane(['close', second.lane]);
+    await final(second); lane(['check'], second.info.workspace); promoteAndComplete(second, { lane, record }); lane(['close', second.lane]);
     return `${first.run} -> ${second.run}: blocked report then done, same PTY, distinct run/report`;
   });
   await test(cases.grace, async () => {
@@ -523,38 +541,34 @@ try {
     assert.ok(!read(log).includes('[watch-no-report]'), 'no early no-report notice');
     write(path.join(root, 'mode'), 'done');
     h('agent', 'prompt', job.agent, `You are run ${job.run}. Write the report to ${job.info.report_path};`);
-    await final(job); assert.match(read(log), /\[org-report\]/); lane(['promote', job.lane]); lane(['close', job.lane]);
+    await final(job); assert.match(read(log), /\[org-report\]/); promoteAndComplete(job, { lane, record }); lane(['close', job.lane]);
     return '900-second configuration stayed quiet for observed interval, resume/report woke it, duplicate refused (full 900s expiry not tested)';
   });
   await test(cases.housekeeping, async () => {
     const script = requireCandidate('housekeeping/housekeeping.mjs');
-    const jobs = [];
+    const done = await dispatch('done', 'housekeeping-done');
+    await final(done); lane(['check'], done.info.workspace); promoteAndComplete(done, { lane, record });
+    const blocked = await dispatch('blocked-report', 'housekeeping-blocked');
+    await final(blocked);
+    const human = await dispatch('needs-human', 'housekeeping-human');
+    await final(human);
+    const tabFor = (job) => h('pane', 'get', job.pane).pane.tab_id;
+    const closedTab = tabFor(done), keptTabs = [blocked, human].map(tabFor);
+    const state = path.join(root, 'housekeeping-state');
+    let failure;
     try {
-      const done = await dispatch('done', 'housekeeping-done'); jobs.push(done);
-      await final(done); lane(['check'], done.info.workspace); lane(['promote', done.lane]);
-      const blocked = await dispatch('blocked-report', 'housekeeping-blocked'); jobs.push(blocked);
-      await final(blocked);
-      const human = await dispatch('needs-human', 'housekeeping-human'); jobs.push(human);
-      await final(human);
-      const tabFor = (job) => h('pane', 'get', job.pane).pane.tab_id;
-      const closedTab = tabFor(done), keptTabs = [blocked, human].map(tabFor);
-      const state = path.join(root, 'housekeeping-state');
-      let failure;
-      try {
-        node(script, ['--once', '--cwd', fixture.repo, '--org', fixture.org, '--state-dir', state],
-          { cwd: fixture.repo, extra: { HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' }, timeout: 60_000 });
-      } catch (error) { failure = error; }
-      if (fs.existsSync(path.join(state, 'actions.jsonl'))) fs.copyFileSync(path.join(state, 'actions.jsonl'), path.join(evidence, 'housekeeping-actions.jsonl'));
-      for (const job of [blocked, human]) assert.equal(node(path.join(root, 'herdr.mjs'), ['pane', 'get', job.pane], { ok: false }).status, 0,
-        'blocked and needs-human workers must remain');
-      if (failure) throw failure;
-      const close = node(path.join(root, 'herdr.mjs'), ['pane', 'get', done.pane], { ok: false });
-      assert.notEqual(close.status, 0, 'one real housekeeping pass left the promoted, ingested done worker open; inspect canonical workspace metadata and action log');
-      assertHousekeepingActions(read(path.join(state, 'actions.jsonl')), { closedTab, keptTabs });
-      return 'actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved';
-    } finally {
-      for (const job of jobs) lane(['close', job.lane]);
-    }
+      node(script, ['--once', '--cwd', fixture.repo, '--org', fixture.org, '--state-dir', state],
+        { cwd: fixture.repo, extra: { HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' }, timeout: 60_000 });
+    } catch (error) { failure = error; }
+    if (fs.existsSync(path.join(state, 'actions.jsonl'))) fs.copyFileSync(path.join(state, 'actions.jsonl'), path.join(evidence, 'housekeeping-actions.jsonl'));
+    for (const job of [blocked, human]) assert.equal(node(path.join(root, 'herdr.mjs'), ['pane', 'get', job.pane], { ok: false }).status, 0,
+      'blocked and needs-human workers must remain');
+    if (failure) throw failure;
+    const close = node(path.join(root, 'herdr.mjs'), ['pane', 'get', done.pane], { ok: false });
+    assert.notEqual(close.status, 0, 'one real housekeeping pass left the promoted, ingested done worker open; inspect canonical workspace metadata and action log');
+    assertHousekeepingActions(read(path.join(state, 'actions.jsonl')), { closedTab, keptTabs });
+    for (const job of [blocked, human]) assertWorkerKept(job, { lane, reason: /awaits correction or disposition/ });
+    return 'actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved';
   });
   await test(cases.release, () => {
     const script = requireCandidate('herdr/release.sh');
@@ -620,10 +634,12 @@ try {
     for (const file of ['default-supervisor-job.json', 'default-supervisor-ingest.json', 'default-supervisor-policy.txt']) fs.copyFileSync(path.join(root, file), path.join(evidence, file));
     assert.ok(!fs.existsSync(path.join(repo, '.lane.json')), 'cycle must retain discovered defaults');
     assert.ok(!fs.existsSync(path.join(repo, '.housekeeping.json')));
-    node(path.join(candidate, 'lanes/lane.mjs'), ['check'], { cwd: info.workspace, extra });
-    node(path.join(candidate, 'lanes/lane.mjs'), ['promote', job.lane], { cwd: repo, extra });
-    node(path.join(candidate, 'lanes/lane.mjs'), ['close', job.lane], { cwd: repo, extra });
-    return `${job.run}: supervisor initialized record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation and fast-forward passed`;
+    const commands = configuredCommands(node, candidate, { repo, org: defaultOrg });
+    const defaultLane = args => commands.lane(args, repo, { extra });
+    commands.lane(['check'], info.workspace, { extra });
+    promoteAndComplete(job, { lane: defaultLane, record: args => commands.record(args, { extra }) });
+    defaultLane(['close', job.lane]);
+    return `${job.run}: supervisor initialized record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation, fast-forward and record completion passed`;
   });
   await test(cases.settle, async () => {
     requireCandidate('settle/settle.mjs');

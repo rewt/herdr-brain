@@ -170,8 +170,8 @@ for (const phase of ['cwd', 'registration']) test(`the real adapter bounds a slo
 });
 
 
-test('failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed', async () => {
-  let state = 'idle', abandoned = false, closed = false, exited = false;
+test('failure-path teardown holds the worker transition through delayed notice confirmation until watcher exit', async () => {
+  let state = 'idle', abandoned = false, exited = false;
   const job = { run: 'R-2', pane: 'owned:pane', lane: 'missing', watcher: { log: '/scratch/watch.log' } };
   await abandonWatcher(job, {
     record: args => { assert.deepEqual(args.slice(0, 2), ['abandon', 'R-2']); abandoned = true; },
@@ -179,7 +179,7 @@ test('failure-path teardown holds the worker transition through delayed notice c
     read: () => { assert.equal(abandoned, true); return 'R-2 was abandoned; stopping'; },
     until: async (predicate, label) => {
       if (label === 'R-2 watcher exits') {
-        assert.equal(state, 'idle'); assert.equal(closed, false);
+        assert.equal(state, 'idle');
         assert.equal(predicate(), false, 'the abandonment log precedes process exit');
         exited = true; assert.equal(predicate(), true); return;
       }
@@ -189,7 +189,6 @@ test('failure-path teardown holds the worker transition through delayed notice c
       assert.equal(predicate(), true);
     },
     alive: () => !exited,
-    close: topic => { assert.equal(exited, true); assert.equal(state, 'idle'); assert.equal(topic, 'missing'); closed = true; },
   });
-  assert.equal(closed, true);
+  assert.equal(exited, true); assert.equal(state, 'idle');
 });

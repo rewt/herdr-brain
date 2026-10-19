@@ -17,7 +17,7 @@ export function render(snapshot, { width = 120, height = Infinity, now = Date.no
   const memory = Number.isFinite(snapshot.memory) ? `${(snapshot.memory / 1024 ** 3).toFixed(1)} GiB` : 'unknown';
   const lines = [clip(`Promotion board | memory available ${memory} | Herdr ${snapshot.herdr}`),
     clip(`Slot ${slot.state}${slot.label ? `: ${slot.label}` : ''}${slot.project ? ` (${slot.project})` : ''} | held ${duration(slot.heldSeconds)} | queue ${slot.queueLength} | shared ${slot.sharedCount ?? 'unknown'}`)];
-  for (const row of slot.reservations ?? []) lines.push(clip(`${row.state === 'expired' ? 'HOST_RESERVATION_EXPIRED: ' : 'Proving: '}${row.project} | ${row.reason} | age ${duration(row.ageSeconds)} | ${row.reserveGib ?? '?'} GiB | expected ${row.expectedEnd ?? '?'} | expiry ${row.expiresAt ?? '?'} | ${row.state}`));
+  for (const row of slot.reservations ?? []) lines.push(clip(`${row.state === 'unknown' ? 'HOST_RESERVATION_UNKNOWN: ' : row.state === 'expired' ? 'HOST_RESERVATION_EXPIRED: ' : 'Proving: '}${row.project} | ${row.reason} | age ${duration(row.ageSeconds)} | ${row.reserveGib ?? '?'} GiB | expected ${row.expectedEnd ?? '?'} | expiry ${row.expiresAt ?? '?'} | ${row.state}`));
   const columns = [
     { title: 'ITEM / LANE', min: 12, max: 28, value: r => [r.item, r.lane].filter(Boolean).join(' ') || r.id },
     { title: 'PHASE', min: 12, max: 16, value: r => r.phase === 'stage' ? r.stage === null ? 'stage' : r.stage === WITHHELD ? `stage ${WITHHELD}` : `stage ${r.stage.n} of ${r.stage.m}` : r.phase },

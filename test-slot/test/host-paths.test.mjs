@@ -113,3 +113,46 @@ test('the foreground barrier preserves payload signals separately from numeric e
     assert.equal(JSON.parse(fs.readFileSync(receipt)).signal, signal);
   }
 });
+
+for (const capped of [false, true]) test(`an exclusive timeout retry renews its proving expiry${capped ? ' up to the six-hour cap' : ''}`, t => {
+  const f = fixture(t), clock = path.join(f.root, 'clock'), attempts = path.join(f.root, 'attempts.json'), preload = path.join(f.root, 'clock.mjs');
+  const initial = Date.now(), advance = capped ? 6 * 60 * 60 * 1000 - 1000 : 100000;
+  fs.writeFileSync(clock, String(initial));
+  fs.writeFileSync(preload, `import fs from 'node:fs';import os from 'node:os';
+    Date.now=()=>Number(fs.readFileSync(${JSON.stringify(clock)},'utf8'));os.loadavg=()=>[1000,1000,1000];`);
+  const command = [process.execPath, '-e', `const fs=require('fs'),path=require('path'),assert=require('assert/strict');
+    const dir=process.env.MONITOR_TEST_SLOT_COMPAT_PATH+'.occupancy';
+    const file=path.join(dir,fs.readdirSync(dir).find(n=>!n.startsWith('.'))),record=JSON.parse(fs.readFileSync(file));
+    const evidence=${JSON.stringify(attempts)};
+    if(!fs.existsSync(evidence)){
+      fs.writeFileSync(evidence,JSON.stringify({file,record}));fs.writeFileSync(${JSON.stringify(clock)},String(Date.now()+${advance}));
+      console.error('ETIMEDOUT: first attempt');process.exit(124);
+    }
+    const first=JSON.parse(fs.readFileSync(evidence));assert.equal(file,first.file);assert.equal(record.acquiredAt,first.record.acquiredAt);
+    assert(Date.parse(first.record.expiresAt)<Date.now(),'the first expiry has elapsed');
+    assert.equal(Date.parse(record.expiresAt),Math.min(Date.now()+40000,Date.parse(record.acquiredAt)+6*60*60*1000));
+    assert(Date.parse(record.expiresAt)>Date.now());assert.equal(process.env.MONITOR_TEST_SLOT_TIMEOUT_RETRIED,'1');console.log('renewed');`];
+  const result = f.run(command, ['--resource', JSON.stringify(resourceStanza('fixture/proving', command, 'EXCLUSIVE')),
+    '--timeout-seconds', '10', '--retry-timeout-under-load'], { NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` });
+  assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'renewed\n');
+  assert.equal((result.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
+  assert.equal(fs.existsSync(f.lock), false); assert.deepEqual(fs.readdirSync(`${f.lock}.occupancy`), []);
+});
+
+for (const damage of ['removed', 'changed']) for (const status of [0, 7])
+  test(`an exclusive payload exiting ${status} releases both bridge locks after its reservation is ${damage}`, t => {
+    const f = fixture(t), workspace = path.join(f.root, 'workspace'), evidence = path.join(f.root, 'reservation.json');
+    const command = [process.execPath, '-e', `const fs=require('fs'),path=require('path'),assert=require('assert/strict');
+      const dir=process.env.MONITOR_TEST_SLOT_COMPAT_PATH+'.occupancy',file=path.join(dir,fs.readdirSync(dir).find(n=>!n.startsWith('.')));
+      const record=JSON.parse(fs.readFileSync(file));record.reason+=' changed externally';const bytes=JSON.stringify(record)+'\\n';
+      if(${JSON.stringify(damage)}==='removed')fs.unlinkSync(file);else fs.writeFileSync(file,bytes);
+      for(const lock of [process.env.MONITOR_TEST_SLOT_PATH,process.env.MONITOR_TEST_SLOT_COMPAT_PATH])assert(fs.existsSync(lock),'live group retains its bridge lock');
+      fs.writeFileSync(${JSON.stringify(evidence)},JSON.stringify({file,bytes}));console.log('payload status');process.exit(${status});`];
+    const result = f.run(command, ['--resource', JSON.stringify(resourceStanza('fixture/proving', command, 'EXCLUSIVE'))], { MONITOR_TEST_SLOT_PATH: workspace });
+    assert.equal(result.status, status, result.stderr); assert.equal(result.stdout, 'payload status\n');
+    assert.match(result.stderr, /HOST_RESERVATION_RELEASE_WARNING:.*group exited; releasing bridge locks/);
+    assert.equal(fs.existsSync(f.lock), false); assert.equal(fs.existsSync(workspace), false);
+    const saved = JSON.parse(fs.readFileSync(evidence));
+    if (damage === 'changed') assert.equal(fs.readFileSync(saved.file, 'utf8'), saved.bytes, 'foreign bytes are not removed');
+    else assert.equal(fs.existsSync(saved.file), false);
+  });

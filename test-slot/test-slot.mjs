@@ -443,7 +443,15 @@ export async function run({ positional, options, child }) {
       const setGroup = slot.setGroup, release = slot.release;
       slot.reservation = reservation;
       slot.setGroup = (...args) => { setGroup(...args); reservation.setGroup(...args); };
-      slot.release = () => reservation.release() === false ? false : release();
+      slot.release = () => {
+        const { pgid, groupStart, groupBirth } = reservation.record;
+        if (pgid !== null && groupState(pgid, groupStart, groupBirth).state !== 'gone') return false;
+        try { if (reservation.release() === false) return false; }
+        catch (error) {
+          process.stderr.write(`HOST_RESERVATION_RELEASE_WARNING: ${error.message}; group exited; releasing bridge locks.\n`);
+        }
+        return release();
+      };
     }
     const acquiredAt = new Date().toISOString();
     Object.assign(wait, { state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt, nested: slot.nested,
@@ -508,6 +516,7 @@ export async function run({ positional, options, child }) {
       if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
       if (!result.groupGone) return result.status || 1;
       if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
+        slot.reservation?.renew({ expiresAt: new Date(Date.now() + (limits.wall_seconds + 30) * 1000).toISOString() });
         process.stderr.write(`TEST_SLOT_TIMEOUT_RETRY: ${label}: timeout under load; re-running once inside the held slot.\n`);
         continue;
       }

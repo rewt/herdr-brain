@@ -13,6 +13,17 @@ import { brainFixture, boardFixture } from './helpers/board-fixture.mjs';
 
 const emptySlot = () => ({ state: 'free', label: null, project: null, heldSeconds: null, queueLength: 0, sharedCount: 0, holderWorktree: null, queueWorktrees: [] });
 const snapshot = f => ({ memory: 6 * 1024 ** 3, herdr: 'available', slot: emptySlot(), rows: validateDocument(f.document(), f.options).rows.map(r => ({ ...r, slot: '#2 in queue' })) });
+test('unknown occupancy files have a neutral reservation diagnostic, never a proving label', t => {
+  const f = boardFixture(t), lock = path.join(f.root, 'slot.lock');
+  for (const bytes of ['{"schema":"occupancy/v1",', JSON.stringify({ schema: 'host-reservation/v1', class: 'proving' })]) {
+    const file = f.write('slot.lock.occupancy/unknown.json', bytes);
+    const slot = readSlot({ lockPath: lock, compatPath: lock });
+    assert.equal(slot.reservations.length, 1); assert.equal(slot.reservations[0].state, 'unknown');
+    const output = render({ slot, rows: [], memory: null, herdr: 'unavailable' }, { width: 500 });
+    assert.match(output, /^HOST_RESERVATION_UNKNOWN:/m); assert.doesNotMatch(output, /^Proving:/m);
+    assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  }
+});
 test('memory parsers honor page size and exact available fields; Herdr validates pane handles and absence', async t => {
   const f = boardFixture(t);
   assert.equal(parseMemory('Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free: 10.\nPages inactive: 20.\nPages speculative: 3.\nPages wired down: 900.\n', 'darwin'), 33 * 16384);

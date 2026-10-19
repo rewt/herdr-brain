@@ -12,6 +12,7 @@ import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
+import { validateSlotPath } from '../../test-slot/paths.mjs';
 
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { drain, retryCleanup } from '../promote.mjs';
@@ -54,8 +55,9 @@ async function until(fn) {
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'pt-'));
   const repo = path.join(root, 'project'); fs.mkdirSync(repo);
+  // Keep short project paths for native socket fixtures, but inherit both slot
+  // paths from bounded-test's private os.tmpdir scratch, including descendants.
   const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
-    MONITOR_TEST_SLOT_PATH: path.join(root, 'retire-slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'retire-slot'),
     npm_config_cache: path.join(root, 'cache'), npm_config_update_notifier: 'false' };
   delete env.NODE_TEST_CONTEXT;
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(?:DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];
@@ -157,6 +159,18 @@ function fixture(t) {
   return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, cleanup, waitForWorkers,
     ownedProcess: (pid) => [...processes.values()].findLast(entry => entry.pid === pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
+
+test('queue fixture inherits private temporary slot paths and admits its real validation runner', t => {
+  const f = fixture(t);
+  for (const key of ['MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH']) assert.equal(f.env[key], process.env[key]);
+  assert.equal(validateSlotPath(f.env.MONITOR_TEST_SLOT_COMPAT_PATH, { compat: true }), f.env.MONITOR_TEST_SLOT_COMPAT_PATH);
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('../../test-slot/test-slot.mjs', import.meta.url)),
+    'run', 'queue validation scratch', '--', process.execPath, '-e',
+    `const fs=require('fs'),assert=require('assert/strict');const file=process.env.MONITOR_TEST_SLOT_OCCUPANCY_PATH;
+     assert(file.startsWith(process.env.MONITOR_TEST_SLOT_COMPAT_PATH+'.occupancy/'));assert.equal(JSON.parse(fs.readFileSync(file)).class,'shared');console.log('admitted');`],
+  { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'admitted\n');
+});
 
 test('fixture teardown waits for post-release catch-up before removing its root', async t => {
   const f = fixture(t), org = path.join(f.repo, '.org');
@@ -387,7 +401,8 @@ test('expected head survives CLI enqueue and succeeds exactly; a changed binding
   assert.equal(f.cli(['first', '--expected-head', 'HEAD']).status, 1);
   const request = f.launch(['first', '--expected-head', expected]); assert.equal(request.jobs[0].id, job.id);
   await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
-  assert.equal(f.results()[0].expectedHead, expected); assert.equal(f.results()[0].tip, expected);
+  assert.equal(f.results()[0].expectedHead, expected, JSON.stringify(f.results()[0]));
+  assert.equal(f.results()[0].tip, expected, JSON.stringify(f.results()[0]));
   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.git(['rev-parse', 'main']), expected);
 });
 
@@ -545,7 +560,7 @@ test('enqueue during the empty-worker handoff always starts a new drain', async 
   const f = fixture(t); f.lane('first'); f.lane('second');
   f.launch(['first']); await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   f.launch(['second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
-  assert.ok(f.results().every((r) => r.outcome === 'promoted'));
+  assert.ok(f.results().every((r) => r.outcome === 'promoted'), JSON.stringify(f.results()));
 });
 
 test('interrupted attempt emits a notice without retrying a gate or deleting its lane', async (t) => {

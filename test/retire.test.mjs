@@ -14,6 +14,7 @@ import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { retirementStatus } from '../lib/retire-status.mjs';
 import { processStartRecord } from '../test-slot/lock-support.mjs';
 import { readTestSlotOccupancy } from '../test-slot/occupancy.mjs';
+import { readProvingReservations } from '../test-slot/reservations.mjs';
 import { readSlot } from '../board/facts.mjs';
 
 function fixture() {
@@ -596,6 +597,26 @@ test('BCH exact occupancy/v1 with UUID filename and null births is counted, kept
   readTestSlotOccupancy(lock, { prune: true, kill: () => { if (!changed) { changed = true; fs.appendFileSync(file, ' '); } gone(); } });
   assert.ok(fs.existsSync(file));
   readTestSlotOccupancy(lock, { prune: true, kill: gone }); assert.equal(fs.existsSync(file), false);
+});
+
+for (const state of ['live', 'expired']) test(`${state} owned proving reservation keeps lane and tab retirement read-only`, t => {
+  const f = referenceFixture(t), common = path.join(f.org, 'common'), lock = path.join(f.org, 'slot'), now = Date.now();
+  const file = path.join(`${lock}.occupancy`, 'proving.json'), identity = processStartRecord(process.pid);
+  fs.mkdirSync(`${lock}.occupancy`);
+  const record = { schema: 'host-reservation/v1', class: 'proving', pid: process.pid, processStart: identity.start, processBirth: identity.birth,
+    pgid: null, groupStart: null, groupBirth: null, acquiredAt: new Date(now - 60000).toISOString(),
+    expectedEnd: new Date(now + 60000).toISOString(), expiresAt: new Date(now + (state === 'live' ? 60000 : -1000)).toISOString(),
+    project: common, label: 'proving /repo/lane', cwd: '/repo/lane', host: os.hostname(), reason: 'ENG-424 R-606' };
+  const bytes = JSON.stringify(record) + '\n'; fs.writeFileSync(file, bytes);
+  assert.equal(readProvingReservations(lock, { now })[0].state, state);
+  const env = { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
+  const observed = readLiveReferences({ common, org: f.org, verifyStateDir: path.join(f.org, 'verify'), env });
+  assert.deepEqual(observed.errors, []); assert.equal(observed.references.length, 1);
+  assert.equal(observed.references[0].kind, 'test-slot occupant');
+  const s = Object.assign(fixture(), observed);
+  assert.match(kept(s), /test-slot occupant reference/);
+  assert.match(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), /test-slot occupant reference/);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes, 'retirement never prunes or rewrites the reservation');
 });
 
 test('promotion references follow the latest request checkpoint and preserve active holds', t => {

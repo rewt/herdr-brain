@@ -90,6 +90,10 @@ gone or expiry arrives. Neither expiry nor a legacy holder permits deletion of a
 live owner's file. All pruning is explicit and opt-in; the board and launch gates
 never prune. Retirement observes both schemas read-only and retains matching live
 references, including expired reservations whose owner/group still lives.
+If the CLI's reservation was removed or changed externally, release emits
+`HOST_RESERVATION_RELEASE_WARNING` and preserves those foreign bytes. Once its
+group is confirmed gone, it still releases its own bridge locks and preserves
+the payload's exit code.
 
 The launch wait emits one stderr line whenever the set/state of live reservations
 changes, naming project, reason and capped expiry. It ends with
@@ -132,6 +136,8 @@ watchdog exits and legacy `.queue`/`.takeover` semantics are unchanged.
 CLI metadata: `--reason TEXT`, `--expected-seconds N`, `--reserve-gib N`. The
 runner estimates the end from expected seconds (default: watchdog wall limit)
 and expires at wall limit plus 30 seconds grace, subject to the six-hour cap.
+Before a permitted timeout retry, the runner renews expiry from the retry's
+current time with the same wall limit and grace; the original six-hour cap remains.
 Those metadata options never change shared admission.
 
 ## Mixed versions and the later admission protocol

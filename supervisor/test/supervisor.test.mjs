@@ -137,6 +137,26 @@ test('handle explicitly sends capped findings back once and adopts its saved cor
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, starts);
 });
 
+test('handle explicitly resumes a saved Major or FAIL cap escalation once', { timeout: 60000 }, (t) => {
+  for (const verdict of ['NEEDS-WORK', 'FAIL']) {
+    const f = fixture(t, { actor: 'supervisor-cap-escalation-test' }), run = f.start();
+    f.commit('correct\n'); f.report(run);
+    fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ verdict,
+      findings: '- [Major] work.txt:1 - Correction required; Fix: resolve it' }));
+    const capped = result(invoke(f, ['handle', run, '--review-round-cap', '1', '--role', 'supervisor']));
+    assert.equal(capped.result, 'escalate'); assert.equal(capped.code, 'REVIEW_CAP_REACHED');
+    assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the reviewer starts');
+    const refused = invoke(f, ['promote', run, '--accept-findings', '--why', 'Attempt capped acceptance', '--role', 'supervisor']);
+    assert.equal(refused.status, 1); assert.match(refused.stderr, /requires saved promotable/);
+    const next = result(invoke(f, ['handle', run, '--retry', '--fix-findings', '--role', 'supervisor']));
+    assert.equal(next.result, 'fix_round');
+    const calls = f.calls().filter((a) => a[1] === 'start' || a[1] === 'prompt');
+    assert.equal(result(invoke(f, ['handle', run, '--retry', '--fix-findings', '--role', 'supervisor'])).fix.run, next.fix.run);
+    assert.deepEqual(f.calls().filter((a) => a[1] === 'start' || a[1] === 'prompt'), calls);
+    assert.equal(f.show(run).notes.filter((n) => n.decision && /requested another correction/.test(n.text)).length, 1);
+  }
+});
+
 // Only defer drain to make the queued mutation deterministic. Enqueue and all
 // execution checks still run the real queue, lane CLI, Git and record.
 function promotionHarness(f, run) {

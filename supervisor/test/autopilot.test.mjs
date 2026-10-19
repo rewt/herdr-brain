@@ -145,6 +145,10 @@ test('Moderate and Minor findings use the ordinary path without filing or accept
 for (const [name, value] of Object.entries({
   unknown: { result: 'new-result' }, uncertain: { result: 'incomplete' }, interrupted: { result: 'stopped' },
   refusal: { result: 'escalate', reason: 'refused' }, fail: { ...pass, review: { verdict: 'FAIL' } },
+  capEscalationMajor: { result: 'escalate', code: 'REVIEW_CAP_REACHED', reason: 'Review cap reached',
+    review: { verdict: 'NEEDS-WORK' }, findings: '- [Major] x.mjs:1 - Broken; Fix: repair', review_policy: { cap: 3, round: 3 } },
+  capEscalationFail: { result: 'escalate', code: 'REVIEW_CAP_REACHED', reason: 'Review cap reached',
+    review: { verdict: 'FAIL' }, review_policy: { cap: 3, round: 3 } },
   cappedMajor: { result: 'fix_round', review: { verdict: 'NEEDS-WORK' }, findings: '- [Major] x.mjs:1 - Broken; Fix: repair', review_policy: { cap: 1, round: 1 } },
   unparsed: { result: 'promotable_with_findings', review: { verdict: 'NEEDS-WORK' }, findings: 'uncertain severity' },
   noPASS: { result: 'promotable' },

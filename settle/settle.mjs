@@ -202,6 +202,7 @@ function finish(result, reason, extra = {}) {
     ...(job.testEvidence ? { test_evidence: job.testEvidence } : {}),
     ...(job.reviewScope ? { review_scope: job.reviewScope } : {}),
     review_policy: job.reviewPolicy ?? { cap: 0, source: 'legacy' },
+    ...(job.reuse_skipped ? { reuse_skipped: job.reuse_skipped } : {}),
     ...(job.rebase ? { rebase: job.rebase } : {}), ...extra };
   const policy = job.result.review_policy;
   job.settleDecision = `Settle: ${result}. ${reason}. Review round cap: ${policy.cap} (${policy.source}); round: ${policy.round ?? 'unknown'}. Reviewed ${job.result.reviewed_commit}; head ${job.result.head}. Evidence: ${journal}`;
@@ -245,17 +246,17 @@ function resumeRecordRefusal() {
   save();
   return true;
 }
-function escalate(reason) {
+function escalate(reason, extra = {}) {
   const item = show(job.item);
   const text = `# Settle handoff for ${id}\n\n${reason}\n\nRecommendation: inspect this evidence and decide whether to resume review, dispatch a correction, change scope, or ask the operator.\n\n${JSON.stringify({ item: item.title, acceptance: item.accept, record_blockers: item.blocked_by, record_status: item.status, record_outcome: item.outcome, record_runs: item.runs,
     report: job.report, summary: job.summary, blockers: job.blockers, proposals: job.proposals,
     questions: job.questions, review: job.review, validation: job.validation, rebase: job.rebase,
     ...(job.reviewScope ? { review_scope: job.reviewScope } : {}),
-    workspace: job.workspace, head: job.head, journal }, null, 2)}\n`;
+    workspace: job.workspace, head: job.head, journal, review_policy: job.reviewPolicy }, null, 2)}\n${extra.code === 'REVIEW_CAP_REACHED' ? `\nRequest one correction under project authority with handle ${id} --retry --fix-findings --role supervisor. A route change starts a fresh session. Otherwise park the lane with the recoverable lane close workflow or seek a decision.\n` : ''}`;
   finish('escalate', reason, { handoff: evidence('handoff.md', text), recommendation: 'supervisor judgment',
     options: ['continue with a correction', 'change scope', 'ask the operator with these findings'],
     ...(transientRecordRefusal(reason) && ['validate', 'rebase', 'ready', 'fix', 'dispatching'].includes(job.stage)
-      ? { resume_stage: job.stage } : {}) });
+      ? { resume_stage: job.stage } : {}), ...extra });
 }
 function reviewScopeProblem() {
   if (!job.reviewScope) {
@@ -492,7 +493,7 @@ function rebaseForPromotion() {
 }
 function dispatchArgs() {
   return [job.item, '--repo', job.repo, '--org', opt.org, '--lane', job.lane, '--route', job.fixRoute,
-    '--brief', job.fixBrief, '--to', job.to, '--from-run', id, ...(job.reuse ? ['--reuse', id] : []),
+    '--brief', job.fixBrief, '--to', job.to, '--from-run', id, ...(job.reuse && !job.reuse_skipped ? ['--reuse', id] : []),
     ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])];
 }
 function correctionStopped() {
@@ -523,6 +524,7 @@ function fix() {
   // Another run is authoritative; neither display metadata nor a prior result
   // authorizes starting overlapping work on this lane/item.
   const item = show(job.item);
+  if (job.reuse && job.fixRoute !== (job.workerRoute ?? show(id).meta?.route)) job.reuse_skipped = 'route_changed';
   if (!job.fixBrief) {
     job.fixBrief = evidence('fix.md', `# Correct the reported work\n\nContinue the original ask below on the same lane. Resolve every finding in the independent review and the validation log. Do not alter the previous report; the new run has its own report.\n\nReview: ${job.review?.path ?? 'No review completed'}\nValidation: ${job.validation.log}\n\n${job.review?.text ?? ''}\n\n## Original ask\n${job.ask}\n\n## Acceptance\n${JSON.stringify(item.accept)}\n`);
     job.stage = 'fix'; save();
@@ -617,8 +619,9 @@ function main() {
     if (job.stage === 'complete') {
       recordSettlementDecision();
       if (opt['fix-findings'] && job.findingsCorrection && job.result.result === 'fix_round') { print(); return; }
-      if (opt['fix-findings'] && job.result.result !== 'promotable_with_findings') throw new Error('--fix-findings requires saved promotable_with_findings evidence');
-      if (['promotable', 'promotable_with_findings'].includes(job.result.result)) {
+      const cappedEscalation = job.result.result === 'escalate' && job.result.code === 'REVIEW_CAP_REACHED';
+      if (opt['fix-findings'] && job.result.result !== 'promotable_with_findings' && !cappedEscalation) throw new Error('--fix-findings requires saved promotable_with_findings evidence');
+      if (['promotable', 'promotable_with_findings'].includes(job.result.result) || (opt['fix-findings'] && cappedEscalation)) {
         const state = recordState();
         const invalid = recordedReportProblem(state);
         if (invalid) return escalate(invalid);
@@ -635,7 +638,8 @@ function main() {
         job.result.validation = job.validation; job.result.report_ingest = job.reportIngest; save();
       }
       if (!opt['fix-findings']) { print(); return; }
-      record(['note', id, `Supervisor requested another correction after capped review round ${job.reviewPolicy.round} (cap ${job.reviewPolicy.cap}); findings ${job.review.path}; reviewed ${job.head}`, '--decision']);
+      const decision = `Supervisor requested another correction after capped review round ${job.reviewPolicy.round} (cap ${job.reviewPolicy.cap}); findings ${job.review.path}; reviewed ${job.head}`;
+      if (!show(id).notes.some((note) => note.decision && note.text === decision)) record(['note', id, decision, '--decision']);
       job.cappedResult = job.result; job.findingsCorrection = true;
       delete job.result; job.stage = 'fix'; save();
     }
@@ -670,6 +674,7 @@ function main() {
     job = { run: id, item: run.item, org: opt.org, repo, common: identity, workspace, lane, laneConfig, release: bundleRelease(),
       main: config.main ?? 'main', head: git(['rev-parse', 'HEAD'], workspace),
       mainHead: git(['rev-parse', config.main ?? 'main'], repo), ask, reviewRoute, fixRoute, timeout,
+      workerRoute: run.meta?.route ?? null,
       reuse: opt.reuse ?? settings.reuse ?? false, to: opt.to ?? settings.to ?? 'supervisor-herdr',
       stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
       blockers: parsed.report.blockers, proposals: parsed.report.proposals, questions: parsed.report.extra?.questions ?? [],
@@ -821,7 +826,11 @@ function settlePending() {
     job.reportIngest = reportIngestReceipt({ ...job, runId: id, run: current.runs.get(id) }); save();
     const policy = job.reviewPolicy;
     const findings = reviewFindings();
-    const capped = policy?.cap > 0 && policy.round >= policy.cap && job.review.verdict === 'NEEDS-WORK';
+    const capped = policy?.cap > 0 && policy.round >= policy.cap && job.review.verdict !== 'PASS';
+    if (capped && (job.review.verdict === 'FAIL' || findings?.severities.includes('Major'))) {
+      return escalate(`Review round ${policy.round} reached cap ${policy.cap} with Major findings or FAIL; the supervisor must decide whether to request another correction or park the lane`,
+        { code: 'REVIEW_CAP_REACHED', ...(findings ? { findings: findings.text } : {}) });
+    }
     const withFindings = capped && findings && !findings.severities.includes('Major');
     if (capped && !findings) return escalate('The capped review has unparsed findings; the supervisor must determine their severity');
     if (job.review.verdict !== 'PASS' && !withFindings) { job.stage = 'fix'; save(); }

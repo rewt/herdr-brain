@@ -164,13 +164,15 @@ a declined question still blocks, and so does a done review whose latest verdict
 not PASS, while resolved blockers permit recovery.
 A completed dispatch receipt
 can still be adopted without launching work. A fresh worker is the default. `--reuse`
-requests dispatch's existing identity-checked stopped-worker reuse; older runs
+requests dispatch's existing identity-checked stopped-worker reuse on the same
+route. If `fix_route` differs from the worker's route, settle starts a fresh
+worker and records `reuse_skipped: "route_changed"`; older runs
 without occupant evidence require a fresh worker. Budgets and total runs appear
 in the result and remain advisory. There is no automatic loop;
 each command handles one landed report. The correction's watcher delivers the
 next report for the next settle invocation.
 
-A review-round cap pauses automatic correction for Moderate/Minor findings.
+A review-round cap pauses automatic correction at every severity.
 Set the project default with `settle.review_round_cap` in tracked `.lane.json`,
 or record a per-item override with
 `record set ENG-123 meta.settle_review_round_cap=3`. `--review-round-cap 3`
@@ -193,8 +195,9 @@ At or above the cap, NEEDS-WORK with only parsed Moderate/Minor findings returns
 reviewed source commit and head containing the public review record. This still
 requires no unresolved Unverified entries,
 clean worktrees, the captured base as ancestor and current record readiness.
-Unparsed findings receive a supervisor handoff. Major findings and FAIL retain
-correction/escalation behaviour regardless of the cap. Red batch validation is
+Unparsed findings receive a supervisor handoff. At or above the cap, Major
+findings or FAIL return `escalate` with `code: "REVIEW_CAP_REACHED"` and a handoff,
+without dispatching another correction. Red batch validation is
 isolated by the promotion queue and handed to the supervisor for correction. The cap
 and settlement decision are recorded through the record CLI; readiness never
 promotes by itself. A missing or lost decision-write response is reconciled on
@@ -204,7 +207,9 @@ After inspecting the findings and project authority, the supervisor can file
 follow-ups and `promote RUN --accept-findings --why REASON --role supervisor`,
 which records the accepted findings and queues the exact settled head. Or use
 `handle RUN --retry --fix-findings --role supervisor` to dispatch one more
-correction without repeating review. Direct settle also supports
+correction without repeating review. The same command accepts a saved
+`REVIEW_CAP_REACHED` escalation; Major or FAIL cannot be accepted for promotion.
+Direct settle also supports
 `RUN --retry --fix-findings`. This explicit choice retains the capped result in
 the journal, records the correction decision, and respects current report/head,
 record, blocker and STOP checks. Repeating it adopts the saved correction receipt.
@@ -214,6 +219,11 @@ dispatch and incomplete-dispatch retry, even if it appeared during review. A sto
 returns `stopped` with a compact handoff and keeps the fix/dispatching stage,
 review and correction brief resumable. After clearing STOP, use `--retry`; no
 review is repeated and a completed dispatch may be adopted without another launch.
+
+BCH's two automatic fix rounds correspond to review cap **3**, since the first
+review counts. Scope continuations and narrow same-session corrections do not
+consume a review round or reset the count. The full rules and BCH cutover fields
+are in [the continuation and revision-cap contract](../docs/contracts/CONTINUATION-AND-REVISION-CAP.md).
 
 Flags `--review-route ROUTE`, `--fix-route ROUTE`, `--timeout SECONDS` override
 defaults. Projects may put `settle` settings in their tracked `.lane.json`:

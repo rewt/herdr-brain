@@ -65,6 +65,22 @@ const identityState = () => fold(loadEvents(job.org).events);
 const lane = (args) => command(laneCLI, args);
 const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
+const refusal = (code, message) => Object.assign(new Error(message), { code });
+function checkOrigin(runId, item, current = true) {
+  const origin = json(record(['show', runId, '--json']));
+  if (!/^R-\d+$/.test(runId) || origin.item !== item.id) throw refusal('FROM_RUN_OTHER_ITEM', '--from-run must name a run on the dispatched item');
+  const later = item.runs.slice(item.runs.indexOf(runId) + 1);
+  if (current && later.length) throw refusal('FROM_RUN_SUPERSEDED', `${runId} is superseded by ${later.join(', ')}`);
+}
+function checkReuse(prior, request) {
+  // Explicit reuse can cross items; only --from-run binds item currentness.
+  // Workspace and live occupant evidence are checked at the worker stage.
+  if (!prior.report && !prior.abandoned) throw refusal('REUSE_RUN_OPEN', 'reuse run must be reported or abandoned; finish the previous run first');
+  if (prior.meta?.lane !== request.lane || prior.meta?.route !== request.route ||
+      Object.entries(request.declared).some(([key, value]) => (prior.meta?.[key] ?? null) !== value)) {
+    throw refusal('REUSE_MISMATCH', 'reuse run must match item, lane, route and declared harness/model/effort; use a fresh worker');
+  }
+}
 const herdr = (args) => json(command(['herdr'], args));
 const note = (text) => record(['note', job.run, `Dispatch: ${text}`]);
 let dispatchWaits;
@@ -100,15 +116,20 @@ function worktree() {
   return entry?.split('\n').find((line) => line.startsWith('worktree '))?.slice(9);
 }
 function liveWorker(worker) {
-  lane(['verify-agent', worker.agentName, job.workspace]);
-  const agent = herdr(['agent', 'get', worker.agentName]).agent;
-  if (!agent || agent.name !== worker.agentName || agent.pane_id !== worker.pane || agent.workspace_id !== worker.workspaceId ||
-      fs.realpathSync(agent.cwd) !== job.workspace ||
-      (worker.terminalId && agent.terminal_id !== worker.terminalId) ||
-      (worker.agentSessionId && agent.agent_session?.value !== worker.agentSessionId)) {
-    throw new Error('worker occupant identity changed; inspect it before recovery');
+  try {
+    lane(['verify-agent', worker.agentName, job.workspace]);
+    const agent = herdr(['agent', 'get', worker.agentName]).agent;
+    if (!agent || agent.name !== worker.agentName || agent.pane_id !== worker.pane || agent.workspace_id !== worker.workspaceId ||
+        fs.realpathSync(agent.cwd) !== job.workspace ||
+        (worker.terminalId && agent.terminal_id !== worker.terminalId) ||
+        (worker.agentSessionId && agent.agent_session?.value !== worker.agentSessionId)) {
+      throw new Error('worker occupant identity changed; inspect it before recovery');
+    }
+    return agent;
+  } catch (error) {
+    if (job.reuse) error.code = 'REUSE_IDENTITY_UNKNOWN';
+    throw error;
   }
-  return agent;
 }
 function observeNative() {
   const agent = liveWorker(job.worker);
@@ -235,8 +256,7 @@ async function main() {
     job = saved;
     if (opt['from-run'] !== undefined) {
       if (job.fromRun && job.fromRun !== opt['from-run']) throw new Error('--from-run cannot replace the saved origin');
-      const origin = json(record(['show', opt['from-run'], '--json']));
-      if (!/^R-\d+$/.test(opt['from-run']) || origin.item !== job.item) throw new Error('--from-run must name a run on the dispatched item');
+      checkOrigin(opt['from-run'], json(record(['show', job.item, '--json'])), !job.run && job.stage !== 'starting');
       job.fromRun = opt['from-run'];
     }
   } else {
@@ -253,17 +273,14 @@ async function main() {
     const item = json(record(['show', positionals[0], '--json']));
     if (Object.hasOwn(item, 'item') || !Array.isArray(item.runs)) throw new Error('dispatch ITEM must be an item, not a run');
     if (opt['from-run'] !== undefined) {
-      const origin = json(record(['show', opt['from-run'], '--json']));
-      if (!/^R-\d+$/.test(opt['from-run']) || origin.item !== item.id) throw new Error('--from-run must name a run on the dispatched item');
-    }
-    if (opt.reuse) {
-      const prior = json(record(['show', opt.reuse, '--json']));
-      if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');
+      checkOrigin(opt['from-run'], item);
     }
     herdr(['agent', 'get', opt.to]);
     const { config } = loadDiscoveredRoutes({ cwd: repo });
     const declared = resolveRoute(config, { route: opt.route });
     resolveLaunchRoute(config, { route: opt.route });
+    const declaredFields = { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null };
+    if (opt.reuse) checkReuse(json(record(['show', opt.reuse, '--json'])), { lane: opt.lane, route: opt.route, declared: declaredFields });
     const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir'], repo));
     if (!opt.reuse) admission(repo, org, common);
     const token = randomUUID();
@@ -273,7 +290,7 @@ async function main() {
     job = { token, repo, org, common, release: bundleRelease(), item: positionals[0], lane: opt.lane, route: opt.route,
       brief, report: opt.report ?? null, to: opt.to,
       base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null,
-      declared: { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null },
+      declared: declaredFields,
       stage: 'open', run: null };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
     job.routeConfig = path.join(directory, `${token}.routes.json`);
@@ -300,6 +317,8 @@ async function main() {
     job.run = run.id; job.stage = 'worker'; save();
   }
   if (job.stage === 'open') {
+    if (job.fromRun) checkOrigin(job.fromRun, json(record(['show', job.item, '--json'])));
+    if (job.reuse) checkReuse(json(record(['show', job.reuse, '--json'])), job);
     memoryGate('memory_open', 'dispatch', checkStop);
     if (!worktree()) lane(['open', job.lane, ...(job.base ? [job.base] : []), '--git-only']);
     job.workspace = fs.realpathSync(worktree());
@@ -324,6 +343,8 @@ async function main() {
     }
   }
   if (job.stage === 'start') {
+    if (job.fromRun) checkOrigin(job.fromRun, json(record(['show', job.item, '--json'])));
+    if (job.reuse) checkReuse(json(record(['show', job.reuse, '--json'])), job);
     delete job.startRefused;
     job.stage = 'starting'; save();
     let output;
@@ -331,8 +352,12 @@ async function main() {
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
       '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`,
       ...(job.fromRun ? ['--if-current-run', job.fromRun] : []),
+      ...(job.reuse ? ['--meta', `continuation_of=${job.reuse}`, '--meta', 'same_session=true'] : []),
       ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
-    catch (error) { job.startRefused = error.recordRefusal === true; save(); throw error; }
+    catch (error) {
+      if (error.recordRefusal && /R-\d+ is superseded by R-\d+/.test(error.message)) error.code = 'FROM_RUN_SUPERSEDED';
+      job.startRefused = error.recordRefusal === true; save(); throw error;
+    }
     job.run = output.match(/^(R-\d+) started/m)?.[1];
     if (!job.run) throw new Error('record start returned no run id; inspect record before retry');
     job.stage = 'worker'; save();
@@ -375,15 +400,13 @@ async function main() {
     if (job.reuse) {
       const prior = json(record(['show', job.reuse, '--json']));
       const identity = effectiveWorkerIdentity(prior, identityState());
-      if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');
-      if (prior.item !== job.item || prior.meta?.lane !== job.lane || prior.meta?.route !== job.route ||
-          fs.realpathSync(prior.workspace) !== job.workspace ||
-          Object.entries(job.declared).some(([key, value]) => (prior.meta?.[key] ?? null) !== value)) throw new Error('reuse run must match item, lane, route and declared harness/model/effort; use a fresh worker');
-      if (identity.identity_conflict || (!identity.agent_session_id && !identity.terminal_id)) throw new Error('reuse needs consistent recorded occupant identity; use a fresh worker');
+      checkReuse(prior, job);
+      if (fs.realpathSync(prior.workspace) !== job.workspace) throw refusal('REUSE_MISMATCH', 'reuse run must match item, lane, route and declared harness/model/effort; use a fresh worker');
+      if (identity.identity_conflict || (!identity.agent_session_id && !identity.terminal_id)) throw refusal('REUSE_IDENTITY_UNKNOWN', 'reuse needs consistent recorded occupant identity; use a fresh worker');
       job.worker = { agentName: identity.agent, pane: identity.pane, workspaceId: identity.worker_workspace,
         terminalId: identity.terminal_id, agentSessionId: identity.agent_session_id };
       const agent = liveWorker(job.worker);
-      if (!['idle', 'done'].includes(agent.agent_status)) throw new Error('reuse worker must be idle or done');
+      if (!['idle', 'done'].includes(agent.agent_status)) throw refusal('REUSE_WORKER_BUSY', 'reuse worker must be idle or done');
     } else {
       // Early counts are advisory. Serialize only the final recount and launch,
       // after both memory waits and lane/record preparation have finished.
@@ -493,7 +516,7 @@ catch (error) {
   } else {
     // Coordinators inherit stderr for live waits; retain failure evidence on
     // their captured stdout as well, including failures before a journal exists.
-    process.stdout.write(`${JSON.stringify({ result: 'failed', reason: error.message, journal })}\n`);
+    process.stdout.write(`${JSON.stringify({ result: 'failed', code: error.code ?? 'DISPATCH_FAILED', reason: error.message, journal })}\n`);
     process.exitCode = 1;
   }
 } finally {

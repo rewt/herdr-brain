@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fixture } from './fixture.mjs';
+import { gitProject, ignoreRuntime } from '../../lib/project.mjs';
 
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 const moderate = '- [Moderate] work.txt:1 - Narrow remaining issue; Fix: follow up';
@@ -16,6 +17,12 @@ function config(f, cap) {
   f.git(['rebase', 'main'], f.workspace);
 }
 function landed(f) { const run = f.start(); f.commit('correct\n'); f.report(run); return run; }
+const launchCalls = (f) => f.calls().filter((a) => a[1] === 'start' || a[1] === 'prompt');
+function dispatchWorker(f, item, extra = []) {
+  ignoreRuntime(gitProject(f.repo, { env: f.env }));
+  return result(f.exec(process.execPath, [path.join(f.source, 'dispatch/dispatch.mjs'), item,
+    '--lane', 'topic', '--route', 'engineer', '--brief', path.join(f.root, 'ask with spaces.md'), ...extra]));
+}
 
 test('project cap counts completed reviews across fix runs and records the no-dispatch decision', { timeout: 45000 }, (t) => {
   const f = fixture(t, { actor: 'settle-cap-project-test' }); config(f, 2); review(f, 'NEEDS-WORK', `${moderate}\n${minor}`);
@@ -75,13 +82,84 @@ test('zero item cap disables the project cap; worker starts without reviews do n
   assert.equal(r.review_policy.cap, 0); assert.equal(r.review_policy.round, 1);
 });
 
-test('cap reached still dispatches for Major or FAIL', { timeout: 60000 }, (t) => {
+test('cap reached with Major or FAIL escalates without dispatch; supervisor correction dispatches exactly once', { timeout: 60000 }, (t) => {
   for (const kind of ['Major', 'FAIL']) {
     const f = fixture(t, { actor: `settle-cap-${kind}-test` }); config(f, 1);
     review(f, kind === 'FAIL' ? 'FAIL' : 'NEEDS-WORK', kind === 'Major' ? moderate.replace('Moderate', 'Major') : moderate);
     const run = landed(f);
-    const r = result(f.settle(run)); assert.equal(r.result, 'fix_round', kind); assert.ok(r.fix.run);
+    const r = result(f.settle(run)); assert.equal(r.result, 'escalate', kind); assert.equal(r.code, 'REVIEW_CAP_REACHED');
+    assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the reviewer starts');
+    assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3].startsWith('You are run ')).length, 0);
+    assert.deepEqual(f.show(r.item).runs, [run]);
+    assert.match(fs.readFileSync(r.handoff, 'utf8'), /--retry --fix-findings/);
+    assert.deepEqual(result(f.retry(run)), r, 'ordinary retry never dispatches past the cap');
+    const correction = result(f.retry(run, ['--fix-findings']));
+    assert.equal(correction.result, 'fix_round'); assert.ok(correction.fix.run);
+    const calls = launchCalls(f);
+    assert.deepEqual(result(f.retry(run, ['--fix-findings'])), correction);
+    assert.deepEqual(launchCalls(f), calls, 'repeated explicit correction adopts its receipt');
+    assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3].startsWith('You are run ')).length, 1);
+    assert.equal(f.show(run).notes.filter((n) => n.decision && /requested another correction/.test(n.text)).length, 1);
+    const saved = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`)));
+    assert.deepEqual(saved.cappedResult, r);
   }
+});
+
+test('BCH cap three allows two automatic fix rounds then stops at Major findings', { timeout: 60000 }, (t) => {
+  const f = fixture(t, { actor: 'settle-cap-bch-test' }); config(f, 3);
+  review(f, 'NEEDS-WORK', moderate.replace('Moderate', 'Major'));
+  let run = landed(f);
+  for (const round of [1, 2, 3]) {
+    const r = result(f.settle(run));
+    assert.equal(r.review_policy.round, round); assert.equal(r.review_policy.cap, 3);
+    assert.equal(r.result, round < 3 ? 'fix_round' : 'escalate');
+    if (round < 3) run = r.fix.run;
+    else assert.equal(r.code, 'REVIEW_CAP_REACHED');
+  }
+  assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3].startsWith('You are run ')).length, 2);
+});
+
+test('settle reuses the same route with continuation metadata and starts fresh when the fix route changes', { timeout: 60000 }, (t) => {
+  for (const changed of [false, true]) {
+    const f = fixture(t, { actor: 'settle-reuse-route-test' }); review(f);
+    const item = JSON.parse(f.record(['status', '--json'])).items[0].id;
+    const first = dispatchWorker(f, item), prior = f.show(first.run);
+    const r = result(f.settle(first.run, ['--reuse', ...(changed ? ['--fix-route', 'engineer-max'] : [])]));
+    assert.equal(r.result, 'fix_round');
+    const next = f.show(r.fix.run);
+    if (changed) {
+      assert.equal(r.reuse_skipped, 'route_changed'); assert.notEqual(next.meta.agent, prior.meta.agent);
+      assert.equal(next.meta.route, 'engineer-max'); assert.equal(next.meta.continuation_of, undefined);
+      assert.equal(next.meta.same_session, undefined);
+    } else {
+      assert.equal(r.reuse_skipped, undefined);
+      for (const key of ['agent', 'pane', 'agent_session_id', 'terminal_id']) assert.equal(next.meta[key], prior.meta[key]);
+      assert.equal(next.meta.continuation_of, first.run); assert.equal(next.meta.same_session, true);
+    }
+    const saved = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${first.run}.json`)));
+    assert.equal(saved.reuse_skipped, r.reuse_skipped);
+    const calls = launchCalls(f);
+    assert.deepEqual(result(f.retry(first.run)), r); assert.deepEqual(launchCalls(f), calls);
+  }
+});
+
+test('cross-item reuse neither consumes another item review round nor resets the original count', { timeout: 60000 }, (t) => {
+  const f = fixture(t, { actor: 'settle-cross-item-rounds-test' }); config(f, 2); review(f);
+  const item = JSON.parse(f.record(['status', '--json'])).items[0].id;
+  const first = dispatchWorker(f, item), reviewed = result(f.settle(first.run, ['--reuse']));
+  assert.equal(reviewed.review_policy.round, 1); assert.equal(reviewed.result, 'fix_round');
+  f.record(['ingest', f.show(reviewed.fix.run).report_path]);
+  const sibling = f.record(['add', 'Sibling slice', '--role', 'engineer']).split(' ')[0];
+  const other = dispatchWorker(f, sibling, ['--reuse', reviewed.fix.run]);
+  const otherReview = result(f.settle(other.run, ['--review-round-cap', '1']));
+  assert.equal(otherReview.result, 'promotable_with_findings');
+  assert.equal(otherReview.review_policy.round, 1); assert.deepEqual(otherReview.review_policy.prior_runs, []);
+  const back = dispatchWorker(f, item, ['--reuse', other.run]);
+  const next = result(f.settle(back.run));
+  assert.equal(next.result, 'promotable_with_findings'); assert.equal(next.review_policy.round, 2);
+  assert.deepEqual(next.review_policy.prior_runs, [first.run]);
+  const savedOther = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${other.run}.json`)));
+  assert.deepEqual(savedOther.result.review_policy, otherReview.review_policy);
 });
 
 test('cap cannot waive unverified claims or unparsed finding severity', { timeout: 45000 }, (t) => {

@@ -36,6 +36,8 @@ const promotion = [
   'test/bch-cloak-contract.test.mjs',
   'test/board-view.test.mjs',
   'test/contracts-conformance.test.mjs',
+  'test/formats.test.mjs',
+  'test/compat.test.mjs',
   'supervisor/test/request.test.mjs',
   'settle/test/rebase-paths.test.mjs',
   'settle/test/rebase-review.test.mjs',

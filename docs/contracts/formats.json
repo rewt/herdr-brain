@@ -1,0 +1,470 @@
+{
+  "schema": "brain-formats/v1",
+  "scope": "Durable state and receipts, including embedded receipts and the external declared-reference contract. Version 1 on untagged documents is a contract label, not an invented schema field. Generated prose, logs without recovery semantics, user-authored routing/manifest policy, transient projections and ephemeral mutex files are not independent formats.",
+  "formats": [
+    {
+      "id": "fleet.json",
+      "version": 1,
+      "writer": "lib/fleet.mjs",
+      "location": "<fleet>/fleet.json",
+      "rule": "additive",
+      "probe": "fleet"
+    },
+    {
+      "id": "project-summary/v1",
+      "version": 1,
+      "writer": "lib/project-summary.mjs",
+      "location": "<record>/published/summary.{json,md}",
+      "rule": "additive",
+      "probe": "summary"
+    },
+    {
+      "id": "occupancy/v1",
+      "version": 1,
+      "writer": "test-slot/occupancy.mjs",
+      "location": "<slot-lock>.occupancy/*.json",
+      "rule": "additive",
+      "probe": "occupancy"
+    },
+    {
+      "id": "herdr-release/v1",
+      "version": 1,
+      "writer": "herdr/releases.mjs",
+      "location": "<bundle>/.release-manifest.json and .release-commit",
+      "rule": "additive",
+      "probe": "release"
+    },
+    {
+      "id": ".herdr-release.json",
+      "version": "unversioned",
+      "writer": "herdr/releases.mjs",
+      "location": "<canonical>/.herdr-release.json",
+      "rule": "closed",
+      "probe": "release"
+    },
+    {
+      "id": "brain.log/v1",
+      "version": 1,
+      "writer": "logs/journal.mjs; messages/journal.mjs",
+      "location": "<journal-partition>/{segment-N,shadow}.jsonl",
+      "rule": "additive",
+      "probe": "log"
+    },
+    {
+      "id": "brain.transport/v1",
+      "version": 1,
+      "writer": "messages/receiver.mjs",
+      "location": "<fixture-receiver>/transport.jsonl",
+      "rule": "additive",
+      "probe": "transport"
+    },
+    {
+      "id": "hook-pull/v1",
+      "version": 1,
+      "writer": "messages/receiver.mjs",
+      "location": "<fixture-receiver>/transport.jsonl receipt.transport",
+      "rule": "additive",
+      "probe": "transport"
+    },
+    {
+      "id": "herdr-reference/v1",
+      "version": 1,
+      "writer": "external claiming owner (no bundled writer)",
+      "location": "<record>/references/*.json",
+      "rule": "additive",
+      "notCovered": "External-writer contract; Brain has no real writer to exercise."
+    },
+    {
+      "id": "record-events",
+      "version": "unversioned",
+      "writer": "lib/store.mjs",
+      "location": "<record>/events.jsonl",
+      "rule": "additive",
+      "probe": "events"
+    },
+    {
+      "id": "record-config",
+      "version": "unversioned",
+      "writer": "lib/store.mjs",
+      "location": "<record>/config.json",
+      "rule": "additive",
+      "probe": "record-config"
+    },
+    {
+      "id": "promotion-queue",
+      "version": "unversioned",
+      "writer": "promote/promote.mjs",
+      "location": "<common>/promote/queue.json",
+      "rule": "additive",
+      "probe": "queue"
+    },
+    {
+      "id": "promotion-train/v1",
+      "version": 1,
+      "writer": "promote/promote.mjs; promote/train.mjs",
+      "location": "<common>/promote/batches/*/train.json",
+      "rule": "additive",
+      "probe": "train"
+    },
+    {
+      "id": "promotion-completion",
+      "version": 1,
+      "writer": "promote/completion.mjs",
+      "location": "<common>/promote/batches/*/train.json.record.json",
+      "rule": "additive",
+      "notCovered": "Successful integrated train reconciliation needs a native-authorized scratch promotion; refused-train coverage is not completed-gate recovery coverage."
+    },
+    {
+      "id": "lane-evidence/v2",
+      "version": 2,
+      "writer": "lib/lane-removal.mjs",
+      "location": "<common>/lane-archive/<topic>/*/sha256.json",
+      "rule": "closed",
+      "probe": "lane-evidence"
+    },
+    {
+      "id": "lane-validation/v1",
+      "version": 1,
+      "writer": "lanes/validation.mjs",
+      "location": "<common>/lane-validation/<key>.json",
+      "rule": "additive",
+      "probe": "validation"
+    },
+    {
+      "id": "lane-gate",
+      "version": 1,
+      "writer": "lanes/lane.mjs",
+      "location": "<lane>/.lane/gate.json",
+      "rule": "additive",
+      "notCovered": "Review prompt consumer is private to the native lane review flow; reusable validation receipt is checked separately."
+    },
+    {
+      "id": "lane-open/v1",
+      "version": 1,
+      "writer": "lib/initial-shell.mjs",
+      "location": "<common>/retirement/lane-opens/*.json",
+      "rule": "additive",
+      "probe": "lane-open"
+    },
+    {
+      "id": "initial-shell/v1",
+      "version": 1,
+      "writer": "lib/initial-shell.mjs",
+      "location": "<common>/retirement/initial-shells/*.json",
+      "rule": "additive",
+      "probe": "initial-shell"
+    },
+    {
+      "id": "retirement-request/v1",
+      "version": 1,
+      "writer": "lib/retire-trigger.mjs",
+      "location": "<record>/retirement/request.json",
+      "rule": "additive",
+      "probe": "retirement"
+    },
+    {
+      "id": "retirement-handled/v1",
+      "version": 1,
+      "writer": "lib/retire-trigger.mjs",
+      "location": "<record>/retirement/handled.json",
+      "rule": "additive",
+      "probe": "retirement"
+    },
+    {
+      "id": "retirement-occupant/v1",
+      "version": 1,
+      "writer": "lib/retire-runtime.mjs",
+      "location": "<record>/retirement/occupants/*.json",
+      "rule": "additive",
+      "notCovered": "Needs bound synthetic callback/terminal/process observations; empty retirement status is not receipt coverage."
+    },
+    {
+      "id": "retirement-review/v1",
+      "version": 1,
+      "writer": "lib/retire-runtime.mjs",
+      "location": "<record>/retirement/reviews/*.json",
+      "rule": "additive",
+      "notCovered": "Needs an ingested review and matching callback session evidence; no live review is launched."
+    },
+    {
+      "id": "retirement-exit/v1",
+      "version": 1,
+      "writer": "lib/retire-runtime.mjs",
+      "location": "<record>/retirement/exits/*.json",
+      "rule": "additive",
+      "notCovered": "Needs guarded synthetic native-exit observations; no native pane exit is performed."
+    },
+    {
+      "id": "dispatch-journal",
+      "version": "unversioned",
+      "writer": "dispatch/dispatch.mjs",
+      "location": "<record>/dispatch/<attempt>.json",
+      "rule": "additive",
+      "probe": "dispatch"
+    },
+    {
+      "id": "run-timing",
+      "version": "unversioned",
+      "writer": "lib/run-timing.mjs",
+      "location": "<record>/dispatch/<attempt>.json.events.jsonl",
+      "rule": "additive",
+      "probe": "timing"
+    },
+    {
+      "id": "settle-journal",
+      "version": "unversioned",
+      "writer": "settle/settle.mjs",
+      "location": "<record>/settle/R-n.json",
+      "rule": "additive",
+      "probe": "settle"
+    },
+    {
+      "id": "report-ingest/v1",
+      "version": 1,
+      "writer": "settle/report-evidence.mjs",
+      "location": "<record>/settle/R-n.json reportIngest",
+      "rule": "additive",
+      "notCovered": "Embedded hash-bound report-ingestion receipt needs OLD settlement decision/retry coverage beyond status display."
+    },
+    {
+      "id": "housekeeping-owner",
+      "version": "unversioned",
+      "writer": "housekeeping/housekeeping.mjs",
+      "location": "<housekeeping-state>/lock/owner.json",
+      "rule": "additive",
+      "probe": "housekeeping"
+    },
+    {
+      "id": "housekeeping-config",
+      "version": "unversioned",
+      "writer": "housekeeping/command.mjs",
+      "location": "<canonical>/.housekeeping.json",
+      "rule": "closed",
+      "probe": "housekeeping-config"
+    },
+    {
+      "id": "housekeeping-actions",
+      "version": "unversioned",
+      "writer": "housekeeping/housekeeping.mjs",
+      "location": "<housekeeping-state>/actions.jsonl",
+      "rule": "additive",
+      "notCovered": "Owner probe captures dry-run activity but does not exercise the OLD activity-tail reader on that log."
+    },
+    {
+      "id": "housekeeping-resume",
+      "version": "unversioned",
+      "writer": "housekeeping/housekeeping.mjs",
+      "location": "<housekeeping-state>/resume-attempts.jsonl",
+      "rule": "additive",
+      "notCovered": "Needs synthetic interrupted-composer recovery; no worker receives a prompt."
+    },
+    {
+      "id": "brain-distill/v1",
+      "version": 1,
+      "writer": "brain/lib/signals.mjs",
+      "location": "<brain-state>/distill/<record-hash>/pending.json",
+      "rule": "additive",
+      "probe": "digest"
+    },
+    {
+      "id": "brain-distill-cursor",
+      "version": 1,
+      "writer": "brain/lib/signals.mjs",
+      "location": "<brain-state>/distill/<record-hash>/cursor.json",
+      "rule": "additive",
+      "probe": "digest"
+    },
+    {
+      "id": "gate-watchdog/v1",
+      "version": 1,
+      "writer": "test-slot/limits.mjs",
+      "location": "<common>/gate-watchdog/*.json (or <history-root>/<project-hash>/*.json)",
+      "rule": "additive",
+      "probe": "history"
+    },
+    {
+      "id": "test-slot-wait/v1",
+      "version": 1,
+      "writer": "test-slot/test-slot.mjs",
+      "location": "<explicit-wait-receipt>",
+      "rule": "additive",
+      "notCovered": "Needs a scratch ticket/grant/cancellation probe; no shared host admission is used."
+    },
+    {
+      "id": "test-slot-owner",
+      "version": "unversioned",
+      "writer": "test-slot/test-slot.mjs",
+      "location": "<slot-lock> (owner JSON)",
+      "rule": "additive",
+      "notCovered": "Needs mixed-version scratch exclusive-owner liveness and ticket coverage."
+    },
+    {
+      "id": "test-slot-ticket",
+      "version": 1,
+      "writer": "test-slot/ticket-queue.mjs",
+      "location": "<slot-lock>.queue/*",
+      "rule": "additive",
+      "notCovered": "Needs mixed-version ticket ordering/cancellation coverage."
+    },
+    {
+      "id": "gate-execution",
+      "version": "unversioned",
+      "writer": "test-slot/test-slot.mjs",
+      "location": "<explicit-execution-receipt>",
+      "rule": "additive",
+      "notCovered": "Execution sidecars are produced during validation, but OLD sidecar/recovery semantics are not probed."
+    },
+    {
+      "id": "test-slot-measurement/v1",
+      "version": 1,
+      "writer": "test-slot/measurement.mjs",
+      "location": "<explicit-measurement-receipt>",
+      "rule": "additive",
+      "notCovered": "Measurement evidence is not authorization; no old measurement consumer probe."
+    },
+    {
+      "id": "promotion-host-gate/v1",
+      "version": 1,
+      "writer": "promote/host-gate.mjs",
+      "location": "<common>/promote/batches/*/host-gate.json",
+      "rule": "additive",
+      "notCovered": "Native gate path is deliberately not invoked; refused train coverage does not cover host grant/execution clocks."
+    },
+    {
+      "id": "standard-slot-history/v1",
+      "version": 1,
+      "writer": "sessions/receipts.mjs",
+      "location": "<common>/sessions/standard-slots.json",
+      "rule": "closed",
+      "probe": "standard-slots"
+    },
+    {
+      "id": "session-controller-journal/v1",
+      "version": 1,
+      "writer": "sessions/reconcile.mjs; sessions/runtime.mjs",
+      "location": "<common>/sessions/controller-journal.json",
+      "rule": "closed",
+      "notCovered": "Needs lifecycle operation, incarnation and binding coverage in an isolated synthetic adapter."
+    },
+    {
+      "id": "session-adapter-receipts/v1",
+      "version": 1,
+      "writer": "sessions/live.mjs",
+      "location": "<common>/sessions/adapter-receipts.json",
+      "rule": "closed",
+      "notCovered": "Native adapter lifecycle effects are outside this offline probe."
+    },
+    {
+      "id": "session-native-context/v1",
+      "version": 1,
+      "writer": "sessions/live.mjs",
+      "location": "<common>/sessions/contexts/*.json",
+      "rule": "closed",
+      "notCovered": "Native adapter context hash/identity coverage is not implemented here."
+    },
+    {
+      "id": "session-authorization/v1",
+      "version": 1,
+      "writer": "sessions/authorization.mjs",
+      "location": "<common>/sessions/authorizations/*.json",
+      "rule": "closed",
+      "notCovered": "Needs authorization claim/disposition and exact scope coverage; no authority is granted by this check."
+    },
+    {
+      "id": "brain.hook-session/v1",
+      "version": 1,
+      "writer": "messages/hook-session.mjs",
+      "location": "<common>/sessions/hook-pull/*/session.json",
+      "rule": "additive",
+      "notCovered": "Private opt-in launch descriptor; no harness settings or hook launch is performed."
+    },
+    {
+      "id": "verify-queue/v1",
+      "version": 1,
+      "writer": "verify/verify.mjs",
+      "location": "<trusted-verify-store>/queue.json",
+      "rule": "additive",
+      "notCovered": "Verification store explicitly refuses system temp roots; do not weaken that boundary for a fixture."
+    },
+    {
+      "id": "verify-inbox/v1",
+      "version": 1,
+      "writer": "verify/verify.mjs",
+      "location": "<trusted-verify-store>/inbox.json",
+      "rule": "additive",
+      "notCovered": "Verification store explicitly refuses system temp roots; no admission is performed."
+    },
+    {
+      "id": "verify-receipt/v1",
+      "version": 1,
+      "writer": "verify/verify.mjs",
+      "location": "<trusted-verify-store>/jobs/*/receipt.json",
+      "rule": "additive",
+      "notCovered": "Needs a trusted-store scratch worker and admitted-spec receipt coverage."
+    },
+    {
+      "id": "supervisor-cursor",
+      "version": "unversioned",
+      "writer": "supervisor/supervisor.mjs",
+      "location": "<record>/supervisor/<identity-hash>/cursor.json",
+      "rule": "additive",
+      "notCovered": "Supervisor checkpoint is a role-restricted cycle mutation; lane workers do not invoke it. OLD brief on real NEW record state is checked separately."
+    },
+    {
+      "id": "supervisor-handle",
+      "version": "unversioned",
+      "writer": "supervisor/supervisor.mjs",
+      "location": "<record>/supervisor/<identity-hash>/R-n.json",
+      "rule": "additive",
+      "notCovered": "Supervisor handling/promotion authorization needs run-bound settlement coverage."
+    },
+    {
+      "id": "supervisor-autopilot",
+      "version": "unversioned",
+      "writer": "supervisor/autopilot.mjs",
+      "location": "<record>/supervisor/<identity-hash>/autopilot/*.json",
+      "rule": "additive",
+      "notCovered": "Needs synthetic admission/decision coverage; no automation is started."
+    },
+    {
+      "id": "supervisor-inbox",
+      "version": "unversioned",
+      "writer": "supervisor/prompt-supervisor.mjs",
+      "location": "<record>/supervisor/inbox*",
+      "rule": "additive",
+      "notCovered": "Notice and delivery formats stay unchanged; no native prompt or inbox owner is started."
+    },
+    {
+      "id": "brain.message-pointer/v1",
+      "version": 1,
+      "writer": "messages/receiver.mjs",
+      "location": "<fixture-receiver>/envelopes/*.json",
+      "rule": "additive",
+      "notCovered": "Retained envelope/body pointer hashes need a separate OLD consumer witness."
+    },
+    {
+      "id": "log-watermarks",
+      "version": 1,
+      "writer": "logs/journal.mjs",
+      "location": "<journal-partition>/watermarks-<sha256>.jsonl",
+      "rule": "closed",
+      "notCovered": "Retention checkpoints require exact tuple/hash, producer count and sequence coverage."
+    },
+    {
+      "id": "lane-session-registry",
+      "version": "unversioned",
+      "writer": "lanes/board/registry.mjs",
+      "location": "<canonical>/.lane/sessions.json and .d/*.json",
+      "rule": "additive",
+      "probe": "session-registry"
+    },
+    {
+      "id": "route-snapshot",
+      "version": "unversioned",
+      "writer": "dispatch/dispatch.mjs; settle/settle.mjs",
+      "location": "<record>/{dispatch,settle}/*.routes.json",
+      "rule": "additive",
+      "notCovered": "Frozen routing snapshots are produced with coordinator journals; OLD route resolution on those snapshots is not separately covered."
+    }
+  ]
+}

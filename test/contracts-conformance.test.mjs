@@ -14,6 +14,7 @@ import { renderProjectSummary } from '../lib/render.mjs';
 import { renderRetirementStatus } from '../lib/retire-status.mjs';
 import { validateDocument } from '../board/rows.mjs';
 import { readTestSlotOccupancy } from '../test-slot/occupancy.mjs';
+import { publishProvingReservation, readProvingReservations } from '../test-slot/reservations.mjs';
 import { projectPin, releaseHome, checkRelease, checkBundle } from '../lib/releases.mjs';
 import { parseEvent } from '../messages/schema.mjs';
 import { LogJournal } from '../logs/journal.mjs';
@@ -203,6 +204,21 @@ const contracts = [
       assert.deepEqual(read(), []); assert.ok(fs.existsSync(held.occupancyPath), 'unknown versions cannot be pruned');
     } finally { held.release(); }
   }],
+  ['host-reservation/v1', ['test-slot/reservations.mjs'], async (f, root) => {
+    const writer = await load(root, 'test-slot/reservations.mjs'), lock = path.join(f.root, 'slot.lock');
+    const held = writer.publishProvingReservation({ lockPath: lock, label: 'contract proof', reason: 'ENG-424 R-601',
+      expiresAt: new Date(Date.now() + 60000).toISOString() });
+    const bytes = fs.readFileSync(held.path, 'utf8'), doc = JSON.parse(bytes);
+    try {
+      assert.equal(doc.schema, 'host-reservation/v1'); assert.equal(readProvingReservations(lock)[0].state, 'live');
+      write(held.path, { ...doc, ...extra }); assert.equal(readProvingReservations(lock)[0].state, 'live');
+      const missing = { ...doc }; delete missing.expiresAt;
+      write(held.path, missing); assert.equal(readProvingReservations(lock, { prune: true })[0].state, 'unknown');
+      assert.ok(fs.existsSync(held.path));
+      write(held.path, { ...doc, schema: 'host-reservation/v999' });
+      assert.deepEqual(readProvingReservations(lock, { prune: true }), []); assert.ok(fs.existsSync(held.path));
+    } finally { fs.writeFileSync(held.path, bytes); held.release(); }
+  }],
   ['herdr-release/v1', ['herdr/releases.mjs'], async (f, root) => {
     // Small inventory, real manifest writer. Mandatory entrypoint/hash drift is
     // covered comprehensively by release-pins, not duplicated here.
@@ -318,6 +334,29 @@ const contracts = [
     }
   }],
 ];
+
+test('installed occupancy reader and BCH closed-key reader skip proving reservations without pruning', async t => {
+  const f = fixture(t), lock = path.join(f.root, 'slot.lock');
+  const held = publishProvingReservation({ lockPath: lock, label: 'mixed proof', reason: 'ENG-424 R-601', expiresAt: new Date(Date.now() + 60000).toISOString() });
+  const bytes = fs.readFileSync(held.path, 'utf8');
+  try {
+    const required = ['schema', 'class', 'pid', 'processStart', 'processBirth', 'pgid', 'groupStart', 'groupBirth', 'acquiredAt', 'startedAt', 'project', 'label', 'cwd', 'host', 'reason'];
+    // B:552 checks this closed set only AFTER skipping schemas other than occupancy/v1.
+    const bchRead = () => fs.readdirSync(`${lock}.occupancy`).filter(n => !n.startsWith('.')).flatMap(name => {
+      const h = json(path.join(`${lock}.occupancy`, name));
+      if (h?.schema !== 'occupancy/v1') return [];
+      return [{ state: required.every(k => Object.hasOwn(h, k)) && Object.keys(h).every(k => required.includes(k) || k === 'profile_id') ? 'reserved' : 'unknown' }];
+    });
+    assert.deepEqual(bchRead(), []); assert.equal(fs.readFileSync(held.path, 'utf8'), bytes);
+    const release = installed ??= installedWriter();
+    if (release.skip) return t.skip(`installed occupancy reader: ${release.skip}`);
+    if (!fs.existsSync(path.join(release.root, 'test-slot/occupancy.mjs'))) return t.skip(`installed ${release.id} predates occupancy reader`);
+    t.diagnostic(`${release.selection}: ${release.id} (${release.root})`);
+    const reader = await load(release.root, 'test-slot/occupancy.mjs');
+    assert.deepEqual(reader.readTestSlotOccupancy(lock, { prune: true, kill: () => { throw Object.assign(Error('gone'), { code: 'ESRCH' }); } }), []);
+    assert.equal(fs.readFileSync(held.path, 'utf8'), bytes);
+  } finally { held.release(); }
+});
 
 for (const [name, files, conform] of contracts) {
   test(`${name}: current writer -> current reader; compatible shape`, async t => {

@@ -14,6 +14,8 @@ import { hookReviewDialog, codexProfile } from '../hook-review.mjs';
 import { runMetrics } from '../metrics.mjs';
 import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 import { fold } from '../../lib/state.mjs';
+import { publishProvingReservation } from '../../test-slot/reservations.mjs';
+import { readTiming } from '../../lib/run-timing.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -730,6 +732,24 @@ return read.call(this,file,...args);};require('node:module').syncBuiltinESMExpor
   assert.equal(f.show(receipt.run).meta.watcher_identity, identity);
   assert.equal(promptCalls(f).length, 1);
 });
+test('a proving reservation pauses dispatch before lane open within the existing memory_open clock', async t => {
+  const f = fixture(t), lock = path.join(f.root, 'slot');
+  const held = publishProvingReservation({ lockPath: lock, label: 'proof', reason: 'ENG-424 R-601', expiresAt: new Date(Date.now() + 60000).toISOString() });
+  t.after(() => held.release());
+  const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
+    { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock });
+  let stderr = ''; pending.child.stderr.on('data', data => { stderr += data; });
+  try {
+    const deadline = Date.now() + 10000;
+    while (!stderr.includes('waiting; proving') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.match(stderr, /waiting; proving.*ENG-424 R-601; expiry/);
+    assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'open'), false);
+    assert.deepEqual(readTiming(f.jobs()[0]).filter(row => row.kind === 'memory_open').map(row => row.outcome), ['entry']);
+  } finally { held.release(); await pending.done; }
+  assert.equal(pending.child.exitCode, 0, stderr); assert.match(stderr, /proving reservation ended; proceeding/);
+  assert.deepEqual(readTiming(f.jobs()[0]).filter(row => row.kind === 'memory_open').map(row => row.outcome), ['entry', 'granted']);
+});
+
 test('dispatch waits under simulated swap pressure before opening a lane and resumes the same request', async t => {
   const f = fixture(t), memory = path.join(f.root, 'memory.json');
   fs.writeFileSync(memory, JSON.stringify({ available: 2 * 1024 ** 3, swap_used: 1024 ** 3 }));

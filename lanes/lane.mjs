@@ -18,6 +18,7 @@ import { retirementHold } from '../lib/retire-hold.mjs';
 import { recordInitialShell, claimInitialShell, initialShellLock, recordLaneOpen } from '../lib/initial-shell.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
+import { waitForProvingHold } from '../test-slot/reservations.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
 import { hookLaunchArguments } from '../messages/hook-session.mjs';
@@ -2488,6 +2489,9 @@ function withPromotionLock(operation) {
 
 function promote(topic, options = {}) {
   const root = repositoryRoot({ requiredBy: "promote" });
+  waitForProvingHold({ label: 'lane promote', check: () => {
+    if (existsSync(join(root, '.lane/supervisor/STOP'))) fail('PROMOTION_STOPPED: supervisor STOP exists; nothing merged');
+  } });
   waitForMemory({ label: 'lane promote' });
   return withPromotionLock(() => promoteLocked(topic, root, options));
 }
@@ -2642,7 +2646,7 @@ function launchMemoryGate(label, alreadyChecked = false) {
   };
   try {
     if (alreadyChecked) check();
-    else waitForMemory({ label, check });
+    else { waitForProvingHold({ label, check }); waitForMemory({ label, check }); }
     return true;
   } catch (error) {
     if (error.code !== 'LANE_STOPPED') throw error;

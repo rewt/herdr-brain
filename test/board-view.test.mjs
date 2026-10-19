@@ -55,7 +55,7 @@ test('board ticks count shared occupancy without writing, pruning or changing th
     });
     for (const method of ['open', 'openSync']) intercept(object, method, original => function(file, flags, ...args) {
       const protectedFile = protectedPath(file);
-      if (protectedFile && flags !== 'r' && flags !== fs.constants.O_RDONLY) { mutations++; throw Error('intercepted writable open'); }
+      if (protectedFile && flags !== 'r' && (typeof flags !== 'number' || (flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_APPEND)))) { mutations++; throw Error('intercepted writable open'); }
       if (protectedFile) readOpens++;
       const result = original.call(this, file, flags, ...args);
       if (protectedFile && typeof result === 'number') descriptors.add(result);

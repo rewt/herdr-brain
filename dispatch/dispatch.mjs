@@ -11,6 +11,7 @@ import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
+import { waitForProvingHold } from '../test-slot/reservations.mjs';
 import { readTiming, timedMemoryWait, timingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { bundleRelease, forwardRelease, continueRelease, operationFile } from '../lib/releases.mjs';
@@ -111,7 +112,7 @@ function syncTiming() {
 }
 function memoryGate(kind, label, check) {
   return timedMemoryWait({ journal, run: job.run, item: job.item, lane: job.lane, kind,
-    wait: () => waitForMemory({ label, check }), persist: syncTiming, onError: timingFailure });
+    wait: () => { waitForProvingHold({ label, check }); return waitForMemory({ label, check }); }, persist: syncTiming, onError: timingFailure });
 }
 function locate(value) {
   if (!/^R-\d+$/.test(value)) return path.resolve(value);

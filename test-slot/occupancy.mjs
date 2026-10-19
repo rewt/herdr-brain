@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { processStartRecord } from './lock-support.mjs';
-import { writeFileAtomic } from '../lib/files.mjs';
+import { readRecordBytes, publishRecord, removeUnchanged } from './record-file.mjs';
 
 const projects = new Map();
 // Informational identity only: never spawn Git on the occupancy write path.
@@ -48,7 +48,7 @@ export function occupancyProject(cwd = process.cwd()) {
 }
 
 const positive = value => Number.isSafeInteger(value) && value > 0;
-export function occupancyState(record, { kill = process.kill, startRecord = processStartRecord } = {}) {
+export function occupancyState(record, { kill = process.kill, startRecord = processStartRecord, ignoreOwner = false } = {}) {
   if (record?.schema !== 'occupancy/v1' || record.class !== 'shared' || !positive(record.pid))
     return { state: 'unknown', why: 'occupancy does not name a shared owner' };
   const exists = target => {
@@ -67,7 +67,7 @@ export function occupancyState(record, { kill = process.kill, startRecord = proc
       return (birth ? now.birth === birth : now.start === start) ? 'present' : 'gone';
     } catch { return exists(pid) === 'gone' ? 'gone' : 'reserved'; }
   };
-  if (owner(record.pid, record.processStart, record.processBirth) !== 'gone') return { state: 'live' };
+  if (!ignoreOwner && owner(record.pid, record.processStart, record.processBirth) !== 'gone') return { state: 'live' };
   const groups = [...(record.pgid == null ? [] : [{ pgid: record.pgid, start: record.groupStart, birth: record.groupBirth }]),
     ...Object.values(record.groups ?? {})];
   for (const group of groups) {
@@ -87,10 +87,10 @@ export function readTestSlotOccupancy(lockPath, { prune = false, ...liveness } =
   return names.flatMap(name => {
     const file = path.join(directory, name);
     try {
-      const bytes = fs.readFileSync(file, 'utf8'), record = JSON.parse(bytes);
+      const bytes = readRecordBytes(file), record = JSON.parse(bytes);
       if (record?.schema !== 'occupancy/v1') return []; // Unknown versions are never deletion authority.
       const state = occupancyState(record, liveness);
-      if (prune && state.state === 'gone' && fs.readFileSync(file, 'utf8') === bytes) fs.rmSync(file, { force: true });
+      if (prune && state.state === 'gone') removeUnchanged(file, bytes);
       return [{ path: file, record, ...state }];
     } catch (error) {
       if (error.code === 'ENOENT') return [];
@@ -104,7 +104,7 @@ export function sharedOccupancy(lockPath, label, resource) {
   try { identity = processStartRecord(process.pid); } catch { identity = { start: null, birth: null }; }
   const directory = `${lockPath}.occupancy`;
   const name = `${process.pid}-${randomBytes(16).toString('hex')}`;
-  const file = path.join(directory, `${name}.json`), temporary = path.join(directory, `.${name}.tmp`);
+  const file = path.join(directory, `${name}.json`);
   const cwd = process.cwd();
   const holder = { schema: 'occupancy/v1', pid: process.pid, processStart: identity.start, processBirth: identity.birth,
     pgid: null, groupStart: null, groupBirth: null, label, cwd, host: os.hostname(),
@@ -112,15 +112,19 @@ export function sharedOccupancy(lockPath, label, resource) {
     ...(resource.profile ? { profile_id: resource.profile.id } : {}) };
   holder.startedAt = holder.acquiredAt;
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  try {
-    fs.writeFileSync(temporary, JSON.stringify(holder) + '\n', { flag: 'wx', mode: 0o600 });
-    fs.renameSync(temporary, file); // Readers can only see complete identity bytes.
-  } finally { fs.rmSync(temporary, { force: true }); }
-  const release = () => { fs.rmSync(file, { force: true }); process.off('exit', release); return true; };
+  let bytes = publishRecord(file, holder);
+  const owner = process.pid;
+  const release = () => {
+    if (process.pid !== owner) throw Error('occupancy belongs to another owner');
+    if (occupancyState(holder, { ignoreOwner: true }).state !== 'gone') return false;
+    const removed = removeUnchanged(file, bytes);
+    process.off('exit', release); return removed;
+  };
   process.on('exit', release);
   return { class: 'shared', nested: false, token: null, holder, occupancyPath: file, release,
     setGroup(pgid, groupStart, groupBirth = null) {
       Object.assign(holder, { pgid, groupStart, groupBirth });
-      writeFileAtomic(file, JSON.stringify(holder) + '\n', 0o600);
+      if (process.pid !== owner || readRecordBytes(file) !== bytes) throw Error('occupancy no longer belongs to this owner');
+      bytes = publishRecord(file, holder);
     } };
 }

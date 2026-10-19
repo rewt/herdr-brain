@@ -3,7 +3,22 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { refuseBeforeTrain } from '../memory-gate.mjs';
+import { refuseBeforeTrain, waitForPromotionMemory } from '../memory-gate.mjs';
+import { publishProvingReservation } from '../../test-slot/reservations.mjs';
+
+test('the held promotion re-check never reads reservations and the unheld gate still honors STOP', t => {
+  const lock = process.env.MONITOR_TEST_SLOT_COMPAT_PATH;
+  const held = publishProvingReservation({ lockPath: lock, label: 'proof', reason: 'ENG-424 R-601', expiresAt: new Date(Date.now() + 60000).toISOString() });
+  t.after(() => held.release());
+  const read = fs.readdirSync; let reservationReads = 0;
+  fs.readdirSync = (file, ...args) => { if (String(file).endsWith('.occupancy')) { reservationReads++; throw Error('reservation read during held re-check'); } return read(file, ...args); };
+  try { waitForPromotionMemory(path.dirname(lock), { held: true }); }
+  finally { fs.readdirSync = read; }
+  assert.equal(reservationReads, 0);
+  const canonical = path.join(path.dirname(lock), 'canonical'); fs.mkdirSync(path.join(canonical, '.lane/supervisor'), { recursive: true });
+  fs.writeFileSync(path.join(canonical, '.lane/supervisor/STOP'), 'STOP');
+  assert.throws(() => waitForPromotionMemory(canonical), e => e.code === 'PROMOTION_STOPPED');
+});
 
 test('memory refusal completes every fresh batch member without attempts or replacing an existing result', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-receipt-'));

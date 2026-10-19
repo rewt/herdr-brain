@@ -12,6 +12,9 @@ import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
 import { sessionBindFact } from './helpers/session-bind.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { retirementStatus } from '../lib/retire-status.mjs';
+import { processStartRecord } from '../test-slot/lock-support.mjs';
+import { readTestSlotOccupancy } from '../test-slot/occupancy.mjs';
+import { readSlot } from '../board/facts.mjs';
 
 function fixture() {
   const events = [
@@ -570,6 +573,30 @@ for (const state of ['live', 'gone', 'EPERM']) for (const match of ['cwd', 'labe
     }
     assert.equal(fs.readFileSync(file, 'utf8'), bytes); assert.equal(fs.readFileSync(path.join(directory, 'future.json'), 'utf8'), future);
   });
+
+test('BCH exact occupancy/v1 with UUID filename and null births is counted, kept and pruned only when gone', t => {
+  const f = referenceFixture(t), common = path.join(f.org, 'common'), lock = path.join(f.org, 'slot');
+  const file = path.join(`${lock}.occupancy`, 'd0e1f200-1111-4111-8111-123456789abc.json');
+  fs.mkdirSync(`${lock}.occupancy`);
+  const acquiredAt = new Date().toISOString();
+  const record = { schema: 'occupancy/v1', class: 'shared', pid: process.pid, processStart: processStartRecord(process.pid).start,
+    processBirth: null, pgid: null, groupStart: null, groupBirth: null, acquiredAt, startedAt: acquiredAt,
+    project: common, label: 'BCH test', cwd: '/repo/lane', host: os.hostname(), reason: 'unprofiled' };
+  const bytes = JSON.stringify(record) + '\n'; fs.writeFileSync(file, bytes);
+  assert.equal(readTestSlotOccupancy(lock)[0].state, 'live');
+  assert.equal(readSlot({ lockPath: lock, compatPath: lock }).sharedCount, 1);
+  const env = { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
+  const observed = readLiveReferences({ common, org: f.org, verifyStateDir: path.join(f.org, 'verify'), env });
+  assert.deepEqual(observed.errors, []); assert.equal(observed.references[0].kind, 'test-slot occupant');
+  assert.match(kept(Object.assign(fixture(), observed)), /test-slot occupant reference/);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  const gone = () => { throw Object.assign(Error('gone'), { code: 'ESRCH' }); };
+  assert.equal(readTestSlotOccupancy(lock, { kill: gone })[0].state, 'gone'); assert.ok(fs.existsSync(file));
+  let changed = false;
+  readTestSlotOccupancy(lock, { prune: true, kill: () => { if (!changed) { changed = true; fs.appendFileSync(file, ' '); } gone(); } });
+  assert.ok(fs.existsSync(file));
+  readTestSlotOccupancy(lock, { prune: true, kill: gone }); assert.equal(fs.existsSync(file), false);
+});
 
 test('promotion references follow the latest request checkpoint and preserve active holds', t => {
   const f = referenceFixture(t), common = path.join(f.org, 'common');

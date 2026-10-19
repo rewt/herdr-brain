@@ -20,8 +20,8 @@ A top-level `run` defaults to **shared**, including unprofiled commands from any
 project (`resource.reason: unprofiled`). Shared runs acquire no legacy,
 compatibility or workspace lock, publish no queue ticket and never poll those
 paths. They read holders once only to recognize nesting. They never wait on
-occupancy. One top-level record is published beside the selected workspace lock
-in `<lockPath>.occupancy/`; different concurrent runs have different filenames.
+occupancy. One top-level record is published beside the selected compat lock
+in `<compatPath>.occupancy/`; different concurrent runs have different filenames.
 Nested runs, even a declared-exclusive child of a shared holder, remain inside
 the existing command group, take nothing and publish no second record. Sampling
 belongs only to a profiled top-level holder.
@@ -53,8 +53,9 @@ metadata, are cached per process and cwd. This discovery starts no subprocess.
 
 No command text or token is recorded. Publication writes complete bytes to a
 hidden temporary file in the same directory, then renames it atomically; group
-updates also use atomic rename. The owner removes its record on success,
-failure, forwarded INT/TERM/HUP, timeout, spawn failure and exception. SIGKILL
+updates also use atomic rename. The owner removes its record after its group is confirmed gone on success,
+failure, forwarded INT/TERM/HUP, timeout, spawn failure and exception. A surviving
+group retains its record. SIGKILL
 cannot run cleanup, so readers apply the stale rule instead. Status is read-only
 and includes `occupancy`; the reader can optionally prune confirmed stale rows.
 
@@ -448,3 +449,22 @@ phase notes, missing samples and isolation evidence before adopting any envelope
 Gather the first release and train envelopes on their next necessary runs;
 this feature starts no measurement campaign. Joint proving-step quiet admission belongs to the next rollout step; shared
 occupancy itself never gates work.
+
+## Proving reservations and path interop
+
+Declared EXCLUSIVE steps additionally publish `host-reservation/v1` beside compat,
+with reason, expected end and mandatory expiry. The payload starts behind a
+barrier until both lock records and the reservation contain its group identity.
+`--reason TEXT`, `--expected-seconds N` and `--reserve-gib N` supply bounded step
+metadata; expiry is the watchdog wall limit plus 30 seconds, capped at six hours.
+Only launch gates pause for live/unexpired proving; shared/nested `run` and held
+promotion re-checks do not read reservations. STOP still cancels launch waits.
+
+Workspace, compat and `--lock-path` reject prover names, known inode aliases,
+symlinks and nonregular files with `TEST_SLOT_LOCK_PATH_INVALID`/75 before writes.
+Non-default compat must be in owned temporary scratch with no group/other write;
+`--lock-path` changes compat too. Readers continue observing both configured
+occupancy directories and never prune during display. No default path or
+environment name changes. See [the full shared contract](../docs/contracts/HOST-RESERVATIONS.md)
+for fields, expiry, release, reader duties and mixed-version behavior. BCH adoption
+and schema/location agreement remain subject to independent cross-project review.

@@ -128,7 +128,7 @@ function unprofiledNestedFixture(t, { mutateLock = false } = {}) {
   // the parent has observed the pending record. Never patch product code.
   fs.writeFileSync(preload, `const fs=require('fs'),path=require('path'),rename=fs.renameSync;
 fs.renameSync=(from,to)=>{
- if(path.dirname(path.resolve(to))===${JSON.stringify(path.join(fs.realpathSync(f.root), 'slot.occupancy'))} && fs.existsSync(to)) {
+ if(fs.realpathSync(path.dirname(path.resolve(to)))===${JSON.stringify(path.join(fs.realpathSync(f.root), 'slot.occupancy'))} && fs.existsSync(to)) {
   const holder=JSON.parse(fs.readFileSync(from,'utf8'));
   if(holder.pid===process.pid&&holder.groupStart!==null) {
    const deadline=Date.now()+${loadTimeout(5000)};
@@ -161,7 +161,7 @@ for(const profiled of [false,true]) {
 }`);
   const result = f.run([process.execPath, parent], { profiled: false,
     environment: { ...f.env, NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}` } });
-  assert.equal(fs.existsSync(pending), true, 'the fixture exercised the pending group publication');
+  assert.equal(fs.existsSync(pending), true, `the fixture exercised the pending group publication: ${result.stderr}`);
   return { f, result };
 }
 

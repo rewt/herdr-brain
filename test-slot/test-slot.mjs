@@ -41,14 +41,14 @@ import { setTimeout as pollSleep } from 'node:timers/promises';
 import { probe, processStartRecord, processState, removeStaleLock } from "./lock-support.mjs";
 import { readTestSlotQueue, testSlotTicket } from './ticket-queue.mjs';
 import { occupancyState, readTestSlotOccupancy, sharedOccupancy } from './occupancy.mjs';
+import { publishProvingReservation } from './reservations.mjs';
+import { TEST_SLOT_PATH, PATH_ENV, COMPAT_PATH_ENV, LOCK_PATH_INVALID_CODE, slotPathOf, validateSlotPath } from './paths.mjs';
+export { TEST_SLOT_PATH, PATH_ENV, COMPAT_PATH_ENV, LOCK_PATH_INVALID_CODE, slotPathOf } from './paths.mjs';
 import { lookupProcess } from "../lib/processes.mjs";
 import { writeFileAtomic } from "../lib/files.mjs";
 import { cliHelp, isMain } from '../lib/cli-help.mjs';
 cliHelp(import.meta.url, "Usage: node test-slot/test-slot.mjs run LABEL [--wait SECONDS] [--timeout-seconds SECONDS] [--idle-timeout-seconds SECONDS] [--tier TIER] [--no-slot] -- COMMAND [ARGS...] | status");
 
-export const TEST_SLOT_PATH = process.platform === "darwin" ? "/private/tmp/bch-cloak-test-slot.lock" : "/tmp/bch-cloak-test-slot.lock";
-export const COMPAT_PATH_ENV = "MONITOR_TEST_SLOT_COMPAT_PATH";
-export const PATH_ENV = "MONITOR_TEST_SLOT_PATH";
 export const LEGACY_TOKEN_ENV = "BCH_CLOAK_TEST_SLOT_TOKEN";
 export const LEGACY_WAIT_ENV = "BCH_CLOAK_TEST_SLOT_WAIT_SECONDS";
 export const TOKEN_ENV = "MONITOR_TEST_SLOT_TOKEN";
@@ -137,6 +137,7 @@ export function waitSecondsOf(env = process.env) {
  */
 export async function acquireTestSlot(label, { env = process.env, lockPath = slotPathOf(env), waitSeconds = waitSecondsOf(env), pollMs = 2_000,
   token = randomBytes(16).toString("hex"), onWait = () => {}, deadline = Date.now() + waitSeconds * 1000, signal } = {}) {
+  validateSlotPath(lockPath);
   if (!Number.isSafeInteger(waitSeconds) || waitSeconds < 0 || !Number.isSafeInteger(pollMs) || pollMs < 1) throw new Error("invalid test slot wait/poll allowance");
   let ownStart;
   try { ownStart = processStartRecord(process.pid); }
@@ -240,12 +241,13 @@ export async function acquireTestSlot(label, { env = process.env, lockPath = slo
 /** Workspace slot plus the legacy bridge, acquired in a fixed order. Taking
  * both locks closes the race with bch-cloak while workspace paths migrate. */
 export async function acquireHostTestSlot(label, { env = process.env, lockPath = slotPathOf(env), compatPath = env[COMPAT_PATH_ENV] ?? TEST_SLOT_PATH,
-  waitSeconds = waitSecondsOf(env), pollMs = 100, onWait = () => {}, signal } = {}) {
+  waitSeconds = waitSecondsOf(env), pollMs = 100, onWait = () => {}, signal, provers } = {}) {
   const started = Date.now();
   const deadline = started + waitSeconds * 1000;
   const slots = [];
   const paths = [...new Set([compatPath, lockPath])];
-  for (const file of paths) slotPathOf({ [PATH_ENV]: file });
+  validateSlotPath(lockPath, { provers });
+  validateSlotPath(compatPath, { compat: true, provers });
   try {
     for (const file of paths) {
       const remaining = Math.max(0, waitSeconds - Math.floor((Date.now() - started) / 1000));
@@ -365,15 +367,9 @@ function held(lockPath, mine) {
 
 const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
 
-export function slotPathOf(env = process.env) {
-  const value = env[PATH_ENV] ?? TEST_SLOT_PATH;
-  if (typeof value !== "string" || !value.startsWith("/") || value.includes("\0") || value.length === 1) throw new Error(`${PATH_ENV} must be an absolute lock file path`);
-  return value;
-}
-
 function parse(argv) {
   const [command, ...rest] = argv;
-  const options = { lockPath: slotPathOf(), compatPath: process.env[COMPAT_PATH_ENV] ?? TEST_SLOT_PATH, waitSeconds: undefined, pollMs: 100, retryTimeout: false };
+  const options = { lockPath: slotPathOf(process.env, { readOnly: true }), compatPath: process.env[COMPAT_PATH_ENV] ?? TEST_SLOT_PATH, waitSeconds: undefined, pollMs: 100, retryTimeout: false };
   const positional = [];
   let i = 0;
   for (; i < rest.length && rest[i] !== "--"; i += 1) {
@@ -388,6 +384,9 @@ function parse(argv) {
     else if (arg === "--tier") options.tier = value();
     else if (arg === "--resource") options.resource = JSON.parse(value());
     else if (arg === "--measurement-notes") options.measurementNotes = value();
+    else if (arg === '--reason') options.reason = value();
+    else if (arg === '--expected-seconds') options.expectedSeconds = Number(value());
+    else if (arg === '--reserve-gib') options.reserveGib = Number(value());
     else if (arg === "--result-path") options.resultPath = value();
     else if (arg === '--caller') {
       options.caller = JSON.parse(value());
@@ -408,6 +407,10 @@ const exitOf = (code, signal) => (code ?? 128 + (os.constants.signals[signal] ??
 export async function run({ positional, options, child }) {
   const [label] = positional;
   if (label === undefined || child.length === 0) throw new Error("usage: test-slot.mjs run <label> [--wait <seconds>] -- <command> [args...]");
+  validateSlotPath(options.lockPath, { provers: options.provers });
+  validateSlotPath(options.compatPath, { compat: true, provers: options.provers });
+  if (options.expectedSeconds !== undefined && !(Number.isFinite(options.expectedSeconds) && options.expectedSeconds > 0)) throw Error('invalid expected seconds');
+  if (options.reserveGib !== undefined && !(Number.isFinite(options.reserveGib) && options.reserveGib >= 0)) throw Error('invalid reserve GiB');
   const common = options.common ?? projectCommon();
   const tier = options.tier ?? label;
   const historyKey = options.historyKey ?? gateHistoryKey(tier, child);
@@ -430,17 +433,27 @@ export async function run({ positional, options, child }) {
         wait.waits.push({ ...entry, at: new Date().toISOString() });
         if (options.waitReceipt) process.stderr.write(`TEST_SLOT_WAIT: ${entry.holder}; ${entry.lock_path}; capped at ${wait.wait_seconds}s\n`);
       }, ...(options.waitSeconds === undefined ? {} : { waitSeconds: options.waitSeconds }) })
-        : sharedOccupancy(options.lockPath, label, resource));
+        : sharedOccupancy(options.compatPath, label, resource));
     slot.class ??= options.noSlot ? 'unslotted' : 'exclusive';
+    if (exclusive && !slot.nested && !options.noSlot) {
+      const acquired = Date.now();
+      const reservation = publishProvingReservation({ lockPath: options.compatPath, label, reason: options.reason ?? label,
+        expectedEnd: new Date(acquired + (options.expectedSeconds ?? limits.wall_seconds) * 1000).toISOString(),
+        expiresAt: new Date(acquired + (limits.wall_seconds + 30) * 1000).toISOString(), reserveGib: options.reserveGib, provers: options.provers });
+      const setGroup = slot.setGroup, release = slot.release;
+      slot.reservation = reservation;
+      slot.setGroup = (...args) => { setGroup(...args); reservation.setGroup(...args); };
+      slot.release = () => reservation.release() === false ? false : release();
+    }
     const acquiredAt = new Date().toISOString();
     Object.assign(wait, { state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt, nested: slot.nested,
       class: slot.class, occupancy_path: slot.occupancyPath });
     // This sidecar proves a grant. Queue/log evidence records refusals instead.
     if (options.waitReceipt) writeFileAtomic(options.waitReceipt, JSON.stringify(wait, null, 2) + '\n', 0o600);
   } catch (error) {
-    if (slot?.class === 'shared') slot.release();
+    slot?.release();
     if (waiting.signal.aborted) return exitOf(null, waiting.signal.reason);
-    if (error?.code === HELD_CODE || error?.code === HOLDER_UNKNOWN_CODE) {
+    if ([HELD_CODE, HOLDER_UNKNOWN_CODE, LOCK_PATH_INVALID_CODE].includes(error?.code)) {
       process.stderr.write(`${error.message}\n`);
       return REFUSED_EXIT;
     }
@@ -507,8 +520,7 @@ export async function run({ positional, options, child }) {
       return released === false ? result.status || 1 : result.status;
     }
   } finally {
-    // Informational presence always follows its owner, even on setup/storage
-    // failure or an uncertain watchdog cleanup. Exclusive retention is unchanged.
+    // A surviving group retains shared presence even when setup/cleanup fails.
     if (slot.class === 'shared') slot.release();
   }
 }
@@ -547,7 +559,12 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     childRetried ||= text.includes("TEST_SLOT_TIMEOUT_RETRY:");
     tail = text.slice(-1024);
   };
-  const proc = spawn(argv[0], argv.slice(1), { stdio: ["inherit", "pipe", "pipe"], detached: !slot.nested,
+  const barrier = Boolean(slot.reservation);
+  // execfail lets a failed exec return 127 even on macOS, while a successful
+  // exec preserves the command PID, signals and numeric payload exits.
+  const proc = spawn(barrier ? '/bin/bash' : argv[0], barrier ? ['--noprofile', '--norc', '--posix', '-c',
+    'shopt -s execfail; IFS= read -r _ <&3 || exit 127; exec 3<&- "$@"; exit 127', 'test-slot-proving', ...argv] : argv.slice(1),
+    { ...(barrier ? { argv0: 'sh' } : {}), stdio: ["inherit", "pipe", "pipe", ...(barrier ? ['pipe'] : [])], detached: !slot.nested,
     env: { ...process.env, ...childEnv, [PATH_ENV]: lockPath, [COMPAT_PATH_ENV]: compatPath, ...(slot.token === null ? {} : { [TOKEN_ENV]: slot.token, [LEGACY_TOKEN_ENV]: slot.token }),
       ...(slot.occupancyPath ? { [OCCUPANCY_ENV]: slot.occupancyPath } : {}),
       ...(retried ? { [RETRIED_ENV]: "1" } : {}) } });
@@ -557,7 +574,8 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     proc.once("error", (error) => { process.stderr.write(`test-slot: ${error.message}\n`); resolve({ status: 127, signal: null }); });
     proc.once("exit", (code, signal) => { leaderExited = true; resolve({ status: exitOf(code, signal), signal }); });
   });
-  if (proc.pid !== undefined) started(proc);
+  if (barrier) proc.stdio[3].on('error', () => {}); // A failed barrier may close before the grant.
+  if (proc.pid !== undefined && !barrier) started(proc);
   {
     proc.stdout.on("data", data => { observe(data); process.stdout.write(data); });
     proc.stderr.on("data", data => { observe(data); process.stderr.write(data); });
@@ -591,6 +609,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
         startRecord = identity;
       } catch { /* The unreaped detached child still proves group ownership. */ }
       if (startRecord) slot.setGroup(proc.pid, startRecord.start, startRecord.birth);
+      if (barrier) { started(proc); proc.stdio[3].end('start\n'); }
     }
     if (measurementOptions && proc.pid !== undefined) {
       try { measurement = measureFamily({ pid: proc.pid, identity: rootIdentity, ...measurementOptions }); }
@@ -636,6 +655,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     // Signals are never retryable, including commands that swallow a signal.
     return { status: gateTimeout ? TIMEOUT_EXIT : leftover ? LEFTOVER_EXIT : status, signal: gateTimeout ? null : signal, gateTimeout, duration_s, longest_silence_s: longestSilence, timeout: signal ? false : timeout, load, childRetried, groupGone, measurement: measurement?.finish() };
   } catch (error) {
+    if (barrier) proc.stdio[3].destroy(); // No grant means no payload, including publication failure.
     if (gateTimeout || leftover) {
       process.stderr.write(`${gateTimeout ? 'GATE_TIMEOUT_CLEANUP_FAILED' : 'GATE_LEFTOVER_GROUP_CLEANUP_FAILED'}: ${error.message}; slot retained.\n`);
       proc.stdout.destroy(); proc.stderr.destroy(); proc.unref();
@@ -696,6 +716,6 @@ if (isMain(import.meta.url)) {
       callerWatch.unref();
     }
     process.exitCode = await main(parsed);
-  } catch (error) { process.stderr.write(`test-slot: ${error.message}\n`); process.exitCode = 2; }
+  } catch (error) { process.stderr.write(`test-slot: ${error.message}\n`); process.exitCode = error.code === LOCK_PATH_INVALID_CODE ? REFUSED_EXIT : 2; }
   finally { clearInterval(callerWatch); }
 }

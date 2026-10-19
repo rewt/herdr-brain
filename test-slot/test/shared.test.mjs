@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { occupancyState, readTestSlotOccupancy, sharedOccupancy } from '../occupancy.mjs';
+import { publishProvingReservation, readProvingReservations } from '../reservations.mjs';
 import { processStartRecord } from '../lock-support.mjs';
 import { resolveResource, resourceStanza } from '../resources.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
@@ -37,7 +38,7 @@ function fixture(t) {
     '--result-path', path.join(root, 'result.json'), ...extra, '--', ...command],
   { cwd, env, encoding: 'utf8', timeout: loadTimeout(15000) });
   t.after(async () => {
-    for (const row of readTestSlotOccupancy(lock)) if (row.record?.pgid) try { process.kill(-row.record.pgid, 'SIGKILL'); } catch {}
+    for (const row of readTestSlotOccupancy(compat)) if (row.record?.pgid) try { process.kill(-row.record.pgid, 'SIGKILL'); } catch {}
     for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     await Promise.all(children.map(child => child.exitCode !== null || child.signalCode !== null ? null : new Promise(resolve => child.once('close', resolve))));
     fs.rmSync(root, { recursive: true, force: true });
@@ -55,6 +56,8 @@ test('occupancy publishes complete occupancy/v1 bytes by same-directory rename, 
     const bytes = fs.readFileSync(from, 'utf8'), record = JSON.parse(bytes);
     assert.equal(Object.keys(record)[0], 'schema'); assert.equal(record.schema, 'occupancy/v1');
     assert.equal(record.class, 'shared'); assert.equal(record.pid, process.pid);
+    assert.deepEqual(Object.keys(record).sort(), ['schema', 'class', 'pid', 'processStart', 'processBirth', 'pgid', 'groupStart', 'groupBirth',
+      'acquiredAt', 'startedAt', 'project', 'label', 'cwd', 'host', 'reason', 'profile_id'].sort(), 'BCH B:552 closed key set');
     assert.equal(record.profile_id, 'fixture/shared'); assert.equal(record.token, undefined); assert.equal(record.command, undefined);
     published = true; return rename(from, to);
   };
@@ -97,9 +100,20 @@ for (const location of ['project', 'subdirectory', 'linked worktree', 'promotion
     const record = JSON.parse(result.stdout);
     assert.equal(record.schema, 'occupancy/v1'); assert.equal(record.class, 'shared');
     assert.equal(record.project, expected); assert.equal(record.cwd, fs.realpathSync(cwd));
-    assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+    assert.deepEqual(readTestSlotOccupancy(f.compat), []);
     for (const file of [f.lock, f.compat, `${f.lock}.queue`]) assert.equal(fs.existsSync(file), false);
   });
+
+test('a shared build starts immediately during live proving and publishes only beside compat', t => {
+  const f = fixture(t), held = publishProvingReservation({ lockPath: f.compat, label: 'proof', reason: 'ENG-424 R-601', expiresAt: new Date(Date.now() + 60000).toISOString() });
+  try {
+    const bytes = fs.readFileSync(held.path, 'utf8');
+    const result = f.run([process.execPath, '-e', `const fs=require('fs');console.log('build');if(!process.env.MONITOR_TEST_SLOT_OCCUPANCY_PATH.startsWith(${JSON.stringify(f.compat + '.occupancy/')}))throw Error('wrong occupancy namespace');`]);
+    assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'build\n');
+    assert.equal(fs.existsSync(`${f.lock}.occupancy`), false);
+    assert.equal(fs.readFileSync(held.path, 'utf8'), bytes); assert.equal(readProvingReservations(f.compat)[0].state, 'live');
+  } finally { held.release(); }
+});
 
 test('occupancy readers accept both legacy project labels and canonical project paths', t => {
   const f = fixture(t), slot = sharedOccupancy(f.lock, 'project gate', { reason: 'unprofiled' });
@@ -134,7 +148,7 @@ const read=fs.readFileSync,counts=new Map();fs.readFileSync=(p,...args)=>{if(pro
   f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(deny)}`;
   fs.copyFileSync(path.join(source, 'package.json'), path.join(f.root, 'package.json'));
   const bin = path.join(f.root, 'bin'); fs.mkdirSync(bin);
-  fs.writeFileSync(path.join(bin, 'npm'), `#!${process.execPath}\nimport fs from 'node:fs';const files=fs.readdirSync(${JSON.stringify(f.lock + '.occupancy')}).filter(n=>!n.startsWith('.'));if(files.length!==1)throw Error('expected one occupancy');console.log('Brain gate fired');`, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'npm'), `#!${process.execPath}\nimport fs from 'node:fs';const files=fs.readdirSync(${JSON.stringify(f.compat + '.occupancy')}).filter(n=>!n.startsWith('.'));if(files.length!==1)throw Error('expected one occupancy');console.log('Brain gate fired');`, { mode: 0o755 });
   f.env.PATH = `${bin}:${f.env.PATH}`;
   for (const command of [['npm', 'run', 'test:promotion:steps'], ['npm', 'run', 'test:release:steps'], [process.execPath, '-e', 'console.log("unprofiled fired")']]) {
     const result = f.run(command, ['--wait', '60']);
@@ -142,7 +156,7 @@ const read=fs.readFileSync,counts=new Map();fs.readFileSync=(p,...args)=>{if(pro
     const saved = f.saved(); assert.equal(saved.class, 'shared'); assert.match(saved.occupancy_path, /\.occupancy\//);
     assert.equal(saved.resource.reason, command[0] === 'npm' ? 'profiled' : 'unprofiled');
     if (command[0] === 'npm') { assert.ok(saved.measurement.samples > 0); assert.equal(saved.measurement.sampling_interval_ms, 2000); }
-    assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+    assert.deepEqual(readTestSlotOccupancy(f.compat), []);
   }
   for (const file of [f.lock, f.compat]) assert.equal(fs.readFileSync(file, 'utf8'), bytes);
   assert.deepEqual(fs.readdirSync(queue), ['waiting.json']);
@@ -152,57 +166,57 @@ const read=fs.readFileSync,counts=new Map();fs.readFileSync=(p,...args)=>{if(pro
 for (const status of [0, 7, 127]) test(`shared occupancy is removed after command exit ${status}`, t => {
   const f = fixture(t), result = f.run(status === 127 ? ['missing-shared-command'] : [process.execPath, '-e', `process.exit(${status})`]);
   assert.equal(result.status, status, result.stderr); assert.equal(f.saved().class, 'shared');
-  assert.equal(f.saved().resource.reason, 'unprofiled'); assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+  assert.equal(f.saved().resource.reason, 'unprofiled'); assert.deepEqual(readTestSlotOccupancy(f.compat), []);
   assert.equal(fs.existsSync(f.lock), false); assert.equal(fs.existsSync(`${f.lock}.queue`), false);
 });
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`shared occupancy is removed after ${signal}`, async t => {
   const f = fixture(t), ready = path.join(f.root, 'ready');
   const execution = f.start([cli, 'run', 'signal', '--', process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000)`]);
-  await until(() => fs.existsSync(ready) && readTestSlotOccupancy(f.lock)[0]?.record.groupBirth);
+  await until(() => fs.existsSync(ready) && readTestSlotOccupancy(f.compat)[0]?.record.groupBirth);
   execution.child.kill(signal); const result = await execution.done;
   assert.equal(result.code, 128 + os.constants.signals[signal], result.stderr);
-  assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+  assert.deepEqual(readTestSlotOccupancy(f.compat), []);
 });
 test('shared occupancy is removed on a wall timeout', t => {
   const f = fixture(t), result = f.run([process.execPath, '-e', 'setInterval(()=>{},1000)'], ['--timeout-seconds', '.3']);
   assert.equal(result.status, 124, result.stderr); assert.equal(f.saved().gate_timeout.kind, 'wall');
-  assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+  assert.deepEqual(readTestSlotOccupancy(f.compat), []);
 });
 test('a killed shared owner stays reserved while its command group lives, then becomes stale', async t => {
   const f = fixture(t), ready = path.join(f.root, 'ready');
   const execution = f.start([cli, 'run', 'killed owner', '--', process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000)`]);
-  await until(() => fs.existsSync(ready) && readTestSlotOccupancy(f.lock)[0]?.record.groupBirth);
-  const record = readTestSlotOccupancy(f.lock)[0];
+  await until(() => fs.existsSync(ready) && readTestSlotOccupancy(f.compat)[0]?.record.groupBirth);
+  const record = readTestSlotOccupancy(f.compat)[0];
   execution.child.kill('SIGKILL');
   await until(() => execution.child.signalCode === 'SIGKILL');
-  assert.equal(readTestSlotOccupancy(f.lock, { prune: true })[0].state, 'live');
+  assert.equal(readTestSlotOccupancy(f.compat, { prune: true })[0].state, 'live');
   assert.equal(fs.existsSync(record.path), true);
   // This fixture has a single leaf. Signal its PID so the same witness also
   // works under the bounded runner's deliberate process-group containment.
   process.kill(record.record.pgid, 'SIGKILL'); await execution.done;
-  await until(() => readTestSlotOccupancy(f.lock)[0].state === 'gone');
-  readTestSlotOccupancy(f.lock, { prune: true }); assert.equal(fs.existsSync(record.path), false);
+  await until(() => readTestSlotOccupancy(f.compat)[0].state === 'gone');
+  readTestSlotOccupancy(f.compat, { prune: true }); assert.equal(fs.existsSync(record.path), false);
 });
 test('concurrent shared runs each publish one record; a nested declared-exclusive run takes nothing and never samples twice', async t => {
   const f = fixture(t), finish = path.join(f.root, 'finish'), inner = path.join(f.root, 'inner.json');
   const command = [process.execPath, '-e', 'console.log("nested")'];
   const parent = path.join(f.root, 'parent.cjs');
   fs.writeFileSync(parent, `const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict');
-const directory=${JSON.stringify(f.lock + '.occupancy')};const before=fs.readdirSync(directory).filter(n=>!n.startsWith('.')).sort();
+const directory=${JSON.stringify(f.compat + '.occupancy')};const before=fs.readdirSync(directory).filter(n=>!n.startsWith('.')).sort();
 const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','inner','--result-path',${JSON.stringify(inner)},'--resource',${JSON.stringify(JSON.stringify(resourceStanza('fixture/proving', command, 'EXCLUSIVE')))},'--',...${JSON.stringify(command)}],{encoding:'utf8'});
 assert.equal(r.status,0,r.stderr);assert.deepEqual(fs.readdirSync(directory).filter(n=>!n.startsWith('.')).sort(),before);
 fs.writeFileSync(${JSON.stringify(path.join(f.root, 'ready'))},'ready');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(finish)}))clearInterval(timer);},20);`);
   const a = f.start([cli, 'run', 'first', '--', process.execPath, '-e', `const timer=setInterval(()=>{if(require('fs').existsSync(${JSON.stringify(finish)}))clearInterval(timer);},20);`]);
-  await until(() => readTestSlotOccupancy(f.lock).length === 1);
+  await until(() => readTestSlotOccupancy(f.compat).length === 1);
   const b = f.start([cli, 'run', 'second', '--', process.execPath, parent]);
   await until(() => fs.existsSync(path.join(f.root, 'ready')));
-  assert.equal(readTestSlotOccupancy(f.lock).length, 2);
+  assert.equal(readTestSlotOccupancy(f.compat).length, 2);
   const saved = JSON.parse(fs.readFileSync(inner)); assert.equal(saved.class, 'shared');
   assert.match(saved.measurement.status, /^nested; sampling owned/); assert.deepEqual(saved.measurement_attempts, []);
   assert.equal(fs.existsSync(f.lock), false); assert.equal(fs.existsSync(f.compat), false); assert.equal(fs.existsSync(`${f.lock}.queue`), false);
   fs.writeFileSync(finish, 'finish');
   for (const result of await Promise.all([a.done, b.done])) assert.equal(result.code, 0, result.stderr);
-  assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+  assert.deepEqual(readTestSlotOccupancy(f.compat), []);
 });
 
 test('occupancy reserves EPERM and failed start reads, and is stale only after owner and all groups are gone', t => {
@@ -232,10 +246,10 @@ test('inherited shared occupancy avoids exclusive admission and duplicate sampli
 const execute=cp.spawnSync,list=fs.readdirSync;
 cp.spawnSync=(file,args,...rest)=>String(file).includes('process-source-')&&!args.some(a=>/^\\d+$/.test(a))?{status:125,stderr:'snapshot: Operation not permitted'}:execute(file,args,...rest);
 fs.readdirSync=(file,...rest)=>String(file)==='/proc'?(()=>{throw Object.assign(Error('snapshot denied'),{code:'EPERM'});})():list(file,...rest);syncBuiltinESMExports();`);
-  const command = [process.execPath, '-e', `const fs=require('fs');if(fs.readdirSync(${JSON.stringify(f.lock + '.occupancy')}).filter(n=>!n.startsWith('.')).length!==1)throw Error('double occupancy');if(fs.existsSync(${JSON.stringify(f.lock)})||fs.existsSync(${JSON.stringify(f.compat)}))throw Error('nested exclusive acquisition');`];
+  const command = [process.execPath, '-e', `const fs=require('fs');if(fs.readdirSync(${JSON.stringify(f.compat + '.occupancy')}).filter(n=>!n.startsWith('.')).length!==1)throw Error('double occupancy');if(fs.existsSync(${JSON.stringify(f.lock)})||fs.existsSync(${JSON.stringify(f.compat)}))throw Error('nested exclusive acquisition');`];
   fs.writeFileSync(parent, `const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict');
 const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','denied nested','--result-path',${JSON.stringify(path.join(f.root, 'inner.json'))},'--resource',${JSON.stringify(JSON.stringify(resourceStanza('fixture/proving', command, 'EXCLUSIVE')))},'--',...${JSON.stringify(command)}],{env:{...process.env,NODE_OPTIONS:(process.env.NODE_OPTIONS||'')+' --import='+${JSON.stringify(JSON.stringify(deny))}},encoding:'utf8'});
 assert.equal(r.status,0,r.stderr);const saved=JSON.parse(fs.readFileSync(${JSON.stringify(path.join(f.root, 'inner.json'))}));assert.equal(saved.class,'shared');assert.match(saved.measurement.status,/^nested;/);assert.deepEqual(saved.measurement_attempts,[]);`);
   const result = f.run([process.execPath, parent]);
-  assert.equal(result.status, 0, result.stderr); assert.deepEqual(readTestSlotOccupancy(f.lock), []);
+  assert.equal(result.status, 0, result.stderr); assert.deepEqual(readTestSlotOccupancy(f.compat), []);
 });

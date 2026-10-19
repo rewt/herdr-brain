@@ -27,8 +27,13 @@ async function until(fn) {
 
 async function holdSlot(t, f) {
   const ready = path.join(f.root, 'slot-ready');
-  const owner = spawnChild(t, process.execPath, provingRun([slotCLI, 'run', 'fixture owner', '--lock-path', f.slot, '--', process.execPath, '-e',
-    `require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000)`]), { env: f.env });
+  // A legacy holder intentionally has no proving reservation. These cases
+  // exercise the slot queue after the launch gate, not the proving pause.
+  const owner = spawnChild(t, process.execPath, ['--input-type=module', '-e', `
+    import fs from 'node:fs';import {acquireTestSlot} from ${JSON.stringify(new URL('../test-slot.mjs', import.meta.url).href)};
+    const slot=await acquireTestSlot('fixture owner',{lockPath:${JSON.stringify(f.slot)}});
+    for(const signal of ['SIGTERM','SIGINT','SIGHUP'])process.on(signal,()=>{slot.release();process.exit(0);});
+    fs.writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000);`], { env: f.env });
   await until(() => fs.existsSync(ready));
   return { release: async () => { owner.kill('SIGTERM'); await waitForExit(owner); } };
 }

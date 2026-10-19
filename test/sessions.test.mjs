@@ -298,6 +298,68 @@ test('Workspace selects referenced resources without implicitly retaining defaul
   assert.ok(productFiles(root).includes('sessions/templates/workspace.md'));
 });
 
+test('a home Workspace preserves bundled defaults selected for a non-home workspace', t => {
+  const f = repo(t), workspace = 'lane/another';
+  const before = inspect({ cwd: f.lane, workspace, env: f.env });
+  const priorStatus = before.entries.find(e => e.manifest.spec.role === 'triage-status');
+  workspaceProject(f);
+  const result = inspect({ cwd: f.lane, workspace, env: f.env });
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.equal(result.entries.filter(e => e.manifest.spec.workspaceRef === 'home').length, 4);
+  const status = result.entries.find(e => e.manifest.spec.role === 'triage-status');
+  assert.equal(status.manifest.spec.workspaceRef, workspace);
+  assert.equal(status.manifest.metadata.uid, priorStatus.manifest.metadata.uid);
+  assert.equal(status.file, priorStatus.file);
+});
+
+test('an invalid composition does not suppress bundled defaults for the selected workspace', t => {
+  const f = repo(t); fs.mkdirSync(path.join(f.main, '.sessions'));
+  fs.writeFileSync(path.join(f.main, '.sessions/workspace.md'), document(workspaceTemplate()));
+  f.git('add', '.sessions'); f.git('commit', '-qm', 'Missing composition resources');
+  const result = inspect({ cwd: f.main, env: f.env });
+  assert.equal(result.valid, false);
+  assert.equal(result.entries.length, 4);
+  assert.ok(result.entries.every(e => e.file.includes('/templates/')));
+});
+
+test('nested Markdown without a Workspace remains opaque, including changed, staged and untracked notes', t => {
+  const f = repo(t), notes = path.join(f.main, '.sessions/notes'); fs.mkdirSync(notes, { recursive: true });
+  fs.writeFileSync(path.join(notes, 'committed.md'), '# Not a manifest\n');
+  f.git('add', '.sessions'); f.git('commit', '-qm', 'Existing nested notes');
+  fs.appendFileSync(path.join(notes, 'committed.md'), 'Working edit\n');
+  fs.writeFileSync(path.join(notes, 'staged.md'), 'Not a manifest'); f.git('add', '.sessions/notes/staged.md');
+  fs.writeFileSync(path.join(notes, 'untracked.md'), 'Not a manifest');
+  const result = inspect({ cwd: f.lane, env: f.env });
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.equal(result.entries.length, 4); assert.deepEqual(result.diagnostics, []);
+});
+
+test('committed Workspace references opt exact nested resources into discovery and change warnings', t => {
+  const f = repo(t), workspace = workspaceProject(f, ['chat']);
+  fs.mkdirSync(path.join(f.main, '.sessions/nested'));
+  f.git('mv', '.sessions/chat.md', '.sessions/nested/chat.md');
+  workspace.spec.sessions = ['nested/chat.md'];
+  fs.writeFileSync(path.join(f.main, '.sessions/workspace.md'), document(workspace));
+  fs.writeFileSync(path.join(f.main, '.sessions/nested/notes.md'), '# Opaque notes\n');
+  f.git('add', '.sessions'); f.git('commit', '-qm', 'Referenced nested resource and opaque sibling');
+  let result = inspect({ cwd: f.main, env: f.env });
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.deepEqual(result.entries.map(e => e.manifest.spec.role), ['chat']);
+  fs.writeFileSync(path.join(f.main, '.sessions/nested/chat.md'), 'Uncommitted invalid bytes');
+  fs.writeFileSync(path.join(f.main, '.sessions/nested/untracked.md'), 'Opaque untracked notes');
+  result = inspect({ cwd: f.lane, env: f.env });
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.length, 1);
+  assert.match(result.diagnostics[0].message, /uncommitted.*nested\/chat\.md/);
+  assert.equal(result.entries[0].manifest.spec.role, 'chat');
+  f.git('rm', '-f', '.sessions/nested/chat.md'); f.git('commit', '-qm', 'Missing nested resource');
+  fs.copyFileSync(path.join(root, 'sessions/templates/chat.md'), path.join(f.main, '.sessions/nested/chat.md'));
+  result = inspect({ cwd: f.lane, env: f.env });
+  assert.equal(result.valid, false);
+  assert.ok(result.diagnostics.some(d => /untracked.*nested\/chat\.md/.test(d.message)));
+  assert.ok(result.diagnostics.some(d => /not a committed resource: nested\/chat\.md/.test(d.message)));
+});
+
 test('Workspace rejects unknown fields, policy payloads, malformed references and profile names', t => {
   const f = repo(t);
   for (const mutate of [

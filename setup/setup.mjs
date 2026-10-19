@@ -16,7 +16,7 @@ import { resolveValidation, validateValidation } from '../lanes/validation.mjs';
 const product = fileURLToPath(new URL('../', import.meta.url));
 const expectedNode = fs.readFileSync(path.join(product, '.nvmrc'), 'utf8').trim();
 const reason = (code, message) => ({ code, message });
-const check = (name, observed, reasons = []) => ({ name, state: reasons.length ? 'held' : 'ok', observed, reasons });
+const check = (name, observed, reasons = [], state = 'held') => ({ name, state: reasons.length ? state : 'ok', observed, reasons });
 
 // Requirements describe the existing launch seam, never native enforcement.
 export function capabilityHolds(entry) {
@@ -81,7 +81,7 @@ function localChecks({ cwd, workspace, env, home, nodeVersion }) {
     [reason('release-unavailable', error.message)])); }
   const sessions = inspection.entries.filter(e => e.manifest.kind === 'Session').map(e => e.manifest.metadata.uid);
   checks.push(check('native-trust', { sessions, verified: false }, sessions.length ? [reason('native-trust-unverified',
-    'Native project trust and authentication cannot be verified by this read-only interface. The project owner must verify them in the native harness before launch; manifest assertions are not proof.')] : []));
+    'Native project trust and authentication cannot be verified by this read-only interface. The project owner must verify them in the native harness before launch; manifest assertions are not proof.')] : [], 'advisory'));
   const requirements = inspection.entries.map(e => ({ uid: e.manifest.metadata.uid, reasons: capabilityHolds(e) }));
   checks.push(check('capabilities', requirements, requirements.flatMap(e => e.reasons.map(r => ({ ...r, uid: e.uid })))));
   return { checks, inspection };
@@ -113,21 +113,22 @@ export async function plan(options = {}) {
   try { preview = await sessionPlan(options); }
   catch (error) { return { schema: 'project-setup-plan/v1', outcome: 'refused', doctor: diagnosis,
     reasons: [reason('plan-unavailable', error.message)], changes: [] }; }
-  const globalHolds = diagnosis.checks.filter(c => !['native-trust', 'capabilities'].includes(c.name)).flatMap(c => c.reasons);
+  const globalHolds = diagnosis.checks.filter(c => c.state === 'held' && c.name !== 'capabilities').flatMap(c => c.reasons);
   const trust = diagnosis.checks.find(c => c.name === 'native-trust');
   const changes = preview.decisions.map(d => {
     const kind = d.desired.spec.viewer ? 'LogViewer' : 'Session';
     const reasons = [...globalHolds, ...capabilityHolds({ manifest: { kind }, resolvedSpec: d.desired.spec })];
-    if (kind === 'Session') reasons.push(...(trust?.reasons.length ? trust.reasons : [reason('native-trust-unverified',
-      'Native project trust and authentication require owner verification before launch.')]));
+    const advisories = kind === 'Session' ? (trust?.reasons.length ? trust.reasons : [reason('native-trust-unverified',
+      'Native project trust and authentication require owner verification before launch.')]) : [];
     const keep = ['KEEP', 'NoOp'].includes(d.decision) && ['Running', 'ParkedAwaitingReview'].includes(d.phase) && !d.action;
     const create = d.decision === 'WouldStart' && d.action?.kind === 'start-standard-slot';
-    // A trust/capability hold never asks to replace a proven live incarnation.
+    // Preserve proven live incarnations while reporting capability holds.
     return { uid: d.uid, workspaceRef: d.desired.spec.workspaceRef, role: d.desired.spec.role,
       standardSlot: d.desired.spec.standardSlot ?? null, paneSlot: d.desired.spec.paneSlot ?? 'primary',
       outcome: keep ? 'keep' : create && !reasons.length ? 'create' : 'refuse',
       operation: create ? 'start-standard-slot' : null, target: d.action?.target ?? d.observed?.binding ?? null,
       reasons: [...reasons, ...(!keep && !create ? [reason(d.phase === 'NotEnrolled' ? 'workspace-not-enrolled' : 'session-held', d.reason)] : [])],
+      advisories,
       observed: { phase: d.phase, decision: d.decision, reason: d.reason } };
   });
   return { schema: 'project-setup-plan/v1', outcome: !preview.valid ? 'refused' :

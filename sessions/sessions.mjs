@@ -30,12 +30,30 @@ export function discoverManifests(project, workspace = 'home', diagnostics = [])
   let head;
   try { head = git(['rev-parse', '--verify', '-q', 'HEAD^{commit}']).trim(); }
   catch (error) { if (error.status !== 1) throw error; } // An unborn project has no committed overrides.
-  const isManifest = file => /^\.sessions\/.+\.md$/u.test(file);
+  const isTopLevel = file => /^\.sessions\/[^/]+\.md$/u.test(file);
   const tracked = head ? git(['ls-tree', '-r', '-z', '--full-tree', head, '--', '.sessions/']) : '';
+  const committedFiles = new Map(), referenced = new Set();
   for (const row of tracked.split('\0').filter(Boolean)) {
     const tab = row.indexOf('\t'), relative = row.slice(tab + 1), mode = row.slice(0, tab).split(' ')[0];
-    if (isManifest(relative)) files.set(relative.slice('.sessions/'.length), { file: path.join(project.root, relative), template: false, committed: { head, relative, mode } });
+    const input = { file: path.join(project.root, relative), template: false, committed: { head, relative, mode } };
+    committedFiles.set(relative, input);
+    if (isTopLevel(relative)) files.set(relative.slice('.sessions/'.length), input);
   }
+  // Nested Markdown has historically been opaque. Only a committed, valid
+  // top-level Workspace can opt its exact resource paths into discovery.
+  for (const input of [...files.values()].filter(input => !input.template)) {
+    try {
+      const manifest = read(input, project);
+      if (manifest.kind !== 'Workspace') continue;
+      validateManifest(manifest, { project });
+      for (const reference of manifest.spec.sessions) {
+        const relative = `.sessions/${reference}`;
+        referenced.add(relative);
+        if (committedFiles.has(relative)) files.set(reference, committedFiles.get(relative));
+      }
+    } catch { /* Inspection below reports invalid top-level manifests. */ }
+  }
+  const isManifest = file => isTopLevel(file) || referenced.has(file);
   const diffArgs = ['--name-only', '-z', '--no-ext-diff', '--no-textconv', '--no-renames'];
   const changed = new Set([
     ...git(['diff', ...diffArgs, '--', '.sessions/']).split('\0'),
@@ -67,6 +85,7 @@ export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', e
   }
   const compositions = parsed.filter(p => p.manifest.kind === 'Workspace');
   const selected = new Map();
+  let suppressDefaults = false;
   if (compositions.length) {
     for (const { input, manifest } of compositions) {
       try {
@@ -74,7 +93,6 @@ export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', e
         const relative = path.relative(project.root, input.file);
         if (safeProjectPath(project.root, relative) !== input.file || !relative.startsWith(`.sessions${path.sep}`))
           throw Error('Workspace must be inside the canonical .sessions directory');
-        workspaces.push({ file: input.file, ...validated });
         for (const reference of manifest.spec.sessions) {
           const file = safeProjectPath(path.join(project.root, '.sessions'), reference);
           // Discovery uses ONLY blobs in the same frozen canonical HEAD.
@@ -84,14 +102,18 @@ export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', e
           if (!resource) throw Error(`Workspace reference is not a committed resource: ${reference}`);
           if (!['Session', 'LogViewer'].includes(resource.manifest.kind)) throw Error(`Workspace reference must be Session or LogViewer: ${reference}`);
           if (resource.manifest.spec?.workspaceRef !== manifest.spec.workspaceRef) throw Error(`Workspace reference disagrees with workspaceRef: ${reference}`);
+          validateManifest(resource.manifest, { config: routes.config, project });
           if (selected.has(file)) throw Error(`resource referenced by multiple Workspaces: ${reference}`);
           selected.set(file, resource);
         }
+        workspaces.push({ file: input.file, ...validated });
+        if (manifest.spec.workspaceRef === workspace) suppressDefaults = true;
       } catch (error) { diagnostics.push({ file: input.file, level: 'error', message: error.message }); }
     }
     // Preserve independently declared resources and closed-field validation.
-    // Only implicit bundled defaults disappear when a composition is present.
-    for (const resource of parsed.filter(p => !p.input.template && p.manifest.kind !== 'Workspace')) {
+    // Suppress implicit defaults only for the selected workspace's valid
+    // composition; compositions for other workspaces cannot remove them.
+    for (const resource of parsed.filter(p => (!p.input.template || !suppressDefaults) && p.manifest.kind !== 'Workspace')) {
       if (!selected.has(resource.input.file)) selected.set(resource.input.file, resource);
     }
   } else for (const resource of parsed) selected.set(resource.input.file, resource);

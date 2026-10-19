@@ -119,27 +119,33 @@ and subscription constraints before activation; inspection never activates it.
 See the [setup module](../setup/README.md#workspace-composition) for its closed
 schema, canonical `.sessions/` containment, committed reference rules and
 [`templates/workspace.md`](templates/workspace.md). Inspection expands resources
-into `entries` and exposes compositions separately in `workspaces`. A committed
-composition suppresses implicit templates; independently committed resources
+into `entries` and exposes compositions separately in `workspaces`. A valid
+committed composition suppresses implicit templates only when its `workspaceRef`
+matches the selected workspace. Independently committed top-level resources
 remain validated. This adds no enrollment or authority.
 
-Without explicit files or a committed Workspace, every project gets chat, supervisor, logs viewer and
-home logs triage templates. `--workspace REF` selects a non-home workspace's
+Without explicit files or a valid committed Workspace for the selected workspace,
+every project gets chat, supervisor, logs viewer and home logs triage templates.
+`--workspace REF` selects a non-home workspace's
 model-free triage-status template instead. Defaults receive deterministic UIDs
 from canonical common-directory identity plus workspace reference and role;
 they are stable across linked-lane invocations. Explicit files are inspected
 as written, with no interpolation or UID replacement.
 
-Projects may commit `.sessions/**/*.md` in the **canonical checkout**. Discovery
+Projects may commit `.sessions/*.md` in the **canonical checkout**. Discovery
 uses `git ls-tree` and reads blobs with `git show` from a fixed snapshot of that
 checkout's committed `HEAD`. Matching template filenames override defaults, and
-other committed filenames add desired objects. For a non-home selection,
+other committed top-level filenames add desired objects. Nested Markdown is
+discovered only at exact paths referenced by a valid committed top-level
+Workspace; unrelated nested files remain opaque. For a non-home selection,
 override `triage-status.md` rather than `logs-triage.md`.
 All project files are validated as written; a project that
 declares multiple workspace layouts supplies their distinct references/UIDs.
 Working-tree edits and index changes are ignored, including staged new files or
-deletions. Each affected path receives a warning diagnostic. Untracked
-`.sessions/*.md` files are also ignored with a warning naming the path.
+deletions. Each affected discovered path receives a warning diagnostic. Untracked
+top-level `.sessions/*.md` files and nested paths referenced by a valid committed
+Workspace are also ignored with a warning naming the path. Other nested files
+produce no diagnostics, including untracked files.
 A linked lane's copies do not affect discovery; only canonical `HEAD` supplies
 project manifests. A project without a first commit uses the shipped defaults.
 Explicit `FILE` arguments remain file previews read as written. No user

@@ -17,8 +17,9 @@ fail before observation. There is **no `init` or `apply` command** in this modul
 No executable name or installation alias is added in this slice.
 
 `doctor` returns `schema: project-setup-doctor/v1`, an `outcome` (`ready` or
-`held`), canonical project identity, and named checks with `state`, `observed`
-and coded `reasons`. It checks:
+`held`), canonical project identity, and named checks with `state` (`ok`, `held`
+or `advisory`), `observed` and coded `reasons`. Only `held` checks prevent a ready
+outcome. It checks:
 
 - The executing Node version against the product's `.nvmrc`.
 - Canonical Git common-directory identity, committed manifests and route layers.
@@ -29,8 +30,9 @@ and coded `reasons`. It checks:
   independent of global `current`; a broken accepted pin holds without fallback.
 - Herdr reachability through a bounded snapshot and agent metadata reads.
 - Native trust and capability requirements. Native trust/authentication are
-  **unverified** for Sessions: this interface has no authoritative native trust
-  probe. The owner must verify project trust and authentication in the native
+  **unverified** for Sessions and reported as an `advisory`: this interface has no
+  authoritative native trust probe. This advisory does not change the outcome or
+  exit status. The owner must verify project trust and authentication in the native
   harness before launch. Presence of a config file or manifest is not proof.
   Unsupported native profiles, required memory adapters, context materializers
   and later-stage triage activation have explicit holds.
@@ -38,7 +40,9 @@ and coded `reasons`. It checks:
 `plan` returns `schema: project-setup-plan/v1`, its doctor result, diagnostics,
 errors and one `changes` row per desired session. Rows identify UID, logical
 workspace, standard tab/pane position, concrete observed target where available,
-and an `outcome` of `create`, `keep` or `refuse`, with coded reasons. The existing
+and an `outcome` of `create`, `keep` or `refuse`, with coded reasons and separate
+`advisories` for unverifiable native trust. Advisories do not prevent a create
+preview or change its exit status. The existing
 session planner supplies canonical enrollment, incarnation and journal checks.
 Only a proven empty, already adopted standard slot can produce a `create`
 preview (`start-standard-slot`). A missing workspace is refused with
@@ -80,12 +84,17 @@ Workspace references and duplicate composition membership are rejected. UID
 uniqueness includes Workspaces and Sessions; each logical workspace can have one
 composition. A composition owns no second record, queue, controller or triage.
 
-Discovery reads `.sessions/**/*.md` from one frozen **canonical committed HEAD**.
+Discovery reads top-level `.sessions/*.md` and exact nested resource paths
+referenced by a valid committed top-level Workspace from one frozen
+**canonical committed HEAD**. Other nested Markdown remains opaque, including
+untracked notes.
 Referenced resources must be committed regular blobs in that same snapshot.
 Untracked/index/working-tree bytes cannot replace them; diagnostics name ignored
-changes. A committed Workspace suppresses implicit bundled session defaults;
-independently committed Session/LogViewer declarations remain inspected and
-validated. Without a Workspace, existing session discovery/defaults continue.
+changes at those discovered paths. A valid committed Workspace suppresses
+implicit bundled session defaults only for a matching selected `workspaceRef`;
+independently committed top-level Session/LogViewer declarations remain inspected
+and validated. Other workspace selections retain their bundled defaults. Without
+a Workspace, existing session discovery/defaults continue.
 The existing `sessions/sessions.mjs inspect` also expands Workspace files into
 `entries`, with compositions separately in `workspaces`. Explicit file inspection
 is a working-file preview; Workspace files and their references must still live
@@ -102,6 +111,7 @@ private repository, production record, live canary or model call.
 product=/absolute/path/to/herdr-brain
 demo=$(mktemp -d)
 git -C "$demo" init -b main
+printf '{}\n' > "$demo/.lane.json"
 
 node "$product/setup/setup.mjs" doctor --project "$demo"
 ```
@@ -110,7 +120,10 @@ Expect JSON naming the canonical identity and whichever prerequisites are
 missing. With no record it includes `record-unavailable`; with no reachable
 Herdr it includes `herdr-unavailable`. A missing installation selection includes
 `release-unavailable`. Default Sessions surface `native-trust-unverified`, and
-the home triage Session also shows activation/native profile holds. Exit 1 is
+the home triage Session also shows activation/native profile holds. Native trust
+is advisory; the record, release, reachability and capability holds determine the
+held outcome. The empty `.lane.json` matches the synthetic test fixture and uses
+the suggested route preset without project overrides. Exit 1 is
 expected while those holds remain. The project files and native trust settings
 are untouched.
 
@@ -122,7 +135,7 @@ for name in workspace chat supervisor logs-viewer logs-triage; do
   cp "$product/sessions/templates/$name.md" "$demo/.sessions/$name.md"
 done
 # Review names, UIDs, routes and policy requirements in these files.
-git -C "$demo" add .sessions
+git -C "$demo" add .lane.json .sessions
 git -C "$demo" commit -m 'Declare the home workspace'
 
 node "$product/setup/setup.mjs" doctor --project "$demo"
@@ -133,8 +146,8 @@ node "$product/setup/setup.mjs" plan --project "$demo"
 With ordinary Git author configuration, the composition now resolves four
 complete resources: chat, supervisor, logs/viewer and logs/triage. Both plans
 list those desired positions and `workspace-not-enrolled`, alongside any record,
-release, native trust or capability holds. The repeated preview creates no
-duplicate sessions, directories or records. Establishing the project's record,
+release or capability holds and a separate native trust advisory. The repeated
+preview creates no duplicate sessions, directories or records. Establishing the project's record,
 accepting its release pin, verifying native trust, enrollment and live adoption
 remain explicit owner work through the existing contracts. A later reviewed
 slice will define initialization and application; this walkthrough does not

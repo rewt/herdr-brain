@@ -76,6 +76,7 @@ test('fresh project doctor and repeated plan name holds without changing any pro
   for (const name of ['node', 'project', 'record', 'release', 'herdr', 'profiles', 'manifests'])
     assert.equal(diagnosis.checks.find(c => c.name === name).state, 'ok', name);
   assert.equal(diagnosis.checks.find(c => c.name === 'native-trust').reasons[0].code, 'native-trust-unverified');
+  assert.equal(diagnosis.checks.find(c => c.name === 'native-trust').state, 'advisory');
   assert.ok(diagnosis.checks.find(c => c.name === 'capabilities').reasons.some(r => r.code === 'native-profile-unverified'));
   for (let n = 0; n < 2; n++) {
     const preview = await plan(f.options); assert.equal(preview.outcome, 'held'); assert.equal(preview.changes.length, 4);
@@ -120,6 +121,19 @@ test('a proven empty adopted viewer has a concrete create preview and never laun
   assert.deepEqual(snapshot(f.scratch), before);
 });
 
+test('unverifiable native trust is advisory and permits ready diagnosis and a read-only Session create preview', async t => {
+  const f = fixture(t, ['chat']); enroll(f); const before = snapshot(f.scratch);
+  const diagnosis = await doctor(f.options), trust = diagnosis.checks.find(c => c.name === 'native-trust');
+  assert.equal(diagnosis.outcome, 'ready', JSON.stringify(diagnosis));
+  assert.equal(trust.state, 'advisory'); assert.equal(trust.observed.verified, false);
+  assert.equal(trust.reasons[0].code, 'native-trust-unverified');
+  const result = await plan(f.options), change = result.changes[0];
+  assert.equal(result.outcome, 'planned', JSON.stringify(result));
+  assert.equal(change.outcome, 'create'); assert.equal(change.operation, 'start-standard-slot');
+  assert.deepEqual(change.reasons, []); assert.equal(change.advisories[0].code, 'native-trust-unverified');
+  assert.deepEqual(snapshot(f.scratch), before);
+});
+
 test('native requirements are holds even in a proven empty owned slot', async t => {
   const f = fixture(t, ['chat']); enroll(f);
   const m = template('chat'); m.spec.permissions.profileRef = 'custom-native-profile'; m.spec.memory.claudeMem = { mode: 'required', domain: 'fixture' };
@@ -127,7 +141,8 @@ test('native requirements are holds even in a proven empty owned slot', async t 
   fs.writeFileSync(path.join(f.cwd, '.sessions/chat.md'), document(m)); f.git('add', '.sessions'); f.git('commit', '-qm', 'Requirements');
   const result = await plan(f.options), c = result.changes[0];
   assert.equal(c.observed.decision, 'WouldStart'); assert.equal(c.outcome, 'refuse');
-  for (const code of ['native-trust-unverified', 'native-profile-unverified', 'required-memory-unavailable', 'context-unavailable'])
+  assert.equal(c.advisories[0].code, 'native-trust-unverified');
+  for (const code of ['native-profile-unverified', 'required-memory-unavailable', 'context-unavailable'])
     assert.ok(c.reasons.some(r => r.code === code), code);
 });
 
@@ -157,7 +172,8 @@ test('matching live native incarnation stays keep with trust uncertainty visible
     terminal_id: binding.terminalId, agent_session: { value: binding.nativeSessionId }, agent_status: 'idle' });
   const before = snapshot(f.scratch); let result = await plan(f.options);
   assert.equal(result.changes[0].outcome, 'keep', JSON.stringify(result));
-  assert.ok(result.changes[0].reasons.some(r => r.code === 'native-trust-unverified'));
+  assert.equal(result.outcome, 'unchanged');
+  assert.ok(result.changes[0].advisories.some(r => r.code === 'native-trust-unverified'));
   f.observation.agents[0].agent_session.value = 'manual-replacement'; result = await plan(f.options);
   assert.equal(result.changes[0].outcome, 'refuse'); assert.match(result.changes[0].observed.reason, /changed.*occupant/);
   assert.deepEqual(snapshot(f.scratch), before);

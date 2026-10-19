@@ -14,6 +14,8 @@ test('tier selection covers every current test once in promotion or release and 
   const fullFileSteps = ['core', 'cycle', 'lanes', 'acceptance'].flatMap(tier => tierFiles(tier, root));
   assert.deepEqual(fullFileSteps.sort(), [...promotion].sort(), 'release steps cover promotion files once');
   const release = tierFiles('release', root), all = [...promotion, ...release];
+  assert.ok(promotion.includes('test/setup.test.mjs'));
+  assert.ok(!release.includes('test/setup.test.mjs'));
   assert.equal(new Set(all).size, all.length, 'no file is scheduled twice within a gate');
   assert.deepEqual([...all].sort(), expected.sort());
   assert.ok(release.includes('discovery/test/lessons.test.mjs'));

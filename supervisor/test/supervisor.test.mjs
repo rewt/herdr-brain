@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gitProject } from '../../lib/project.mjs';
+import { gitProject, ignoreRuntime } from '../../lib/project.mjs';
 import { fixture } from '../../settle/test/fixture.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { entryPolicy } from '../../discovery/policy.mjs';
@@ -152,6 +152,9 @@ const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expec
 }
 
 function readyPromotion(f, run, testEvidence) {
+  // Real settle excludes its record/runtime directories before readiness.
+  // This stand-in must prepare the same valid ordinary promotion checkout.
+  ignoreRuntime(gitProject(f.repo));
   f.record(['ingest', f.show(run).report_path]);
   // Readiness uses the existing settle-cli seam. The supervisor, queue, train,
   // Git and record completion remain real; no native reviewer is needed here.
@@ -174,6 +177,8 @@ test('supervisor promotion forwards required component tests into the real queue
 });
 
 test('green-pass promotion replays deferred and component checks and verifies train completion', { timeout: 45000 }, t => {
+  // Exercise ordinary authorized queue admission and the train proof. The
+  // existing-worker green guard remains separate enablement work in ENG-445.
   const f = fixture(t), checks = ['deferred.test.mjs', 'test/board-view.test.mjs'];
   fs.mkdirSync(path.join(f.repo, 'test'));
   for (const file of checks) fs.writeFileSync(path.join(f.repo, file),
@@ -190,8 +195,11 @@ else for(const file of JSON.parse(process.argv[3])){const r=spawnSync(process.ex
   assert.deepEqual(saved.requiredTests, checks); assert.deepEqual(h.queue.load().pending[0].requiredTests, checks);
   fs.writeFileSync(path.join(f.repo, 'upstream'), 'main moved after review\n');
   f.git(['add', 'upstream']); f.git(['commit', '-qm', 'Advance main before train replay']);
-  assert.equal(h.drain().outcome, 'promoted');
-  const promoted = h.queue.load().results[0], plan = JSON.parse(fs.readFileSync(promoted.receipt));
+  assert.equal(f.git(['status', '--porcelain=v1']), '', 'the canonical train fixture must be clean before drain');
+  const drained = h.drain(), promoted = h.queue.load().results[0];
+  assert.equal(drained.outcome, 'promoted', JSON.stringify({ reason: promoted?.reason ?? drained.reason,
+    log: promoted?.gate?.log && fs.existsSync(promoted.gate.log) ? fs.readFileSync(promoted.gate.log, 'utf8') : null }));
+  const plan = JSON.parse(fs.readFileSync(promoted.receipt));
   assert.notEqual(promoted.tip, saved.head, 'must exercise verifyTrainResult rather than the exact-head shortcut');
   assert.deepEqual(plan.jobs[0].requiredTests, checks); assert.deepEqual(plan.attempts[0].test_plan.required, checks);
   assert.deepEqual(fs.readFileSync(path.join(f.root, 'required-runs'), 'utf8').trim().split('\n').sort(), checks);

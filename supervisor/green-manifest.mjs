@@ -177,6 +177,16 @@ export function checkDeployment(manifest, trusted) {
   } catch (error) { throw Error(`GREEN_REACH_UNKNOWN: ${error.message}`); }
 }
 
+export function checkConsumerEvidence(tree, manifest) {
+  if (!manifest.consumerEvidenceBinding) return;
+  const { confirmation, inventory } = manifest.consumerEvidenceBinding;
+  for (const pin of [confirmation, inventory]) {
+    if (!pin || !safePath(pin.path) || !/^[a-f0-9]{64}$/.test(pin.sha256) ||
+        !regular(tree.files.get(pin.path)?.mode) || hash(tree.bytes ? tree.bytes(pin.path) : tree.read(pin.path)) !== pin.sha256)
+      throw Error(`consumer evidence drift: ${pin?.path ?? 'missing descriptor'}`);
+  }
+}
+
 export function manifestScope(before, after, { manifest, trusted, project = 'brain', changes, reviewFile, review }) {
   try {
     if (manifest.version !== 2 || manifest.interimDays !== 10 || !manifest.bindings?.brain ||
@@ -202,6 +212,7 @@ export function manifestScope(before, after, { manifest, trusted, project = 'bra
       for (const [file, pin] of Object.entries(manifest.boundary)) {
         if (!safePath(file) || tree.files.get(file)?.mode !== pin.mode || hash(tree.bytes ? tree.bytes(file) : tree.read(file)) !== pin.sha256) throw Error(`boundary version drift: ${file}`);
       }
+      checkConsumerEvidence(tree, manifest);
     }
     checkDeployment(manifest, trusted);
     const components = [];

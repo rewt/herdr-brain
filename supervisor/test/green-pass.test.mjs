@@ -11,15 +11,13 @@ import { createGreenCohort, greenContractRefusal, GREEN_CONTRACTS, lifecycleEvid
 import { buildManifest, BOOTSTRAP_FILES, INTERIM_MS, checkActivation, componentShape, activationNote, recordedActivation } from '../green-manifest.mjs';
 import { sourceReach, executionClosure } from '../green-reach.mjs';
 import { autopilotNotice, autopilotSettings } from '../autopilot.mjs';
+import { renderer } from './green-fixture.mjs';
 
 
 // The bounded runner policy is already loaded and continues containing every
 // child. Model the production parent's required-absent loader environment here.
 delete process.env.NODE_OPTIONS;
 const digest = value => createHash('sha256').update(value).digest('hex');
-const sourceRenderer = fs.readFileSync(new URL('../../board/render.mjs', import.meta.url), 'utf8');
-const sourceWidth = componentShape(sourceRenderer, 'board-default-width/v1').width;
-const renderer = sourceRenderer.replace(`export function render(snapshot, { width = ${sourceWidth},`, 'export function render(snapshot, { width = 120,');
 function setup(t, { binary = false, active = true } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'green-manifest-')));
   fixtureFleet(t, root); t.after(() => fs.rmSync(root, { recursive: true, force: true }));

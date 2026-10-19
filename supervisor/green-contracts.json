@@ -1379,7 +1379,7 @@
     },
     "supervisor/README.md": {
       "mode": "100644",
-      "sha256": "3b7c704dea3e70d12635a8fe520126b121160cedb53372a3b7d3ba99e3632993",
+      "sha256": "1ca82e24f11c6a8129309e0095225edb4e30b66819ff1ef79bb93f459031dbe8",
       "role": "runtime-or-configuration"
     },
     "supervisor/arm-watch.sh": {
@@ -1754,7 +1754,7 @@
     },
     "test/helpers/tier.mjs": {
       "mode": "100644",
-      "sha256": "376b1887e14d1f74c3fa38eaf52d6685e5edfdf3d533a1ea01200c256beb378f",
+      "sha256": "8d67c097a84345d9b9896ff3f54102a800acb57ebdaf28e9e552d74e6cd25696",
       "role": "promotion-authority"
     },
     "verify/README.md": {

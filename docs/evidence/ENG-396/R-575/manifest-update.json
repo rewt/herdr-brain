@@ -1,0 +1,19 @@
+{
+  "previous_manifest_sha256": "1d2c60f1cbbca75b7875229f44c0f3ba2437a58ff0a93d3487cb031d562843ff",
+  "manifest_sha256": "6df63d9d8c8067061b3159a0baa38b32cc2a43cf6d7ec07d7d7db4eece9e439f",
+  "changed_boundary_pins": [
+    "supervisor/README.md",
+    "test/helpers/tier.mjs"
+  ],
+  "deployment_descriptors": "unchanged from reviewed manifest",
+  "activation": {
+    "item": "ENG-396",
+    "actor": "supervisor-herdr"
+  },
+  "enablement_item": "ENG-445",
+  "duplicate_item": "ENG-446 dropped at record event 8823",
+  "deployment": {
+    "result": "refused; ordinary handling before activation",
+    "reason": "GREEN_REACH_UNKNOWN: external configuration drift: /Users/rewt/.local/share/herdr-monitor/current/contrib/settle-watch.mjs"
+  }
+}

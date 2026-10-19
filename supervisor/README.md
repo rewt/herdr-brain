@@ -461,11 +461,15 @@ The `green` key is accepted only with `green-pass`. The separate
 containment manifest bound to Brain, with an optional empty lab slot, exact boundary
 pins and a ten-day activation period. Its initial renderer contract admits only a
 bounded display-width edit; lifecycle components await a protected boundary.
-Green-pass activation and its first activation note are blocked by ENG-445 until
+The ENG-446 enablement precondition was consolidated into ENG-445. Green-pass
+activation and its first activation note are blocked by that guard work until
 the native-worker promotion guard binds and rechecks the reviewed green-pass
 identity, activation, manifest and scope at integration; the current guard accepts
 only clean-pass. After that fix, enabling it remains a separate supervisor step
-after bootstrap review and canonical deployment acceptance. Tooling must be
+after bootstrap review, canonical deployment acceptance and the explicitly opt-in
+[enable-time probe](GREEN-COHORT.md#bootstrap-and-activation). The deployment probe
+is excluded from promotion/cycle tier selection; pure offline manifest checks
+remain in the promotion tier. Tooling must be
 `auto` in the record's approvals config. Operator-reserved/human items,
 publish/priorities categories, other categories routed to `ask`, report questions,
 blockers, unclassified decisions and category warnings wake for judgment. No

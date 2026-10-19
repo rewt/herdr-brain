@@ -41,7 +41,10 @@ exact independently hashed generated review addition retains its existing exempt
    and Node selectors are stripped from child launches, not hashed per session. A deployment using different
    inputs needs ordinary manifest review. The committed manifest describes Brain;
    no lab exists. Adding a lab binding/components is an ordinary reviewed amendment.
-4. Activation is blocked by ENG-445 until the native-worker promotion guard binds
+4. Activation requires the native-worker guard work and the enable-time probes
+   below. The guard precondition filed as ENG-446 was consolidated into ENG-445;
+   ENG-446 is dropped as a duplicate, not satisfied. Activation remains blocked
+   by ENG-445 until the native-worker promotion guard binds
    and rechecks the reviewed green-pass identity, activation, manifest and scope
    at integration. The current guard accepts only clean-pass; do not enable
    green-pass or write its first activation note while that blocker remains.
@@ -56,6 +59,16 @@ exact independently hashed generated review addition retains its existing exempt
    NODE
    ```
 
+   Also run the opt-in real-main/deployment probe from that canonical checkout:
+
+   ```sh
+   HERDR_GREEN_ENABLE_PROBE=1 node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 supervisor/test/green-main.test.mjs
+   ```
+
+   Require the real-main renderer admission to execute and pass, with no skip or
+   stale-manifest reason. A skipped probe is not enablement evidence. The probe
+   is excluded from promotion and cycle tier selection and skips without the
+   explicit opt-in; ordinary merges never require current deployment pins.
    Any refusal requires ordinary handling and re-review of changed pins. A passing
    probe in a lane does not replace this canonical deployment check.
    The supervisor can then enable the
@@ -110,15 +123,18 @@ profile: identity, HOLD, live-reference and recoverability evidence must bind th
 run/base/head/record and immutable artifact/log hashes. It is not an initial
 lifecycle admission route.
 
-`supervisor/test/green-main.test.mjs` reads actual Git `main` boundary blobs,
+The opt-in `supervisor/test/green-main.test.mjs` reads actual Git `main` boundary blobs,
 then applies the explicit ordinary-bootstrap diff from main to the committed
 lane HEAD. It uses the committed manifest bytes and owner consumer-evidence
-binding. When boundary, launcher, environment or external descriptors are stale,
-green admission must refuse and only the committed-pin admission assertion skips
-with an explicit stale-manifest reason; ordinary promotion and release suites
-remain usable. Refusal controls still run. Hermetic fixtures assert both stale-pin
-refusal and admission after an ordinary reviewed refresh, including changed,
-deleted and added main inputs and external configuration drift.
+binding. Stale boundary, component, validation, consumer evidence, launcher,
+environment or external descriptors refuse admission and produce an explicit
+stale skip. This probe supplies enable-time evidence and is outside the merge
+path. Pure offline controls in `supervisor/test/green-manifest.test.mjs` and
+`supervisor/test/green-pass.test.mjs` remain in the promotion tier and use fixed
+reviewed renderer bytes. They assert stale-pin refusal and admission after an
+ordinary refresh or restoration of reviewed inputs, including signature changes,
+removed validation tests and changed consumer evidence. They read no operator
+configuration or pinned deployment descriptors.
 Outside Brain's canonical Git identity, including release snapshots,
 the real-main probe skips explicitly. The probe reads declared external inputs
 under the manifest's environment selection, discovers no live record or fleet,

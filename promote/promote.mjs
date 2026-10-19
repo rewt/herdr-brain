@@ -8,7 +8,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
+import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
 import { bundleRelease, forwardRelease, operationFile } from '../lib/releases.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
@@ -138,7 +138,7 @@ export function enqueue(queue, topics, options) {
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
   if (options.superseded !== undefined && (!Array.isArray(options.superseded) || (options.superseded.length && !options.run) || new Set(options.superseded).size !== options.superseded.length || options.superseded.some(id => !/^R-\d+$/.test(id)))) throw Error('invalid explicit superseded runs');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
-  return queue.transaction((data) => {
+  const admit = () => queue.transaction((data) => {
     if (options.existingWorker && !liveNativeWorker(queue.project.identity)) throw settingsRefusal('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
     return topics.map((topic) => {
       const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && ['refused', 'timeout'].includes(job.result?.outcome)));
@@ -154,6 +154,10 @@ export function enqueue(queue, topics, options) {
       return { id: job.id, topic, duplicate: false };
     });
   });
+  // Serialize admission (including its durable queue commit) with record writes.
+  // A writer that saw no queued member must finish before its admission snapshot;
+  // otherwise a note could slip between the guard's queue read and enqueue.
+  return options.run ? withLock(options.org, admit) : admit();
 }
 
 function cleanup(job, queue, workspace) {

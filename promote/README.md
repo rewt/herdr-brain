@@ -334,6 +334,49 @@ CLI as a run note, so `record show R-n` exposes report-to-main velocity. This ke
 ignore setup. The record's event log is never written by this module. Queue state
 is mechanical bookkeeping, not stored item/run status. Logs/results are retained
 without a retention policy.
+
+The record CLI guards item-changing writes while a run is pending in this
+project's queue, being prepared or gated, or integrated with reconciliation
+pending. It reads only the owning Git common directory's queue and
+`promotion-train/v1` receipts, including from linked worktrees and explicit
+fleet record paths. Item/run notes and edits, dependency changes, new children,
+questions, launch receipts, abandonment, handoffs and pane-release notes are
+checked under the record lock before their events are appended. Blockers and
+review children that contribute to completion are protected with their member.
+The direct pane-release policy writer uses the same guard. Recorded queue
+admission holds that lock through its snapshot and queue commit, so a writer
+that observed no queued member finishes before the admission boundary.
+Refusals exit 3, name the batch or queue job, and direct the writer to an
+unguarded parent or supervisor digest until landing and reconciliation finish.
+
+The policy is **fail-closed** for an existing unreadable/invalid queue or train
+receipt. Open entries never expire by age: a stale green receipt can still need
+reconciliation. A missing queue means there is no queued work; a standalone
+record has no Git queue. Terminal refused/timeout jobs are released immediately;
+members of a red batch still queued for bisection stay protected. Reconciliation
+markers release completed members even before the queue saves its next checkpoint.
+
+For inspected recovery, set `ORG_GUARD_OVERRIDE` to the exact batch ID (or the
+job ID while it is pending outside a batch). A mismatched ID refuses. Each
+successful override prints a warning to stderr and appends a
+`promotion.write-overridden` audit event in the same transaction, with the
+command, member IDs, batch/job IDs and Git identity. Unknown/unreadable membership
+cannot be overridden this way; inspect and repair the queue first. Older folds
+ignore the new audit event.
+
+The existing supervisor-attested `complete-batch` receipt remains authoritative
+for its validated item/run coverage, including manual recovery. The legacy
+completion `close --if-current-run` also works when the queue has persisted a
+promoted result for that run and its exact requested head is integrated. Actor
+names, note text and the current-run flag alone grant no exemption. Read-only
+commands never consult this guard.
+
+`ingest` and watcher ingestion through `ingest`/`sync` remain accepted, including
+report proposals: refusing them risks losing a late report. Intake does not
+refresh prepared fingerprints or waive readiness checks. A late report that
+changes completion inputs therefore holds integration/reconciliation for
+inspection through the existing guards, with its immutable report preserved.
+
 A failed velocity note is reported as a warning and does not prevent finished
 tab cleanup or lane close. Integration warnings still retain the lane for inspection.
 When no record is discovered, the saved result retains

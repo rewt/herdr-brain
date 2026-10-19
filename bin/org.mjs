@@ -25,6 +25,7 @@ import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { completeBatchCommand } from '../lib/completion.mjs';
 import { releasesCommand } from '../lib/release-record.mjs';
 import { handoffsCommand } from '../lib/handoffs-command.mjs';
+import { protectRecordMutation } from '../lib/record-guard.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
   renderSnapshot, renderStatus, statusJson, truncate, renderLessons,
@@ -159,13 +160,16 @@ function view(ctx) {
 }
 
 let warnedUnattributed = false;
-function mutate(ctx, fn) {
+function mutate(ctx, fn, authority) {
   const who = writer();
   if (who.unattributed && !warnedUnattributed) {
     warnedUnattributed = true;
     err('record: recorded as human but unattributed (no ORG_ACTOR, no terminal). An agent session sets ORG_ACTOR=<its session name>.\n');
   }
-  const res = transact(ctx.dir, (events) => fn(fold(events), events), {
+  const res = transact(ctx.dir, (events) => {
+    const state = fold(events);
+    return protectRecordMutation({ org: ctx.dir, events, state, mutation: fn(state, events), command: process.argv[2], ...authority });
+  }, {
     at: ctx.now,
     actor: who.actor,
     unattributed: who.unattributed,
@@ -596,7 +600,7 @@ function close(argv) {
     }
     if (item.closed?.as === as) return { add: [], result: [] };
     return { add: [{ type: 'item.closed', id, as, note: values.note ?? null }], result: openRuns(s, id).map((r) => r.id) };
-  });
+  }, { closeRun: values['if-current-run'] });
   if (!added.length) {
     out(`${id} is already ${as}\n`);
     return 0;
@@ -1029,7 +1033,7 @@ try {
 } catch (error) {
   if (error instanceof UserError || error instanceof FleetError || String(error.code).startsWith('ERR_PARSE_ARGS')) {
     err(`record: ${error.message}\n`);
-    process.exitCode = 1;
+    process.exitCode = error.exitCode ?? 1;
   } else {
     throw error;
   }

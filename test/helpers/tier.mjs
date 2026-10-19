@@ -61,6 +61,7 @@ const promotion = [
   'test/one-watcher.test.mjs',
   'test/processes.test.mjs',
   'test/report.test.mjs',
+  'test/record-guard.test.mjs',
   'test/retire-status.test.mjs',
   'test/retire-archive.test.mjs',
   'test/retire-removal-deadlines.test.mjs',

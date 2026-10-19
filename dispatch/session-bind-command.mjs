@@ -5,6 +5,7 @@ import { findOrgDir, transact, UserError, writer } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { effectiveWorkerIdentity, validSessionBind, sharesWorker, sameReceipt } from '../lib/worker-identity.mjs';
+import { protectRecordMutation } from '../lib/record-guard.mjs';
 const fields = ['type', 'run', 'dispatch', 'receipt', 'process', 'prompted_at', 'deadline', 'observed_at', 'session'];
 
 // Dispatch is the sole caller/writer. This command consumes its saved proposal,
@@ -40,7 +41,7 @@ export function sessionBindCommand(argv) {
     if ([...state.runs.values()].some(other => other.started.seq > run.started.seq &&
         (sharesWorker(run, other, state) || effectiveWorkerIdentity(other, state).agent_session_id === proposed.session)))
       throw new UserError('a newer run holds the worker occupant');
-    return { add: [proposed] };
+    return protectRecordMutation({ org, events, state, command: 'session-bind', mutation: { add: [proposed] } });
   }, { actor: who.actor, unattributed: who.unattributed });
   process.stdout.write(JSON.stringify({ recorded: result.added.length > 0 }) + '\n');
   return 0;

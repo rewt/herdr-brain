@@ -79,6 +79,9 @@ the manifest or legacy attestation with its summary SHA-256, and global `current
 JSON includes `admissionError` when the selected target is refused; read-back
 does not silently fall back to `current`. Installation overrides select the
 installation to inspect, just as for pin/attest tooling.
+An invalid committed pin or a deleted canonical working-tree pin still reports
+the HEAD commit, readable committed bytes, prepared working-tree state and the
+admission error. This diagnostic does not authorize a fallback admission.
 
 Installed `org`, `record` and `lane` are links to tiny content-addressed Node
 resolvers under the installation's `routing/` directory. Their installation root
@@ -121,7 +124,7 @@ to build/install/pin tooling, never to these operation admissions.
 | Housekeeping start/loop/tick | Start action, owner receipt and activity include release; detached loop, tidy-tabs, retirement, record and inbox children use absolute bundle paths |
 | Dispatch and retry | Journal includes release; retry reads the saved bundle under its lock, then a receiving bundle relocks and reads fresh progress; lane, record and watch children use the bundle paths |
 | `dispatch/record-worker.mjs` | Mutable and foreign-source CLI admissions select the project named by `--cwd` (also through `release.sh exec`); capture and its record child then use the absolute bundle. External launchers must save this admitted root in their existing job receipt and use it for retries; this short capture command does not own their job journal |
-| Watch direct entry, detach/spawn and cold-start re-arm | Mutable/foreign-source entry selects the project named by `--cwd`; mutable re-arm of a dispatched run first re-enters its saved dispatch bundle. Self/record children derive from import.meta.url; detached startup receipt includes release; supervisor cold-start re-arm uses the dispatch journal's saved bundle |
+| Watch direct entry, detach/spawn and cold-start re-arm | Mutable/foreign-source entry selects the project named by `--cwd`; every installed watcher checks the run's dispatch journal, including immutable entries launched through `arm-watch.sh` or `release.sh exec`. Re-arm re-enters the saved dispatch bundle when different and keeps it when already there; a legacy journal without release evidence refuses recovery. Self/record children derive from import.meta.url; detached startup receipt includes release; supervisor cold-start re-arm uses the dispatch journal's saved bundle |
 | Settlement and retry | Journal includes release; existing receipt re-enters that bundle before locking; review, dispatch, record and validation adapters derive from its bundle |
 | Validation library/adapter | Gate and onStart evidence include the producing bundle; tree, command and fingerprint identify reusable validation across bundle roots and tiers. Canonical lane CLI, watchdog and slot children use the executing bundle |
 | Foreground notice/inbox/autopilot | Existing module-relative owner/children remain in their launch bundle; new autopilot receipt includes release (no policy/notice-format change) |

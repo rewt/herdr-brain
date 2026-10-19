@@ -69,7 +69,9 @@ try {
     if (rest.includes('--json')) console.log(JSON.stringify(status, null, 2));
     else {
       console.log(`canonical: ${status.project?.canonical ?? 'none'}`);
-      console.log(`committed pin: ${status.committed?.release ?? 'global current'} at ${status.committed?.commit ?? 'no HEAD'}`);
+      const pin = status.committed && Object.hasOwn(status.committed, 'release') ? status.committed.release ?? 'global current' : status.admissionError ? 'invalid' : 'global current';
+      console.log(`committed pin: ${pin} at ${status.committed?.commit ?? 'no HEAD'}`);
+      if (status.admissionError && status.committed?.bytes !== undefined) console.log(`committed pin bytes: ${JSON.stringify(status.committed.bytes)}`);
       if (status.prepared) console.log(`working-tree pin: ${JSON.stringify(status.prepared.config ?? status.prepared)} (prepared, not accepted)`);
       console.log(`resolved bundle: ${status.resolved?.root ?? 'unavailable'} (manifest commit ${status.resolved?.manifestCommit ?? 'none'})`);
       const acceptance = status.resolved?.acceptance;

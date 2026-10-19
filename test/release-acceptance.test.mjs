@@ -120,6 +120,48 @@ test('pin-status reads canonical HEAD, labels a prepared change, and uses the ad
   assert.equal(f.status().resolved.root, green);
 });
 
+test('pin-status reports a deleted working-tree pin and the refused admission from canonical HEAD', t => {
+  const f = fixture(t); f.bundle('blue', { live: true });
+  const green = f.bundle('green', { live: true }); fs.symlinkSync(green, path.join(f.home, 'current'));
+  f.accept('blue');
+  const file = path.join(f.repo, '.herdr-release.json'), bytes = fs.readFileSync(file, 'utf8'), head = f.git('rev-parse', 'HEAD');
+  const lane = path.join(f.root, 'lane'); f.git('worktree', 'add', '-qb', 'lane/fixture', lane);
+  fs.unlinkSync(file);
+  for (const cwd of [f.repo, lane]) {
+    const status = f.status(cwd);
+    assert.equal(status.committed.commit, head); assert.equal(status.committed.release, 'blue');
+    assert.equal(status.committed.bytes, bytes);
+    assert.deepEqual(status.prepared, { label: 'prepared, not accepted', present: false, bytes: null });
+    assert.match(status.admissionError, /committed but missing from the canonical working tree/);
+    assert.equal(status.resolved, null, 'a failed pin read must never fall back to current'); assert.equal(status.current, green);
+  }
+  f.git('add', '-u'); assert.equal(f.status().committed.commit, head, 'staged deletion still reads committed HEAD');
+  const output = f.ok(f.shell('pin-status', f.repo));
+  assert.ok(output.includes(`committed pin bytes: ${JSON.stringify(bytes)}`));
+  assert.match(output, /prepared, not accepted/); assert.match(output, /admission refused:/);
+  assert.match(f.tool('exec', f.home, 'bin/org.mjs', 'help').stderr, /committed but missing/);
+});
+
+for (const [kind, bytes, reason] of [
+  ['malformed JSON', '{"release":\n', /JSON/],
+  ['invalid schema', '{"release":"blue","extra":true}\n', /invalid .herdr-release.json/],
+]) test(`pin-status retains committed bytes and prepared state for ${kind}`, t => {
+  const f = fixture(t), green = f.bundle('green', { live: true }); fs.symlinkSync(green, path.join(f.home, 'current'));
+  const file = path.join(f.repo, '.herdr-release.json'); fs.writeFileSync(file, bytes);
+  f.git('add', '.'); f.git('commit', '-qm', 'invalid pin fixture');
+  const head = f.git('rev-parse', 'HEAD');
+  let status = f.status();
+  assert.equal(status.committed.commit, head); assert.equal(status.committed.bytes, bytes);
+  assert.equal(status.prepared.label, 'prepared, not accepted'); assert.equal(status.prepared.bytes, bytes);
+  assert.match(status.admissionError, reason); assert.equal(status.resolved, null); assert.equal(status.current, green);
+  fs.writeFileSync(file, '{"release":"green"}\n');
+  status = f.status();
+  assert.equal(status.committed.bytes, bytes); assert.deepEqual(status.prepared.config, { release: 'green' });
+  assert.match(status.admissionError, reason); assert.equal(status.resolved, null);
+  const output = f.ok(f.shell('pin-status', f.repo));
+  assert.ok(output.includes(`committed pin bytes: ${JSON.stringify(bytes)}`)); assert.match(output, /admission refused:/);
+});
+
 test('a manually committed unready pin refuses admission with the same reason as read-back', t => {
   const f = fixture(t); f.bundle('offline'); f.accept('offline');
   const result = f.tool('exec', f.home, 'bin/org.mjs', 'help');
@@ -155,6 +197,34 @@ test('record-worker and watcher mutable entry points select the explicit project
   assert.equal(f.ok(f.run(process.execPath, [path.join(f.home, 'current/watch/watch.mjs'), 'R-1', '--cwd', f.repo, '--org', org, '--dry-run'])), 'selected-blue', 're-arming a dispatch reuses its saved bundle after a pin change');
   fs.writeFileSync(journal, JSON.stringify({ run: 'R-1' }));
   assert.match(f.run(process.execPath, [path.join(f.home, 'current/watch/watch.mjs'), 'R-1', '--cwd', f.repo, '--org', org, '--dry-run']).stderr, /operation-release-missing/);
+});
+
+for (const adapter of ['arm-watch', 'release-exec']) test(`installed ${adapter} re-arms from the saved dispatch bundle after a pin change`, t => {
+  const f = fixture(t), blue = f.bundle('blue', { live: true }), green = f.bundle('green', { live: true });
+  fs.symlinkSync(green, path.join(f.home, 'current')); f.accept('blue');
+  const org = path.join(f.root, 'org'), journal = path.join(f.root, 'dispatch.json');
+  const snapshot = path.join(f.root, 'run.json'), record = path.join(f.root, 'record.cjs');
+  const run = { id: 'R-1', item: 'ENG-1', meta: { agent: 'worker', dispatch_journal: journal }, report_path: path.join(f.root, 'report.md') };
+  const save = value => fs.writeFileSync(snapshot, JSON.stringify(value)); save(run);
+  fs.writeFileSync(record, `#!${process.execPath}\nconsole.log(require('fs').readFileSync(${JSON.stringify(snapshot)},'utf8'));`, { mode: 0o755 });
+  fs.writeFileSync(journal, JSON.stringify({ run: run.id, release: checkBundle(blue) }));
+  const entry = adapter === 'arm-watch' ? [path.join(green, 'supervisor/arm-watch.sh')]
+    : [path.join(green, 'herdr/release.sh'), 'exec', 'watch/watch.mjs'];
+  const rearm = () => f.run(adapter === 'arm-watch' ? 'sh' : 'bash', [...entry, run.id, '--cwd', f.repo,
+    '--org', org, '--org-cli', record, '--workspace', 'scratch-workspace', '--spawn', '--dry-run'], f.root);
+  const watcher = root => `'${path.join(root, 'watch/watch.mjs')}'`;
+  // Both watchers are real implementations. Their dry-run spawn command is
+  // an oracle for the next child path, without needing filesystem notifications.
+  assert.ok(f.ok(rearm()).includes(watcher(blue)));
+  f.accept('green');
+  const continued = f.ok(rearm());
+  assert.ok(continued.includes(watcher(blue)), continued); assert.equal(continued.includes(watcher(green)), false);
+  save({ ...run, meta: { agent: 'worker' } });
+  assert.ok(f.ok(rearm()).includes(watcher(green)), 'a new watcher uses the newly accepted pin');
+  save(run); fs.writeFileSync(journal, JSON.stringify({ run: run.id }));
+  const legacy = rearm(); assert.notEqual(legacy.status, 0); assert.match(legacy.stderr, /operation-release-missing/);
+  fs.writeFileSync(journal, JSON.stringify({ run: 'R-2', release: checkBundle(blue) }));
+  const mismatch = rearm(); assert.notEqual(mismatch.status, 0); assert.match(mismatch.stderr, /dispatch receipt does not match watched run/);
 });
 
 test('supervisor restart re-enters saved promotion requests for retry and completion before consulting a new pin', t => {

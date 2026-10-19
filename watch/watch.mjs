@@ -546,11 +546,11 @@ async function watch() {
 }
 
 try {
-  // A mutable entry used to re-arm an admitted dispatch must recover its
-  // original bundle before considering the project's next-admission pin.
+  // Installed adapters enter through an absolute bundle path after resolving
+  // the project. Re-arm must still recover the dispatch's original bundle.
   const actual = bundleRelease();
   let saved;
-  if (actual.commit && path.resolve(process.argv[1]) !== SELF) {
+  if (actual.commit) {
     const current = readRun();
     if (current.meta?.dispatch_journal) {
       const receipt = JSON.parse(fs.readFileSync(current.meta.dispatch_journal, 'utf8'));
@@ -559,7 +559,8 @@ try {
       saved = receipt.release;
     }
   }
-  const forwarded = saved ? continueRelease('watch/watch.mjs', saved) : forwardRelease('watch/watch.mjs', opt.cwd);
+  const forwarded = saved ? (saved.root === actual.root ? null : continueRelease('watch/watch.mjs', saved))
+    : forwardRelease('watch/watch.mjs', opt.cwd);
   if (forwarded !== null) process.exit(forwarded);
   if (opt.detach && !dry) {
     await detachWatcher();

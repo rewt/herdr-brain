@@ -143,8 +143,13 @@ gate runs once in the git-archive snapshot), activates it, checks that the insta
 don't. Record the result on the goal. A failed gate leaves the current release
 untouched: fix it in a lane and cut a new tag. A built tag is never rebuilt, so after a
 rolled-back ship cut a new tag; if a build succeeded but activation never ran, run
-`bash herdr/release.sh activate TAG`. Workers never run the release gate. The live acceptance
-harness is optional (`build TAG --live`); the default gate is the offline release tier.
+`bash herdr/release.sh activate TAG`. Workers never run the release gate. The default
+`ship TAG` path runs the offline release tier and records **acceptance did not run**;
+that release cannot be pinned. For a pin candidate, the supervisor instead runs
+`bash herdr/release.sh build TAG --live`, then `bash herdr/release.sh activate TAG`
+after the live acceptance passes. The build retains READY evidence for that exact
+commit before sealing the bundle. See [release pins](../herdr/RELEASE-PINS.md) for
+acceptance, canonical adoption and read-back.
 Historical candidates remain readable with `record releases`.
 
 ## Identity desks

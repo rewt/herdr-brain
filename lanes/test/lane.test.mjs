@@ -11,6 +11,7 @@ import {
   waitForFile,
   HERE,
   LANE,
+  HERDR_CLIENT,
   GIT,
   HEAD,
   OPERATOR_GIT_ENV,
@@ -38,6 +39,10 @@ import {
   makeReviewFixture,
   privateReviewDelivery,
 } from "./lane-fixture.mjs";
+
+// Assert fixture targets here so one-hop planning sees both indirect CLI dependencies.
+assert.equal(LANE, resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs")));
+assert.equal(HERDR_CLIENT, resolve(HERE, "..", "board", "herdr-client.mjs"));
 
 test("git helpers isolate the operator's global excludes file", () => {
   const fixture = makeFixture();

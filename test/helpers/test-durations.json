@@ -59,9 +59,20 @@
       "duration_ms": 82,
       "measured_at": "2026-10-03T20:57:21.784Z"
     },
+    "lanes/test/lane-dispatch.test.mjs": {
+      "duration_ms": 216864,
+      "measured_at": "2026-10-19T00:13:06.490Z",
+      "source": ".org/runs/R-551/evidence/lane-dispatch.tap (Node 20.19.4 node --test; TAP duration_ms)"
+    },
+    "lanes/test/lane-review.test.mjs": {
+      "duration_ms": 177844,
+      "measured_at": "2026-10-19T00:16:09.603Z",
+      "source": ".org/runs/R-551/evidence/lane-review.tap (Node 20.19.4 node --test; TAP duration_ms)"
+    },
     "lanes/test/lane.test.mjs": {
-      "duration_ms": 342215,
-      "measured_at": "2026-10-03T20:57:21.784Z"
+      "duration_ms": 214806,
+      "measured_at": "2026-10-19T00:09:17.582Z",
+      "source": ".org/runs/R-551/evidence/lane.tap (Node 20.19.4 node --test; TAP duration_ms)"
     },
     "lanes/test/no-focus.test.mjs": {
       "duration_ms": 11,

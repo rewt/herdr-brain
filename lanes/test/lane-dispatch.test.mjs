@@ -13,6 +13,7 @@ import { ownerProcess } from '../../lib/process-owner.mjs';
 import { initialShellFile } from '../../lib/initial-shell.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import {
+  HERE,
   LANE,
   HERDR_CLIENT,
   HEAD,
@@ -35,6 +36,10 @@ import {
   makeReviewFixture,
   privateReviewDelivery,
 } from "./lane-fixture.mjs";
+
+// Assert fixture targets here so one-hop planning sees both indirect CLI dependencies.
+assert.equal(LANE, resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs")));
+assert.equal(HERDR_CLIENT, resolve(HERE, "..", "board", "herdr-client.mjs"));
 
 test("dispatch refreshes Herdr workspaces before accepting newly visible metadata", () => {
   const fixture = makeFixture();

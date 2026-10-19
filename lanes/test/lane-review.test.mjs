@@ -2,10 +2,12 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from '../../test/helpers/bounded-test.mjs';
 import {
   HERE,
+  LANE,
+  HERDR_CLIENT,
   HEAD,
   negativeControl,
   git,
@@ -15,6 +17,10 @@ import {
   HISTORICAL_REVIEW_ABSOLUTE_PATH_PATTERN,
   HISTORICAL_REVIEW_AMBIGUOUS_PATH_PATTERN,
 } from "./lane-fixture.mjs";
+
+// Assert fixture targets here so one-hop planning sees both indirect CLI dependencies.
+assert.equal(LANE, resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs")));
+assert.equal(HERDR_CLIENT, resolve(HERE, "..", "board", "herdr-client.mjs"));
 
 test("review preserves a final finding immediately before the next section heading", () => {
   const findings = [

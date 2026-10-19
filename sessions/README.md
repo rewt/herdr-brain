@@ -298,6 +298,7 @@ mutation. The status cache is not read at all.
 | Never-adopted chat/supervisor position in an enrolled, exactly owned workspace, with no prior operation | At most one `WouldCreate`; later candidates defer; recorded `never-started` operations do not claim the position |
 | Missing adopted tab/pane, prior incarnation gone, or uncertain launch | `Hold` unless stage 4's exact transition evidence resolves it |
 | Unacknowledged create without an exact receipt | `Hold`: create intent unresolved; inspect retained tab; never create twice |
+| Create withheld before the native call, including a failed final physical guard | `Hold` with its durable reason; delegate never invoked; explicit supervisor `dispose-start` required |
 | Missing logs/triage layout | Non-fencing `Observe`: creation unsupported: logs layout awaits triage activation |
 | Unowned live workspace agent before creation | `Hold`: preserve, never create beside it; exact controller or recorded work-item bindings required |
 | Start withheld after intent because evidence changed; delegate never invoked | `Hold` with the durable reason, pending an explicit later operator disposition; stage 4 does not resolve it |
@@ -619,6 +620,43 @@ hold, unknown occupants and abandoned locks refuse or hold without native input.
 native reply leaves intent unresolved, even if an apparent agent exists. Do not
 repeat `agent start`, close, resume or delivery to repair it. Inspect evidence and
 use an explicit disposition; there is no automatic retry command.
+
+### Disposing a create that was never invoked
+
+A `create-standard-slot` can be durably `withheld` when evidence changes after
+intent or the live adapter refuses before entering native `tab create`. Its Hold
+preserves the exact reason and says `create withheld, delegate never invoked`.
+It cannot retry automatically, and does not claim that a tab was retained.
+
+After resolving the underlying STOP, hold, ownership or authorization issue,
+the supervisor can use the existing `dispose-start` command with the exact
+withheld operation ID and a `session-create-disposition/v1` request:
+
+```json
+{"schema":"session-create-disposition/v1","common":"/canonical/project/.git","operationId":"exact-withheld-create-id","operationDigest":"sha256-of-the-complete-withheld-operation","target":{"server":"/exact/herdr.sock","workspace":"native-workspace-id","checkout":"/canonical/project"},"outcome":"never-started","creationInvoked":false,"role":"supervisor","actor":"supervisor-name","observedAt":"fresh-UTC-time","reason":"Inspected the durable refusal before the native call","evidence":[{"file":"/absolute/refusal-evidence.json","sha256":"sha256-of-source-bytes"}]}
+```
+
+`operationDigest` uses the canonical JSON `digest` exported by
+`sessions/lifecycle-evidence.mjs`, over the complete operation in state `withheld`,
+including its durable reason. The request contains no tab, pane or terminal.
+Its hashed source evidence must establish non-invocation; live absence alone is
+insufficient. It requires the canonical checkout, explicit supervisor actor and
+current `create-standard-slot` authorization for the exact enrolled workspace:
+
+```sh
+node sessions/sessions.mjs dispose-start --project "$project" --workspace "$workspace" \
+  --role supervisor --actor "$supervisor_actor" --authorization "$authorization_file" \
+  --operation "$withheld_operation_id" --disposition "$create_disposition_file"
+```
+
+The command rechecks scope, brakes, source hashes, fresh evidence, no launch
+receipt/context/binding or competing operation, an unadopted position, exact
+workspace identity and no unowned live agent. It observes the scoped native
+topology twice without input. Success preserves the old operation and reason,
+adds the disposition and changes its state to `never-started`. A new dry run can
+then propose a new authorized create. An `intent` that entered `tab create`, a
+lost reply, or any contrary launch evidence cannot use this path: preserve the
+retained workspace and investigate; never relabel an uncertain call as withheld.
 
 ### Disposing a start that was never invoked
 

@@ -145,7 +145,7 @@ export async function plan(options = {}) {
       observed: { phase: d.phase, decision: d.decision, reason: d.reason } };
   });
   return { schema: 'project-setup-plan/v1', outcome: !preview.valid ? 'refused' :
-    globalHolds.length || preview.errors.length || changes.some(c => c.outcome === 'refuse') ? 'held' :
+    globalHolds.length || preview.errors.length || changes.some(c => c.outcome === 'refuse' || c.outcome === 'keep' && c.reasons.length) ? 'held' :
       changes.some(c => ['create', 'start'].includes(c.outcome)) ? 'planned' : 'unchanged',
     project: preview.project, doctor: diagnosis, diagnostics: preview.diagnostics, errors: preview.errors,
     changes, observedAt: preview.observedAt };
@@ -201,8 +201,6 @@ export async function apply(options = {}) {
     if (!original || attempted.has(action.uid) || !['create-standard-slot', 'start-standard-slot'].includes(action.kind) || action.kind !== original.operation ||
         action.specDigest !== original.specDigest || action.generation !== original.generation)
       return stop('plan-drift', 'action was not a create or start row in the saved dry run', action.uid, action.kind, null, 'stopped');
-    const age = now() - Date.parse(expected.observedAt);
-    if (age < 0 || age > 60000) return stop('plan-drift', 'saved dry run expired', action.uid, action.kind, null, 'stopped');
     let step;
     attempted.add(action.uid);
     try { step = await sessionApply({ ...options, savedPlan: fresh }); }

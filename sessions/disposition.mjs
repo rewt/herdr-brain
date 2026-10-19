@@ -10,7 +10,8 @@ import { checkAuthorization, enrolledWorkspace } from './authorization.mjs';
 import { readStandardSlots } from './receipts.mjs';
 import { readSessionFacts } from './observe.mjs';
 import { herdrEdge, readAdapterReceipts, safeStandard } from './live.mjs';
-import { digest, validStartDisposition } from './lifecycle-evidence.mjs';
+import { digest, validStartDisposition, validCreateDisposition } from './lifecycle-evidence.mjs';
+import { claimsPosition, unownedWorkspaceReason } from './create-safety.mjs';
 import { acquireControllerLease, durableWrite, present, readControllerJournal, runtimePaths } from './runtime.mjs';
 
 export function disposeStart({ cwd = process.cwd(), workspace, authorization, operationId, dispositionFile,
@@ -19,24 +20,28 @@ export function disposeStart({ cwd = process.cwd(), workspace, authorization, op
   if (!workspace) throw Error('explicit workspace required');
   const project = canonicalProject(cwd), bound = enrolledWorkspace(project, workspace);
   if (fs.realpathSync(cwd) !== project.root) throw Error('dispose-start requires the canonical checkout');
-  const check = () => {
-    const auth = checkAuthorization({ file: authorization, project, workspace, action: { kind: 'start-standard-slot' }, env, now });
+  const check = kind => {
+    const auth = checkAuthorization({ file: authorization, project, workspace, ...(kind ? { action: { kind } } : {}), env, now });
     if (auth.actor !== actor || herdrSocketPath(env) !== bound.server) throw Error('supervisor actor or physical endpoint changed');
     const facts = readSessionFacts({ project, env });
     if (facts.stopped || facts.closeHold || facts.errors.length) throw Error('STOP, close hold or unreadable facts; disposition refused');
+    return facts;
   };
   check();
   const release = acquireControllerLease(project.common);
   try {
     const journal = readControllerJournal(project.common), op = journal.operations.find(op => op.id === operationId);
-    if (!op || op.kind !== 'start-standard-slot' || op.state !== 'intent' || op.receipt) throw Error('exact unresolved start intent required');
+    const create = op?.kind === 'create-standard-slot';
+    if (!op || (create ? op.state !== 'withheld' : op.kind !== 'start-standard-slot' || op.state !== 'intent') || op.receipt)
+      throw Error('exact unresolved start intent or withheld create required');
+    check(op.kind);
     safeStandard(op);
     if (op.spec.viewer || !['chat', 'supervisor'].includes(op.spec.role)) throw Error('only native conversation starts can be disposed');
     const d = parseUniqueJson(readPlainFile(dispositionFile));
-    if (!validStartDisposition(op, d) || d.common !== project.common || d.actor !== actor ||
+    if (!(create ? validCreateDisposition(op, d) : validStartDisposition(op, d)) || d.common !== project.common || d.actor !== actor ||
         ['server', 'workspace', 'checkout'].some(k => d.target[k] !== bound[k])) throw Error('invalid or mismatched never-started evidence');
     const verify = () => {
-      check();
+      const facts = check(op.kind);
       const age = now() - Date.parse(d.observedAt);
       if (age < 0 || age > 60000) throw Error('never-started evidence is stale');
       if (digest(parseUniqueJson(readPlainFile(dispositionFile))) !== digest(d)) throw Error('disposition evidence changed');
@@ -44,18 +49,32 @@ export function disposeStart({ cwd = process.cwd(), workspace, authorization, op
         throw Error('disposition source hash changed');
       if (readAdapterReceipts(project.common).some(r => r.operationId === op.id) || journal.bindings.some(b => b.uid === op.uid) ||
           journal.operations.some(other => other.id !== op.id && other.state !== 'never-started' &&
-            (other.uid === op.uid || other.target?.pane === op.target.pane)) ||
-          present(path.join(project.common, 'sessions/contexts', `${op.id}.json`))) throw Error('launch evidence or competing operation exists; hold');
+            (create ? claimsPosition(other, op.uid, op.target, op.standardSlot) : other.uid === op.uid || other.target?.pane === op.target.pane)) ||
+          ['.json', '.instructions.md'].some(extension => present(path.join(project.common, 'sessions/contexts', `${op.id}${extension}`))))
+        throw Error('launch evidence or competing operation exists; hold');
+      return facts;
     };
     const herdr = herdrEdge(env);
     const observe = () => {
-      verify();
+      const facts = verify();
       const workspaces = herdr(['workspace', 'list']).workspaces,
         tabs = herdr(['tab', 'list', '--workspace', bound.workspace]).tabs,
         panes = herdr(['pane', 'list', '--workspace', bound.workspace]).panes,
         agents = herdr(['agent', 'list']).agents;
       if (![workspaces, tabs, panes, agents].every(Array.isArray)) throw Error('incomplete disposition observation');
       const slots = readStandardSlots(project.common), t = d.target;
+      if (create) {
+        const ws = workspaces.filter(w => w.workspace_id === t.workspace);
+        if (slots.errors.length || ws.length !== 1 || ws[0].worktree?.repo_key !== project.common || ws[0].worktree.checkout_path !== t.checkout ||
+            slots.slots.some(s => s.server === t.server && s.workspace === t.workspace && s.standardSlot === op.standardSlot) ||
+            agents.some(a => a.name === `slot-${createHash('sha256').update(op.id).digest('hex').slice(0, 24)}`))
+          throw Error('create position or workspace evidence changed; hold');
+        const unowned = unownedWorkspaceReason({ server: bound.server, agents }, journal, facts, t);
+        if (unowned) throw Error(unowned);
+        return { workspace: { workspace_id: ws[0].workspace_id, worktree: ws[0].worktree },
+          tabs: tabs.filter(tab => tab.workspace_id === t.workspace), panes: panes.filter(p => p.workspace_id === t.workspace),
+          agents: agents.filter(a => a.workspace_id === t.workspace) };
+      }
       const slot = slots.slots.filter(s => s.workspace === t.workspace && s.server === t.server && s.checkout === t.checkout &&
         s.tab === t.tab && s.standardSlot === op.spec.standardSlot && s.panes.length === 1 && s.panes[0].pane === t.pane);
       const ws = workspaces.filter(w => w.workspace_id === t.workspace), ts = tabs.filter(tab => tab.tab_id === t.tab),

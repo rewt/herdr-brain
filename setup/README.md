@@ -54,6 +54,9 @@ live incarnations stay `keep`, with trust uncertainty still visible. Unknown,
 foreign or manual occupants are refused and preserved. No session is adopted,
 closed, restarted or prompted by planning. The planner selects at most one
 action per pass; setup includes deferred create/start candidates in its rows.
+Capability holds on a `keep` row still make the plan outcome `held` (exit 1),
+while preserving that live session. Only unsupported missing logs layouts skip
+their capability requirements; native trust remains a separate advisory.
 
 Plan outcomes are `planned`, `unchanged`, `held` or `refused`. Both commands exit
 0 for a ready/planned/unchanged result and 1 for a held/refused result or invalid
@@ -89,9 +92,12 @@ create does not change its enrollment digest. An evidence file is optional for
 creation beside proven controller-owned sessions; starting an empty adopted pane
 requires the scoped process evidence described in [sessions](../sessions/README.md).
 
-Execution requires the saved dry run to be at most 60 seconds old and match fresh
-rows. It performs at most one session apply per desired entry, using a fresh
-session plan in memory each time. Each step lists
+At execution start, the saved dry run must be at most 60 seconds old and match
+fresh rows. That workspace admission window is checked once, so a slow native
+launch does not expire the remainder of an admitted batch. It performs at most
+one session apply per desired entry, using a fresh session plan in memory each
+time, with its own 60-second validity and the saved UID/spec/generation bounds.
+Authorization expiry and physical-edge guards are rechecked throughout. Each step lists
 `{uid, operation, operationId, state, reason}`. The existing controller journal,
 adapter receipts and native context receipts are the only action evidence;
 setup adds no durable state. Exit 0 means `applied` or `unchanged`; exit 1 means
@@ -105,6 +111,10 @@ closes, respawns, resumes or transfers a session. An unresolved create holds wit
 live workspace agents hold creation even when another adopted pane is empty;
 only controller receipt/incarnation bindings or exact recorded live work-item
 bindings establish ownership. Unknown identity preserves all existing work.
+When creation is withheld before the native call, the durable reason is reported
+as `create withheld, delegate never invoked`; an explicit supervisor
+[disposition](../sessions/README.md#disposing-a-create-that-was-never-invoked)
+is required before a fresh apply can try a new operation.
 
 Creation uses one unfocused tab and its sole root shell, then starts the native
 session. Existing panes receive no focus, rename, close or input. Routes come

@@ -20,6 +20,7 @@ import { planRetirement } from '../lib/retire.mjs';
 import { fold } from '../lib/state.mjs';
 import { workerIdentityEvidence } from '../lib/worker-identity.mjs';
 import { sessionBindFact } from './helpers/session-bind.mjs';
+import { CreateNotInvokedError } from '../sessions/create-safety.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const example = name => parseManifest(fs.readFileSync(path.join(root, `test/fixtures/sessions/${name}.md`), 'utf8'));
@@ -101,6 +102,32 @@ test('a create intent without an exact receipt holds and fences every later acti
   const first = await f.run(); assert.match(decision(first).reason, /create intent unresolved/);
   assert.ok(first.decisions.every(d => d.decision === 'Hold'));
   await f.run(); assert.equal(f.calls.length, 1);
+});
+
+test('a create withheld after intent keeps its durable reason and fences unrelated starts without claiming a retained tab', async t => {
+  const f = fixture(t, ['chat', 'supervisor']); removeChatAdoption(f);
+  const read = f.read; let reads = 0;
+  f.read = async () => { if (++reads === 3) f.facts.stopped = true; return read(); };
+  f.actions.create = async () => assert.fail('create delegate must not run');
+  await f.run();
+  const op = readControllerJournal(f.project.common).operations[0];
+  assert.equal(op.state, 'withheld'); assert.match(op.reason, /evidence changed after intent/);
+  f.facts.stopped = false; f.read = read;
+  const p = await f.run(), d = decision(p);
+  assert.match(d.reason, /create withheld, delegate never invoked: evidence changed after intent/);
+  assert.doesNotMatch(d.reason, /inspect retained tab/);
+  assert.deepEqual(d.observed, { operationId: op.id, operationState: 'withheld', withheldReason: op.reason });
+  assert.ok(p.decisions.every(d => d.decision === 'Hold')); assert.equal(f.calls.length, 0);
+  assert.deepEqual(readControllerJournal(f.project.common).operations, [op]);
+});
+
+test('only a typed pre-create refusal records withheld; an ordinary lost reply stays intent', async t => {
+  const f = fixture(t, ['chat', 'supervisor']); removeChatAdoption(f);
+  f.actions.create = async () => { throw new CreateNotInvokedError(Error('physical STOP before tab create')); };
+  const p = await f.run(), op = readControllerJournal(f.project.common).operations[0];
+  assert.equal(op.state, 'withheld'); assert.match(op.reason, /create not invoked: physical STOP/);
+  assert.match(decision(p).reason, /create withheld, delegate never invoked/);
+  assert.equal(f.calls.length, 0);
 });
 
 test('missing logs positions Observe without fencing a chat or supervisor action', async t => {

@@ -174,9 +174,16 @@ test('matching live native incarnation stays keep with trust uncertainty visible
   assert.equal(result.changes[0].outcome, 'keep', JSON.stringify(result));
   assert.equal(result.outcome, 'unchanged');
   assert.ok(result.changes[0].advisories.some(r => r.code === 'native-trust-unverified'));
+  assert.deepEqual(snapshot(f.scratch), before);
+  const m = template('chat'); m.metadata.generation = 2; m.spec.permissions.profileRef = 'custom-native-profile';
+  fs.writeFileSync(path.join(f.cwd, '.sessions/chat.md'), document(m)); f.git('add', '.sessions'); f.git('commit', '-qm', 'Require a native capability');
+  const heldBefore = snapshot(f.scratch), held = await plan(f.options);
+  assert.equal(held.outcome, 'held', JSON.stringify(held)); assert.equal(held.changes[0].outcome, 'keep');
+  assert.ok(held.changes[0].reasons.some(r => r.code === 'native-profile-unverified'));
+  assert.deepEqual(snapshot(f.scratch), heldBefore);
   f.observation.agents[0].agent_session.value = 'manual-replacement'; result = await plan(f.options);
   assert.equal(result.changes[0].outcome, 'refuse'); assert.match(result.changes[0].observed.reason, /changed.*occupant/);
-  assert.deepEqual(snapshot(f.scratch), before);
+  assert.deepEqual(snapshot(f.scratch), heldBefore);
 });
 
 test('project pins remain independent of global current and another project pin', async t => {

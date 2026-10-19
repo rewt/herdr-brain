@@ -6,7 +6,7 @@ import { roleIs } from '../lib/roles.mjs';
 import { agentBinding, sameBinding } from './observe.mjs';
 import { acquireControllerLease, durableWrite, emptyJournal, readControllerJournal, runtimePaths } from './runtime.mjs';
 import { specDigest, equalBinding, validBinding, validLaunchReceipt } from './lifecycle-evidence.mjs';
-import { claimsPosition, unownedWorkspaceReason } from './create-safety.mjs';
+import { claimsPosition, unownedWorkspaceReason, CreateNotInvokedError } from './create-safety.mjs';
 import { planLifecycle, resetAssessment, lifecycleOperation } from './lifecycle.mjs';
 export { specDigest } from './lifecycle-evidence.mjs';
 
@@ -48,6 +48,9 @@ function missingPosition(entry, input, slots) {
   const prior = journal.operations.filter(op => claimsPosition(op, uid, target, s.standardSlot));
   if (prior.length) {
     const op = prior[0], receipts = (o.receipts ?? []).filter(r => r.operationId === op.id);
+    if (prior.length === 1 && op.kind === 'create-standard-slot' && op.state === 'withheld')
+      return { decision: row(entry, 'Hold', 'Hold', `create withheld, delegate never invoked: ${op.reason}; explicit supervisor dispose-start disposition required`, {
+        observed: { operationId: op.id, operationState: op.state, withheldReason: op.reason } }) };
     // An exact fresh receipt can settle a lost acknowledgement. It is only a
     // provisional layout here; enrollment derives it after durable acknowledgement.
     if (prior.length === 1 && op.uid === uid && op.kind === 'create-standard-slot' && op.state === 'intent' &&
@@ -352,7 +355,14 @@ export async function reconcileOnce({ inspection, read, actions, approvePlan }) 
             Object.assign(op, { state: 'withheld', reason: failure });
             durableWrite(paths.journal, journal);
           }
-          else try { await actions[op.kind === 'create-standard-slot' ? 'create' : 'start'](op); } catch (error) { failure = error.message; }
+          else try { await actions[op.kind === 'create-standard-slot' ? 'create' : 'start'](op); }
+          catch (error) {
+            failure = error.message;
+            if (op.kind === 'create-standard-slot' && error instanceof CreateNotInvokedError) {
+              Object.assign(op, { state: 'withheld', reason: `create not invoked: ${failure}` });
+              durableWrite(paths.journal, journal);
+            }
+          }
           // The returned acknowledgement alone is insufficient. Only exact
           // receipt evidence in a new observation can acknowledge an intent.
           plan = await observe();

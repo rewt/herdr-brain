@@ -15,6 +15,8 @@ import { readControllerJournal, runtimePaths } from '../sessions/runtime.mjs';
 import { readAdapterReceipts } from '../sessions/live.mjs';
 import { readSessionFacts } from '../sessions/observe.mjs';
 import { digest, validStartOperation } from '../sessions/lifecycle-evidence.mjs';
+import { disposeStart } from '../sessions/disposition.mjs';
+import { createHash } from 'node:crypto';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const mutations = f => f.read().calls.filter(a => ['create', 'run', 'start', 'close', 'focus', 'rename'].includes(a[1]));
@@ -186,6 +188,8 @@ test('a lost create reply retains exactly one tab and every later apply holds', 
   const op = readControllerJournal(f.project.common).operations[1]; assert.equal(op.kind, 'create-standard-slot'); assert.equal(op.state, 'intent');
   assert.equal(readStandardSlots(f.project.common).slots.some(s => s.standardSlot === 'chat'), false);
   const next = await f.execute(); assert.match(JSON.stringify(next), /create intent unresolved; inspect retained tab; never create twice/);
+  assert.throws(() => disposeStart({ cwd: f.cwd, workspace: 'home', authorization: f.authorization, operationId: op.id,
+    dispositionFile: path.join(f.scratch, 'unproved.json'), role: 'supervisor', actor: 'fixture-supervisor', env: f.env }), /withheld create required/);
   assert.equal(command(f, 'tab', 'create').length, 1); assert.equal(command(f, 'agent', 'start').length, 0);
   assert.deepEqual(readControllerJournal(f.project.common).operations[1], op);
 });
@@ -198,6 +202,21 @@ test('saved dry run freshness, row digest and selection drift are checked before
     const result = await apply({ ...f.options, execute: true, authorization, planFile });
     assert.match(JSON.stringify(result), /saved dry run is stale or has drifted/); noController(f);
   }
+});
+
+test('a workspace dry run fresh at execution start remains valid when the first launch takes over sixty seconds', async t => {
+  const f = workspace(t), observe = f.options.observer.observe;
+  let offset = 0, advanced = false;
+  const observer = { observe: async () => {
+    if (!advanced && readControllerJournal(f.project.common).operations.some(op => op.state === 'acknowledged')) {
+      advanced = true; offset = 61000;
+    }
+    return observe();
+  } };
+  const result = await f.execute({ observer, now: () => Date.now() + offset });
+  assert.equal(advanced, true, JSON.stringify(result)); assert.equal(result.outcome, 'applied', JSON.stringify(result));
+  assert.equal(result.steps.length, 2); assert.equal(command(f, 'tab', 'create').length, 1);
+  assert.equal(command(f, 'agent', 'start').length, 2);
 });
 
 test('new actionable UIDs between steps stop as plan-drift and cannot extend the saved batch', async t => {
@@ -227,7 +246,38 @@ test('physical create edge catches an unowned agent arriving after intent and pr
   const result = await f.execute();
   assert.equal(result.outcome, 'stopped', JSON.stringify(result)); assert.match(result.steps.at(-1).reason, /unowned live occupant/);
   assert.equal(mutations(f).length, 0); assert.deepEqual(f.read().tabs, before);
-  assert.equal(readControllerJournal(f.project.common).operations[1].state, 'intent');
+  const op = readControllerJournal(f.project.common).operations[1];
+  assert.equal(op.state, 'withheld'); assert.match(op.reason, /create not invoked: unowned live occupant/);
+  f.change(s => { delete s.changeOnCall; });
+  const held = await f.execute(); assert.match(held.steps[0].reason, /create withheld, delegate never invoked/);
+  assert.match(held.steps[0].reason, /unowned live occupant/); assert.doesNotMatch(held.steps[0].reason, /inspect retained tab/);
+  assert.equal(command(f, 'tab', 'create').length, 0);
+
+  const source = path.join(f.scratch, 'create-refusal.json'), dispositionFile = path.join(f.scratch, 'dispose-create.json');
+  fs.writeFileSync(source, JSON.stringify(op));
+  const d = { schema: 'session-create-disposition/v1', common: f.project.common, operationId: op.id, operationDigest: digest(op),
+    target: op.target, outcome: 'never-started', creationInvoked: false, role: 'supervisor', actor: 'fixture-supervisor',
+    observedAt: new Date().toISOString(), reason: 'Inspected durable pre-native refusal; no tab create was invoked',
+    evidence: [{ file: source, sha256: createHash('sha256').update(fs.readFileSync(source)).digest('hex') }] };
+  const dispose = extra => disposeStart({ cwd: f.cwd, workspace: 'home', authorization: f.authorization, operationId: op.id,
+    dispositionFile, role: 'supervisor', actor: d.actor, env: f.env, ...extra });
+  fs.writeFileSync(dispositionFile, JSON.stringify(d));
+  assert.throws(dispose, /unowned live occupant/);
+  f.change(s => { s.agents = s.agents.filter(a => a.name !== 'late-manual'); });
+  for (const patch of [{ creationInvoked: true }, { operationDigest: '0'.repeat(64) }, { target: { ...op.target, tab: 'unproved' } }]) {
+    fs.writeFileSync(dispositionFile, JSON.stringify({ ...d, ...patch }));
+    assert.throws(dispose, /invalid or mismatched never-started evidence/);
+    assert.deepEqual(readControllerJournal(f.project.common).operations[1], op);
+  }
+  fs.writeFileSync(dispositionFile, JSON.stringify(d));
+  assert.throws(() => dispose({ authorization: f.auth({ actions: ['start-standard-slot'] }).file }), /not authorized: create-standard-slot/);
+  assert.equal(dispose().state, 'never-started');
+  assert.ok(validStartOperation(readControllerJournal(f.project.common).operations[1]));
+  assert.equal(mutations(f).length, 0, 'disposition only reads existing native layouts');
+  const recovered = await f.execute();
+  assert.equal(recovered.outcome, 'applied', JSON.stringify(recovered));
+  assert.equal(command(f, 'tab', 'create').length, 1); assert.equal(command(f, 'agent', 'start').length, 1);
+  assert.equal(readControllerJournal(f.project.common).operations.length, 3);
 });
 
 test('a faulty create reply naming an existing empty tab never sends input or starts an agent there', async t => {
@@ -237,6 +287,7 @@ test('a faulty create reply naming an existing empty tab never sends input or st
   assert.equal(result.outcome, 'stopped', JSON.stringify(result)); assert.match(result.steps.at(-1).reason, /create returned existing tab, pane or terminal/);
   assert.equal(command(f, 'pane', 'run').length, 0); assert.equal(command(f, 'agent', 'start').length, 0);
   assert.deepEqual(f.read().panes, panes);
+  assert.equal(readControllerJournal(f.project.common).operations[1].state, 'intent', 'entering the native create edge remains uncertain');
 });
 
 test('apply can create beside a controller-owned supervisor without an evidence file', async t => {

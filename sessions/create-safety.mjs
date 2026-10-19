@@ -3,6 +3,11 @@ import { matchingRun } from '../lib/retire.mjs';
 import { agentBinding } from './observe.mjs';
 import { equalBinding, validLaunchReceipt } from './lifecycle-evidence.mjs';
 
+// Only the adapter can prove that it has not entered the native create call.
+export class CreateNotInvokedError extends Error {
+  constructor(cause) { super(cause.message, { cause }); this.name = 'CreateNotInvokedError'; }
+}
+
 export const sameWorkspace = (a, b) => ['server', 'workspace', 'checkout'].every(k => a?.[k] === b?.[k]);
 export const claimsPosition = (op, uid, target, standardSlot) => op.state !== 'never-started' &&
   (op.uid === uid || sameWorkspace(op.target, target) && (op.standardSlot ?? op.spec?.standardSlot) === standardSlot);

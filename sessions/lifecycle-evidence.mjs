@@ -72,7 +72,7 @@ export function validStartOperation(op) {
     (!create || ['chat', 'supervisor'].includes(op.spec.role) && op.standardSlot === op.spec.role && op.spec.standardSlot === op.standardSlot && op.spec.intent?.kind !== 'work-item') &&
     Number.isSafeInteger(op.generation) && op.generation > 0 && exact(op.target, keys) &&
     keys.every(k => text(op.target[k])) && ['intent', 'acknowledged', 'withheld', 'never-started'].includes(op.state) &&
-    (op.state === 'never-started' ? !op.receipt && validStartDisposition(op, op.disposition?.request) &&
+    (op.state === 'never-started' ? !op.receipt && (create ? validCreateDisposition(op, op.disposition?.request) : validStartDisposition(op, op.disposition?.request)) &&
       exact(op.disposition, ['request', 'recordedAt', 'observationDigest']) &&
       Number.isFinite(Date.parse(op.disposition.recordedAt)) && hash(op.disposition.observationDigest) : op.disposition === undefined) &&
     (op.state !== 'withheld' || text(op.reason)) && (op.state !== 'acknowledged' || validLaunchReceipt(op, op.receipt));
@@ -93,6 +93,19 @@ export function validStartDisposition(op, d) {
     bindingKeys.slice(0, 5).every(k => d.target[k] === op.target[k]) &&
     d.outcome === 'never-started' && d.launchInvoked === false && d.shellOnly === true && d.agentPresent === false &&
     d.sessionPresent === false && d.launchPending === false && d.role === 'supervisor' && text(d.actor) &&
+    Number.isFinite(Date.parse(d.observedAt)) && text(d.reason) && Array.isArray(d.evidence) && d.evidence.length > 0 &&
+    d.evidence.every(e => exact(e, ['file', 'sha256']) && path.isAbsolute(e.file ?? '') && hash(e.sha256)) &&
+    new Set(d.evidence.map(e => e.file)).size === d.evidence.length;
+}
+// A workspace-only disposition is restricted to a durable pre-invocation
+// refusal. An unresolved native create call can never use this recovery path.
+export function validCreateDisposition(op, d) {
+  const withheld = { ...op, state: 'withheld' }; delete withheld.disposition;
+  return op.kind === 'create-standard-slot' && ['withheld', 'never-started'].includes(op.state) && text(op.reason) &&
+    exact(d, ['schema', 'common', 'operationId', 'operationDigest', 'target', 'outcome', 'creationInvoked', 'role', 'actor', 'observedAt', 'reason', 'evidence']) &&
+    d.schema === 'session-create-disposition/v1' && path.isAbsolute(d.common ?? '') && d.operationId === op.id && d.operationDigest === digest(withheld) &&
+    exact(d.target, ['server', 'workspace', 'checkout']) && ['server', 'workspace', 'checkout'].every(k => text(d.target[k]) && d.target[k] === op.target[k]) &&
+    d.outcome === 'never-started' && d.creationInvoked === false && d.role === 'supervisor' && text(d.actor) &&
     Number.isFinite(Date.parse(d.observedAt)) && text(d.reason) && Array.isArray(d.evidence) && d.evidence.length > 0 &&
     d.evidence.every(e => exact(e, ['file', 'sha256']) && path.isAbsolute(e.file ?? '') && hash(e.sha256)) &&
     new Set(d.evidence.map(e => e.file)).size === d.evidence.length;

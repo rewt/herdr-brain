@@ -17,7 +17,7 @@ import { parseUniqueJson } from './json.mjs';
 import { durableWrite, readControllerJournal } from './runtime.mjs';
 import { agentBinding, readSessionFacts } from './observe.mjs';
 import { readStandardSlots } from './receipts.mjs';
-import { claimsPosition, unownedWorkspaceReason } from './create-safety.mjs';
+import { claimsPosition, unownedWorkspaceReason, CreateNotInvokedError } from './create-safety.mjs';
 import { lastTabCloseVeto, unexpectedWorkspaceRemoval } from './close-safety.mjs';
 import { checkAuthorization } from './authorization.mjs';
 import { safeProjectPath } from './project.mjs';
@@ -155,6 +155,7 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
   };
   const before = async op => { safeStandard(op); await permit(op); return observe(); };
   const createWitnesses = new Map();
+  const createInvoked = new Set();
   const record = receipt => saveReceipt(project.common, receipt);
   const launch = (op, p, create, resume, shellTarget) => {
     const spec = p?.spec ?? op.spec, target = shellTarget ?? p?.binding ?? op.target;
@@ -168,7 +169,13 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     const made = opener({ ...launchOptions, target, role: spec.role, record: findOrgDir({ cwd: project.root, env }), launch: spec.resolvedRoute,
       name: resume ? target.agentName : `slot-${createHash('sha256').update(op.id).digest('hex').slice(0, 24)}`,
       instructions, common: project.common, operationId: op.id,
-      beforeMutation: receipt => physicalPermit(op, receipt, create), resume: resume ? target.nativeSessionId : undefined, create, env, herdr });
+      beforeMutation: receipt => physicalPermit(op, receipt, create), resume: resume ? target.nativeSessionId : undefined, create, env,
+      herdr: op.kind === 'create-standard-slot' ? (args, options) => {
+        // Set before entering the edge: even a lost/failed reply may have created
+        // a tab. Only failures before this boundary are provably not invoked.
+        if (args[0] === 'tab' && args[1] === 'create') createInvoked.add(op.id);
+        return herdr(args, options);
+      } : herdr });
     return { ...made, instructionsSha256: createHash('sha256').update(instructions).digest('hex') };
   };
   function physicalObservation(op) {
@@ -250,12 +257,18 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
   }
   return {
     async create(op) {
-      const o = await before(op);
-      creationGuard(op, o);
-      const made = launch(op, null, true, false), after = await observe();
-      const binding = launchedBinding(after, made, op.spec, op.target);
-      saveContext(op, op.uid, op.generation, op.specDigest, op.spec.resolvedRoute, binding, made.instructionsSha256);
-      return record({ operationId: op.id, uid: op.uid, generation: op.generation, specDigest: op.specDigest, binding });
+      try {
+        if (op.state !== 'intent') throw Error('create requires its exact unresolved intent; withheld operations need disposition');
+        const o = await before(op);
+        creationGuard(op, o);
+        const made = launch(op, null, true, false), after = await observe();
+        const binding = launchedBinding(after, made, op.spec, op.target);
+        saveContext(op, op.uid, op.generation, op.specDigest, op.spec.resolvedRoute, binding, made.instructionsSha256);
+        return record({ operationId: op.id, uid: op.uid, generation: op.generation, specDigest: op.specDigest, binding });
+      } catch (error) {
+        if (!createInvoked.has(op.id)) throw new CreateNotInvokedError(error);
+        throw error;
+      }
     },
     async start(op) {
       const o = await before(op), pane = o.panes.find(p => p.pane_id === op.target.pane);

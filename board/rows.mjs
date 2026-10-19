@@ -82,3 +82,5 @@ export function validateDocument(doc, options = {}) {
   return { schema: 'board-rows/v1', project: safeProject(source.project), generatedAt: safeTime(source.generatedAt),
     rows: source.rows.map(row => validateRow(row, { ...options, project: source.project })) };
 }
+
+// R-566 refusal control

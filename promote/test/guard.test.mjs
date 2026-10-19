@@ -109,11 +109,21 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
 }
 
 function damage(f, kind) {
-  if (kind === 'boundary-input') fs.appendFileSync(f.gate, '// changed external boundary\n');
+  if (kind === 'boundary-input') {
+    const bytes = fs.readFileSync(f.gate);
+    fs.appendFileSync(f.gate, '// changed external boundary\n');
+    return () => fs.writeFileSync(f.gate, bytes);
+  }
   if (kind === 'self-authority' || kind === 'out-of-scope') {
+    const previous = { head: f.guard.expectedHead, finalHead: f.settled.finalHead, resultHead: f.settled.result.head };
     f.change(kind === 'self-authority' ? 'promote/guard.mjs' : 'docs/guide.md', '// candidate edit\n');
     const head = f.git(['rev-parse', 'HEAD'], f.workspace);
     f.guard.expectedHead = head; f.settled.finalHead = head; f.settled.result.head = head; f.save();
+    if (kind === 'out-of-scope') return () => {
+      // Restore only this private fixture's added scope change and its head binding.
+      f.git(['reset', '--hard', previous.head], f.workspace);
+      f.guard.expectedHead = previous.head; f.settled.finalHead = previous.finalHead; f.settled.result.head = previous.resultHead; f.save();
+    };
   }
   if (kind === 'expired') {
     const at = new Date(Date.now() - INTERIM_MS).toISOString();
@@ -125,22 +135,43 @@ function damage(f, kind) {
   }
   if (kind === 'stale-PASS') { f.settled.result.head = f.base; f.save(); }
 }
-const refusals = { 'boundary-input': 'GREEN_REACH_UNKNOWN', 'self-authority': 'GREEN_SELF_AUTHORITY', foreign: 'GREEN_IDENTITY_MISMATCH',
-  expired: 'GREEN_EXPIRED', 'stale-PASS': 'AUTOPILOT_PASS_STALE', 'out-of-scope': 'GREEN_REACH_UNKNOWN' };
+const refusals = {
+  'boundary-input': { code: 'GREEN_REACH_UNKNOWN', reason: f => `external configuration drift: ${f.gate}` },
+  'self-authority': { code: 'GREEN_SELF_AUTHORITY', reason: 'eligibility/evidence authority: promote/guard.mjs' },
+  foreign: { code: 'GREEN_IDENTITY_MISMATCH', reason: 'admission is outside the declared canonical project and record' },
+  expired: { code: 'GREEN_EXPIRED', reason: 'activation is missing, in the future or outside the ten-day interim' },
+  'stale-PASS': { code: 'AUTOPILOT_PASS_STALE', reason: 'current clean PASS or head changed' },
+  'out-of-scope': { code: 'GREEN_REACH_UNKNOWN', reason: 'outside reviewed component contracts: docs/guide.md' },
+};
+const refusalMessage = (f, kind) => {
+  const { code, reason } = refusals[kind];
+  return `${code}: ${typeof reason === 'function' ? reason(f) : reason}; nothing merged`;
+};
 
 test('green guard admits the exact reviewed head under the record lock', async t => {
   const f = await fixture(t); let called = false;
   f.check(() => { called = true; assert.ok(fs.existsSync(path.join(f.org, 'lock'))); }); assert.equal(called, true);
 });
-for (const [kind, code] of Object.entries(refusals)) test(`green guard refuses ${kind} without integration`, async t => {
-  const f = await fixture(t, { foreign: kind === 'foreign' }); damage(f, kind);
-  assert.throws(() => f.check(() => assert.fail('refused operation executed')), new RegExp(code));
+for (const kind of Object.keys(refusals)) test(`green guard refuses ${kind} without integration`, async t => {
+  const f = await fixture(t, { foreign: kind === 'foreign' });
+  if (kind !== 'foreign') f.check();
+  const restore = damage(f, kind);
+  assert.throws(() => f.check(() => assert.fail('refused operation executed')), { message: refusalMessage(f, kind) });
   assert.equal(f.git(['rev-parse', 'main'], f.project), f.base);
   assert.equal(fs.existsSync(path.join(f.org, 'lock')), false);
+  if (restore) { restore(); f.check(); }
 });
-for (const kind of ['disabled', 'unknown', 'paused', 'STOP', 'identity', 'review-hash', 'reviewed-commit', 'findings'])
+const stalePass = 'AUTOPILOT_PASS_STALE: current clean PASS or head changed; nothing merged';
+const retainedRefusals = {
+  disabled: 'AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged',
+  unknown: 'AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged',
+  paused: 'AUTOPILOT_PAUSED: housekeeping paused before integration; nothing merged',
+  STOP: 'supervisor STOP exists; nothing merged',
+  identity: stalePass, 'review-hash': stalePass, 'reviewed-commit': stalePass, findings: stalePass,
+};
+for (const [kind, message] of Object.entries(retainedRefusals))
 test(`existing-worker guard retains ${kind} refusal`, async t => {
-  const f = await fixture(t);
+  const f = await fixture(t); f.check();
   if (kind === 'disabled') { f.settings.enabled = false; f.configure(); }
   if (kind === 'unknown') { f.settings.cohort = 'unknown'; f.configure(); }
   if (kind === 'paused') f.put('.housekeeping.json', '{"enabled":false}', f.project);
@@ -150,7 +181,7 @@ test(`existing-worker guard retains ${kind} refusal`, async t => {
   if (kind === 'reviewed-commit') f.settled.result.reviewed_commit = f.base;
   if (kind === 'findings') { f.settled.review.text = f.settled.review.text.replace('None', '- [Minor] Finding'); f.settled.review.sha256 = hash(f.settled.review.text); }
   f.save();
-  assert.throws(() => f.check(), /AUTOPILOT_DISABLED|AUTOPILOT_PAUSED|supervisor STOP|AUTOPILOT_PASS_STALE/);
+  assert.throws(() => f.check(), { message });
 });
 test('clean-pass keeps its ordinary documentation scope and named refusals', async t => {
   const f = await fixture(t, { cohort: 'clean-pass' });
@@ -187,7 +218,7 @@ for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existi
     process: lookupProcess(child.pid),
   }));
   if (kind !== 'foreign') f.check(); // A valid admission precedes late drift.
-  damage(f, kind);
+  const restore = damage(f, kind);
   const result = f.exec(process.execPath, [cli, 'candidate', '--existing-worker', '--repo', f.project, '--org', f.org,
     '--if-current-run', f.run, '--expected-head', f.guard.expectedHead, '--delivery-attempts', '1', '--retry-seconds', '0', '--herdr', f.herdr]);
   const reply = JSON.parse(f.ok(result)); assert.deepEqual(reply.worker, { already_running: true });
@@ -203,9 +234,10 @@ for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existi
     assert.equal(f.show(f.item).closed.as, 'done'); assert.ok(fs.existsSync(f.checked));
     assert.equal(f.git(['rev-list', '--merges', 'main'], f.project), '');
   } else {
-    assert.equal(row.outcome, 'refused', evidence); assert.match(row.reason, new RegExp(refusals[kind]));
+    assert.equal(row.outcome, 'refused', evidence); assert.equal(row.reason, refusalMessage(f, kind), evidence);
     assert.equal(f.git(['rev-parse', 'main'], f.project), f.base);
     assert.ok(fs.existsSync(f.workspace)); assert.equal(f.show(f.item).closed, null);
     assert.equal(fs.existsSync(f.checked), false, 'refused before candidate validation');
+    if (restore) { restore(); f.check(); }
   }
 });

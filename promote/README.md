@@ -438,11 +438,16 @@ Files that do not fit are recorded as `time-budget` or `file-cap` deferrals to t
 release candidate. Required exceptions carry `bound-required` and
 `budget.required_over_budget` in the receipt.
 
-`test/helpers/test-durations.json` records the latest tracked whole-file
-measurements from the ENG-135 inventory, with a timestamp per file and a source
-path. Its 342,215 ms measurement for `lanes/test/lane.test.mjs` exceeds the default
-budget by itself. Unmeasured files use a conservative 60,000 ms estimate; every
-row identifies measured or fallback cost and retains the measurement timestamp when available. Update the tracked inventory from
+`test/helpers/test-durations.json` records tracked whole-file measurements with a
+timestamp per file. The default source is the ENG-135 inventory; some rows carry
+their own source. The three split lane CLI files have individual R-551 measurements:
+214,806 ms for `lanes/test/lane.test.mjs`, 216,864 ms for
+`lanes/test/lane-dispatch.test.mjs`, and 177,844 ms for
+`lanes/test/lane-review.test.mjs`. Each fits the default 300,000 ms budget alone,
+but no pair fits together, and other selected extras can leave too little budget
+for even one. Unmeasured files use a conservative 60,000 ms estimate; every plan
+row identifies measured or fallback cost and retains the measurement timestamp
+when available. Update the tracked inventory from
 whole-file measurements collected during release preparation, without running
 extra suites in a lane. The estimates bound selection rather than impose a new
 execution timeout: machine load and changed test behavior can exceed them.

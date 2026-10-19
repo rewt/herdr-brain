@@ -16,6 +16,7 @@ import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 const CLI = process.env.TEST_SLOT_QUEUE_CLI ?? fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
 const MODULE = pathToFileURL(CLI).href;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const loadWaitSeconds = ms => Math.ceil(loadTimeout(ms) / 1000);
 const firing = (name, body) => test(name, { timeout: loadTimeout(20000) }, body);
 
 async function until(predicate, what) {
@@ -50,7 +51,7 @@ function fixture(t) {
       : new Promise(resolve => child.once('close', resolve))));
     fs.rmSync(root, { recursive: true, force: true });
   });
-  const worker = (label, { lockPath = lock, compatPath, pollMs = 100, waitSeconds = 12, preload = '' } = {}) => {
+  const worker = (label, { lockPath = lock, compatPath, pollMs = 100, waitSeconds = loadWaitSeconds(12000), preload = '' } = {}) => {
     const waiting = file(`${label}.waiting`), ready = file(`${label}.ready`), finish = file(`${label}.finish`);
     const script = `import fs from 'node:fs';
       ${preload}
@@ -88,7 +89,7 @@ function writeTicket(f, { pid = process.pid, arrivedMs = Date.now() - 1000, toke
   const identity = processStartRecord(pid);
   const ticket = { v: 1, token, pid, processStart: identity.start, processBirth: null,
     label: 'wire-peer', cwd: f.root, host: os.hostname(), arrivedAt: new Date(arrivedMs).toISOString(),
-    expiresAt: new Date(Date.now() + 12000).toISOString(), ...overrides };
+    expiresAt: new Date(Date.now() + loadTimeout(12000)).toISOString(), ...overrides };
   const name = `${String(arrivedMs).padStart(16, '0')}-${String(pid).padStart(10, '0')}-${token}.json`;
   fs.mkdirSync(`${f.lock}.queue`, { recursive: true, mode: 0o700 });
   fs.writeFileSync(path.join(`${f.lock}.queue`, name), JSON.stringify(ticket) + '\n');
@@ -98,20 +99,117 @@ function writeTicket(f, { pid = process.pid, arrivedMs = Date.now() - 1000, toke
 firing('1: the earlier 2 s waiter takes the slot before a later 100 ms waiter', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
   await until(() => fs.existsSync(holder.ready), 'holder');
-  const early = f.worker('early', { pollMs: 2000 });
+  const removed = f.file('early.removed');
+  const early = f.worker('early', { pollMs: 2000, preload: `
+    const remove = fs.rmSync;
+    fs.rmSync = (target, ...args) => {
+      if (String(target).startsWith(${JSON.stringify(`${f.lock}.queue/`)}) && !String(target).split('/').at(-1).startsWith('.')) {
+        const ticket = JSON.parse(fs.readFileSync(target, 'utf8'));
+        if (ticket.pid === process.pid) {
+          const holder = JSON.parse(fs.readFileSync(${JSON.stringify(f.lock)}, 'utf8'));
+          if (holder.pid !== ticket.pid || holder.token !== ticket.token) throw Error('ticket removed before owning the lock');
+          fs.writeFileSync(${JSON.stringify(removed)}, JSON.stringify({ ticket, holder }));
+        }
+      }
+      return remove(target, ...args);
+    };` });
   await until(() => fs.existsSync(early.waiting), 'earlier arrival');
   const late = f.worker('late', { pollMs: 100 });
   await until(() => fs.existsSync(late.waiting), 'later arrival');
+  const lateTicket = f.queue().find(name => JSON.parse(fs.readFileSync(path.join(`${f.lock}.queue`, name), 'utf8')).pid === late.child.pid);
+  assert.ok(lateTicket, 'later waiter has published its ticket');
   await f.stop(holder);
   await until(() => fs.existsSync(early.ready) || fs.existsSync(late.ready), 'next holder');
   assert.equal(fs.existsSync(late.ready), false, 'fast polling cannot pass an earlier waiter');
   assert.equal(fs.existsSync(early.ready), true);
-  assert.equal(f.queue().length, 1, 'lock is created before the winner removes its ticket');
+  const witness = JSON.parse(fs.readFileSync(removed, 'utf8'));
+  assert.equal(witness.holder.token, JSON.parse(fs.readFileSync(early.ready, 'utf8')).token);
+  assert.equal(witness.ticket.token, witness.holder.token, 'lock exists before the winner removes its own ticket');
+  assert.deepEqual(f.queue(), [lateTicket], 'later waiter keeps its ticket while early holds the lock');
   await f.stop(early);
   await until(() => fs.existsSync(late.ready), 'later holder');
   await f.stop(late);
   assert.equal(fs.readFileSync(f.file('order'), 'utf8'), 'holder\nearly\nlate\n');
   assert.deepEqual(f.queue(), []);
+});
+
+firing('lock publication never exposes incomplete bytes to another queued waiter', async t => {
+  const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
+  await until(() => fs.existsSync(holder.ready), 'holder');
+  const paused = f.file('publication.paused'), resume = f.file('publication.resume'), observed = f.file('late.observed');
+  const early = f.worker('early', { pollMs: 50, preload: `
+    const write = fs.writeFileSync;
+    fs.writeFileSync = (target, data, options) => {
+      if (options?.flag !== 'wx' || typeof data !== 'string' || !data.includes('"acquiredAt"')) return write(target, data, options);
+      const fd = fs.openSync(target, options.flag, options.mode), split = Math.floor(data.length / 2);
+      try {
+        write(fd, data.slice(0, split));
+        write(${JSON.stringify(paused)}, 'paused');
+        const deadline = Date.now() + ${loadTimeout(6000)};
+        while (!fs.existsSync(${JSON.stringify(resume)})) {
+          if (Date.now() >= deadline) throw Error('publication pause timed out');
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+        }
+        return write(fd, data.slice(split));
+      } finally { fs.closeSync(fd); }
+    };` });
+  await until(() => fs.existsSync(early.waiting), 'early waiting');
+  const late = f.worker('late', { pollMs: 50, preload: `
+    const read = fs.readFileSync;
+    fs.readFileSync = (target, ...args) => {
+      try { return read(target, ...args); }
+      finally {
+        if (target === ${JSON.stringify(f.lock)} && fs.existsSync(${JSON.stringify(paused)}) && !fs.existsSync(${JSON.stringify(resume)}))
+          fs.writeFileSync(${JSON.stringify(observed)}, 'observed');
+      }
+    };` });
+  await until(() => fs.existsSync(late.waiting), 'late waiting');
+  const names = f.queue();
+  assert.equal(names.length, 2);
+  await f.stop(holder);
+  await until(() => fs.existsSync(paused) && fs.existsSync(observed), 'late to read during the incomplete write');
+  assert.equal(fs.existsSync(f.lock), false, 'incomplete holder bytes remain private');
+  assert.deepEqual(f.queue(), names, 'neither ticket is removed before lock publication');
+  fs.writeFileSync(resume, 'resume');
+  await until(() => fs.existsSync(early.ready) || fs.existsSync(late.ready), 'next holder');
+  assert.equal(fs.existsSync(early.ready), true);
+  assert.equal(fs.existsSync(late.ready), false, 'late cannot pass the unpublished head');
+  await f.stop(early);
+  await until(() => fs.existsSync(late.ready), 'later holder');
+  await f.stop(late);
+  assert.equal(fs.readFileSync(f.file('order'), 'utf8'), 'holder\nearly\nlate\n');
+  assert.deepEqual(f.queue(), []);
+  assert.deepEqual(fs.readdirSync(f.root).filter(name => name.endsWith('.tmp')), [], 'publication scratch is removed');
+});
+
+firing('lock publication preserves a competing creator and cleans scratch on link failure', async t => {
+  for (const error of ['EEXIST', 'EACCES']) {
+    const f = fixture(t);
+    const result = await f.start(['--input-type=module', '-e', `import fs from 'node:fs';
+      const link = fs.linkSync;
+      fs.linkSync = (source, destination) => {
+        if (destination !== ${JSON.stringify(f.lock)}) return link(source, destination);
+        ${error === 'EEXIST' ? `const competing = { ...JSON.parse(fs.readFileSync(source, 'utf8')), token: 'competing', label: 'competing' };
+          fs.writeFileSync(destination, JSON.stringify(competing), { flag: 'wx' });
+          return link(source, destination);` : "throw Object.assign(Error('publication denied'), { code: 'EACCES' });"}
+      };
+      const { acquireTestSlot } = await import(${JSON.stringify(MODULE)});
+      try {
+        const slot = await acquireTestSlot('publisher', { lockPath: ${JSON.stringify(f.lock)}, env: process.env, waitSeconds: 0 });
+        console.log(JSON.stringify({ nested: slot.nested, token: slot.token }));
+      } catch (error) { console.log(JSON.stringify({ code: error.code, message: error.message })); }`]).done;
+    assert.equal(result.code, 0, result.stderr);
+    const outcome = JSON.parse(result.stdout);
+    if (error === 'EEXIST') {
+      assert.deepEqual(outcome, { nested: true, token: 'competing' }, 'exclusive link loses to the existing holder');
+      assert.equal(JSON.parse(fs.readFileSync(f.lock, 'utf8')).token, 'competing');
+    } else {
+      assert.equal(outcome.code, 'TEST_SLOT_HOLDER_UNKNOWN');
+      assert.match(outcome.message, /cannot create .*: EACCES/);
+      assert.equal(fs.existsSync(f.lock), false);
+    }
+    assert.deepEqual(fs.readdirSync(f.root).filter(name => name.endsWith('.tmp')), [], 'failed publication scratch is removed');
+  }
 });
 
 firing('2: SIGKILL leaves a gone head that ESRCH removes even with denied start-time reads', async t => {
@@ -144,10 +242,8 @@ firing('3: an EPERM/unknown head blocks until its own expiresAt', async t => {
   const status = await f.start(['--input-type=module', '-e', `import fs from 'node:fs';${denySource(peer.child.pid, { eperm: true })}
     process.argv = [process.execPath, ${JSON.stringify(CLI)}, 'status', '--lock-path', ${JSON.stringify(f.lock)}];await import(${JSON.stringify(MODULE)});`]).done;
   assert.equal(JSON.parse(status.stdout).queue[0].state, 'unknown');
-  await sleep(Math.max(0, expires - Date.now() - 150));
-  assert.equal(fs.existsSync(next.ready), false, 'no separate shorter unknown-ticket cap');
   await until(() => fs.existsSync(next.ready), 'expired head to stop blocking');
-  assert.ok(Date.now() >= expires);
+  assert.ok(Date.parse(JSON.parse(fs.readFileSync(next.ready, 'utf8')).acquiredAt) >= expires, 'no separate shorter unknown-ticket cap');
   assert.equal(f.queue().includes(head.name), false);
   assert.equal(peer.child.exitCode, null, 'expiration works while the pid still exists');
   await f.stop(next);
@@ -212,10 +308,10 @@ firing('6: inherited-token and token-free nested runs never create tickets', asy
   const f = fixture(t), result = f.file('nested-result');
   const program = `const fs=require('fs'),cp=require('child_process');
     for(const inherited of [true,false]){const env={...process.env};if(!inherited){delete env.MONITOR_TEST_SLOT_TOKEN;delete env.BCH_CLOAK_TEST_SLOT_TOKEN;}
-      const r=cp.spawnSync(process.execPath,[${JSON.stringify(CLI)},'run','nested','--wait','5','--',process.execPath,'-e',''],{env,encoding:'utf8'});
+      const r=cp.spawnSync(process.execPath,[${JSON.stringify(CLI)},'run','nested','--wait',${JSON.stringify(String(loadWaitSeconds(5000)))},'--',process.execPath,'-e',''],{env,encoding:'utf8'});
       if(r.status!==0)throw Error(r.stderr);if(fs.existsSync(${JSON.stringify(`${f.lock}.queue`)}))throw Error('nested run created queue');}
     fs.writeFileSync(${JSON.stringify(result)},'done');`;
-  const run = await f.start([CLI, 'run', 'outer', '--wait', '5', '--', process.execPath, '-e', program]).done;
+  const run = await f.start([CLI, 'run', 'outer', '--wait', String(loadWaitSeconds(5000)), '--', process.execPath, '-e', program]).done;
   assert.equal(run.code, 0, run.stderr);
   assert.equal(fs.readFileSync(result, 'utf8'), 'done');
   assert.equal(fs.existsSync(`${f.lock}.queue`), false);
@@ -298,7 +394,7 @@ firing('two-path acquisition queues on the second path only after taking the fir
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) firing(`waiting ${signal} removes the ticket and releases an already held compat path`, async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
   await until(() => fs.existsSync(holder.ready), 'holder');
-  const waiting = f.start([CLI, 'run', 'waiting', '--wait', '12', '--poll-ms', '2000', '--', process.execPath, '-e', ''],
+  const waiting = f.start([CLI, 'run', 'waiting', '--wait', String(loadWaitSeconds(12000)), '--poll-ms', '2000', '--', process.execPath, '-e', ''],
     { MONITOR_TEST_SLOT_COMPAT_PATH: f.compat });
   await until(() => f.queue().length === 1, 'CLI ticket on the second path');
   assert.equal(JSON.parse(fs.readFileSync(f.compat, 'utf8')).pid, waiting.child.pid);
@@ -314,7 +410,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) firing(`waiting ${signal} 
 firing('wait exhaustion still exits 75 with TEST_SLOT_HELD and removes its ticket', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
   await until(() => fs.existsSync(holder.ready), 'holder');
-  const waiter = f.start([CLI, 'run', 'budget', '--wait', '1', '--', process.execPath, '-e', '']);
+  const waiter = f.start([CLI, 'run', 'budget', '--wait', String(loadWaitSeconds(1000)), '--', process.execPath, '-e', '']);
   await until(() => f.queue().length === 1, 'budget ticket');
   const result = await waiter.done;
   assert.equal(result.code, 75); assert.match(result.stderr, /^TEST_SLOT_HELD:/);
@@ -337,7 +433,7 @@ firing('callback failure and an explicit process exit both remove a waiting tick
     const result = await f.start(['--input-type=module', '-e', `import fs from 'node:fs';
       const { acquireTestSlot } = await import(${JSON.stringify(MODULE)});
       try { await acquireTestSlot('ends-wait', { lockPath: ${JSON.stringify(f.lock)}, env: process.env,
-        waitSeconds: 10, onWait: () => { ${exit ? 'process.exit(0);' : "throw Error('callback failed');"} } }); }
+        waitSeconds: ${loadWaitSeconds(10000)}, onWait: () => { ${exit ? 'process.exit(0);' : "throw Error('callback failed');"} } }); }
       catch (error) { if(error.message !== 'callback failed') throw error; }`]).done;
     assert.equal(result.code, 0, result.stderr);
     assert.deepEqual(f.queue(), []);

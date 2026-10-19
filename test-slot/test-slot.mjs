@@ -196,14 +196,20 @@ export async function acquireTestSlot(label, { env = process.env, lockPath = slo
       const first = ticket ? queue.head?.name === ticket.name : queue.head === null;
       if (state === 'free' && first && (!ticket || Date.now() < deadline)) {
         const mine = { pid: process.pid, processStart: ownStart.start, processBirth: ownStart.birth, pgid: null, groupStart: null, groupBirth: null, token, label, cwd: process.cwd(), host: os.hostname(), acquiredAt: new Date().toISOString() };
+        const temporary = path.join(path.dirname(lockPath), `.${path.basename(lockPath)}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`);
         try {
-          fs.writeFileSync(lockPath, `${JSON.stringify(mine)}\n`, { flag: "wx", mode: 0o644 });
+          // Exclusive creation must publish complete bytes: an empty/partial
+          // lock makes another queued waiter refuse as HOLDER_UNKNOWN.
+          fs.writeFileSync(temporary, `${JSON.stringify(mine)}\n`, { flag: "wx", mode: 0o644 });
+          fs.linkSync(temporary, lockPath);
           // The finally block removes the ticket only after the lock is published.
           return held(lockPath, mine);
         } catch (error) {
           if (error?.code !== "EEXIST") throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot create ${lockPath}: ${reasonOf(error)}.`);
           // A competing creator may be our holder; recheck nesting before queuing.
           continue;
+        } finally {
+          fs.rmSync(temporary, { force: true });
         }
       }
       const waited = Date.now() - started;

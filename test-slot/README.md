@@ -126,6 +126,9 @@ an unknown PID is honored until its ticket's `expiresAt`, with no shorter cap.
 Tickets expire at their wait allowance even if their process is still live.
 Nested commands and zero-wait takers publish no tickets. Deleting a queue directory
 lets live waiters republish their original names and arrival times on the next poll.
+New holders write complete lock bytes to a hidden sibling, then publish them by
+exclusive hard link before removing their ticket. Readers cannot see a partial
+lock record from a participating taker; competing creators cannot overwrite it.
 Old pollers still interoperate through the unchanged lock record and may take a
 free slot ahead of queued waiters; full arrival order requires both copies to queue.
 The compatibility path is acquired first, then the workspace path with its own

@@ -204,3 +204,56 @@ files are changed here. BCH owns accepting a pin and updating its adapters.
 `contrib/settle-watch.mjs`, `supervisor/reconcile.mjs`, `lib/cli-help.mjs` and all
 notice formats stay byte-identical. The supervisor owns the real Brain/lab demo,
 activation and BCH's later agreement; the lane's demonstrations are offline.
+
+## Project-local rollback
+
+The pin-capable fallback is **`rc-20261019T042359000Z-cc585d9f33`**, the
+first activated `herdr-release/v1` bundle. It replaces frozen A' as the rollback
+target: A' predates the manifest and cannot be a project pin. The fallback's
+acceptance was **19/19 PASS, READY**. The acceptance summary is
+`/Users/rewt/development/rewt/.org/evidence/RELEASE-ACCEPTANCE-SUMMARIES-20261019/rc-20261019T042359000Z-cc585d9f33.summary.json`,
+SHA-256 `6c81d9147e1983ebf9fb7ad911ed457eddd8e02b3a550e90738cb1fb9e606d39`.
+This names an eligible retained bundle; it does not change a project's pin.
+
+The offline NEW-writer -> OLD-reader evidence is committed at
+[`docs/evidence/ENG-441/rc-20261019T042359000Z-cc585d9f33.json`](../docs/evidence/ENG-441/rc-20261019T042359000Z-cc585d9f33.json).
+The fallback reads all **27 covered formats with zero failures**. There are
+**35 named not-covered formats** in the broader persisted-format inventory.
+The second requested OLD bundle,
+`rc-20261019T154523000Z-ebcc5ffe85`, has the same result in its
+[JSON evidence](../docs/evidence/ENG-441/rc-20261019T154523000Z-ebcc5ffe85.json).
+These are representative probes, not a blanket state/recovery certification:
+dispatch and settle checks exercise their status readers; train coverage is a
+refused train, not recovery of a successful completed promotion. The JSON names
+the exact OLD/NEW commits, per-format reader results and coverage limits. The
+[format list](../docs/contracts/formats.json) ships with new bundles; OLD need
+not have that list. Each affected switch must resolve any relevant coverage gap
+before relying on the fallback; otherwise KEEP and recover forward.
+
+For a project-local rollback:
+
+1. Stop the affected project's new admissions. Account for its queued jobs,
+   entry points and single owning controller; a retirement HOLD alone does not
+   stop dispatch or promotion.
+2. Let bound jobs finish on their recorded immutable runtime. If needed, pause
+   through their supported safe points; do not move jobs to a guessed runtime.
+   Retain every bundle and adapter needed by live or recoverable work.
+3. From that project's canonical checkout, prepare the pin to its known-good
+   immutable bundle with the release pin command, verify its acceptance and
+   read-back under the accepted pin contract, and **commit `.herdr-release.json`**.
+   For this fallback the selection is
+   `{"release":"rc-20261019T042359000Z-cc585d9f33"}`.
+4. Restart that project's single owner on the committed selection. Preserve
+   existing job bindings and reconcile actual outcomes using their receipts.
+
+Never rewind `.org`, restore queue snapshots, replay completed gates, undo a
+landed commit, or repeat signing/broadcast because software was rolled back.
+If the old-reader check fails, **KEEP/forward recovery** is the fallback until
+an approved migration exists. An unknown relevant format is not a passing
+compatibility result.
+
+Bare `release.sh rollback` switches the installation's global previous release;
+it is **not a project rollback**. `unpin` follows global `current` and does not
+select a known-good rollback. This section performs no activation, pin change,
+state migration or live operation. Wiring `compat.mjs` into release build is a
+follow-up after the concurrent pin-contract changes land.

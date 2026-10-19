@@ -1,0 +1,48 @@
+TAP version 13
+# Subtest: every registry format row and machine inventory entry agree in both directions
+ok 1 - every registry format row and machine inventory entry agree in both directions
+  ---
+  duration_ms: 14.192083
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: NEW real writers -> archived OLD own readers without an OLD formats list
+ok 2 - NEW real writers -> archived OLD own readers without an OLD formats list
+  ---
+  duration_ms: 12569.466833
+  ...
+# Subtest: reader failures retain OLD stderr, exit nonzero, write JSON and require KEEP; missing readers are named
+ok 3 - reader failures retain OLD stderr, exit nonzero, write JSON and require KEEP; missing readers are named
+  ---
+  duration_ms: 657.546708
+  ...
+# Subtest: scratch environment removes inherited identity, Git selectors, preloads and live resource paths
+ok 4 - scratch environment removes inherited identity, Git selectors, preloads and live resource paths
+  ---
+  duration_ms: 0.982666
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+# Subtest: tier selection covers every current test once in promotion or release and excludes support modules
+ok 5 - tier selection covers every current test once in promotion or release and excludes support modules
+  ---
+  duration_ms: 4.555875
+  ...
+# Subtest: split lane CLI files keep release placement and individual suite deadlines
+ok 6 - split lane CLI files keep release placement and individual suite deadlines
+  ---
+  duration_ms: 1.844416
+  ...
+# Subtest: a module folder removed from the planned tree contributes no tests instead of failing the plan
+ok 7 - a module folder removed from the planned tree contributes no tests instead of failing the plan
+  ---
+  duration_ms: 1.314292
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 128 command files from other origins
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 13370.596167

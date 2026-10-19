@@ -1,0 +1,990 @@
+{
+  "schema": "brain-compat/v1",
+  "generatedAt": "2026-10-19T20:06:29.875Z",
+  "old": {
+    "root": "/Users/rewt/.local/share/herdr-monitor/releases/rc-20261019T042359000Z-cc585d9f33",
+    "commit": "cc585d9f334c9842b459ef2b7ff3f693d57eb08b"
+  },
+  "new": {
+    "root": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-compat",
+    "commit": "1ec5c3f2426447ccac2d29f3c274b5112425acdc"
+  },
+  "inventory_sha256": "feb174f7dbce411eb24dced44bc189490b5eb658dba864509006a2e04ac26ff6",
+  "node": "v20.19.4",
+  "counts": {
+    "pass": 27,
+    "fail": 0,
+    "not-covered": 35
+  },
+  "message": "No failures in covered old readers; not-covered formats still need switch-specific evidence.",
+  "limitations": "Representative offline state only; pass does not authorize a switch, migration, completed-gate replay or job handoff.",
+  "formats": [
+    {
+      "id": "fleet.json",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "one project joined using NEW joinFleet",
+      "artifacts": [
+        {
+          "path": "../fleet/fleet.json",
+          "sha256": "c9880135450d20d297c2a2d05ba53ca68d96f814687cd657094c090356fc5dd2"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "fleet identity read\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "project-summary/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "published summary and generation switch",
+      "artifacts": [
+        {
+          "path": "project/.org/.published-summaries/de88745cf7e1227dbc863444572792352cff6469ec67364375e1857a900fedff/summary.json",
+          "sha256": "98084c552af99cdfc0f6672e4f3ec85b5e2a1476d0e1415c0aa784c0e5a01f6e"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "fresh project summary rendered\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "occupancy/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "shared presence; reader must preserve uncertain ownership",
+      "artifacts": [
+        {
+          "path": "occupancy.json",
+          "sha256": "6652737b6a1fdc22ce7235a80b233a5f6cc5b7a7654e9d9abf613673ca58a7b8"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD occupancy conservatively keeps observed owner\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "herdr-release/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "real manifest and non-null committed canonical pin",
+      "artifacts": [
+        {
+          "path": "installation/releases/compat-release/.release-manifest.json",
+          "sha256": "583999601a6bdb992671c7ed412d76301697993ef7682dfebc5358f71ed7836b"
+        },
+        {
+          "path": "project/.herdr-release.json",
+          "sha256": "7d020ab6e2439a70bd5ac44fbd66306c07ca9e6eaa158461d147e878bab9d12e"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD manifest verifier and canonical committed pin reader\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": ".herdr-release.json",
+      "version": "unversioned",
+      "rule": "closed",
+      "status": "pass",
+      "scope": "real manifest and non-null committed canonical pin",
+      "artifacts": [
+        {
+          "path": "installation/releases/compat-release/.release-manifest.json",
+          "sha256": "583999601a6bdb992671c7ed412d76301697993ef7682dfebc5358f71ed7836b"
+        },
+        {
+          "path": "project/.herdr-release.json",
+          "sha256": "7d020ab6e2439a70bd5ac44fbd66306c07ca9e6eaa158461d147e878bab9d12e"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD manifest verifier and canonical committed pin reader\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "brain.log/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "source-gap event through NEW journal append",
+      "artifacts": [
+        {
+          "path": "logs/compat-fixture/00db48039284a3925878737f3a99727c34a992c3aa8f92a2ac2dbf0914ccfe5c/segment-0000000000000001.jsonl",
+          "sha256": "b0c8f85f6a238770f5f5b5a7c4844e2cf4d958508f70e2bfe552db94da67e746"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD journal read\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "brain.transport/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "fixture receiver enrollment, acceptance and hook claim; no harness launched",
+      "artifacts": [
+        {
+          "path": "transport.jsonl",
+          "sha256": "d348cbd8a3b17f4d11ccf34606ef46c13a749594039ed5df70ef92d746abcde8"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD receiver fold and hook handoff read NEW claim without replay\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "hook-pull/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "fixture receiver enrollment, acceptance and hook claim; no harness launched",
+      "artifacts": [
+        {
+          "path": "transport.jsonl",
+          "sha256": "0eda9dabc8f23f5cbf6c7a79949db003c812ea6948640d04c86d68ec025f86f9"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD receiver fold and hook handoff read NEW claim without replay\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "herdr-reference/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "External-writer contract; Brain has no real writer to exercise."
+    },
+    {
+      "id": "record-events",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "pass",
+      "scope": "item, run, ingested report and note; status/show/snapshot, retirement status and supervisor brief",
+      "artifacts": [
+        {
+          "path": "project/.org/events.jsonl",
+          "sha256": "7c44ef926737ceb29c7bc1218b6b675ded8d63de9903f356b73fa88fab231930"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD status/show/snapshot, retirement status and supervisor brief read the NEW event log\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "record-config",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "pass",
+      "scope": "record init defaults",
+      "artifacts": [
+        {
+          "path": "project/.org/config.json",
+          "sha256": "01831577df4650c0571af3390ab9baaacee924a68e747aad18e51c5c714df315"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "record config read\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "promotion-queue",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "pass",
+      "scope": "pending queue request with NEW release binding",
+      "artifacts": [
+        {
+          "path": "project/.git/promote/queue.json",
+          "sha256": "a415d2dafa31cb2e4003444fcad8b0c87c83ad56f387ff7fa796875e34c7d245"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD queue status and retirement keep-reference reader\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "promotion-train/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "terminal refused train only; integrated checkpoints and completion reconciliation are not exercised",
+      "artifacts": [
+        {
+          "path": "project/.git/promote/batches/6690f415-021a-45d9-b875-02594052c337/train.json",
+          "sha256": "782490a934bddf6621f951e9c984b001664bfc021fccd1507b9d144e0f692ddf"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": "integrated-but-cleanup-pending: retirement discovery: compat fixture stops before delivery\n"
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD train metrics accepted the NEW refused receipt\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "promotion-completion",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Successful integrated train reconciliation needs a native-authorized scratch promotion; refused-train coverage is not completed-gate recovery coverage."
+    },
+    {
+      "id": "lane-evidence/v2",
+      "version": 2,
+      "rule": "closed",
+      "status": "not-covered",
+      "reason": "OLD archive verification is a writing-invocation closure, with no standalone reader; archive bytes produced but old-reader compatibility not covered",
+      "scope": "NEW real archive writer and its own verification; OLD standalone verification is unavailable",
+      "artifacts": [
+        {
+          "path": "project/.git/lane-archive/compat-topic/1792440383491-9e7b7ae0-1ac1-48f5-880b-c3b07f2f9527/sha256.json",
+          "sha256": "3923c7280e01763297a64e81737084aefd268244390db103b22866e5e2fd5795"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 77,
+        "signal": null,
+        "stdout": "",
+        "stderr": "OLD archive verification is a writing-invocation closure, with no standalone reader; archive bytes produced but old-reader compatibility not covered\n"
+      }
+    },
+    {
+      "id": "lane-validation/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "fast scratch command; OLD must reuse exact evidence without executing",
+      "artifacts": [
+        {
+          "path": "project/.git/lane-validation/a45d796b6b8ea7c3a36aa7617baeab4e64488765f176e91ee019071b64c2229b.json",
+          "sha256": "495e74b6d8e69f00e6980b9ec8730c6ec5b3c5f6309168198ae7640da3fae4b1"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "compatibility-validation",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "REUSE tree=5ae49e348bfad117c1b9f8242fa6a9ac3b61f275 tier=fast command=\"printf compatibility-validation\" log=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/brain-compat-dqCZe4/brain-transport-15/project/.git/lane-validation/a45d796b6b8ea7c3a36aa7617baeab4e64488765f176e91ee019071b64c2229b.94c5f246-1011-4a28-a240-4295b2f7fae4.log\nOLD reused NEW validation receipt\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "lane-gate",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Review prompt consumer is private to the native lane review flow; reusable validation receipt is checked separately."
+    },
+    {
+      "id": "lane-open/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "lane opening provenance",
+      "artifacts": [
+        {
+          "path": "project/.git/retirement/lane-opens/6a3e1c498eea57db8ade6f2cbba291ad649759d532a11ad40cb7a341135f0311.json",
+          "sha256": "8196fbdcb7d717cdf5b220f55e4bd4544a6aa6cb08b072109b0ab7573ac1b8b1"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "lane opening provenance read\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "initial-shell/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "real receipt from synthetic creation/terminal/shell observations; no native creation",
+      "artifacts": [
+        {
+          "path": "project/.git/retirement/initial-shells/82326829507b19921126d7eac0fe5c77b19a8d048aaa56418c6b1c5c441e6252.json",
+          "sha256": "412339a5ff49b92045768a7960c3fc8252e047e8bebfac0aba0274068ecc9ad4"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD initial-shell receipt validator\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "retirement-request/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "coalesced request and acknowledged empty observation; no native effects",
+      "artifacts": [
+        {
+          "path": "project/.org/retirement/request.json",
+          "sha256": "accdd2b9678cc61486a21fd4654ce3dbd7c9cb16eff9dcd1960c3835e7ecf72d"
+        },
+        {
+          "path": "project/.org/retirement/handled.json",
+          "sha256": "20c7b14461c6f0e6978bab51b9d5f222a464c3067c336393e4c634da15db3af2"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD preserved handled revision without replay\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "retirement-handled/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "coalesced request and acknowledged empty observation; no native effects",
+      "artifacts": [
+        {
+          "path": "project/.org/retirement/request.json",
+          "sha256": "accdd2b9678cc61486a21fd4654ce3dbd7c9cb16eff9dcd1960c3835e7ecf72d"
+        },
+        {
+          "path": "project/.org/retirement/handled.json",
+          "sha256": "20c7b14461c6f0e6978bab51b9d5f222a464c3067c336393e4c634da15db3af2"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD preserved handled revision without replay\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "retirement-occupant/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs bound synthetic callback/terminal/process observations; empty retirement status is not receipt coverage."
+    },
+    {
+      "id": "retirement-review/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs an ingested review and matching callback session evidence; no live review is launched."
+    },
+    {
+      "id": "retirement-exit/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs guarded synthetic native-exit observations; no native pane exit is performed."
+    },
+    {
+      "id": "dispatch-journal",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "pass",
+      "scope": "failed open-stage request; no worker, watcher or model launched",
+      "artifacts": [
+        {
+          "path": "project/.org/dispatch/45863c11-7edb-4105-8868-548f283dc68f.json",
+          "sha256": "c213a2d4b27da315645b233eaff865f1ed4ea0eb4a0c30802f640ac66c877701"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD dispatch --status; retry/ownership handoff is outside this probe\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "run-timing",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "pass",
+      "scope": "allowlisted process-end event",
+      "artifacts": [
+        {
+          "path": "dispatch.json.events.jsonl",
+          "sha256": "b1c1476e15584402dd072128f1d2e8528ac1aaf9f453724c9699572fc16d967f"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "run timing read\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "settle-journal",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "pass",
+      "scope": "blocked settlement with report and release evidence; no review dispatch",
+      "artifacts": [
+        {
+          "path": "project/.org/settle/R-1.json",
+          "sha256": "c8fc55ff8e157f31605fdfe612adbcfbaf10b953f075cdfd7f7b20c1f2b72b92"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD settle --status; retry is outside this probe\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "report-ingest/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Embedded hash-bound report-ingestion receipt needs OLD settlement decision/retry coverage beyond status display."
+    },
+    {
+      "id": "housekeeping-owner",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "pass",
+      "scope": "owner captured during NEW --once --dry-run; no schedule starts",
+      "artifacts": [
+        {
+          "path": "owner.json",
+          "sha256": "3659567636a889e9ed0f70f50dfc1a1b17ce07e2aa4cfcfeaa0e66ad8c3ae3c5"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD recognized stopped NEW housekeeping owner\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "housekeeping-config",
+      "version": "unversioned",
+      "rule": "closed",
+      "status": "pass",
+      "scope": "configuration written by NEW setHousekeeping",
+      "artifacts": [
+        {
+          "path": "project/.housekeeping.json",
+          "sha256": "4a30c9be3f878a9b2ecf59f5e0ada934c9d7e390f09c232597a46d5b4e929a50"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "housekeeping config read\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "housekeeping-actions",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Owner probe captures dry-run activity but does not exercise the OLD activity-tail reader on that log."
+    },
+    {
+      "id": "housekeeping-resume",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs synthetic interrupted-composer recovery; no worker receives a prompt."
+    },
+    {
+      "id": "brain-distill/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "digest pass and acknowledged cursor",
+      "artifacts": [
+        {
+          "path": "brain/distill/4861e217d63c4dc1afba495acff58237ab0d14163885cd13d5a78a59069a91cf/pending.json",
+          "sha256": "31778f61177ad8bc04a3cad65ba53e587272828a372a07b85e2bfa9d40fc0338"
+        },
+        {
+          "path": "brain/distill/4861e217d63c4dc1afba495acff58237ab0d14163885cd13d5a78a59069a91cf/cursor.json",
+          "sha256": "8039499d4a5b2aa6ea50d0f93be819f1d183216295f19936a11259b1b50f7288"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD reads acknowledged distillation cursor\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "brain-distill-cursor",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "digest pass and acknowledged cursor",
+      "artifacts": [
+        {
+          "path": "brain/distill/1a48169f1384e61815e92faa8729304a8dad9b6e8944231172ee0b74be7fb66a/pending.json",
+          "sha256": "b8a248af8586f5863704ec0653da89f834817148ecf4e50d3e2384e52c0fbce2"
+        },
+        {
+          "path": "brain/distill/1a48169f1384e61815e92faa8729304a8dad9b6e8944231172ee0b74be7fb66a/cursor.json",
+          "sha256": "2fe7ce73db6e2f155134ff5c2056c69dc6bd21bf465973664e01f24a36b064eb"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD reads acknowledged distillation cursor\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "gate-watchdog/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "pass",
+      "scope": "healthy gate history entry",
+      "artifacts": [
+        {
+          "path": "history/gate.json",
+          "sha256": "babee5338d7eb978c7000554de5e40a5e6e4c57a18162ed727079dd5ebc264e1"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD gate watchdog history\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "test-slot-wait/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs a scratch ticket/grant/cancellation probe; no shared host admission is used."
+    },
+    {
+      "id": "test-slot-owner",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs mixed-version scratch exclusive-owner liveness and ticket coverage."
+    },
+    {
+      "id": "test-slot-ticket",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs mixed-version ticket ordering/cancellation coverage."
+    },
+    {
+      "id": "gate-execution",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Execution sidecars are produced during validation, but OLD sidecar/recovery semantics are not probed."
+    },
+    {
+      "id": "test-slot-measurement/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Measurement evidence is not authorization; no old measurement consumer probe."
+    },
+    {
+      "id": "promotion-host-gate/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Native gate path is deliberately not invoked; refused train coverage does not cover host grant/execution clocks."
+    },
+    {
+      "id": "standard-slot-history/v1",
+      "version": 1,
+      "rule": "closed",
+      "status": "pass",
+      "scope": "KEEP-only slot enrollment using synthetic native identity",
+      "artifacts": [
+        {
+          "path": "project/.git/sessions/standard-slots.json",
+          "sha256": "876d62f209ea5c5b53ee7ca88f40abe28d386c7e735d3ae2424f2e0807161c34"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD standard-slot KEEP history\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "session-controller-journal/v1",
+      "version": 1,
+      "rule": "closed",
+      "status": "not-covered",
+      "reason": "Needs lifecycle operation, incarnation and binding coverage in an isolated synthetic adapter."
+    },
+    {
+      "id": "session-adapter-receipts/v1",
+      "version": 1,
+      "rule": "closed",
+      "status": "not-covered",
+      "reason": "Native adapter lifecycle effects are outside this offline probe."
+    },
+    {
+      "id": "session-native-context/v1",
+      "version": 1,
+      "rule": "closed",
+      "status": "not-covered",
+      "reason": "Native adapter context hash/identity coverage is not implemented here."
+    },
+    {
+      "id": "session-authorization/v1",
+      "version": 1,
+      "rule": "closed",
+      "status": "not-covered",
+      "reason": "Needs authorization claim/disposition and exact scope coverage; no authority is granted by this check."
+    },
+    {
+      "id": "brain.hook-session/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Private opt-in launch descriptor; no harness settings or hook launch is performed."
+    },
+    {
+      "id": "verify-queue/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Verification store explicitly refuses system temp roots; do not weaken that boundary for a fixture."
+    },
+    {
+      "id": "verify-inbox/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Verification store explicitly refuses system temp roots; no admission is performed."
+    },
+    {
+      "id": "verify-receipt/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs a trusted-store scratch worker and admitted-spec receipt coverage."
+    },
+    {
+      "id": "supervisor-cursor",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Supervisor checkpoint is a role-restricted cycle mutation; lane workers do not invoke it. OLD brief on real NEW record state is checked separately."
+    },
+    {
+      "id": "supervisor-handle",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Supervisor handling/promotion authorization needs run-bound settlement coverage."
+    },
+    {
+      "id": "supervisor-autopilot",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Needs synthetic admission/decision coverage; no automation is started."
+    },
+    {
+      "id": "supervisor-inbox",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Notice and delivery formats stay unchanged; no native prompt or inbox owner is started."
+    },
+    {
+      "id": "brain.message-pointer/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Retained envelope/body pointer hashes need a separate OLD consumer witness."
+    },
+    {
+      "id": "log-watermarks",
+      "version": 1,
+      "rule": "closed",
+      "status": "not-covered",
+      "reason": "Retention checkpoints require exact tuple/hash, producer count and sequence coverage."
+    },
+    {
+      "id": "lane-session-registry",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "pass",
+      "scope": "display-only session record and done sidecar; no native session launched",
+      "artifacts": [
+        {
+          "path": "project/.lane/sessions.json.d/9f4b1612-53a3-4467-80dd-5074e7341708.json",
+          "sha256": "34e398ab81ef019862ff1dad9571545d5103798b24788261c8746b1d18ed8379"
+        },
+        {
+          "path": "project/.lane/sessions.json.d/9f4b1612-53a3-4467-80dd-5074e7341708.done.json",
+          "sha256": "124395612d9e483fa7b7264746243310c825f6a43eacaca9f4de3825d39e7e87"
+        }
+      ],
+      "writer": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "reader": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "OLD session display metadata and done sidecar\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "route-snapshot",
+      "version": "unversioned",
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Frozen routing snapshots are produced with coordinator journals; OLD route resolution on those snapshots is not separately covered."
+    },
+    {
+      "id": "promotion-tests/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Embedded focused test selection is not present in the refused train; needs OLD planned-attempt recovery coverage."
+    },
+    {
+      "id": "promotion-selector-shadow/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Embedded shadow selection is written only after candidate preparation; no gate/selection expansion is authorized here."
+    },
+    {
+      "id": "project-cycle-time/v1",
+      "version": 1,
+      "rule": "additive",
+      "status": "not-covered",
+      "reason": "Published cycle-time projection needs an OLD publication consumer witness."
+    },
+    {
+      "id": "slot-handoff",
+      "version": "unversioned",
+      "rule": "closed",
+      "status": "not-covered",
+      "reason": "Immutable hash-bound continuity payload; needs OLD handoff hash/path validation coverage beyond ordinary generated prose."
+    }
+  ]
+}

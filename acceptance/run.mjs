@@ -27,6 +27,24 @@ import { loadAwareCommand } from './commands.mjs';
 import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
 import { noticeDeliveryBudgetMs } from './notice-budget.mjs';
 import { matchingRun } from '../supervisor/tidy-tabs.mjs';
+import { ownerAlive } from '../lib/process-owner.mjs';
+
+// The configured fixture keeps its record outside the checkout. Both command
+// paths must select it; lane retirement otherwise observes an empty record.
+export function configuredCommands(node, candidate, { repo, org }) {
+  const call = (file, args, cwd, options) => node(path.join(candidate, file), args,
+    { ...options, cwd, extra: { ...options.extra, ORG_DIR: org } }).stdout;
+  return {
+    record: (args, options = {}) => call('bin/org.mjs', args, repo, options),
+    lane: (args, cwd = repo, options = {}) => call('lanes/lane.mjs', args, cwd, options),
+  };
+}
+
+// A PTY input/ingestion receipt can precede the sender's delivery confirmation.
+// Keep its callback reference until the exact recorded watcher has exited.
+export async function awaitWatcherExit(job, { until, alive = ownerAlive }) {
+  await until(() => !alive(job.watcher), `${job.run} watcher exits`, 30_000);
+}
 
 export function harnessEnvironment(input, root) {
   const env = { ...input };
@@ -43,7 +61,7 @@ export function initializeHerdrOwnership(root, { binary, socketPath, fleetRoot }
     creationRoots: [fs.realpathSync(fleetRoot)], workspaces: [], tabs: [], panes: [] }));
 }
 
-export async function abandonWatcher(job, { record, h, until, read, close }) {
+export async function abandonWatcher(job, { record, h, until, read, close, alive = ownerAlive }) {
   record(['abandon', job.run, '--note', 'Acceptance failure path complete']);
   // Notice confirmation may still be running when the PTY receipt arrives.
   // Hold working until the watcher actually observes abandonment, so its next
@@ -51,6 +69,7 @@ export async function abandonWatcher(job, { record, h, until, read, close }) {
   h('pane', 'report-agent', job.pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', 'working', '--seq', '100');
   try { await until(() => read(job.watcher.log).includes('was abandoned; stopping'), 'abandoned watcher stops'); }
   finally { h('pane', 'report-agent', job.pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', 'idle', '--seq', '101'); }
+  await awaitWatcherExit(job, { until, alive });
   close(job.lane);
 }
 
@@ -71,7 +90,7 @@ fs.mkdirSync(evidence);
 const started = Date.now();
 const load = createLoadMonitor({ record: (sample) => fs.appendFileSync(path.join(evidence, 'load.jsonl'), JSON.stringify(sample) + '\n') });
 const results = [];
-let logFile, candidateCommit, fixture, supervisor, defaultOrg;
+let logFile, candidateCommit, fixture, supervisor, defaultOrg, record, lane;
 let focusMonitor, focusError;
 let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
@@ -144,8 +163,6 @@ async function until(fn, label, ms = 25_000) {
   }, label, ms, { load });
 }
 const h = (...args) => json(node(path.join(root, 'herdr.mjs'), args, { extra: { ACCEPTANCE_CALLER: 'harness' } }).stdout);
-const record = (args, options = {}) => node(path.join(candidate, 'bin/org.mjs'), args, { cwd: fixture.repo, extra: { ORG_DIR: fixture.org }, ...options }).stdout;
-const lane = (args, cwd = fixture.repo, options = {}) => node(path.join(candidate, 'lanes/lane.mjs'), args, { cwd, ...options }).stdout;
 const inbox = () => fs.existsSync(path.join(root, 'supervisor-input.jsonl')) ? read(path.join(root, 'supervisor-input.jsonl')) : '';
 function initRepo(repo) {
   fs.mkdirSync(repo, { recursive: true });
@@ -189,6 +206,7 @@ async function final(job, { ingest = true } = {}) {
     record(['ingest', job.info.report_path, '--run', job.run]);
     assert.ok(json(record(['show', job.run, '--json'])).report);
   }
+  await awaitWatcherExit(job, { until });
 }
 const stopWatcher = job => abandonWatcher(job, { record, h, until, read, close: topic => lane(['close', topic]) });
 
@@ -362,6 +380,7 @@ try {
     fs.symlinkSync(path.join(candidate, 'lanes/lane.mjs'), path.join(bin, 'lane'));
     env.PATH = `${bin}:${process.env.PATH}`;
     fixture = { repo: path.join(root, 'configured-project'), org: path.join(root, 'record'), brief: path.join(root, 'ask.md') };
+    ({ record, lane } = configuredCommands(node, candidate, fixture));
     initRepo(fixture.repo);
     write(fixture.brief, 'Commit a scratch work file and write the supplied report. No model.\n');
     write(path.join(fixture.repo, '.lane.json'), JSON.stringify({ main: 'main', validate: 'node --test',
@@ -595,6 +614,7 @@ try {
     const ingested = JSON.parse(read(path.join(root, 'default-supervisor-ingest.json')));
     if (ingested.error) throw commandFailure(ingested.error);
     assert.equal(ingested.report.outcome, 'done');
+    await awaitWatcherExit(job, { until });
     const notices = inbox().split('\n').filter(Boolean).map(JSON.parse).filter((v) => v.line.includes(`[org-report] run=${job.run} `) && v.line.includes(`report=${info.report_path}`));
     assert.equal(notices.length, 1); assert.match(notices[0].line, /check=pass/);
     for (const file of ['default-supervisor-job.json', 'default-supervisor-ingest.json', 'default-supervisor-policy.txt']) fs.copyFileSync(path.join(root, file), path.join(evidence, file));

@@ -7,7 +7,7 @@ import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
 import { ownerAlive } from '../../lib/process-owner.mjs';
 import { matchingRun } from '../../lib/retire.mjs';
-import { harnessEnvironment, initializeHerdrOwnership } from '../run.mjs';
+import { harnessEnvironment, initializeHerdrOwnership, configuredCommands, promoteAndComplete, assertWorkerKept } from '../run.mjs';
 import { createLiveSessionTemp } from '../temp.mjs';
 import { testSlotEnvironment, scratchProductHomes } from '../environment.mjs';
 import { waitUntil } from '../load.mjs';
@@ -43,10 +43,14 @@ async function offlineNative(root, repo) {
     state.tab = { tab_id: 'worker:t1', workspace_id: 'worker' };
     state.pane = { pane_id: 'worker:p1', workspace_id: 'worker', tab_id: 'worker:t1' };
     result = { already_open: false, workspace: state.workspace, tab: state.tab, root_pane: state.pane };
-  } else if (group === 'pane' && verb === 'list') result = { panes: [state.pane] };
-  else if (group === 'tab' && verb === 'list') result = { tabs: [state.tab] };
+  } else if (group === 'pane' && verb === 'list') result = { panes: state.pane ? [state.pane] : [] };
+  else if (group === 'tab' && verb === 'list') result = { tabs: state.tab ? [state.tab] : [] };
   else if (group === 'pane' && verb === 'get') result = { pane: pane(target) };
-  else if (group === 'pane' && verb === 'process-info') result = { process_info: { shell_pid: 1, foreground_processes: [{ pid: 1, name: 'sh' }] } };
+  else if (group === 'pane' && verb === 'process-info') result = { process_info: state.retirement
+    ? { shell_pid: 1, foreground_processes: [{ pid: 2, name: 'codex' }], process_tree_complete: true,
+      process_tree: [{ pid: 1, identity: 'shell', state: 'S', command: '[sh]' },
+        { pid: 2, ppid: 1, identity: 'worker', state: 'S', command: '[codex]' }] }
+    : { shell_pid: 1, foreground_processes: [{ pid: 1, name: 'sh' }] } };
   else if (group === 'pane' && verb === 'run') {
     if (args[3].startsWith(' . ')) {
       // The scoped adapter already verified this exact private source/verify
@@ -66,14 +70,17 @@ async function offlineNative(root, repo) {
   else if (group === 'agent' && verb === 'rename') { state.agent.name = args[3]; result = { agent: state.agent }; }
   else if (group === 'agent' && verb === 'prompt') state.agent.agent_status = 'working';
   else if (group === 'agent' && verb === 'wait') await new Promise(resolve => setTimeout(resolve, 100));
+  else if (group === 'tab' && verb === 'close') { delete state.tab; delete state.pane; delete state.agent; }
+  else if (group === 'workspace' && verb === 'close') delete state.workspace;
   else if (!((group === 'pane' && verb === 'report-agent') || (group === 'tab' && verb === 'rename') ||
     (group === 'agent' && ['read', 'send-keys'].includes(verb)))) throw Error(`unexpected offline native call: ${args.join(' ')}`);
   if ((group === 'worktree' && verb === 'open') || (group === 'pane' && verb === 'run') ||
+    (['tab', 'workspace'].includes(group) && verb === 'close') ||
     (group === 'agent' && ['rename', 'prompt'].includes(verb))) fs.writeFileSync(file, JSON.stringify(state));
   console.log(JSON.stringify({ result }));
 }
 
-test('real default-cycle dispatch admits its owned fleet worktree and cwd while foreign roots remain refused', async t => {
+test('real default-cycle dispatch admits owned fleet paths, refuses foreign roots and completes open work before retirement', async t => {
   const root = fs.realpathSync(fs.mkdtempSync('/tmp/ac-')), roots = [root], cleanup = [];
   const receipts = createReceiptTracker({ suitePid: Number(process.env.HERDR_TEST_SUITE_PID) || process.pid });
   let supervisor;
@@ -186,4 +193,31 @@ test('real default-cycle dispatch admits its owned fleet worktree and cwd while 
   const denied = guard(['agent', 'send-keys', saved.job.agent, 'Enter']);
   assert.notEqual(denied.status, 0); assert.match(denied.stderr, /pane cwd left scratch/);
   assert.ok(!calls().some(args => args[0] === 'agent' && args[1] === 'send-keys'));
+
+  // Continue the same real dispatch through ingestion, direct integration and
+  // supervisor completion. The record lives at the discovered default path.
+  delete state.movedCwd; state.retirement = true;
+  Object.assign(state.agent, { agent: 'codex', agent_status: 'idle' });
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  const node = (file, args, { extra, ...options }) => {
+    const result = spawnSync(process.execPath, [file, ...args], { ...options, env: { ...env, ...extra }, encoding: 'utf8' });
+    if (options.ok !== false) assert.equal(result.status, 0, result.stdout + result.stderr);
+    return result;
+  };
+  const commands = configuredCommands(node, source, { repo, org });
+  const job = { ...saved.job, info: saved.info };
+  assertWorkerKept(job, { lane: commands.lane, reason: /report is not ingested/ });
+  fs.writeFileSync(path.join(saved.info.workspace, 'work.txt'), 'scripted default work\n');
+  git(['-C', saved.info.workspace, 'add', 'work.txt']); git(['-C', saved.info.workspace, 'commit', '-qm', 'Scripted default work']);
+  fs.writeFileSync(saved.info.report_path, `---\nrun: ${job.run}\noutcome: done\nsummary: Scripted default work.\nheadline: The scripted work completed\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
+  commands.record(['check', saved.info.report_path]); commands.record(['ingest', saved.info.report_path, '--run', job.run]);
+  assertWorkerKept(job, { lane: commands.lane, reason: /chain is still open/ });
+  commands.lane(['check'], saved.info.workspace);
+  promoteAndComplete(job, commands);
+  assert.equal(JSON.parse(commands.record(['show', job.item, '--json'])).closed.as, 'done');
+  assert.equal(git(['rev-parse', 'main']), git(['-C', saved.info.workspace, 'rev-parse', 'HEAD']));
+  assert.match(commands.lane(['close', job.lane]), /removed worktree/);
+  assert.equal(fs.existsSync(saved.info.workspace), false);
+  assert.ok(calls().some(args => args[0] === 'tab' && args[1] === 'close' && args[2] === 'worker:t1'));
+  assert.ok(calls().some(args => args[0] === 'workspace' && args[1] === 'close' && args[2] === 'worker'));
 });

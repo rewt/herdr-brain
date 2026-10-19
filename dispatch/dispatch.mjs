@@ -137,6 +137,19 @@ function admission(repo, org, common) {
   if (job) job.sessionCap = evidence;
   return evidence;
 }
+function prepareSessionBinding(run) {
+  const binding = job.sessionBinding;
+  if (job.worker.agentSessionId || run.meta.dispatch_attempt !== job.token ||
+      binding?.status === 'bound' || binding?.proposed) return;
+  // A new delivery (or explicit confirmation of uncertain delivery) gets one
+  // bounded observation window. Keep the original launch continuity and receipt:
+  // recovery must never pin a replacement occupant or rewrite a saved proposal.
+  const receipt = binding ? binding.receipt
+    : workerReceipt(json(record(['show', job.run, '--json'])), identityState());
+  const prompted = Date.now();
+  job.sessionBinding = { status: 'observing', process: binding ? binding.process : job.launchProcess ?? null, receipt,
+    prompted_at: new Date(prompted).toISOString(), deadline: new Date(prompted + 60000).toISOString() };
+}
 async function bindSession() {
   const binding = job.sessionBinding;
   if (!binding || ['bound', 'unbound'].includes(binding.status)) return;
@@ -424,7 +437,7 @@ async function main() {
     if (job.stage === 'watch') note(`watcher ready (pid ${job.watcher.pid}); prompt not sent`);
     if (job.stage === 'watch') { job.stage = 'prompt'; save(); }
     if (job.stage === 'prompting' && opt['accept-delivered']) {
-      if (job.sessionBinding) { job.sessionBinding.status = 'unbound'; job.sessionBinding.reason = 'ambiguous prompt delivery'; }
+      prepareSessionBinding(run);
       job.stage = 'complete'; save();
       note('caller confirmed the uncertain prompt was delivered; no resend');
     }
@@ -445,14 +458,7 @@ async function main() {
         }
       }
       const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.${job.extra ? `\n\n${job.extra}` : ''}`;
-      if (job.stage === 'prompt' && !job.sessionBinding && !job.worker.agentSessionId && run.meta.dispatch_attempt === job.token) {
-        const current = json(record(['show', job.run, '--json']));
-        const prompted = Date.now();
-        job.sessionBinding = { status: 'observing', process: job.launchProcess ?? null, receipt: workerReceipt(current, identityState()),
-          prompted_at: new Date(prompted).toISOString(), deadline: new Date(prompted + 60000).toISOString() };
-      } else if (job.stage === 'prompting' && job.sessionBinding) {
-        job.sessionBinding.status = 'unbound'; job.sessionBinding.reason = 'ambiguous prompt delivery';
-      }
+      prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
       job.stage = 'complete'; save();

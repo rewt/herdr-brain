@@ -13,8 +13,8 @@ export function nativeProcess(agent, info, readOwner) {
   return { pid, identity: ownerIdentity(pid, readOwner) };
 }
 
-// The deadline is created and saved BEFORE delivery. Never initialize it here:
-// crash recovery has only the remainder of the original launch opportunity.
+// Dispatch saves the deadline before delivery or explicit delivery confirmation.
+// Never initialize it here: observation retries only get the saved remainder.
 export async function observeSessionBinding({ job, save, observe, record, now = Date.now,
   monotonic = () => performance.now(), pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   const b = job.sessionBinding;
@@ -52,5 +52,5 @@ export async function observeSessionBinding({ job, save, observe, record, now = 
     }
     await pause(Math.max(0, Math.min(250, Date.parse(b.deadline) - now(), end - (monotonic() - started))));
   }
-  finish('unbound', 'native session not established within the original launch deadline');
+  finish('unbound', 'native session not established within the saved delivery deadline');
 }

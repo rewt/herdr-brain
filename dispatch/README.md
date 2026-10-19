@@ -118,15 +118,18 @@ launches bind that variable to ops separately from their `chat-` agent name.
 The core stays foreground and never calls a model.
 When the immutable pre-prompt receipt has no native session, dispatch pins the
 native foreground PID and kernel birth identity before delivery, then observes
-for the remainder of one saved launch deadline (at most 60 seconds). A verified
+for the remainder of one saved delivery deadline (at most 60 seconds). A verified
 late session becomes a separate `run.session_bound` event through
 `record session-bind --journal FILE`; the launch receipt is never enriched.
 Dispatch alone writes this fact. Retirement, reuse, handoff, pane-release and
 status derive the same effective identity and reject conflicting evidence.
-Unavailable continuity, replacement, timeout or uncertain prompt delivery leaves
-the run unbound. There is no backfill, background binder or ingestion delay.
-Retry cannot renew the deadline or replay a prompt to obtain a session. A saved
-bind proposal can recover an exact lost reply even after report ingestion.
+Unavailable continuity, replacement or timeout leaves the run unbound. Uncertain
+delivery requires explicit recovery before binding. An authorized `--resend` or
+`--accept-delivered` starts a new bounded window, anchored to the original launch
+process and receipt; `prompted_at` records the delivery attempt or confirmation.
+An ordinary retry only gets the saved remainder and never replays a prompt.
+There is no backfill, background binder or ingestion delay. A saved bind proposal
+is never replaced and can recover an exact lost reply even after report ingestion.
 An unknown bind reply prints the exact retry command to stderr and returns
 `binding.status: "unknown"` with that command in the JSON receipt. Record writes
 finish outside the observation timeout and enforce the deadline under the lock.

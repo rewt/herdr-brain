@@ -193,9 +193,11 @@ function observationFixture() {
   return { job, process, options, deadline, time: () => time, commits: () => commits, reads: () => reads, saves: () => saves };
 }
 
-test('delayed observation returns immediately on identity; timeout and retries cannot renew the saved deadline', async () => {
+test('delayed observation returns immediately on identity; ordinary retries cannot renew the saved delivery deadline', async () => {
   const f = observationFixture(); await observeSessionBinding(f.options);
   assert.equal(f.job.sessionBinding.status, 'bound'); assert.equal(f.commits(), 1); assert.equal(f.reads(), 3); assert.equal(f.time(), 100500);
+  await observeSessionBinding(f.options);
+  assert.equal(f.commits(), 1); assert.equal(f.reads(), 3, 'a bound delivery never observes or commits twice');
   const timeout = observationFixture(); timeout.options.observe = () => ({ process: timeout.process });
   await observeSessionBinding(timeout.options);
   assert.equal(timeout.job.sessionBinding.status, 'unbound'); assert.equal(timeout.commits(), 0); assert.equal(timeout.time(), timeout.deadline);

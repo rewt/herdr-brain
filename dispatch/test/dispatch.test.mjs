@@ -79,8 +79,11 @@ if(type==='org') {
   result({result:{agent}});
  }
  if(a[0]==='agent' && a[1]==='prompt') {
+  if(fail==='prompt-blocked') {console.error(JSON.stringify({error:{code:'agent_blocked',message:'one-time trust prompt'}}));process.exit(1);}
   if(fail==='prompt') {console.error('injected prompt');process.exit(1);}
-  workers[a[2]].agent_status='working';save();result({result:{}});
+  workers[a[2]].agent_status='working';save();
+  if(fail==='prompt-lost-reply') {console.error('lost prompt reply');process.exit(1);}
+  result({result:{}});
  }
  if(a[0]==='agent' && a[1]==='wait') {
   await new Promise(r=>setTimeout(r,1000));result({result:{}});
@@ -380,16 +383,79 @@ test('delayed native session binds separately before same-session continuation r
   assert.equal(promptCalls(f).length, 2);
 });
 
-test('ambiguous delivery confirmation never opens a binding opportunity or replays the prompt', t => {
-  const f = fixture(t, { lateSession: 'delayed' }); f.fail('prompt');
+test('ordinary retry after a blocked first delivery binds without another worker or watcher', t => {
+  const f = fixture(t, { lateSession: 'delayed' }); f.fail('screen');
   assert.equal(f.start().status, 1);
-  const before = JSON.parse(fs.readFileSync(f.jobs()[0])); assert.equal(before.stage, 'prompting');
-  f.fail(''); const retry = f.dispatch(['--retry', before.run, '--accept-delivered']); assert.equal(retry.status, 0, retry.stderr);
+  const before = JSON.parse(fs.readFileSync(f.jobs()[0]));
+  assert.equal(before.stage, 'prompt'); assert.equal(before.sessionBinding, undefined);
+  f.fail(''); const retry = f.dispatch(['--retry', before.run]); assert.equal(retry.status, 0, retry.stderr);
   const after = JSON.parse(fs.readFileSync(f.jobs()[0]));
-  assert.equal(after.sessionBinding.status, 'unbound'); assert.match(after.sessionBinding.reason, /ambiguous/);
-  assert.equal(after.sessionBinding.deadline, before.sessionBinding.deadline);
-  assert.equal(f.state().sessionBindings.get(before.run), undefined); assert.equal(promptCalls(f).length, 1);
+  assert.equal(after.sessionBinding.status, 'bound'); assert.equal(promptCalls(f).length, 1);
+  assert.equal(f.state().sessionBindings.get(before.run).length, 1);
+  assert.deepEqual(after.launchProcess, before.launchProcess);
+  assert.deepEqual(after.watcher, before.watcher);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
 });
+
+for (const recovery of ['resend', 'accept-delivered']) test(`${recovery} binds an expired uncertain delivery once using original launch evidence`, t => {
+  const f = fixture(t, { lateSession: 'delayed' });
+  f.fail(recovery === 'resend' ? 'prompt-blocked' : 'prompt-lost-reply');
+  const first = f.start(); assert.equal(first.status, 1);
+  assert.match(first.stderr, recovery === 'resend' ? /agent_blocked/ : /lost prompt reply/);
+  const file = f.jobs()[0], before = JSON.parse(fs.readFileSync(file)); assert.equal(before.stage, 'prompting');
+  // The trust prompt in the reported incident held delivery for three minutes.
+  // Age the saved opportunity without sleeping or changing its identity anchors.
+  const attempted = Date.now() - 180000;
+  before.sessionBinding.prompted_at = new Date(attempted).toISOString();
+  before.sessionBinding.deadline = new Date(attempted + 60000).toISOString();
+  fs.writeFileSync(file, JSON.stringify(before));
+  f.fail('');
+  const uncertain = f.dispatch(['--retry', before.run]);
+  assert.equal(uncertain.status, 1); assert.match(uncertain.stderr, /prompt delivery outcome is unknown/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file)).sessionBinding, before.sessionBinding);
+  assert.equal(f.state().sessionBindings.get(before.run), undefined); assert.equal(promptCalls(f).length, 1);
+  const retry = f.dispatch(['--retry', before.run, `--${recovery}`]); assert.equal(retry.status, 0, retry.stderr);
+  const after = JSON.parse(fs.readFileSync(file)), state = f.state(), run = f.show(before.run);
+  assert.equal(JSON.parse(retry.stdout).binding.status, 'bound'); assert.equal(after.stage, 'complete');
+  assert.equal(after.sessionBinding.status, 'bound');
+  assert.ok(Date.parse(after.sessionBinding.prompted_at) > Date.parse(before.sessionBinding.deadline));
+  assert.equal(Date.parse(after.sessionBinding.deadline) - Date.parse(after.sessionBinding.prompted_at), 60000);
+  assert.deepEqual(after.sessionBinding.process, before.sessionBinding.process);
+  assert.deepEqual(after.sessionBinding.receipt, before.sessionBinding.receipt);
+  assert.deepEqual(after.launchProcess, before.launchProcess); assert.deepEqual(after.watcher, before.watcher);
+  assert.equal(run.meta.agent_session_id, undefined, 'original receipt remains terminal-only');
+  assert.equal(effectiveWorkerIdentity(run, state).agent_session_id, 's-worker-1');
+  assert.equal(state.sessionBindings.get(before.run).length, 1);
+  const prompts = recovery === 'resend' ? 2 : 1;
+  assert.equal(promptCalls(f).length, prompts);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'watch').length, 1);
+  assert.equal(f.dispatch(['--retry', before.run, `--${recovery}`]).status, 0);
+  assert.deepEqual(f.state().sessionBindings.get(before.run), state.sessionBindings.get(before.run));
+  assert.equal(promptCalls(f).length, prompts);
+});
+
+for (const recovery of ['resend', 'accept-delivered']) {
+  for (const field of ['name', 'terminal_id']) test(`${recovery} refuses a changed worker ${field} without binding or delivering`, t => {
+    const f = fixture(t, { lateSession: 'delayed' }); f.fail('prompt-blocked'); assert.equal(f.start().status, 1);
+    const file = f.jobs()[0], before = JSON.parse(fs.readFileSync(file));
+    const workerFile = path.join(f.root, 'workers'), workers = JSON.parse(fs.readFileSync(workerFile));
+    workers[before.worker.agentName][field] = 'replacement'; fs.writeFileSync(workerFile, JSON.stringify(workers));
+    f.fail(''); const retry = f.dispatch(['--retry', before.run, `--${recovery}`]);
+    assert.equal(retry.status, 1); assert.match(retry.stderr, /worker occupant identity changed/);
+    assert.equal(f.state().sessionBindings.get(before.run), undefined); assert.equal(promptCalls(f).length, 1);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).sessionBinding, before.sessionBinding);
+  });
+  test(`${recovery} rejects a replacement native process in the original terminal`, t => {
+    const f = fixture(t, { lateSession: 'replacement-before-prompt' }); f.fail('prompt-blocked'); assert.equal(f.start().status, 1);
+    const file = f.jobs()[0], before = JSON.parse(fs.readFileSync(file));
+    f.fail(''); const retry = f.dispatch(['--retry', before.run, `--${recovery}`]); assert.equal(retry.status, 0, retry.stderr);
+    const after = JSON.parse(fs.readFileSync(file));
+    assert.equal(after.sessionBinding.status, 'unbound'); assert.equal(after.sessionBinding.reason, 'native process changed');
+    assert.deepEqual(after.sessionBinding.process, before.sessionBinding.process);
+    assert.equal(f.state().sessionBindings.get(before.run), undefined);
+  });
+}
 
 for (const mode of ['replacement', 'replacement-before-prompt']) test(`same-terminal ${mode} keeps the original launch unbound despite matching topology`, t => {
   const f = fixture(t, { lateSession: mode }), result = f.start();

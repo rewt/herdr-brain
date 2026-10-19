@@ -54,7 +54,7 @@ const probes = {
     async write() {
       git(['worktree', 'add', '-qb', 'lane/compat-topic', path.join(directory, 'lane')]);
       report(); record(['note', 'ENG-1', 'Compatibility note']);
-      save({}, [path.join(org, 'events.jsonl')], 'item, run, ingested report and note; status/show/list and supervisor brief');
+      save({}, [path.join(org, 'events.jsonl')], 'item, run, ingested report and note; status/show/snapshot, retirement status and supervisor brief');
     },
     async read() {
       const status = JSON.parse(record(['status', '--json'])); assert.ok(JSON.stringify(status).includes('ENG-1'));

@@ -988,6 +988,101 @@ test('cross-item reuse accepts the same lane and identity without adding an orig
   assert.equal(f.calls().filter(c=>c.type==='lane'&&c.a[0]==='dispatch').length,1);
 });
 
+test('an older reported run cannot lend a worker held by a newer open correction, even when idle or done',t=>{
+  const f=fixture(t),first=JSON.parse(f.start().stdout),report=f.show(first.run).report_path;
+  fs.writeFileSync(report,`---\nrun: ${first.run}\noutcome: done\nsummary: First run complete\n---\n`);f.rec(['ingest',report]);
+  const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
+  workers[first.agent].agent_status='idle';fs.writeFileSync(file,JSON.stringify(workers));
+  const second=f.start(['--reuse',first.run]);assert.equal(second.status,0,second.stderr);
+  const correction=JSON.parse(second.stdout);
+  const other=f.rec(['add','Sibling work','--role','engineer']).split(' ')[0];
+  const reuse=()=>f.dispatch([other,'--lane','topic','--route','engineer','--brief',f.brief,'--reuse',first.run,'--awaited']);
+  for(const status of ['idle','done']) {
+    workers[first.agent].agent_status=status;fs.writeFileSync(file,JSON.stringify(workers));
+    const events=fs.readFileSync(path.join(f.org,'events.jsonl')),jobs=f.jobs().length,calls=f.calls().length;
+    const r=reuse();assert.equal(r.status,1);assert.equal(JSON.parse(r.stdout).code,'REUSE_WORKER_BUSY');
+    assert.ok(JSON.parse(r.stdout).reason.includes(correction.run));
+    assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),events);
+    assert.equal(f.jobs().length,jobs);assert.equal(f.calls().slice(calls).filter(c=>c.type==='lane').length,0);
+    assert.equal(promptCalls(f).length,2);
+  }
+  f.rec(['abandon',correction.run]);
+  const released=reuse();assert.equal(released.status,0,released.stderr);
+  assert.equal(JSON.parse(released.stdout).agent,first.agent);
+});
+
+test('reuse rechecks newer open occupant holders immediately before prompting',async t=>{
+  const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
+  const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
+  workers[first.agent].agent_status='done';fs.writeFileSync(file,JSON.stringify(workers));
+  const hook=pauseHook(f,`const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+ const result=rename.call(fs,from,to);
+ if(once && String(to).endsWith('.json')) {
+  const job=JSON.parse(read.call(fs,to,'utf8'));
+  if(job.reuse && job.stage==='prompt') {once=false;pause();}
+ }
+ return result;
+};`);
+  const pending=f.concurrent([f.item,'--lane','topic','--route','engineer','--brief',f.brief,'--reuse',first.run],hook);
+  let holder;
+  try {
+    await until(()=>fs.existsSync(hook.PAUSE_MARKER));
+    const other=f.rec(['add','Sibling work','--role','engineer']).split(' ')[0],prior=f.show(first.run);
+    holder=f.rec(['start',other,'--workspace',prior.workspace]).match(/R-\d+/)[0];
+    f.rec(['worker',holder,'--agent',prior.meta.agent,'--pane',prior.meta.pane,
+      '--worker-workspace',prior.meta.worker_workspace,'--cwd',prior.workspace,
+      '--terminal-id',prior.meta.terminal_id,'--agent-session-id',prior.meta.agent_session_id]);
+  } finally {fs.writeFileSync(hook.PAUSE_RELEASE,'go');await pending.done;}
+  const r=await pending.done;assert.equal(r.status,1,r.stderr);
+  assert.equal(JSON.parse(r.stdout).code,'REUSE_WORKER_BUSY');assert.ok(JSON.parse(r.stdout).reason.includes(holder));
+  assert.equal(promptCalls(f).length,1,'the new dispatch never prompts its worker');
+});
+
+test('reuse identity classification is local to the worker stage and preserves existing codes',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dispatch-reuse-codes-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const preload=path.join(root,'fault.cjs');
+  fs.writeFileSync(preload,`if(process.argv[1]===${JSON.stringify(DISPATCH)}) {
+ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process'),spawn=cp.spawnSync;
+ cp.spawnSync=function(command,args,options) {
+  const root=process.env.FAKE_ROOT,fault=path.join(root,'reuse-fault.json');
+  if(path.basename(command)==='lane' && args?.[0]==='verify-agent' && fs.existsSync(fault)) {
+   const target=JSON.parse(fs.readFileSync(fault,'utf8')),directory=path.join(process.env.ORG_DIR,'dispatch');
+   const matches=fs.readdirSync(directory).filter(file=>file.endsWith('.json')&&!file.endsWith('.routes.json'))
+    .map(file=>JSON.parse(fs.readFileSync(path.join(directory,file),'utf8')))
+    .some(job=>job.reuse && job.stage===target.stage);
+   if(matches) throw Object.assign(new Error('injected reuse identity transport failure'),target.code?{code:target.code}:{});
+  }
+  return spawn.call(this,command,args,options);
+ };require('node:module').syncBuiltinESMExports();
+}`);
+  for(const [stage,code,expected] of [
+    ['worker',null,'REUSE_IDENTITY_UNKNOWN'],['worker','REUSE_WORKER_BUSY','REUSE_WORKER_BUSY'],
+    ['worker','EAGAIN','DISPATCH_FAILED'],['record-worker',null,'DISPATCH_FAILED'],
+    ['watch',null,'DISPATCH_FAILED'],['prompt',null,'DISPATCH_FAILED'],['watch','EMFILE','DISPATCH_FAILED'],
+  ]) {
+    const f=fixture(t,{preload}),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
+    const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
+    workers[first.agent].agent_status='done';fs.writeFileSync(file,JSON.stringify(workers));
+    fs.writeFileSync(path.join(f.root,'reuse-fault.json'),JSON.stringify({stage,code}));
+    const r=f.start(['--reuse',first.run]);assert.equal(r.status,1,`${stage}: ${r.stderr}`);
+    assert.equal(JSON.parse(r.stdout).code,expected,`${stage} ${code}: ${r.stderr}`);
+    assert.match(JSON.parse(r.stdout).reason,/injected reuse identity transport failure/);
+    const job=JSON.parse(fs.readFileSync(JSON.parse(r.stdout).journal));
+    assert.equal(job.stage,stage);assert.equal(promptCalls(f).length,1);
+  }
+});
+
+test('native filesystem error codes are normalized without changing failure reasons',t=>{
+  const f=fixture(t),missing=path.join(f.root,'missing-brief.md');
+  const r=f.dispatch([f.item,'--lane','topic','--route','engineer','--brief',missing]);
+  assert.equal(r.status,1);const failed=JSON.parse(r.stdout);
+  assert.equal(failed.result,'failed');assert.equal(failed.code,'DISPATCH_FAILED');
+  assert.match(failed.reason,/ENOENT/);assert.ok(failed.reason.includes(missing));
+  assert.ok(r.stderr.includes(failed.reason));assert.deepEqual(f.show(f.item).runs,[]);
+  assert.equal(fs.existsSync(path.join(f.org,'dispatch')),false);
+});
+
 test('late reuse identity and busy refusals retain their messages and supply stable codes',t=>{
   for(const kind of ['missing','replaced','busy']) {
     const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);

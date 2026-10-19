@@ -12,6 +12,10 @@ run must be reported or abandoned. Lane, workspace, route, declared
 harness/model/effort and immutable occupant identity must match, and the live
 worker must be idle or done. An unknown identity requires a fresh worker or
 investigation. Reuse never infers identity or model choice from a session registry.
+An older completed run cannot lend a worker held by a newer unreported,
+unabandoned run, even when idle or done. Dispatch checks shared agent, pane,
+terminal or effective session identity in preflight and again before prompting,
+excluding its own run from the holder check.
 
 The new run records `meta.continuation_of=R-previous` and
 `meta.same_session=true` through `record start --meta`. These names match BCH.
@@ -103,12 +107,15 @@ and adds `code`. Preflight refuses before lane/run side effects:
 | `REUSE_MISMATCH` | Lane, route or declared harness/model/effort differs |
 | `FROM_RUN_OTHER_ITEM` | Origin does not name a run on the dispatched item |
 | `FROM_RUN_SUPERSEDED` | Origin has later runs; the reason names them |
+| `REUSE_WORKER_BUSY` | A newer open run holds the occupant; also used by the late idle/done check |
 
 Workspace and occupant checks remain late and retain the recoverable started
 run: workspace mismatch also uses `REUSE_MISMATCH`; missing, conflicting or
-changed identity uses `REUSE_IDENTITY_UNKNOWN`; a worker that is not idle/done
-uses `REUSE_WORKER_BUSY`. Existing specialized codes are preserved; other
-failures use `DISPATCH_FAILED`. These codes are diagnostic, not retry authority.
+changed identity uses `REUSE_IDENTITY_UNKNOWN` only at the initial reuse identity
+check when the error has no code; a worker that is not idle/done uses
+`REUSE_WORKER_BUSY`. Only dispatch-owned codes are exposed. Later transport
+failures and Node system error codes use `DISPATCH_FAILED`; existing
+dispatch-owned codes are preserved. These codes are diagnostic, not retry authority.
 The historical reuse mismatch message still mentions item matching; the explicit
 cross-item rule above defines the accepted behavior.
 

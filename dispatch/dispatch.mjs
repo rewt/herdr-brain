@@ -15,7 +15,7 @@ import { readTiming, timedMemoryWait, timingMetadata } from '../lib/run-timing.m
 import { gitProject } from '../lib/project.mjs';
 import { bundleRelease, forwardRelease, continueRelease, operationFile } from '../lib/releases.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
-import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
+import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
@@ -61,11 +61,13 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
   return result.stdout.trim();
 }
 const record = (args) => command(recordCLI, args);
-const identityState = () => fold(loadEvents(job.org).events);
+const identityState = () => fold(loadEvents(job?.org ?? opt.org).events);
 const lane = (args) => command(laneCLI, args);
 const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
 const refusal = (code, message) => Object.assign(new Error(message), { code });
+const dispatchCodes = new Set(['REUSE_RUN_OPEN', 'REUSE_MISMATCH', 'REUSE_IDENTITY_UNKNOWN', 'REUSE_WORKER_BUSY',
+  'FROM_RUN_OTHER_ITEM', 'FROM_RUN_SUPERSEDED', 'DISPATCH_FAILED', 'DISPATCH_STOPPED', 'DISPATCH_HOOK_REVIEW']);
 function checkOrigin(runId, item, current = true) {
   const origin = json(record(['show', runId, '--json']));
   if (!/^R-\d+$/.test(runId) || origin.item !== item.id) throw refusal('FROM_RUN_OTHER_ITEM', '--from-run must name a run on the dispatched item');
@@ -80,6 +82,13 @@ function checkReuse(prior, request) {
       Object.entries(request.declared).some(([key, value]) => (prior.meta?.[key] ?? null) !== value)) {
     throw refusal('REUSE_MISMATCH', 'reuse run must match item, lane, route and declared harness/model/effort; use a fresh worker');
   }
+  checkReuseOccupant(prior, request.run);
+}
+function checkReuseOccupant(prior, currentRun) {
+  const state = identityState();
+  const holders = [...state.runs.values()].filter(other => other.id !== currentRun &&
+    other.started.seq > prior.started.seq && !other.report && !other.abandoned && sharesWorker(prior, other, state));
+  if (holders.length) throw refusal('REUSE_WORKER_BUSY', `reuse worker is held by an open run: ${holders.map(run => run.id).join(', ')}`);
 }
 const herdr = (args) => json(command(['herdr'], args));
 const note = (text) => record(['note', job.run, `Dispatch: ${text}`]);
@@ -116,20 +125,15 @@ function worktree() {
   return entry?.split('\n').find((line) => line.startsWith('worktree '))?.slice(9);
 }
 function liveWorker(worker) {
-  try {
-    lane(['verify-agent', worker.agentName, job.workspace]);
-    const agent = herdr(['agent', 'get', worker.agentName]).agent;
-    if (!agent || agent.name !== worker.agentName || agent.pane_id !== worker.pane || agent.workspace_id !== worker.workspaceId ||
-        fs.realpathSync(agent.cwd) !== job.workspace ||
-        (worker.terminalId && agent.terminal_id !== worker.terminalId) ||
-        (worker.agentSessionId && agent.agent_session?.value !== worker.agentSessionId)) {
-      throw new Error('worker occupant identity changed; inspect it before recovery');
-    }
-    return agent;
-  } catch (error) {
-    if (job.reuse) error.code = 'REUSE_IDENTITY_UNKNOWN';
-    throw error;
+  lane(['verify-agent', worker.agentName, job.workspace]);
+  const agent = herdr(['agent', 'get', worker.agentName]).agent;
+  if (!agent || agent.name !== worker.agentName || agent.pane_id !== worker.pane || agent.workspace_id !== worker.workspaceId ||
+      fs.realpathSync(agent.cwd) !== job.workspace ||
+      (worker.terminalId && agent.terminal_id !== worker.terminalId) ||
+      (worker.agentSessionId && agent.agent_session?.value !== worker.agentSessionId)) {
+    throw new Error('worker occupant identity changed; inspect it before recovery');
   }
+  return agent;
 }
 function observeNative() {
   const agent = liveWorker(job.worker);
@@ -405,7 +409,9 @@ async function main() {
       if (identity.identity_conflict || (!identity.agent_session_id && !identity.terminal_id)) throw refusal('REUSE_IDENTITY_UNKNOWN', 'reuse needs consistent recorded occupant identity; use a fresh worker');
       job.worker = { agentName: identity.agent, pane: identity.pane, workspaceId: identity.worker_workspace,
         terminalId: identity.terminal_id, agentSessionId: identity.agent_session_id };
-      const agent = liveWorker(job.worker);
+      let agent;
+      try { agent = liveWorker(job.worker); }
+      catch (error) { error.code ??= 'REUSE_IDENTITY_UNKNOWN'; throw error; }
       if (!['idle', 'done'].includes(agent.agent_status)) throw refusal('REUSE_WORKER_BUSY', 'reuse worker must be idle or done');
     } else {
       // Early counts are advisory. Serialize only the final recount and launch,
@@ -482,6 +488,7 @@ async function main() {
       }
       const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.${job.extra ? `\n\n${job.extra}` : ''}`;
       prepareSessionBinding(run);
+      if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
       job.stage = 'complete'; save();
@@ -516,7 +523,7 @@ catch (error) {
   } else {
     // Coordinators inherit stderr for live waits; retain failure evidence on
     // their captured stdout as well, including failures before a journal exists.
-    process.stdout.write(`${JSON.stringify({ result: 'failed', code: error.code ?? 'DISPATCH_FAILED', reason: error.message, journal })}\n`);
+    process.stdout.write(`${JSON.stringify({ result: 'failed', code: dispatchCodes.has(error.code) ? error.code : 'DISPATCH_FAILED', reason: error.message, journal })}\n`);
     process.exitCode = 1;
   }
 } finally {

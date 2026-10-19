@@ -54,14 +54,20 @@ The supervisor may explicitly reuse across items on the same lane under the
 same checks; omit `--from-run` across items. Starting a continuation neither
 consumes nor resets either item's independent-review count.
 
-Open-run and lane/route/declared-field refusals happen before lane preparation,
-run creation or awaited-item writes. Failed JSON adds a stable `code` alongside
+Open-run, lane/route/declared-field and newer open-run occupant refusals happen
+before lane preparation, run creation or awaited-item writes. Dispatch also
+rechecks the occupant immediately before prompting: an older completed run cannot
+lend a worker held by a newer unreported, unabandoned run, even if idle or done.
+The check uses recorded agent, pane, terminal and effective session identity;
+the dispatch's own run is excluded. Failed JSON adds a stable `code` alongside
 the unchanged reason: `REUSE_RUN_OPEN`, `REUSE_MISMATCH`,
 `FROM_RUN_OTHER_ITEM` or `FROM_RUN_SUPERSEDED` (the reason names later runs).
 Workspace and live occupant checks remain late; missing/conflicting/replaced
-identity uses `REUSE_IDENTITY_UNKNOWN`, and a working occupant uses
-`REUSE_WORKER_BUSY`. Other failures use `DISPATCH_FAILED` unless they already
-carry a code. Inspect a late failure's journal to recover its started run.
+identity uses `REUSE_IDENTITY_UNKNOWN` only at the initial reuse identity check
+when the error has no code. A working occupant or newer open-run holder uses
+`REUSE_WORKER_BUSY`. Later transport failures and Node system error codes use
+`DISPATCH_FAILED`; existing dispatch-owned codes are preserved. Inspect a late
+failure's journal to recover its started run.
 
 Dispatch caps new sessions per Git common-directory project at **7**, matching
 BCH's `MAX_SESSIONS` default and leaving room for the normal 4–6 concurrent lanes.
@@ -115,7 +121,7 @@ launch still checks capacity, including an uncertain earlier launch.
 Settle adds `--from-run R-previous` to bind a correction to its originating run.
 Dispatch saves this precondition and passes `--if-current-run` to record start;
 it also refuses an already superseded origin before any lane or run side effect.
-the event-log transaction refuses creation if a later sibling run exists, the
+The event-log transaction refuses creation if a later sibling run exists, the
 current outcome belongs to another run, or the item is explicitly closed. A
 retry retains the saved origin. `--retry ... --from-run R-previous` may bind an
 older journal that lacks the field, or confirm the same origin, but cannot

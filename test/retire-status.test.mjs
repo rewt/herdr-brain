@@ -156,6 +156,14 @@ const reasonCases = [
   ['unknown or mismatched registered lane identity', 'UNKNOWN'],
   ['lane worktree is not clean', null],
   ['lane tip is not integrated in main', null],
+  ['lane tip is not integrated in main; archival retirement policy is off', null],
+  ['archival retirement policy is unavailable; lane kept', 'UNKNOWN'],
+  ['archival retirement Git snapshot changed; lane kept', 'UNKNOWN'],
+  ['archival retirement Git observation is incomplete; lane kept', 'UNKNOWN'],
+  ['archival retirement has unaccounted merge commits; lane kept', null],
+  ['archival retirement has no matched patches; lane kept', null],
+  ['archival retirement has unmatched changes; lane kept', null],
+  ['archival lane has no commits of its own; dispatch preparation kept', null],
   ['lane has no commits of its own and no recorded terminal chain', null],
   ['lane branch history is unavailable and no recorded terminal chain', null],
   ['promotion queue cleanup pending; retry through queue', 'UNKNOWN'],
@@ -181,8 +189,9 @@ test('every planner reason expression is enumerated and mapped; source drift fai
     "${agents.map(a => matchingRun(a, snapshot.record)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
     'lane removal preconditions verified',
     'integrated lane eligible; preservation verified on apply',
+    'archival lane eligible; exact archive and preservation verified on apply',
   ];
-  const releases = [...policy.matchAll(/why: reason \?\? (?:\(inert \? initial \? ('[^']*') : ('[^']*') : needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
+  const releases = [...policy.matchAll(/why: reason \?\? (?:\(inert \? initial \? ('[^']*') : ('[^']*') : needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|\(candidate\.eligibility === 'archival-retirement' \?\s*('[^']*') : ('[^']*')\)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());
   for (const why of releases) assert.equal(classifyRetirement({ decision: 'release', why }).class, 'TERMINAL');
 });
@@ -351,7 +360,7 @@ test('status JSON uses the shared snapshot and inventories every canonical workt
 test('ordinary dirty and unintegrated lanes stay unclassified; compact inventories never infer a sweep keep', () => {
   const snapshot = { common: '/repo/.git', workspaces: [], tabs: [], panes: [], agents: [], references: [], record: fold([]) };
   const lane = { worktree: '/repo/lane', identity: snapshot.common, linked: true, branch: 'lane/topic', tip: 'a'.repeat(40), head: 'a'.repeat(12), clean: true, integrated: true };
-  for (const [delta, reason] of [[{ clean: false }, 'lane worktree is not clean'], [{ integrated: false }, 'lane tip is not integrated in main']]) {
+  for (const [delta, reason] of [[{ clean: false }, 'lane worktree is not clean'], [{ integrated: false }, 'lane tip is not integrated in main; archival retirement policy is off']]) {
     const status = retirementStatus(snapshot, { worktrees: [{ ...lane, ...delta }] }), row = status.rows[0];
     assert.equal(row.class, null); assert.equal(status.counts.UNKNOWN, 0);
     assert.ok(row.reason.startsWith(reason)); assert.equal(row.nextAction, `keep; ${reason}`);

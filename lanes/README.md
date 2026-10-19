@@ -238,6 +238,12 @@ time.
 is first preserved as `archive/lane/<topic>` and freshly resolved to the exact tip.
 A different existing tag target refuses an unmerged close; a matching tag permits
 retry. An integrated lane leaves any older archive tag untouched.
+The automatic sweep keeps non-ancestor lanes unless the project's reviewed
+activation enables `retirement.archival_retirement` in the canonical `.lane.json`
+(default `false`). This separate eligibility case requires complete historical
+patch matches, no unique merge commits, terminal work disposition and every
+ordinary lifecycle guard. It uses this same exact archive-tag and preservation
+path; patch matches never set `integrated` or resolve a reopened obligation.
 Before deleting anything, close probes writes, renames and removal in the affected
 Git metadata directories and copies ignored/untracked evidence (including `.lane/`)
 to `GIT_COMMON_DIR/lane-archive/<topic>/<unique timestamp>/`. Its `sha256.json`

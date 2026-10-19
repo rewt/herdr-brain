@@ -133,8 +133,21 @@ for canonical-supervisor startup and the manual one-time backlog procedure.
   chain, zero panes and no live process/job references. Missing or ambiguous
   record/reference evidence keeps the lane. The existing lifecycle lock and
   guarded removal executor recheck identity, ancestry and canonical HOLD and
-  verify evidence preservation outside the lane before removal. Unmerged and
-  archive retirement are excluded. Pending queue cleanup retains its existing
+  verify evidence preservation outside the lane before removal. Archival
+  retirement is disabled by default. A project's reviewed activation may set
+  `retirement.archival_retirement: true` in its canonical `.lane.json` to also
+  consider non-ancestor lanes whose non-merge patches all appear in main's
+  history. `integrated` remains the ancestry fact. The archival case requires a
+  complete Git observation, at least one matching patch, no unmatched patches
+  or unique merge commits, and the same terminal-chain, reference, protection
+  and zero-occupant checks. A historical match after a revert does not discharge
+  an open obligation. Untouched dispatch preparations remain kept. Both the
+  lane tip and main snapshot are bound and rechecked under the lifecycle lock;
+  removal requires the exact verified `archive/lane/<topic>` tag and preserved
+  evidence. Conflicting tags are never overwritten. Missing, malformed or
+  unreadable policy cannot enable this case; lane copies and `LANE_CONFIG`
+  cannot enable it either. This capability's development does not activate it.
+  Pending queue cleanup retains its existing
   retry limits. The sweep has the same finite 30-second foreground allowance as
   retirement catch-up and attempts each lane at most once per pass. The lanes
   view and action log show keep reasons; scoped and recovery-only ticks do not

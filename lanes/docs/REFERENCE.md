@@ -68,6 +68,7 @@ Every key is optional. A repository can inherit reusable settings from one paren
 | `selection_policy.by_task_class` | none | Task class to route, directly or through an opaque pool-to-route map |
 | `seams_doc` | none | Optional task-map path printed by `seams` |
 | `retirement.protected_paths` | `[]` | Project-declared lane-relative protected path globs; read directly from the canonical checkout's `.lane.json`, independently of other config layers or `LANE_CONFIG` |
+| `retirement.archival_retirement` | `false` | Opt in to automatic archival retirement of completed patch-equivalent lanes; read only from the canonical checkout's `.lane.json`; adoption requires the project's reviewed activation path |
 
 Legacy `entry`, `chat` and `always_args` fields are accepted and ignored.
 

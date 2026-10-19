@@ -88,8 +88,8 @@ test('all provenance, lane-binding and dependency negatives keep both the tab an
     }],
     ['own reported run in this checkout', s => { s.record.runs.push({ id: 'R-2', item: 'ENG-2', workspace: f.lane,
       started: { seq: 6 }, report: { seq: 7, outcome: 'done' } }); }],
-    ['own run in a checkout subdirectory', s => { s.record.runs.push({ id: 'R-2', item: 'ENG-2', workspace: path.join(f.lane, 'subdir') }); }],
-    ['own run with unknown checkout', s => { s.record.runs.push({ id: 'R-2', item: 'ENG-2' }); }],
+    ['own run in a checkout subdirectory', s => { s.record.runs.push({ id: 'R-2', item: 'ENG-2', started: { seq: 6 }, workspace: path.join(f.lane, 'subdir') }); }],
+    ['own run with unknown checkout', s => { s.record.runs.push({ id: 'R-2', item: 'ENG-2', started: { seq: 6 } }); }],
     ['unintegrated tip', s => { s.git[0].integrated = false; }],
     ['archive alone', s => { s.git[0].integrated = false; s.git[0].archived = true; }],
     ['missing integration observation', s => { delete s.git[0].integrated; }],
@@ -98,7 +98,7 @@ test('all provenance, lane-binding and dependency negatives keep both the tab an
     ['proposal run outside this chain', s => {
       s.record.items[1].created.run = 'R-9';
       s.record.items.push({ id: 'ENG-9', role: 'engineer' });
-      s.record.runs.push({ id: 'R-9', item: 'ENG-9', workspace: '/another/lane', report: { seq: 8, outcome: 'done' } });
+      s.record.runs.push({ id: 'R-9', item: 'ENG-9', started: { seq: 6 }, workspace: '/another/lane', report: { seq: 8, outcome: 'done' } });
     }],
     ['proposal reviewer without PASS', s => { s.record.items[1].role = 'reviewer'; }],
     ['declined answer', s => { s.record.items[1].meta.answer = 'no'; }],
@@ -150,9 +150,9 @@ test('a separately dispatched follow-up owns its reviewer, corrections and exclu
   assert.deepEqual(s, before, 'exemptions must not rewrite the folded chain');
   assert.equal(retirementStatus(s).counts.UNKNOWN, 0);
   const cases = [
-    ['reviewer run in source checkout', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'REV-1', workspace: f.lane }); }],
-    ['correction run in source subdirectory', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'ENG-3', workspace: path.join(f.lane, 'subdir') }); }],
-    ['descendant with unknown run binding', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'ENG-3' }); }],
+    ['reviewer run in source checkout', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'REV-1', started: { seq: 12 }, workspace: f.lane }); }],
+    ['correction run in source subdirectory', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'ENG-3', started: { seq: 12 }, workspace: path.join(f.lane, 'subdir') }); }],
+    ['descendant with unknown run binding', fresh => { fresh.record.runs.push({ id: 'R-3', item: 'ENG-3', started: { seq: 12 } }); }],
     ['subtree blocker through links', fresh => { fresh.record.links.push({ blocked: 'ENG-1', blocker: 'ENG-3' }); }],
     ['subtree blocker through blocked_by', fresh => { fresh.record.items[0].blocked_by = ['REV-1']; }],
     ['subtree blocker through satisfied source blocker', fresh => {
@@ -168,7 +168,7 @@ test('a separately dispatched follow-up owns its reviewer, corrections and exclu
     assert.ok(laneRemovalReason(vacant(fresh), f.lane), name);
   }
   for (const mutate of [
-    fresh => { fresh.record.runs.push({ id: 'R-3', item: 'REV-1', workspace: f.lane }); },
+    fresh => { fresh.record.runs.push({ id: 'R-3', item: 'REV-1', started: { seq: 12 }, workspace: f.lane }); },
     fresh => { fresh.record.links.push({ blocked: 'ENG-1', blocker: 'ENG-3' }); },
   ]) {
     const fresh = structuredClone(s); mutate(fresh);
@@ -187,7 +187,7 @@ test('dependencies between exempt follow-ups do not retain the source, but a ret
   assert.equal(planRetirement(s).close.length, 1);
   assert.equal(laneRemovalReason(vacant(s), f.lane), null);
   assert.deepEqual(followUps(planRetirement(s)).map(d => d.item), ['ENG-2', 'ENG-3']);
-  s.record.runs.push({ id: 'R-2', item: 'ENG-2', workspace: f.lane, report: { seq: 8, outcome: 'done' } });
+  s.record.runs.push({ id: 'R-2', item: 'ENG-2', started: { seq: 6 }, workspace: f.lane, report: { seq: 8, outcome: 'done' } });
   assert.equal(planRetirement(s).close.length, 0);
   assert.ok(laneRemovalReason(vacant(s), f.lane));
   assert.deepEqual(followUps(planRetirement(s)), [], 'retained source work depends on the second follow-up subtree');
@@ -199,7 +199,7 @@ test('fresh blocker and same-lane dispatch observations invalidate a prior follo
   assert.equal(plan.close.length, 1);
   for (const mutate of [
     fresh => { fresh.record.links.push({ blocked: 'ENG-1', blocker: 'ENG-2' }); },
-    fresh => { fresh.record.runs.push({ id: 'R-2', item: 'ENG-2', workspace: f.lane }); },
+    fresh => { fresh.record.runs.push({ id: 'R-2', item: 'ENG-2', started: { seq: 6 }, workspace: f.lane }); },
     fresh => { fresh.git[0].integrated = false; },
   ]) {
     const fresh = structuredClone(s); mutate(fresh);

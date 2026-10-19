@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gitProject } from '../../lib/project.mjs';
 import { fixture } from '../../settle/test/fixture.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { entryPolicy } from '../../discovery/policy.mjs';
@@ -152,9 +153,16 @@ const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expec
 
 test('supervisor promotion forwards required component tests into the real queue', t => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
-  assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'promotable');
+  f.record(['ingest', f.show(run).report_path]);
+  // This check exercises supervisor -> enqueue forwarding. Supply readiness
+  // through the existing settle-cli seam; native review transport is independent.
+  const head = f.git(['rev-parse', 'HEAD'], f.workspace), journal = path.join(f.org, 'settle', run + '.json');
+  const ready = { result: 'promotable', run, lane: 'topic', head, reviewed_commit: head, journal };
+  fs.mkdirSync(path.dirname(journal), { recursive: true });
+  fs.writeFileSync(journal, JSON.stringify({ common: gitProject(f.repo).identity, stage: 'complete', result: ready }));
+  const settleCLI = path.join(f.root, 'ready.mjs'); fs.writeFileSync(settleCLI, `console.log(${JSON.stringify(JSON.stringify(ready))});`);
   const h = promotionHarness(f, run), required = ['test/board-view.test.mjs'];
-  const saved = result(h.promote(['--required-tests', JSON.stringify(required)]));
+  const saved = result(h.promote(['--settle-cli', settleCLI, '--required-tests', JSON.stringify(required)]));
   assert.deepEqual(saved.requiredTests, required);
   assert.deepEqual(h.queue.load().pending[0].requiredTests, required);
 });

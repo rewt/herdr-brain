@@ -62,6 +62,18 @@ test('join is a byte and mtime no-op from a linked checkout; session limit chang
   assert.notEqual(f.run(cwd, ['join', '--session-limit', '0']).status, 0);
 });
 
+test('record discovery uses its explicit Git environment with and without a fleet', t => {
+  const f = fixture(t), cwd = f.repo('explicit-env'); f.join(cwd);
+  const lane = path.join(f.scratch, 'lane'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/env', lane]);
+  const safe = Object.fromEntries(Object.entries(f.env).filter(([key]) => !key.startsWith('GIT_')));
+  process.env.GIT_DIR = path.join(f.scratch, 'foreign.git');
+  process.env.GIT_CONFIG_COUNT = 'invalid';
+  const expected = f.read().projects['explicit-env'].record;
+  assert.equal(projectFleet(lane, safe).project.record, expected);
+  assert.equal(findOrgDir({ cwd: lane, env: safe }), expected);
+  assert.equal(findOrgDir({ cwd: lane, env: { ...safe, HERDR_MONITOR_FLEET: path.join(f.scratch, 'no-fleet') } }), expected);
+});
+
 test('moved checkout remains stale in fleet instead of being guessed by name', t => {
   const f = fixture(t), cwd = f.repo('app'); f.join(cwd);
   const bytes = fs.readFileSync(path.join(f.fleetHome, 'fleet.json'));

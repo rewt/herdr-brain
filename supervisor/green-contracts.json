@@ -82,11 +82,74 @@
     {
       "entry": "lanes/validation.mjs",
       "kind": "imported-api",
-      "source": "installed release by default; explicit manual/reuse root may select a checkout",
-      "switch": "release suites, live acceptance and BCH seam checks"
+      "source": "explicit reuse request.brain only; may select an installed release or a checkout",
+      "switch": "release suites, live acceptance and BCH seam checks",
+      "conditional": "Nonempty BCH_CLOAK_REUSE_REQUEST; scripts/cycle-time/validation-reuse.mjs:260 imports validateTree"
     }
   ],
   "consumerEvidence": "docs/evidence/ENG-396/R-570/bch-confirmation.txt",
+  "consumerEvidenceBinding": {
+    "ownerIdentity": "bastian",
+    "requests": [
+      "R-570 / ENG-396",
+      "R-566.fix.md",
+      "docs/reviews/green-cohort/7ece822-r1.md"
+    ],
+    "scope": "Complete inspected tracked BCH production auto-promotion, dispatch, watcher and promotion-wrapper integration inventory at the captured revision; excludes arbitrary ad hoc commands, test fixtures, historical archives and future callers.",
+    "packet": "/Users/rewt/development/bastian/.org/evidence/R-570-ENG-396-BRAIN-CONSUMERS-20261019",
+    "confirmation": {
+      "path": "docs/evidence/ENG-396/R-570/bch-confirmation.txt",
+      "packetFile": "CONFIRMATION.txt",
+      "sha256": "dc84bf2c6f43573834a765a890e82e5ddb45fe967ef4b2358561494b12b16112"
+    },
+    "inventory": {
+      "path": "docs/evidence/ENG-396/R-570/bch-consumers.json",
+      "packetFile": "inventory.json",
+      "sha256": "425013b415457b474d28fd065e98529037e64b8bedb7f2490b7ba8637dffde5e"
+    },
+    "packetChecksums": {
+      "path": "/Users/rewt/development/bastian/.org/evidence/R-570-ENG-396-BRAIN-CONSUMERS-20261019/SHA256SUMS",
+      "sha256": "13e3dfc2da9be5ff17b729aaaf924d32fbb0c6460dfa812169867ea59952d26f"
+    },
+    "ownerRecord": {
+      "path": "/Users/rewt/development/bastian/.org",
+      "item": "G-24",
+      "event": 21749,
+      "at": "2026-10-19T15:07:44.507Z",
+      "receiptSha256": "564e779a2d11c53a7d018dcb44a8c7fdf0d0d04c02a435e43da36f8855760f55"
+    },
+    "inspectedBch": {
+      "repo": "/Users/rewt/development/bastian/bch-cloak",
+      "identity": "/Users/rewt/development/bastian/bch-cloak/.git",
+      "head": "6cd8e881b293da0d6d7338e43bfa37bc7ae64f02",
+      "trackedTreeClean": true
+    },
+    "liveReconcile": {
+      "configuredRoot": "/Users/rewt/.local/share/herdr-monitor/current",
+      "resolvedRoot": "/Users/rewt/.local/share/herdr-monitor/releases/rc-20261019T042359000Z-cc585d9f33",
+      "commit": "cc585d9f334c9842b459ef2b7ff3f693d57eb08b",
+      "HERDR_BRAIN_ROOT": "absent in observed supervisor process and inspection shell; excluded by promote-launch env -i; stripped by auto-promote",
+      "BCH_CLOAK_REUSE_REQUEST": "absent in observed supervisor process and inspection shell; excluded by promote-launch env -i",
+      "activeReconcileProcessAtCapture": false,
+      "historicalExecutionTraceClaim": false,
+      "capturedAt": "2026-10-19T15:05:45.341949+00:00",
+      "supervisorPid": 1764,
+      "trackedInstalledWrappersMatch": true,
+      "projectReleasePinExists": false,
+      "alternateSelectors": [
+        "Direct manual HERDR_BRAIN_ROOT",
+        "Explicit BCH_CLOAK_REUSE_REQUEST JSON request.brain (and request.profile.env)"
+      ],
+      "releaseSwitchQualification": "Manual wrapper resolves current separately for each child; auto-promote realpaths once per operation. Capture does not pin future switches."
+    },
+    "containment": "All direct entries and their transitive Brain runtime/configuration closures remain frozen; a manual/reuse alternate root requires the same frozen boundary or ordinary handling. Reconfirm consumer/root inventory before activation; each switch candidate still requires release suites, live acceptance and BCH seam checks.",
+    "nonClaims": [
+      "Independent review PASS",
+      "Release acceptance",
+      "Cohort enablement",
+      "Historical reconciliation execution trace"
+    ]
+  },
   "contracts": [
     "supervisor/GREEN-CONTRACTS.md"
   ],
@@ -697,7 +760,7 @@
     },
     "lib/fleet.mjs": {
       "mode": "100644",
-      "sha256": "9f65ee34facfab79d99d72968c03421a4b78f4488d221cef2d965d7efde64779",
+      "sha256": "511e3cc63a657e3af683dd9c4865bd3aa280250c30fc916f5ba4c625f5353ee8",
       "role": "runtime-or-configuration"
     },
     "lib/handoffs-command.mjs": {
@@ -897,7 +960,7 @@
     },
     "lib/store.mjs": {
       "mode": "100644",
-      "sha256": "d2eb7a1506fe6485f949efffcd80837c194bf62a68e8c0c5b669acfd9aacdb16",
+      "sha256": "68817019529b92b70338c6c025cc87ba0650648fc753be82e78ba4bf0298611b",
       "role": "bch-entry"
     },
     "lib/today.mjs": {

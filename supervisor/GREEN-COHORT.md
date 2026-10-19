@@ -29,7 +29,8 @@ exact independently hashed generated review addition retains its existing exempt
 2. Rebuild the manifest's pins from the exact ordinary bootstrap candidate if its
    boundary changed. `buildManifest(tree, {bindings, externalInputs})` in
    `green-manifest.mjs` produces review input from a Git tree reader. Preserve the
-   exclusion map. It neither writes a manifest nor enables anything. Review the
+   exclusion map and pass the owner-attested `consumerEvidenceBinding` when
+   regenerating. It neither writes a manifest nor enables anything. Review the
    resulting diff; never regenerate from a green candidate to make it qualify.
    Bootstrap files are pinned to the trusted running versions in both committed
    trees; all other runtime/configuration inputs carry exact hashes and modes.

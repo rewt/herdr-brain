@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { createGreenCohort, greenContractRefusal, GREEN_CONTRACTS, lifecycleEvidence, LIFECYCLE_CASES } from '../green-pass.mjs';
-import { buildManifest, BOOTSTRAP_FILES, INTERIM_MS, checkActivation, activationNote, recordedActivation } from '../green-manifest.mjs';
+import { buildManifest, BOOTSTRAP_FILES, INTERIM_MS, checkActivation, componentShape, activationNote, recordedActivation } from '../green-manifest.mjs';
 import { sourceReach, executionClosure } from '../green-reach.mjs';
 import { autopilotNotice, autopilotSettings } from '../autopilot.mjs';
 
@@ -17,7 +17,9 @@ import { autopilotNotice, autopilotSettings } from '../autopilot.mjs';
 // child. Model the production parent's required-absent loader environment here.
 delete process.env.NODE_OPTIONS;
 const digest = value => createHash('sha256').update(value).digest('hex');
-const renderer = fs.readFileSync(new URL('../../board/render.mjs', import.meta.url), 'utf8');
+const sourceRenderer = fs.readFileSync(new URL('../../board/render.mjs', import.meta.url), 'utf8');
+const sourceWidth = componentShape(sourceRenderer, 'board-default-width/v1').width;
+const renderer = sourceRenderer.replace(`export function render(snapshot, { width = ${sourceWidth},`, 'export function render(snapshot, { width = 120,');
 function setup(t, { binary = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'green-manifest-')));
   fixtureFleet(t, root); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -66,10 +68,12 @@ function setup(t, { binary = false } = {}) {
 
 test('raw binary launcher pins and Git selector environment changes preserve containment', t => {
   const f = setup(t, { binary: true }); f.change(); const opts = f.options();
+  fs.mkdirSync(process.env.HERDR_MONITOR_FLEET, { recursive: true });
+  fs.writeFileSync(path.join(process.env.HERDR_MONITOR_FLEET, 'fleet.json'), JSON.stringify({ version: 1, session_limit: 4, projects: { brain: { identity: f.brain.identity, checkout: f.repo, record: f.brain.org, worktrees: f.root, layers: [] } } }));
   assert.equal(f.scope().eligible, true);
-  for (const key of ['GIT_CONFIG_SYSTEM', 'GIT_CONFIG_COUNT', 'GIT_PAGER', 'GIT_R566_NEW_SELECTOR', 'NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S']) {
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_COUNT', 'GIT_PAGER', 'GIT_R566_NEW_SELECTOR', 'NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S']) {
     const prior = process.env[key];
-    try { process.env[key] = '/unreviewed/config'; assert.equal(f.checker.scope(opts).eligible, true); assert.equal(f.checker.environment()[key], undefined); }
+    try { process.env[key] = '/unreviewed/config'; assert.equal(f.checker.scope(opts).eligible, true, JSON.stringify(f.checker.scope(opts))); assert.equal(f.checker.environment()[key], undefined); }
     finally { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; }
   }
   assert.equal(f.scope().eligible, true);
@@ -99,7 +103,7 @@ for (const [file, code] of [
   ...['.lane.validation.json', '.promotion-selector.json', 'package.json'].map(file => [file, 'GREEN_SELF_AUTHORITY']),
   ['supervisor/green-contracts.json', 'GREEN_SELF_AUTHORITY'], ['supervisor/green-pass.mjs', 'GREEN_SELF_AUTHORITY'],
   ['supervisor/green-manifest.mjs', 'GREEN_SELF_AUTHORITY'], ['supervisor/GREEN-CONTRACTS.md', 'GREEN_SELF_AUTHORITY'],
-  ['dispatch/record-worker.mjs', 'GREEN_BCH_CONSUMED'], ['contrib/settle-watch.mjs', 'GREEN_BCH_CONSUMED'],
+  ['dispatch/record-worker.mjs', 'GREEN_SHARED_RUNTIME'], ['contrib/settle-watch.mjs', 'GREEN_BCH_CONSUMED'],
   ['supervisor/autopilot.mjs', 'GREEN_SELF_AUTHORITY'], ['supervisor/reconcile.mjs', 'GREEN_BCH_CONSUMED'],
   ['blue/hotfix.mjs', 'GREEN_BLUE_HOTFIX'], ['discovery/native-sandbox.mjs', 'GREEN_NATIVE_ISOLATION'],
   ['test-slot/ticket-queue.mjs', 'GREEN_HOST_RESOURCE'], ['sessions/authorization.mjs', 'GREEN_CROSS_PROJECT_AUTHORITY'],

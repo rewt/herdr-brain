@@ -113,7 +113,7 @@ export function executableDescriptor(name) {
 export const BCH_ENTRIES = ['bin/org.mjs', 'promote/promote.mjs', 'dispatch/record-worker.mjs',
   'supervisor/reconcile.mjs', 'contrib/settle-watch.mjs', 'lib/store.mjs', 'lib/state.mjs',
   'lib/report.mjs', 'lib/roles.mjs', 'lanes/validation.mjs'];
-export function buildManifest(tree, { bindings, externalInputs = [] }) {
+export function buildManifest(tree, { bindings, externalInputs = [], consumerEvidenceBinding }) {
   const boundary = {};
   for (const file of [...tree.files.keys()].filter(boundaryInput).sort()) {
     const mode = tree.files.get(file).mode;
@@ -125,9 +125,11 @@ export function buildManifest(tree, { bindings, externalInputs = [] }) {
     interimDays: 10, bootstrapFiles: BOOTSTRAP_FILES,
     entries: [{ project: 'brain', path: 'supervisor/reconcile.mjs', contract: 'reconcile-complete-batch/v1' }],
     externalConsumers: BCH_ENTRIES.map((entry, i) => ({ entry, kind: i < 5 ? 'command' : 'imported-api',
-      source: ['supervisor/reconcile.mjs', 'lib/store.mjs', 'lib/state.mjs', 'lib/roles.mjs', 'lanes/validation.mjs'].includes(entry) ? 'installed release by default; explicit manual/reuse root may select a checkout' : 'installed release',
-      switch: 'release suites, live acceptance and BCH seam checks' })),
+      source: entry === 'lanes/validation.mjs' ? 'explicit reuse request.brain only; may select an installed release or a checkout' : ['supervisor/reconcile.mjs', 'lib/store.mjs', 'lib/state.mjs', 'lib/roles.mjs', 'lanes/validation.mjs'].includes(entry) ? 'installed release by default; explicit manual/reuse root may select a checkout' : 'installed release',
+      switch: 'release suites, live acceptance and BCH seam checks',
+      ...(entry === 'lanes/validation.mjs' ? { conditional: 'Nonempty BCH_CLOAK_REUSE_REQUEST; scripts/cycle-time/validation-reuse.mjs:260 imports validateTree' } : {}) })),
     consumerEvidence: 'docs/evidence/ENG-396/R-570/bch-confirmation.txt',
+    ...(consumerEvidenceBinding ? { consumerEvidenceBinding } : {}),
     contracts: ['supervisor/GREEN-CONTRACTS.md'],
     environment: loaderEnvironment(), node: { path: fs.realpathSync(process.execPath), sha256: hash(fs.readFileSync(process.execPath)), version: 'v20.19.4', execArgv: process.execArgv },
     git: executableDescriptor('git'), externalInputs: externalInputs.map(externalDescriptor),

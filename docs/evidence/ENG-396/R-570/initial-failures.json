@@ -1,0 +1,86 @@
+[
+  {
+    "test": "not ok 1 - raw binary launcher pins and Git selector environment changes preserve containment",
+    "classification": "new-green-case"
+  },
+  {
+    "test": "not ok 20 - preserved exclusion dispatch/record-worker.mjs returns GREEN_BCH_CONSUMED",
+    "classification": "new-green-case"
+  },
+  {
+    "test": "not ok 288 - runless completion fleet-membership retains an explicit binding diagnostic",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 299 - legacy uncertain promotion receipts still forbid command replay after the key upgrade",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 309 - automatic PASS reaches the real queue, lands and closes without waking the supervisor",
+    "classification": "native-process-refusal"
+  },
+  {
+    "test": "not ok 310 - automatic PASS reaches the real queue, lands and closes with one awaited wake",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 313 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.",
+    "classification": "delivery/integration-unresolved"
+  },
+  {
+    "test": "not ok 351 - a worker exiting after autopilot precheck leaves a confirmed no-op that bare promotion can recover",
+    "classification": "native-process-refusal"
+  },
+  {
+    "test": "not ok 352 - automatic queue refuses an engineer child filed during handle after report intake",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 353 - automatic queue promotes its own non-blocking report proposal",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 355 - automatic queue rechecks kill-switch at final integration",
+    "classification": "native-process-refusal"
+  },
+  {
+    "test": "not ok 364 - supervisor handle exposes correction memory wait before pressure clears",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 366 - handle explicitly sends capped findings back once and adopts its saved correction",
+    "classification": "review-incomplete"
+  },
+  {
+    "test": "not ok 368 - STOP arriving during review retains a resumable correction without launching another worker",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 369 - supervisor binds head and run into the queue and retries confirmed refusals with history",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 370 - bound promotion rechecks queued runs and record changes during validation before integration",
+    "classification": "review-incomplete"
+  },
+  {
+    "test": "not ok 371 - late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards",
+    "classification": "review-incomplete"
+  },
+  {
+    "test": "not ok 372 - late original and correction notices after lane removal preserve promotion guards and never replay settlement",
+    "classification": "review-incomplete"
+  },
+  {
+    "test": "not ok 373 - refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt",
+    "classification": "native-process-refusal"
+  },
+  {
+    "test": "not ok 374 - supervisor entry and final notices carry the unconfigured cycle through actual promotion",
+    "classification": "watcher-ownership"
+  },
+  {
+    "test": "not ok 382 - supervisor retries a confirmed timeout with the same reviewed binding",
+    "classification": "watcher-ownership"
+  }
+]

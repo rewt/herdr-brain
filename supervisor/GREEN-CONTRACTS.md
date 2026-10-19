@@ -99,7 +99,29 @@ acceptance and BCH seam checks. Missing or changed inputs mean ordinary handling
 
 The owner-confirmed direct inventory is recorded in
 [the confirmation](../docs/evidence/ENG-396/R-570/bch-confirmation.txt) and
-[the structured inventory](../docs/evidence/ENG-396/R-570/bch-consumers.json):
+[the structured inventory](../docs/evidence/ENG-396/R-570/bch-consumers.json).
+The first five entries below are direct commands; the remaining five are direct
+imported APIs, with `lanes/validation.mjs` conditional on explicit reuse.
+
+The `consumerEvidenceBinding` in `green-contracts.json` binds this owner inspection
+to R-570 / ENG-396, R-566.fix.md and `docs/reviews/green-cohort/7ece822-r1.md`.
+The source packet is
+`/Users/rewt/development/bastian/.org/evidence/R-570-ENG-396-BRAIN-CONSUMERS-20261019/`;
+its source snapshots and inventory retain the exact call sites and selectors.
+The local copies match the packet byte for byte:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| `CONFIRMATION.txt` / local `bch-confirmation.txt` | `dc84bf2c6f43573834a765a890e82e5ddb45fe967ef4b2358561494b12b16112` |
+| `inventory.json` / local `bch-consumers.json` | `425013b415457b474d28fd065e98529037e64b8bedb7f2490b7ba8637dffde5e` |
+| Packet `SHA256SUMS` | `13e3dfc2da9be5ff17b729aaaf924d32fbb0c6460dfa812169867ea59952d26f` |
+
+Every entry in the packet's `SHA256SUMS` verified. The owner recorded the
+confirmation in `/Users/rewt/development/bastian/.org`, G-24, event 21749
+(`2026-10-19T15:07:44.507Z`). The inspected BCH HEAD was
+`6cd8e881b293da0d6d7338e43bfa37bc7ae64f02`, with a clean tracked tree.
+This inventory confirmation supplies owner evidence for the review correction;
+it grants no independent review PASS, release acceptance or cohort enablement.
 
 | Entry | BCH use |
 | --- | --- |
@@ -114,18 +136,27 @@ The owner-confirmed direct inventory is recorded in
 | `lib/roles.mjs` | pre-window role checks |
 | `lanes/validation.mjs` | conditional explicit reuse `validateTree` API |
 
-The observed current alias resolved to
-`rc-20261019T042359000Z-cc585d9f33`, Brain commit
+The ordinary configured root `/Users/rewt/.local/share/herdr-monitor/current`
+resolved to
+`/Users/rewt/.local/share/herdr-monitor/releases/rc-20261019T042359000Z-cc585d9f33`, Brain commit
 `cc585d9f334c9842b459ef2b7ff3f693d57eb08b`. BCH has no project release pin.
+The sampled tracked and installed wrappers match.
 The installed promotion launcher removes both alternate-root selectors with its
 `env -i` allowlist; auto-promote strips `HERDR_BRAIN_ROOT`. The observed supervisor
-process and LaunchAgent supplied neither selector. No live reconcile was running
+PID 1764 and LaunchAgent supplied neither `HERDR_BRAIN_ROOT` nor
+`BCH_CLOAK_REUSE_REQUEST`. No live reconcile was running
 at capture, so this is configured-root evidence, not a historical execution trace.
-It corrects older checkout-root wording, including AGENTS.md's description.
+It corrects older checkout-root wording in this contract, Brain's AGENTS.md and
+BCH's WORK-PATTERN.md. No BCH source or configuration edit is part of this binding.
 
 All ten entries appear in `externalConsumers`; their transitive closures remain
 frozen. Manual/reuse alternate roots require the same frozen boundary or ordinary
-handling. The validation-reuse adapter's hash walks over lanes/lib/test-slot are
+handling. Explicit `BCH_CLOAK_REUSE_REQUEST` selects JSON whose absolute
+`request.brain` and `request.profile.env` supply the reuse root and environment;
+it is not an unconditional installed-release path. The manual wrapper resolves
+`current` on each child invocation, while auto-promote realpaths it once per
+operation. This capture does not pin future release switches.
+The validation-reuse adapter's hash walks over lanes/lib/test-slot are
 data reads, not additional executable entries. Immutable release consumption and
 `contrib/` plus `lib/cli-help.mjs` shipping remain intact. A future switch still
 requires release suites, live acceptance and BCH seam checks. Before activation,

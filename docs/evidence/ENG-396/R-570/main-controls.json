@@ -1,0 +1,102 @@
+{
+  "schema": "green-main-probe/v2",
+  "main": "e13859f2540c2d8b7bef16d26a09d306f944bc33",
+  "stage": "containment after required ordinary bootstrap overlay; independent review still pending",
+  "head": "6ddeb7129777aeebd6504cecad4474ac1c6016a6",
+  "bootstrap_overlay": "A\\tdocs/evidence/ENG-396/R-537/authority-imports.json\\nA\\tdocs/evidence/ENG-396/R-537/focused.tap\\nA\\tdocs/evidence/ENG-396/R-537/fork-overloads-final.tap\\nA\\tdocs/evidence/ENG-396/R-537/fork-overloads.tap\\nA\\tdocs/evidence/ENG-396/R-537/validation.md\\nA\\tdocs/evidence/ENG-396/R-539/validation.md\\nA\\tdocs/evidence/ENG-396/R-543/green-pass.json\\nA\\tdocs/evidence/ENG-396/R-543/validation.md\\nA\\tdocs/evidence/ENG-396/R-544/green-tests.json\\nA\\tdocs/evidence/ENG-396/R-544/main-probe.json\\nA\\tdocs/evidence/ENG-396/R-544/validation.md\\nA\\tdocs/evidence/ENG-396/R-566/final-focused.json\\nA\\tdocs/evidence/ENG-396/R-566/final-main-probe.json\\nA\\tdocs/evidence/ENG-396/R-566/first-real-candidate.json\\nA\\tdocs/evidence/ENG-396/R-566/main-probe.json\\nA\\tdocs/evidence/ENG-396/R-566/manifest-generation.json\\nA\\tdocs/evidence/ENG-396/R-566/real-candidate-command.json\\nA\\tdocs/evidence/ENG-396/R-566/real-candidates.json\\nA\\tdocs/evidence/ENG-396/R-566/required-tests.json\\nA\\tdocs/evidence/ENG-396/R-566/validation.md\\nA\\tdocs/evidence/ENG-396/R-570/bch-confirmation.txt\\nA\\tdocs/evidence/ENG-396/R-570/bch-consumers.json\\nA\\tdocs/evidence/ENG-396/containment-design.md\\nA\\tdocs/evidence/ENG-396/source-audit.json\\nA\\tdocs/reviews/green-cohort/7ece822-r1.md\\nA\\tdocs/reviews/green-cohort/8f80886-r1.md\\nA\\tdocs/reviews/green-cohort/d17bdfe-r1.md\\nD\\tdocs/reviews/pnpm-store-disposable/70fd741-r1.md\\nM\\tlanes/README.md\\nM\\tlanes/docs/REFERENCE.md\\nM\\tlib/lane-removal.mjs\\nA\\tsupervisor/GREEN-COHORT.md\\nA\\tsupervisor/GREEN-CONTRACTS.md\\nM\\tsupervisor/README.md\\nM\\tsupervisor/autopilot.mjs\\nA\\tsupervisor/green-contracts.json\\nA\\tsupervisor/green-manifest.mjs\\nA\\tsupervisor/green-pass.mjs\\nA\\tsupervisor/green-reach.mjs\\nM\\tsupervisor/supervisor.mjs\\nA\\tsupervisor/test/green-main.test.mjs\\nA\\tsupervisor/test/green-pass.test.mjs\\nM\\tsupervisor/test/supervisor.test.mjs\\nM\\ttest/helpers/tier.mjs\\nM\\ttest/lane-removal-disposable.test.mjs\\nM\\ttest/lane-removal-protection.test.mjs\\nM\\ttest/tier-plan.test.mjs",
+  "manifest_sha256": "124a17c00a30eb9d088d518e710786e0cf1717ab156e68c0854f64854a0c45d5",
+  "boundary_inputs": 298,
+  "candidate": {
+    "file": "board/render.mjs",
+    "old_line": "export function render(snapshot, { width = 120, height = Infinity, now = Date.now() } = {}) {",
+    "new_line": "export function render(snapshot, { width = 121, height = Infinity, now = Date.now() } = {}) {",
+    "before_sha256": "5ba08446d07656efe5982525cd2d5501cf60b3d099b8f59a49d1fe65a9a761a8",
+    "after_sha256": "2dc97396ae64b948c235994e2ef2d5c6103ed437086d08933436b4e134f10d5d"
+  },
+  "validation": {
+    "exact_candidate_bytes": true,
+    "default_width": 121,
+    "explicit_width": 80,
+    "height": 1
+  },
+  "outcomes": [
+    {
+      "label": "renderer",
+      "file": "board/render.mjs",
+      "eligible": true,
+      "code": null,
+      "reason": null,
+      "before_sha256": "5ba08446d07656efe5982525cd2d5501cf60b3d099b8f59a49d1fe65a9a761a8",
+      "after_sha256": "2dc97396ae64b948c235994e2ef2d5c6103ed437086d08933436b4e134f10d5d"
+    },
+    {
+      "label": "bch-entry",
+      "file": "supervisor/reconcile.mjs",
+      "eligible": false,
+      "code": "GREEN_BCH_CONSUMED",
+      "reason": "reviewed boundary input changed: supervisor/reconcile.mjs",
+      "before_sha256": "f00d3ee4a35dcf985c05ecd67f865ee199a0312bf5d0e45be7c7bebf37072932",
+      "after_sha256": "5439ef503e13ea9c1da6f41a6986283afaaa9080a49f856f1d3da637893f1453"
+    },
+    {
+      "label": "promotion-authority",
+      "file": "test/helpers/run.mjs",
+      "eligible": false,
+      "code": "GREEN_SELF_AUTHORITY",
+      "reason": "frozen eligibility or promotion authority: test/helpers/run.mjs",
+      "before_sha256": "9b5eaa970c3f5c30fa16ca2cbf037863391a3a00986e265cdff4d713ac910537",
+      "after_sha256": "e651f571475d2556aad2d7407e0d5099abf135b35491a442d23d3e63e07cd1e6"
+    },
+    {
+      "label": "check-selection",
+      "file": ".lane.validation.json",
+      "eligible": false,
+      "code": "GREEN_SELF_AUTHORITY",
+      "reason": "frozen eligibility or promotion authority: .lane.validation.json",
+      "before_sha256": "e93f7a39bfde12ea1bfa467226abf3b704b4eed196684556659017585a7b18f4",
+      "after_sha256": "3c526784fcc56052f90e3f7f69593b28ba3d4766bb09889bf212a0cd57199755"
+    },
+    {
+      "label": "check-selection",
+      "file": ".promotion-selector.json",
+      "eligible": false,
+      "code": "GREEN_SELF_AUTHORITY",
+      "reason": "frozen eligibility or promotion authority: .promotion-selector.json",
+      "before_sha256": "2e3fde662c204f3fb28a28029447bd6ddf842a1ef735553f4f9cf288303f50e3",
+      "after_sha256": "7bdffbe3f31a1dfe932f26e44179e865a63eeed3aaf12af02d4d1e2fa92ce2bb"
+    },
+    {
+      "label": "manifest",
+      "file": "supervisor/green-contracts.json",
+      "eligible": false,
+      "code": "GREEN_SELF_AUTHORITY",
+      "reason": "frozen eligibility or promotion authority: supervisor/green-contracts.json",
+      "before_sha256": "124a17c00a30eb9d088d518e710786e0cf1717ab156e68c0854f64854a0c45d5",
+      "after_sha256": "417ef990a59cf7dd39feb546889ff3188e6123555b59a981c0442960e6194d85"
+    },
+    {
+      "label": "boundary",
+      "file": "board/rows.mjs",
+      "eligible": false,
+      "code": "GREEN_BOUNDARY_CHANGED",
+      "reason": "reviewed boundary input changed: board/rows.mjs",
+      "before_sha256": "c2b5bac4e69e377fbcce944b0d50cb5f81fc49f641fce301af3c2eab43ddfa74",
+      "after_sha256": "9324e748e6c80e94011bb09bb7125d5b6a47329fc6cf31473e3bcdb6ab137d20"
+    },
+    {
+      "label": "new-edge",
+      "file": "board/render.mjs",
+      "eligible": false,
+      "code": "GREEN_REACH_UNKNOWN",
+      "reason": "component boundary expanded: board/render.mjs",
+      "before_sha256": "5ba08446d07656efe5982525cd2d5501cf60b3d099b8f59a49d1fe65a9a761a8",
+      "after_sha256": "be9d839e56ac73fb285de75bf5f9471aec5528f524c45a079dee1e050bbcf7ba"
+    },
+    {
+      "label": "missing-boundary",
+      "eligible": false,
+      "code": "GREEN_REACH_UNKNOWN"
+    }
+  ],
+  "independent_review": "not performed by this engineer; ordinary bootstrap and ready review required before activation/promotion"
+}

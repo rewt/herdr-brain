@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { GREEN_CONTRACTS } from '../green-pass.mjs';
-import { buildManifest, BOOTSTRAP_FILES, manifestScope } from '../green-manifest.mjs';
+import { buildManifest, BOOTSTRAP_FILES, manifestScope, componentShape } from '../green-manifest.mjs';
 
 // Test containment is already imported; child launches remain contained.
 delete process.env.NODE_OPTIONS;
@@ -51,8 +51,9 @@ test('real main plus the complete HEAD overlay admits a renderer and refuses bou
   const main = git(checkout, ['rev-parse', 'main']).trim(), tree = sourceTree(checkout);
   const { before, manifest, trusted } = probeSource(tree), files = before.files;
   const original = before.read('board/render.mjs');
-  const oldLine = 'export function render(snapshot, { width = 120, height = Infinity, now = Date.now() } = {}) {';
-  const newLine = oldLine.replace('120', '121'); assert.ok(original.includes(oldLine));
+  const oldWidth = componentShape(original, 'board-default-width/v1').width, newWidth = oldWidth === 240 ? 239 : oldWidth + 1;
+  const oldLine = `export function render(snapshot, { width = ${oldWidth}, height = Infinity, now = Date.now() } = {}) {`;
+  const newLine = oldLine.replace(`width = ${oldWidth},`, `width = ${newWidth},`); assert.ok(original.includes(oldLine));
   const candidate = original.replace(oldLine, newLine), outcomes = [];
   for (const [label, file, contents, expected] of [
     ['renderer', 'board/render.mjs', candidate, null],
@@ -81,13 +82,13 @@ test('real main plus the complete HEAD overlay admits a renderer and refuses bou
   fs.writeFileSync(path.join(scratch, 'render.mjs'), candidate); fs.writeFileSync(path.join(scratch, 'rows.mjs'), before.read('board/rows.mjs'));
   const { render } = await import(pathToFileURL(path.join(scratch, 'render.mjs')).href);
   const snapshot = { memory: 0, herdr: 'x'.repeat(150), slot: { state: 'idle', heldSeconds: 0, queueLength: 0 }, rows: [] };
-  assert.equal(render(snapshot).split('\n')[0].length, 121); assert.equal(render(snapshot, { width: 80 }).split('\n')[0].length, 80);
+  assert.equal(render(snapshot).split('\n')[0].length, newWidth); assert.equal(render(snapshot, { width: 80 }).split('\n')[0].length, 80);
   assert.equal(render(snapshot, { height: 1 }).split('\n').length, 1);
   const evidence = { schema: 'green-main-probe/v2', main, stage: 'containment after required ordinary bootstrap overlay; independent review still pending',
     head: tree.head, bootstrap_overlay: git(checkout, ['diff', '--name-status', main, tree.head]).trim(),
     manifest_sha256: hash(JSON.stringify(manifest)), boundary_inputs: Object.keys(manifest.boundary).length,
     candidate: { file: 'board/render.mjs', old_line: oldLine, new_line: newLine, before_sha256: hash(original), after_sha256: hash(candidate) },
-    validation: { exact_candidate_bytes: true, default_width: 121, explicit_width: 80, height: 1 }, outcomes,
+    validation: { exact_candidate_bytes: true, default_width: newWidth, explicit_width: 80, height: 1 }, outcomes,
     independent_review: 'not performed by this engineer; ordinary bootstrap and ready review required before activation/promotion' };
   t.diagnostic(`GREEN_MAIN_PROBE ${JSON.stringify(evidence)}`);
 });
@@ -103,9 +104,11 @@ for (const operation of ['changed', 'deleted']) test(`complete probe tree handle
   git(scratch, ['add', '.']); git(scratch, ['commit', '-qm', 'Base']);
   if (operation === 'changed') fs.writeFileSync(path.join(scratch, 'lib/unrelated.mjs'), '// unrelated promotion change\n');
   else fs.unlinkSync(path.join(scratch, 'lib/unrelated.mjs'));
+  fs.writeFileSync(path.join(scratch, 'board/render.mjs'), fs.readFileSync(path.join(scratch, 'board/render.mjs'), 'utf8').replace('width = 120,', `width = ${operation === 'changed' ? 121 : 240},`));
   git(scratch, ['add', '-A']); git(scratch, ['commit', '-qm', 'Unrelated promotion']);
   const { before, manifest, trusted } = probeSource(sourceTree(scratch));
-  const candidate = before.read('board/render.mjs').replace('width = 120,', 'width = 121,');
+  const original = before.read('board/render.mjs'), width = componentShape(original, 'board-default-width/v1').width;
+  const candidate = original.replace(`width = ${width},`, `width = ${width === 240 ? 239 : width + 1},`);
   const after = { ...before, read: file => file === 'board/render.mjs' ? candidate : before.read(file),
     bytes: file => file === 'board/render.mjs' ? Buffer.from(candidate) : before.bytes(file) };
   const result = manifestScope(before, after, { manifest, trusted, changes: [{ file: 'board/render.mjs', before: '100644', after: '100644', status: 'M' }] });

@@ -1,0 +1,90 @@
+[
+  {
+    "test": "promoted queue notice handles its bound run and a closed item is a no-op",
+    "current": "passed"
+  },
+  {
+    "test": "completion after an interrupted promotion has its own receipt and closes once",
+    "current": "passed"
+  },
+  {
+    "test": "a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice",
+    "current": "passed"
+  },
+  {
+    "test": "actual handle and promotion commands return findings to the supervisor offline",
+    "current": "passed"
+  },
+  {
+    "test": "automatic PASS reaches the real queue, lands and closes with one awaited wake",
+    "current": "passed"
+  },
+  {
+    "test": "real CLIs retry an exit-one base-moved refusal with the saved request and land once",
+    "current": "passed"
+  },
+  {
+    "test": "a worker exiting after autopilot precheck leaves a confirmed no-op that bare promotion can recover",
+    "current": "failed"
+  },
+  {
+    "test": "automatic queue refuses an engineer child filed during handle after report intake",
+    "current": "passed"
+  },
+  {
+    "test": "automatic queue rechecks kill-switch at final integration",
+    "current": "passed"
+  },
+  {
+    "test": "automatic queue rechecks pause at final integration",
+    "current": "failed"
+  },
+  {
+    "test": "supervisor handle exposes correction memory wait before pressure clears",
+    "current": "passed"
+  },
+  {
+    "test": "handle explicitly sends capped findings back once and adopts its saved correction",
+    "current": "passed"
+  },
+  {
+    "test": "green-pass promotion replays deferred and component checks and verifies train completion",
+    "current": "failed"
+  },
+  {
+    "test": "bare promotion retains required tests after not-queued and refuses explicit removal",
+    "current": "passed"
+  },
+  {
+    "test": "bare promotion retains required tests after timeout and refuses explicit removal",
+    "current": "passed"
+  },
+  {
+    "test": "STOP arriving during review retains a resumable correction without launching another worker",
+    "current": "passed"
+  },
+  {
+    "test": "supervisor binds head and run into the queue and retries confirmed refusals with history",
+    "current": "failed"
+  },
+  {
+    "test": "bound promotion rechecks queued runs and record changes during validation before integration",
+    "current": "failed"
+  },
+  {
+    "test": "late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards",
+    "current": "failed"
+  },
+  {
+    "test": "late original and correction notices after lane removal preserve promotion guards and never replay settlement",
+    "current": "passed"
+  },
+  {
+    "test": "refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt",
+    "current": "passed"
+  },
+  {
+    "test": "supervisor entry and final notices carry the unconfigured cycle through actual promotion",
+    "current": "failed"
+  }
+]

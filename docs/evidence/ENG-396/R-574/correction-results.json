@@ -1,0 +1,58 @@
+[
+  {
+    "test": "only supervisor decisions on the reviewed activation item can anchor or bind a digest",
+    "result": "passed"
+  },
+  {
+    "test": "cohort activation cannot be restarted by configuration, a later note or a reviewed manifest refresh",
+    "result": "passed"
+  },
+  {
+    "test": "real-main committed pins admit while current and boundary controls always refuse",
+    "result": "passed"
+  },
+  {
+    "test": "ordinary changed keeps the suite green while stale pins refuse green admission",
+    "result": "passed"
+  },
+  {
+    "test": "ordinary deleted keeps the suite green while stale pins refuse green admission",
+    "result": "passed"
+  },
+  {
+    "test": "ordinary added keeps the suite green while stale pins refuse green admission",
+    "result": "passed"
+  },
+  {
+    "test": "ordinary external-drift keeps the suite green while stale pins refuse green admission",
+    "result": "passed"
+  },
+  {
+    "test": "supervisor promotion forwards required component tests into the real queue",
+    "result": "passed"
+  },
+  {
+    "test": "bare promotion retains required tests after not-queued and refuses explicit removal",
+    "result": "passed"
+  },
+  {
+    "test": "bare promotion retains required tests after refused and refuses explicit removal",
+    "result": "passed"
+  },
+  {
+    "test": "bare promotion retains required tests after timeout and refuses explicit removal",
+    "result": "passed"
+  },
+  {
+    "test": "replayed green promotion verifies the saved union of deferred and component checks",
+    "result": "passed"
+  },
+  {
+    "test": "legacy receipts fall back to deferred evidence while explicit requirements survive reexecution",
+    "result": "passed"
+  },
+  {
+    "test": "green-pass promotion replays deferred and component checks and verifies train completion",
+    "result": "failed"
+  }
+]

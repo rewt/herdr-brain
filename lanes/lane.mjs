@@ -2385,19 +2385,27 @@ function prepareWorktree(path, { quiet = false, env = validationEnvironment(), p
 
 function check(args) {
   repositoryRoot({ requiredBy: "check" });
-  let tier = 'fast', override, exactGate = false;
+  let tier = 'fast', override, exactGate = false, requiredTests;
   for (let index = 0; index < args.length; index += 1) {
     if (args[index] === '--gate') { exactGate = true; continue; }
-    if (!["--cmd", "--tier"].includes(args[index])) {
-      fail(`usage: lane check [--cmd <validate command>] (unknown option: ${args[index]})`);
+    if (!["--cmd", "--tier", "--required-tests"].includes(args[index])) {
+      fail(`usage: lane check [--cmd <validate command>] | --gate [--required-tests JSON] (unknown option: ${args[index]})`);
     }
     if (args[index + 1] === undefined || args[index + 1] === "") {
-      fail("usage: lane check [--cmd <validate command>]");
+      fail("usage: lane check [--cmd <validate command>] | --gate [--required-tests JSON]");
     }
     if (args[index] === '--tier') tier = args[index + 1];
-    else override = args[index + 1];
+    else if (args[index] === '--required-tests') {
+      if (requiredTests !== undefined) fail('--required-tests may only be specified once');
+      try { requiredTests = JSON.parse(args[index + 1]); }
+      catch { fail('--required-tests must be a JSON array of test files'); }
+      if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || isAbsolute(file))) fail('invalid required test files');
+    } else override = args[index + 1];
     index += 1;
   }
+  if (requiredTests !== undefined && !exactGate) fail('--required-tests requires --gate');
+  // The train plans the sorted union of the jobs' bound test evidence.
+  const required = [...new Set(requiredTests ?? [])].sort();
   if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by bash herdr/release.sh build TAG');
   const settings = validationSettings();
 
@@ -2434,8 +2442,10 @@ function check(args) {
       const excluded = new Set(excludedAdditions({ repo: REPO, base: exact.base, head, declaration: exact.declaration }));
       const changed = changedPaths(REPO, exact.base, head).filter(name => !excluded.has(name));
       const plan = canonicalTestPlan({ repo: REPO_ROOT, base: exact.base, cwd: REPO, planner: settings.promotion_tests,
-        changed, baseCommand: settings.tiers.promotion.command, env });
+        changed, required, baseCommand: settings.tiers.promotion.command, env });
       requireExactPlan(settings, plan);
+      const covered = [...plan.files, ...(plan.covered ?? [])];
+      if (required.some(file => !covered.includes(file))) throw Error('promotion test plan no longer covers the bound deferred test evidence');
       command = plannedCommand(settings.tiers.promotion.command, plan);
     } catch (error) { fail(error.code === 'SELECTION_UNKNOWN' ? error.message : selectionUnknown(error.message).message); }
   }
@@ -2830,6 +2840,7 @@ switch (command) {
         "                   then fails for environmental reasons that look real\n" +
         `  status           list open lanes vs ${MAIN}\n` +
         "  check [--cmd <validate command>] [--tier fast|promotion]\n" +
+        "        --gate [--required-tests JSON]  plan with the queue's bound test list\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
         "                   --tier fast (worker default) or promotion (integration CI); reuse exact trees\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +

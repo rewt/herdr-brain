@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { exactFixture } from '../../test/helpers/exact-validation-fixture.mjs';
 
-function land(f) {
-  f.add(); f.good(f.drain());
+function land(f, options) {
+  f.add('topic', options); f.good(f.drain());
   const result = f.queue.load().results.at(-1);
   assert.equal(result.outcome, 'promoted', JSON.stringify(result));
   return { result, attempt: f.train().attempts.at(-1) };
@@ -21,6 +21,81 @@ test('lane check --gate and drain share the exact planned command with zero extr
   assert.equal(result.gate.validated_head, checked.head); assert.equal(result.gate.head, f.git(['rev-parse', 'HEAD']));
   assert.equal(attempt.receipt_bridge.outcome, 'reused'); assert.equal(result.gate.command, checked.command);
   assert.equal(fs.readFileSync(f.selections, 'utf8').trim(), 'selected', 'planner supplemental command executed once');
+});
+
+test('the sorted union of bound required tests reuses the worker receipt', t => {
+  const requiredTests = ['test/review.test.mjs', 'test/component.test.mjs', 'test/review.test.mjs'];
+  const f = exactFixture(t, { requiredTests });
+  f.good(f.lane(['check', '--gate', '--required-tests', JSON.stringify(requiredTests)]));
+  const checked = f.gate(), { result, attempt } = land(f, { requiredTests });
+  assert.deepEqual(attempt.test_plan.required, ['test/component.test.mjs', 'test/review.test.mjs']);
+  assert.deepEqual(attempt.test_plan.files, [...attempt.test_plan.required, 'test/focus.test.mjs']);
+  assert.equal(result.gate.command, checked.command);
+  assert.equal(result.gate.reused, true); assert.equal(result.gate.exact.outcome, 'reused');
+  assert.equal(f.runs(), 1, 'the bound train gate adds no execution');
+});
+
+for (const provided of [[], ['test/component.test.mjs']]) test(`an incomplete worker required-test list (${provided.length} files) misses commands and runs once`, t => {
+  const requiredTests = ['test/review.test.mjs', 'test/component.test.mjs'];
+  const f = exactFixture(t, { requiredTests });
+  f.good(f.lane(provided.length ? ['check', '--gate', '--required-tests', JSON.stringify(provided)] : undefined));
+  const checked = f.gate(), { result, attempt } = land(f, { requiredTests });
+  assert.notEqual(result.gate.command, checked.command);
+  assert.deepEqual(attempt.test_plan.required, [...requiredTests].sort());
+  assert.equal(result.gate.reused, false); assert.equal(attempt.receipt_bridge.field, 'commands');
+  assert.equal(f.runs(), 2, 'a missing bound test forces one selected execution');
+});
+
+test('required-test CLI input is validated before executing a check', t => {
+  const f = exactFixture(t);
+  const invalid = ['{', 'null', '{}', '"test/one.test.mjs"', '[1]', '["../test/one.test.mjs"]', '["/test/one.test.mjs"]', '["test/one.js"]', JSON.stringify(Array(513).fill('test/one.test.mjs'))];
+  for (const value of invalid) {
+    const result = f.lane(['check', '--gate', '--required-tests', value]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /required test files|required-tests must be a JSON array/);
+  }
+  assert.match(f.lane(['check', '--required-tests', '[]']).stderr, /requires --gate/);
+  assert.match(f.lane(['check', '--gate', '--required-tests', '[]', '--required-tests', '[]']).stderr, /only be specified once/);
+  assert.equal(f.runs(), 0);
+});
+
+test('a removed required test cannot reuse earlier evidence', t => {
+  const requiredTests = ['test/review.test.mjs'], f = exactFixture(t, { requiredTests });
+  const args = ['check', '--gate', '--required-tests', JSON.stringify(requiredTests)];
+  f.good(f.lane(args));
+  f.git(['rm', requiredTests[0]], f.workspace); f.git(['commit', '-qm', 'Remove bound test'], f.workspace);
+  const check = f.lane(args);
+  assert.equal(check.status, 1); assert.match(check.stderr, /SELECTION_UNKNOWN:.*required test file is missing:/s);
+  f.add('topic', { requiredTests }); f.good(f.drain());
+  const result = f.queue.load().results.at(-1);
+  assert.equal(result.outcome, 'refused'); assert.equal(result.code, 'SELECTION_UNKNOWN', JSON.stringify(result));
+  assert.match(result.reason, /required test file is missing: test\/review\.test\.mjs/);
+  assert.equal(f.runs(), 1, 'the removed file prevents any additional check execution');
+});
+
+test('worker planning refuses a plan that omits bound coverage', t => {
+  const requiredTests = ['test/review.test.mjs'], f = exactFixture(t, { requiredTests });
+  f.commit('planner.mjs', "console.log(JSON.stringify({files:[]}));\n", f.repo);
+  f.git(['rebase', 'main'], f.workspace);
+  const result = f.lane(['check', '--gate', '--required-tests', JSON.stringify(requiredTests)]);
+  assert.equal(result.status, 1); assert.match(result.stderr, /SELECTION_UNKNOWN:.*no longer covers/);
+  assert.equal(f.runs(), 0);
+});
+
+for (const pointer of ['missing', 'legacy', 'unreadable']) test(`a ${pointer} lane pointer has an explicit diagnostic without a repo mismatch`, t => {
+  const f = exactFixture(t);
+  if (pointer === 'legacy') {
+    f.good(f.lane(['check', '--tier', 'promotion'], { UNLISTED: undefined }));
+    assert.equal(f.gate().exact, undefined);
+  } else if (pointer === 'unreadable') {
+    fs.mkdirSync(path.join(f.workspace, '.lane'));
+    fs.writeFileSync(path.join(f.workspace, '.lane/gate.json'), '{');
+  }
+  const { result, attempt } = land(f);
+  assert.equal(result.gate.reused, false);
+  assert.equal(attempt.receipt_bridge.field, 'candidate');
+  assert.equal(attempt.receipt_bridge.pointer, pointer);
+  assert.equal(f.runs(), pointer === 'legacy' ? 2 : 1);
 });
 
 test('preparation still runs with the restricted environment before a receipt hit', t => {

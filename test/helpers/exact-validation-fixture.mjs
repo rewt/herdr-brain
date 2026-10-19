@@ -12,7 +12,7 @@ import { commandAllowance } from './command-allowance.mjs';
 import { queueFor, enqueue } from '../../promote/promote.mjs';
 
 export const source = fileURLToPath(new URL('../../', import.meta.url));
-export function exactFixture(t, { declared = true, planner = true, prepare = [], layeredPromotion = false } = {}) {
+export function exactFixture(t, { declared = true, planner = true, prepare = [], layeredPromotion = false, requiredTests = [] } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'exact-validation-'))), repo = path.join(root, 'repo'), workspace = path.join(root, 'worker');
   fixtureFleet(t, root);
   fs.mkdirSync(repo);
@@ -42,8 +42,14 @@ export function exactFixture(t, { declared = true, planner = true, prepare = [],
 if(process.env.UNLISTED)throw Error('planner environment leaked');
 if(process.argv[2]==='--plan'){
  const changed=JSON.parse(process.argv[3]);fs.appendFileSync(${JSON.stringify(planned)},JSON.stringify(changed)+'\\n');
- console.log(JSON.stringify({files:['test/focus.test.mjs'],unknown:changed.includes('unmapped')?['unmapped']:[]}));
+ const required=JSON.parse(process.argv[5]);
+ for(const file of required)if(!fs.existsSync(file))throw Error('required test file is missing: '+file);
+ console.log(JSON.stringify({files:[...new Set([...required,'test/focus.test.mjs'])],unknown:changed.includes('unmapped')?['unmapped']:[]}));
 }else fs.appendFileSync(${JSON.stringify(selections)},'selected\\n');`);
+  for (const file of new Set(['test/focus.test.mjs', ...requiredTests])) {
+    fs.mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
+    fs.writeFileSync(path.join(repo, file), '// offline planner selection fixture\n');
+  }
   fs.writeFileSync(path.join(repo, 'work'), 'base'); git(['add', '.']); git(['commit', '-qm', 'Canonical base']);
   const base = git(['rev-parse', 'HEAD']);
   git(['worktree', 'add', '-qb', 'lane/topic', workspace]);
@@ -57,8 +63,8 @@ const a=process.argv.slice(2);
 if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
-  const add = (topic = 'topic') => enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0, laneCLI: path.join(source, 'lanes/lane.mjs'), org: null,
-    laneConfig: config, validate: env.LANE_VALIDATE ?? null, expectedHead: git(['rev-parse', 'lane/' + topic]) });
+  const add = (topic = 'topic', options = {}) => enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0, laneCLI: path.join(source, 'lanes/lane.mjs'), org: null,
+    laneConfig: config, validate: env.LANE_VALIDATE ?? null, expectedHead: git(['rev-parse', 'lane/' + topic]), ...options });
   const drain = () => run(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain']);
   const runs = () => fs.existsSync(counts) ? fs.readFileSync(counts, 'utf8').trim().split('\n').length : 0;
   const train = () => {

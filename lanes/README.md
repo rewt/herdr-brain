@@ -331,7 +331,7 @@ receipt keeps its filename-bound tab instead of the project.
 | `lane config` | Print resolved configuration values and sources |
 | `lane status` | Show lane state and overlapping files |
 | `lane check [--cmd <validate command>] [--tier fast\|promotion]` | Validate or reuse evidence for the current clean tree |
-| `lane check --gate` | With a committed canonical receipt declaration, run the train's planned promotion command and record exact-input evidence; requires current main as an ancestor ([contract](../docs/contracts/exact-validation.md)) |
+| `lane check --gate [--required-tests JSON]` | With a committed canonical receipt declaration, run the train's planned promotion command with the queue request's bound test list and record exact-input evidence; requires current main as an ancestor ([contract](../docs/contracts/exact-validation.md)) |
 | `lane prepare <topic>` | Run missing setup steps |
 | `lane rebase-check <topic>` | Check whether promotion can rebase the lane onto main (conflicts, or a merge commit it will not flatten) |
 | `lane promote <topic>` | Rebase, validate, and fast-forward local main |

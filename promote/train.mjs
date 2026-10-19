@@ -254,10 +254,15 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         const current = exactIdentity({ cwd: attempt.scratch, common: identity, base: attempt.base, commands: [command], prepare,
           environment: validation.environment, env: gateEnv, declaration });
         const pointers = attempt.jobs.map(job => path.join(job.workspace, '.lane/gate.json'));
-        let previous;
-        try { previous = JSON.parse(readPlainFile(pointers[0])); } catch { /* Diagnostic only. */ }
-        attempt.receipt_bridge = { outcome: 'miss', field: attempt.jobs.length > 1 ? 'candidate' : explainMiss(current, previous) ?? 'candidate',
-          receipt: attempt.jobs.length > 1 ? pointers : pointers[0] };
+        let previous, pointer;
+        try {
+          previous = JSON.parse(readPlainFile(pointers[0]));
+          pointer = previous?.exact?.identity ? 'exact' : 'legacy';
+        } catch (error) { pointer = error.code === 'ENOENT' ? 'missing' : 'unreadable'; }
+        const single = attempt.jobs.length === 1;
+        attempt.receipt_bridge = { outcome: 'miss', field: !single || pointer !== 'exact' ? 'candidate' : explainMiss(current, previous) ?? 'candidate',
+          receipt: single ? pointers[0] : pointers,
+          ...(single && pointer !== 'exact' ? { pointer } : {}) };
       }
       attempt.prepare.finished_at = new Date().toISOString(); save();
       process.stdout.write(`validating in ${attempt.scratch}: ${validation.tiers.promotion.command}\n`);

@@ -118,6 +118,14 @@ refuses `EXACT_BASE_BEHIND`. It removes only qualifying additions from changed
 paths, calls the canonical base's planner, builds the train's exact command,
 runs preparation and validation with the restricted environment, writes
 `.lane/gate.json`, preserves `GATE` and prints `EXACT key=… base=…`.
+`lane check --gate --required-tests '["test/review.test.mjs"]'` supplies the same
+bound `requiredTests` list as the queue request. The JSON array uses promotion's
+validation rules: at most 512 project-relative `.test.mjs` paths, with no parent
+traversal. The worker passes their sorted union as the planner's `required`, just
+as the train unions each job's bound tests. Required tests participate in command
+selection; omitting one can change `plannedCommand` and cause a `commands` miss.
+A missing required file or a plan without its required coverage refuses the
+worker check before execution. `--required-tests` is only valid with `--gate`.
 
 An opted-in train requires a declared successful planner and a complete plan.
 The additive `unknown` array names unresolved paths or sources. A missing or
@@ -134,5 +142,8 @@ difference in fixed order: `repo`, `base`, `candidate`, `commands`,
 `toolchain.arch`, `toolchain.release`, other toolchain fields,
 `environment.NAME` in sorted order, `prepare`, `declared`. Changes to exclusions
 or adapter fields diagnose `declared`; equal identity with an ineligible source
-or tree delta diagnoses `candidate`. Actual reuse comes exclusively from verified
+or tree delta diagnoses `candidate`. A single-lane pointer that is missing,
+unreadable or legacy (without `exact.identity`) also diagnoses `candidate`, with
+an additive `pointer: missing|unreadable|legacy` marker naming that case; it does
+not diagnose a repository mismatch. Actual reuse comes exclusively from verified
 shared exact evidence, even when a lane pointer is missing or falsified.

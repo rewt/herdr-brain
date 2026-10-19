@@ -79,7 +79,7 @@ export function runMetrics(runs, { since, until } = {}) {
     limitations: [
       'All record runs in the window are counted, including legacy and manual runs; missing clocks are null, never zero.',
       'Memory gates include the probe and any pressure wait. Resolved stopped/failed attempts are included after a later grant; unfinished gates remain missing.',
-      'Dispatch currently has no run-cap, concurrency queue or fleet session limit. Its per-request recovery lock refuses contention rather than waiting.',
+      'The project session cap and admission/recovery locks refuse rather than queue. There is no fleet session limit or capacity wait clock.',
       'Process end is watch\'s idle/done/gone terminal decision after startup and idle report grace or with a valid report; later observed work lets the next terminal decision supersede it. Unavailable/blocked states are excluded. It is not report time or an OS exit timestamp.',
       'Run start precedes worker launch; process_end_after_run_start_s includes the worker memory gate and setup.',
       'Train slot and prepare splits are reported by promote/metrics.mjs from train receipts.',

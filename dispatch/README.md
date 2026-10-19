@@ -49,6 +49,36 @@ need a fresh worker. The session registry is never read to choose or reuse worke
 The previous run must already be reported or abandoned, even when its worker is
 idle; an open run cannot share its worker with a new fix round.
 
+Dispatch caps new sessions per Git common-directory project at **7**, matching
+BCH's `MAX_SESSIONS` default and leaving room for the normal 4–6 concurrent lanes.
+Set `dispatch.max_sessions` to a positive integer in the existing `.lane.json`
+dispatch settings. The usual parent/repository layers and explicit `LANE_CONFIG`
+apply; like other dispatch fields, a later `dispatch` object replaces that object.
+Admission reads the current setting again on retry and immediately before launch;
+route identity stays frozen separately.
+
+The count combines open runs with bound worker identities (including external
+`record worker` launches) and dispatch journals. Reported or abandoned workers
+are excluded. Recorded settle reviewer sessions from
+`.org/retirement/occupants/` also count, including retained live reviewers after
+their worker report or review verdict. Repeated evidence for the same native
+session/terminal counts once. Other projects are excluded by canonical Git
+common-directory identity; the display session registry is never read.
+Saved native PID/birth evidence is checked first; older record-only workers use
+their matching live native occupant when available. Only ESRCH or a confirmed
+birth mismatch frees a session. EPERM, unknown errors, missing native evidence
+and uncertain launches count as occupied. Unreadable capacity files refuse
+admission. The refusal names `session cap N reached: R-a, R-b, …` and gives the
+worker/reviewer breakdown. It never kills or closes a session.
+
+Admission is serialized through the durable worker launch under
+`<git-common-dir>/dispatch-session-cap/`, so simultaneous dispatches cannot both
+take the last slot. A busy lock refuses for retry; after a crash, inspect its
+`owner.json` and surviving processes before removing a stale lock. Live `--reuse`
+continuations and retries that only record a worker, arm watch or deliver the
+saved prompt do not add a session and bypass admission. An explicit `--fresh`
+launch still checks capacity, including an uncertain earlier launch.
+
 Settle adds `--from-run R-previous` to bind a correction to its originating run.
 Dispatch saves this precondition and passes `--if-current-run` to record start;
 the event-log transaction refuses creation if a later sibling run exists, the
@@ -93,8 +123,8 @@ supervisor directly.
 
 Dispatch records entry and grant for its two memory gates (`memory_open` before
 lane preparation and `memory_worker` before worker launch), including immediate
-grants. There is currently no run-cap, concurrency queue or fleet session limit
-in dispatch. Its recovery lock refuses a second coordinator for the same request;
+grants. The project session cap refuses admission without a concurrency queue or
+fleet session limit. Its recovery lock refuses a second coordinator for the same request;
 that refusal is not a queue wait. Lane dispatch skips the redundant memory gate
 through `--memory-checked` while still checking canonical STOP.
 

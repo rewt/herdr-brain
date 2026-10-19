@@ -20,6 +20,7 @@ const promotion = [
   'acceptance/test/snapshot.test.mjs',
   'dispatch/test/timing.test.mjs',
   'dispatch/test/retired-flags.test.mjs',
+  'dispatch/test/session-cap.test.mjs',
   'lanes/test/herdr-client.test.mjs',
   'lanes/test/no-focus.test.mjs',
   'lanes/test/routes.test.mjs',

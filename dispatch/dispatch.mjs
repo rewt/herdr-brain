@@ -18,6 +18,8 @@ import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
+import { acquireLock } from '../lanes/promotion-lock.mjs';
+import { checkSessionCap } from './session-cap.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL", allowPositionals: true, options: {
@@ -36,6 +38,7 @@ const recordCLI = cli('org', '../bin/org.mjs');
 const laneCLI = cli('lane', '../lanes/lane.mjs');
 const watchCLI = cli('watch', '../watch/watch.mjs');
 let job, journal, lock, contender, ownsLock = false, observationDeadline;
+let releaseAdmission;
 const atomic = (file, value) => {
   const temp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -126,7 +129,15 @@ function captureLaunchProcess() {
   // Pin once alongside the original worker identity, before its receipt and
   // watcher. Recovery never replaces missing or old continuity evidence.
   job.launchProcess = null;
-  if (!job.worker.agentSessionId) try { job.launchProcess = observeNative().process; } catch {}
+  try { job.launchProcess = observeNative().process; } catch {}
+}
+function admission(repo, org, common) {
+  releaseAdmission ??= acquireLock(path.join(common, 'dispatch-session-cap'));
+  const { config } = loadDiscoveredRoutes({ cwd: repo });
+  const evidence = checkSessionCap({ config, org, common, agent: name => herdr(['agent', 'get', name]).agent,
+    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info });
+  if (job) job.sessionCap = evidence;
+  return evidence;
 }
 async function bindSession() {
   const binding = job.sessionBinding;
@@ -243,6 +254,7 @@ async function main() {
     const declared = resolveRoute(config, { route: opt.route });
     resolveLaunchRoute(config, { route: opt.route });
     const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir'], repo));
+    if (!opt.reuse) admission(repo, org, common);
     const token = randomUUID();
     const directory = path.join(org, 'dispatch');
     fs.mkdirSync(directory, { recursive: true });
@@ -261,6 +273,8 @@ async function main() {
   }
   const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir']));
   if (common !== job.common) throw new Error('repository common-directory identity changed');
+  if (!job.reuse && (['open', 'start', 'starting', 'worker'].includes(job.stage) ||
+      (job.stage === 'launching' && opt.fresh))) admission(job.repo, job.org, common);
   const stop = path.join(gitProject(job.repo).canonical, '.lane/supervisor/STOP');
   const checkStop = () => {
     if (fs.existsSync(stop)) {
@@ -360,6 +374,7 @@ async function main() {
       const agent = liveWorker(job.worker);
       if (!['idle', 'done'].includes(agent.agent_status)) throw new Error('reuse worker must be idle or done');
     } else {
+      admission(job.repo, job.org, common);
       job.stage = 'launching'; save();
       const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked']);
       const launched = JSON.parse(output);
@@ -373,6 +388,7 @@ async function main() {
     }
     captureLaunchProcess();
     job.stage = 'record-worker'; save();
+    releaseAdmission?.(); releaseAdmission = undefined;
   }
   if (job.stage === 'record-worker') {
     liveWorker(job.worker);
@@ -471,6 +487,7 @@ catch (error) {
     process.exitCode = 1;
   }
 } finally {
+  releaseAdmission?.();
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
   if (contender) try { fs.unlinkSync(contender); } catch {}
 }

@@ -56,6 +56,7 @@ Every key is optional. A repository can inherit reusable settings from one paren
 | `dispatch.effort` | none | Reasoning effort passed to the agent and recorded for routed runs |
 | `dispatch.env` | none | Environment added to the Herdr tab |
 | `dispatch.args` | none | Raw agent arguments |
+| `dispatch.max_sessions` | `7` | Positive integer cap for new project sessions through `dispatch/dispatch.mjs`; live reuse bypasses it |
 | `routes` | none | Named dispatch configurations selected with `--route` |
 | `routes.<name>.kind` | `dispatch.kind` | Herdr agent kind for this route |
 | `routes.<name>.model` | `dispatch.model` | Model for this route |

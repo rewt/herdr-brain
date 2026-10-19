@@ -193,6 +193,87 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
 
+function capSetting(f, cap) {
+  const file = path.join(f.repo, '.lane.json'), config = JSON.parse(fs.readFileSync(file));
+  config.dispatch = { ...config.dispatch, max_sessions: cap };
+  fs.writeFileSync(file, JSON.stringify(config));
+}
+function occupiedRun(f, { project = f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), process: owner } = {}) {
+  const run = f.rec(['start', f.item, '--workspace', f.repo, '--meta', `dispatch_project=${project}`]).match(/^(R-\d+) started/m)[1];
+  f.rec(['worker', run, '--agent', `occupied-${run}`, '--pane', `p-${run}`, '--worker-workspace', 'w', '--terminal-id', `t-${run}`, '--cwd', f.repo]);
+  if (owner) {
+    fs.mkdirSync(path.join(f.org, 'dispatch'), { recursive: true });
+    fs.writeFileSync(path.join(f.org, 'dispatch', `${run}.json`), JSON.stringify({ run, common: project, launchProcess: owner }));
+  }
+  return run;
+}
+
+test('session cap refuses before lane/run creation, lists occupants and admits after an ESRCH exit', t => {
+  const f = fixture(t); capSetting(f, 2);
+  const dead = spawnSync(process.execPath, ['-e', '']).pid;
+  const first = occupiedRun(f), second = occupiedRun(f);
+  const refused = f.start();
+  assert.equal(refused.status, 1, refused.stderr);
+  assert.match(JSON.parse(refused.stdout).reason, new RegExp(`session cap 2 reached: ${first}, ${second}`));
+  assert.match(refused.stderr, /2 workers, 0 settle reviewers/);
+  assert.equal(f.calls().some(c => c.type === 'lane'), false);
+  assert.deepEqual(f.show(f.item).runs, [first, second]);
+  fs.mkdirSync(path.join(f.org, 'dispatch'), { recursive: true });
+  fs.writeFileSync(path.join(f.org, 'dispatch', `${second}.json`), JSON.stringify({ run: second,
+    common: f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), launchProcess: { pid: dead, identity: 'old' } }));
+  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
+  assert.equal(promptCalls(f).length, 1);
+});
+
+test('another project in the same record does not occupy this project session cap', t => {
+  const f = fixture(t); capSetting(f, 1);
+  occupiedRun(f, { project: path.join(f.root, 'other-project/.git') });
+  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
+  assert.equal(promptCalls(f).length, 1);
+});
+
+test('live reuse and setup-only retries remain admitted at the cap', t => {
+  const f = fixture(t); capSetting(f, 1); f.fail('watch');
+  assert.equal(f.start().status, 1);
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0])); f.fail('');
+  const setup = f.dispatch(['--retry', job.run]); assert.equal(setup.status, 0, setup.stderr);
+  f.rec(['abandon', job.run]);
+  const file = path.join(f.root, 'workers'), workers = JSON.parse(fs.readFileSync(file));
+  workers[job.worker.agentName].agent_status = 'idle'; fs.writeFileSync(file, JSON.stringify(workers));
+  occupiedRun(f);
+  const reused = f.start(['--reuse', job.run]); assert.equal(reused.status, 0, reused.stderr);
+  assert.equal(JSON.parse(reused.stdout).agent, job.worker.agentName);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+});
+
+test('a saved request rechecks the current cap before creating a worker', t => {
+  const f = fixture(t); f.fail('prepare');
+  assert.equal(f.start().status, 1); const journal = f.jobs()[0];
+  occupiedRun(f); capSetting(f, 1); f.fail('');
+  const retry = f.dispatch(['--retry', journal]); assert.equal(retry.status, 1);
+  assert.match(retry.stderr, /session cap 1 reached/);
+  assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
+});
+
+test('project admission serializes simultaneous requests through the recorded launch', async t => {
+  const f = fixture(t); capSetting(f, 1);
+  const hook = pauseHook(f, `const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+ const result=rename.call(this,from,to);
+ if(once && String(to).endsWith('.json') && JSON.parse(fs.readFileSync(to)).stage==='launching') {once=false;pause();}
+ return result;
+};`);
+  const first = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief], hook);
+  try {
+    await until(() => fs.existsSync(hook.PAUSE_MARKER));
+    const racing = f.start(); assert.equal(racing.status, 1, racing.stderr);
+    assert.match(racing.stderr, /locked: .*dispatch-session-cap/);
+  } finally { fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); await first.done; }
+  assert.equal((await first.done).status, 0);
+  const full = f.start(); assert.equal(full.status, 1); assert.match(full.stderr, /session cap 1 reached/);
+  assert.equal(f.show(f.item).runs.length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+});
+
 test('delayed native session binds separately before same-session continuation reuses it', t => {
   const f = fixture(t, { lateSession: 'delayed', timingRecord: true });
   const first = f.start(); assert.equal(first.status, 0, first.stderr);

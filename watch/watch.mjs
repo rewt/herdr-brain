@@ -553,10 +553,16 @@ try {
   if (actual.commit) {
     const current = readRun();
     if (current.meta?.dispatch_journal) {
-      const receipt = JSON.parse(fs.readFileSync(current.meta.dispatch_journal, 'utf8'));
-      if (receipt.run !== runId) throw Error('dispatch receipt does not match watched run');
-      if (!receipt.release) throw Error('operation-release-missing: identify the legacy dispatch runtime before re-arming');
-      saved = receipt.release;
+      let contents;
+      try { contents = fs.readFileSync(current.meta.dispatch_journal, 'utf8'); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      // Match cold-start entry: an absent journal has no saved binding.
+      if (contents !== undefined) {
+        const receipt = JSON.parse(contents);
+        if (receipt.run !== runId) throw Error('dispatch receipt does not match watched run');
+        if (!receipt.release) throw Error('operation-release-missing: identify the legacy dispatch runtime before re-arming');
+        saved = receipt.release;
+      }
     }
   }
   const forwarded = saved ? (saved.root === actual.root ? null : continueRelease('watch/watch.mjs', saved))

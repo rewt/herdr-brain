@@ -167,6 +167,12 @@ original bundle. Mutable watcher/supervisor recovery refuses legacy dispatch or
 promotion receipts that lack a release binding; use the identified original
 absolute runtime or obtain a reviewed handoff. New protocol-1 operations retain
 that evidence on admission.
+For an in-flight run whose journal predates the release field, re-arm using its
+identified original immutable bundle's watcher
+(`node /absolute/original/bundle/watch/watch.mjs R-n ...`), or finish the run on
+its original runtime before switching. If that runtime cannot be identified,
+retain the run for a reviewed handoff instead of inferring it from `current` or
+editing the journal to bypass the refusal.
 
 The host test slot, ticket queue and occupancy identity remain shared across
 versions, with their existing paths, environment contract and identity rules.

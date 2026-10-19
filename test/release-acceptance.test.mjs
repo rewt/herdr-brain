@@ -199,7 +199,7 @@ test('record-worker and watcher mutable entry points select the explicit project
   assert.match(f.run(process.execPath, [path.join(f.home, 'current/watch/watch.mjs'), 'R-1', '--cwd', f.repo, '--org', org, '--dry-run']).stderr, /operation-release-missing/);
 });
 
-for (const adapter of ['arm-watch', 'release-exec']) test(`installed ${adapter} re-arms from the saved dispatch bundle after a pin change`, t => {
+for (const adapter of ['arm-watch', 'release-exec']) test(`installed ${adapter} re-arms saved dispatches and tolerates a missing journal`, t => {
   const f = fixture(t), blue = f.bundle('blue', { live: true }), green = f.bundle('green', { live: true });
   fs.symlinkSync(green, path.join(f.home, 'current')); f.accept('blue');
   const org = path.join(f.root, 'org'), journal = path.join(f.root, 'dispatch.json');
@@ -219,6 +219,13 @@ for (const adapter of ['arm-watch', 'release-exec']) test(`installed ${adapter} 
   f.accept('green');
   const continued = f.ok(rearm());
   assert.ok(continued.includes(watcher(blue)), continued); assert.equal(continued.includes(watcher(green)), false);
+  fs.unlinkSync(journal);
+  assert.ok(f.ok(rearm()).includes(watcher(green)), 'a missing journal follows normal selection, matching cold-start entry');
+  fs.mkdirSync(journal);
+  const unreadable = rearm(); assert.notEqual(unreadable.status, 0); assert.match(unreadable.stderr, /EISDIR/);
+  fs.rmSync(journal, { recursive: true });
+  fs.writeFileSync(journal, '{');
+  const malformed = rearm(); assert.notEqual(malformed.status, 0); assert.match(malformed.stderr, /JSON/);
   save({ ...run, meta: { agent: 'worker' } });
   assert.ok(f.ok(rearm()).includes(watcher(green)), 'a new watcher uses the newly accepted pin');
   save(run); fs.writeFileSync(journal, JSON.stringify({ run: run.id }));

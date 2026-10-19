@@ -118,3 +118,5 @@ if (isMain(import.meta.url)) {
   try { process.stdout.write(JSON.stringify(reconcile(process.argv.slice(2))) + '\n'); }
   catch (error) { process.stderr.write(`completion: ${error.message}\n`); process.exitCode = 1; }
 }
+
+// R-566 refusal control

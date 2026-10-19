@@ -1351,11 +1351,12 @@ function dispatch(topic, promptText, options = {}) {
   // The native registry now names this agent in the verified lane pane. The
   // receipt, when claimed, and ordinary occupant guards protect it after lock release.
   unlockInitial();
+  let reviewReceipt;
   if (IS_REVIEW_COMMAND) {
     // Reviewers have no worker run of their own. Bind their native occupant to
     // the run under review before delivery, independently of display metadata.
     try {
-      createRetirement({ cwd: REPO_ROOT, main: MAIN,
+      reviewReceipt = createRetirement({ cwd: REPO_ROOT, main: MAIN,
         deadline: Math.min(options.deadline ?? Infinity, Date.now() + 10000) }).recordCallback({
         kind: 'settle', pane, agent: agentName, run: options.run,
       });
@@ -1463,6 +1464,7 @@ function dispatch(topic, promptText, options = {}) {
     agentSessionId: record.agent_session_id ?? null,
     terminalId: record.terminal_id ?? null,
     cwd: path,
+    ...(reviewReceipt ? { reviewReceipt } : {}),
   };
 }
 
@@ -2342,7 +2344,7 @@ async function review(topic, args, memoryChecked = false) {
       fail("mutation after public review creation caused late publication failure; inspect retained evidence before recovery");
     }
     if (Date.now() > deadline) fail("review timed out after public review creation; inspect retained evidence before recovery");
-    if (options.run) try {
+    if (options.run && session.reviewReceipt) try {
       createRetirement({ cwd: REPO_ROOT, main: MAIN, deadline: Math.min(deadline, Date.now() + 10000) }).recordReviewVerdict({
         pane: session.pane, run: options.run, verdict: parsed.verdict, head, evidence: publicPath,
         sha256: createHash('sha256').update(publicRecord).digest('hex'),

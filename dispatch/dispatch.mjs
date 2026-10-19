@@ -18,8 +18,7 @@ import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
-import { acquireLock } from '../lanes/promotion-lock.mjs';
-import { checkSessionCap } from './session-cap.mjs';
+import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL", allowPositionals: true, options: {
@@ -132,7 +131,6 @@ function captureLaunchProcess() {
   try { job.launchProcess = observeNative().process; } catch {}
 }
 function admission(repo, org, common) {
-  releaseAdmission ??= acquireLock(path.join(common, 'dispatch-session-cap'));
   const { config } = loadDiscoveredRoutes({ cwd: repo });
   const evidence = checkSessionCap({ config, org, common, agent: name => herdr(['agent', 'get', name]).agent,
     processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info });
@@ -374,6 +372,9 @@ async function main() {
       const agent = liveWorker(job.worker);
       if (!['idle', 'done'].includes(agent.agent_status)) throw new Error('reuse worker must be idle or done');
     } else {
+      // Early counts are advisory. Serialize only the final recount and launch,
+      // after both memory waits and lane/record preparation have finished.
+      releaseAdmission = acquireSessionCapLock(common);
       admission(job.repo, job.org, common);
       job.stage = 'launching'; save();
       const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked']);
@@ -386,9 +387,12 @@ async function main() {
       }
       job.worker = json(output);
     }
-    captureLaunchProcess();
+    // Publish the bound worker before releasing admission. Native process
+    // observation can wait on Herdr; until saved, this occupant counts unknown.
+    job.launchProcess = null;
     job.stage = 'record-worker'; save();
     releaseAdmission?.(); releaseAdmission = undefined;
+    captureLaunchProcess(); save();
   }
   if (job.stage === 'record-worker') {
     liveWorker(job.worker);

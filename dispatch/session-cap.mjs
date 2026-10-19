@@ -1,6 +1,7 @@
 // Capacity evidence only: never signal, close or alter a recorded session.
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { fold } from '../lib/state.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -15,27 +16,74 @@ const bound = w => w?.agent && w.pane && w.worker_workspace && (w.terminal_id ||
 const worker = w => w && ({ agent: w.agentName, pane: w.pane, worker_workspace: w.workspaceId,
   terminal_id: w.terminalId, agent_session_id: w.agentSessionId });
 
+// Separate from promotion locks: a launching journal reserves capacity even if
+// the coordinator dies while its launch child survives. Unique contenders
+// serialize cleanup too, so two reclaimers cannot remove a newly acquired lock.
+export function acquireSessionCapLock(common, { kill = process.kill } = {}) {
+  const directory = path.join(common, 'dispatch-session-cap'), contenders = `${directory}.contenders`;
+  const token = `${process.pid}-${randomUUID()}`, contender = path.join(contenders, token);
+  const locked = () => Error(`locked: ${directory}; retry after the current launch, or inspect owner.json and surviving processes`);
+  const held = pid => {
+    if (!positive(pid)) return true;
+    try { kill(pid, 0); return true; }
+    catch (e) { return e.code !== 'ESRCH'; }
+  };
+  fs.mkdirSync(contenders, { recursive: true });
+  fs.writeFileSync(contender, '', { flag: 'wx', mode: 0o600 });
+  let ownsDirectory = false;
+  try {
+    for (const entry of fs.readdirSync(contenders)) {
+      if (entry === token) continue;
+      if (held(Number(entry.split('-')[0]))) throw locked();
+      try { fs.unlinkSync(path.join(contenders, entry)); }
+      catch (e) { if (e.code !== 'ENOENT') throw e; }
+    }
+    if (fs.existsSync(directory)) {
+      let owner;
+      try { owner = JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'), 'utf8')); }
+      catch { throw locked(); }
+      if (held(owner?.pid)) throw locked();
+      fs.rmSync(directory, { recursive: true });
+    }
+    fs.mkdirSync(directory); ownsDirectory = true;
+    fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify({ pid: process.pid, token, at: new Date().toISOString() }), { mode: 0o600 });
+  } catch (e) {
+    if (ownsDirectory) fs.rmSync(directory, { recursive: true });
+    fs.unlinkSync(contender);
+    throw e;
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    fs.rmSync(directory, { recursive: true });
+    fs.unlinkSync(contender);
+    released = true;
+  };
+}
+
 // A missing/denied process source is unknown, never proof of death. Compare
 // kernel birth identities when saved; a successful PID probe alone is weaker.
-export function sessionAlive(owner, { kill = process.kill, readProcess = pid => lookupProcess(pid, { identityOnly: true }) } = {}) {
-  if (!positive(owner?.pid)) return true;
+function sessionLiveness(owner, { kill = process.kill, readProcess = pid => lookupProcess(pid, { identityOnly: true }) } = {}) {
+  if (!positive(owner?.pid)) return 'unknown';
   const probe = () => {
     try { kill(owner.pid, 0); return 'present'; }
     catch (e) { return e.code === 'ESRCH' ? 'gone' : 'unknown'; }
   };
   const exists = probe();
-  if (exists !== 'present') return exists !== 'gone';
-  if (typeof owner.identity !== 'string' || !owner.identity.trim()) return true;
+  if (exists !== 'present') return exists === 'gone' ? 'dead' : 'unknown';
+  if (typeof owner.identity !== 'string' || !owner.identity.trim()) return 'unknown';
   try {
     const now = readProcess(owner.pid);
     if (now?.ok && now.value?.pid === owner.pid && typeof now.value.identity === 'string' && now.value.identity.trim()) {
       // Old Linux tick-only receipts cannot prove boot continuity.
-      if (/^\d+$/.test(owner.identity) && /^[a-f0-9-]{36}:\d+$/i.test(now.value.identity)) return true;
-      return owner.identity === now.value.identity;
+      if (/^\d+$/.test(owner.identity) && /^[a-f0-9-]{36}:\d+$/i.test(now.value.identity)) return 'unknown';
+      return owner.identity === now.value.identity ? 'live' : 'dead';
     }
   } catch { /* Unknown stays occupied, unless a fresh probe proves ESRCH. */ }
-  return probe() !== 'gone';
+  return probe() === 'gone' ? 'dead' : 'unknown';
 }
+
+export const sessionAlive = (owner, options) => sessionLiveness(owner, options) !== 'dead';
 
 export function countSessions({ state, journals = [], reviewers = [], common, agent, processInfo,
   projectIdentity = cwd => gitProject(cwd).identity, ...liveness }) {
@@ -47,12 +95,19 @@ export function countSessions({ state, journals = [], reviewers = [], common, ag
     catch { return true; } // Unreadable legacy project evidence cannot free capacity.
   };
   const add = candidate => {
-    if (!sessionAlive(candidate.process, liveness)) return;
+    const live = sessionLiveness(candidate.process, liveness);
+    if (live === 'dead') return;
+    const occupancy = live === 'live' ? 'observed live'
+      : candidate.evidence === 'uncertain launch' ? 'uncertain launch' : 'unknown liveness';
     const duplicate = sessions.find(s => candidate.identity?.agent_session_id && s.identity?.agent_session_id
       ? candidate.identity.agent_session_id === s.identity.agent_session_id
       : candidate.identity?.terminal_id && candidate.identity.terminal_id === s.identity?.terminal_id);
-    if (duplicate) { duplicate.runs = [...new Set([...duplicate.runs, candidate.run])]; return; }
-    sessions.push({ ...candidate, runs: [candidate.run] });
+    if (duplicate) {
+      duplicate.runs = [...new Set([...duplicate.runs, candidate.run])];
+      if (occupancy === 'observed live') duplicate.occupancy = occupancy;
+      return;
+    }
+    sessions.push({ ...candidate, occupancy, runs: [candidate.run] });
   };
   for (const run of state.runs.values()) {
     if (run.report || run.abandoned) continue;
@@ -70,7 +125,11 @@ export function countSessions({ state, journals = [], reviewers = [], common, ag
         owner = nativeProcess(a, processInfo(launch.pane), liveness.readProcess ??
           (pid => lookupProcess(pid, { identityOnly: true })));
       }
-    } catch { /* Missing native evidence counts as an unknown live session. */ }
+    } catch {
+      // Even definitive agent_not_found proves only that Herdr lost the entry,
+      // not that its native process exited. Keep the slot until process proof
+      // or an explicit report/abandon, and name it for operator inspection.
+    }
     add({ run: run.id, kind: 'worker', identity: launch, process: owner ?? null,
       evidence: owner ? 'native process' : job?.stage === 'launching' ? 'uncertain launch' : 'unknown liveness' });
   }
@@ -103,8 +162,12 @@ export function checkSessionCap({ config, org, ...options }) {
   } catch (e) { throw Error(`session count unavailable: ${e.message}`); }
   const evidence = { cap, count: sessions.length, sessions };
   if (sessions.length >= cap) {
-    const runs = [...new Set(sessions.flatMap(s => s.runs))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
-    const error = Error(`session cap ${cap} reached: ${runs.join(', ')} (counted ${sessions.filter(s => s.kind === 'worker').length} workers, ${sessions.filter(s => s.kind === 'reviewer').length} settle reviewers; unknown liveness counts as alive)`);
+    const runs = list => [...new Set(list.flatMap(s => s.runs))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2))).join(', ');
+    const categories = ['observed live', 'unknown liveness', 'uncertain launch'].map(category =>
+      `${category}: ${runs(sessions.filter(s => s.occupancy === category)) || 'none'}`).join('; ');
+    const inspect = sessions.some(s => s.occupancy !== 'observed live')
+      ? '; inspect unknown-liveness and uncertain-launch runs and explicitly abandon stale runs after checking their workers' : '';
+    const error = Error(`session cap ${cap} reached: ${runs(sessions)} (counted ${sessions.filter(s => s.kind === 'worker').length} workers, ${sessions.filter(s => s.kind === 'reviewer').length} settle reviewers; ${categories}${inspect})`);
     error.code = 'DISPATCH_SESSION_CAP';
     error.sessions = evidence;
     throw error;

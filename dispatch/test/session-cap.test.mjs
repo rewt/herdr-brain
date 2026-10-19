@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { countSessions, sessionAlive, checkSessionCap, DEFAULT_SESSION_CAP } from '../session-cap.mjs';
+import { acquireSessionCapLock, countSessions, sessionAlive, checkSessionCap, DEFAULT_SESSION_CAP } from '../session-cap.mjs';
 import { loadDiscoveredRoutes, validateRoutesConfig, mergeRoutesConfig } from '../../lanes/routes.mjs';
 
 const common = '/project/.git';
@@ -57,6 +57,27 @@ test('a reused PID with a different kernel start identity never occupies the old
     readProcess: pid => row(pid, '00000000-0000-0000-0000-000000000000:42') }), true);
 });
 
+test('admission locks retain live, EPERM, unknown and invalid owners or contenders', t => {
+  const common = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-lock-'));
+  t.after(() => fs.rmSync(common, { recursive: true, force: true }));
+  const directory = path.join(common, 'dispatch-session-cap'), contenders = `${directory}.contenders`;
+  for (const source of ['owner', 'contender']) for (const code of ['live', 'EPERM', 'EIO', 'invalid']) {
+    fs.mkdirSync(directory, { recursive: true });
+    fs.mkdirSync(contenders, { recursive: true });
+    const owner = { pid: code === 'invalid' && source === 'owner' ? null : 123 };
+    fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify(owner));
+    const contender = path.join(contenders, code === 'invalid' ? 'invalid' : '123-original');
+    if (source === 'contender') fs.writeFileSync(contender, '');
+    assert.throws(() => acquireSessionCapLock(common, { kill: () => {
+      if (code !== 'live') throw error(code);
+    } }), /locked:/);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'))), owner);
+    assert.deepEqual(fs.readdirSync(contenders), source === 'contender' ? [path.basename(contender)] : []);
+    fs.rmSync(directory, { recursive: true });
+    fs.rmSync(contenders, { recursive: true });
+  }
+});
+
 test('records and journals count each bound session once, excluding terminal runs and other projects', () => {
   const sessions = count({ state: state(run(1), run(2, { report: {} }), run(3, { abandoned: {} }),
     run(4, { meta: { ...identity(4), dispatch_project: '/elsewhere/.git' } }), run(5, { meta: {} })),
@@ -77,6 +98,17 @@ test('record-only workers use their bound native occupant and missing or changed
   assert.equal(count(options)[0].process.pid, 1);
   assert.equal(count({ ...options, agent: () => ({ ...a, terminal_id: 'replacement' }) })[0].evidence, 'unknown liveness');
   assert.equal(count({ ...options, agent: () => { throw Error('not found'); } }).length, 1);
+});
+
+test('definitive Herdr agent-not-found retains an orphan without process evidence until explicitly abandoned', () => {
+  const orphan = run(335), options = { state: state(orphan), journals: [journal(335, { stage: 'complete', launchProcess: null })],
+    agent: () => { throw Object.assign(Error('agent_not_found'), { code: 'agent_not_found' }); } };
+  const sessions = count(options);
+  assert.equal(sessions.length, 1);
+  assert.equal(sessions[0].occupancy, 'unknown liveness');
+  assert.equal(count({ ...options, agent: () => null }).length, 1);
+  assert.equal(count({ ...options, state: state({ ...orphan, abandoned: {} }) }).length, 0);
+  assert.equal(count({ ...options, journals: [journal(335)], kill: () => { throw error('ESRCH'); } }).length, 0);
 });
 
 test('recorded live settle reviewers count independently of the completed worker run', () => {
@@ -105,4 +137,27 @@ test('cap refusal names all runs and the worker/reviewer breakdown from durable 
   assert.equal(checkSessionCap({ ...options, kill: () => { throw error('ESRCH'); } }).count, 0);
   fs.writeFileSync(path.join(dir, 'review.json'), '{');
   assert.throws(() => checkSessionCap(options), /session count unavailable/);
+});
+
+test('refusal distinguishes observed, unknown and uncertain runs and explains orphan recovery', t => {
+  const org = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-reasons-'));
+  t.after(() => fs.rmSync(org, { recursive: true, force: true }));
+  const events = [run(1), run(2), run(3, { meta: {} })].map(r => ({ type: 'run.started', ...r }));
+  fs.writeFileSync(path.join(org, 'events.jsonl'), events.map(e => JSON.stringify(e)).join('\n') + '\n');
+  const dir = path.join(org, 'dispatch'); fs.mkdirSync(dir);
+  for (const j of [journal(1), journal(2, { launchProcess: null }), journal(3, { stage: 'launching', launchProcess: null })]) {
+    fs.writeFileSync(path.join(dir, `${j.run}.json`), JSON.stringify(j));
+  }
+  const options = { config: { dispatch: { max_sessions: 3 } }, org, common, kill: () => {}, readProcess: pid => row(pid),
+    agent: () => { throw error('agent_not_found'); } };
+  assert.throws(() => checkSessionCap(options), e => {
+    assert.equal(e.code, 'DISPATCH_SESSION_CAP');
+    assert.match(e.message, /session cap 3 reached: R-1, R-2, R-3/);
+    assert.match(e.message, /observed live: R-1; unknown liveness: R-2; uncertain launch: R-3/);
+    assert.match(e.message, /inspect .*explicitly abandon stale runs after checking their workers/);
+    return true;
+  });
+  fs.writeFileSync(path.join(dir, 'R-2.json'), JSON.stringify(journal(2)));
+  assert.throws(() => checkSessionCap({ ...options, kill: pid => { if (pid === 2) throw error('EPERM'); } }),
+    /unknown liveness: R-2/);
 });

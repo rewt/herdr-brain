@@ -257,9 +257,9 @@ test('a saved request rechecks the current cap before creating a worker', t => {
 
 test('project admission serializes simultaneous requests through the recorded launch', async t => {
   const f = fixture(t); capSetting(f, 1);
-  const hook = pauseHook(f, `const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
- const result=rename.call(this,from,to);
- if(once && String(to).endsWith('.json') && JSON.parse(fs.readFileSync(to)).stage==='launching') {once=false;pause();}
+  const hook = pauseHook(f, `const write=fs.writeFileSync;let once=true;fs.writeFileSync=function(file,...args) {
+ const result=write.call(this,file,...args);
+ if(once && String(file).endsWith('dispatch-session-cap/owner.json')) {once=false;pause();}
  return result;
 };`);
   const first = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief], hook);
@@ -270,9 +270,70 @@ test('project admission serializes simultaneous requests through the recorded la
   } finally { fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); await first.done; }
   assert.equal((await first.done).status, 0);
   const full = f.start(); assert.equal(full.status, 1); assert.match(full.stderr, /session cap 1 reached/);
-  assert.equal(f.show(f.item).runs.length, 1);
+  assert.equal(f.show(f.item).runs.length, 2, 'the contender may prepare a run, but cannot launch it');
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
 });
+
+test('a dead project admission owner and contender are reclaimed before launching', t => {
+  const f = fixture(t), dead = spawnSync(process.execPath, ['-e', '']).pid;
+  const directory = path.join(f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'dispatch-session-cap');
+  fs.mkdirSync(directory);
+  fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify({ pid: dead }));
+  fs.mkdirSync(`${directory}.contenders`);
+  fs.writeFileSync(path.join(`${directory}.contenders`, `${dead}-crashed`), '');
+  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
+  assert.equal(promptCalls(f).length, 1);
+  assert.equal(fs.existsSync(directory), false);
+  assert.deepEqual(fs.readdirSync(`${directory}.contenders`), []);
+});
+
+test('concurrent dead-owner reclaim cannot remove the new project admission lock', async t => {
+  const f = fixture(t), dead = spawnSync(process.execPath, ['-e', '']).pid;
+  const directory = path.join(f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'dispatch-session-cap');
+  fs.mkdirSync(directory);
+  fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify({ pid: dead }));
+  const hook = pauseHook(f, `process.kill=function(pid,...args) {
+ if(pid===${dead}) {try {return kill.call(process,pid,...args);} catch(error) {pause();throw error;}}
+ return kill.call(process,pid,...args);
+};`);
+  const first = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief], hook);
+  try {
+    await until(() => fs.existsSync(hook.PAUSE_MARKER));
+    const second = f.start(); assert.equal(second.status, 1, second.stderr);
+    assert.match(second.stderr, /locked: .*dispatch-session-cap/);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'))).pid, dead);
+  } finally { fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); await first.done; }
+  assert.equal((await first.done).status, 0);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+  assert.equal(fs.existsSync(directory), false);
+  assert.deepEqual(fs.readdirSync(`${directory}.contenders`), []);
+});
+
+for (const [stage, cap] of [['open', 2], ['worker', 2], ['worker', 1]]) {
+  test(`a ${stage} memory wait allows another dispatch below cap ${cap} and recounts before launch`, async t => {
+    const f = fixture(t), memory = path.join(f.root, 'memory.json'); capSetting(f, cap);
+    fs.writeFileSync(memory, JSON.stringify({ available: (stage === 'open' ? 128 * 1024 ** 2 : 8 * 1024 ** 3), swap_used: 0 }));
+    const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
+      { TEST_MEMORY_FILE: memory, ...(stage === 'worker' ? { TEST_MEMORY_WORKER_PRESSURE: '1' } : {}) });
+    let stderr = '';
+    pending.child.stderr.on('data', data => { stderr += data; });
+    try {
+      await until(() => stderr.includes('waiting; memory pressure'));
+      assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).stage, stage);
+      const directory = path.join(f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'dispatch-session-cap');
+      assert.equal(fs.existsSync(directory), false, 'memory waits must not hold admission');
+      const concurrent = f.start(); assert.equal(concurrent.status, 0, concurrent.stderr);
+      assert.equal(promptCalls(f).length, 1);
+    } finally {
+      fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+      await pending.done;
+    }
+    assert.equal((await pending.done).status, cap === 1 ? 1 : 0, stderr);
+    if (cap === 1) assert.match(stderr, /session cap 1 reached/);
+    assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, cap);
+    assert.equal(promptCalls(f).length, cap);
+  });
+}
 
 test('delayed native session binds separately before same-session continuation reuses it', t => {
   const f = fixture(t, { lateSession: 'delayed', timingRecord: true });

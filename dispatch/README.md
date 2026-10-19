@@ -67,14 +67,25 @@ common-directory identity; the display session registry is never read.
 Saved native PID/birth evidence is checked first; older record-only workers use
 their matching live native occupant when available. Only ESRCH or a confirmed
 birth mismatch frees a session. EPERM, unknown errors, missing native evidence
-and uncertain launches count as occupied. Unreadable capacity files refuse
-admission. The refusal names `session cap N reached: R-a, R-b, …` and gives the
-worker/reviewer breakdown. It never kills or closes a session.
+and uncertain launches count as occupied. Even a definitive Herdr
+`agent_not_found` does not prove that the native process exited and cannot free
+an otherwise unknown slot. Unreadable capacity files refuse admission. The
+refusal names `session cap N reached: R-a, R-b, …`, gives the worker/reviewer
+breakdown and separately lists observed-live, unknown-liveness and
+uncertain-launch runs. Inspect those uncertain runs and their workers, then use
+the existing record abandon command for stale runs. It never kills or closes a
+session, or automatically abandons a run.
 
-Admission is serialized through the durable worker launch under
-`<git-common-dir>/dispatch-session-cap/`, so simultaneous dispatches cannot both
-take the last slot. A busy lock refuses for retry; after a crash, inspect its
-`owner.json` and surviving processes before removing a stale lock. Live `--reuse`
+Early admissions are lock-free advisory counts. After both memory gates and
+lane/record preparation, the final recount and durable worker launch are
+serialized under `<git-common-dir>/dispatch-session-cap/`, so simultaneous
+dispatches cannot both take the last slot. Waiting for memory never holds this
+lock. Native process observation, record worker, watch and prompt delivery happen
+after release. A busy lock refuses for retry. A later admission automatically
+reclaims a crash-retained lock only when its `owner.json` PID probes ESRCH;
+EPERM, unknown or invalid owners remain held for inspection. Unique PID
+contenders also serialize stale cleanup, so a concurrent reclaimer cannot
+remove a new owner's lock. Live `--reuse`
 continuations and retries that only record a worker, arm watch or deliver the
 saved prompt do not add a session and bypass admission. An explicit `--fresh`
 launch still checks capacity, including an uncertain earlier launch.

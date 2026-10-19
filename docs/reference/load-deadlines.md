@@ -12,6 +12,8 @@ cancellation regressions use `--fixed-deadlines` to request exact timers.
 | Detached watch / dispatch acknowledgement | 10 seconds | Scale; still require ready after run lock and configuration read |
 | Promotion, inbox and housekeeping startup | 5 seconds | Scale; preserve uncertainty, queue and lock recovery |
 | Housekeeping evidence and supervisor Herdr calls | 10 seconds | Scale; failures still prevent input/closure |
+| Lane worktree removal / branch deletion | 30 seconds + 10 ms per inventoried entry / 30 seconds | Scale, capped at 10 minutes / 1 minute; reserve both allowances before removal or defer with the needed and remaining seconds |
+| Housekeeping integrated-lane sweep | 12 minutes | Scale the finite pass deadline; each removal remains bounded by the pass and its own cap |
 | Promotion queue and notice journal lock contention | 5 seconds | Scale; never remove live or unidentified owners |
 | Record lock contention | 10 seconds | Scale once; keep live/refused owner checks and a longer load-aware missing-PID initialization grace |
 | Settle Git ref transaction response | 15 seconds per protocol response | Scale; CAS, clean-tree checks and uncertain checkout locks remain |

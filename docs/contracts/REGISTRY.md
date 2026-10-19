@@ -43,6 +43,18 @@ are `TERMINAL`, `ACTIVE`, `WAITING`, `IDLE-NONTERMINAL`, `UNKNOWN` and `PROTECTE
 (`lib/retire-status.mjs:7`). Worktree inventory rows can have `class: null` and
 are excluded from class counts. These are display facts, never cleanup authority.
 
+## Validation evidence
+
+This section describes the ENG-419 implementation based on source revision
+`ad97e531073dd31e4e6cc885773415a4b55e5b40`. It uses symbol names for the new
+implementation; existing line numbers elsewhere in this registry still refer to
+the source audit at the top. The runner exclusion's historical line number in
+the linked contract refers explicitly to `ad97e531`.
+
+| Identifier / version | Owner (writer) and location | Readers | Writer and validation code | Compatibility |
+| --- | --- | --- | --- | --- |
+| `exact-validation/v1` (`exact.schema` and identity `schema`) | Engineer-attested green `validateTree` execution; `<common>/lane-validation/exact/<key>.json` plus the existing receipt, immutable log and execution sidecar. | `lane check --gate` and the promotion train, only when current canonical base commits `.validation-receipts.json`. | `lanes/exact-validation.mjs`: `readReceiptDeclaration`, `restrictEnvironment`, `exactIdentity`, `explainMiss`; `lanes/validation.mjs`: `validateTree`, `reusableExact`. Full semantics: [exact-validation.md](exact-validation.md). | Receipt envelope additions are allowed. Every core identity field is mandatory; adapters may add bound fields and cannot remove core ones. Unknown identity schema cannot reuse. The separate `validation-receipts/v1` declaration is closed to unknown keys, schemas and exclusions. Absence preserves legacy behavior; older releases ignore the file. New exclusions require T2. Opt-in explicitly changes prepare/planner/check execution to the allowlisted environment plus closed runner pass-through. No project is activated by this row. |
+
 ## Host occupancy and installed releases
 
 | Identifier / version | Owner (writer) and location | Readers | Writer and validation code | Compatibility |

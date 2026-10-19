@@ -10,6 +10,7 @@ import { acquireLock } from './promotion-lock.mjs';
 import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 import { resolveResource } from '../test-slot/resources.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
+import { exactIdentity, exactDigest, restrictEnvironment, excludedDelta, explainMiss } from './exact-validation.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
 
@@ -108,23 +109,35 @@ function unchanged(cwd, before, label) {
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
 }
 
-export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds }) {
+export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, exact }) {
   const admittedRelease = bundleRelease();
-  env = validationEnvironment(env);
+  env = exact ? restrictEnvironment(env, exact.declaration) : validationEnvironment(env);
   const before = captured(cwd, label);
+  const identity = exact ? exactIdentity({ cwd, common, base: exact.base, commands: [command], prepare, environment, env,
+    declaration: exact.declaration, toolchain: exact.toolchain, additional: exact.additional }) : null;
   const usesSlot = tier === 'promotion';
   const fingerprint = environmentFingerprint({ env, prepare, environment });
   // Identical commands across tiers prove the same thing. Tier names describe
   // who runs a check; they do not force a second execution of identical inputs.
-  const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint });
+  const key = identity ? exactDigest(identity) : digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint });
   const directory = plainDirectory(path.join(common, 'lane-validation'));
   const receipt = path.join(directory, `${key}.json`);
+  const exactReceipt = exact ? path.join(plainDirectory(path.join(directory, 'exact')), `${key}.json`) : null;
   const release = acquireLock(path.join(directory, `${key}.lock`));
   process.once('exit', release);
   try {
+    if (exact) {
+      const hit = reusableExact({ cwd, before, directory, receipt, exactReceipt, key, identity, declaration: exact.declaration });
+      if (hit) {
+        unchanged(cwd, before, label);
+        process.stdout.write(`EXACT_REUSE key=${key} receipt=${exactReceipt}\n`);
+        return { ...hit.receipt, ...before, tier, reused: true, validated_head: hit.receipt.head,
+          exact: { ...hit.receipt.exact, outcome: 'reused', excluded_delta: hit.excluded } };
+      }
+    }
     let previous;
     try { previous = JSON.parse(readPlainFile(receipt)); } catch { /* Missing/old/malformed evidence is a miss. */ }
-    if (previous?.schema === 'lane-validation/v1' && previous.key === key && previous.tree === before.tree &&
+    if (!exact && previous?.schema === 'lane-validation/v1' && previous.key === key && previous.tree === before.tree &&
         previous.command === command && previous.environment_fingerprint === fingerprint && previous.exit_code === 0 &&
         previous.signal === null && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(previous.head ?? '') &&
         VALIDATION_TIERS.includes(previous.tier) && previous.reused === false &&
@@ -188,7 +201,43 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     // Failed, dirty or moving executions never become reusable green evidence.
     try { unchanged(cwd, before, label); }
     catch (error) { throw Object.assign(error, { gate }); }
+    if (exact) {
+      let executionHash = null;
+      try { executionHash = digest(readPlainFile(executionReceipt)); } catch { /* Incomplete sources never reuse. */ }
+      gate.exact = { schema: identity.schema, key, identity, outcome: 'executed', excluded_delta: [], execution_hash: executionHash };
+    }
     writeFileAtomic(receipt, JSON.stringify(gate, null, 2) + '\n', 0o600);
+    if (exact && gate.outcome === 'green' && gate.executed && !gate.gate_timeout) writeFileAtomic(exactReceipt, JSON.stringify(gate, null, 2) + '\n', 0o600);
     return gate;
   } finally { process.off('exit', release); release(); }
+}
+
+function reusableExact({ cwd, before, directory, receipt, exactReceipt, key, identity, declaration }) {
+  try {
+    // Independent copies detect a modified source receipt. This is integrity
+    // evidence, not a signature: the engineer owning the repo attests execution.
+    const bytes = readPlainFile(exactReceipt);
+    if (bytes !== readPlainFile(receipt)) return null;
+    const source = JSON.parse(bytes);
+    if (source.schema !== 'lane-validation/v1' || source.key !== key || source.exact?.key !== key ||
+        source.exact.schema !== 'exact-validation/v1' || exactDigest(source.exact.identity) !== key || explainMiss(identity, source) !== null ||
+        source.command !== identity.commands[0] || source.exit_code !== 0 || source.signal !== null || source.outcome !== 'green' ||
+        source.executed !== true || source.reused !== false || source.exact.outcome !== 'executed' || source.gate_timeout ||
+        !VALIDATION_TIERS.includes(source.tier) || !Number.isFinite(source.duration_s) || source.duration_s < 0 ||
+        !Number.isFinite(Date.parse(source.started_at)) || !Number.isFinite(Date.parse(source.finished_at)) || Date.parse(source.finished_at) < Date.parse(source.started_at) ||
+        !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(source.head ?? '') || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(source.tree ?? '') ||
+        typeof source.log !== 'string' || path.dirname(source.log) !== directory ||
+        !new RegExp(`^${key}\\.[0-9a-f-]{36}\\.log$`).test(path.basename(source.log)) || source.execution_receipt !== `${source.log}.execution.json`) return null;
+    if (digest(readPlainFile(source.log)) !== source.log_hash) return null;
+    const sidecar = readPlainFile(source.execution_receipt);
+    if (digest(sidecar) !== source.exact.execution_hash) return null;
+    const execution = JSON.parse(sidecar);
+    if (execution.command_started !== true || execution.exit_code !== 0 || execution.signal != null || execution.gate_timeout || execution.cleanup_error ||
+        !Number.isSafeInteger(execution.attempts) || execution.attempts < 1 || !Number.isFinite(Date.parse(execution.started_at)) ||
+        !Number.isFinite(Date.parse(execution.finished_at)) || Date.parse(execution.finished_at) < Date.parse(execution.started_at)) return null;
+    if (git(cwd, ['rev-parse', `${source.head}^{tree}`]) !== source.tree) return null;
+    git(cwd, ['merge-base', '--is-ancestor', identity.base, source.head]);
+    const excluded = excludedDelta({ repo: cwd, from: source.tree, to: before.tree, declaration });
+    return excluded === null ? null : { receipt: source, excluded };
+  } catch { return null; }
 }

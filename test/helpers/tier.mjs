@@ -25,6 +25,8 @@ const promotion = [
   'lanes/test/no-focus.test.mjs',
   'lanes/test/routes.test.mjs',
   'lanes/test/validation.test.mjs',
+  'lanes/test/exact-validation.test.mjs',
+  'promote/test/exact-bridge.test.mjs',
   'promote/test/promote.test.mjs',
   'promote/test/train.test.mjs',
   'promote/test/workflow-train.test.mjs',

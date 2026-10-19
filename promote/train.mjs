@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { writeFileAtomic } from '../lib/files.mjs';
+import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { captureCompletionMember, accountUncapturedMember } from './completion.mjs';
@@ -18,6 +18,7 @@ import { gateHistoryKey } from '../test-slot/limits.mjs';
 import { changedPaths, plannedCommand } from './test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
 import { shadowSelection, completeShadow } from './selector.mjs';
+import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, exactIdentity, explainMiss, requireExactPlan, selectionUnknown } from '../lanes/exact-validation.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
@@ -218,29 +219,46 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     try {
       plan.native_context = probeNativeGate(); save();
       if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
+      const declaration = readReceiptDeclaration({ repo: canonical, base: attempt.base });
+      const exact = declaration ? { base: attempt.base, declaration } : undefined;
+      const gateEnv = declaration ? restrictEnvironment(env, declaration) : env;
+      if (exact && (!validation.promotion_tests || validation.tiers.promotion.source === 'env')) requireExactPlan(validation, null);
       if (attempt.prepare) (attempt.prepare_history ??= []).push(attempt.prepare);
       attempt.prepare = { started_at: new Date().toISOString() };
       phase('preparing');
       for (const step of prepare) {
         if (step.unless !== undefined && fs.existsSync(path.join(attempt.scratch, step.unless))) continue;
-        const r = spawnSync(step.run, { cwd: attempt.scratch, env, shell: '/bin/sh', stdio: 'inherit' });
+        const r = spawnSync(step.run, { cwd: attempt.scratch, env: gateEnv, shell: '/bin/sh', stdio: 'inherit' });
         if (r.error || r.status !== 0) {
           attempt.prepare.failure = { exit_code: r.status, signal: r.signal ?? null, error: r.error?.code ?? null };
           throw new Error(`train preparation failed: ${step.run}`);
         }
       }
       if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch tip or branch changed during preparation');
-      const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))];
+      const excluded = new Set(exact ? excludedAdditions({ repo: attempt.scratch, base: attempt.base, head: attempt.tip, declaration }) : []);
+      const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))].filter(name => !excluded.has(name));
       // Coverage comes from the captured base and its imports; the candidate
       // supplies only the tree being inspected and the supplemental test run.
       const required = [...new Set(attempt.jobs.flatMap(job => job.requiredTests ?? []))].sort();
-      attempt.test_plan = canonicalTestPlan({ repo: canonical, base: attempt.base, cwd: attempt.scratch,
-        planner: validation.promotion_tests, changed, required, baseCommand: validation.tiers.promotion.command, env });
+      try {
+        attempt.test_plan = canonicalTestPlan({ repo: canonical, base: attempt.base, cwd: attempt.scratch,
+          planner: validation.promotion_tests, changed, required, baseCommand: validation.tiers.promotion.command, env: gateEnv });
+        if (exact) requireExactPlan(validation, attempt.test_plan);
+      } catch (error) { throw exact && error.code !== 'SELECTION_UNKNOWN' ? selectionUnknown(error.message) : error; }
       const covered = [...(attempt.test_plan?.files ?? []), ...(attempt.test_plan?.covered ?? [])];
       if (attempt.jobs.some(job => (job.requiredTests ?? []).some(file => !covered.includes(file)))) throw Error('promotion test plan no longer covers the bound deferred test evidence');
       const command = plannedCommand(validation.tiers.promotion.command, attempt.test_plan);
       if (attempt.selector_shadow) (attempt.selector_shadow_history ??= []).push(attempt.selector_shadow);
-      attempt.selector_shadow = shadowSelection({ repo: canonical, base: attempt.base, head: attempt.tip, cwd: attempt.scratch, env });
+      attempt.selector_shadow = shadowSelection({ repo: canonical, base: attempt.base, head: attempt.tip, cwd: attempt.scratch, env: gateEnv });
+      if (exact) {
+        const current = exactIdentity({ cwd: attempt.scratch, common: identity, base: attempt.base, commands: [command], prepare,
+          environment: validation.environment, env: gateEnv, declaration });
+        const pointers = attempt.jobs.map(job => path.join(job.workspace, '.lane/gate.json'));
+        let previous;
+        try { previous = JSON.parse(readPlainFile(pointers[0])); } catch { /* Diagnostic only. */ }
+        attempt.receipt_bridge = { outcome: 'miss', field: attempt.jobs.length > 1 ? 'candidate' : explainMiss(current, previous) ?? 'candidate',
+          receipt: attempt.jobs.length > 1 ? pointers : pointers[0] };
+      }
       attempt.prepare.finished_at = new Date().toISOString(); save();
       process.stdout.write(`validating in ${attempt.scratch}: ${validation.tiers.promotion.command}\n`);
       // Publish the clock before the synchronous gate blocks. No exit code is
@@ -253,8 +271,10 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       phase('validating');
       attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command, historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', validation.tiers.promotion.command]),
         prepare, timeoutSeconds: profile?.timeoutSeconds ?? validation.tiers.promotion.timeoutSeconds,
-        idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? validation.tiers.promotion.idleTimeoutSeconds, environment: validation.environment, env, label: 'train scratch',
+        idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? validation.tiers.promotion.idleTimeoutSeconds, environment: validation.environment, env: gateEnv, exact, label: 'train scratch',
         onStart: gate => { attempt.gate = gate; save(); } });
+      if (exact && attempt.gate.reused) attempt.receipt_bridge = { outcome: 'reused', field: null,
+        receipt: path.join(identity, 'lane-validation/exact', `${attempt.gate.key}.json`) };
       attempt.selector_shadow = completeShadow(attempt.selector_shadow, attempt.gate, [attempt.scratch, canonical]);
     } catch (error) {
       if (attempt.prepare && !attempt.prepare.finished_at) attempt.prepare.finished_at = new Date().toISOString();

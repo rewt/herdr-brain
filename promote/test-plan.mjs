@@ -15,7 +15,8 @@ export function promotionTestPlan({ cwd, plannerRoot = cwd, planner, changed, re
   if (r.error || r.status !== 0) throw Error(r.stderr || r.error?.message || 'promotion test planning failed');
   if (!r.stdout.trim()) throw Error(`promotion test planner produced no output${r.stderr.trim() ? ': ' + r.stderr.trim() : ''}`);
   const plan = JSON.parse(r.stdout);
-  if (!plan || Object.keys(plan).some(key => !['files', 'covered', 'graph', 'selected', 'deferred', 'budget'].includes(key))) throw Error('invalid promotion test plan fields');
+  if (!plan || Object.keys(plan).some(key => !['files', 'covered', 'graph', 'selected', 'deferred', 'budget', 'unknown'].includes(key))) throw Error('invalid promotion test plan fields');
+  if (plan.unknown !== undefined && (!Array.isArray(plan.unknown) || plan.unknown.some(name => typeof name !== 'string' || !name.trim()))) throw Error('invalid unknown test selection');
   if (plan.covered !== undefined && !validFiles(plan.covered)) throw Error('invalid promotion test coverage');
   if (!validFiles(plan.files)) throw Error('invalid promotion test plan');
   const validRows = rows => Array.isArray(rows) && validFiles(rows.map(row => row?.file)) &&

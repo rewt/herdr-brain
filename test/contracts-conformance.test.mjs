@@ -20,6 +20,7 @@ import { LogJournal } from '../logs/journal.mjs';
 import { Receiver, addressKey, readTransport, foldTransport } from '../messages/receiver.mjs';
 import { hookHandoff } from '../messages/hook-pull.mjs';
 import { readDeclaredReferences } from '../lib/retire-runtime.mjs';
+import { explainMiss, readReceiptDeclaration } from '../lanes/exact-validation.mjs';
 
 const source = fileURLToPath(new URL('../', import.meta.url));
 const at = '2026-10-18T12:00:00.000Z';
@@ -113,6 +114,22 @@ const contracts = [
     assert.equal({ result: 'promotable' }.review_scope, undefined, 'older results omit this additive field');
     const deferred = writer.reviewScope({ workspace, base, head, artifacts: [`HEAD: ${base}`] });
     assert.equal(deferred.deferred, 'named-commit-outside-range'); assert.deepEqual(deferred.outside, [base]);
+  }],
+  ['exact-validation/v1', ['lanes/exact-validation.mjs'], async (f, root) => {
+    const writer = await load(root, 'lanes/exact-validation.mjs'), cwd = f.repo();
+    const declaration = { schema: 'validation-receipts/v1', exclude: ['settle-review-document'], environment: ['PATH'] };
+    write(path.join(cwd, '.validation-receipts.json'), declaration);
+    f.run('git', ['-C', cwd, 'add', '.validation-receipts.json']);
+    f.run('git', ['-C', cwd, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Opt in']);
+    const base = f.run('git', ['-C', cwd, 'rev-parse', 'HEAD']);
+    const identity = writer.exactIdentity({ cwd, common: path.join(cwd, '.git'), base, commands: ['true'], env: f.env, declaration });
+    assert.equal(identity.schema, 'exact-validation/v1');
+    assert.deepEqual(readReceiptDeclaration({ repo: cwd, base }), declaration);
+    assert.equal(explainMiss(identity, { exact: { identity }, ...extra }), null, 'receipt envelope additions are ignored');
+    const extended = { ...identity, adapter: { version: 1 } };
+    assert.equal(explainMiss(extended, extended), null);
+    assert.equal(explainMiss(extended, identity), 'declared', 'adapter identity inputs cannot be dropped');
+    assert.equal(explainMiss(identity, { ...identity, schema: 'exact-validation/v999' }), 'declared');
   }],
   ['fleet.json', ['lib/fleet.mjs'], async (f, root) => {
     const writer = await load(root, 'lib/fleet.mjs'), cwd = f.repo();

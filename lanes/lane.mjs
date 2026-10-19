@@ -39,6 +39,9 @@ import { ROUTE_PRESET } from './preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment } from './validation.mjs';
+import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, requireExactPlan, selectionUnknown } from './exact-validation.mjs';
+import { changedPaths, plannedCommand } from '../promote/test-plan.mjs';
+import { canonicalTestPlan } from '../settle/test-plan.mjs';
 
 import {
   loadRegistry,
@@ -2370,20 +2373,21 @@ async function review(topic, args, memoryChecked = false) {
 // repository says what "prepared" means in .lane.json "prepare": each step is
 // skipped when its `unless` path already exists, so this is cheap to call
 // unconditionally.
-function prepareWorktree(path, { quiet = false } = {}) {
+function prepareWorktree(path, { quiet = false, env = validationEnvironment(), prepare = CONFIG.prepare ?? [], shell = true } = {}) {
   const say = (m) => { if (!quiet) process.stdout.write(m); };
-  for (const step of CONFIG.prepare ?? []) {
+  for (const step of prepare) {
     if (step.unless !== undefined && existsSync(join(path, step.unless))) continue;
     say(`preparing ${path}: ${step.run}\n`);
-    const run = spawnSync(step.run, { cwd: path, env: validationEnvironment(), shell: true, stdio: "inherit" });
+    const run = spawnSync(step.run, { cwd: path, env, shell, stdio: "inherit" });
     if (run.status !== 0) fail(`prepare step failed (${step.run}); cannot validate this worktree`);
   }
 }
 
 function check(args) {
   repositoryRoot({ requiredBy: "check" });
-  let tier = 'fast', override;
+  let tier = 'fast', override, exactGate = false;
   for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === '--gate') { exactGate = true; continue; }
     if (!["--cmd", "--tier"].includes(args[index])) {
       fail(`usage: lane check [--cmd <validate command>] (unknown option: ${args[index]})`);
     }
@@ -2397,16 +2401,48 @@ function check(args) {
   if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by bash herdr/release.sh build TAG');
   const settings = validationSettings();
 
-  const command = override ?? settings.tiers[tier].command;
+  let command = override ?? settings.tiers[tier].command;
   requireClean(REPO, "current worktree");
   const head = git(["rev-parse", "HEAD"]);
   const branch = git(["branch", "--show-current"]);
   if (branch === "") fail("current checkout is detached; check requires a branch");
 
-  prepareWorktree(REPO);
+  let exact, env = validationEnvironment(), prepare = CONFIG.prepare ?? [], environment = settings.environment, profile;
+  if (exactGate) {
+    try {
+      if (override !== undefined || tier !== 'fast') throw Error('--gate cannot be combined with --cmd or --tier');
+      const base = git(['rev-parse', MAIN], { cwd: REPO_ROOT });
+      if (git(['merge-base', base, head]) !== base) throw Error('EXACT_BASE_BEHIND: lane must contain current canonical main');
+      const declaration = readReceiptDeclaration({ repo: REPO_ROOT, base });
+      if (!declaration) throw Error('exact validation receipts are not declared by canonical main');
+      exact = { base, declaration };
+      tier = 'promotion';
+      profile = resolveGateProfile(REPO_ROOT);
+      if (profile) {
+        env = profile.env;
+        prepare = [...prepare, ...profile.prepare];
+        environment = `${environment}\nprofile:${profile.fingerprint}`;
+      }
+      env = restrictEnvironment(env, declaration);
+      if (!settings.promotion_tests || settings.tiers.promotion.source === 'env') requireExactPlan(settings, null);
+    } catch (error) { fail(error.message); }
+  }
+  prepareWorktree(REPO, { env, prepare, shell: exact ? '/bin/sh' : true });
   if (git(['rev-parse', 'HEAD']) !== head || git(['branch', '--show-current']) !== branch) fail('worktree branch or lane tip changed during preparation');
+  if (exact) {
+    try {
+      const excluded = new Set(excludedAdditions({ repo: REPO, base: exact.base, head, declaration: exact.declaration }));
+      const changed = changedPaths(REPO, exact.base, head).filter(name => !excluded.has(name));
+      const plan = canonicalTestPlan({ repo: REPO_ROOT, base: exact.base, cwd: REPO, planner: settings.promotion_tests,
+        changed, baseCommand: settings.tiers.promotion.command, env });
+      requireExactPlan(settings, plan);
+      command = plannedCommand(settings.tiers.promotion.command, plan);
+    } catch (error) { fail(error.code === 'SELECTION_UNKNOWN' ? error.message : selectionUnknown(error.message).message); }
+  }
   let gate;
-  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, timeoutSeconds: settings.tiers[tier].timeoutSeconds, idleTimeoutSeconds: settings.tiers[tier].idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
+  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier,
+    timeoutSeconds: profile?.timeoutSeconds ?? settings.tiers[tier].timeoutSeconds, idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? settings.tiers[tier].idleTimeoutSeconds,
+    prepare, environment, env, exact }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75); // validateTree already emitted its one coded line.
     fail(error.message);
@@ -2415,6 +2451,7 @@ function check(args) {
   const path = join(directory, "gate.json");
   writeAgentFileAtomic(path, `${JSON.stringify(gate, null, 2)}\n`);
   process.stdout.write(`GATE ${head} exit=${gate.exit_code} (${gate.duration_s.toFixed(3)}s)\n`);
+  if (exact) process.stdout.write(`EXACT key=${gate.key} base=${exact.base}\n`);
   // Exit 75 is reserved for a pre-execution slot refusal. Keep the command's
   // real code in the receipt/GATE line, but report a started exit 75 as failure.
   process.exitCode = gate.exit_code === 75 ? 1 : gate.exit_code;

@@ -8,7 +8,7 @@ import { fixture, isolatedEnv } from './helpers/retire-fixture.mjs';
 import { measureLaneEvidence, preserveLaneEvidence } from '../lib/lane-removal.mjs';
 
 const cli = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
-const disposable = ['node_modules', 'dist', 'build', '.cache', 'coverage', 'target'];
+const disposable = ['node_modules', '.pnpm-store', 'dist', 'build', '.cache', 'coverage', 'target'];
 // BCH REV-863's complete declaration and synthetic samples, copied here so the
 // offline regression never imports another project's files or configuration.
 const protectedCases = [
@@ -130,7 +130,8 @@ test('lane close keeps claimed protected and live descendants without an evidenc
 for(const operation of ['openSync','readFileSync','readlinkSync','copyFileSync']){const original=fs[operation];fs[operation]=(file,...args)=>{
 if(typeof file==='string'&&file.startsWith(root+'/')&&!file.startsWith(root+'/.git'))throw Error('lane payload access');return original(file,...args);};}
 `);
-  for (const [relative, patterns] of [['dist/secrets', ['**/secrets/**']], ['build/.local-live', []]]) {
+  for (const [relative, patterns] of [['dist/secrets', ['**/secrets/**']], ['build/.local-live', []],
+    ['.pnpm-store/secrets', ['**/secrets/**']], ['.pnpm-store/.local-live', []]]) {
     protect(f, patterns); const canary = write(f, `${relative}/synthetic-canary.txt`);
     const events = fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse);
     events.find(event => event.type === 'report.ingested').report.artifacts = [path.dirname(canary)];

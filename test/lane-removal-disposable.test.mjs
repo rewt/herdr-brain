@@ -9,7 +9,7 @@ import { fixture } from './helpers/retire-fixture.mjs';
 import { measureLaneEvidence, preserveLaneEvidence } from '../lib/lane-removal.mjs';
 
 const cli = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
-const disposable = ['node_modules', 'dist', 'build', '.cache', 'coverage', 'target'];
+const disposable = ['node_modules', '.pnpm-store', 'dist', 'build', '.cache', 'coverage', 'target'];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const options = f => ({ common: f.common, lane: f.lane, topic: 'topic', tip: f.head, env: f.env,
   tracked: new Set(f.git(['ls-files', '-z'], f.lane).split('\0').filter(Boolean)) });
@@ -28,6 +28,7 @@ test('integrated lane retires with oversized ignored disposable trees, recording
     'node_modules/.pnpm/pkg/node_modules/@scope/pkg/build/lib/schema/wallet-template.js',
     'node_modules/package/private-key.pem', 'dist/.env', 'target/.local-live-notes/state']) write(f, relative, 'synthetic dependency fixture');
   const large = write(f, 'node_modules/package/output\n.bin', ''); fs.truncateSync(large, 256 * 1024 * 1024 + 1);
+  const store = write(f, '.pnpm-store/v3/files/large.bin', ''); fs.truncateSync(store, 256 * 1024 * 1024 + 1);
   fs.mkdirSync(path.join(f.lane, 'node_modules/empty'));
   const external = path.join(f.scratch, 'external'); fs.writeFileSync(external, 'external bytes stay outside the archive');
   const link = path.join(f.lane, 'node_modules/link'); fs.symlinkSync(external, link);
@@ -128,6 +129,22 @@ test('an allowlisted name without Git ignore confirmation is fully preserved', t
   const proof = preserveLaneEvidence(options(f));
   assert.equal(fs.readFileSync(path.join(proof.directory, 'files/dist/output'), 'utf8'), 'unique non-ignored bytes');
   assert.equal(measureLaneEvidence(options(f)).bytes, Buffer.byteLength('unique non-ignored bytes'));
+});
+
+test('an unignored .pnpm-store preserves its payload and counts against the copy budget', t => {
+  const f = fixture(t, { occupied: false }), relative = '.pnpm-store/v3/files/output';
+  const bytes = Buffer.from('unique non-ignored store bytes'); write(f, relative, bytes);
+  assert.equal(f.git(['status', '--porcelain', '--', '.pnpm-store'], f.lane), '?? .pnpm-store/');
+  f.env.LANE_EVIDENCE_MAX_BYTES = '0';
+  assert.throws(() => measureLaneEvidence(options(f)), /exceeds budget/);
+  assert.throws(() => preserveLaneEvidence(options(f)), /exceeds budget/);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+  f.env.LANE_EVIDENCE_MAX_BYTES = String(bytes.length);
+  const proof = preserveLaneEvidence(options(f)), entry = manifest(proof).entries.find(entry => entry.path === relative);
+  assert.equal(entry.metadataOnly, undefined); assert.equal(entry.sha256, digest(bytes));
+  assert.equal(measureLaneEvidence(options(f)).bytes, bytes.length);
+  assert.deepEqual(fs.readFileSync(path.join(proof.directory, 'files', relative)), bytes);
+  proof.verify();
 });
 
 test('nested ignored dependency directories omit payloads while preserving their ordinary parents', t => {

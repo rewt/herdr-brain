@@ -7,7 +7,7 @@ import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
-import { canonicalProject } from './project.mjs';
+import { canonicalProject, safeProjectPath } from './project.mjs';
 import { parseManifest, validateManifest, validateSet } from './manifest.mjs';
 
 const templates = fileURLToPath(new URL('./templates/', import.meta.url));
@@ -30,11 +30,11 @@ export function discoverManifests(project, workspace = 'home', diagnostics = [])
   let head;
   try { head = git(['rev-parse', '--verify', '-q', 'HEAD^{commit}']).trim(); }
   catch (error) { if (error.status !== 1) throw error; } // An unborn project has no committed overrides.
-  const isManifest = file => /^\.sessions\/[^/]+\.md$/u.test(file);
+  const isManifest = file => /^\.sessions\/.+\.md$/u.test(file);
   const tracked = head ? git(['ls-tree', '-r', '-z', '--full-tree', head, '--', '.sessions/']) : '';
   for (const row of tracked.split('\0').filter(Boolean)) {
     const tab = row.indexOf('\t'), relative = row.slice(tab + 1), mode = row.slice(0, tab).split(' ')[0];
-    if (isManifest(relative)) files.set(path.basename(relative), { file: path.join(project.root, relative), template: false, committed: { head, relative, mode } });
+    if (isManifest(relative)) files.set(relative.slice('.sessions/'.length), { file: path.join(project.root, relative), template: false, committed: { head, relative, mode } });
   }
   const diffArgs = ['--name-only', '-z', '--no-ext-diff', '--no-textconv', '--no-renames'];
   const changed = new Set([
@@ -52,8 +52,9 @@ export function discoverManifests(project, workspace = 'home', diagnostics = [])
 export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', env = process.env } = {}) {
   const project = canonicalProject(cwd);
   const routes = loadDiscoveredRoutes({ cwd: project.root, env });
-  const entries = [], diagnostics = [];
+  const entries = [], workspaces = [], diagnostics = [];
   const inputs = files.length ? files.map(file => ({ file: path.resolve(file), template: false })) : discoverManifests(project, workspace, diagnostics);
+  const parsed = [];
   for (const input of inputs) {
     try {
       const manifest = read(input, project);
@@ -61,12 +62,53 @@ export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', e
         manifest.spec.workspaceRef = workspace;
         manifest.metadata.uid = `default-${manifest.spec.role}-${createHash('sha256').update(JSON.stringify([project.common, workspace])).digest('hex').slice(0, 16)}`;
       }
+      parsed.push({ input, manifest });
+    } catch (error) { diagnostics.push({ file: input.file, level: 'error', message: error.message }); }
+  }
+  const compositions = parsed.filter(p => p.manifest.kind === 'Workspace');
+  const selected = new Map();
+  if (compositions.length) {
+    for (const { input, manifest } of compositions) {
+      try {
+        const validated = validateManifest(manifest, { config: routes.config, project });
+        const relative = path.relative(project.root, input.file);
+        if (safeProjectPath(project.root, relative) !== input.file || !relative.startsWith(`.sessions${path.sep}`))
+          throw Error('Workspace must be inside the canonical .sessions directory');
+        workspaces.push({ file: input.file, ...validated });
+        for (const reference of manifest.spec.sessions) {
+          const file = safeProjectPath(path.join(project.root, '.sessions'), reference);
+          // Discovery uses ONLY blobs in the same frozen canonical HEAD.
+          // A same-named bundled default or uncommitted file cannot satisfy it.
+          const resource = input.committed ? parsed.find(p => p.input.file === file && p.input.committed?.head === input.committed.head)
+            : { input: { file, template: false }, manifest: read({ file }, project) };
+          if (!resource) throw Error(`Workspace reference is not a committed resource: ${reference}`);
+          if (!['Session', 'LogViewer'].includes(resource.manifest.kind)) throw Error(`Workspace reference must be Session or LogViewer: ${reference}`);
+          if (resource.manifest.spec?.workspaceRef !== manifest.spec.workspaceRef) throw Error(`Workspace reference disagrees with workspaceRef: ${reference}`);
+          if (selected.has(file)) throw Error(`resource referenced by multiple Workspaces: ${reference}`);
+          selected.set(file, resource);
+        }
+      } catch (error) { diagnostics.push({ file: input.file, level: 'error', message: error.message }); }
+    }
+    // Preserve independently declared resources and closed-field validation.
+    // Only implicit bundled defaults disappear when a composition is present.
+    for (const resource of parsed.filter(p => !p.input.template && p.manifest.kind !== 'Workspace')) {
+      if (!selected.has(resource.input.file)) selected.set(resource.input.file, resource);
+    }
+  } else for (const resource of parsed) selected.set(resource.input.file, resource);
+  for (const { input, manifest } of selected.values()) {
+    try {
       const validated = validateManifest(manifest, { config: routes.config, project });
       entries.push({ file: input.file, ...validated });
       diagnostics.push(...validated.diagnostics.map(d => ({ file: input.file, ...d })));
     } catch (error) { diagnostics.push({ file: input.file, level: 'error', message: error.message }); }
   }
-  diagnostics.push(...validateSet(entries));
+  diagnostics.push(...validateSet([...workspaces, ...entries]));
+  const refs = new Set();
+  for (const entry of workspaces) {
+    const ref = entry.manifest.spec.workspaceRef;
+    if (refs.has(ref)) diagnostics.push({ file: entry.file, level: 'error', message: `duplicate Workspace workspaceRef ${ref}` });
+    refs.add(ref);
+  }
   const workers = entries.filter(e => e.manifest.spec.intent.kind === 'work-item');
   if (workers.length) {
     try {
@@ -81,7 +123,7 @@ export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', e
     } catch (error) { diagnostics.push({ level: 'error', message: error.message }); }
   }
   return { apiVersion: 'session-inspection/v1', project, workspace, routeFiles: routes.files, suggestedRoutes: Boolean(routes.suggested),
-    entries, diagnostics, valid: !diagnostics.some(d => d.level === 'error') };
+    entries, workspaces, diagnostics, valid: !diagnostics.some(d => d.level === 'error') };
 }
 
 export async function main(args = process.argv.slice(2)) {

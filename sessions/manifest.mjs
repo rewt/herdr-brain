@@ -54,10 +54,28 @@ export function parseManifest(markdown) {
 export function validateManifest(manifest, { config, project } = {}) {
   obj(manifest, ['apiVersion', 'kind', 'metadata', 'spec'], 'manifest');
   choice(manifest.apiVersion, [API_VERSION], 'apiVersion');
-  choice(manifest.kind, ['Session', 'LogViewer'], 'kind');
+  choice(manifest.kind, ['Session', 'LogViewer', 'Workspace'], 'kind');
   const { metadata: m, spec: s } = manifest;
   obj(m, ['name', 'uid', 'namespace', 'generation'], 'metadata');
   id(m.name, 'metadata.name'); id(m.uid, 'metadata.uid'); id(m.namespace, 'metadata.namespace', true); positive(m.generation, 'metadata.generation');
+  if (manifest.kind === 'Workspace') {
+    obj(s, ['workspaceRef', 'sessions', 'routeProfileRef', 'validationProfileRef'], 'spec');
+    id(s.workspaceRef, 'spec.workspaceRef', true);
+    // These bind the existing layered project configuration. There is no
+    // second profile registry, inline policy, or authority in a composition.
+    choice(s.routeProfileRef, ['project-default'], 'routeProfileRef');
+    choice(s.validationProfileRef, ['project-default'], 'validationProfileRef');
+    if (!project?.root || !isAbsolute(project.root)) fail('Workspace validation requires a canonical project');
+    const directory = safeProjectPath(project.root, '.sessions');
+    if (!Array.isArray(s.sessions) || !s.sessions.length) fail('Workspace sessions must be a non-empty array');
+    const paths = s.sessions.map(value => {
+      const file = safeProjectPath(directory, value);
+      if (!value.endsWith('.md')) fail('Workspace sessions must reference Markdown manifests');
+      return file;
+    });
+    if (new Set(paths).size !== paths.length) fail('duplicate Workspace session reference');
+    return { manifest, resolvedSpec: { ...s }, diagnostics: [] };
+  }
   const isSession = manifest.kind === 'Session';
   obj(s, ['workspaceRef', 'role', 'standardSlot', 'paneSlot', 'intent', 'context', 'memory', 'permissions', 'logs', 'lifecycle',
     ...(isSession ? ['route', 'launch', 'execution', 'personality', 'singletonScope', 'tools'] : ['viewer'])], 'spec');

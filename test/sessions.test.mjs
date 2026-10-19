@@ -263,3 +263,76 @@ test('unknown, unreadable, duplicate-key and mismatched canonical receipts fail 
   fs.unlinkSync(file); fs.mkdirSync(path.join(path.dirname(file), 'standard-slots.lock'));
   assert.match(readStandardSlots(f.project.common).errors[0], /lock unresolved/);
 });
+
+const workspaceTemplate = () => parseManifest(fs.readFileSync(path.join(root, 'sessions/templates/workspace.md'), 'utf8'));
+function workspaceProject(f, names = ['chat', 'supervisor', 'logs-viewer', 'logs-triage']) {
+  fs.mkdirSync(path.join(f.main, '.sessions'), { recursive: true });
+  const workspace = workspaceTemplate(); workspace.spec.sessions = names.map(name => `${name}.md`);
+  fs.writeFileSync(path.join(f.main, '.sessions/workspace.md'), document(workspace));
+  for (const name of names) fs.copyFileSync(path.join(root, `sessions/templates/${name}.md`), path.join(f.main, `.sessions/${name}.md`));
+  f.git('add', '.sessions'); f.git('commit', '-qm', 'Workspace composition');
+  return workspace;
+}
+
+test('Workspace composes complete canonical HEAD resources, with no bundled or uncommitted substitutes', t => {
+  const f = repo(t); workspaceProject(f);
+  const run = () => inspect({ cwd: f.lane, env: f.env });
+  let result = run(); assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.equal(result.workspaces.length, 1); assert.equal(result.entries.length, 4);
+  assert.ok(result.entries.every(e => !e.file.includes('/templates/')));
+  assert.equal(result.entries.find(e => e.manifest.spec.role === 'chat').manifest.metadata.uid, 'template-chat');
+  for (const name of ['workspace', 'chat']) fs.writeFileSync(path.join(f.main, `.sessions/${name}.md`), 'bad uncommitted bytes');
+  result = run(); assert.equal(result.valid, true); assert.equal(result.entries.length, 4);
+  assert.equal(result.diagnostics.filter(d => d.level === 'warning').length, 2);
+  f.git('restore', '.sessions'); f.git('rm', '.sessions/chat.md'); f.git('commit', '-qm', 'Missing committed reference');
+  fs.copyFileSync(path.join(root, 'sessions/templates/chat.md'), path.join(f.main, '.sessions/chat.md'));
+  result = run(); assert.equal(result.valid, false);
+  assert.ok(result.diagnostics.some(d => /not a committed resource: chat.md/.test(d.message)));
+});
+
+test('Workspace selects referenced resources without implicitly retaining default sessions', t => {
+  const f = repo(t); workspaceProject(f, ['logs-viewer']);
+  const result = inspect({ cwd: f.main, env: f.env });
+  assert.equal(result.valid, true, JSON.stringify(result.diagnostics));
+  assert.deepEqual(result.entries.map(e => e.manifest.kind), ['LogViewer']);
+  assert.ok(productFiles(root).includes('sessions/templates/workspace.md'));
+});
+
+test('Workspace rejects unknown fields, policy payloads, malformed references and profile names', t => {
+  const f = repo(t);
+  for (const mutate of [
+    m => { m.status = {}; }, m => { m.metadata.authority = 'owner'; }, m => { m.spec.apply = true; },
+    m => { m.spec.routeProfileRef = 'invented'; }, m => { m.spec.validationProfileRef = 'invented'; },
+    m => { m.spec.sessions = []; }, m => { m.spec.sessions = ['chat.md', 'chat.md']; },
+    ...['../chat.md', '/tmp/chat.md', '$HOME/chat.md', 'a/../chat.md', 'a\\chat.md', 'chat.json', null].map(ref => m => { m.spec.sessions = [ref]; }),
+  ]) {
+    const m = workspaceTemplate(); mutate(m);
+    assert.throws(() => validateManifest(m, { project: f.project, config: ROUTE_PRESET }));
+  }
+  assert.throws(() => validateManifest(workspaceTemplate()), /canonical project/);
+});
+
+test('Workspace references enforce containment, regular resources, kind, matching workspace and uniqueness', t => {
+  const f = repo(t), workspace = workspaceProject(f, ['chat']);
+  const file = path.join(f.main, '.sessions/workspace.md');
+  const run = () => inspect({ cwd: f.lane, env: f.env });
+  const commit = () => { f.git('add', '.sessions'); f.git('commit', '-qm', 'Invalid composition'); };
+  const reset = () => { f.git('reset', '--hard', 'HEAD~1'); };
+  for (const [mutate, message] of [
+    [() => { workspace.spec.sessions = ['workspace.md']; fs.writeFileSync(file, document(workspace)); }, /must be Session or LogViewer/],
+    [() => { const m = fixture('chat'); m.spec.workspaceRef = 'other'; fs.writeFileSync(path.join(f.main, '.sessions/chat.md'), document(m)); }, /disagrees with workspaceRef/],
+    [() => { const m = structuredClone(workspace); m.metadata.uid = 'second'; fs.writeFileSync(path.join(f.main, '.sessions/second.md'), document(m)); }, /multiple Workspaces|duplicate Workspace/],
+    [() => { fs.unlinkSync(path.join(f.main, '.sessions/chat.md')); fs.symlinkSync('../.lane.json', path.join(f.main, '.sessions/chat.md')); }, /regular file|not a committed resource/],
+  ]) {
+    workspace.spec.sessions = ['chat.md']; mutate(); commit();
+    const result = run(); assert.equal(result.valid, false); assert.ok(result.diagnostics.some(d => message.test(d.message)), JSON.stringify(result.diagnostics)); reset();
+  }
+  fs.symlinkSync(f.scratch, path.join(f.main, '.sessions/escape'));
+  fs.symlinkSync('missing', path.join(f.main, '.sessions/dangling'));
+  for (const ref of ['escape/outside.md', 'dangling/file.md']) {
+    workspace.spec.sessions = [ref];
+    assert.throws(() => validateManifest(workspace, { project: f.project }), /escapes project|dangling symlink/);
+  }
+  const outside = path.join(f.scratch, 'workspace.md'); fs.writeFileSync(outside, document(workspaceTemplate()));
+  assert.equal(inspect({ cwd: f.main, env: f.env, files: [outside] }).valid, false);
+});

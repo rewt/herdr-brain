@@ -10,7 +10,7 @@ const cell = (value, width) => {
   const text = String(value ?? '');
   return (text.length > width ? text.slice(0, Math.max(0, width - 1)) + '~' : text).padEnd(width);
 };
-export function render(snapshot, { width = 120, height = Infinity, now = Date.now() } = {}) {
+export function render(snapshot, { width = 121, height = Infinity, now = Date.now() } = {}) {
   width = Math.max(1, Math.floor(width));
   const clip = line => line.length <= width ? line : line.slice(0, Math.max(0, width - 1)) + '~';
   const slot = snapshot.slot;

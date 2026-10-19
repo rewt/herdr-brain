@@ -199,7 +199,10 @@ else if(args[0]==='pane'&&args[1]==='process-info') {
 else if(args[0]==='pane'&&args[1]==='get') out({pane:{pane_id:args[2],foreground_cwd:cwd}});
 else if(args[0]==='pane'&&args[1]==='read') console.log(fs.existsSync(path.join(root,'supervisor-composer'))?fs.readFileSync(path.join(root,'supervisor-composer'),'utf8'):'────────────────────\\n❯ \\n────────────────────');
 else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:'w-lane',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle',...(process.env.SETTLE_TEST_REVIEW_IDENTITY?{client_owner:clientOwner('lanes/lane.mjs','review')}:{})};save();out({name:n,pane_id:pane});}
-else if(args[0]==='agent'&&args[1]==='list') out({agents:liveAgents()});
+else if(args[0]==='agent'&&args[1]==='list') out({agents:liveAgents().map(a=>{
+ if(!process.env.SETTLE_TEST_REVIEW_IDENTITY)return a;
+ const {agent_session,...summary}=a;return summary;
+})});
 else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent:'claude',agent_status:'idle',cwd,pane_id:'original:p',workspace_id:'w-lane'}});
 else if(args[0]==='agent'&&args[1]==='read') console.log('');
 else if(args[0]==='agent'&&args[1]==='wait') {await new Promise(r=>setTimeout(r,100));out({});}

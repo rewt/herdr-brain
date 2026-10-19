@@ -294,18 +294,21 @@ a lane or worktree. BCH's `HOLD-WORKER-TAB-CLOSE` still holds it, and
 a same-pane, same-terminal or same-session continuation keeps the tab.
 
 The project `release_sessions` housekeeping policy defaults on. It applies this
-same pane-release transaction to reviewers with recorded PASS verdicts, and to
+same pane-release transaction to reviewers with recorded PASS, NEEDS-WORK or FAIL verdicts, and to
 workers whose exact run has a PASS consumed by `promotion.reconciled` or a
-confirmed retained successor with different pane, terminal and native session.
-Open sibling work does not retain those completed sessions. NEEDS-WORK retains
-both sessions pending correction/disposition. Reuse, missing or mismatched launch
+successor bound to a different pane, terminal and native session, observed with
+its recorded launch identity. The old worker needs an ingested report or recorded
+supersession (`run.abandoned`); no handoff confirmation is required for a fresh
+bound worker. Confirmed retained handoffs still work. Open sibling work does not
+retain those completed sessions. Reuse, missing or mismatched launch
 identity, HOLD and live references remain keeps in the lanes view. Turn off only
 these automatic releases with `record housekeeping set --release-sessions false`.
 No fold keys or session display metadata grant this authority.
 Settle reviewers have no separate worker run: after validating and publishing the
 review, lane review writes an immutable `retirement-review/v1` receipt under
 `ORG/retirement/reviews/`, bound to its launch receipt. Review never appends to the
-event log. Their pane release uses `--reviewer` to bind that exact occupant;
+event log. Launch records the native session from `herdr agent get` when the list
+summary omits it. Their pane release uses `--reviewer` to bind that exact occupant;
 it cannot release the worker. Unknown legacy reviewers stay kept.
 After guarded tab closure the executor can close an empty policy-released native
 workspace; its Git worktree, branch and open item chain remain intact.

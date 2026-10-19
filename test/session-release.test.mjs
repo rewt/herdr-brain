@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
@@ -11,6 +13,7 @@ import { paneReleaseEvents } from '../lib/retire-command.mjs';
 import { exitFixture } from './helpers/retire-exit-fixture.mjs';
 import { hold } from './helpers/retire-fixture.mjs';
 import { parseOverride } from '../housekeeping/config.mjs';
+import { planRetirement } from '../lib/retire.mjs';
 
 function writeEvents(f, events) {
   fs.writeFileSync(f.eventFile, events.map((e, i) => JSON.stringify({ ...e, seq: i + 1 }) + '\n').join(''));
@@ -73,8 +76,19 @@ test('a worker releases after its exact run lands even with an open child; PASS 
   assert.match(f.git(['branch', '--list', 'lane/topic']), /lane\/topic/);
 });
 
-for (const reviewer of [true, false]) test(`NEEDS-WORK keeps the ${reviewer ? 'reviewer' : 'worker'} session`, t => {
-  assertKept(openFixture(t, { reviewer, landed: !reviewer, verdict: 'NEEDS-WORK' }));
+test('NEEDS-WORK keeps the worker pending a bound successor or landed PASS', t => {
+  assertKept(openFixture(t, { landed: true, verdict: 'NEEDS-WORK' }));
+});
+
+for (const verdict of ['NEEDS-WORK', 'FAIL']) test(`a recorded ${verdict} review run releases its idle reviewer`, t => {
+  const f = openFixture(t, { reviewer: true, verdict }), r = f.retirement();
+  if (verdict === 'FAIL') {
+    const events = loadEvents(f.org).events;
+    events[2].report.outcome = 'failed'; writeEvents(f, events);
+  }
+  assert.equal(r.plan().sessionReleases.length, 1);
+  assert.ok(r.apply(r.plan()).some(row => row.action === 'closed'));
+  assert.deepEqual(f.read().actions.slice(0, 2), [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
 });
 
 test('a reused worker and its pane/terminal identity cannot be released as an older landed run', t => {
@@ -97,7 +111,7 @@ test('a confirmed different successor releases the old worker; missing or reused
   f.state.agents.push({ ...f.state.agents[0], name: 'successor', pane_id: 'w:q', tab_id: 'w:u', terminal_id: 'next-terminal',
     agent_session: { value: 'next-session' }, agent_status: 'working' });
   writeEvents(f, events); f.save();
-  assert.equal(f.retirement().plan().sessionReleases?.length ?? 0, 0, 'a newer run is not a confirmed handoff');
+  assert.equal(f.retirement().plan().sessionReleases?.length, 1, 'a fresh successor is bound to its own native occupant');
   events.push({ type: 'retirement.handoff', from: 'R-1', to: 'R-3', confirmed: true }); writeEvents(f, events);
   const plan = f.retirement().plan();
   assert.equal(plan.sessionReleases.length, 1); assert.equal(plan.sessionReleases[0].run, 'R-1');
@@ -107,6 +121,46 @@ test('a confirmed different successor releases the old worker; missing or reused
     assert.equal(f.retirement().plan().sessionReleases?.length ?? 0, 0, key);
     meta[key] = previous;
   }
+});
+
+for (const abandoned of [false, true]) test(`a ${abandoned ? 'record-superseded unreported' : 'reported'} worker exits after a fresh successor binds without a handoff`, t => {
+  const f = openFixture(t), events = loadEvents(f.org).events.filter(e => !abandoned || e.run !== 'R-1');
+  if (abandoned) events.push({ type: 'run.abandoned', id: 'R-1', note: 'superseded by fresh fix worker' });
+  else events.find(e => e.type === 'report.ingested' && e.run === 'R-1').report.outcome = 'blocked';
+  const meta = { ...events[1].meta, agent: 'successor', pane: 'w:q', terminal_id: 'next-terminal', agent_session_id: 'next-session' };
+  events.push({ type: 'run.started', id: 'R-3', item: 'ENG-1', workspace: f.lane, meta });
+  writeEvents(f, events);
+  f.state.tabs.push({ tab_id: 'w:u', workspace_id: 'w' });
+  f.state.panes.push({ pane_id: 'w:q', tab_id: 'w:u', workspace_id: 'w', terminal_id: 'next-terminal' });
+  f.state.agents.push({ ...f.state.agents[0], name: 'successor', pane_id: 'w:q', tab_id: 'w:u', terminal_id: 'next-terminal',
+    agent_session: { value: 'next-session' }, agent_status: 'working' });
+  f.state.unregisterOnExit = false; f.save();
+  const r = f.retirement(), plan = r.plan(f.lane), snapshot = r.observe(f.lane);
+  assert.equal(plan.sessionReleases.length, 1); assert.equal(plan.sessionReleases[0].run, 'R-1');
+  assert.match(plan.sessionReleases[0].opt.why, /bound successor R-3/);
+  const changes = [
+    s => { delete s.record.runs.find(r => r.id === 'R-3').meta.agent_session_id; },
+    s => { s.record.runs.find(r => r.id === 'R-3').meta.pane = 'w:p'; },
+    s => { s.record.runs.find(r => r.id === 'R-3').abandoned = { seq: 99 }; },
+    s => { s.agents = s.agents.filter(a => a.name !== 'successor'); },
+    s => { s.panes = s.panes.filter(p => p.pane_id !== 'w:q'); },
+    s => { s.panes.find(p => p.pane_id === 'w:q').terminal_id = 'replacement'; },
+    s => { s.agents.find(a => a.name === 'successor').agent_status = 'unknown'; },
+    s => { s.record.runs.find(r => r.id === 'R-3').workspace = '/foreign/lane'; s.agents.find(a => a.name === 'successor').cwd = '/foreign/lane'; },
+    s => { s.record.runs.push({ id: 'R-4', item: 'ENG-1', workspace: f.lane, started: { seq: 99 }, meta: {} }); },
+    s => { const old = s.record.runs.find(r => r.id === 'R-1'); old.report = null; old.abandoned = null; },
+  ];
+  for (const change of changes) {
+    const current = structuredClone(snapshot); change(current);
+    assert.equal(planRetirement(current).sessionReleases?.length ?? 0, 0);
+  }
+  const result = r.apply(plan, f.lane);
+  assert.ok(result.some(row => row.action === 'closed' && row.tab_id === 'w:t'), JSON.stringify(result));
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+  assert.deepEqual(f.read().agents.map(a => a.name), ['successor']);
+  assert.equal(releaseEvents(f)[0].run, 'R-1');
+  assert.equal(fs.existsSync(f.lane), true);
+  assert.equal(fold(loadEvents(f.org).events).items.get('ENG-1').closed, null);
 });
 
 test('another run or another repository integration receipt cannot release this worker', t => {
@@ -202,19 +256,34 @@ test('apply rechecks native identity, head, policy and references before recordi
   }
 });
 
-test('a settle reviewer records its validated verdict and releases independently of the worker', t => {
+function settleReviewer(t, verdict = 'PASS') {
   const f = openFixture(t), events = loadEvents(f.org).events;
   events[1].meta = { ...events[1].meta, agent: 'original-worker', pane: 'w:original', terminal_id: 'other-terminal', agent_session_id: 'other-session' };
   writeEvents(f, events);
   // Scripted PID 2 lives until the fake native exit unregisters its occupant.
-  const r = f.retirement({ readOwner: () => f.read().agents.length > 0 });
-  r.recordCallback({ kind: 'settle', pane: 'w:p', agent: 'worker', run: 'R-1' });
-  const evidence = path.join(f.scratch, 'validated-review.md'), bytes = '**PASS**\nvalidated by lane review\n';
+  const r = f.retirement({ readOwner: owner => f.read().info.process_tree.some(row => row.pid === owner.pid && row.identity === owner.identity),
+    command: (exe, args, options) => {
+      const result = spawnSync(exe, args, options);
+      if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'list') {
+        const summary = JSON.parse(result.stdout);
+        for (const agent of summary.result.agents) delete agent.agent_session;
+        result.stdout = JSON.stringify(summary);
+      }
+      return result;
+    } });
+  const callback = r.recordCallback({ kind: 'settle', pane: 'w:p', agent: 'worker', run: 'R-1' });
+  assert.equal(callback.agent_session_id, 'session', 'agent get supplies the native session missing from agent list');
+  const evidence = path.join(f.scratch, 'validated-review.md'), bytes = `**${verdict}**\nvalidated by lane review\n`;
   fs.writeFileSync(evidence, bytes);
   const eventBytes = fs.readFileSync(f.eventFile);
-  r.recordReviewVerdict({ pane: 'w:p', run: 'R-1', verdict: 'PASS', head: f.head, evidence,
+  r.recordReviewVerdict({ pane: 'w:p', run: 'R-1', verdict, head: f.head, evidence,
     sha256: createHash('sha256').update(bytes).digest('hex') });
   assert.deepEqual(fs.readFileSync(f.eventFile), eventBytes, 'review verdict evidence leaves the event log unchanged');
+  return { f, r };
+}
+
+for (const verdict of ['PASS', 'NEEDS-WORK', 'FAIL']) test(`a settle ${verdict} reviewer records its verdict and exits before closing independently of the worker`, t => {
+  const { f, r } = settleReviewer(t, verdict);
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"release_sessions":false}');
   assertKept(f);
   fs.unlinkSync(path.join(f.repo, '.housekeeping.json'));
@@ -224,7 +293,47 @@ test('a settle reviewer records its validated verdict and releases independently
   assert.ok(results.some(row => row.action === 'closed'), JSON.stringify(results));
   const release = releaseEvents(f)[0];
   assert.equal(release.recipient, 'reviewer'); assert.equal(release.agent, 'worker');
+  assert.deepEqual(f.read().actions.slice(0, 2), [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
   assert.equal(fold(loadEvents(f.org).events).items.get('ENG-1').closed, null);
+});
+
+test('record pane-release --reviewer accepts the settle launch and verdict receipts', t => {
+  const { f, r } = settleReviewer(t, 'NEEDS-WORK');
+  const args = [fileURLToPath(new URL('../bin/org.mjs', import.meta.url)), 'pane-release', 'R-1', '--reviewer',
+    '--session', 'session', '--terminal', 'term', '--pane', 'w:p', '--head', f.head,
+    '--authority', 'fixture supervisor', '--next', 'successor worker', '--unresolved', 'review findings',
+    '--evidence', 'validated-review.md', '--confirm', '--why', 'verdict recorded'];
+  const result = spawnSync(process.execPath, args, { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(releaseEvents(f)[0].recipient, 'reviewer');
+  assert.equal(r.plan().close[0].decision, 'exit');
+  assert.ok(r.apply(r.plan()).some(row => row.action === 'closed'));
+});
+
+test('settle release preserves every identity, process and protection guard before recording a disposition', t => {
+  const { f, r } = settleReviewer(t), snapshot = r.observe(), plan = r.plan();
+  const changes = [
+    s => { s.agents[0].agent_status = 'working'; },
+    s => { s.panes[0].process_info.process_tree[1].identity = 'replacement'; s.panes[0].process_info.process_tree_raw[1].identity = 'replacement'; },
+    s => { s.panes[0].process_info.process_tree[0].identity = 'replacement'; s.panes[0].process_info.process_tree_raw[0].identity = 'replacement'; },
+    s => { s.panes[0].terminal_id = 'replacement'; },
+    s => { s.agents[0].agent_session.value = 'replacement'; },
+    s => { s.panes[0].process_info.process_tree_raw.push({ pid: 99, ppid: 1, identity: 'sibling', state: 'S', command: '[node]' }); },
+    s => { s.tabs[0].focused = true; },
+    s => { s.retirementHold = 'operator hold'; },
+    s => { s.workspaces[0].persistent = true; },
+    s => { s.references.push({ kind: 'live work', cwd: f.lane }); },
+    s => { s.reviewVerdicts = []; },
+  ];
+  for (const change of changes) {
+    const current = structuredClone(snapshot); change(current);
+    const kept = planRetirement(current);
+    assert.equal(kept.sessionReleases?.length ?? 0, 0, JSON.stringify(kept));
+    assert.equal(kept.close.length, 0);
+  }
+  f.state.info.process_tree[1].identity = 'replacement'; f.save();
+  assert.ok(r.apply(plan).some(row => row.action === 'release-kept'));
+  assert.deepEqual(f.read().actions, []); assert.deepEqual(releaseEvents(f), []);
 });
 
 test('an unregistered released shell retries a failed close and then closes its last workspace', t => {

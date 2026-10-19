@@ -38,11 +38,14 @@ The detached process is a timer, not an agent: tidy finished tabs and resume eve
 60 seconds, with settled-lane cleanup on startup and every 600 seconds. Every
 tick runs `supervisor/tidy-tabs.mjs` through the same pure retirement planner
 and guarded executor as settled cleanup. The default-on `release_sessions` policy
-releases a recorded reviewer after its PASS verdict, and a worker after its exact
-run's PASS is consumed by landed integration or a confirmed different successor
-is retained. This does not wait for the item's other children to finish.
-NEEDS-WORK, a reused pane/terminal/session, mismatched identity, HOLD and live
-references keep the session. Other ingested reports keep their pane while
+releases a recorded reviewer after any validated verdict (PASS, NEEDS-WORK or
+FAIL), and a worker after its exact run's PASS is consumed by landed integration
+or a different successor is bound to its own native pane, terminal and session.
+The old worker must have an ingested report or a recorded supersession
+(`run.abandoned`); the successor must be observed in its recorded pane. An explicit
+confirmed handoff remains supported. This does not wait for the item's other
+children to finish. A reused pane/terminal/session, mismatched identity, HOLD and
+live references keep the session. Other ingested reports keep their pane while
 review, correction or integration can return to it.
 Unrecorded reviews, sessions and watcher shells stay. See the exact eligibility
 and generic reference contract in [the supervisor README](../supervisor/README.md#safe-retirement).

@@ -30,7 +30,14 @@ test('settle review launch records its native occupant against the run under rev
   assert.equal(receipt.common, path.join(f.repo, '.git')); assert.equal(receipt.cwd, f.workspace);
   assert.equal(receipt.workspace, 'w-lane'); assert.ok(receipt.pane); assert.ok(receipt.tab);
   assert.ok(receipt.shell.identity); assert.ok(receipt.process.identity);
+  // The native list omits agent_session; only agent get exposes that identity.
+  const reviews = path.join(f.org, 'retirement/reviews'), verdicts = fs.readdirSync(reviews);
+  assert.equal(verdicts.length, 1);
+  const verdict = JSON.parse(fs.readFileSync(path.join(reviews, verdicts[0])));
+  assert.equal(verdict.run, run); assert.equal(verdict.session, receipt.agent_session_id);
+  assert.equal(verdict.pane, receipt.pane); assert.equal(verdict.verdict, 'PASS');
   assert.doesNotMatch(fs.readFileSync(journal(f, run).reviewLog, 'utf8'), /launch identity could not be recorded/);
+  assert.doesNotMatch(fs.readFileSync(journal(f, run).reviewLog, 'utf8'), /verdict release evidence could not be recorded/);
 });
 
 test('settle retains the review stage under simulated memory pressure and launches once after it clears', async t => {

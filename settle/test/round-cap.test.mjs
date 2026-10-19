@@ -17,11 +17,21 @@ function config(f, cap) {
   f.git(['rebase', 'main'], f.workspace);
 }
 function landed(f) { const run = f.start(); f.commit('correct\n'); f.report(run); return run; }
-const launchCalls = (f) => f.calls().filter((a) => a[1] === 'start' || a[1] === 'prompt');
+const launchCalls = (f) => f.calls().filter((a) => a[1] === 'start' ||
+  (a[1] === 'prompt' && (a[3].startsWith('You are run ') || a[3].includes('Private record file: '))));
+function retainWorker(f, run) {
+  // The shared fake normally expires clients with their launching CLI. These
+  // scenarios model a retained native worker after that foreground CLI exits.
+  const file = path.join(f.root, 'agents.json'), agents = JSON.parse(fs.readFileSync(file));
+  delete agents[f.show(run).meta.agent].client_owner;
+  fs.writeFileSync(file, JSON.stringify(agents));
+}
 function dispatchWorker(f, item, extra = []) {
   ignoreRuntime(gitProject(f.repo, { env: f.env }));
-  return result(f.exec(process.execPath, [path.join(f.source, 'dispatch/dispatch.mjs'), item,
+  const receipt = result(f.exec(process.execPath, [path.join(f.source, 'dispatch/dispatch.mjs'), item,
     '--lane', 'topic', '--route', 'engineer', '--brief', path.join(f.root, 'ask with spaces.md'), ...extra]));
+  retainWorker(f, receipt.run);
+  return receipt;
 }
 
 test('project cap counts completed reviews across fix runs and records the no-dispatch decision', { timeout: 45000 }, (t) => {
@@ -149,6 +159,7 @@ test('cross-item reuse neither consumes another item review round nor resets the
   const first = dispatchWorker(f, item), reviewed = result(f.settle(first.run, ['--reuse']));
   assert.equal(reviewed.review_policy.round, 1); assert.equal(reviewed.result, 'fix_round');
   f.record(['ingest', f.show(reviewed.fix.run).report_path]);
+  retainWorker(f, reviewed.fix.run);
   const sibling = f.record(['add', 'Sibling slice', '--role', 'engineer']).split(' ')[0];
   const other = dispatchWorker(f, sibling, ['--reuse', reviewed.fix.run]);
   const otherReview = result(f.settle(other.run, ['--review-round-cap', '1']));

@@ -150,9 +150,11 @@ test('handle explicitly resumes a saved Major or FAIL cap escalation once', { ti
     assert.equal(refused.status, 1); assert.match(refused.stderr, /requires saved promotable/);
     const next = result(invoke(f, ['handle', run, '--retry', '--fix-findings', '--role', 'supervisor']));
     assert.equal(next.result, 'fix_round');
-    const calls = f.calls().filter((a) => a[1] === 'start' || a[1] === 'prompt');
+    const launches = () => f.calls().filter((a) => a[1] === 'start' ||
+      (a[1] === 'prompt' && (a[3].startsWith('You are run ') || a[3].includes('Private record file: '))));
+    const calls = launches();
     assert.equal(result(invoke(f, ['handle', run, '--retry', '--fix-findings', '--role', 'supervisor'])).fix.run, next.fix.run);
-    assert.deepEqual(f.calls().filter((a) => a[1] === 'start' || a[1] === 'prompt'), calls);
+    assert.deepEqual(launches(), calls);
     assert.equal(f.show(run).notes.filter((n) => n.decision && /requested another correction/.test(n.text)).length, 1);
   }
 });

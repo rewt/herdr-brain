@@ -250,9 +250,9 @@ inventory also runs first: the default evidence budget is 256 MiB of copied byte
 `LANE_EVIDENCE_MAX_BYTES` overrides it with a nonnegative integer byte count for
 the attempt. Content over that budget keeps the lane, copies nothing, and reports
 its size and the need for explicit disposition; it never permits an unverified sweep.
-Only Git-ignored paths under directories named exactly `node_modules`, `dist`,
-`build`, `.cache`, `coverage` or `target` may omit payloads. These disposable paths
-are recorded individually in the `lane-evidence/v2` manifest by path, type and
+Only Git-ignored paths under directories named exactly `node_modules`, `.pnpm-store`,
+`dist`, `build`, `.cache`, `coverage` or `target` may omit payloads. These disposable
+paths are recorded individually in the `lane-evidence/v2` manifest by path, type and
 `lstat` size, with `metadataOnly: true`; their bytes do not consume the copy budget.
 Evidence and reference claims override omission. Ignored reports, diagnostics,
 unknown content and `.lane/` evidence retain full verified copies. Outside confirmed

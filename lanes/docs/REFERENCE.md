@@ -672,9 +672,9 @@ except the following explicitly disposable output. The byte bound counts file
 payloads and symlink-target bytes actually copied; it never truncates an archive.
 
 Metadata-only retention requires Git ignore confirmation **and** a directory
-component named exactly `node_modules`, `dist`, `build`, `.cache`, `coverage` or
-`target`. This includes nested package output. A file merely named `build`, or
-untracked output that is not ignored, is preserved in full. Each omitted path has
+component named exactly `node_modules`, `.pnpm-store`, `dist`, `build`, `.cache`,
+`coverage` or `target`. This includes nested package output. A file merely named
+`build`, or untracked output that is not ignored, is preserved in full. Each omitted path has
 `path`, `type`, `size` (its `lstat` size, including directory/symlink metadata size)
 and `metadataOnly: true` in `lane-evidence/v2`. It has no payload hash or symlink
 target. These entries do not consume the copied-byte budget. Parent directories

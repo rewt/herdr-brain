@@ -13,6 +13,7 @@ import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { lookupProcess } from '../../lib/processes.mjs';
 
 // Containment is installed already; green checks require absent loader inputs.
 delete process.env.NODE_OPTIONS;
@@ -180,7 +181,11 @@ for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existi
   const deadline = Date.now() + loadTimeout(10000);
   while (!fs.existsSync(started) && child.exitCode === null && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(fs.existsSync(started), JSON.stringify({ queue: queue.load(), worker: child.exitCode === null ? 'running' : await done }));
-  assert.ok(liveNativeWorker(f.guard.identity), 'actual native worker is live');
+  if (!liveNativeWorker(f.guard.identity)) assert.fail(JSON.stringify({
+    reason: 'actual native worker is not confirmed',
+    owner: JSON.parse(fs.readFileSync(path.join(queue.directory, 'worker.lock/owner.json'), 'utf8')),
+    process: lookupProcess(child.pid),
+  }));
   if (kind !== 'foreign') f.check(); // A valid admission precedes late drift.
   damage(f, kind);
   const result = f.exec(process.execPath, [cli, 'candidate', '--existing-worker', '--repo', f.project, '--org', f.org,

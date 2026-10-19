@@ -20,6 +20,7 @@ import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
 import { promotionWorkers } from '../../test/helpers/promotion-worker.mjs';
+import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -136,6 +137,36 @@ for (const size of [1, 3]) test(`native ${size}-member batch reconciles atomical
   assert.equal(replay.pending, false); assert.equal(replay.results[0].result.reconciliation.replayed, true);
   assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
   f.drain(); assert.equal(f.gates(), 1);
+});
+
+test('record-bound enqueue completes while a real drain gates another member without lock inversion', async t => {
+  const f = fixture(t), first = f.lane('first');
+  const gating = path.join(f.root, 'gating'), release = path.join(f.root, 'release-gate');
+  fs.writeFileSync(f.checker, `const fs=require('fs');fs.appendFileSync(${JSON.stringify(path.join(f.root, 'gates'))},'gate\\n');
+fs.writeFileSync(${JSON.stringify(gating)},'ready');const until=Date.now()+60000;
+while(!fs.existsSync(${JSON.stringify(release)})){if(Date.now()>until)throw Error('gate barrier timed out');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}
+console.log('# tests 1');`);
+  const child = spawnScenarioChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+  const completed = waitForExit(child);
+  let second, reply;
+  try {
+    const until = Date.now() + loadTimeout(30000);
+    while (!fs.existsSync(gating)) {
+      assert.ok(Date.now() < until, 'drain reached the bounded gate barrier');
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    // Both record writes and admission run while the drain owns its worker lock.
+    second = f.lane('second');
+    assert.ok(f.queue.load().pending.some(job => job.id === second.job.id));
+    assert.equal(f.queue.load().pending.find(job => job.id === second.job.id).admittedSeq, f.events().at(-1).seq);
+  } finally {
+    fs.writeFileSync(release, 'continue');
+    reply = await completed;
+  }
+  assert.equal(reply.code, 0, reply.stderr || reply.stdout);
+  assert.equal(f.gates(), 2);
+  for (const member of [first, second]) assert.equal(f.show(member.item).closed.as, 'done');
+  assert.ok(f.queue.load().results.every(result => result.reconciliation.state === 'complete'));
 });
 
 test('integrated record refusal retains every lane and resumes records without another gate', t => {

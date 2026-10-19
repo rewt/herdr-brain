@@ -355,9 +355,15 @@ reconciliation. A missing queue means there is no queued work; a standalone
 record has no Git queue. Terminal refused/timeout jobs are released immediately;
 members of a red batch still queued for bisection stay protected. Reconciliation
 markers release completed members even before the queue saves its next checkpoint.
+Older promoted results without reconciliation metadata release after the item
+was closed as done with that run current. That durable legacy completion remains
+effective after reopening or starting follow-up work; an explicit pending
+reconciliation still holds its member.
 
 For inspected recovery, set `ORG_GUARD_OVERRIDE` to the exact batch ID (or the
-job ID while it is pending outside a batch). A mismatched ID refuses. Each
+job ID while it is pending outside a batch). If a transaction touches multiple
+promotions, supply their comma-separated batch/job IDs. The supplied set must
+equal the full set of affected promotions; missing or extra IDs refuse. Each
 successful override prints a warning to stderr and appends a
 `promotion.write-overridden` audit event in the same transaction, with the
 command, member IDs, batch/job IDs and Git identity. Unknown/unreadable membership
@@ -365,7 +371,9 @@ cannot be overridden this way; inspect and repair the queue first. Older folds
 ignore the new audit event.
 
 The existing supervisor-attested `complete-batch` receipt remains authoritative
-for its validated item/run coverage, including manual recovery. The legacy
+for its entire validated transaction, including manual recovery and effects on
+other queued parents, dependents and review owners. Those jobs retain their own
+completion checks. The legacy
 completion `close --if-current-run` also works when the queue has persisted a
 promoted result for that run and its exact requested head is integrated. Actor
 names, note text and the current-run flag alone grant no exemption. Read-only

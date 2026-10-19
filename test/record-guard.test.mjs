@@ -179,6 +179,33 @@ test('legacy completion close requires a persisted promoted exact head; actor an
     f.refuse(['note', f.item, 'Only completion is allowed']);
     f.ok(['close', f.item, '--if-current-run', f.run, '--note', 'Promoted locally from the queue']);
     assert.equal(f.json(['show', f.item, '--json']).closed.as, 'done');
+    f.ok(['note', f.item, 'Copying the digest after legacy completion']);
+    f.ok(['reopen', f.item]);
+    f.ok(['note', f.item, 'New scope after landing']);
+    f.ok(['start', f.item]);
+    f.ok(['add', 'Follow-up child', '--parent', f.item]);
+  }
+});
+
+test('historical promoted results without reconciliation release only after their own current-run close', t => {
+  for (const batch of [undefined, 'historical-batch']) {
+    const f = fixture(t);
+    const original = f.queue.load().pending[0];
+    f.queue.transaction(data => { data.pending = []; });
+    // An unrelated close must not count as completion of this run.
+    f.ok(['close', f.other]);
+    f.queue.transaction(data => { data.results.push({ ...original, outcome: 'promoted', tip: f.head, batch }); });
+    f.refuse(['note', f.item, 'Not completed yet']);
+    f.queue.transaction(data => { data.results = []; });
+    f.ok(['close', f.item, '--if-current-run', f.run]);
+    f.ok(['reopen', f.item]);
+    f.ok(['start', f.item]);
+    f.queue.transaction(data => { data.results.push({ ...original, outcome: 'promoted', tip: f.head, batch }); });
+    f.ok(['note', f.item, 'Historical landed work stays writable']);
+    assert.ok(!f.events().some(e => ['promotion.reconciled', 'promotion.write-overridden'].includes(e.type)));
+    // A live reconciliation marker still requires the train's completion.
+    f.queue.transaction(data => { data.results[0].reconciliation = { state: 'pending' }; });
+    f.refuse(['note', f.item, 'Explicit reconciliation is still pending']);
   }
 });
 
@@ -194,6 +221,61 @@ test('validated batch completion is exempt and its durable marker releases membe
   assert.ok(!f.events().some(e => e.type === 'promotion.write-overridden'));
   fs.writeFileSync(b.receipt, '{obsolete unreadable train');
   f.ok(['note', f.item, 'Copying the digest after landing']);
+});
+
+test('validated batch completion allows collateral hits on pending and interrupted dependents', t => {
+  for (const relation of ['blocker', 'parent', 'review-child']) {
+    const f = fixture(t);
+    // Prepare the relationship before admission, as a real dependent would.
+    const original = f.queue.load().pending[0];
+    f.queue.transaction(data => { data.pending = []; });
+    const dependent = f.other;
+    if (relation === 'blocker') f.ok(['block', dependent, '--by', f.item]);
+    else f.ok(['set', f.item, `parent=${dependent}`, ...(relation === 'review-child' ? ['role=reviewer'] : [])]);
+    const dependentRun = f.ok(['start', dependent]).match(/^R-\d+/)[0];
+    f.queue.transaction(data => { data.pending = [original]; });
+    const b = f.batch('complete', { outcome: 'promoted', tip: f.head, reconciliation: { state: 'pending' } });
+    const pending = enqueue(f.queue, ['dependent-work'], { org: f.dir, run: dependentRun, expectedHead: f.head })[0];
+    if (relation === 'review-child') f.queue.transaction(data => {
+      data.interrupted = [{ ...data.pending.shift(), phase: 'prepared' }];
+    });
+    f.refuse(['note', f.item, 'Ordinary writes still refuse']);
+    const payload = { version: 1, batch: b.id, org: fs.realpathSync(f.dir), identity: f.queue.project.identity,
+      base: f.head, tip: f.head, gate: { exit_code: 0, log: path.join(f.root, 'gate.log'), sha256: '0'.repeat(64) },
+      items: [{ item: f.item, run: f.run, head: f.head, expected: completionFingerprint(fold(f.events()), f.item), superseded: [], why: 'Supervisor-attested completion' }], excluded: [] };
+    const receipt = path.join(f.dir, 'complete.json');
+    fs.writeFileSync(receipt, JSON.stringify({ ...payload, identity: path.join(f.root, 'foreign.git') }));
+    f.refuse(['complete-batch', '--file', receipt]);
+    fs.writeFileSync(receipt, JSON.stringify(payload));
+    f.ok(['complete-batch', '--file', receipt]);
+    assert.equal(f.json(['show', f.item, '--json']).closed.as, 'done');
+    assert.equal(f.json(['show', dependent, '--json']).closed, null);
+    assert.ok(f.refuse(['note', dependent, 'Dependent is still queued']).includes(pending.id));
+    assert.equal(f.events().filter(e => e.type === 'promotion.reconciled').length, 1);
+    assert.ok(!f.events().some(e => e.type === 'promotion.write-overridden'));
+  }
+});
+
+test('recovery override must name exactly all batch and job ids touched by one write', t => {
+  const f = fixture(t);
+  const original = f.queue.load().pending[0];
+  f.queue.transaction(data => { data.pending = []; });
+  const otherRun = f.ok(['start', f.other]).match(/^R-\d+/)[0];
+  f.queue.transaction(data => { data.pending = [original]; });
+  const b = f.batch();
+  const otherJob = enqueue(f.queue, ['other-work'], { org: f.dir, run: otherRun, expectedHead: f.head })[0];
+  const args = ['block', f.item, '--by', f.other];
+  for (const override of [b.id, otherJob.id, `${b.id},wrong`, `${b.id},${otherJob.id},extra`, `${b.id},${otherJob.id},`]) {
+    f.refuse(args, { env: { ORG_GUARD_OVERRIDE: override } });
+  }
+  const r = f.org(args, { env: { ORG_GUARD_OVERRIDE: `${otherJob.id},${b.id}` } });
+  assert.equal(r.code, 0, r.err);
+  assert.ok(r.err.includes(b.id) && r.err.includes(otherJob.id));
+  const audit = f.events().at(-1);
+  assert.equal(audit.type, 'promotion.write-overridden');
+  assert.deepEqual(new Set(audit.batches), new Set([b.id, otherJob.id]));
+  assert.deepEqual(new Set(audit.items), new Set([f.item, f.other]));
+  assert.equal(audit.override, `${otherJob.id},${b.id}`);
 });
 
 test('ingest and watcher sync preserve late reports and proposals on queued work', t => {
@@ -239,4 +321,16 @@ test('linked worktrees use the common queue and explicit fleet records consult o
   fs.unlinkSync(f.queue.file);
   const free = invoke(other.root, f.dir, ['note', f.item, 'Foreign queue ignored'], env);
   assert.equal(free.status, 0, free.stderr);
+});
+
+test('fleet record bindings accept symlinked and trailing-slash checkout and identity paths', t => {
+  const f = fixture(t), alias = path.join(f.root, 'checkout-alias'), fleet = path.join(f.dir, 'fleet');
+  fs.symlinkSync(f.queue.project.canonical, alias, 'dir'); fs.mkdirSync(fleet);
+  const owner = { identity: `${alias}/.git/`, checkout: `${alias}/`, record: f.dir, worktrees: f.root, layers: [] };
+  fs.writeFileSync(path.join(fleet, 'fleet.json'), JSON.stringify({ version: 1, session_limit: 12, projects: { owner } }));
+  const env = { HERDR_MONITOR_FLEET: fleet };
+  assert.ok(f.refuse(['note', f.item, 'Canonical queue still protects its member'], { env }).includes(f.job.id));
+  f.ok(['note', f.other, 'Unrelated record writes accept canonical aliases'], { env });
+  fs.unlinkSync(f.queue.file);
+  f.ok(['note', f.item, 'Released work accepts canonical aliases'], { env });
 });

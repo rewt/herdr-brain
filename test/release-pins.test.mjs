@@ -23,10 +23,15 @@ function fixture(t, { markers = true } = {}) {
   const ok = result => { assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim(); };
   const node = (args, cwd, extra) => ok(run(process.execPath, args, cwd, extra));
   const git = (repo, ...args) => ok(run('git', ['-C', repo, ...args]));
-  const tool = (...args) => node([path.join(source, 'herdr/releases.mjs'), ...args]);
+  const tool = (...args) => {
+    if (args[0] === 'manifest') args.push(path.join(args[1], '.release-acceptance.json'));
+    return node([path.join(source, 'herdr/releases.mjs'), ...args]);
+  };
   const releases = Object.fromEntries(['blue', 'green'].map((id, index) => {
     const directory = path.join(home, 'releases', id); copyProduct(source, directory);
     fs.writeFileSync(path.join(directory, '.release-commit'), String(index + 1).repeat(40) + '\n');
+    fs.writeFileSync(path.join(directory, '.release-acceptance.json'), JSON.stringify({ ready: true,
+      candidateCommit: String(index + 1).repeat(40), elapsedSeconds: 1, counts: { PASS: 1, FAIL: 0, PENDING: 0, SKIP: 0 } }));
     if (markers) for (const relative of ['bin/org.mjs', 'lanes/lane.mjs']) fs.writeFileSync(path.join(directory, relative), `console.log(${JSON.stringify(id)});`);
     fs.writeFileSync(path.join(directory, 'herdr/probe.mjs'), `import {bundleRelease} from '../lib/releases.mjs'; console.log(JSON.stringify(bundleRelease()));`);
     fs.writeFileSync(path.join(directory, 'herdr/child.mjs'), `import fs from 'node:fs';import {bundleRelease} from '../lib/releases.mjs';fs.appendFileSync(process.env.PIN_TRACE,JSON.stringify(bundleRelease())+'\\n');console.error('lane: fixture validation refused');process.exitCode=1;`);

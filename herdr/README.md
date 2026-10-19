@@ -13,6 +13,8 @@ bash herdr/release.sh rollback
 bash herdr/release.sh status
 bash herdr/release.sh pin TAG /canonical/project  # commit .herdr-release.json to accept
 bash herdr/release.sh unpin /canonical/project   # commit to return to current
+bash herdr/release.sh attest LEGACY_TAG /path/to/summary.json
+bash herdr/release.sh pin-status /canonical/project --json
 bash herdr/release.sh exec supervisor/supervisor.mjs brief
 ```
 
@@ -28,11 +30,15 @@ gate bounds the command and its children. Build then renames the snapshot and ma
 read-only. A failed or interrupted build retains its partial directory for
 inspection and cannot be activated or rebuilt in place. `--live` adds the live
 acceptance harness after the offline gate; it is optional and never run in lanes.
+Pin candidates require `--live`: the build retains its summary and records READY
+acceptance for the exact commit in the additive release manifest. Offline builds
+explicitly record acceptance did not run. `attest` supplies write-once installation
+evidence only for older protocol-1 bundles without an acceptance record.
 Every release retains `contrib/settle-watch.mjs` and `lib/cli-help.mjs`.
 
 Activation updates `previous` and `current` and installs project-aware resolvers
 for `~/.local/bin/{org,record,lane}`. A committed canonical `.herdr-release.json`
-selects a complete immutable bundle; unpinned projects keep using `current`.
+selects a complete, acceptance-READY immutable bundle; unpinned projects keep using `current`.
 See [release pins](RELEASE-PINS.md) for acceptance, rollback, compatibility,
 operation inventory and the deferred BCH adapters. Existing regular
 files are refused before switching. Repeating activation preserves the previous

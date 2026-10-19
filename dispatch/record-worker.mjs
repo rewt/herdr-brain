@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
+import { forwardRelease } from '../lib/releases.mjs';
 
 const { values: opt, positionals } = parseArgs({
   usage: 'Usage: node dispatch/record-worker.mjs R-n --agent NAME --pane ID --cwd DIR [--org DIR] [--worker-workspace ID] [--terminal-id ID] [--agent-session-id ID]',
@@ -15,6 +16,8 @@ try {
   if (positionals.length !== 1 || !/^R-\d+$/.test(positionals[0])) throw new Error('one run ID is required');
   for (const key of ['agent', 'pane', 'cwd']) if (!opt[key]?.trim()) throw new Error(`--${key} is required from the launch`);
   const cwd = fs.realpathSync(opt.cwd);
+  const forwarded = forwardRelease('dispatch/record-worker.mjs', cwd);
+  if (forwarded !== null) process.exit(forwarded);
   const env = { ...process.env, ...(opt.org ? { ORG_DIR: opt.org } : {}) };
   function command(exe, args) {
     const r = spawnSync(exe, args, { env, cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });

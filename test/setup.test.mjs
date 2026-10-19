@@ -14,6 +14,7 @@ import { emptyJournal, runtimePaths } from '../sessions/runtime.mjs';
 import { specDigest } from '../sessions/lifecycle-evidence.mjs';
 import { createHerdrObserver } from '../sessions/observe.mjs';
 import { copyProduct, productFiles } from '../lib/product-files.mjs';
+import { acceptanceRecord } from '../lib/releases.mjs';
 
 const source = fileURLToPath(new URL('../', import.meta.url));
 const document = m => `## Manifest\n\`\`\`json\n${JSON.stringify(m)}\n\`\`\`\n`;
@@ -26,7 +27,11 @@ function bundle(home, name) {
     fs.writeFileSync(file, '// fixture\n'); files[relative] = 'fixture';
   }
   const commit = 'a'.repeat(40); fs.writeFileSync(path.join(root, '.release-commit'), commit);
-  fs.writeFileSync(path.join(root, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, commit, files }));
+  const summary = Buffer.from(JSON.stringify({ ready: true, candidateCommit: commit, elapsedSeconds: 1,
+    counts: { PASS: 1, FAIL: 0, PENDING: 0, SKIP: 0 } }));
+  fs.writeFileSync(path.join(root, '.release-acceptance.json'), summary);
+  fs.writeFileSync(path.join(root, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, commit, files,
+    acceptance: acceptanceRecord(summary, commit) }));
   return root;
 }
 function fixture(t, names = ['chat', 'supervisor', 'logs-viewer', 'logs-triage']) {

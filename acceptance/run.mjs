@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { HarnessLimit, Pending, commandFailure, requirePrerequisite } from './limits.mjs';
 import { installSignalCleanup, removeCredentials, credentialResidue } from './signal-cleanup.mjs';
 import { stopProducers, awaitProducers } from './producers.mjs';
-import { retainedRoots, resultLine, gateOutcome } from './results.mjs';
+import { retainedRoots, resultLine, gateOutcome, writeSummary } from './results.mjs';
 import { liveSocket } from './probe.mjs';
 import { cases, runCase } from './cases.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
@@ -98,10 +98,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
 const { values: opt } = parseArgs({ options: {
   candidate: { type: 'string' }, source: { type: 'string', default: SOURCE },
+  'summary-file': { type: 'string' },
   keep: { type: 'boolean', default: false },
   'skip-live': { type: 'boolean', default: false },
 } });
-if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--keep]'); process.exit(2); }
+if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--keep] [--summary-file FILE]'); process.exit(2); }
 const scratchRoots = [];
 const realHome = os.homedir();
 const root = createOwnedTempRoot(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tmp', 'herdr-acceptance-'), scratchRoots);
@@ -302,7 +303,8 @@ function emitSummary(interruption = {}) {
   const { counts, ready } = gateOutcome(results);
   const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, ready, evidence, results, load: measuredLoad,
     credentialResidue: credentialResidue(root), retainedDiscoveryRoots: retainedRoots(discoveryRoots), ...interruption };
-  write(path.join(evidence, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
+  // The build requests an exact copy before sealing the immutable bundle.
+  writeSummary(summary, opt['summary-file']);
   const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending / ${counts.SKIP} skipped — ${ready ? 'READY' : 'NOT READY'}`,
     ...results.map((v) => resultLine(v, summary.retainedDiscoveryRoots)), `Evidence: ${evidence} (NN.jsonl; summary.json has reasons)`].join('\n');
   write(path.join(evidence, 'screen.txt'), screen + '\n'); console.log(screen);

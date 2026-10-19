@@ -21,7 +21,7 @@ function scratch(t) {
   write('package.json', JSON.stringify({ scripts: { 'test:release': `node gate.cjs` } }));
   write('gate.cjs', `const fs=require('fs');fs.appendFileSync(${JSON.stringify(gateLog)},process.cwd()+'\\n');if(process.env.FIXTURE_GATE_FAIL)process.exit(7);`);
   write('contrib/settle-watch.mjs', '// compatibility');
-  write('acceptance/run.mjs', `import fs from 'node:fs';fs.appendFileSync(${JSON.stringify(gateLog)},'live:'+process.cwd()+'\\n');if(process.env.FIXTURE_LIVE_FAIL)process.exit(8);`);
+  write('acceptance/run.mjs', `import fs from 'node:fs';fs.appendFileSync(${JSON.stringify(gateLog)},'live:'+process.cwd()+'\\n');if(process.env.FIXTURE_LIVE_FAIL)process.exit(8);fs.writeFileSync(process.argv[process.argv.indexOf('--summary-file')+1],JSON.stringify({ready:true,candidateCommit:fs.readFileSync('.release-commit','utf8').trim(),elapsedSeconds:1,counts:{PASS:1,FAIL:0,PENDING:0,SKIP:0}}));`);
   for (const tag of ['t1', 't2']) {
     write('bin/org.mjs', `console.log('${tag}');`); write('lanes/lane.mjs', `console.log('lane ${tag}');`);
     git('add', '.'); git('commit', '-qm', tag); git('tag', tag);
@@ -216,7 +216,7 @@ test('installed release commands can inspect and switch launchers without Git me
 });
 
 test('pin validates a complete bundle and only a canonical commit accepts activation or rollback', t => {
-  const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']); f.ok(['activate', 't2']);
+  const f = scratch(t); f.ok(['build', 't1', '--live']); f.ok(['build', 't2', '--live']); f.ok(['activate', 't2']);
   const project = path.join(f.root, 'project'); fs.mkdirSync(project);
   const git = (...args) => execFileSync('git', ['-C', project, ...args], { env: f.env, encoding: 'utf8' });
   git('init', '-qb', 'main'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid');

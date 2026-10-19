@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
+import { bundleRelease, continueRelease, forwardRelease } from '../lib/releases.mjs';
 
 import { acquireWatcherLock } from './lock.mjs';
 import { readReport } from '../lib/report.mjs';
@@ -321,7 +322,7 @@ async function detachWatcher() {
       resolve();
     });
   });
-  process.stdout.write(`${JSON.stringify({ run: runId, pid: child.pid, identity, log: logPath })}\n`);
+  process.stdout.write(`${JSON.stringify({ run: runId, pid: child.pid, identity, log: logPath, release: bundleRelease() })}\n`);
 }
 
 function acquireLock() {
@@ -545,6 +546,21 @@ async function watch() {
 }
 
 try {
+  // A mutable entry used to re-arm an admitted dispatch must recover its
+  // original bundle before considering the project's next-admission pin.
+  const actual = bundleRelease();
+  let saved;
+  if (actual.commit && path.resolve(process.argv[1]) !== SELF) {
+    const current = readRun();
+    if (current.meta?.dispatch_journal) {
+      const receipt = JSON.parse(fs.readFileSync(current.meta.dispatch_journal, 'utf8'));
+      if (receipt.run !== runId) throw Error('dispatch receipt does not match watched run');
+      if (!receipt.release) throw Error('operation-release-missing: identify the legacy dispatch runtime before re-arming');
+      saved = receipt.release;
+    }
+  }
+  const forwarded = saved ? continueRelease('watch/watch.mjs', saved) : forwardRelease('watch/watch.mjs', opt.cwd);
+  if (forwarded !== null) process.exit(forwarded);
   if (opt.detach && !dry) {
     await detachWatcher();
   } else if (opt.spawn) {

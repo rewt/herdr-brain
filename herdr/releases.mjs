@@ -5,16 +5,24 @@ import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { cliHelp } from '../lib/cli-help.mjs';
 import { productFiles } from '../lib/product-files.mjs';
-import { PIN_FILE, checkBundle, checkRelease, releaseProject, releaseHome, runRelease } from '../lib/releases.mjs';
-cliHelp(import.meta.url, 'Usage: node herdr/releases.mjs manifest ROOT | install HOME BIN | pin HOME PROJECT TAG | unpin HOME PROJECT | exec HOME ENTRY [ARGS...] | run ENTRY [ARGS...]');
+import { PIN_FILE, acceptanceRecord, checkBundle, checkRelease, releaseAcceptance, requireReadyAcceptance,
+  releaseProject, releaseHome, runRelease, pinStatus } from '../lib/releases.mjs';
+cliHelp(import.meta.url, 'Usage: node herdr/releases.mjs manifest ROOT [SUMMARY] | install HOME BIN | pin HOME PROJECT TAG | unpin HOME PROJECT | attest HOME TAG SUMMARY | pin-status HOME PROJECT [--json] | exec HOME ENTRY [ARGS...] | run ENTRY [ARGS...]');
 
 const [action, home, target, ...rest] = process.argv.slice(2);
 try {
   if (action === 'manifest') {
     const commit = fs.readFileSync(path.join(home, '.release-commit'), 'utf8').trim();
+    let acceptance = { ran: false, ready: false };
+    if (target) {
+      const bytes = fs.readFileSync(target);
+      acceptance = acceptanceRecord(bytes, commit);
+      fs.writeFileSync(path.join(home, '.release-acceptance.json'), bytes);
+    }
     const files = Object.fromEntries(productFiles(home).map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(home, file))).digest('hex')]));
-    fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, commit, files }, null, 2) + '\n');
-    checkBundle(home, { verifyFiles: true });
+    fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, commit, files, acceptance }, null, 2) + '\n');
+    const bundle = checkBundle(home, { verifyFiles: true });
+    if (target && !releaseAcceptance(bundle).ready) throw Error('acceptance-invalid: manifest does not retain its READY summary');
   } else if (action === 'install') {
     // Content-address the small router: activation never rewrites an admitted
     // launcher's code, including when rolling current back to a legacy bundle.
@@ -33,13 +41,42 @@ try {
   } else if (action === 'pin' || action === 'unpin') {
     const project = releaseProject(target);
     if (project.checkout !== project.canonical) throw Error('set release pins from the canonical checkout');
-    const release = action === 'pin' ? checkRelease(home, rest[0], { verifyFiles: true }).id : null;
+    const release = action === 'pin' ? requireReadyAcceptance(checkRelease(home, rest[0], { verifyFiles: true }), home).id : null;
     const file = path.join(project.canonical, PIN_FILE);
     if (fs.existsSync(file) && !fs.lstatSync(file).isFile()) throw Error('pin configuration must be a regular file');
     const temporary = `${file}.${randomUUID()}`;
     fs.writeFileSync(temporary, JSON.stringify({ release }, null, 2) + '\n', { flag: 'wx' });
     fs.renameSync(temporary, file);
     console.log(`release: ${file} selects ${release ?? 'global current'}; commit this file in the canonical checkout to accept the change`);
+  } else if (action === 'attest') {
+    if (rest.length !== 1) throw Error('usage: attest HOME TAG SUMMARY');
+    const release = checkRelease(home, target, { verifyFiles: true });
+    const manifest = JSON.parse(fs.readFileSync(path.join(release.root, '.release-manifest.json'), 'utf8'));
+    if (Object.hasOwn(manifest, 'acceptance')) throw Error('acceptance-not-legacy: only protocol-1 bundles without an acceptance record may be attested');
+    const acceptance = acceptanceRecord(fs.readFileSync(rest[0]), release.commit);
+    const directory = path.resolve(home, 'acceptance'); fs.mkdirSync(directory, { recursive: true });
+    const file = path.join(directory, `${release.id}.json`), temporary = `${file}.${randomUUID()}`;
+    try {
+      fs.writeFileSync(temporary, JSON.stringify({ schema: 'herdr-release-acceptance/v1', release: release.id,
+        commit: release.commit, acceptance }, null, 2) + '\n', { flag: 'wx', mode: 0o444 });
+      try { fs.linkSync(temporary, file); } // Atomic, write-once publication; never opens the bundle for writing.
+      catch (error) { if (error.code === 'EEXIST') throw Error(`acceptance-already-attested: ${release.id}`); throw error; }
+    } finally { fs.rmSync(temporary, { force: true }); }
+    console.log(`release: attested ${release.id} READY (${acceptance.summarySha256}) at ${file}`);
+  } else if (action === 'pin-status') {
+    if (rest.some(arg => arg !== '--json') || rest.length > 1) throw Error('usage: pin-status HOME PROJECT [--json]');
+    const status = pinStatus(target, home);
+    if (rest.includes('--json')) console.log(JSON.stringify(status, null, 2));
+    else {
+      console.log(`canonical: ${status.project?.canonical ?? 'none'}`);
+      console.log(`committed pin: ${status.committed?.release ?? 'global current'} at ${status.committed?.commit ?? 'no HEAD'}`);
+      if (status.prepared) console.log(`working-tree pin: ${JSON.stringify(status.prepared.config ?? status.prepared)} (prepared, not accepted)`);
+      console.log(`resolved bundle: ${status.resolved?.root ?? 'unavailable'} (manifest commit ${status.resolved?.manifestCommit ?? 'none'})`);
+      const acceptance = status.resolved?.acceptance;
+      console.log(`acceptance: ${acceptance?.ready ? `READY from ${acceptance.source}; summary sha256 ${acceptance.summarySha256}` : acceptance?.reason ?? 'unavailable'}`);
+      if (status.admissionError) console.log(`admission refused: ${status.admissionError}`);
+      console.log(`current: ${status.current ?? 'none'}`);
+    }
   } else if (action === 'exec') process.exitCode = runRelease(target, rest, { home });
   else if (action === 'run') {
     const root = fileURLToPath(new URL('../', import.meta.url));

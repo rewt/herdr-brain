@@ -1,4 +1,10 @@
 import fs from 'node:fs';
+import path from 'node:path';
+export function writeSummary(summary, summaryFile) {
+  const bytes = JSON.stringify(summary, null, 2) + '\n';
+  fs.writeFileSync(path.join(summary.evidence, 'summary.json'), bytes);
+  if (summaryFile) fs.writeFileSync(path.resolve(summaryFile), bytes);
+}
 export const retainedRoots = (roots) => roots.filter((directory) => fs.existsSync(directory));
 export function gateOutcome(results) {
   const counts = Object.fromEntries(['PASS', 'FAIL', 'PENDING', 'SKIP'].map((status) => [status, results.filter((v) => v.status === status).length]));

@@ -3,10 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { bundleRelease, forwardRelease } from '../lib/releases.mjs';
+import { bundleRelease, forwardRelease, continueRelease, releaseProject } from '../lib/releases.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
-import { writeFileAtomic } from '../lib/store.mjs';
+import { writeFileAtomic, findOrgDir } from '../lib/store.mjs';
 import { enterSupervisor } from './entry.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { coldStart, renderColdStart, briefSize, receiptDirectory } from './context.mjs';
@@ -32,6 +32,32 @@ const completedJob = (queue, id) => {
   return job ? { ...job, ...job.result } : null;
 };
 const jobAttempt = (receipt, id) => attempts(receipt).find((a) => a.queue?.jobs?.some((j) => j.id === id));
+
+// A restarted supervisor may arrive through a newer pin/current. Existing
+// promotion requests own their original runtime, including completion handling.
+function requestRelease(action, requested, opt) {
+  if (!['handle', 'promote'].includes(action)) return null;
+  const run = requested ?? (opt.notice ? noticeRun(opt.notice) : null);
+  const job = action === 'handle' && /^\[promote-queue\] id=([a-zA-Z0-9-]+) lane=/.exec(opt.notice ?? '')?.[1];
+  if (!/^R-\d+$/.test(run ?? '') && !job) return null;
+  const orgPath = opt.org ?? findOrgDir({ cwd: opt.repo });
+  if (!orgPath) return null;
+  const org = fs.realpathSync(orgPath), project = releaseProject(opt.repo);
+  const directory = receiptDirectory(org, project.identity);
+  let saved;
+  if (job && fs.existsSync(directory)) {
+    saved = fs.readdirSync(directory).filter(name => /^R-\d+\.json$/.test(name))
+      .map(name => JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8'))).find(receipt => jobAttempt(receipt, job));
+  } else if (run && fs.existsSync(path.join(directory, `${run}.json`))) {
+    saved = JSON.parse(fs.readFileSync(path.join(directory, `${run}.json`), 'utf8'));
+  }
+  if (!saved) return null;
+  if (saved.identity !== project.identity || saved.org !== org || (run && saved.run !== run)) throw Error('promotion receipt identity changed');
+  const actual = bundleRelease();
+  if (!saved.release && actual.commit && path.resolve(process.argv[1]) !== path.join(actual.root, 'supervisor/supervisor.mjs'))
+    throw Error('operation-release-missing: identify the legacy promotion runtime before resuming');
+  return saved.release ?? null;
+}
 export function main(argv = process.argv.slice(2)) {
   const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|safe-point|status|entry|checkpoint|handle|promote [OPTIONS]", args: argv, allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
@@ -43,9 +69,10 @@ export function main(argv = process.argv.slice(2)) {
     'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'accept-findings': { type: 'boolean' },
     'required-tests': { type: 'string' }, 'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
   } });
-  const forwarded = forwardRelease('supervisor/supervisor.mjs', opt.repo);
-  if (forwarded !== null) { process.exitCode = forwarded; return; }
   const [action = 'brief', requested] = positionals;
+  const admitted = requestRelease(action, requested, opt);
+  const forwarded = admitted ? continueRelease('supervisor/supervisor.mjs', admitted) : forwardRelease('supervisor/supervisor.mjs', opt.repo);
+  if (forwarded !== null) { process.exitCode = forwarded; return; }
   let requiredTests = opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']);
   if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('invalid required test files');
   if (opt['required-tests'] !== undefined && action !== 'promote') throw Error('--required-tests belongs to promote');

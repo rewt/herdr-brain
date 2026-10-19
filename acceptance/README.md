@@ -33,6 +33,8 @@ scratch evidence directory. PASS means the case completed. Product failures are
 FAIL; unavailable host prerequisites and measured load timeouts are PENDING.
 Cleanup failures retain their owned roots for inspection. `--keep` retains scratch
 artifacts; credentials are always removed. Successful cleanup leaves only evidence.
+The build passes `--summary-file FILE` to retain an exact copy of the final
+summary before sealing its bundle; the ordinary evidence summary is still written.
 
 The gate needs Node, Git, Bash, zsh, rg, tar, npm and Herdr. It never mutates a live
 project record or operator pane. Focus monitoring and ownership checks remain

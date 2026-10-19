@@ -1,0 +1,508 @@
+{
+  "candidate": "/Users/rewt/.local/share/herdr-monitor/releases/rc-20261019T042359000Z-cc585d9f33.partial",
+  "candidateCommit": "cc585d9f334c9842b459ef2b7ff3f693d57eb08b",
+  "elapsedSeconds": 818,
+  "counts": {
+    "PASS": 19,
+    "FAIL": 0,
+    "PENDING": 0,
+    "SKIP": 0
+  },
+  "ready": true,
+  "evidence": "/private/tmp/herdr-acceptance-o2GjW2/evidence",
+  "results": [
+    {
+      "id": "01",
+      "key": "candidate-snapshot",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "/Users/rewt/.local/share/herdr-monitor/releases/rc-20261019T042359000Z-cc585d9f33.partial: cc585d9f334c9842b459ef2b7ff3f693d57eb08b",
+      "load": {
+        "samples": 2,
+        "startedAt": 1792387253842,
+        "endedAt": 1792387254504,
+        "peak": {
+          "at": 1792387253842,
+          "averages": [
+            3.64111328125,
+            3.5634765625,
+            4.029296875
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "key": "new-project-record",
+      "name": "New project: record discovers and populates",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "load": {
+        "samples": 8,
+        "startedAt": 1792387254540,
+        "endedAt": 1792387254647,
+        "peak": {
+          "at": 1792387254540,
+          "averages": [
+            3.64111328125,
+            3.5634765625,
+            4.029296875
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "key": "new-project-routes",
+      "name": "New project: routes resolve without config",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "load": {
+        "samples": 5,
+        "startedAt": 1792387254647,
+        "endedAt": 1792387254686,
+        "peak": {
+          "at": 1792387254647,
+          "averages": [
+            3.64111328125,
+            3.5634765625,
+            4.029296875
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "key": "supervisor-policy",
+      "name": "New project: foreground supervisor context",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "foreground supervisor cold start reads the initialized record without entry adapters",
+      "load": {
+        "samples": 5,
+        "startedAt": 1792387254686,
+        "endedAt": 1792387254760,
+        "peak": {
+          "at": 1792387254686,
+          "averages": [
+            3.64111328125,
+            3.5634765625,
+            4.029296875
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "key": "herdr-fixture",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "load": {
+        "samples": 79,
+        "startedAt": 1792387254760,
+        "endedAt": 1792387255582,
+        "peak": {
+          "at": 1792387254760,
+          "averages": [
+            3.64111328125,
+            3.5634765625,
+            4.029296875
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "05.jsonl"
+    },
+    {
+      "id": "06",
+      "key": "configured-cycle",
+      "name": "Configured cycle: dispatch/report/ingest/promote/close",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-1: one notice, recorded report, green fast-forward, lane removed; red/dirty gates refused",
+      "load": {
+        "samples": 68,
+        "startedAt": 1792387255582,
+        "endedAt": 1792387322835,
+        "peak": {
+          "at": 1792387321537,
+          "averages": [
+            3.75634765625,
+            3.609375,
+            4.00634765625
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "06.jsonl"
+    },
+    {
+      "id": "07",
+      "key": "promotion-queue",
+      "name": "Unconfigured promotion queue: FIFO, notices and refusal",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "unconfigured project: two default npm gates promoted FIFO, lanes closed; dirty refusal kept its lane; three supervisor PTY notices",
+      "load": {
+        "samples": 318,
+        "startedAt": 1792387322836,
+        "endedAt": 1792387355666,
+        "peak": {
+          "at": 1792387351101,
+          "averages": [
+            3.86181640625,
+            3.62060546875,
+            3.99365234375
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "07.jsonl"
+    },
+    {
+      "id": "08",
+      "key": "missing-worker",
+      "name": "Failure path: missing worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-2: matching intermediate notice, watcher alive, no ingestion; abandoned watcher exited, unresolved worker kept for scratch cleanup",
+      "load": {
+        "samples": 37,
+        "startedAt": 1792387355667,
+        "endedAt": 1792387419136,
+        "peak": {
+          "at": 1792387355667,
+          "averages": [
+            3.86181640625,
+            3.62060546875,
+            3.99365234375
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "08.jsonl"
+    },
+    {
+      "id": "09",
+      "key": "invalid-worker",
+      "name": "Failure path: invalid worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-3: matching intermediate notice, watcher alive, no ingestion; abandoned watcher exited, unresolved worker kept for scratch cleanup",
+      "load": {
+        "samples": 37,
+        "startedAt": 1792387419137,
+        "endedAt": 1792387482723,
+        "peak": {
+          "at": 1792387419137,
+          "averages": [
+            3.2255859375,
+            3.49169921875,
+            3.91748046875
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "09.jsonl"
+    },
+    {
+      "id": "10",
+      "key": "blocked-worker",
+      "name": "Failure path: blocked worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-4: matching intermediate notice, watcher alive, no ingestion; abandoned watcher exited, unresolved worker kept for scratch cleanup",
+      "load": {
+        "samples": 37,
+        "startedAt": 1792387482724,
+        "endedAt": 1792387546203,
+        "peak": {
+          "at": 1792387545457,
+          "averages": [
+            5.029296875,
+            3.8369140625,
+            3.97802734375
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "10.jsonl"
+    },
+    {
+      "id": "11",
+      "key": "fix-round",
+      "name": "Fix round: same worker, fresh durable run",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-5 -> R-6: blocked report then done, same PTY, distinct run/report",
+      "load": {
+        "samples": 74,
+        "startedAt": 1792387546204,
+        "endedAt": 1792387674557,
+        "peak": {
+          "at": 1792387609241,
+          "averages": [
+            13.54296875,
+            5.865234375,
+            4.68896484375
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "11.jsonl"
+    },
+    {
+      "id": "12",
+      "key": "watch-grace",
+      "name": "Watch cutover: idle grace and exclusive watcher",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "900-second configuration stayed quiet for observed interval, resume/report woke it, duplicate refused (full 900s expiry not tested)",
+      "load": {
+        "samples": 167,
+        "startedAt": 1792387674558,
+        "endedAt": 1792387758359,
+        "peak": {
+          "at": 1792387674558,
+          "averages": [
+            7.6220703125,
+            5.79443359375,
+            4.75830078125
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "12.jsonl"
+    },
+    {
+      "id": "13",
+      "key": "housekeeping",
+      "name": "Housekeeping closes only eligible finished workers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved",
+      "load": {
+        "samples": 116,
+        "startedAt": 1792387758360,
+        "endedAt": 1792387959028,
+        "peak": {
+          "at": 1792387823350,
+          "averages": [
+            8.29638671875,
+            6.478515625,
+            5.162109375
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "13.jsonl"
+    },
+    {
+      "id": "14",
+      "key": "scratch-release",
+      "name": "Scratch release build/activate/rollback",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "immutable scratch releases and launcher activation and rollback checked in an isolated home",
+      "load": {
+        "samples": 56,
+        "startedAt": 1792387959029,
+        "endedAt": 1792387962706,
+        "peak": {
+          "at": 1792387959029,
+          "averages": [
+            3.35693359375,
+            5.109375,
+            4.796875
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "14.jsonl"
+    },
+    {
+      "id": "15",
+      "key": "default-cycle",
+      "name": "New project: default supervisor dispatch/watch/ingest cycle",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-1: supervisor initialized record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation, fast-forward and record completion passed",
+      "load": {
+        "samples": 629,
+        "startedAt": 1792387962707,
+        "endedAt": 1792388040849,
+        "peak": {
+          "at": 1792387966836,
+          "averages": [
+            3.86865234375,
+            5.15625,
+            4.81640625
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "15.jsonl"
+    },
+    {
+      "id": "16",
+      "key": "settle-cycle",
+      "name": "New project: report/settle/fix/settle/promotable without config",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-1 -> R-2: actual record/review/dispatch/watch, suite deferred to promotion, no project config, scripted transport and claim check, no model",
+      "load": {
+        "samples": 61,
+        "startedAt": 1792388040850,
+        "endedAt": 1792388050959,
+        "peak": {
+          "at": 1792388040850,
+          "averages": [
+            2.4169921875,
+            4.4609375,
+            4.5791015625
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "16.jsonl"
+    },
+    {
+      "id": "17",
+      "key": "supervisor-cycle",
+      "name": "New project: fresh/history supervisor, notices, fix, promotion and record completion",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-1 -> R-2: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicate original reports return supersession, correction reports reuse receipts; queue and final-report replays preserve explicit reopening; no config or model",
+      "load": {
+        "samples": 176,
+        "startedAt": 1792388050960,
+        "endedAt": 1792388069802,
+        "peak": {
+          "at": 1792388066979,
+          "averages": [
+            2.61279296875,
+            4.3056640625,
+            4.517578125
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "17.jsonl"
+    },
+    {
+      "id": "18",
+      "key": "scope-cleanup",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "all created workspaces closed; only evidence retained",
+      "load": {
+        "samples": 37,
+        "startedAt": 1792388069802,
+        "endedAt": 1792388070912,
+        "peak": {
+          "at": 1792388069802,
+          "averages": [
+            2.61279296875,
+            4.3056640625,
+            4.517578125
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "18.jsonl"
+    },
+    {
+      "id": "19",
+      "key": "operator-focus",
+      "name": "Background work preserves operator focus",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "2752 samples plus pane_focused events over 818094ms; zero harness focus changes; 0 external changes recorded and re-baselined; w2XS:p2 -> w2XS:p2",
+      "load": {
+        "samples": 3,
+        "startedAt": 1792388070913,
+        "endedAt": 1792388071085,
+        "peak": {
+          "at": 1792388070913,
+          "averages": [
+            2.61279296875,
+            4.3056640625,
+            4.517578125
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "19.jsonl"
+    }
+  ],
+  "load": {
+    "samples": 1962,
+    "startedAt": 1792387252939,
+    "endedAt": 1792388071086,
+    "peak": {
+      "at": 1792387609241,
+      "averages": [
+        13.54296875,
+        5.865234375,
+        4.68896484375
+      ],
+      "cpus": 18,
+      "threshold": 18
+    },
+    "heavy": false
+  },
+  "credentialResidue": [],
+  "retainedDiscoveryRoots": []
+}

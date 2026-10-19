@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Immutable local releases. The project supervisor ships them (see supervisor/PROTOCOL.md).
 # Usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status
-#        release.sh pin TAG [PROJECT] | unpin [PROJECT] | exec ENTRY [ARGS...]
+#        release.sh pin TAG [PROJECT] | unpin [PROJECT] | pin-status [PROJECT] [--json]
+#        release.sh attest TAG SUMMARY.json | exec ENTRY [ARGS...]
 # ship = build (release gate in the archive) + activate + check the installed launchers; it rolls
 # back to the previous release if that check fails. Agents run it as one bare command. A built tag is
 # never rebuilt: after a failed ship cut a new tag; if a build succeeded but activation never ran,
@@ -61,9 +62,11 @@ process.exitCode = run.status ?? (run.signal ? 128 + (os.constants.signals[run.s
 NODE
   )
   if [ "$live" = --live ]; then
-    (cd "$dir.partial" && node acceptance/run.mjs --candidate "$dir.partial")
+    (cd "$dir.partial" && node acceptance/run.mjs --candidate "$dir.partial" --summary-file "$dir.partial/.release-acceptance.json")
+    node "$TOOLS" manifest "$dir.partial" "$dir.partial/.release-acceptance.json"
+  else
+    node "$TOOLS" manifest "$dir.partial"
   fi
-  node "$TOOLS" manifest "$dir.partial"
   mv "$dir.partial" "$dir"
   chmod -R a-w "$dir"
   say "built $tag at $dir ($(cut -c1-8 "$dir/.release-commit"))"
@@ -154,6 +157,16 @@ case "${1:-}" in
   status) [ $# -eq 1 ] || die "usage: release.sh status"; status ;;
   pin) [ $# -ge 2 ] && [ $# -le 3 ] || die "usage: release.sh pin TAG [PROJECT]"; node "$TOOLS" pin "$HOME_DIR" "${3:-$PWD}" "$2" ;;
   unpin) [ $# -le 2 ] || die "usage: release.sh unpin [PROJECT]"; node "$TOOLS" unpin "$HOME_DIR" "${2:-$PWD}" ;;
+  attest) [ $# -eq 3 ] || die "usage: release.sh attest TAG SUMMARY.json"; valid_tag "$2"; node "$TOOLS" attest "$HOME_DIR" "$2" "$3" ;;
+  pin-status)
+    shift
+    project=$PWD; json=; project_set=
+    for arg in "$@"; do
+      if [ "$arg" = --json ] && [ -z "$json" ]; then json=--json
+      elif [ -z "$project_set" ] && [[ "$arg" != --* ]]; then project=$arg; project_set=1
+      else die "usage: release.sh pin-status [PROJECT] [--json]"; fi
+    done
+    node "$TOOLS" pin-status "$HOME_DIR" "$project" ${json:+"$json"} ;;
   exec) [ $# -ge 2 ] || die "usage: release.sh exec ENTRY [ARGS...]"; shift; node "$TOOLS" run "$@" ;;
-  *) die "usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status | pin TAG [PROJECT] | unpin [PROJECT] | exec ENTRY [ARGS...]" ;;
+  *) die "usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status | pin TAG [PROJECT] | unpin [PROJECT] | attest TAG SUMMARY.json | pin-status [PROJECT] [--json] | exec ENTRY [ARGS...]" ;;
 esac

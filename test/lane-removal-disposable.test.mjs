@@ -26,8 +26,7 @@ test('integrated lane retires with oversized ignored disposable trees, recording
   for (const name of disposable) write(f, `${name}/package/output`, 'rebuildable');
   for (const relative of ['node_modules/.pnpm/pkg/node_modules/@scope/pkg/build/lib/key/wallet-import-format.js',
     'node_modules/.pnpm/pkg/node_modules/@scope/pkg/build/lib/schema/wallet-template.js',
-    'node_modules/package/private-key.pem', 'dist/.env', 'target/.local-live/state']) write(f, relative, 'synthetic dependency fixture');
-  protect(f, ['node_modules/**', 'dist/.env', 'target/**']);
+    'node_modules/package/private-key.pem', 'dist/.env', 'target/.local-live-notes/state']) write(f, relative, 'synthetic dependency fixture');
   const large = write(f, 'node_modules/package/output\n.bin', ''); fs.truncateSync(large, 256 * 1024 * 1024 + 1);
   fs.mkdirSync(path.join(f.lane, 'node_modules/empty'));
   const external = path.join(f.scratch, 'external'); fs.writeFileSync(external, 'external bytes stay outside the archive');
@@ -238,12 +237,13 @@ for (const context of ['cwd', 'lane', 'topic']) test(`a relative reference claim
   assert.equal(fs.existsSync(path.join(proof.directory, 'files/build/claimed-sibling')), false);
 });
 
-test('a claimed disposable directory does not inspect dependency names for protected state', t => {
+test('a claimed disposable directory still keeps protected state without copying', t => {
   const f = fixture(t, { occupied: false }); ignore(f, ['node_modules/']);
   write(f, 'node_modules/pkg/.local-live/fixture', 'claimed fixture'); protect(f, ['node_modules/**']);
   fs.writeFileSync(path.join(f.org, 'references/local.json'), JSON.stringify({ path: path.join(f.lane, 'node_modules/pkg') }));
-  const proof = preserveLaneEvidence(options(f));
-  assert.equal(fs.readFileSync(path.join(proof.directory, 'files/node_modules/pkg/.local-live/fixture'), 'utf8'), 'claimed fixture');
+  assert.throws(() => preserveLaneEvidence(options(f)), /protected wallet\/secret\/live state at node_modules; lane kept without copying/);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+  assert.ok(fs.existsSync(path.join(f.lane, 'node_modules/pkg/.local-live/fixture')));
 });
 
 test('protected configuration errors keep before evidence payloads are read', t => {
@@ -266,7 +266,7 @@ test('recursive project globs cover root and nested paths and are reread during 
 });
 
 test('claim indexing inventories a pnpm-sized ignored tree with many declared artifacts', t => {
-  const f = fixture(t, { occupied: false }); ignore(f, ['node_modules/']); protect(f, ['node_modules/**']);
+  const f = fixture(t, { occupied: false }); ignore(f, ['node_modules/']);
   const count = 16647, directory = 'node_modules/.pnpm/pkg/node_modules/@scope/pkg/build/lib/schema';
   fs.mkdirSync(path.join(f.lane, directory), { recursive: true });
   for (let i = 0; i < count; i++) fs.writeFileSync(path.join(f.lane, directory, `wallet-template-${i}.js`), '');

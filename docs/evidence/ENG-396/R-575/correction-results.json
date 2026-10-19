@@ -1,0 +1,50 @@
+{
+  "tested_head": "5c039cff24afc161913c9f2f5e847b846441a3ba",
+  "passed_witnesses": [
+    "cohort activation cannot be restarted by configuration, a later note or a reviewed manifest refresh",
+    "only supervisor decisions on the reviewed activation item can anchor or bind a digest",
+    "ordinary renderer-signature skips committed admission while offline manifest tests stay usable",
+    "ordinary renderer-range skips committed admission while offline manifest tests stay usable",
+    "ordinary renderer-deleted skips committed admission while offline manifest tests stay usable",
+    "ordinary renderer-mode skips committed admission while offline manifest tests stay usable",
+    "ordinary validation-deleted skips committed admission while offline manifest tests stay usable",
+    "ordinary validation-renamed skips committed admission while offline manifest tests stay usable",
+    "ordinary validation-mode skips committed admission while offline manifest tests stay usable",
+    "ordinary confirmation-changed skips committed admission while offline manifest tests stay usable",
+    "ordinary confirmation-deleted skips committed admission while offline manifest tests stay usable",
+    "ordinary inventory-changed skips committed admission while offline manifest tests stay usable",
+    "supervisor promotion forwards required component tests into the real queue",
+    "green-pass promotion replays deferred and component checks and verifies train completion",
+    "bare promotion retains required tests after not-queued and refuses explicit removal",
+    "bare promotion retains required tests after refused and refuses explicit removal",
+    "bare promotion retains required tests after timeout and refuses explicit removal",
+    "replayed green promotion verifies the saved union of deferred and component checks",
+    "legacy receipts fall back to deferred evidence while explicit requirements survive reexecution",
+    "tier selection covers every current test once in promotion or release and excludes support modules"
+  ],
+  "skips": [
+    "    ok 1 - committed admission is explicitly skipped for stale pins # SKIP stale committed manifest: boundary version drift: lib/unrelated.mjs",
+    "    ok 1 - committed admission is explicitly skipped for stale pins # SKIP stale committed manifest: runtime/configuration inventory drift",
+    "    ok 1 - committed admission is explicitly skipped for stale pins # SKIP stale committed manifest: runtime/configuration inventory drift",
+    "    ok 1 - committed admission is explicitly skipped for stale pins # SKIP stale committed manifest: GREEN_REACH_UNKNOWN: external configuration drift: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/green-probe-3Vuv0m/.git/launcher.json",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: width must be an integer from 80 to 240",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: width must be an integer from 80 to 240",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: component drift: board/render.mjs",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: component drift: board/render.mjs",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: component validation drift: board/render.mjs",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: component validation drift: board/render.mjs",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: component validation drift: board/render.mjs",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: consumer evidence drift: docs/confirmation.txt",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: consumer evidence drift: docs/confirmation.txt",
+    "    ok 1 - stale component, validation or evidence is an explicit admission-only skip # SKIP stale committed manifest: consumer evidence drift: docs/inventory.json",
+    "ok 242 - real-main committed pins admit while current and boundary controls always refuse # SKIP enable-time probe only; set HERDR_GREEN_ENABLE_PROBE=1 explicitly"
+  ],
+  "native_process_diagnostics": [
+    "# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent",
+    "            \"reason\": \"PROMOTE_NATIVE_PROCESS_SOURCE_REFUSED: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; native permissions remain authoritative; no relaunch\",",
+    "# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent",
+    "# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent",
+    "# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent",
+    "# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent"
+  ]
+}

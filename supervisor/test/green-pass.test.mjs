@@ -15,7 +15,7 @@ import { fixture as settleFixture } from '../../settle/test/fixture.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const renderer = fs.readFileSync(new URL('../../board/render.mjs', import.meta.url), 'utf8');
-function setup(t) {
+function setup(t, { binary = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'green-manifest-')));
   fixtureFleet(t, root); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const repo = path.join(root, 'brain'), workspace = path.join(root, 'lane');
@@ -34,8 +34,9 @@ function setup(t) {
   put('board/render.mjs', renderer);
   const brain = { repo, identity: gitProject(repo).identity, org: path.join(repo, '.org') };
   const sourceFiles = new Map(BOOTSTRAP_FILES.concat(['board/render.mjs', 'board/rows.mjs', 'board/board.mjs', 'supervisor/reconcile.mjs', 'bin/org.mjs', 'supervisor/autopilot.mjs', 'housekeeping/config.mjs', 'lib/state.mjs', 'test/board-view.test.mjs']).map(file => [file, { mode: '100644' }]));
+  if (binary) { put('lib/native/launcher', Buffer.from([0xcf, 0xfa, 0, 0xfe])); fs.chmodSync(path.join(repo, 'lib/native/launcher'), 0o755); sourceFiles.set('lib/native/launcher', { mode: '100755' }); }
   const external = path.join(root, 'launcher.json'); fs.writeFileSync(external, '{}');
-  const manifest = { ...buildManifest({ files: sourceFiles, read: file => fs.readFileSync(path.join(repo, file), 'utf8') }, { bindings: { brain }, externalInputs: [external] }), exclusions: GREEN_CONTRACTS.exclusions };
+  const manifest = { ...buildManifest({ files: sourceFiles, bytes: file => fs.readFileSync(path.join(repo, file)), read: file => fs.readFileSync(path.join(repo, file), 'utf8') }, { bindings: { brain }, externalInputs: [external] }), exclusions: GREEN_CONTRACTS.exclusions };
   put('supervisor/green-contracts.json', JSON.stringify(manifest));
   git(['add', '.']); git(['commit', '-qm', 'Reviewed bootstrap fixture']);
   const base = git(['rev-parse', 'HEAD']); git(['worktree', 'add', '-qb', 'lane/change', workspace]);
@@ -48,6 +49,18 @@ function setup(t) {
     scope: (extra = {}) => checker.scope({ ...options(), ...extra }) };
 }
 
+test('raw binary launcher pins and Git selector environment changes preserve containment', t => {
+  const f = setup(t, { binary: true }); f.change(); const opts = f.options();
+  assert.equal(f.scope().eligible, true);
+  for (const key of ['GIT_CONFIG_SYSTEM', 'GIT_R566_NEW_SELECTOR']) {
+    const prior = process.env[key];
+    try { process.env[key] = '/unreviewed/config'; assert.equal(f.checker.scope(opts).code, 'GREEN_REACH_UNKNOWN'); }
+    finally { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; }
+  }
+  assert.equal(f.scope().eligible, true);
+  f.put('lib/native/launcher', Buffer.from([0xcf, 0xfb, 0, 0xfe]));
+  assert.equal(f.scope().code, 'GREEN_REACH_UNKNOWN');
+});
 test('a real committed renderer candidate qualifies under a candidate-immutable manifest', t => {
   const f = setup(t); f.change(); const result = f.scope();
   assert.equal(result.eligible, true, JSON.stringify(result)); assert.equal(result.area, 'green');

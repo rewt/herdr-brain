@@ -59,17 +59,19 @@ function readTree(git, ref, root) {
     files.set(m[4], { mode: m[1], oid: m[3] });
   }
   if (files.size > 10000) throw Error('Git tree exceeds 10000 files');
-  return { files, root, read(file) {
+  const bytes = file => {
     if (!cache.has(file)) {
       const entry = files.get(file);
       if (!entry || !['100644', '100755'].includes(entry.mode)) throw Error(`non-regular input: ${file}`);
-      const bytes = git(['cat-file', 'blob', entry.oid], true); total += bytes.length;
-      if (bytes.length > 2 * 1024 * 1024 || total > 32 * 1024 * 1024) throw Error('source inventory exceeds byte limit');
-      cache.set(file, text(bytes));
+      const value = git(['cat-file', 'blob', entry.oid], true); total += value.length;
+      if (value.length > 2 * 1024 * 1024 || total > 32 * 1024 * 1024) throw Error('source inventory exceeds byte limit');
+      cache.set(file, value);
     }
     return cache.get(file);
-  } };
+  };
+  return { files, root, bytes, read: file => text(bytes(file)) };
 }
+
 function declaredPair(pair) {
   if (!pair || typeof pair !== 'object' || Array.isArray(pair) || Object.keys(pair).length !== 3 ||
       !['repo', 'identity', 'org'].every(k => typeof pair[k] === 'string' && path.isAbsolute(pair[k]) && fs.realpathSync(pair[k]) === pair[k])) identityError('declarations require canonical repo, identity and org paths');
@@ -107,12 +109,14 @@ export function createGreenCohort(sourceRoot = root) {
   const policyBytes = sourceRoot === root ? contractBytes : fs.readFileSync(path.join(sourceRoot, contractFile), 'utf8');
   const manifest = JSON.parse(policyBytes);
   const snapshots = new Map();
-  const trusted = (file, expectedMode) => {
+  const trusted = (file, expectedMode, raw = false) => {
     const target = path.join(fs.realpathSync(sourceRoot), file);
     const stat = fs.lstatSync(target);
     if (!safePath(file) || fs.realpathSync(target) !== target || !stat.isFile() || stat.size > 2 * 1024 * 1024 ||
         (expectedMode && ((stat.mode & 0o111) ? '100755' : '100644') !== expectedMode)) throw Error('non-regular, oversized or changed-mode trusted input');
-    const bytes = text(fs.readFileSync(target));
+    const value = fs.readFileSync(target);
+    if (raw) return value;
+    const bytes = text(value);
     if (snapshots.has(file) && snapshots.get(file) !== bytes) throw Error(`trusted source drift: ${file}`);
     return bytes;
   };

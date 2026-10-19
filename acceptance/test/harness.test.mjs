@@ -45,6 +45,37 @@ test('the real scripted supervisor presents an empty composer before publishing 
   child.kill('SIGTERM'); assert.equal((await waitForExit(child)).code, 0);
 });
 
+test('the scripted agent launch has a real Codex executable identity without starting a model', t => {
+  const root = scratch(t), binary = path.join(root, 'native.mjs');
+  for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'environment.mjs', 'poll.mjs'])
+    fs.copyFileSync(path.join(source, 'acceptance', file), path.join(root, file));
+  fs.copyFileSync(path.join(source, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
+  fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: ['owned'], panes: ['owned:pane'], tabs: [] }));
+  const observed = path.join(root, 'worker-observed.json');
+  fs.writeFileSync(path.join(root, 'worker.mjs'), `import fs from 'node:fs';
+    import {lookupProcess} from ${JSON.stringify(path.join(source, 'lib/processes.mjs'))};
+    fs.writeFileSync(${JSON.stringify(observed)},JSON.stringify({executable:process.execPath,node:process.versions.node,
+      args:process.argv.slice(2),process:lookupProcess(process.pid,{identityOnly:true})}));`);
+  fs.writeFileSync(binary, `#!${process.execPath}
+    import {spawnSync} from 'node:child_process';const a=process.argv.slice(2);let result={};
+    if(a[0]==='pane'&&a[1]==='get')result={pane:{pane_id:'owned:pane',workspace_id:'owned',foreground_cwd:${JSON.stringify(root)}}};
+    if(a[0]==='pane'&&a[1]==='run'){
+      const r=spawnSync('/bin/sh',['-c',a[3]],{encoding:'utf8'});
+      if(r.status!==0){console.error(r.stderr);process.exit(1);}
+    }
+    if(a[0]==='agent')result={agent:{pane_id:'owned:pane',agent_status:'idle'}};
+    console.log(JSON.stringify({result}));`, { mode: 0o755 });
+  const reply = spawnSync(process.execPath, [path.join(root, 'herdr.mjs'), 'agent', 'start', 'offline-worker', '--kind', 'codex', '--pane', 'owned:pane'],
+    { env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8', timeout: 15000 });
+  assert.equal(reply.status, 0, reply.stdout + reply.stderr);
+  const worker = JSON.parse(fs.readFileSync(observed));
+  assert.equal(worker.executable, path.join(root, 'script-runtime/codex'));
+  assert.equal(worker.node, process.versions.node);
+  assert.deepEqual(worker.args, [root, 'worker', 'offline-worker']);
+  assert.equal(worker.process.ok, true, worker.process.error);
+  assert.equal(worker.process.value.command, '[codex]', 'the native process reader sees the registered agent kind');
+});
+
 test('scratch promotion inherits the actual gate slot while project and session metadata are scrubbed', async t => {
   const root = scratch(t);
   const inherited = { ...process.env, MONITOR_TEST_SLOT_PATH: path.join(root, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'compat'),

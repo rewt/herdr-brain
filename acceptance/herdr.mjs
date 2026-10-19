@@ -191,7 +191,19 @@ try {
   }
   if (group === 'agent' && verb === 'start') {
     const pane = option('--pane');
-    const command = [process.execPath, path.join(root, 'worker.mjs'), root, 'worker', target].map(quote).join(' ');
+    // report-agent registers the script as Codex. Give its real executable the
+    // same name so retirement sees an honest kernel/foreground match. Keep the
+    // forbidden model executables in bin/ untouched; this is only a Node copy.
+    const executable = path.join(root, 'script-runtime', 'codex');
+    fs.mkdirSync(path.dirname(executable), { recursive: true, mode: 0o700 });
+    if (!fs.existsSync(executable)) {
+      const temporary = `${executable}.${process.pid}.tmp`;
+      try {
+        fs.copyFileSync(process.execPath, temporary, fs.constants.COPYFILE_FICLONE);
+        fs.renameSync(temporary, executable);
+      } finally { fs.rmSync(temporary, { force: true }); }
+    }
+    const command = [executable, path.join(root, 'worker.mjs'), root, 'worker', target].map(quote).join(' ');
     body(await real(['pane', 'run', pane, command]));
     try {
       await pollNative(async deadline => {

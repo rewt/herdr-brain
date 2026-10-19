@@ -26,7 +26,7 @@
 // This is an operational guard for one development host. It excludes only the
 // runs that take it; unrelated host workloads remain outside this guard.
 
-import { resolveGateLimits, projectCommon, recordHealthyGate, historyFile, gateHistoryKey, TIMEOUT_EXIT } from "./limits.mjs";
+import { resolveGateLimits, projectCommon, recordHealthyGate, historyFile, gateHistoryKey, TIMEOUT_EXIT, RELEASE_TIMEOUT_ENV } from "./limits.mjs";
 import { stopGateGroup } from "./watchdog.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -487,7 +487,7 @@ export async function run({ positional, options, child }) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture, resource.profile && !slot.nested && !options.noSlot ? {
         telemetryPath: options.resultPath ? `${options.resultPath}.samples.jsonl` : undefined, telemetry, notes: options.measurementNotes,
-      } : null);
+      } : null, tier === 'release' ? { [RELEASE_TIMEOUT_ENV]: String(limits.wall_seconds) } : {});
       if (result.measurement) measurementAttempts.push({ attempt: attempt + 1, ...result.measurement });
       saveExecution({ ...execution, signal: received ?? result.signal,
         measurement: result.measurement ?? { status: slot.nested ? 'nested; sampling owned by top-level holder if profiled' : options.noSlot ? 'unslotted' : 'unprofiled' }, measurement_attempts: measurementAttempts,
@@ -518,7 +518,7 @@ export function shouldRetryTimeout({ status, timeout, load, childRetried = false
   return status !== 0 && status !== REFUSED_EXIT && !gateTimeout && timeout && load > 1 && !childRetried;
 }
 
-async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits, onCapture, measurementOptions) {
+async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits, onCapture, measurementOptions, childEnv) {
   const capacity = Math.max(1, Math.min(4, os.availableParallelism()));
   let load = os.loadavg()[0] / capacity;
   let timeout = false;
@@ -548,7 +548,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     tail = text.slice(-1024);
   };
   const proc = spawn(argv[0], argv.slice(1), { stdio: ["inherit", "pipe", "pipe"], detached: !slot.nested,
-    env: { ...process.env, [PATH_ENV]: lockPath, [COMPAT_PATH_ENV]: compatPath, ...(slot.token === null ? {} : { [TOKEN_ENV]: slot.token, [LEGACY_TOKEN_ENV]: slot.token }),
+    env: { ...process.env, ...childEnv, [PATH_ENV]: lockPath, [COMPAT_PATH_ENV]: compatPath, ...(slot.token === null ? {} : { [TOKEN_ENV]: slot.token, [LEGACY_TOKEN_ENV]: slot.token }),
       ...(slot.occupancyPath ? { [OCCUPANCY_ENV]: slot.occupancyPath } : {}),
       ...(retried ? { [RETRIED_ENV]: "1" } : {}) } });
   const closed = new Promise(resolve => proc.once("close", resolve));

@@ -8,6 +8,7 @@ import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs
 
 export const WALL_FLOOR_SECONDS = 600;
 export const WALL_DEFAULT_SECONDS = 4500;
+export const RELEASE_TIMEOUT_ENV = 'MONITOR_TEST_SLOT_RELEASE_TIMEOUT_SECONDS';
 export const IDLE_FLOOR_SECONDS = 300;
 export const MIN_HEALTHY_SAMPLES = 3;
 // Full promotion/release gates must keep room for the observed 10/30-minute
@@ -61,10 +62,14 @@ export function resolveGateLimits({ common, tier = 'gate', command, historyKey, 
     Number.isFinite(run.longest_silence_s) && run.longest_silence_s >= 0 && run.longest_silence_s <= run.duration_s);
   const measured = samples.length >= MIN_HEALTHY_SAMPLES;
   if (timeoutSeconds !== undefined) limitSeconds(timeoutSeconds, 'timeout_seconds');
+  // The release gate has already resolved the project's declaration (or its
+  // history/default). Its descendants must not learn a shorter wall limit.
+  const releaseTimeoutSeconds = timeoutSeconds === undefined && env[RELEASE_TIMEOUT_ENV] !== undefined
+    ? limitSeconds(Number(env[RELEASE_TIMEOUT_ENV]), RELEASE_TIMEOUT_ENV) : undefined;
   if (idleTimeoutSeconds !== undefined) limitSeconds(idleTimeoutSeconds, 'idle_timeout_seconds', { idle: true });
   return {
-    wall_seconds: timeoutSeconds ?? (measured ? Math.max(wallFloorSeconds(tier), Math.ceil(2 * Math.max(...samples.map(r => r.duration_s)))) : WALL_DEFAULT_SECONDS),
-    wall_source: timeoutSeconds !== undefined ? 'config' : measured ? 'history' : 'default',
+    wall_seconds: timeoutSeconds ?? releaseTimeoutSeconds ?? (measured ? Math.max(wallFloorSeconds(tier), Math.ceil(2 * Math.max(...samples.map(r => r.duration_s)))) : WALL_DEFAULT_SECONDS),
+    wall_source: timeoutSeconds !== undefined ? 'config' : releaseTimeoutSeconds !== undefined ? 'release' : measured ? 'history' : 'default',
     idle_seconds: idleTimeoutSeconds ?? (measured ? Math.max(IDLE_FLOOR_SECONDS, Math.ceil(3 * Math.max(...samples.map(r => r.longest_silence_s)))) : 0),
     idle_source: idleTimeoutSeconds !== undefined ? 'config' : measured ? 'history' : 'off',
   };

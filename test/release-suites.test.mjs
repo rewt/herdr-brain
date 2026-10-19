@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { tierFiles } from './helpers/tier.mjs';
 import { releasePhases, MAX_SUITE_FILES } from './helpers/release-suites.mjs';
 import { spawnScenarioChild, waitForExit } from './helpers/child.mjs';
+import { testSlotEnvironment } from './helpers/test-slot-env.mjs';
+import { RELEASE_TIMEOUT_ENV } from '../test-slot/limits.mjs';
 
 const helper = fileURLToPath(new URL('./helpers/release-suites.mjs', import.meta.url));
 const slot = fileURLToPath(new URL('../test-slot/test-slot.mjs', import.meta.url));
@@ -41,6 +43,59 @@ test('release scripts retain one shared family without retrying the entire relea
   assert.ok(scripts['test:release:steps'].endsWith(' && npm run test:release:only'));
   assert.doesNotMatch(scripts['test:release:steps'], /test-slot\.mjs run test:release:only/);
   assert.equal(scripts['test:release'], 'node test-slot/test-slot.mjs run test:release -- npm run test:release:steps');
+});
+
+test('the fresh snapshot gate passes its declared timeout through every nested release wrapper', async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'release-wall-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  // Exercise the exact build adapter without invoking release.sh or a test tier.
+  const source = fs.readFileSync(new URL('../herdr/release.sh', import.meta.url), 'utf8');
+  const adapter = source.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\nNODE/)[1];
+  for (const file of ['lanes/validation.mjs', 'test-slot/run.mjs']) {
+    const target = path.join(root, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.symlinkSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), target);
+  }
+  const scripts = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).scripts;
+  const prefixes = ['test', 'test:release:steps', 'test:release:only'].flatMap(name =>
+    [...scripts[name].matchAll(/node test-slot\/test-slot.mjs run ([\w:]+)(.*?) -- /g)]
+      .map(match => [match[1], ...match[2].trim().split(/\s+/).filter(Boolean)]));
+  assert.deepEqual(prefixes.map(([label]) => label).sort(),
+    ['test:core', 'test:cycle', 'test:lanes', 'test:acceptance', 'test:release:only'].sort());
+  // Include the adapter below test:release:only, and a deliberately tighter CLI override.
+  prefixes.push(['test:release:fixture:1'], ['explicit', '--timeout-seconds', '17']);
+  const commands = prefixes.map((args, i) => [slot, 'run', ...args, '--project-common', root,
+    '--result-path', path.join(root, `${i}.json`), '--', process.execPath, '-e', '']);
+  const driver = path.join(root, 'driver.mjs');
+  fs.writeFileSync(driver, `import {spawnSync} from 'node:child_process';
+for (const args of ${JSON.stringify(commands)}) {
+  const result = spawnSync(process.execPath, args, {env:process.env, stdio:'inherit', timeout:15000});
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+`);
+  const quote = arg => `'${arg.replaceAll("'", "'\\''")}'`;
+  const top = scripts['test:release'].split(' -- ')[0].split(' ').slice(2);
+  const command = [process.execPath, slot, ...top, '--project-common', root, '--result-path', path.join(root, 'top.json'),
+    '--', process.execPath, driver].map(quote).join(' ');
+  const lock = path.join(root, 'slot.lock');
+  const declaration = JSON.parse(fs.readFileSync(new URL('../.lane.validation.json', import.meta.url)));
+  const seconds = declaration.timeout_seconds.release;
+  fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ release: command, timeout_seconds: { release: seconds } }));
+  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
+    MONITOR_GATE_HISTORY_ROOT: path.join(root, 'history') };
+  assert.equal(env[RELEASE_TIMEOUT_ENV], undefined);
+  assert.equal(fs.existsSync(env.MONITOR_GATE_HISTORY_ROOT), false, 'fresh bundle has no gate history');
+  const result = await waitForExit(spawnScenarioChild(t, process.execPath, ['--input-type=module', '-e', adapter], { cwd: root, env }));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const topReceipt = JSON.parse(fs.readFileSync(path.join(root, 'top.json')));
+  assert.equal(topReceipt.limits.wall_seconds, seconds);
+  assert.equal(topReceipt.limits.wall_source, 'release');
+  for (const [i, [label]] of prefixes.entries()) {
+    const receipt = JSON.parse(fs.readFileSync(path.join(root, `${i}.json`)));
+    assert.equal(receipt.limits.wall_seconds, label === 'explicit' ? 17 : seconds, label);
+    assert.equal(receipt.limits.wall_source, label === 'explicit' ? 'config' : 'release', label);
+    assert.equal(receipt.exit_code, 0, label);
+  }
 });
 
 async function scenario(t, failure) {

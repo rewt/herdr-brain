@@ -233,7 +233,21 @@ pass `--timeout-seconds SECONDS`, `--project-common GIT_COMMON_DIR`, and
 `--tier TIER`; otherwise the CLI discovers the Git common directory and uses
 its label as the tier. Fast and other non-slot validation tiers use the same process-group watchdog through `runGateSync` and never acquire the host slot (`run --no-slot` on the CLI). Their healthy history is recorded under their own tier.
 
-Without an explicit limit, successful command durations in
+A `--tier release` gate exports its resolved wall limit to its command as
+`MONITOR_TEST_SLOT_RELEASE_TIMEOUT_SECONDS`. The release snapshot gate already
+reads the tagged `.lane.validation.json`, so its declared release timeout is the
+single source for the inner `test:release` wrapper and all descendant wrappers,
+including `test:core`, `test:cycle`, `test:lanes`, `test:acceptance`,
+`test:release:only` and its per-suite adapters. Each uses that full wall allowance
+(recorded with `wall_source: "release"`) before consulting its own history or the
+4500-second default. The outer gate still bounds the entire release. An explicit
+`--timeout-seconds` on any wrapper wins, allowing a deliberate narrower limit.
+This context is inherited only by the release command's process tree; promotion
+and standalone commands retain their existing resolution. Idle and bounded test
+file/suite deadlines are unchanged. Test fixtures clear the inherited release
+context along with their slot context.
+
+Without an explicit or inherited release limit, successful command durations in
 `GIT_COMMON_DIR/gate-watchdog/` supply twice the maximum of the last 20 healthy
 runs for that project, tier and command fingerprint, **only after three usable
 samples**. Samples below 180 seconds for `promotion`, 300 seconds for `release`,

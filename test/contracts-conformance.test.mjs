@@ -52,27 +52,48 @@ function fixture(t) {
   return { root, env, run, repo };
 }
 
-// Resolve once, before scratch project creation. A bad accepted pin is a failure,
-// never a fallback. Unpinned source projects still check an installed current.
+// Resolve once for the conformance cases. An absent pinned bundle skips; a
+// present but invalid bundle fails. Neither falls back to an unrelated current.
 let installed;
-function installedWriter() {
-  if (installed) return installed;
-  const pin = projectPin(source), home = releaseHome();
-  if (pin?.release) installed = { ...checkRelease(home, pin.release), selection: 'project pin' };
-  else {
+function installedWriter(cwd = source, home = releaseHome()) {
+  const pin = projectPin(cwd);
+  if (pin?.release) {
+    try { fs.lstatSync(path.join(home, 'releases', pin.release)); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      return { skip: `pinned release not installed: ${pin.release}` };
+    }
+    return { ...checkRelease(home, pin.release), selection: 'project pin' };
+  } else {
     let root;
     try { root = fs.realpathSync(path.join(home, 'current')); }
     catch (error) {
       if (error.code !== 'ENOENT') throw error;
-      return installed = { skip: 'no installed release (no project pin or current)' };
+      return { skip: 'no installed release (no project pin or current)' };
     }
     // Legacy installed bundles may predate the manifest protocol.
-    installed = fs.existsSync(path.join(root, '.release-manifest.json'))
+    return fs.existsSync(path.join(root, '.release-manifest.json'))
       ? { ...checkBundle(root), selection: 'unpinned current' }
       : { root, id: path.basename(root), selection: 'legacy unpinned current' };
   }
-  return installed;
 }
+
+test('installed writer selection skips an absent pinned bundle but rejects a present invalid bundle', t => {
+  const f = fixture(t), cwd = f.repo(), home = path.join(f.root, 'installation'), id = 'fixture-release';
+  write(path.join(cwd, '.herdr-release.json'), { release: id });
+  f.run('git', ['-C', cwd, 'add', '.herdr-release.json']);
+  f.run('git', ['-C', cwd, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'accept fixture release']);
+  const read = () => installedWriter(cwd, home), absent = { skip: `pinned release not installed: ${id}` };
+  assert.deepEqual(read(), absent, 'missing releases directory explicitly skips');
+  const other = path.join(home, 'releases/other'); fs.mkdirSync(other, { recursive: true });
+  fs.symlinkSync(other, path.join(home, 'current'));
+  assert.deepEqual(read(), absent, 'missing pinned directory skips without falling back to current');
+  const pinned = path.join(home, 'releases', id); fs.mkdirSync(pinned);
+  assert.throws(read, { code: 'ENOENT' }, 'present bundle without a manifest must fail');
+  write(path.join(pinned, '.release-manifest.json'), { schema: 'herdr-release/v999', protocol: 999 });
+  fs.writeFileSync(path.join(pinned, '.release-commit'), 'a'.repeat(40) + '\n');
+  assert.throws(read, /incomplete or incompatible release/, 'present incompatible bundle must fail');
+});
 
 const contracts = [
   ['fleet.json', ['lib/fleet.mjs'], async (f, root) => {
@@ -268,7 +289,7 @@ for (const [name, files, conform] of contracts) {
     await conform(fixture(t), source);
   });
   test(`${name}: installed writer -> current reader; compatible shape`, async t => {
-    const release = installedWriter();
+    const release = installed ??= installedWriter();
     if (release.skip) return t.skip(release.skip);
     const missing = files.filter(file => !fs.existsSync(path.join(release.root, file)));
     if (missing.length) return t.skip(`installed ${release.id} predates contract writer: ${missing.join(', ')}`);

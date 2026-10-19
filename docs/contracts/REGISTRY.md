@@ -102,12 +102,14 @@ does not claim to validate an external harness implementation.
 The installed cases resolve the source project's **committed canonical pin**
 first, or the installed `current` once when unpinned. They report the exact bundle
 and never write into it. No installation produces explicit skips; an installed
-bundle predating a contract writer produces a named per-contract skip. A broken
-accepted pin is an error, not a skip or fallback. All writes, enrollments and
+bundle predating a contract writer produces a named per-contract skip. An absent
+pinned bundle skips explicitly with its release name; a present but invalid bundle
+is an error, not a skip or fallback. All writes, enrollments and
 process-presence fixtures are disposable and offline; the in-process fleet path
 is also explicitly isolated. Promotion includes this file in
-`test/helpers/tier.mjs:30`, so release preparation's promotion coverage includes
-it too. New files otherwise default to release-only.
+the `promotion` list in `test/helpers/tier.mjs` as
+`test/contracts-conformance.test.mjs`, so release preparation's promotion coverage
+includes it too. New files otherwise default to release-only.
 
 Keep these existing drift witnesses as the authorities for their own scope:
 

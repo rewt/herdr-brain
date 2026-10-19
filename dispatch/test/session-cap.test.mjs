@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { acquireSessionCapLock, countSessions, sessionAlive, checkSessionCap, DEFAULT_SESSION_CAP } from '../session-cap.mjs';
 import { loadDiscoveredRoutes, validateRoutesConfig, mergeRoutesConfig } from '../../lanes/routes.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 
 const common = '/project/.git';
 const identity = n => ({ agent: `worker-${n}`, pane: `p-${n}`, worker_workspace: 'w', terminal_id: `t-${n}` });
@@ -68,7 +69,7 @@ test('admission locks retain live, EPERM, unknown and invalid owners or contende
     fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify(owner));
     const contender = path.join(contenders, code === 'invalid' ? 'invalid' : '123-original');
     if (source === 'contender') fs.writeFileSync(contender, '');
-    assert.throws(() => acquireSessionCapLock(common, { kill: () => {
+    assert.throws(() => acquireSessionCapLock(common, { waitMs: 0, readProcess: pid => row(pid), kill: () => {
       if (code !== 'live') throw error(code);
     } }), /locked:/);
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'))), owner);
@@ -76,6 +77,89 @@ test('admission locks retain live, EPERM, unknown and invalid owners or contende
     fs.rmSync(directory, { recursive: true });
     fs.rmSync(contenders, { recursive: true });
   }
+});
+
+test('admission installs the complete birth owner atomically and reclaims recycled owner and contender PIDs', t => {
+  const common = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-birth-lock-'));
+  t.after(() => fs.rmSync(common, { recursive: true, force: true }));
+  const directory = path.join(common, 'dispatch-session-cap'), contenders = `${directory}.contenders`;
+  const old = { pid: 123, identity: 'old birth', token: '123-old' };
+  fs.mkdirSync(directory); fs.mkdirSync(contenders);
+  fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify(old));
+  fs.writeFileSync(path.join(contenders, old.token), JSON.stringify(old));
+  const rename = fs.renameSync; let installed = false;
+  fs.renameSync = function(from, to) {
+    if (to === directory) {
+      assert.equal(fs.existsSync(directory), false);
+      assert.equal(fs.statSync(from).mode & 0o777, 0o700, 'the staging directory is private');
+      const owner = JSON.parse(fs.readFileSync(path.join(from, 'owner.json')));
+      assert.equal(owner.pid, process.pid); assert.equal(owner.identity, 'new birth');
+      installed = true;
+    }
+    return rename.call(this, from, to);
+  };
+  t.after(() => { fs.renameSync = rename; });
+  const release = acquireSessionCapLock(common, { waitMs: 0, kill: () => {}, readProcess: pid => row(pid, 'new birth') });
+  assert.equal(installed, true);
+  assert.equal(fs.existsSync(path.join(contenders, old.token)), false);
+  release(); release();
+  assert.equal(fs.existsSync(directory), false);
+  assert.deepEqual(fs.readdirSync(contenders), []);
+  assert.deepEqual(fs.readdirSync(common), ['dispatch-session-cap.contenders']);
+});
+
+test('known birth owners remain held when process evidence is denied or unavailable', t => {
+  const common = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-unknown-lock-'));
+  t.after(() => fs.rmSync(common, { recursive: true, force: true }));
+  const directory = path.join(common, 'dispatch-session-cap'); fs.mkdirSync(directory);
+  const owner = { pid: 123, identity: 'old birth' };
+  fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify(owner));
+  for (const unknown of ['EPERM', 'EIO', 'unreadable']) {
+    assert.throws(() => acquireSessionCapLock(common, { waitMs: 0,
+      kill: () => { if (unknown !== 'unreadable') throw error(unknown); },
+      readProcess: pid => pid === process.pid ? row(pid) : unknown === 'unreadable' ? { ok: false } : row(pid, 'different birth'),
+    }), e => e.code === 'DISPATCH_SESSION_CAP_LOCKED');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'))), owner);
+  }
+});
+
+test('legacy owner-less locks name inspection and manual recovery without guessing from age', t => {
+  const common = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-ownerless-'));
+  t.after(() => fs.rmSync(common, { recursive: true, force: true }));
+  const directory = path.join(common, 'dispatch-session-cap'); fs.mkdirSync(directory);
+  fs.utimesSync(directory, new Date(0), new Date(0));
+  assert.throws(() => acquireSessionCapLock(common, { readProcess: pid => row(pid) }), e => {
+    assert.equal(e.code, 'DISPATCH_SESSION_CAP_LOCK_OWNER_UNREADABLE');
+    assert.match(e.message, /owner missing or unreadable/);
+    assert.match(e.message, /inspect surviving dispatch processes, then remove this lock directory and retry/);
+    return true;
+  });
+  assert.equal(fs.existsSync(directory), true);
+  assert.deepEqual(fs.readdirSync(`${directory}.contenders`), []);
+  fs.rmSync(directory, { recursive: true });
+  acquireSessionCapLock(common, { readProcess: pid => row(pid) })();
+});
+
+test('admission waits through a short overlap and times out only at its scaled allowance', t => {
+  const common = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-wait-'));
+  t.after(() => fs.rmSync(common, { recursive: true, force: true }));
+  const directory = path.join(common, 'dispatch-session-cap');
+  const occupy = () => { fs.mkdirSync(directory); fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify({ pid: 123, identity: '100:1' })); };
+  occupy(); let clock = 0, waits = 0;
+  const options = { waitMs: 200, now: () => clock, allowance: ms => ms, kill: () => {}, readProcess: pid => row(pid) };
+  const release = acquireSessionCapLock(common, { ...options, pause: ms => {
+    clock += ms; waits++;
+    assert.deepEqual(fs.readdirSync(`${directory}.contenders`), [], 'a waiting contender must withdraw');
+    if (clock === 150) fs.rmSync(directory, { recursive: true });
+  } });
+  assert.equal(clock, 150); assert.equal(waits, 3); release();
+  occupy(); clock = 0;
+  assert.throws(() => acquireSessionCapLock(common, { ...options, waitMs: undefined,
+    allowance: ms => { assert.equal(ms, 60000); return loadTimeout(ms, 2); },
+    pause: () => { clock += 60000; },
+  }), e => e.code === 'DISPATCH_SESSION_CAP_LOCKED' && /after 120000 ms/.test(e.message));
+  assert.equal(clock, 120000);
+  assert.deepEqual(fs.readdirSync(`${directory}.contenders`), []);
 });
 
 test('records and journals count each bound session once, excluding terminal runs and other projects', () => {

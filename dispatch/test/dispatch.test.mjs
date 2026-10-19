@@ -255,23 +255,42 @@ test('a saved request rechecks the current cap before creating a worker', t => {
   assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
 });
 
-test('project admission serializes simultaneous requests through the recorded launch', async t => {
-  const f = fixture(t); capSetting(f, 1);
-  const hook = pauseHook(f, `const write=fs.writeFileSync;let once=true;fs.writeFileSync=function(file,...args) {
- const result=write.call(this,file,...args);
- if(once && String(file).endsWith('dispatch-session-cap/owner.json')) {once=false;pause();}
+function admissionHook(f, body) {
+  return pauseHook(f, `const list=fs.readdirSync;fs.readdirSync=function(dir,...args) {
+ if(String(dir).endsWith('dispatch-session-cap.contenders')) fs.appendFileSync(process.env.PAUSE_MARKER+'.attempts',process.pid+'\\n');
+ return list.call(this,dir,...args);
+}; ${body}`);
+}
+const admissionAttempts = hook => new Set(fs.readFileSync(`${hook.PAUSE_MARKER}.attempts`, 'utf8').trim().split('\n')).size;
+
+for (const cap of [1, 2]) test(`overlapping final launches wait for admission, then respect cap ${cap}`, async t => {
+  const f = fixture(t); capSetting(f, cap);
+  const hook = admissionHook(f, `const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+ const result=rename.call(this,from,to);
+ if(once && String(to).endsWith('/dispatch-session-cap')) {once=false;pause();}
  return result;
 };`);
-  const first = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief], hook);
+  const args = [f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief];
+  const first = f.concurrent(args, hook); let second;
   try {
     await until(() => fs.existsSync(hook.PAUSE_MARKER));
-    const racing = f.start(); assert.equal(racing.status, 1, racing.stderr);
-    assert.match(racing.stderr, /locked: .*dispatch-session-cap/);
-  } finally { fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); await first.done; }
-  assert.equal((await first.done).status, 0);
-  const full = f.start(); assert.equal(full.status, 1); assert.match(full.stderr, /session cap 1 reached/);
-  assert.equal(f.show(f.item).runs.length, 2, 'the contender may prepare a run, but cannot launch it');
-  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+    second = f.concurrent(args, hook);
+    await until(() => admissionAttempts(hook) === 2);
+    assert.equal(second.child.exitCode, null, 'the overlapping launch waits instead of refusing');
+    assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
+  } finally {
+    fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
+    await Promise.all([first.done, second?.done]);
+  }
+  const a = await first.done, b = await second.done;
+  assert.equal(a.status, 0, a.stderr);
+  assert.equal(b.status, cap === 1 ? 1 : 0, b.stderr);
+  if (cap === 1) assert.match(b.stderr, /session cap 1 reached/);
+  else assert.notEqual(JSON.parse(a.stdout).agent, JSON.parse(b.stdout).agent);
+  const full = f.start(); assert.equal(full.status, 1); assert.match(full.stderr, new RegExp(`session cap ${cap} reached`));
+  assert.equal(f.show(f.item).runs.length, 2);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, cap);
+  assert.equal(promptCalls(f).length, cap);
 });
 
 test('a dead project admission owner and contender are reclaimed before launching', t => {
@@ -292,19 +311,24 @@ test('concurrent dead-owner reclaim cannot remove the new project admission lock
   const directory = path.join(f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'dispatch-session-cap');
   fs.mkdirSync(directory);
   fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify({ pid: dead }));
-  const hook = pauseHook(f, `process.kill=function(pid,...args) {
+  const hook = admissionHook(f, `process.kill=function(pid,...args) {
  if(pid===${dead}) {try {return kill.call(process,pid,...args);} catch(error) {pause();throw error;}}
  return kill.call(process,pid,...args);
 };`);
-  const first = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief], hook);
+  const args = [f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief];
+  const first = f.concurrent(args, hook); let second;
   try {
     await until(() => fs.existsSync(hook.PAUSE_MARKER));
-    const second = f.start(); assert.equal(second.status, 1, second.stderr);
-    assert.match(second.stderr, /locked: .*dispatch-session-cap/);
+    second = f.concurrent(args, hook);
+    await until(() => admissionAttempts(hook) === 2);
+    assert.equal(second.child.exitCode, null);
     assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'))).pid, dead);
-  } finally { fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); await first.done; }
-  assert.equal((await first.done).status, 0);
-  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+  } finally {
+    fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
+    await Promise.all([first.done, second?.done]);
+  }
+  for (const result of await Promise.all([first.done, second.done])) assert.equal(result.status, 0, result.stderr);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 2);
   assert.equal(fs.existsSync(directory), false);
   assert.deepEqual(fs.readdirSync(`${directory}.contenders`), []);
 });

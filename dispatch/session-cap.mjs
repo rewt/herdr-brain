@@ -8,6 +8,7 @@ import { gitProject } from '../lib/project.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { nativeProcess } from './session-bind.mjs';
+import { loadTimeout } from '../lib/deadline.mjs';
 
 export const DEFAULT_SESSION_CAP = 7;
 const positive = n => Number.isSafeInteger(n) && n > 0;
@@ -19,42 +20,80 @@ const worker = w => w && ({ agent: w.agentName, pane: w.pane, worker_workspace: 
 // Separate from promotion locks: a launching journal reserves capacity even if
 // the coordinator dies while its launch child survives. Unique contenders
 // serialize cleanup too, so two reclaimers cannot remove a newly acquired lock.
-export function acquireSessionCapLock(common, { kill = process.kill } = {}) {
+export function acquireSessionCapLock(common, { waitMs = 60000, allowance = loadTimeout, now = Date.now,
+  pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms), check = () => {},
+  kill = process.kill, readProcess = pid => lookupProcess(pid, { identityOnly: true }) } = {}) {
   const directory = path.join(common, 'dispatch-session-cap'), contenders = `${directory}.contenders`;
   const token = `${process.pid}-${randomUUID()}`, contender = path.join(contenders, token);
-  const locked = () => Error(`locked: ${directory}; retry after the current launch, or inspect owner.json and surviving processes`);
-  const held = pid => {
-    if (!positive(pid)) return true;
-    try { kill(pid, 0); return true; }
-    catch (e) { return e.code !== 'ESRCH'; }
+  const budget = allowance(waitMs), deadline = now() + budget;
+  const busy = () => Object.assign(Error('admission busy'), { code: 'ADMISSION_BUSY' });
+  const readOwner = file => {
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch (e) {
+      if (e.code === 'ENOENT' && !fs.existsSync(directory)) throw busy();
+      throw Object.assign(Error(`DISPATCH_SESSION_CAP_LOCK_OWNER_UNREADABLE: session admission lock owner missing or unreadable: ${directory}; inspect surviving dispatch processes, then remove this lock directory and retry`),
+        { code: 'DISPATCH_SESSION_CAP_LOCK_OWNER_UNREADABLE' });
+    }
   };
+  const current = readProcess(process.pid);
+  if (!current?.ok || current.value?.pid !== process.pid || typeof current.value.identity !== 'string' || !current.value.identity.trim()) {
+    throw Error('session admission owner birth identity unavailable; inspect the native process source and retry');
+  }
+  const owner = { pid: process.pid, identity: current.value.identity, token, at: new Date().toISOString() };
   fs.mkdirSync(contenders, { recursive: true });
-  fs.writeFileSync(contender, '', { flag: 'wx', mode: 0o600 });
-  let ownsDirectory = false;
+  const temporary = fs.mkdtempSync(path.join(common, '.dispatch-session-cap-'));
+  let acquired = false;
   try {
-    for (const entry of fs.readdirSync(contenders)) {
-      if (entry === token) continue;
-      if (held(Number(entry.split('-')[0]))) throw locked();
-      try { fs.unlinkSync(path.join(contenders, entry)); }
-      catch (e) { if (e.code !== 'ENOENT') throw e; }
+    fs.writeFileSync(path.join(temporary, 'owner.json'), JSON.stringify(owner), { mode: 0o600 });
+    for (;;) {
+      check();
+      // Waiters withdraw their contender before sleeping. Retaining it would
+      // make two waiting coordinators hold each other out indefinitely.
+      fs.writeFileSync(path.join(temporary, 'contender.json'), JSON.stringify(owner), { mode: 0o600 });
+      fs.renameSync(path.join(temporary, 'contender.json'), contender);
+      try {
+        for (const entry of fs.readdirSync(contenders)) {
+          if (entry === token) continue;
+          const file = path.join(contenders, entry);
+          let other;
+          try { other = JSON.parse(fs.readFileSync(file, 'utf8')); }
+          catch (e) {
+            if (e.code === 'ENOENT') continue;
+            // Older contenders contain only the PID in their filename.
+            other = { pid: Number(entry.split('-')[0]) };
+          }
+          if (sessionAlive(other, { kill, readProcess })) throw busy();
+          try { fs.unlinkSync(file); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+        }
+        if (fs.existsSync(directory)) {
+          if (sessionAlive(readOwner(path.join(directory, 'owner.json')), { kill, readProcess })) throw busy();
+          fs.rmSync(directory, { recursive: true });
+        }
+        // The shared lock first becomes visible with its complete birth tuple.
+        fs.renameSync(temporary, directory);
+        acquired = true;
+        break;
+      } catch (e) {
+        if (e.code !== 'ADMISSION_BUSY') throw e;
+      } finally {
+        if (!acquired) fs.rmSync(contender, { force: true });
+      }
+      if (now() >= deadline) {
+        throw Object.assign(Error(`locked: ${directory}; admission wait exhausted after ${budget} ms; inspect owner.json and surviving dispatch processes, then retry`),
+          { code: 'DISPATCH_SESSION_CAP_LOCKED' });
+      }
+      pause(Math.min(50, deadline - now()));
     }
-    if (fs.existsSync(directory)) {
-      let owner;
-      try { owner = JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'), 'utf8')); }
-      catch { throw locked(); }
-      if (held(owner?.pid)) throw locked();
-      fs.rmSync(directory, { recursive: true });
+  } finally {
+    if (!acquired) {
+      fs.rmSync(contender, { force: true });
+      fs.rmSync(temporary, { recursive: true, force: true });
     }
-    fs.mkdirSync(directory); ownsDirectory = true;
-    fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify({ pid: process.pid, token, at: new Date().toISOString() }), { mode: 0o600 });
-  } catch (e) {
-    if (ownsDirectory) fs.rmSync(directory, { recursive: true });
-    fs.unlinkSync(contender);
-    throw e;
   }
   let released = false;
   return () => {
     if (released) return;
+    if (readOwner(path.join(directory, 'owner.json')).token !== token) throw Error('session admission lock owner changed; inspect before retry');
     fs.rmSync(directory, { recursive: true });
     fs.unlinkSync(contender);
     released = true;

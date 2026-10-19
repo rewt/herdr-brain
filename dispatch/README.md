@@ -81,11 +81,19 @@ lane/record preparation, the final recount and durable worker launch are
 serialized under `<git-common-dir>/dispatch-session-cap/`, so simultaneous
 dispatches cannot both take the last slot. Waiting for memory never holds this
 lock. Native process observation, record worker, watch and prompt delivery happen
-after release. A busy lock refuses for retry. A later admission automatically
-reclaims a crash-retained lock only when its `owner.json` PID probes ESRCH;
-EPERM, unknown or invalid owners remain held for inspection. Unique PID
-contenders also serialize stale cleanup, so a concurrent reclaimer cannot
-remove a new owner's lock. Live `--reuse`
+after release. An overlapping launch polls for admission for up to 60 seconds,
+scaled by `loadTimeout`, and recounts capacity after acquiring the lock. Only
+an exhausted allowance returns the named `locked` retry reason. STOP is checked
+while waiting. The lock is installed by renaming a private directory containing
+the complete `owner.json` PID and kernel birth identity. A later admission
+automatically reclaims it on ESRCH or a confirmed birth mismatch; EPERM, unknown
+or invalid owners remain held. Contenders also carry birth identity and serialize
+stale cleanup; waiters withdraw theirs before polling again so they cannot hold
+each other out. An older owner-less or unreadable-owner directory refuses with
+`DISPATCH_SESSION_CAP_LOCK_OWNER_UNREADABLE`, its path, and an instruction to
+inspect surviving dispatch processes before manually removing that lock directory
+and retrying. Age alone cannot establish safe ownership, so it never clears this
+legacy case automatically. Live `--reuse`
 continuations and retries that only record a worker, arm watch or deliver the
 saved prompt do not add a session and bypass admission. An explicit `--fresh`
 launch still checks capacity, including an uncertain earlier launch.
@@ -134,9 +142,10 @@ supervisor directly.
 
 Dispatch records entry and grant for its two memory gates (`memory_open` before
 lane preparation and `memory_worker` before worker launch), including immediate
-grants. The project session cap refuses admission without a concurrency queue or
-fleet session limit. Its recovery lock refuses a second coordinator for the same request;
-that refusal is not a queue wait. Lane dispatch skips the redundant memory gate
+grants. Project admission uses a bounded wait for overlapping final launches;
+there is no concurrency queue or fleet session limit. Its recovery lock refuses
+a second coordinator for the same request; that refusal is not a queue wait.
+Lane dispatch skips the redundant memory gate
 through `--memory-checked` while still checking canonical STOP.
 
 Timing events live in the dispatch journal's companion `<request>.json.events.jsonl`.

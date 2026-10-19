@@ -374,7 +374,7 @@ async function main() {
     } else {
       // Early counts are advisory. Serialize only the final recount and launch,
       // after both memory waits and lane/record preparation have finished.
-      releaseAdmission = acquireSessionCapLock(common);
+      releaseAdmission = acquireSessionCapLock(common, { check: checkStop });
       admission(job.repo, job.org, common);
       job.stage = 'launching'; save();
       const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked']);

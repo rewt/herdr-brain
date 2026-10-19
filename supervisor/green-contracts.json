@@ -690,12 +690,12 @@
     },
     "lib/native/process-source-darwin-arm64": {
       "mode": "100755",
-      "sha256": "5f8f004efd9fa2e8dbecb4bb6c6f5842e61c086f86ea378bb8cacfac17e9a107",
+      "sha256": "67258651ab5dcc2396bb38155b81f4d1ec8fd338064c1393b6647176a01980d9",
       "role": "runtime-or-configuration"
     },
     "lib/native/process-source-darwin-x64": {
       "mode": "100755",
-      "sha256": "053f25d49467f056f9b48849ba9427dec171fa992c6abf7c2d543ceaa8b02493",
+      "sha256": "86d77bec47d684d70da8cb4e97988571fc1b3427ed80084c90b259a62b28aa2a",
       "role": "runtime-or-configuration"
     },
     "lib/process-owner.mjs": {

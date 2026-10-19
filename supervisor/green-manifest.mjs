@@ -80,7 +80,7 @@ export function buildManifest(tree, { bindings, externalInputs = [] }) {
   for (const file of [...tree.files.keys()].filter(boundaryInput).sort()) {
     const mode = tree.files.get(file).mode;
     if (!['100644', '100755'].includes(mode)) throw Error(`non-regular boundary input: ${file}`);
-    boundary[file] = { mode, sha256: hash(tree.read(file)), role: boundaryRole(file) };
+    boundary[file] = { mode, sha256: hash(tree.bytes ? tree.bytes(file) : tree.read(file)), role: boundaryRole(file) };
   }
   return {
     version: 2, bindings: { brain: bindings.brain, lab: bindings.lab ?? null },
@@ -102,7 +102,7 @@ export function checkDeployment(manifest, trusted) {
   try {
     for (const file of BOOTSTRAP_FILES) trusted(file, '100644');
     for (const [file, pin] of Object.entries(manifest.boundary)) {
-      if (!safePath(file) || hash(trusted(file, pin.mode)) !== pin.sha256) throw Error(`running boundary drift: ${file}`);
+      if (!safePath(file) || hash(trusted(file, pin.mode, true)) !== pin.sha256) throw Error(`running boundary drift: ${file}`);
     }
     if (process.version !== manifest.node?.version || fs.realpathSync(process.execPath) !== manifest.node.path ||
         hash(fs.readFileSync(process.execPath)) !== manifest.node.sha256 || hash(JSON.stringify(process.execArgv)) !== manifest.node.execArgv_sha256) throw Error('Node launcher drift');
@@ -140,7 +140,7 @@ export function manifestScope(before, after, { manifest, trusted, project = 'bra
         if (!regular(tree.files.get(file)?.mode) || tree.read(file) !== trusted(file, '100644')) throw Error(`bootstrap authority drift: ${file}`);
       }
       for (const [file, pin] of Object.entries(manifest.boundary)) {
-        if (!safePath(file) || tree.files.get(file)?.mode !== pin.mode || hash(tree.read(file)) !== pin.sha256) throw Error(`boundary version drift: ${file}`);
+        if (!safePath(file) || tree.files.get(file)?.mode !== pin.mode || hash(tree.bytes ? tree.bytes(file) : tree.read(file)) !== pin.sha256) throw Error(`boundary version drift: ${file}`);
       }
     }
     checkDeployment(manifest, trusted);

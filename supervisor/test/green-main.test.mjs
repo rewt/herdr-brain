@@ -17,8 +17,8 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 test('real main admits an exact renderer change and refuses every boundary control', async t => {
   const checkout = fs.realpathSync(new URL('../../', import.meta.url));
   const project = gitProject(checkout), root = project.canonical;
-  const git = args => {
-    const result = spawnSync('git', ['--no-optional-locks', '-C', checkout, ...args], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+  const git = (args, raw = false) => {
+    const result = spawnSync('git', ['--no-optional-locks', '-C', checkout, ...args], { encoding: raw ? null : 'utf8', maxBuffer: 32 * 1024 * 1024,
       env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } });
     assert.equal(result.status, 0, result.stderr || result.error?.message); return result.stdout;
   };
@@ -27,8 +27,8 @@ test('real main admits an exact renderer change and refuses every boundary contr
     const match = /^(\d{6}) \w+ ([a-f0-9]+)\t(.+)$/.exec(row); assert.ok(match); files.set(match[3], { mode: match[1], oid: match[2] });
   }
   const mainRead = file => {
-    if (!cache.has(file)) { assert.ok(files.has(file), file); cache.set(file, git(['cat-file', 'blob', files.get(file).oid])); }
-    return cache.get(file);
+    if (!cache.has(file)) { assert.ok(files.has(file), file); cache.set(file, git(['cat-file', 'blob', files.get(file).oid], true)); }
+    return cache.get(file).toString('utf8');
   };
   const original = mainRead('board/render.mjs');
   // Main does not yet contain ENG-396. This explicitly models its required
@@ -37,11 +37,12 @@ test('real main admits an exact renderer change and refuses every boundary contr
   for (const file of BOOTSTRAP_FILES.concat('supervisor/autopilot.mjs', 'supervisor/README.md', 'test/helpers/tier.mjs')) {
     overlay.set(file, fs.readFileSync(path.join(checkout, file), 'utf8')); files.set(file, { mode: '100644' });
   }
-  const before = { files, root, read: file => overlay.has(file) ? overlay.get(file) : mainRead(file) };
+  const before = { files, root, read: file => overlay.has(file) ? overlay.get(file) : mainRead(file),
+    bytes: file => overlay.has(file) ? Buffer.from(overlay.get(file)) : (mainRead(file), cache.get(file)) };
   const brain = { repo: root, identity: project.identity, org: fs.realpathSync(findOrgDir({ cwd: root, env: { ...process.env, ORG_DIR: '' } })) };
   const manifest = { ...buildManifest(before, { bindings: { brain } }), exclusions: GREEN_CONTRACTS.exclusions };
   overlay.set('supervisor/green-contracts.json', JSON.stringify(manifest));
-  const trusted = file => overlay.has(file) ? overlay.get(file) : fs.readFileSync(path.join(checkout, file), 'utf8');
+  const trusted = (file, _mode, raw) => overlay.has(file) ? (raw ? Buffer.from(overlay.get(file)) : overlay.get(file)) : fs.readFileSync(path.join(checkout, file), raw ? undefined : 'utf8');
   const oldLine = 'export function render(snapshot, { width = 120, height = Infinity, now = Date.now() } = {}) {';
   const newLine = oldLine.replace('120', '121'); assert.ok(original.includes(oldLine));
   const candidate = original.replace(oldLine, newLine), outcomes = [];
@@ -53,7 +54,7 @@ test('real main admits an exact renderer change and refuses every boundary contr
     ['boundary', 'board/rows.mjs', before.read('board/rows.mjs') + '// changed\n', 'GREEN_BOUNDARY_CHANGED'],
     ['new-edge', 'board/render.mjs', candidate + 'import(process.env.TARGET);\n', 'GREEN_REACH_UNKNOWN'],
   ]) {
-    const after = { ...before, read: name => name === file ? contents : before.read(name) };
+    const after = { ...before, read: name => name === file ? contents : before.read(name), bytes: name => name === file ? Buffer.from(contents) : before.bytes(name) };
     const result = manifestScope(before, after, { manifest, trusted, changes: [{ file, status: 'M', before: '100644', after: '100644' }] });
     assert.equal(result.eligible, expected === null, JSON.stringify(result)); if (expected) assert.equal(result.code, expected);
     outcomes.push({ label, file, eligible: result.eligible, code: result.code ?? null, reason: result.reason ?? null,

@@ -1,19 +1,1776 @@
 {
-  "version": 1,
-  "authorityEntries": ["supervisor/autopilot.mjs", "supervisor/green-pass.mjs", "supervisor/supervisor.mjs"],
+  "version": 2,
+  "bindings": {
+    "brain": {
+      "repo": "/Users/rewt/development/rewt/herdr-brain",
+      "identity": "/Users/rewt/development/rewt/herdr-brain/.git",
+      "org": "/Users/rewt/development/rewt/.org"
+    },
+    "lab": null
+  },
+  "interimDays": 10,
+  "bootstrapFiles": [
+    "supervisor/green-contracts.json",
+    "supervisor/green-pass.mjs",
+    "supervisor/green-reach.mjs",
+    "supervisor/green-manifest.mjs",
+    "supervisor/GREEN-COHORT.md",
+    "supervisor/GREEN-CONTRACTS.md"
+  ],
   "entries": [
-    { "project": "brain", "path": "supervisor/reconcile.mjs" }
+    {
+      "project": "brain",
+      "path": "supervisor/reconcile.mjs",
+      "contract": "reconcile-complete-batch/v1"
+    }
   ],
+  "externalConsumers": [
+    {
+      "entry": "contrib/settle-watch.mjs",
+      "source": "immutable installed release",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    }
+  ],
+  "contracts": [
+    "supervisor/GREEN-CONTRACTS.md"
+  ],
+  "environment": {
+    "DYLD_INSERT_LIBRARIES": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "DYLD_LIBRARY_PATH": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "GIT_CONFIG_COUNT": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+    "GIT_CONFIG_KEY_0": "c69f268fb43e3b0bd46436177505f548fe105ce296445b5ba5a428f122453429",
+    "GIT_CONFIG_KEY_1": "61f51870656028552e7e9168d8a8e598e0322f554b73b23bc4f106868155562a",
+    "GIT_CONFIG_KEY_2": "ee8d3388271d171c44da18d2410a1d9d1ebcda4c164fb98365fbd6c5f8f8b66f",
+    "GIT_CONFIG_VALUE_0": "da287d3295c045aeb5a2bc3567ea4d920d92e13e0880e11b9184275a3ee5cc5f",
+    "GIT_CONFIG_VALUE_1": "faed84e2aed546128e4d3ac6c3f0cc9e1a14e3693fc6e4853649a2e3c04e40ef",
+    "GIT_CONFIG_VALUE_2": "1215f172399d60c2f8ec29488a1ff2fcf9cae3dd37aa8577982474db4f4fb0f8",
+    "GIT_PAGER": "77af778b51abd4a3c51c5ddd97204a9c3ae614ebccb75a606c3b6865aed6744e",
+    "HERDR_MONITOR_FLEET": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "HOME": "54a97fa39722426568d64ece47598653a01b5a3154ddd764a1b6a7afd063177b",
+    "LD_LIBRARY_PATH": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "LD_PRELOAD": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "NODE_OPTIONS": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "NODE_PATH": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S": "c1ab6b02a9cccbf3da12f58e0619f3838bd47b383e4beee2c124be49baaca96f",
+    "PATH": "1e31690a9ca6e98d8ea17bfca23d2e82aff92967b9a2a4c5e522894834de334b",
+    "XDG_CONFIG_HOME": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "node": {
+    "path": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node",
+    "sha256": "d1c54537f00093999715de0617c0ef2191dbf1875720201d4c2fde16195a9287",
+    "version": "v20.19.4",
+    "execArgv_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "git": {
+    "path": "/opt/homebrew/bin/git",
+    "realpath": "/opt/homebrew/Cellar/git/2.54.0/bin/git",
+    "sha256": "9b19807c702934b8c51fd2da8c2d38053bd7328536546e5a47eb3914dcc7bcde"
+  },
+  "externalInputs": [
+    {
+      "path": "/Users/rewt/.gitconfig",
+      "realpath": "/Users/rewt/.gitconfig",
+      "sha256": "fcf2324a8abf45c3862dc29492066f2ae19770de11ba947ce0fdff245759b762"
+    },
+    {
+      "path": "/Users/rewt/.gitconfig-rewt",
+      "realpath": "/Users/rewt/.gitconfig-rewt",
+      "sha256": "00b0ebe63cd533b9b2fcae43856f6bc09e7221e48af75f48def42f6cee57dc4c"
+    },
+    {
+      "path": "/Users/rewt/.gitconfig-bastian",
+      "realpath": "/Users/rewt/.gitconfig-bastian",
+      "sha256": "6450c08b6a6bff002dc9453e8f9570c1532f6e798e0cf259ca56a8f04445f42b"
+    },
+    {
+      "path": "/Users/rewt/.config/git/config",
+      "sha256": null
+    },
+    {
+      "path": "/opt/homebrew/etc/gitconfig",
+      "realpath": "/opt/homebrew/etc/gitconfig",
+      "sha256": "a968ad7fcf11e792afba1256baaae1649bd6ce89bdb8f04572e780f940ab9392"
+    },
+    {
+      "path": "/etc/gitconfig",
+      "sha256": null
+    },
+    {
+      "path": "/Users/rewt/development/bastian/bch-cloak/.git/config",
+      "realpath": "/Users/rewt/development/bastian/bch-cloak/.git/config",
+      "sha256": "6d3e1b4262941b52cd89d4d034d90a4e0a2bf1713dfca1228d67b7de60f0d00c"
+    },
+    {
+      "path": "/Users/rewt/development/bastian/bch-cloak/.herdr-release.json",
+      "sha256": null
+    },
+    {
+      "path": "/Users/rewt/development/bastian/.lane.json",
+      "realpath": "/Users/rewt/development/bastian/.lane.json",
+      "sha256": "e0fb056862a0b2fb707d2661631a4f8303b4aa3198cdd095075e1e417e974de7"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/herdr-brain/.git/config",
+      "realpath": "/Users/rewt/development/rewt/herdr-brain/.git/config",
+      "sha256": "cae33efdb02cf774435c1ff9cb16bcc1014606908530c6e1dc727615fe3e8cda"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/herdr-brain/.git/config.worktree",
+      "sha256": null
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.lane.json",
+      "realpath": "/Users/rewt/development/rewt/.lane.json",
+      "sha256": "7c0da845cd5b2adcf42f888a980a1aa08b88a65f5f5879e68b2d3c97a8e8f2e9"
+    },
+    {
+      "path": "/Users/rewt/development/.lane.json",
+      "sha256": null
+    },
+    {
+      "path": "/Users/rewt/.lane.json",
+      "sha256": null
+    },
+    {
+      "path": "/Users/rewt/development/rewt/herdr-brain/.housekeeping.json",
+      "sha256": null
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.housekeeping.json",
+      "sha256": null
+    },
+    {
+      "path": "/Users/rewt/development/rewt/herdr-brain/.herdr-release.json",
+      "sha256": null
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/config.json",
+      "realpath": "/Users/rewt/development/rewt/.org/config.json",
+      "sha256": "66d6841f13676aedecfbb8ecf5e3d6c7d4bdf192fcfd666700ad7082500594b8"
+    },
+    {
+      "path": "/Users/rewt/.herdr-monitor/fleet.json",
+      "realpath": "/Users/rewt/.herdr-monitor/fleet.json",
+      "sha256": "b5e5f3b9e0faccd95251df2fe2e39dd813ceb32a220ba3958b9f3653592785a1"
+    },
+    {
+      "path": "/Users/rewt/.local/share/herdr-monitor/current/contrib/settle-watch.mjs",
+      "realpath": "/Users/rewt/.local/share/herdr-monitor/releases/rc-20261019T042359000Z-cc585d9f33/contrib/settle-watch.mjs",
+      "sha256": "9f1e3ea484e0b2103ee291e60586264c1be35e929e5f4816e8a1d143aa1920f6"
+    }
+  ],
+  "components": [
+    {
+      "project": "brain",
+      "path": "board/render.mjs",
+      "profile": "board-default-width/v1",
+      "shape_sha256": "4686bb8dbd2b3f810bd3d3e8c2a12a3b0290e2126baccf326d4c909f2b5c76bd",
+      "effects": "presentation width only; no change to live(), imports, calls, loaders, configuration or project targeting",
+      "lifecycle": false,
+      "validation": [
+        "test/board-view.test.mjs"
+      ]
+    }
+  ],
+  "boundary": {
+    ".claude/settings.json": {
+      "mode": "100644",
+      "sha256": "5d4fcbb160fe3597c71a2e5321649482e32c06971f46a370802b8fb282ef389e",
+      "role": "runtime-or-configuration"
+    },
+    ".gitignore": {
+      "mode": "100644",
+      "sha256": "4325470a473c670645300d3677fb043f5b48b50207983bdd1b9a42b7f0294cdb",
+      "role": "runtime-or-configuration"
+    },
+    ".lane.json": {
+      "mode": "100644",
+      "sha256": "91a013763fe82d1fe8d1bae5cdd255f3c1a0767a4328797a9193e60b7f7d610c",
+      "role": "runtime-or-configuration"
+    },
+    ".lane.validation.json": {
+      "mode": "100644",
+      "sha256": "e93f7a39bfde12ea1bfa467226abf3b704b4eed196684556659017585a7b18f4",
+      "role": "runtime-or-configuration"
+    },
+    ".nvmrc": {
+      "mode": "100644",
+      "sha256": "9e4a98495fccf30bb42ef14acad25fde8d2d550d87c66120ae0478a5cfe2cce1",
+      "role": "runtime-or-configuration"
+    },
+    ".promotion-selector.json": {
+      "mode": "100644",
+      "sha256": "2e3fde662c204f3fb28a28029447bd6ddf842a1ef735553f4f9cf288303f50e3",
+      "role": "runtime-or-configuration"
+    },
+    "AGENTS.md": {
+      "mode": "100644",
+      "sha256": "ad27f1b839df7ce6dc5b1a6efb44dcf5816cc836d63ee923c3dc707739b3117e",
+      "role": "runtime-or-configuration"
+    },
+    "README.md": {
+      "mode": "100644",
+      "sha256": "d725512d19743bf3e4be5d669b50f0fd474d6117d1e2111e45e4a956256f7982",
+      "role": "runtime-or-configuration"
+    },
+    "acceptance/DEADLINES.md": {
+      "mode": "100644",
+      "sha256": "f31b43ef7b9ddce5f2ebfd46665b146e68b6210f1bf54156977ae4e78d9f5094",
+      "role": "promotion-authority"
+    },
+    "acceptance/README.md": {
+      "mode": "100644",
+      "sha256": "b8bbaf5088bc6acd93bfa11502772b2f76a734020d6fc662a90a358a2b8693fa",
+      "role": "promotion-authority"
+    },
+    "acceptance/cases.mjs": {
+      "mode": "100644",
+      "sha256": "0b4a44905bddd8e29f459a80651b7e89a0f4445aab070568033b7f09fd8dbb6d",
+      "role": "promotion-authority"
+    },
+    "acceptance/cleanup.mjs": {
+      "mode": "100644",
+      "sha256": "4c64c79673b02eb1219509158d7af46f6cef6dbdc97a1744fb85adf03cd3f168",
+      "role": "promotion-authority"
+    },
+    "acceptance/commands.mjs": {
+      "mode": "100644",
+      "sha256": "3e401711465fa8e35bd2cfaf9a87708516eb269e688db8413211d1d86da4ed49",
+      "role": "promotion-authority"
+    },
+    "acceptance/deadline.mjs": {
+      "mode": "100644",
+      "sha256": "cd6e0adbd8085a7988367c4b1fd18fae6070076dd68309ec574dbb2c34cd2d1c",
+      "role": "promotion-authority"
+    },
+    "acceptance/environment.mjs": {
+      "mode": "100644",
+      "sha256": "0c227386dcd57f99579ba2ff32a26d4036eec12bf33fda80a824af3fb598a486",
+      "role": "promotion-authority"
+    },
+    "acceptance/focus.mjs": {
+      "mode": "100644",
+      "sha256": "a6087cd8b745d8ac3cb1bd9d65501968ece1cae8b92aa551db63002ea6000aa9",
+      "role": "promotion-authority"
+    },
+    "acceptance/herdr.mjs": {
+      "mode": "100644",
+      "sha256": "7d6eee82e54fbfaff524511ffedc48c434546c2a13d5ea252ca183cf1d7586a0",
+      "role": "promotion-authority"
+    },
+    "acceptance/housekeeping.mjs": {
+      "mode": "100644",
+      "sha256": "5068df0bd02fb9cf8833d70735f45a61015d60d132e49868ee48df5c4acf37d9",
+      "role": "promotion-authority"
+    },
+    "acceptance/limits.mjs": {
+      "mode": "100644",
+      "sha256": "80e87873d7ec6d9b1c717b036aa806cb48fec4ebe7aa7ff2f607a1278c02cb35",
+      "role": "promotion-authority"
+    },
+    "acceptance/load.mjs": {
+      "mode": "100644",
+      "sha256": "e39ddbc602018e23def4e33732ed2842b520c0d48c7f939216125d294adf76d6",
+      "role": "promotion-authority"
+    },
+    "acceptance/notice-budget.mjs": {
+      "mode": "100644",
+      "sha256": "867a45acbbbb9a5a5c97383a8c4be8a33e726e8c0d78b26d04b0283e2b257d97",
+      "role": "promotion-authority"
+    },
+    "acceptance/poll.mjs": {
+      "mode": "100644",
+      "sha256": "cb0e162c2c487f2772d158bcbb1d92de1b1a0a71e3e10a2428bdbca0a3b6bf7c",
+      "role": "promotion-authority"
+    },
+    "acceptance/probe.mjs": {
+      "mode": "100644",
+      "sha256": "069a5b94ff3c6ac81b4265bf8c7bd11cdf5a5d8fd98aec7d08e6c60e3d0c73c9",
+      "role": "promotion-authority"
+    },
+    "acceptance/producers.mjs": {
+      "mode": "100644",
+      "sha256": "10edfb543ff91380ee363cf7af727cfccbc4f9634288d904f67488e0560f12ec",
+      "role": "promotion-authority"
+    },
+    "acceptance/receipts.mjs": {
+      "mode": "100644",
+      "sha256": "0e43675906797e60ad9b9bac389ec9fb7aab9cea5da2507c79cb977ba5ff5b42",
+      "role": "promotion-authority"
+    },
+    "acceptance/record-shim.mjs": {
+      "mode": "100644",
+      "sha256": "95bd195704eab1f72ca30438f05aeaa2b442fc090ad51db94f413f6f5e1c4221",
+      "role": "promotion-authority"
+    },
+    "acceptance/results.mjs": {
+      "mode": "100644",
+      "sha256": "546f6d1c7a6198d167fdba2efbcc9343385e28a4fb3f7106996621d2dd13fdeb",
+      "role": "promotion-authority"
+    },
+    "acceptance/retirement.mjs": {
+      "mode": "100644",
+      "sha256": "df4c74a26ae23c738632e44f2a1755c646766ce116b5d211849c7313a05cee2c",
+      "role": "promotion-authority"
+    },
+    "acceptance/run.mjs": {
+      "mode": "100644",
+      "sha256": "aec3707773ffae17297b8f375a1680be4f7fdfd421ec1d26d706c79df4f701b9",
+      "role": "promotion-authority"
+    },
+    "acceptance/settle.mjs": {
+      "mode": "100644",
+      "sha256": "f72472ed67bdeaa87d75860fab94d2e8883c9f4c7642ee98e005948f634eadbf",
+      "role": "promotion-authority"
+    },
+    "acceptance/signal-cleanup.mjs": {
+      "mode": "100644",
+      "sha256": "944a79efe31785e367ca17702343c900da2ba2f9121526107462a6a73aa355f6",
+      "role": "promotion-authority"
+    },
+    "acceptance/snapshot.mjs": {
+      "mode": "100644",
+      "sha256": "9a81a326e9b55226ed720003af7ed2c034cb9d72d4ce52dd098eccbf1fd1b692",
+      "role": "promotion-authority"
+    },
+    "acceptance/supervisor.mjs": {
+      "mode": "100644",
+      "sha256": "d3acedd22541d2d689795532f4ff4cb6aec6847fb7bfa2a1b91cd4f0ffafdc5e",
+      "role": "promotion-authority"
+    },
+    "acceptance/temp.mjs": {
+      "mode": "100644",
+      "sha256": "bfcabe8438f68ab4dbf726283ad6428f19030a032bd81f1c34378cef05f8bdd8",
+      "role": "promotion-authority"
+    },
+    "acceptance/worker.mjs": {
+      "mode": "100644",
+      "sha256": "c737b664fb8553b6ab6521145e4eea56ba2a85848bbbd6cfd81a02a1ec89f370",
+      "role": "promotion-authority"
+    },
+    "bin/org.mjs": {
+      "mode": "100755",
+      "sha256": "563472c487679eb7aa3b598246c319d74980278c1ad213a7e63a00c649cc10c3",
+      "role": "bch-entry"
+    },
+    "board/README.md": {
+      "mode": "100644",
+      "sha256": "e304e49f6f047c260b935691a2d43364807920ee1ab804e3469fe4d6c5e99dca",
+      "role": "runtime-or-configuration"
+    },
+    "board/board.mjs": {
+      "mode": "100644",
+      "sha256": "050325c7fad1faeada91e04daf3d141bdff75fcd10c714d3a7dd3faf7a5e9b1c",
+      "role": "runtime-or-configuration"
+    },
+    "board/brain.mjs": {
+      "mode": "100644",
+      "sha256": "a5264f4cc8b371a6c97c7ba40d189b1ca57741a6eb2abf8b7f3224ffad5f1b37",
+      "role": "runtime-or-configuration"
+    },
+    "board/facts.mjs": {
+      "mode": "100644",
+      "sha256": "186990215ae4d56b45004fc264042fb924738df288507afd6aab7af144973fdc",
+      "role": "runtime-or-configuration"
+    },
+    "board/rows.mjs": {
+      "mode": "100644",
+      "sha256": "c2b5bac4e69e377fbcce944b0d50cb5f81fc49f641fce301af3c2eab43ddfa74",
+      "role": "runtime-or-configuration"
+    },
+    "board/source.mjs": {
+      "mode": "100644",
+      "sha256": "847e18a9a56a0852365463ff3ada7be1609e29c0288a0b3263386a0c771fd07f",
+      "role": "runtime-or-configuration"
+    },
+    "brain/.gitignore": {
+      "mode": "100644",
+      "sha256": "295aa1f18923880afebb2e08aa70a8c4f285cc52baea238b8d2864d10e45d825",
+      "role": "runtime-or-configuration"
+    },
+    "brain/README.md": {
+      "mode": "100644",
+      "sha256": "99508d9792b83149fe95fac0240942671899cf03dc678a506b7c85aac6d134e8",
+      "role": "runtime-or-configuration"
+    },
+    "brain/bin/brain.mjs": {
+      "mode": "100755",
+      "sha256": "a19892e73ba77948ca707ff4cb4988a23030f9203a4470c2a6d0a4def67d0b44",
+      "role": "runtime-or-configuration"
+    },
+    "brain/distill.md": {
+      "mode": "100644",
+      "sha256": "8f63eed6550180df9905fd4c551c1ee862e336a754cf06385457201aac83439b",
+      "role": "runtime-or-configuration"
+    },
+    "brain/lib/signals.mjs": {
+      "mode": "100644",
+      "sha256": "7c8128e7c17f2d7946136f7742326d53ced8f4c4dae17a0ad88a74613d054f41",
+      "role": "runtime-or-configuration"
+    },
+    "contrib/settle-watch.mjs": {
+      "mode": "100755",
+      "sha256": "9f1e3ea484e0b2103ee291e60586264c1be35e929e5f4816e8a1d143aa1920f6",
+      "role": "runtime-or-configuration"
+    },
+    "discovery/README.md": {
+      "mode": "100644",
+      "sha256": "e5103e1710c070ef2f1e6e264b54d1342cb2d46c6e9bd3d00ed9fbc661e3e487",
+      "role": "runtime-or-configuration"
+    },
+    "discovery/client.mjs": {
+      "mode": "100644",
+      "sha256": "95c2644bc99a654db133f84d8d4aa9590a2aaf8b6636f3d0a86fc6e294457ed3",
+      "role": "runtime-or-configuration"
+    },
+    "discovery/lessons.mjs": {
+      "mode": "100644",
+      "sha256": "0d7f2260fc5a093d2f86da4c93e08a1e34c0f0e81d7d6cda9996706a5ec7895d",
+      "role": "runtime-or-configuration"
+    },
+    "discovery/policy.mjs": {
+      "mode": "100644",
+      "sha256": "fa89c1360fd552c5e29975f6a8f8108d955128f42c2acc89138370b3b3512b76",
+      "role": "runtime-or-configuration"
+    },
+    "dispatch/README.md": {
+      "mode": "100644",
+      "sha256": "3747d12788ba345370f74c064e9e1cc461e87ac3913ecd04048964a08c19f63b",
+      "role": "runtime-or-configuration"
+    },
+    "dispatch/dispatch.mjs": {
+      "mode": "100644",
+      "sha256": "10a921aaa3e11e9b87ab37d586a05fcb0a339999ef9d6245ae82695f53fa2b43",
+      "role": "runtime-or-configuration"
+    },
+    "dispatch/hook-review.mjs": {
+      "mode": "100644",
+      "sha256": "32a4e567ece38b0e3890d1bd5be25e8e7c15b3008f757b5da20522278a66301c",
+      "role": "runtime-or-configuration"
+    },
+    "dispatch/metrics.mjs": {
+      "mode": "100644",
+      "sha256": "323fd9429bb4164ccd1185e7720e82d09ce682a65fc5aef8c62c026d9809aa19",
+      "role": "runtime-or-configuration"
+    },
+    "dispatch/record-worker.mjs": {
+      "mode": "100644",
+      "sha256": "a923cc9fc035766725e2da41d31f1b4191712cff4dd2175942d8cc0d9a2d46df",
+      "role": "runtime-or-configuration"
+    },
+    "dispatch/session-bind-command.mjs": {
+      "mode": "100644",
+      "sha256": "0814f5dd950385caae806fb7288a166317e789d8c8dd2157edc5491f9072d198",
+      "role": "runtime-or-configuration"
+    },
+    "dispatch/session-bind.mjs": {
+      "mode": "100644",
+      "sha256": "904b35fce7ad628e881a77e80d98ec022eafc48af221f0366bf5afa3b2e7f37d",
+      "role": "runtime-or-configuration"
+    },
+    "herdr/README.md": {
+      "mode": "100644",
+      "sha256": "b04e5a5e73b50930edddaf50adda6a352871f3acca943f1f91746a5debabcb3c",
+      "role": "runtime-or-configuration"
+    },
+    "herdr/RELEASE-PINS.md": {
+      "mode": "100644",
+      "sha256": "e4786966b764212a0edf93fc7ada9de7c5ae1259652884b4c8845984dc3b00d0",
+      "role": "runtime-or-configuration"
+    },
+    "herdr/canary-env.sh": {
+      "mode": "100755",
+      "sha256": "3ccbdf2825d1864859360263fbc1521e3cba51133831d298a554e9d900bae432",
+      "role": "runtime-or-configuration"
+    },
+    "herdr/release.sh": {
+      "mode": "100755",
+      "sha256": "ca84511ec83593d8be3ec0207468d9535ce0d761afd8da56277e5113d5f05e1e",
+      "role": "runtime-or-configuration"
+    },
+    "herdr/releases.mjs": {
+      "mode": "100644",
+      "sha256": "95f655fa3965815b8777e47121776030c09bf1d15c4648f6730677529853429c",
+      "role": "runtime-or-configuration"
+    },
+    "housekeeping/README.md": {
+      "mode": "100644",
+      "sha256": "872e7f2bde55ea29be52ace2a62c3103bda74a0b4fbe767387b0de70d4b79bbd",
+      "role": "runtime-or-configuration"
+    },
+    "housekeeping/command.mjs": {
+      "mode": "100644",
+      "sha256": "17738c445aca35027b0ca706638fd3690e31a8e542283131b67860c1344b999c",
+      "role": "runtime-or-configuration"
+    },
+    "housekeeping/config.mjs": {
+      "mode": "100644",
+      "sha256": "77317953e6fd12e3182489932b582460df01f7d571bb7c7f715f3aa4d801893a",
+      "role": "runtime-or-configuration"
+    },
+    "housekeeping/housekeeping.mjs": {
+      "mode": "100644",
+      "sha256": "581e6d2f1e3a54907383e5ce91502270fdb32abf536fd6c9dde4c9ace9eb9afa",
+      "role": "runtime-or-configuration"
+    },
+    "housekeeping/retirement-notices.mjs": {
+      "mode": "100644",
+      "sha256": "786bcfce90e1bd8c671813886e5c52273cc7d8d29a58bcca5970924dc1ec7084",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/.gitignore": {
+      "mode": "100644",
+      "sha256": "302e91308e05073146f01d851623d2413a79361ba52ca4cb11427a1ed2ce5269",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/.lane.json.example": {
+      "mode": "100644",
+      "sha256": "831083e5fdff794952edcd2bf2f4862b6dfaf644eef9ce46cf2f7e488afc5522",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/LICENSE": {
+      "mode": "100644",
+      "sha256": "1bf0d76cb7fefa90693f6b1c9a1d9c45fe29b2ed167e5e561ffba6a9d6234603",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/README.md": {
+      "mode": "100644",
+      "sha256": "baffe809d409f98d4bd44d24a0a3184900b12251797da4cd9921672fcf61189c",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/board/herdr-client.mjs": {
+      "mode": "100644",
+      "sha256": "ae030084780d1caa00de7cb84ef599000ad402219b568f3818ab88257a1aefdf",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/board/registry.mjs": {
+      "mode": "100644",
+      "sha256": "db2a992b57350f48c5ce65802e6ddb4c43f9e8b932b848776600aa0fad5832b1",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/composer.mjs": {
+      "mode": "100644",
+      "sha256": "1f2b155870b169035f7471db55841073b95611ae69d211fa2c4db98c68ce729c",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/docs/BRIEF_TEMPLATE.md": {
+      "mode": "100644",
+      "sha256": "61b9447ad3e44d781ed01e31cbd3ec47c18fab442fcb65e4d4f477ed174850d7",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/docs/REFERENCE.md": {
+      "mode": "100644",
+      "sha256": "6df3c0f66f5748769eb1a0c26a76c9188626d59df6aec664279c68fdd07ff9b7",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/docs/REVIEW_TEMPLATE.md": {
+      "mode": "100644",
+      "sha256": "33d079d245ae7b2097a77d39b6f2913e1aaada2f8d3c612276fbafee8445e575",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/lane.mjs": {
+      "mode": "100755",
+      "sha256": "3ab650bdb1086fb3636acc6b9f35066829dcbf970bb3e8b5b16572232fd11c1b",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/package.json": {
+      "mode": "100644",
+      "sha256": "3d2360f24b89ae76fb1346c9145c67dc0652dea653af73dba2e9486692823831",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/preset.mjs": {
+      "mode": "100644",
+      "sha256": "317940cf29002e0afdb43695520be4a577e10ad01b8c91337a7ad2c3df40c2c8",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/promotion-lock.mjs": {
+      "mode": "100644",
+      "sha256": "e358ab38efb1e206d6cc8221f39c4acc0a5fcd12d9f9344d2286ce85990bac5c",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/review-evidence.mjs": {
+      "mode": "100644",
+      "sha256": "dbfbbc9192ddd31195d9eade12be942104db52ebd779db3097f2715ed4ef88cd",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/routes-command.mjs": {
+      "mode": "100644",
+      "sha256": "3ad2b722361298b7b60e485285a0e1b5fd1619e0ae6b6c55767cd35b3fb96f7e",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/routes.mjs": {
+      "mode": "100644",
+      "sha256": "19b7880d700728bca20738e78c88a6700738041e9bea3653971519788bb6f65e",
+      "role": "runtime-or-configuration"
+    },
+    "lanes/validation.mjs": {
+      "mode": "100644",
+      "sha256": "4025f960563099fd0f32677c153835b57fee16f3120db2f894f3c8f37e8016ac",
+      "role": "promotion-authority"
+    },
+    "lib/cli-help.mjs": {
+      "mode": "100644",
+      "sha256": "4d452709a077fa4ed854d03a01156025764aa2bc524d9069aec6c588b6361004",
+      "role": "runtime-or-configuration"
+    },
+    "lib/completion.mjs": {
+      "mode": "100644",
+      "sha256": "01ebe3a7405e6cfeca95eb98679a41bde261adfc10d60f591c5930a01f7f0498",
+      "role": "runtime-or-configuration"
+    },
+    "lib/deadline.mjs": {
+      "mode": "100644",
+      "sha256": "59b73afa796b2061986d86b51fd7aa09f33b9ddad6b5554960b99d2cd3cee0b0",
+      "role": "runtime-or-configuration"
+    },
+    "lib/discernment.mjs": {
+      "mode": "100644",
+      "sha256": "48cb379f329f9242579effb39baed9914b36442d042f2e986894c932d7caa15e",
+      "role": "runtime-or-configuration"
+    },
+    "lib/files.mjs": {
+      "mode": "100644",
+      "sha256": "8790830f733de75286a124cacbfe68460dec2c6ac9b261c85614aa42bfcd7249",
+      "role": "runtime-or-configuration"
+    },
+    "lib/fleet.mjs": {
+      "mode": "100644",
+      "sha256": "9f65ee34facfab79d99d72968c03421a4b78f4488d221cef2d965d7efde64779",
+      "role": "runtime-or-configuration"
+    },
+    "lib/handoffs-command.mjs": {
+      "mode": "100644",
+      "sha256": "5314d4cf65adb31bc70298342be6d58055322016beada8dce7bc2e8a52fe1eb2",
+      "role": "runtime-or-configuration"
+    },
+    "lib/handoffs.mjs": {
+      "mode": "100644",
+      "sha256": "b0f722a13d69a02f57e3f268bd91f73c28c510d962222ded81259622319fc76c",
+      "role": "runtime-or-configuration"
+    },
+    "lib/initial-shell.mjs": {
+      "mode": "100644",
+      "sha256": "7fffd9a310e6fd5cc0a8eb3f3a199cd19621d696cfa20e59e399a5bff4289feb",
+      "role": "runtime-or-configuration"
+    },
+    "lib/install-lock.mjs": {
+      "mode": "100644",
+      "sha256": "2a77bf779e46029e5e64131f9ec553a0cda98b6842bafbce054cfebcc8e311c8",
+      "role": "runtime-or-configuration"
+    },
+    "lib/lane-removal.mjs": {
+      "mode": "100644",
+      "sha256": "5f9e9c7cd58bc54423f2a74f05519197b3c1613b937e4d0138153471317c750a",
+      "role": "runtime-or-configuration"
+    },
+    "lib/lessons.mjs": {
+      "mode": "100644",
+      "sha256": "691598def3f3164c229fb61c244d327422bd32932e706ff38856fbf4898ee2c0",
+      "role": "runtime-or-configuration"
+    },
+    "lib/memory.mjs": {
+      "mode": "100644",
+      "sha256": "f667f0466e4c0701e261683e2f55a84432f16a5a494e208b83a036395c3cc5cb",
+      "role": "runtime-or-configuration"
+    },
+    "lib/native/README.md": {
+      "mode": "100644",
+      "sha256": "decbb373261cdd400f94fbe0a621cec323ff8805246fa78e0a0144ceb2b4229c",
+      "role": "runtime-or-configuration"
+    },
+    "lib/native/build.mjs": {
+      "mode": "100644",
+      "sha256": "86fd0f2c0ce25dd2d36f8d2c50352bc36291191bfc6ad7899a56debd6b85aaac",
+      "role": "runtime-or-configuration"
+    },
+    "lib/native/manifest.json": {
+      "mode": "100644",
+      "sha256": "6bccb36c3fe02efaef72cddb5716d95527d208aea7d03c20875ff1a0cefdf8b2",
+      "role": "runtime-or-configuration"
+    },
+    "lib/native/process-source-darwin-arm64": {
+      "mode": "100755",
+      "sha256": "5f8f004efd9fa2e8dbecb4bb6c6f5842e61c086f86ea378bb8cacfac17e9a107",
+      "role": "runtime-or-configuration"
+    },
+    "lib/native/process-source-darwin-x64": {
+      "mode": "100755",
+      "sha256": "053f25d49467f056f9b48849ba9427dec171fa992c6abf7c2d543ceaa8b02493",
+      "role": "runtime-or-configuration"
+    },
+    "lib/process-owner.mjs": {
+      "mode": "100644",
+      "sha256": "33e46cae16427de2bcfb427ce7b67e4fcc9527d6e1ca701b526e97bc68d4666e",
+      "role": "runtime-or-configuration"
+    },
+    "lib/process-source.c": {
+      "mode": "100644",
+      "sha256": "311533e3693a2aa2438a4c17127970689ed515c9ab764dec60e78f66dab8e088",
+      "role": "runtime-or-configuration"
+    },
+    "lib/processes.mjs": {
+      "mode": "100644",
+      "sha256": "18d019a3b3650796952447d401236ebaac56e9a55e411970edabd7b2b0fb9139",
+      "role": "runtime-or-configuration"
+    },
+    "lib/product-files.mjs": {
+      "mode": "100644",
+      "sha256": "5cc89b554bdd2db30ec6ef81a80980c77bad093fe8e83ea0434c9fd12f4754a5",
+      "role": "runtime-or-configuration"
+    },
+    "lib/project-publication.mjs": {
+      "mode": "100644",
+      "sha256": "4566d9399bb0be16c1e83d5e2b60cbef1f352ea107afca19489de7a7f6ffe593",
+      "role": "runtime-or-configuration"
+    },
+    "lib/project-summary.mjs": {
+      "mode": "100644",
+      "sha256": "b0e1a418bd1e02023fbd471e3bae8d3d6b35e325cdbb2ea446c8aa1476578a2e",
+      "role": "runtime-or-configuration"
+    },
+    "lib/project.mjs": {
+      "mode": "100644",
+      "sha256": "76c9e5b8d9882cfa77f2479c28be1c7ac544627a47a679d66f23f9295ecd31a9",
+      "role": "runtime-or-configuration"
+    },
+    "lib/release-record.mjs": {
+      "mode": "100644",
+      "sha256": "761bb8979056790ca1d2ea010a03d68ce1c6b4772b56e9576baaf89d8ecfc350",
+      "role": "runtime-or-configuration"
+    },
+    "lib/releases.mjs": {
+      "mode": "100644",
+      "sha256": "e33b1fbc95e1e56fe84c3023923baf254b0b5081123319ebb420f6e541467396",
+      "role": "runtime-or-configuration"
+    },
+    "lib/render.mjs": {
+      "mode": "100644",
+      "sha256": "172bb321eaf8500703e89d1e247419043f200e598ce9e75f5a18c73ecb976368",
+      "role": "runtime-or-configuration"
+    },
+    "lib/report-feed.mjs": {
+      "mode": "100644",
+      "sha256": "9142f5d5f0ce31da1812d3a0d180d4fc3e938bb619849cb0ea310a43f7b9ec37",
+      "role": "runtime-or-configuration"
+    },
+    "lib/report.mjs": {
+      "mode": "100644",
+      "sha256": "73a32b105b8eff208511415b55f2cfc8ada410a5e5ffa6d4ff6fcdefe2454a5c",
+      "role": "runtime-or-configuration"
+    },
+    "lib/retire-age.mjs": {
+      "mode": "100644",
+      "sha256": "7f6c2d9ef87d5a3236075c7a4913d14cb3bc6135ce91a56381c32709978305c2",
+      "role": "runtime-or-configuration"
+    },
+    "lib/retire-command.mjs": {
+      "mode": "100644",
+      "sha256": "eba1c529dd61749ac2024eb2adf56526bf3334a9897aca2b61263d1a10f9284d",
+      "role": "runtime-or-configuration"
+    },
+    "lib/retire-hold.mjs": {
+      "mode": "100644",
+      "sha256": "8b0a8a428587d5b7e21d208225abcef8ed70e3ea80f476d4bc33109766c2106e",
+      "role": "runtime-or-configuration"
+    },
+    "lib/retire-lock.mjs": {
+      "mode": "100644",
+      "sha256": "b3af95ccb9d362e16ec39cd33a5379191116b152790af4bcec07940f71a96e5a",
+      "role": "runtime-or-configuration"
+    },
+    "lib/retire-runtime.mjs": {
+      "mode": "100644",
+      "sha256": "44d37510443b209ff9acbc10173d867ced403b384328243643326707a9bfb31e",
+      "role": "runtime-or-configuration"
+    },
+    "lib/retire-status.mjs": {
+      "mode": "100644",
+      "sha256": "15186a5697bec182f92c8ace2fdac523ec918a4ca627ee97240145045593b191",
+      "role": "runtime-or-configuration"
+    },
+    "lib/retire-trigger.mjs": {
+      "mode": "100644",
+      "sha256": "1bc557bb8bdfcd9259a7b945b740e509747659b41bffe73ed0fbb7a08be71481",
+      "role": "runtime-or-configuration"
+    },
+    "lib/retire.mjs": {
+      "mode": "100644",
+      "sha256": "b1d546588609076394e5631f843f4ddd8897e5f6a4b762fdeaedffce67e0b638",
+      "role": "runtime-or-configuration"
+    },
+    "lib/review-verdict.mjs": {
+      "mode": "100644",
+      "sha256": "38d331e0c329f55a94df7206f0fbb97342f2eecee328d84cccb8d700892b4cc3",
+      "role": "runtime-or-configuration"
+    },
+    "lib/roles.mjs": {
+      "mode": "100644",
+      "sha256": "c5722efe6515439421593fc6606fe9a97aa9e3276e57bc378c514c9bf9d3c64e",
+      "role": "runtime-or-configuration"
+    },
+    "lib/run-timing.mjs": {
+      "mode": "100644",
+      "sha256": "e76eb2d1395ff777f4462d60a4b1603516019b0f97958342fb098bc06b5c3d03",
+      "role": "runtime-or-configuration"
+    },
+    "lib/sanitize.mjs": {
+      "mode": "100644",
+      "sha256": "a3a3477361f13d237af4e1dd37f6e2a4854d24217c44b00ce846acfc49f427a5",
+      "role": "runtime-or-configuration"
+    },
+    "lib/session-release.mjs": {
+      "mode": "100644",
+      "sha256": "35f364d76394b9130254ac5453c70b9e1867a3673eb6b8d07b1498774c04404a",
+      "role": "runtime-or-configuration"
+    },
+    "lib/shell.mjs": {
+      "mode": "100644",
+      "sha256": "0de580ddf37f6785fe580ec4089befeb8399d8316f38992ce5e3ed63ea8136cc",
+      "role": "runtime-or-configuration"
+    },
+    "lib/state.mjs": {
+      "mode": "100644",
+      "sha256": "6c379650bf9414c58e2a3462a4726036d270dcd4c58c7d0500280de1cef03557",
+      "role": "runtime-or-configuration"
+    },
+    "lib/store.mjs": {
+      "mode": "100644",
+      "sha256": "d2eb7a1506fe6485f949efffcd80837c194bf62a68e8c0c5b669acfd9aacdb16",
+      "role": "runtime-or-configuration"
+    },
+    "lib/today.mjs": {
+      "mode": "100644",
+      "sha256": "dcfa70b8b1363f599203f269006cd54d287db5240278e0ea37e130030cf563ae",
+      "role": "runtime-or-configuration"
+    },
+    "lib/worker-identity.mjs": {
+      "mode": "100644",
+      "sha256": "f0d686116498208334a30f7a502779a681746167e16ea71101a1be08173cc9b8",
+      "role": "runtime-or-configuration"
+    },
+    "logs/README.md": {
+      "mode": "100644",
+      "sha256": "f23fa9f3e6c5ddecf8b8dd253041fe7d6c7ec1c341c7774bc78bac1ecb59ebe0",
+      "role": "runtime-or-configuration"
+    },
+    "logs/inputs.mjs": {
+      "mode": "100644",
+      "sha256": "b5bb8b6316af3c505aff1725da4259e7cee64f59363ddb8329578ed946bcf1a7",
+      "role": "runtime-or-configuration"
+    },
+    "logs/journal.mjs": {
+      "mode": "100644",
+      "sha256": "995d8ce4457643f9d4f0acafa478f36bb89e1ab8b8e3f3b9c3f7addce12ea84e",
+      "role": "runtime-or-configuration"
+    },
+    "logs/logs.mjs": {
+      "mode": "100644",
+      "sha256": "19edb22d8f6172a26e5b6acafd8b75e73311fc12c4043b7c5da4d3df2161a2cf",
+      "role": "runtime-or-configuration"
+    },
+    "logs/rules.mjs": {
+      "mode": "100644",
+      "sha256": "a6617f64a7a49a88fabe1dc2b2a9eed85365bf1c46268a395439ab18834f1e76",
+      "role": "runtime-or-configuration"
+    },
+    "logs/view.mjs": {
+      "mode": "100644",
+      "sha256": "3722c12770f9639ddb3a95417762e5bd875f0dc76692ae845a85c64b14f390cb",
+      "role": "runtime-or-configuration"
+    },
+    "messages/README.md": {
+      "mode": "100644",
+      "sha256": "88b0e4e49725f3ccb55298934736c69d82ee9aba8b509263572b88a9f4745a40",
+      "role": "runtime-or-configuration"
+    },
+    "messages/classify.mjs": {
+      "mode": "100644",
+      "sha256": "074e93852d9f8f7b08694888f8d97d670366af7876797e9c6d0679dd00615a96",
+      "role": "runtime-or-configuration"
+    },
+    "messages/codex-hooks.template.json": {
+      "mode": "100644",
+      "sha256": "67b55994f2e27c0ec3d7dac434c9dadedaf45a1ed43aef62cd90519c0f88ab44",
+      "role": "runtime-or-configuration"
+    },
+    "messages/fixture.mjs": {
+      "mode": "100644",
+      "sha256": "e3115e9cfb10ec08467dd13c737ff609a256104cd4302983443ee2af13c8595c",
+      "role": "runtime-or-configuration"
+    },
+    "messages/hook-nudge.mjs": {
+      "mode": "100644",
+      "sha256": "0540d32370d1206344a8922e0259a0f246e7b9a19d712cd0eec659455c8f8564",
+      "role": "runtime-or-configuration"
+    },
+    "messages/hook-pull.mjs": {
+      "mode": "100644",
+      "sha256": "2d910bcecadab2ca9ba8d8e6b11e1ac06f67d6c354f6879fe01937130e8f998a",
+      "role": "runtime-or-configuration"
+    },
+    "messages/hook-session.mjs": {
+      "mode": "100644",
+      "sha256": "05c72e4213e4be6cc61a02b164ea8631d9163b88067f57ee0a523872c51aca52",
+      "role": "runtime-or-configuration"
+    },
+    "messages/journal.mjs": {
+      "mode": "100644",
+      "sha256": "3123beeae01439ea653ee679603a9cb0502e9b4fb1441aeaf25a2b59d22632d4",
+      "role": "runtime-or-configuration"
+    },
+    "messages/messages.mjs": {
+      "mode": "100644",
+      "sha256": "86fe9f533ea548b00fe7a6a75e038e785cc2a1e21243387d2d95db85ada110e0",
+      "role": "runtime-or-configuration"
+    },
+    "messages/mirror.mjs": {
+      "mode": "100644",
+      "sha256": "92eac2fa8eee0126a9fc09fc4cf3523fcee11bc9ed4a3f405a9b45de0f035169",
+      "role": "runtime-or-configuration"
+    },
+    "messages/receiver.mjs": {
+      "mode": "100644",
+      "sha256": "c890ba74202d3441ade2b3122549a6b4c94bd9474eab564c3e897d4bda4c21a6",
+      "role": "runtime-or-configuration"
+    },
+    "messages/schema.mjs": {
+      "mode": "100644",
+      "sha256": "befb0fa7f6a5fd27c3ece27c4e9728fac83e3cdafb9322478616c2e6547935d2",
+      "role": "runtime-or-configuration"
+    },
+    "messages/session-transfer.mjs": {
+      "mode": "100644",
+      "sha256": "580f94ccdaad8734ea15b853e533fe185b7e004207d8bb17ffa6a34af9f88cd2",
+      "role": "runtime-or-configuration"
+    },
+    "messages/transfer.mjs": {
+      "mode": "100644",
+      "sha256": "835d58cd87a0ab9584ed8a6465e24d202e15fc3d033d911cbe81f5e646f578a0",
+      "role": "runtime-or-configuration"
+    },
+    "messages/transport.mjs": {
+      "mode": "100644",
+      "sha256": "5dc3cb5e202061e6a892b19c7f1f9c2540081f25d306b0c99ceb21e6cc290dec",
+      "role": "runtime-or-configuration"
+    },
+    "package.json": {
+      "mode": "100644",
+      "sha256": "ff3bc1743163ed25dd91a0488a987b6d42a10ec661c994ba20dbe7f1353bdaec",
+      "role": "runtime-or-configuration"
+    },
+    "promote/README.md": {
+      "mode": "100644",
+      "sha256": "83316a8352597858e5918c7942f54fb0bc1aad086ec0a819406aec311034a2c0",
+      "role": "promotion-authority"
+    },
+    "promote/completion.mjs": {
+      "mode": "100644",
+      "sha256": "a7c9a780d91bcaf39acce44d163541c889bb95f54c2cb1a1bd5f4b1ab6511fd0",
+      "role": "promotion-authority"
+    },
+    "promote/evidence.mjs": {
+      "mode": "100644",
+      "sha256": "0bdd8a9cd325ecad77feb488dbb8a7a446fc4307675298a6f4754f6844d0586a",
+      "role": "promotion-authority"
+    },
+    "promote/gate-profile.mjs": {
+      "mode": "100644",
+      "sha256": "c38c5e3ab78c0233c3d13b8b441207b949a77711835de6dfebb1c4c225d046e5",
+      "role": "promotion-authority"
+    },
+    "promote/guard.mjs": {
+      "mode": "100644",
+      "sha256": "a414f742df99fae5194a6d0f6ed3974bf61bdacedf119fec8d8226339075e87d",
+      "role": "promotion-authority"
+    },
+    "promote/host-gate.mjs": {
+      "mode": "100644",
+      "sha256": "57283e308e9da52eb77f3f83a11a7d896f4ff22da5d708fe369ed01b1c6533e3",
+      "role": "promotion-authority"
+    },
+    "promote/memory-gate.mjs": {
+      "mode": "100644",
+      "sha256": "8f9cba429663ef43abf4bf69fbbdf1b579804b0c1bbc344b7b9a201985b28874",
+      "role": "promotion-authority"
+    },
+    "promote/metrics.mjs": {
+      "mode": "100644",
+      "sha256": "84c6e8fda1f1ac872141f8ff01843b5154d326d1158966f60297c0b7250a004d",
+      "role": "promotion-authority"
+    },
+    "promote/native-context.mjs": {
+      "mode": "100644",
+      "sha256": "b2a420e72515f01f54bf98ad6d04702fff6d999c2351932ed27544200492425d",
+      "role": "promotion-authority"
+    },
+    "promote/promote.mjs": {
+      "mode": "100755",
+      "sha256": "aa7dde5712d1f1cdb8b237443386410f6349356f3ef9c5df03aab890189167bd",
+      "role": "promotion-authority"
+    },
+    "promote/selector.mjs": {
+      "mode": "100644",
+      "sha256": "e1f7b29c6068a25b0542aa3158148eb7d5bfa1a7fa55a7e33809c8a1fd58fad1",
+      "role": "promotion-authority"
+    },
+    "promote/shadow.mjs": {
+      "mode": "100644",
+      "sha256": "61930f4261bdae19d7edd2005600aca630ac5d1687e4263e67842020696ec9c3",
+      "role": "promotion-authority"
+    },
+    "promote/test-plan.mjs": {
+      "mode": "100644",
+      "sha256": "c01ef81feb06859413e710ef5504b1d5e3a1a33dca3acba8c4e63edc7df61954",
+      "role": "promotion-authority"
+    },
+    "promote/train.mjs": {
+      "mode": "100644",
+      "sha256": "abdeac38ea9caaa0baafa538e9c9b2868c70df959d1e215c2bec04cc49b10192",
+      "role": "promotion-authority"
+    },
+    "sessions/README.md": {
+      "mode": "100644",
+      "sha256": "766973977355e22ad0ab2d0121b1640b429a2442f5ff3467c5fb8e3586211b86",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/apply.mjs": {
+      "mode": "100644",
+      "sha256": "2cca40c00a06f4c45b32f06abeab9bd5266cbfc67e5df91dd8b9998df32c148b",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/authorization.mjs": {
+      "mode": "100644",
+      "sha256": "bc666c6692327ab73a491c835bd4858be0d824c7cccb6cbf84c8e949ddeda224",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/close-safety.mjs": {
+      "mode": "100644",
+      "sha256": "6a9d99e080085feac2e5155ec9b63b7d5a501d45747ae79877dc0e89ebf09c74",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/disposition.mjs": {
+      "mode": "100644",
+      "sha256": "ff0dfa9c18db34de4a9393da6c26d15400c86220f548ef88eef7e683f65ed629",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/json.mjs": {
+      "mode": "100644",
+      "sha256": "94169763547bc3bfabc969da16137e18672a69bed5f4762393943ebbc57e2c56",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/lifecycle-evidence.mjs": {
+      "mode": "100644",
+      "sha256": "7dce5a2d79c768c6c99056ecd6e4557a1cab00812c70d565dbd05efe7eaacf59",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/lifecycle.mjs": {
+      "mode": "100644",
+      "sha256": "211cee0dc2ec0fbabec71dbe8e3b410cc60dc14edbcc954c88b2e4516916e12d",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/live-observe.mjs": {
+      "mode": "100644",
+      "sha256": "9244ea120b2f6ab41537b6cf340ea4d4a1d622b5bcb02a372450fa37da928be1",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/live.mjs": {
+      "mode": "100644",
+      "sha256": "a0f82f059fbbdbb44dfda14e093f367ed0fa7b7de6321d07726e09f63c6a3c55",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/manifest.mjs": {
+      "mode": "100644",
+      "sha256": "ee01761f807a6f11a6a08990a4093954fa923e890dcdefba57bc27eaa00f6d8b",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/native-conversation.mjs": {
+      "mode": "100644",
+      "sha256": "4572ade9040dfb4966cde558fa3b7036d99cd752519091d5205d08868ecaf273",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/observe.mjs": {
+      "mode": "100644",
+      "sha256": "e3c1c46b1990b8bec9e536910397cb0ea0e9bde5dfd1117f9387e0562fb7925d",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/plan.mjs": {
+      "mode": "100644",
+      "sha256": "07faa8b767649e055c47d45a4c42989294997f7e157ec119cd839bde472df510",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/project.mjs": {
+      "mode": "100644",
+      "sha256": "8a05a00671cbe96c3aa84a787e207a6688100b23abf29e093305e64e0da0edf0",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/receipts.mjs": {
+      "mode": "100644",
+      "sha256": "9f59e427ac8ef54f683eb231e421c8c3e0d2191a5120985fa2ba6589621f314b",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/reconcile.mjs": {
+      "mode": "100644",
+      "sha256": "8c43415983612fee7075a50ecd2770bcda68ba58daad5ebb3c45954e79a1a191",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/runtime.mjs": {
+      "mode": "100644",
+      "sha256": "2b7fdbcf8dadd54b12fee8a8864e78550ba42e07f6243b7e423357ff1368effb",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/sessions.mjs": {
+      "mode": "100644",
+      "sha256": "993167ca2914e93bcaeac5a1cc93e62df24324d176d9f942850008870aa827e4",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/templates/chat.md": {
+      "mode": "100644",
+      "sha256": "92b925df8593a6b54734526fca369a24bdc3161bc563f9a5c1b5cc0e7fc925b3",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/templates/engineer-worker.md": {
+      "mode": "100644",
+      "sha256": "b6cd23608329004288f44d9609426d7676ca9e9c54d35facceb7346fbbf1440e",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/templates/logs-triage.md": {
+      "mode": "100644",
+      "sha256": "a2a03dbb1b5746bf76061cd4c86b1c1ba60309731fa04cffc0735b62d138b666",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/templates/logs-viewer.md": {
+      "mode": "100644",
+      "sha256": "2fad91427a0c2310ae4e6da309f86e6628c69a6a4eec4a4ab21dfcaca1e5ac31",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/templates/reviewer.md": {
+      "mode": "100644",
+      "sha256": "295df05cd77064585768cc784eb7067c817e48eacf30ad0ab837694f999aa92f",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/templates/supervisor.md": {
+      "mode": "100644",
+      "sha256": "c7c218279fbd64f5ec449e3f1d6573d2ef4548693d42a3d4f9c13fb98f4cef10",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/templates/triage-status.md": {
+      "mode": "100644",
+      "sha256": "629eaf4dd9ce2c6f1d039fd5e18aeda6856427f6502b99b3585c21f9d1027f03",
+      "role": "runtime-or-configuration"
+    },
+    "sessions/templates/workspace.md": {
+      "mode": "100644",
+      "sha256": "6e6040497ada1e00101580073a06860b7bed725a91a727a3468771d7ef5179a8",
+      "role": "runtime-or-configuration"
+    },
+    "settle/README.md": {
+      "mode": "100644",
+      "sha256": "0bf0975385cda44a62192269d2290c4473495aa22394217384d8003f1a7dbd1a",
+      "role": "promotion-authority"
+    },
+    "settle/config.mjs": {
+      "mode": "100644",
+      "sha256": "b8ce59c5e6a45d6280492973e5f4d54eaba8b3eb2d0249ca48f2fa899944780f",
+      "role": "promotion-authority"
+    },
+    "settle/desks-command.mjs": {
+      "mode": "100644",
+      "sha256": "22c03ea90beef63dfbe798e4904aedadc458e10ae0a928950c7c3a604562fb8c",
+      "role": "promotion-authority"
+    },
+    "settle/lock.mjs": {
+      "mode": "100644",
+      "sha256": "f2c59a99fb986f0d8a95f650093874f9e5f617c8590a31292f5d4ecfa412aa81",
+      "role": "promotion-authority"
+    },
+    "settle/record-state.mjs": {
+      "mode": "100644",
+      "sha256": "fc7c22011083ec910f75959b19f6fcd39810debdff304ca11f9f4b12950179fa",
+      "role": "promotion-authority"
+    },
+    "settle/replace-lane-head.mjs": {
+      "mode": "100644",
+      "sha256": "b0739b454528c5ece4168d8539f08a3e9a2b9bee349b34df9a0f364f3406baca",
+      "role": "promotion-authority"
+    },
+    "settle/report-evidence.mjs": {
+      "mode": "100644",
+      "sha256": "c549d940c9f58b3883d017322b7b309d0f2a6668c762bf056cfdd0bc2a8ed49e",
+      "role": "promotion-authority"
+    },
+    "settle/settle.mjs": {
+      "mode": "100644",
+      "sha256": "120bf5a32ea7e7c3dacec1165dc856724b20a14d89b059869551fcbd927038d5",
+      "role": "promotion-authority"
+    },
+    "settle/test-evidence.mjs": {
+      "mode": "100644",
+      "sha256": "c4794ce5e8a7ed217569f72bd2eecd72b4eef7ccd5907a141b71699ddbe00e26",
+      "role": "promotion-authority"
+    },
+    "settle/test-plan.mjs": {
+      "mode": "100644",
+      "sha256": "1657a593f13ed2a2c9c847c8a021c1b1d1d039c05ce436c3aac1b5059486d26e",
+      "role": "promotion-authority"
+    },
+    "setup/README.md": {
+      "mode": "100644",
+      "sha256": "1005d0071adb729a8aca7ff72331f62502a61d164911b5210fcda0c21de0a0b1",
+      "role": "runtime-or-configuration"
+    },
+    "setup/setup.mjs": {
+      "mode": "100644",
+      "sha256": "b58eebbd8aaa2d2b476423de536291a3d453f039fda668658fcb162ba79a9a38",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/DECISION-ROUTING.md": {
+      "mode": "100644",
+      "sha256": "4aa833cb643445356ef8b5185a45bc07c0ed3452b94bd68dff3370d286f10602",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/KICKOFF.md": {
+      "mode": "100644",
+      "sha256": "3aa7d23e8a556253a3486c2a544e94c8c38c63afaf36e0a27a5c5fce11ce0c3d",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/PROMOTION-COMPLETION.md": {
+      "mode": "100644",
+      "sha256": "d951bb5de92e6993820acd3d3a70c31e0729976ad51fbb8427184f74c87dded1",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/PROTOCOL.md": {
+      "mode": "100644",
+      "sha256": "2d5e42d72f1a8fe8646b77a325cc74dfa2df2f8844743acfb51b6eac4e0bf4a5",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/README.md": {
+      "mode": "100644",
+      "sha256": "6519713af8705ab6cfd7bd542dc172bf25a05c435dd28769599203f88b446f74",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/arm-watch.sh": {
+      "mode": "100755",
+      "sha256": "8a0fe59c20bfbc91dda49b9607e124a70ce24e5394f79482de77fee979d91e65",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/autopilot.mjs": {
+      "mode": "100644",
+      "sha256": "d40920c5305f359cccf70f190f1fe87c0b055ca04d47ecdad06ecfb5ae383c67",
+      "role": "promotion-authority"
+    },
+    "supervisor/chats.mjs": {
+      "mode": "100644",
+      "sha256": "1d790c81c2f2b2ce07b39471937e5ffcb20ceea83bda688d0515bb70b2d52f70",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/clean-pass.mjs": {
+      "mode": "100644",
+      "sha256": "b0bae43268c306a306929f4cae6b7f63ba014280a94be3570b4cd36c0a43be55",
+      "role": "promotion-authority"
+    },
+    "supervisor/composer.mjs": {
+      "mode": "100644",
+      "sha256": "e25633516411e51f8839e127d2e0a40741a3aca8def9cb03b13d817420429d9e",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/context.mjs": {
+      "mode": "100644",
+      "sha256": "186ea8e8e3d74963c2d3f3a77dda0e4b35894070d572bf24ed7149d3bf016fa3",
+      "role": "promotion-authority"
+    },
+    "supervisor/cycle-time.mjs": {
+      "mode": "100644",
+      "sha256": "254a773d8249eb23bbd88f5263de97e84692a5859dde8078a41ba619df78b7f4",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/docs/R-285-report.md": {
+      "mode": "100644",
+      "sha256": "7deea974956a1077618e3baf198eb8df12aeb1c8e836b2e4dce69a21b1a81fd7",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/docs/R-292-report.md": {
+      "mode": "100644",
+      "sha256": "6540168eb6aab282bdf84cea960432e4871915ff2abd5d4a716b83a3a34dc142",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/docs/R-298-report.md": {
+      "mode": "100644",
+      "sha256": "aa899ca8621c80cdc0f55bb5164671deccf797818ff7642f37ba0d267d961d74",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/docs/R-319-report.md": {
+      "mode": "100644",
+      "sha256": "a4657af8842c8e2bb9c910a32380ff9ea771f7c9844bf75f8f5f7c19d7df81bd",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/entry.mjs": {
+      "mode": "100644",
+      "sha256": "da5d591b789d14bfcee71f257c05176fae071b6e1fca36d147e10600c713976c",
+      "role": "promotion-authority"
+    },
+    "supervisor/fast-path-timing.mjs": {
+      "mode": "100644",
+      "sha256": "1c4242c08f232ea49cf125d566a6db470075fbe9b376c4bfd738bcfe2913084f",
+      "role": "promotion-authority"
+    },
+    "supervisor/herdr-edge.mjs": {
+      "mode": "100644",
+      "sha256": "f7890dabe67bfc91ab69666450c9037c945a84472d1243df14f8132e95c2d31d",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/notice-lock.mjs": {
+      "mode": "100644",
+      "sha256": "a575eaaae08a2a15a718ca83f577d11b09826998ebc6d02b3b73f7101f1595a2",
+      "role": "promotion-authority"
+    },
+    "supervisor/prompt-supervisor.mjs": {
+      "mode": "100755",
+      "sha256": "028dd99f589cd4d88413e261153e8d7944f652e28666bc3dde77e45c3ec5634f",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/protocol.mjs": {
+      "mode": "100644",
+      "sha256": "0fd525e51304ac268709bccb72235cf9527d60948bd158009c1904f99b2e435c",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/reconcile.mjs": {
+      "mode": "100644",
+      "sha256": "f00d3ee4a35dcf985c05ecd67f865ee199a0312bf5d0e45be7c7bebf37072932",
+      "role": "bch-entry"
+    },
+    "supervisor/request.mjs": {
+      "mode": "100644",
+      "sha256": "2797daca1cf2df2dd987c3906012f8fa8a2189f2c09df366ca03e4d266857def",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/retire.mjs": {
+      "mode": "100644",
+      "sha256": "72e911c08800c5358518427dd8ef7c80634e0a996605e7bd181dc21ede2e7fd0",
+      "role": "runtime-or-configuration"
+    },
+    "supervisor/safe-point.mjs": {
+      "mode": "100644",
+      "sha256": "55a93d90351375700923c36e5da71656167dc1186370de17de9ee9a29518c394",
+      "role": "promotion-authority"
+    },
+    "supervisor/status.mjs": {
+      "mode": "100644",
+      "sha256": "fb7e55957356b4a6d56e63892a038604c2009e47cfa819fc7e49289cc7ce69f8",
+      "role": "promotion-authority"
+    },
+    "supervisor/supervisor.mjs": {
+      "mode": "100644",
+      "sha256": "f2a16a9686a4d58d535d1b434c3737b0bb1b23dbf63b34089049b34a16eee64e",
+      "role": "promotion-authority"
+    },
+    "supervisor/tidy-tabs.mjs": {
+      "mode": "100644",
+      "sha256": "d2ab74b1d2e8af4806c019483a8701e4f838410249e2b73ca192bc7e6207775d",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/README.md": {
+      "mode": "100644",
+      "sha256": "45e7abfa26ef9cf68d25c5596f3528504f560858f80add1f587f8b3e34a2b828",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/limits.mjs": {
+      "mode": "100644",
+      "sha256": "7e185e565195fc69b822ee75c254d16b7d7b4dfa890cd2634f19e5556f4345ce",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/lock-support.mjs": {
+      "mode": "100644",
+      "sha256": "b51723fd5dceae689997a86bfcf4dfc6d0c42cffe88b9319c2d28d86dbeb226e",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/measurement.mjs": {
+      "mode": "100644",
+      "sha256": "60bbf369297b50a5b34bdaee4f62cbf9365c05930f8f763fe3f4bb2e7ddd4f67",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/occupancy.mjs": {
+      "mode": "100644",
+      "sha256": "e49a8430a625e15b5d9fb287d588104bc5ee92dc6c713118d653a326b6927da8",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/resources.mjs": {
+      "mode": "100644",
+      "sha256": "2f7f9d5c842f82f16a10345ac9336d0b96d73c32c29cda4fce74f4839273d586",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/retention.mjs": {
+      "mode": "100644",
+      "sha256": "a1cecc8c25d7026da36dea5399bfdac55b7441bae8feb029264b8694fd3232d4",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/run.mjs": {
+      "mode": "100644",
+      "sha256": "0aa730524e84cd0820a844f24fd333a89c6b2ed649802e40236bb9d491640e6f",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/summarize.mjs": {
+      "mode": "100644",
+      "sha256": "6155b82452fcc16e67c8a3fec5ffd08682afa0f7fb0d52f767c84fcb4a00ba02",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/test-slot.mjs": {
+      "mode": "100644",
+      "sha256": "4a36aa1a058bf22d1b5e31e88c55b4a9f709a06b6184f50785b9680d82f8f8da",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/ticket-queue.mjs": {
+      "mode": "100644",
+      "sha256": "37ad65dc7f6cff885985c20a1ab0ea4924b77984d35ce517e6d822c562cef646",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/validation-resources.json": {
+      "mode": "100644",
+      "sha256": "92d1874089633aaeaf0a10847d83bd5d30b31de97353e73be9ad836047b6e717",
+      "role": "runtime-or-configuration"
+    },
+    "test-slot/watchdog.mjs": {
+      "mode": "100644",
+      "sha256": "8c2ce8023689cadbd52b5ab6fd7dbe2a0503403c29f6d0ce8aef6b3862d18db9",
+      "role": "runtime-or-configuration"
+    },
+    "test/helpers/affected-tests.mjs": {
+      "mode": "100644",
+      "sha256": "204dd2870fc964cb1e01f168f7e944404ada5676a2a9e7885fac42e3e6e45525",
+      "role": "promotion-authority"
+    },
+    "test/helpers/board-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "744ed92e50a65eae390787f904be48de44a8a4ca9571e0acea9956f51daf656b",
+      "role": "promotion-authority"
+    },
+    "test/helpers/bounded-test.mjs": {
+      "mode": "100644",
+      "sha256": "6c15d3b9e9429145504884fae3e550bdffa103cf7bf6cf3a0ea69c96d67e7464",
+      "role": "promotion-authority"
+    },
+    "test/helpers/child.mjs": {
+      "mode": "100644",
+      "sha256": "da8966a097aef45ef2d7732cffa5738b020aec9e59a9f88dd5532fbcef3cf32a",
+      "role": "promotion-authority"
+    },
+    "test/helpers/command-allowance.mjs": {
+      "mode": "100644",
+      "sha256": "67dbbd090bc9da9000521c5ab3fa2b2d41354e4a5d4ed2c4e4b4cfeb09ece992",
+      "role": "promotion-authority"
+    },
+    "test/helpers/detached-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "62f43f2070bfd123ba302d074af7238aa5cd49dd064447c69df4e226f167b3aa",
+      "role": "promotion-authority"
+    },
+    "test/helpers/detached.mjs": {
+      "mode": "100644",
+      "sha256": "e009f924e224b3a9d2a3a5ee42218f36b6f6801f22ac7b494c0501d27122406b",
+      "role": "promotion-authority"
+    },
+    "test/helpers/file-wait.mjs": {
+      "mode": "100644",
+      "sha256": "de124ed6d20e37e393e5cf8a0d937f991e21658c420d1cbea32b5a0bb3cd0ffa",
+      "role": "promotion-authority"
+    },
+    "test/helpers/fixture-deadline.c": {
+      "mode": "100644",
+      "sha256": "03050f89c08d7908ae8293b49d8610dbb47cdb443d9aef2bf905d8dd583a5a9b",
+      "role": "promotion-authority"
+    },
+    "test/helpers/fixture-lifetime.c": {
+      "mode": "100644",
+      "sha256": "489eb4c0b13af4dbe94c5828062c04e2fa8bd445126b489a1be2a67fb707253e",
+      "role": "promotion-authority"
+    },
+    "test/helpers/fixture-lifetime.mjs": {
+      "mode": "100644",
+      "sha256": "ad649bdb2884298dc4f29b46c0449093084f6ee8829ef19a8ccf39f5df155bef",
+      "role": "promotion-authority"
+    },
+    "test/helpers/fixture-policy.mjs": {
+      "mode": "100644",
+      "sha256": "2c31086898a7c09027bb6f760b75c57227d00f8c03f6a6dae663b614e776e0be",
+      "role": "promotion-authority"
+    },
+    "test/helpers/fleet-guard.mjs": {
+      "mode": "100644",
+      "sha256": "b6d3aa031880634fca4137b4031a0345fc0c53543439e83f108cff7645eb5658",
+      "role": "promotion-authority"
+    },
+    "test/helpers/gate-history.mjs": {
+      "mode": "100644",
+      "sha256": "647cbedd7a38d983bc328e0db0a2b497ba6f948bf131d2c71c6e9c3ac0d8c037",
+      "role": "promotion-authority"
+    },
+    "test/helpers/git-seed.mjs": {
+      "mode": "100644",
+      "sha256": "ea441626c72afbc1ddc9c8861c485dc56d85072489bbffa1ab73c1fde42295a7",
+      "role": "promotion-authority"
+    },
+    "test/helpers/inbox.mjs": {
+      "mode": "100644",
+      "sha256": "d885d61f3003d14ba51507159c34cc1f2d775f088b17d0bd0d3f8552e53e0f2a",
+      "role": "promotion-authority"
+    },
+    "test/helpers/log-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "e2b859ed66e62bb81e503d203c8d47964bca19a4429ccc62d7c2d5a52e084731",
+      "role": "promotion-authority"
+    },
+    "test/helpers/memory-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "aa32bc588651ef9ef1397dae7ba1d83c7f70b80d54702b0bd082152345b1f264",
+      "role": "promotion-authority"
+    },
+    "test/helpers/native-group-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "aa0ab73a00288a578918e8068a1e4879e28e1ba7a8f21181055b51775bd6904a",
+      "role": "promotion-authority"
+    },
+    "test/helpers/offline-herdr.mjs": {
+      "mode": "100644",
+      "sha256": "90322258f389ca2b726ae7e30bcf172b9cc5e0ce7cc2edda1939fd526b3a3c2c",
+      "role": "promotion-authority"
+    },
+    "test/helpers/processes.mjs": {
+      "mode": "100644",
+      "sha256": "25d2fb492f16da9ab961b205d7471f9af497a1495d7ae295255301e75c37a998",
+      "role": "promotion-authority"
+    },
+    "test/helpers/promotion-memory-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "03412c703e61e0e360aef5982f3042e36be1c068d43025811f22bf538f3533eb",
+      "role": "promotion-authority"
+    },
+    "test/helpers/promotion-worker.mjs": {
+      "mode": "100644",
+      "sha256": "75fd72dee68a3753c8d7f2cf7449d480259d22ae185fa1c7a785f3de7a551f42",
+      "role": "promotion-authority"
+    },
+    "test/helpers/pty-owner.c": {
+      "mode": "100644",
+      "sha256": "96af8afeb5bb398c5213105f0886ac51706b535593e43c4c7363f86f07eb9464",
+      "role": "promotion-authority"
+    },
+    "test/helpers/pty.mjs": {
+      "mode": "100644",
+      "sha256": "abdc21907f5d881eba658a1e8d31a9d538abfdee55753a8e58ed12a58dd6bc52",
+      "role": "promotion-authority"
+    },
+    "test/helpers/receipts.mjs": {
+      "mode": "100644",
+      "sha256": "e95ce9841bdfad954cbd7ab55c91def6ed2f20ba19473e750dc2f888864918e7",
+      "role": "promotion-authority"
+    },
+    "test/helpers/release-environment.mjs": {
+      "mode": "100644",
+      "sha256": "368f0230eb58801ca66dfd18d9860b72ae5d01c004cd24f8a4d537da6b62b6f8",
+      "role": "promotion-authority"
+    },
+    "test/helpers/release-suites.mjs": {
+      "mode": "100644",
+      "sha256": "331076701b8cfa00dee46b211142013860f94123a75b13719deab7e950d04f8d",
+      "role": "promotion-authority"
+    },
+    "test/helpers/retire-exit-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "668aa13c9d2ed70ca36dd46e8d0d61d5d64f5ad2ac805d84d148e41446d21e3c",
+      "role": "promotion-authority"
+    },
+    "test/helpers/retire-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "798528b3c7edb2ebc2a97c936030d21aa7711a4996d4fb98b48ee50a27dc931a",
+      "role": "promotion-authority"
+    },
+    "test/helpers/retire-sweep-fixture.mjs": {
+      "mode": "100644",
+      "sha256": "5a6eedc60af8c84951ab9353b65cb11c3cd439d8f4629afecee9737f36e13681",
+      "role": "promotion-authority"
+    },
+    "test/helpers/run.mjs": {
+      "mode": "100644",
+      "sha256": "9b5eaa970c3f5c30fa16ca2cbf037863391a3a00986e265cdff4d713ac910537",
+      "role": "promotion-authority"
+    },
+    "test/helpers/select-tests.mjs": {
+      "mode": "100644",
+      "sha256": "2a109615460e2ec763412a58ad61fb50063d1ac34a208524ca6f2258805ac228",
+      "role": "promotion-authority"
+    },
+    "test/helpers/session-bind.mjs": {
+      "mode": "100644",
+      "sha256": "ba845be7815e8686aaa5cc8f08bcf416fe9e61d34ccb1a5960b680dda7b51764",
+      "role": "promotion-authority"
+    },
+    "test/helpers/suite.mjs": {
+      "mode": "100644",
+      "sha256": "b1d835e56f373322069c2b9ae7f2fa0325cc3edb0a63672e376409a7de58bc19",
+      "role": "promotion-authority"
+    },
+    "test/helpers/test-durations.json": {
+      "mode": "100644",
+      "sha256": "c45a3094791e813c5300af8bb21c8ad3a5434a7bba822c857dc3c55202de5c7f",
+      "role": "promotion-authority"
+    },
+    "test/helpers/test-slot-env.mjs": {
+      "mode": "100644",
+      "sha256": "3a998b0b8c22be135aa0b004a27270040e4a81555d519e446773abb4f0d5d7d0",
+      "role": "promotion-authority"
+    },
+    "test/helpers/tier.mjs": {
+      "mode": "100644",
+      "sha256": "1b8a1e1f2b5d1365a5302abd05629c2891224f47c3f8a014b82f2d212852fad2",
+      "role": "promotion-authority"
+    },
+    "verify/README.md": {
+      "mode": "100644",
+      "sha256": "702a5a213f22d1fda74db3395e6071accb3f7bb568880d70592605531e71bb4f",
+      "role": "runtime-or-configuration"
+    },
+    "verify/execute.mjs": {
+      "mode": "100644",
+      "sha256": "25cdc3439d655d6db939acf1f9db3318c439c433871bb339af261de2e5c9e8bc",
+      "role": "runtime-or-configuration"
+    },
+    "verify/expectations.mjs": {
+      "mode": "100644",
+      "sha256": "4b5fec421fa6455d10bf0a6da9f347a67e9567ef7a310cc6b5d33fd3929eba2e",
+      "role": "runtime-or-configuration"
+    },
+    "verify/verify.mjs": {
+      "mode": "100644",
+      "sha256": "d2d2515f0f02de9f635db511076dfa55e42a7aea18890b0deb5cfca7ead080a1",
+      "role": "runtime-or-configuration"
+    },
+    "watch/README.md": {
+      "mode": "100644",
+      "sha256": "92a870537750f23e7696d22b68d63bf5705141fca4a08bf1de2d5ec012c8acd5",
+      "role": "runtime-or-configuration"
+    },
+    "watch/lock.mjs": {
+      "mode": "100644",
+      "sha256": "3b843ce1f70d0d5835f81d0d132c74cd7eaf1c1be489760f40bc72c1d46e24f9",
+      "role": "runtime-or-configuration"
+    },
+    "watch/notice.mjs": {
+      "mode": "100644",
+      "sha256": "a6edf0ad469c679171a71069abca7fa398ead7ccddede546c7c76f8c9c18b6cb",
+      "role": "runtime-or-configuration"
+    },
+    "watch/watch.mjs": {
+      "mode": "100644",
+      "sha256": "f1eea8832ec8d6e0b2bbd1bdbc26dd4e9b43a0ecc32df05fa3c50cec42a19778",
+      "role": "runtime-or-configuration"
+    }
+  },
   "exclusions": [
-    { "code": "GREEN_SELF_AUTHORITY", "paths": ["supervisor/green-*", "supervisor/clean-pass.mjs", "supervisor/autopilot.mjs", "supervisor/fast-path-timing.mjs", "supervisor/test/green-*", "supervisor/test/autopilot.test.mjs", "supervisor/GREEN-COHORT.md", ".supervisor.json", ".housekeeping.json", "settle/**", "promote/**", "lanes/validation.mjs", "test/helpers/**", "acceptance/**"] },
-    { "code": "GREEN_BLUE_HOTFIX", "paths": ["blue/**"] },
-    { "code": "GREEN_NATIVE_ISOLATION", "paths": [".codex/**", ".claude/**", "**/.codex/**", "**/.claude/**", "discovery/native-*", "**/permissions*", "AGENTS.md", "CLAUDE.md"] },
-    { "code": "GREEN_HOST_RESOURCE", "paths": ["test-slot/**", "lanes/promotion-lock.mjs", "lib/retire-lock.mjs", "lib/install-lock.mjs", "lib/memory.mjs"] },
-    { "code": "GREEN_CROSS_PROJECT_AUTHORITY", "paths": ["lib/project.mjs", "lib/fleet.mjs", "lib/lane-removal.mjs", "lib/retire-hold.mjs", "lib/retire.mjs", "lib/retire-runtime.mjs", "sessions/lifecycle.mjs", "sessions/apply.mjs", "sessions/live.mjs", "sessions/project.mjs", "sessions/authorization.mjs", "sessions/close-safety.mjs", "sessions/receipts.mjs", "lanes/lane.mjs", "supervisor/request.mjs", "supervisor/chats.mjs", "supervisor/DECISION-ROUTING.md", "supervisor/PROTOCOL.md", "discovery/policy.mjs"] },
-    { "code": "GREEN_GLOBAL_RELEASE", "paths": ["herdr/**", "lib/releases.mjs", "lib/release-record.mjs", ".herdr-release.json", "package.json", "package-lock.json", ".nvmrc"] },
-    { "code": "GREEN_SHARED_RUNTIME", "paths": ["lib/state.mjs", "lib/store.mjs", "lib/report.mjs", "lib/completion.mjs", "lib/worker-identity.mjs", "lib/retire-trigger.mjs", "lib/discernment.mjs", "messages/**", "sessions/runtime.mjs", "sessions/lifecycle-evidence.mjs", "supervisor/context.mjs", "supervisor/notice-*", "supervisor/prompt-supervisor.mjs", "supervisor/herdr-edge.mjs", "watch/**", "dispatch/record-worker.mjs", "dispatch/session-bind-command.mjs"] }
-  ],
-  "lifecycle": ["sessions/**", "lib/retire*", "lib/lane-*", "supervisor/**", "housekeeping/**", "lanes/**", "dispatch/**"],
-  "code": ["brain/**", "board/**", "logs/**", "lib/**", "sessions/**", "supervisor/**", "housekeeping/**", "lanes/**", "dispatch/**", "test/**"],
-  "evidenceExtensions": [".md", ".txt", ".tap", ".log", ".json", ".jsonl", ".csv", ".tsv"]
+    {
+      "code": "GREEN_SELF_AUTHORITY",
+      "paths": [
+        "supervisor/green-*",
+        "supervisor/clean-pass.mjs",
+        "supervisor/autopilot.mjs",
+        "supervisor/fast-path-timing.mjs",
+        "supervisor/test/green-*",
+        "supervisor/test/autopilot.test.mjs",
+        "supervisor/GREEN-COHORT.md",
+        ".supervisor.json",
+        ".housekeeping.json",
+        "settle/**",
+        "promote/**",
+        "lanes/validation.mjs",
+        "test/helpers/**",
+        "acceptance/**",
+        "supervisor/GREEN-CONTRACTS.md"
+      ]
+    },
+    {
+      "code": "GREEN_BLUE_HOTFIX",
+      "paths": [
+        "blue/**"
+      ]
+    },
+    {
+      "code": "GREEN_NATIVE_ISOLATION",
+      "paths": [
+        ".codex/**",
+        ".claude/**",
+        "**/.codex/**",
+        "**/.claude/**",
+        "discovery/native-*",
+        "**/permissions*",
+        "AGENTS.md",
+        "CLAUDE.md"
+      ]
+    },
+    {
+      "code": "GREEN_HOST_RESOURCE",
+      "paths": [
+        "test-slot/**",
+        "lanes/promotion-lock.mjs",
+        "lib/retire-lock.mjs",
+        "lib/install-lock.mjs",
+        "lib/memory.mjs"
+      ]
+    },
+    {
+      "code": "GREEN_CROSS_PROJECT_AUTHORITY",
+      "paths": [
+        "lib/project.mjs",
+        "lib/fleet.mjs",
+        "lib/lane-removal.mjs",
+        "lib/retire-hold.mjs",
+        "lib/retire.mjs",
+        "lib/retire-runtime.mjs",
+        "sessions/lifecycle.mjs",
+        "sessions/apply.mjs",
+        "sessions/live.mjs",
+        "sessions/project.mjs",
+        "sessions/authorization.mjs",
+        "sessions/close-safety.mjs",
+        "sessions/receipts.mjs",
+        "lanes/lane.mjs",
+        "supervisor/request.mjs",
+        "supervisor/chats.mjs",
+        "supervisor/DECISION-ROUTING.md",
+        "supervisor/PROTOCOL.md",
+        "discovery/policy.mjs"
+      ]
+    },
+    {
+      "code": "GREEN_GLOBAL_RELEASE",
+      "paths": [
+        "herdr/**",
+        "lib/releases.mjs",
+        "lib/release-record.mjs",
+        ".herdr-release.json",
+        "package.json",
+        "package-lock.json",
+        ".nvmrc"
+      ]
+    },
+    {
+      "code": "GREEN_SHARED_RUNTIME",
+      "paths": [
+        "lib/state.mjs",
+        "lib/store.mjs",
+        "lib/report.mjs",
+        "lib/completion.mjs",
+        "lib/worker-identity.mjs",
+        "lib/retire-trigger.mjs",
+        "lib/discernment.mjs",
+        "messages/**",
+        "sessions/runtime.mjs",
+        "sessions/lifecycle-evidence.mjs",
+        "supervisor/context.mjs",
+        "supervisor/notice-*",
+        "supervisor/prompt-supervisor.mjs",
+        "supervisor/herdr-edge.mjs",
+        "watch/**",
+        "dispatch/record-worker.mjs",
+        "dispatch/session-bind-command.mjs"
+      ]
+    }
+  ]
 }

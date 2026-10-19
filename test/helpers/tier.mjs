@@ -38,6 +38,7 @@ const promotion = [
   'settle/test/train.test.mjs',
   'supervisor/test/autopilot.test.mjs',
   'supervisor/test/green-pass.test.mjs',
+  'supervisor/test/green-main.test.mjs',
   'supervisor/test/chats.test.mjs',
   'supervisor/test/reconcile.test.mjs',
   'test/activation-seam.test.mjs',

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir } from '../lib/store.mjs';
-import { executionClosure } from './green-reach.mjs';
+import { manifestScope, checkActivation, checkDeployment } from './green-manifest.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const contractFile = 'supervisor/green-contracts.json';
@@ -40,18 +40,6 @@ export function greenContractRefusal(file, { contracts = GREEN_CONTRACTS, author
   const rules = contracts.exclusions.filter(rule => (rule.code === 'GREEN_SELF_AUTHORITY') === authority);
   const rule = rules.find(rule => matches(file, rule.paths));
   return rule && refusal(rule.code, `${authority ? 'eligibility/evidence authority' : 'declared contract'}: ${file}`);
-}
-
-function runningAuthority(sourceRoot) {
-  const source = fs.realpathSync(sourceRoot), inventory = readTree(gitAt(source), 'HEAD', source); let bytes = 0;
-  return executionClosure({ files: inventory.files, root: source, read(file) {
-    if (!safePath(file)) throw Error('unsafe authority source path');
-    const target = path.join(source, file), stat = fs.lstatSync(target);
-    if (!stat.isFile() || fs.realpathSync(target) !== target || stat.size > 2 * 1024 * 1024) throw Error('non-regular or oversized authority input');
-    const data = fs.readFileSync(target); bytes += data.length;
-    if (bytes > 32 * 1024 * 1024) throw Error('authority source exceeds byte limit');
-    return text(data);
-  } }, GREEN_CONTRACTS.authorityEntries);
 }
 
 function gitAt(workspace) {
@@ -92,50 +80,49 @@ function declaredPair(pair) {
   return pair;
 }
 
-// Read-only execution stage shared by admission and Git-snapshot probes. This
-// does not grant identity, policy-byte, evidence, review or promotion authority.
-export function greenExecutionScope(before, after, { sourceRoot = root, project = 'brain', changes }) {
-  const authority = { running: runningAuthority(sourceRoot), ...(project === 'brain' ? {
-    base: executionClosure(before, GREEN_CONTRACTS.authorityEntries),
-    candidate: executionClosure(after, GREEN_CONTRACTS.authorityEntries),
-  } : {}) };
-  const authorityPaths = new Set(Object.values(authority).flatMap(reach => reach.paths));
-  for (const { file } of changes) if (authorityPaths.has(file)) return refusal('GREEN_SELF_AUTHORITY', `eligibility/evidence execution input: ${file}`, { authority });
-  const entries = GREEN_CONTRACTS.entries.filter(e => e.project === project).map(e => e.path);
-  const oldReach = executionClosure(before, entries), newReach = executionClosure(after, entries);
-  const consumed = new Set([...oldReach.paths, ...newReach.paths]);
-  const evidence = { base: oldReach, candidate: newReach };
-  for (const { file } of changes) if (consumed.has(file)) return refusal('GREEN_BCH_CONSUMED', `cross-project execution input: ${file}`, { reach: evidence });
-  for (const change of changes) if (![change.before, change.after].every(m => ['000000', '100644', '100755'].includes(m)) ||
-      (change.before !== '000000' && change.after !== '000000' && change.before !== change.after) ||
-      (change.after === '100755' && change.before !== '100755')) return refusal('GREEN_NATIVE_ISOLATION', `file type or executable mode: ${change.file}`);
-  for (const { file } of changes) {
-    const denied = greenContractRefusal(file);
-    if (denied) return denied;
-  }
-  if (Object.values(authority).some(reach => reach.unknown.length) || oldReach.unknown.length || newReach.unknown.length) return refusal('GREEN_REACH_UNKNOWN', 'unresolved inventory or authority execution edge', { reach: evidence, authority });
-  return { eligible: true, reach: evidence, authority };
-}
-
-// sourceRoot injects a trusted running checkout for private fixtures, including
-// its authority graph. The live singleton has no configurable source root.
-export function createGreenCohort(sourceRoot = root) {
-  function identity({ repo, org, identity: expected, bindings }) {
+export function greenManifestIdentity({ repo, org, identity: expected, bindings }, { manifest, sourceRoot }) {
     try {
-      if (!bindings || Object.keys(bindings).length !== 2 || !bindings.brain || !bindings.lab) identityError('declare brain and lab project/record pairs');
-      const brain = declaredPair(bindings.brain), lab = declaredPair(bindings.lab);
-      if (brain.identity === lab.identity || brain.org === lab.org) identityError('Brain and lab must have independent identities and records');
+      checkActivation(bindings?.activatedAt);
+      if (!bindings || Object.keys(bindings).some(k => !['brain', 'lab', 'activatedAt'].includes(k)) || !bindings.brain) identityError('declare the manifest Brain binding');
+      if (!['brain', 'lab'].every(kind => ['repo', 'identity', 'org'].every(key => (bindings[kind]?.[key] ?? null) === (manifest.bindings[kind]?.[key] ?? null)))) identityError('configuration differs from reviewed manifest identities');
+      const brain = declaredPair(bindings.brain), lab = bindings.lab && declaredPair(bindings.lab);
+      if (lab && (brain.identity === lab.identity || brain.org === lab.org)) identityError('Brain and lab must have independent identities and records');
       const source = gitProject(sourceRoot, { env: env(), timeoutMs: 10000 });
       if (source.identity !== brain.identity || source.canonical !== brain.repo) identityError('Brain declaration differs from this source checkout');
       const project = gitProject(repo, { env: env(), timeoutMs: 10000 });
-      const kind = ['brain', 'lab'].find(k => bindings[k].identity === project.identity);
+      const kind = ['brain', 'lab'].find(k => bindings[k]?.identity === project.identity);
       if (!kind || project.checkout !== project.canonical || project.canonical !== bindings[kind].repo || repo !== project.canonical || org !== bindings[kind].org ||
           (expected !== undefined && expected !== project.identity)) identityError('admission is outside the declared canonical project and record');
       return { kind, ...bindings[kind] };
     } catch (error) {
-      if (error.message.startsWith('GREEN_IDENTITY_MISMATCH:')) throw error;
+      if (error.message.startsWith('GREEN_')) throw error;
       identityError(error.message);
     }
+  }
+
+// Private fixtures may inject a trusted checkout. The live singleton always
+// loads the reviewed manifest from its own source, never from the candidate.
+export function createGreenCohort(sourceRoot = root) {
+  // Read only the trusted running checkout. Candidate policy is never loaded.
+  const policyBytes = sourceRoot === root ? contractBytes : fs.readFileSync(path.join(sourceRoot, contractFile), 'utf8');
+  const manifest = JSON.parse(policyBytes);
+  const snapshots = new Map();
+  const trusted = (file, expectedMode) => {
+    const target = path.join(fs.realpathSync(sourceRoot), file);
+    const stat = fs.lstatSync(target);
+    if (!safePath(file) || fs.realpathSync(target) !== target || !stat.isFile() || stat.size > 2 * 1024 * 1024 ||
+        (expectedMode && ((stat.mode & 0o111) ? '100755' : '100644') !== expectedMode)) throw Error('non-regular, oversized or changed-mode trusted input');
+    const bytes = text(fs.readFileSync(target));
+    if (snapshots.has(file) && snapshots.get(file) !== bytes) throw Error(`trusted source drift: ${file}`);
+    return bytes;
+  };
+  let sourceError;
+  try { for (const file of manifest.bootstrapFiles ?? []) snapshots.set(file, trusted(file, '100644')); }
+  catch (error) { sourceError = error.message; }
+  function identity(options) {
+    if (sourceError) throw Error(`GREEN_REACH_UNKNOWN: ${sourceError}`);
+    checkDeployment(manifest, trusted);
+    return greenManifestIdentity(options, { manifest, sourceRoot });
   }
   function scope(options) {
     const { repo, org, workspace, base, head, review, report, run, reportRoot, item } = options;
@@ -158,45 +145,34 @@ export function createGreenCohort(sourceRoot = root) {
         changes.push({ file, before: m[1], after: m[2], status: m[3] });
       }
       // Refuse policy edits before interpreting any candidate declaration.
-      // Derive the remaining frozen authority inputs below from execution reach.
+      // The reviewed manifest supplies the remaining frozen boundary inputs.
       for (const change of changes) {
         const denied = greenContractRefusal(change.file, { authority: true });
         if (denied) return denied;
       }
+      for (const change of changes) {
+        const denied = greenContractRefusal(change.file);
+        if (denied) return denied;
+        if (![change.before, change.after].every(mode => ['000000', '100644', '100755'].includes(mode)) ||
+            (change.before !== '000000' && change.after !== '000000' && change.before !== change.after) || change.after === '100755')
+          return refusal('GREEN_NATIVE_ISOLATION', `file type or executable mode: ${change.file}`);
+      }
       const before = readTree(git, base, binding.repo), after = readTree(git, head, binding.repo);
       if (binding.kind === 'brain') for (const tree of [before, after]) {
-        if (tree.read(contractFile) !== contractBytes) return refusal('GREEN_SELF_AUTHORITY', 'inventory/contract declaration differs from the running checker');
+        if (tree.read(contractFile) !== policyBytes) return refusal('GREEN_SELF_AUTHORITY', 'inventory/contract declaration differs from the running checker');
       }
-      const execution = greenExecutionScope(before, after, { sourceRoot, project: binding.kind, changes });
+      const execution = manifestScope(before, after, { manifest, trusted, project: binding.kind, changes, review,
+        reviewFile: review && path.relative(workspace, review.path).split(path.sep).join('/') });
       if (!execution.eligible) return execution;
       const { reach: evidence, authority } = execution;
-      let lifecycle = false, evidenceOnly = true; const paths = [];
-      for (const change of changes) {
-        const { file } = change; paths.push(file);
-        if (review && file.startsWith('docs/reviews/') && file === path.relative(workspace, review.path).split(path.sep).join('/') && change.status === 'A' && hash(after.read(file)) === review.sha256) continue;
-        if (file.startsWith('docs/evidence/')) {
-          if (!GREEN_CONTRACTS.evidenceExtensions.includes(path.posix.extname(file)) || [change.before, change.after].includes('100755')) return refusal('GREEN_BINARY_EVIDENCE', `non-text evidence type or executable evidence: ${file}`);
-          try { for (const tree of [before, after]) if (tree.files.has(file)) tree.read(file); }
-          catch { return refusal('GREEN_BINARY_EVIDENCE', `binary evidence: ${file}`); }
-          continue;
-        }
-        evidenceOnly = false;
-        if ((file === 'README.md' || /^docs\/(?!reviews\/).*\.md$/.test(file)) && change.after !== '100755') continue;
-        if (!matches(file, GREEN_CONTRACTS.code) || !/\.(?:mjs|js)$/.test(file)) return refusal('GREEN_REACH_UNKNOWN', `unmapped code, launcher or configuration: ${file}`);
-        // Reach of changed code is also inspected. New hidden loads cannot be
-        // declared green merely because the old cross-project graph misses it.
-        for (const tree of [before, after]) if (tree.files.has(file)) {
-          const reach = executionClosure(tree, [file]);
-          if (reach.unknown.length) return refusal('GREEN_REACH_UNKNOWN', `unresolved affected execution path: ${file}`, { reach });
-        }
-        lifecycle ||= matches(file, GREEN_CONTRACTS.lifecycle);
-      }
+      const lifecycle = execution.lifecycle;
+      const paths = changes.map(change => change.file);
       let controls;
       if (lifecycle) {
         try { controls = lifecycleEvidence({ report, run, reportRoot, binding, base, head, review, workspace, git, after }); }
         catch (error) { return refusal('GREEN_LIFECYCLE_EVIDENCE', error.message); }
       }
-      return { eligible: true, cohort: 'green-pass', area: evidenceOnly ? 'evidence-only' : lifecycle ? 'green-lifecycle' : 'green', base, head, paths, repo, binding, reach: evidence, authority,
+      return { eligible: true, cohort: 'green-pass', area: lifecycle ? 'green-lifecycle' : 'green', base, head, paths, repo, binding, reach: evidence, authority, manifest: { sha256: hash(policyBytes), components: execution.components },
         ...(controls ? { lifecycle: controls } : {}) };
     } catch (error) {
       const named = /^(GREEN_[A-Z_]+):\s*/.exec(error.message);
@@ -212,7 +188,7 @@ export const LIFECYCLE_CASES = {
   live_reference: ['live-reference-kept'],
   recoverability: ['dirty-or-unknown-kept', 'unmerged-work-archived'],
 };
-function lifecycleEvidence({ report, run, reportRoot, binding, base, head, review, workspace, git, after }) {
+export function lifecycleEvidence({ report, run, reportRoot, binding, base, head, review, workspace, git, after }) {
   const e = report?.extra?.green_lifecycle ?? report?.green_lifecycle;
   if (!e || e.version !== 1 || e.run !== run || e.base !== base || !commit(e.head) || e.identity !== binding.identity || e.org !== binding.org) throw Error('missing or stale lifecycle report binding');
   if (e.head !== head) {

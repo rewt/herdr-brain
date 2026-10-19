@@ -20,7 +20,7 @@ const digest = value => createHash('sha256').update(value).digest('hex');
 const sourceRenderer = fs.readFileSync(new URL('../../board/render.mjs', import.meta.url), 'utf8');
 const sourceWidth = componentShape(sourceRenderer, 'board-default-width/v1').width;
 const renderer = sourceRenderer.replace(`export function render(snapshot, { width = ${sourceWidth},`, 'export function render(snapshot, { width = 120,');
-function setup(t, { binary = false } = {}) {
+function setup(t, { binary = false, active = true } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'green-manifest-')));
   fixtureFleet(t, root); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const repo = path.join(root, 'brain'), workspace = path.join(root, 'lane');
@@ -38,8 +38,8 @@ function setup(t, { binary = false } = {}) {
   for (const file of ['.lane.validation.json', '.promotion-selector.json', 'package.json']) put(file, '{}');
   put('test/board-view.test.mjs', '// ordinary tests, not promotion authority\n');
   put('board/render.mjs', renderer);
-  const record = args => {
-    const result = spawnSync(process.execPath, [new URL('../../bin/org.mjs', import.meta.url).pathname, ...args], { cwd: repo, encoding: 'utf8', env: { ...process.env, ORG_DIR: path.join(repo, '.org'), ORG_ACTOR: 'green-fixture' } });
+  const record = (args, actor = 'green-fixture') => {
+    const result = spawnSync(process.execPath, [new URL('../../bin/org.mjs', import.meta.url).pathname, ...args], { cwd: repo, encoding: 'utf8', env: { ...process.env, ORG_DIR: path.join(repo, '.org'), ORG_ACTOR: actor } });
     assert.equal(result.status, 0, result.stderr || result.stdout); return result.stdout.trim();
   };
   const item = record(['add', 'Offline renderer', '--role', 'engineer']).split(' ')[0];
@@ -47,18 +47,18 @@ function setup(t, { binary = false } = {}) {
   const sourceFiles = new Map(BOOTSTRAP_FILES.concat(['.lane.validation.json', '.promotion-selector.json', 'package.json', 'board/render.mjs', 'board/rows.mjs', 'board/board.mjs', 'supervisor/reconcile.mjs', 'bin/org.mjs', 'supervisor/autopilot.mjs', 'housekeeping/config.mjs', 'lib/state.mjs', 'dispatch/record-worker.mjs', 'contrib/settle-watch.mjs', 'test/board-view.test.mjs']).map(file => [file, { mode: '100644' }]));
   if (binary) { put('lib/native/launcher', Buffer.from([0xcf, 0xfa, 0, 0xfe])); fs.chmodSync(path.join(repo, 'lib/native/launcher'), 0o755); sourceFiles.set('lib/native/launcher', { mode: '100755' }); }
   const external = path.join(root, 'launcher.json'); fs.writeFileSync(external, '{}');
-  const manifest = { ...buildManifest({ files: sourceFiles, bytes: file => fs.readFileSync(path.join(repo, file)), read: file => fs.readFileSync(path.join(repo, file), 'utf8') }, { bindings: { brain }, externalInputs: [external] }), exclusions: GREEN_CONTRACTS.exclusions };
+  const manifest = { ...buildManifest({ files: sourceFiles, bytes: file => fs.readFileSync(path.join(repo, file)), read: file => fs.readFileSync(path.join(repo, file), 'utf8') }, { bindings: { brain }, activation: { item, actor: 'supervisor-fixture' }, externalInputs: [external] }), exclusions: GREEN_CONTRACTS.exclusions };
   put('supervisor/green-contracts.json', JSON.stringify(manifest));
   git(['add', '.']); git(['commit', '-qm', 'Reviewed bootstrap fixture']);
   const base = git(['rev-parse', 'HEAD']); git(['worktree', 'add', '-qb', 'lane/change', workspace]);
   const bindings = { brain, lab: null, activatedAt: new Date().toISOString() }, checker = createGreenCohort(repo);
   const activate = () => {
     const bytes = fs.readFileSync(path.join(repo, 'supervisor/green-contracts.json'));
-    record(['note', item, activationNote(digest(bytes)), '--decision']);
-    const activation = recordedActivation(brain.org, digest(bytes));
+    record(['note', item, activationNote(digest(bytes)), '--decision'], manifest.activation.actor);
+    const activation = recordedActivation(brain.org, digest(bytes), manifest.activation);
     bindings.activatedAt = activation.at; bindings.activationId = activation.id;
   };
-  activate();
+  if (active) activate();
   const options = () => ({ ...brain, workspace, base, head: git(['rev-parse', 'HEAD'], workspace), bindings, run: 'R-1' });
   const change = (file = 'board/render.mjs', bytes = renderer.replace('width = 120,', 'width = 121,')) => {
     put(file, bytes, workspace); git(['add', '.'], workspace); git(['commit', '-qm', 'Candidate'], workspace); return git(['rev-parse', 'HEAD'], workspace);
@@ -256,24 +256,52 @@ test('cohort activation cannot be restarted by configuration, a later note or a 
   assert.equal(f.scope().eligible, true);
   const changed = structuredClone(f.bindings); changed.activatedAt = new Date(Date.parse(first.at) + 1).toISOString();
   assert.equal(f.scope({ bindings: changed }).code, 'GREEN_EXPIRED');
-  assert.throws(() => recordedActivation(f.brain.org, 'f'.repeat(64)), /no recorded activation/);
+  assert.throws(() => recordedActivation(f.brain.org, 'f'.repeat(64), f.manifest.activation), /no recorded activation/);
   // An ordinary-reviewed refresh changes the exact digest, while keeping the
   // cohort's first event identity and start. No new note means no admission.
   f.put('housekeeping/config.mjs', 'export const ordinaryReviewedRefresh = true;\n');
   f.manifest.boundary['housekeeping/config.mjs'].sha256 = digest('export const ordinaryReviewedRefresh = true;\n');
   f.put('supervisor/green-contracts.json', JSON.stringify(f.manifest));
   const refreshedDigest = digest(JSON.stringify(f.manifest));
-  assert.throws(() => recordedActivation(f.brain.org, refreshedDigest), /no recorded activation/);
+  assert.throws(() => recordedActivation(f.brain.org, refreshedDigest, f.manifest.activation), /no recorded activation/);
   f.git(['add', 'supervisor/green-contracts.json', 'housekeeping/config.mjs']); f.git(['commit', '-qm', 'Reviewed manifest refresh']);
   f.git(['rebase', 'main'], f.workspace);
   const checker = createGreenCohort(f.repo), base = f.git(['rev-parse', 'main']);
   f.activate();
-  const recorded = recordedActivation(f.brain.org, refreshedDigest);
+  const recorded = recordedActivation(f.brain.org, refreshedDigest, f.manifest.activation);
   assert.deepEqual(recorded, first);
   assert.equal(checker.scope({ ...f.options(), base }).eligible, true);
   assert.throws(() => checkActivation(f.bindings, Date.parse(first.at) + INTERIM_MS, recorded), /GREEN_EXPIRED/);
   const reset = { ...f.bindings, activationId: recorded.id + 1, activatedAt: new Date(Date.parse(first.at) + 1000).toISOString() };
   assert.throws(() => checkActivation(reset, Date.parse(first.at) + 1000, recorded), /GREEN_EXPIRED/);
+});
+
+test('only supervisor decisions on the reviewed activation item can anchor or bind a digest', t => {
+  const f = setup(t, { active: false }); f.change();
+  const digestOfManifest = digest(JSON.stringify(f.manifest)), supervisor = f.manifest.activation.actor;
+  const other = f.record(['add', 'Unrelated work', '--role', 'engineer']).split(' ')[0];
+  const strayNotes = value => {
+    const text = activationNote(value);
+    f.record(['note', f.item, text], supervisor);
+    f.record(['note', other, text, '--decision'], supervisor);
+    f.record(['note', f.item, text, '--decision']);
+  };
+  const recorded = value => recordedActivation(f.brain.org, value, f.manifest.activation);
+  strayNotes(digestOfManifest);
+  assert.throws(() => recorded(digestOfManifest), /no recorded activation/);
+  assert.equal(f.scope().code, 'GREEN_EXPIRED');
+  assert.throws(() => recordedActivation(f.brain.org, digestOfManifest), /no reviewed activation item/);
+  f.activate();
+  const first = recorded(digestOfManifest);
+  assert.equal(f.scope().eligible, true);
+  const events = fs.readFileSync(path.join(f.brain.org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(first.id, events.at(-1).seq, 'earlier stray notes must not become the anchor');
+  const refreshedDigest = 'f'.repeat(64);
+  strayNotes(refreshedDigest);
+  assert.throws(() => recorded(refreshedDigest), /no recorded activation/);
+  assert.deepEqual(recorded(digestOfManifest), first);
+  f.record(['note', f.item, activationNote(refreshedDigest), '--decision'], supervisor);
+  assert.deepEqual(recorded(refreshedDigest), first, 'supervisor digest evidence retains the original interim');
 });
 
 test('promotion authority follows import and launch edges into routes and review-record validation', () => {

@@ -1,0 +1,29 @@
+{
+  "node": "v20.19.4",
+  "execArgv": [],
+  "source_main": "6e77270905ad0a6f3e01a82e317cc3c53d0c3a52",
+  "source_head": "e369b9c43a4a1f8562914a75168c3541f5913b2d",
+  "previous_manifest_sha256": "f8c91d26092f54b684e2ecf2d30a63bd70238686ebee6806b3869bd54bb11663",
+  "manifest_sha256": "1d2c60f1cbbca75b7875229f44c0f3ba2437a58ff0a93d3487cb031d562843ff",
+  "activation": {
+    "item": "ENG-396",
+    "actor": "supervisor-herdr"
+  },
+  "boundary_inputs": 299,
+  "changed_pins_or_roles": [
+    "supervisor/README.md"
+  ],
+  "external_inputs": 20,
+  "external_changes": [],
+  "deployment_check": "passed against lane working bytes; activation remains blocked by ENG-445 and canonical acceptance",
+  "process_source": {
+    "self": {
+      "ok": true,
+      "present": true
+    },
+    "snapshot": {
+      "ok": true,
+      "size": 979
+    }
+  }
+}

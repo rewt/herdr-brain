@@ -197,13 +197,18 @@ use the reviewed Node/Git directories plus HOME/.local/bin and fixed system bins
 and receive the explicit record/actor. Git and Node executables remain byte pinned.
 The running Node's execArgv is also bound as a readable array.
 
-Activation is the first append-only `note.added` event matching
-`green-activation/v1 MANIFEST_SHA256` for any digest in the manifest Brain record.
+Activation is the first append-only `note.added` decision event matching
+`green-activation/v1 MANIFEST_SHA256` for any digest in the manifest Brain record,
+on the reviewed manifest's `activation.item` (`ENG-396`) and by its
+`activation.actor` (`supervisor-herdr`). The record persists `by` on every event;
+non-decision, other-item, other-actor and unattributed notes cannot anchor the
+cohort or bind any digest.
 Its event `seq` identifies the cohort activation as configured `activationId`;
 its `at` must equal configured `activatedAt`. Each refreshed manifest requires
 ordinary independent review and its own exact-digest note on the same item,
-written only after a fresh canonical `checkDeployment` pass of the committed
-manifest. Digest refreshes and repeated notes retain the original event id and
+by that supervisor, written only after a fresh canonical `checkDeployment` pass
+of the committed manifest. Digest refreshes preserve the activation item/actor;
+refreshes and repeated notes retain the original event id and
 ten-day clock. Missing digest evidence, torn records and reset ids/timestamps refuse.
 The checker reads this evidence and never writes the event log.
 Any boundary drift, missing input, unknown component or foreign project returns

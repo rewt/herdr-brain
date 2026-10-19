@@ -12,12 +12,17 @@ const regular = mode => mode === '100644';
 const safePath = file => typeof file === 'string' && /^[\w./-]+$/.test(file) && !path.isAbsolute(file) && file.split('/').every(p => p && p !== '.' && p !== '..');
 export const INTERIM_MS = 10 * 24 * 60 * 60 * 1000;
 export const activationNote = digest => `green-activation/v1 ${digest}`;
-export function recordedActivation(org, digest) {
+export function recordedActivation(org, digest, activation) {
+  if (!activation || typeof activation.item !== 'string' || !activation.item ||
+      typeof activation.actor !== 'string' || !activation.actor)
+    throw Error('GREEN_EXPIRED: no reviewed activation item or supervisor actor');
   const { events, tornTail } = loadEvents(org);
   if (tornTail) throw Error('GREEN_EXPIRED: incomplete activation record');
-  const activations = events.filter(event => event.type === 'note.added' && /^green-activation\/v1 [a-f0-9]{64}$/.test(event.text));
+  const activations = events.filter(event => event.type === 'note.added' && event.decision === true &&
+    event.id === activation.item && event.by === activation.actor && !event.unattributed &&
+    /^green-activation\/v1 [a-f0-9]{64}$/.test(event.text));
   const first = activations[0];
-  if (!first || !activations.some(event => event.id === first.id && event.text === activationNote(digest))) throw Error('GREEN_EXPIRED: no recorded activation for this reviewed manifest');
+  if (!first || !activations.some(event => event.text === activationNote(digest))) throw Error('GREEN_EXPIRED: no recorded activation for this reviewed manifest');
   // The event sequence identifies the cohort activation across reviewed digest
   // refreshes. A later manifest note binds new bytes, never a new interim.
   return { id: first.seq, at: first.at };
@@ -125,7 +130,7 @@ export function executableDescriptor(name) {
 export const BCH_ENTRIES = ['bin/org.mjs', 'promote/promote.mjs', 'dispatch/record-worker.mjs',
   'supervisor/reconcile.mjs', 'contrib/settle-watch.mjs', 'lib/store.mjs', 'lib/state.mjs',
   'lib/report.mjs', 'lib/roles.mjs', 'lanes/validation.mjs'];
-export function buildManifest(tree, { bindings, externalInputs = [], consumerEvidenceBinding }) {
+export function buildManifest(tree, { bindings, activation, externalInputs = [], consumerEvidenceBinding }) {
   const boundary = {}, authority = promotionAuthority(tree);
   for (const file of [...tree.files.keys()].filter(boundaryInput).sort()) {
     const mode = tree.files.get(file).mode;
@@ -133,7 +138,7 @@ export function buildManifest(tree, { bindings, externalInputs = [], consumerEvi
     boundary[file] = { mode, sha256: hash(tree.bytes ? tree.bytes(file) : tree.read(file)), role: boundaryRole(file, authority) };
   }
   return {
-    version: 2, bindings: { brain: bindings.brain, lab: bindings.lab ?? null },
+    version: 2, bindings: { brain: bindings.brain, lab: bindings.lab ?? null }, activation,
     interimDays: 10, bootstrapFiles: BOOTSTRAP_FILES,
     entries: [{ project: 'brain', path: 'supervisor/reconcile.mjs', contract: 'reconcile-complete-batch/v1' }],
     externalConsumers: BCH_ENTRIES.map((entry, i) => ({ entry, kind: i < 5 ? 'command' : 'imported-api',

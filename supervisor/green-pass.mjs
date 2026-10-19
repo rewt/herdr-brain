@@ -84,7 +84,7 @@ function declaredPair(pair, manifest) {
 
 export function greenManifestIdentity({ repo, org, identity: expected, bindings }, { manifest, sourceRoot, manifestDigest = hash(JSON.stringify(manifest)) }) {
     try {
-      checkActivation(bindings, Date.now(), recordedActivation(manifest.bindings.brain.org, manifestDigest));
+      checkActivation(bindings, Date.now(), recordedActivation(manifest.bindings.brain.org, manifestDigest, manifest.activation));
       if (!bindings || Object.keys(bindings).some(k => !['brain', 'lab', 'activatedAt', 'activationId'].includes(k)) || !bindings.brain) identityError('declare the manifest Brain binding');
       if (!['brain', 'lab'].every(kind => ['repo', 'identity', 'org'].every(key => (bindings[kind]?.[key] ?? null) === (manifest.bindings[kind]?.[key] ?? null)))) identityError('configuration differs from reviewed manifest identities');
       const brain = declaredPair(bindings.brain, manifest), lab = bindings.lab && declaredPair(bindings.lab, manifest);

@@ -27,10 +27,10 @@ exact independently hashed generated review addition retains its existing exempt
    deployment facts and positive/refusal evidence. Reconfirm BCH's ten-entry owner inventory and configured installed reconcile root,
    including the documented manual/reuse alternate selectors.
 2. Rebuild the manifest's pins from the exact ordinary bootstrap candidate if its
-   boundary changed. `buildManifest(tree, {bindings, externalInputs})` in
+   boundary changed. `buildManifest(tree, {bindings, activation, externalInputs})` in
    `green-manifest.mjs` produces review input from a Git tree reader. Preserve the
-   exclusion map and pass the owner-attested `consumerEvidenceBinding` when
-   regenerating. It neither writes a manifest nor enables anything. Review the
+   exclusion map, the cohort's original activation item/actor and the owner-attested
+   `consumerEvidenceBinding` when regenerating. It neither writes a manifest nor enables anything. Review the
    resulting diff; never regenerate from a green candidate to make it qualify.
    Bootstrap files are pinned to the trusted running versions in both committed
    trees; all other runtime/configuration inputs carry exact hashes and modes.
@@ -41,8 +41,12 @@ exact independently hashed generated review addition retains its existing exempt
    and Node selectors are stripped from child launches, not hashed per session. A deployment using different
    inputs needs ordinary manifest review. The committed manifest describes Brain;
    no lab exists. Adding a lab binding/components is an ordinary reviewed amendment.
-4. After bootstrap PASS and deployment acceptance, the supervisor must run a fresh
-   `checkDeployment` of the committed manifest against the canonical checkout,
+4. Activation is blocked by ENG-445 until the native-worker promotion guard binds
+   and rechecks the reviewed green-pass identity, activation, manifest and scope
+   at integration. The current guard accepts only clean-pass; do not enable
+   green-pass or write its first activation note while that blocker remains.
+   Once ENG-445 is complete, after bootstrap PASS and deployment acceptance, the
+   supervisor must run a fresh `checkDeployment` of the committed manifest against the canonical checkout,
    using the reviewed Node, environment and execArgv, before writing any activation
    note. With the committed manifest's empty execArgv, run from the canonical root:
 
@@ -58,8 +62,12 @@ exact independently hashed generated review addition retains its existing exempt
    existing cohort in canonical `.supervisor.json` with the manifest's exact pairs
    and the first activation event's `activationId` and `activatedAt`. Calculate SHA-256 of the exact
    reviewed `supervisor/green-contracts.json` bytes and append through the existing
-   record CLI: `record note ENG-396 "green-activation/v1 MANIFEST_SHA256" --decision`.
-   Use the first cohort activation note's event `seq` as `activationId` and `at`
+   record CLI as the manifest's `activation.actor` (`supervisor-herdr`):
+   `record note ENG-396 "green-activation/v1 MANIFEST_SHA256" --decision`.
+   The note must be a decision on the manifest's `activation.item` (`ENG-396`)
+   by that actor. Non-decision, other-item and other-actor notes neither anchor
+   the interim nor bind a digest. Use the first qualifying cohort activation
+   note's event `seq` as `activationId` and `at`
    as `activatedAt`; no custom event type or direct log write is needed. Every
    refreshed digest requires ordinary independent review, a fresh canonical
    deployment check and a new note on that same item. The configured id and time
@@ -105,13 +113,19 @@ lifecycle admission route.
 `supervisor/test/green-main.test.mjs` reads actual Git `main` boundary blobs,
 then applies the explicit ordinary-bootstrap diff from main to the committed
 lane HEAD. It uses the committed manifest bytes and owner consumer-evidence
-binding, without regenerating pins. An unrelated main input with stale pins
-refuses. Outside Brain's canonical Git identity, including release snapshots,
+binding. When boundary, launcher, environment or external descriptors are stale,
+green admission must refuse and only the committed-pin admission assertion skips
+with an explicit stale-manifest reason; ordinary promotion and release suites
+remain usable. Refusal controls still run. Hermetic fixtures assert both stale-pin
+refusal and admission after an ordinary reviewed refresh, including changed,
+deleted and added main inputs and external configuration drift.
+Outside Brain's canonical Git identity, including release snapshots,
 the real-main probe skips explicitly. The probe reads declared external inputs
 under the manifest's environment selection, discovers no live record or fleet,
 and writes no operator refs/config/records/source.
-It requires a one-line renderer change to pass containment and entry, authority,
-manifest, boundary-drift and foreign-project controls to refuse. It records exact
+With current pins it requires a one-line renderer change to pass containment;
+entry, authority, manifest, boundary-drift and foreign-project controls refuse.
+It records exact
 base/candidate bytes and hashes. This is engineer containment evidence; it is not
 an actual independent candidate review, bootstrap PASS or permission to enable.
 A full admission fixture separately exercises canonical identity, clean committed

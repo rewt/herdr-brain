@@ -8,6 +8,10 @@
     },
     "lab": null
   },
+  "activation": {
+    "item": "ENG-396",
+    "actor": "supervisor-herdr"
+  },
   "interimDays": 10,
   "bootstrapFiles": [
     "supervisor/green-contracts.json",
@@ -1375,7 +1379,7 @@
     },
     "supervisor/README.md": {
       "mode": "100644",
-      "sha256": "d4aafb80dc2d440fe1664d990eb9af903479355022831231f92bac0c865a2e7e",
+      "sha256": "3b7c704dea3e70d12635a8fe520126b121160cedb53372a3b7d3ba99e3632993",
       "role": "runtime-or-configuration"
     },
     "supervisor/arm-watch.sh": {

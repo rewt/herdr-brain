@@ -434,10 +434,26 @@ test('a crash with a train notice queued resumes its saved outcome without repea
   f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '10';
   fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, typedComposer);
   const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
-  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+  // The append is visible before journal-lock release. Park after release so
+  // SIGKILL cannot strand an unidentified lock between owner unlink and rmdir.
+  const parked = path.join(f.root, 'notice-queued'), preload = path.join(f.root, 'park-notice.cjs');
+  fs.writeFileSync(preload, `const fs=require('node:fs'),rmdir=fs.rmdirSync;
+fs.rmdirSync=function(directory,...args){
+ const result=rmdir.call(this,directory,...args);
+ if(directory===${JSON.stringify(`${inbox}.lock`)}){
+  fs.writeFileSync(${JSON.stringify(`${parked}.tmp`)},JSON.stringify({pid:process.pid}));
+  fs.renameSync(${JSON.stringify(`${parked}.tmp`)},${JSON.stringify(parked)});
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,${loadTimeout(60000)});
+ }
+ return result;
+};`);
+  const worker = spawnChild(t, process.execPath, ['--require', preload, path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
   const done = waitForExit(worker); let resumedDone;
   try {
-    await until(() => fs.existsSync(inbox) && readInbox(inbox).length === 1);
+    await until(() => fs.existsSync(parked));
+    assert.equal(readInbox(inbox).length, 1);
+    assert.equal(JSON.parse(fs.readFileSync(parked)).pid, worker.pid);
+    assert.equal(fs.existsSync(`${inbox}.lock`), false, 'the queued notice has released its journal lock');
     const queued = readInbox(inbox)[0], saved = f.queue.load().current, integrated = f.git(['rev-parse', 'main']);
     assert.deepEqual(f.messages(), []); assert.equal(f.runs(), 1);
     assert.equal(fs.existsSync(path.join(f.root, 'first')), false, 'cleanup completed before the notice was queued');
@@ -457,7 +473,7 @@ test('a crash with a train notice queued resumes its saved outcome without repea
     assert.equal(f.messages().length, 2); assert.equal(f.messages()[0][3], `${queued.message} notice-id=${queued.id}`);
     assert.equal(readInbox(inbox).length, 2); assert.ok(readInbox(inbox).every(entry => entry.state === 'sent'));
     assert.equal(f.runs(), 1); assert.equal(f.git(['rev-parse', 'main']), integrated);
-  } finally { fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer); await done; if (resumedDone) await resumedDone; }
+  } finally { fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer); worker.kill('SIGKILL'); await done; if (resumedDone) await resumedDone; }
 });
 
 test('interrupted validation preserves main and drain resumes the batch', async t => {

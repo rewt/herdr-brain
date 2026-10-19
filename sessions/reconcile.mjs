@@ -5,7 +5,8 @@ import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding, sameBinding } from './observe.mjs';
 import { acquireControllerLease, durableWrite, emptyJournal, readControllerJournal, runtimePaths } from './runtime.mjs';
-import { specDigest, equalBinding, validBinding } from './lifecycle-evidence.mjs';
+import { specDigest, equalBinding, validBinding, validLaunchReceipt } from './lifecycle-evidence.mjs';
+import { claimsPosition, unownedWorkspaceReason } from './create-safety.mjs';
 import { planLifecycle, resetAssessment, lifecycleOperation } from './lifecycle.mjs';
 export { specDigest } from './lifecycle-evidence.mjs';
 
@@ -34,10 +35,38 @@ function slotTopology(slot, observation, common) {
   return null;
 }
 const targetMatches = (b, t) => b && ['server', 'workspace', 'tab', 'pane', 'checkout'].every(k => b[k] === t[k]);
-const receiptMatches = (receipt, op) => receipt?.operationId === op.id && receipt.uid === op.uid &&
-  receipt.specDigest === op.specDigest && receipt.generation === op.generation && targetMatches(receipt.binding, op.target);
+const receiptMatches = (receipt, op) => validLaunchReceipt(op, receipt);
 const fence = (plan, reason) => ({ ...plan, action: null, errors: [...plan.errors, reason],
   decisions: plan.decisions.map(d => d.action ? { ...d, phase: 'Hold', decision: 'Hold', action: null, reason } : d) });
+
+function missingPosition(entry, input, slots) {
+  const { observation: o, journal, facts, inspection } = input, s = entry.resolvedSpec, uid = entry.manifest.metadata.uid;
+  const target = { server: o.server, workspace: slots[0].workspace, checkout: slots[0].checkout };
+  const workspace = o.workspaces.find(w => w.workspace_id === target.workspace);
+  if (!workspace || workspace.worktree?.repo_key !== inspection.project.common || workspace.worktree?.checkout_path !== target.checkout)
+    return { decision: row(entry, 'Hold', 'Hold', 'missing or mismatched enrolled workspace identity') };
+  const prior = journal.operations.filter(op => claimsPosition(op, uid, target, s.standardSlot));
+  if (prior.length) {
+    const op = prior[0], receipts = (o.receipts ?? []).filter(r => r.operationId === op.id);
+    // An exact fresh receipt can settle a lost acknowledgement. It is only a
+    // provisional layout here; enrollment derives it after durable acknowledgement.
+    if (prior.length === 1 && op.uid === uid && op.kind === 'create-standard-slot' && op.state === 'intent' &&
+        receipts.length === 1 && validLaunchReceipt(op, receipts[0])) {
+      const b = receipts[0].binding;
+      return { slot: { ...target, tab: b.tab, standardSlot: s.standardSlot, panes: [{ pane: b.pane, paneSlot: 'primary' }] } };
+    }
+    return { decision: row(entry, 'Hold', 'Hold', op.kind === 'create-standard-slot'
+      ? 'create intent unresolved; inspect retained tab; never create twice'
+      : 'desired standard slot has prior operation evidence; inspect ownership') };
+  }
+  if (!['chat', 'supervisor'].includes(s.role)) return { decision: row(entry, 'Unsupported', 'Observe',
+    'creation unsupported: logs layout awaits triage activation') };
+  const unowned = unownedWorkspaceReason(o, journal, facts, target);
+  if (unowned) return { decision: row(entry, 'Hold', 'Hold', unowned) };
+  return { decision: row(entry, 'Missing', 'WouldCreate', 'never-adopted standard position in an enrolled workspace', {
+    action: { kind: 'create-standard-slot', uid, target, standardSlot: s.standardSlot,
+      generation: entry.manifest.metadata.generation, specDigest: specDigest(entry), spec: s } }) };
+}
 
 // A projection of the existing folded chain, never retirement authorization.
 function chainEvidence(facts, run) {
@@ -148,38 +177,43 @@ export function planSessions(input) {
     else if (s.intent.kind === 'work-item') decision = worker(entry, input, slots);
     else {
       const matching = slots.filter(slot => slot.standardSlot === s.standardSlot);
-      if (matching.length !== 1) return row(entry, 'Hold', 'Hold', 'desired standard slot has no unique adopted binding');
-      const slot = matching[0], why = slotTopology(slot, o, inspection.project.common);
-      if (why) return row(entry, 'Hold', 'Hold', why);
-      const paneId = slot.panes.find(p => p.paneSlot === (s.paneSlot ?? 'primary'))?.pane;
-      const pane = o.panes.find(p => p.pane_id === paneId);
-      const target = { server: o.server, workspace: slot.workspace, tab: slot.tab, pane: paneId, checkout: slot.checkout };
-      const prior = journal.operations.filter(op => !lifecycleOperation(op) && (op.uid === uid || targetMatches(op.target, target)));
-      const ops = prior.filter(op => op.state !== 'never-started');
-      if (ops.length > 1) return row(entry, 'Hold', 'Hold', 'multiple operations claim this standard position');
-      const op = ops[0], viewer = entry.manifest.kind === 'LogViewer', agents = viewer
-        ? (o.viewers ?? []).filter(v => v.binding.pane === paneId) : o.agents.filter(a => a.pane_id === paneId);
-      if (op && op.uid !== uid) return row(entry, 'Hold', 'Hold', 'another manifest UID owns this standard position');
-      const a = agents[0], binding = a && (viewer ? a.binding : agentBinding(a, o.server, slot.tab));
-      const matches = (a, b) => viewer ? validBinding(a, 'LogViewer') && equalBinding(a, b) : sameBinding(a, b);
-      const claims = op ? (o.receipts ?? []).filter(r => r.operationId === op.id) : [];
-      const receipts = claims.filter(r => receiptMatches(r, op));
-      const receipt = op?.receipt ?? (receipts.length === 1 ? receipts[0] : null);
-      if (op?.state === 'withheld') decision = row(entry, 'Hold', 'Hold', `start withheld, delegate never invoked: ${op.reason}; explicit later operator disposition required`, {
-        observed: { operationId: op.id, operationState: op.state, withheldReason: op.reason } });
-      else if (a) {
-        if (!op || !receipt || claims.length > 1 || (claims.length && (receipts.length !== 1 || !matches(claims[0].binding, receipt.binding))) || !matches(receipt.binding, binding) || pane.terminal_id !== binding.terminalId ||
-            !targetMatches(binding, target) || (!viewer && !['working', 'idle', 'done'].includes(a.agent_status ?? a.status))) return row(entry, 'Hold', 'Hold', 'unknown or changed standard-slot occupant; never adopt or close');
-        decision = row(entry, 'Running', 'KEEP', 'matching live incarnation; protected standard slot; no prompt replay', {
-          observed: { binding, generation: op.generation, specDigest: op.specDigest },
-          ...(op.specDigest !== specDigest(entry) || op.generation !== entry.manifest.metadata.generation ? { pendingGeneration: entry.manifest.metadata.generation } : {}),
-          ...(op.state === 'intent' ? { resolvedOperation: op.id, receipt } : {}) });
-      } else if (op) decision = row(entry, 'Hold', 'Hold', 'prior start intent or incarnation exists; acknowledgement/loss requires observation, never start twice');
-      else if (s.role === 'logs-triage' || (viewer && s.viewer !== 'brain-structured-events')) decision = row(entry, 'Hold', 'KEEP', 'protected slot; triage activation belongs to later stages');
-      else if (pane.emptyConfirmed !== true || !pane.terminal_id || pane.agent || pane.agent_session?.value || pane.restore_error || pane.launch_pending) decision = row(entry, 'Hold', 'Hold', 'missing occupant is not proven empty; keep unknown processes');
-      else decision = row(entry, 'Missing', 'WouldStart', 'missing occupant in an adopted standard slot', {
-        observed: { target, terminalId: pane.terminal_id }, action: { kind: 'start-standard-slot', uid, target,
-          generation: entry.manifest.metadata.generation, specDigest: specDigest(entry), spec: entry.resolvedSpec } });
+      const missing = matching.length === 0 ? missingPosition(entry, input, slots) : null;
+      if (matching.length > 1) return row(entry, 'Hold', 'Hold', 'desired standard slot has no unique adopted binding');
+      if (missing?.decision) decision = missing.decision;
+      else {
+        const slot = matching[0] ?? missing.slot, why = slotTopology(slot, o, inspection.project.common);
+        if (why) return row(entry, 'Hold', 'Hold', why);
+        const paneId = slot.panes.find(p => p.paneSlot === (s.paneSlot ?? 'primary'))?.pane;
+        const pane = o.panes.find(p => p.pane_id === paneId);
+        const target = { server: o.server, workspace: slot.workspace, tab: slot.tab, pane: paneId, checkout: slot.checkout };
+        const prior = journal.operations.filter(op => !lifecycleOperation(op) && (op.uid === uid || targetMatches(op.receipt?.binding ?? op.target, target) ||
+          op.kind === 'create-standard-slot' && claimsPosition(op, uid, target, s.standardSlot)));
+        const ops = prior.filter(op => op.state !== 'never-started');
+        if (ops.length > 1) return row(entry, 'Hold', 'Hold', 'multiple operations claim this standard position');
+        const op = ops[0], viewer = entry.manifest.kind === 'LogViewer', agents = viewer
+          ? (o.viewers ?? []).filter(v => v.binding.pane === paneId) : o.agents.filter(a => a.pane_id === paneId);
+        if (op && op.uid !== uid) return row(entry, 'Hold', 'Hold', 'another manifest UID owns this standard position');
+        const a = agents[0], binding = a && (viewer ? a.binding : agentBinding(a, o.server, slot.tab));
+        const matches = (a, b) => viewer ? validBinding(a, 'LogViewer') && equalBinding(a, b) : sameBinding(a, b);
+        const claims = op ? (o.receipts ?? []).filter(r => r.operationId === op.id) : [];
+        const receipts = claims.filter(r => receiptMatches(r, op));
+        const receipt = op?.receipt ?? (receipts.length === 1 ? receipts[0] : null);
+        if (op?.state === 'withheld') decision = row(entry, 'Hold', 'Hold', `start withheld, delegate never invoked: ${op.reason}; explicit later operator disposition required`, {
+          observed: { operationId: op.id, operationState: op.state, withheldReason: op.reason } });
+        else if (a) {
+          if (!op || !receipt || claims.length > 1 || (claims.length && (receipts.length !== 1 || !matches(claims[0].binding, receipt.binding))) || !matches(receipt.binding, binding) || pane.terminal_id !== binding.terminalId ||
+              !targetMatches(binding, target) || (!viewer && !['working', 'idle', 'done'].includes(a.agent_status ?? a.status))) return row(entry, 'Hold', 'Hold', 'unknown or changed standard-slot occupant; never adopt or close');
+          decision = row(entry, 'Running', 'KEEP', 'matching live incarnation; protected standard slot; no prompt replay', {
+            observed: { binding, generation: op.generation, specDigest: op.specDigest },
+            ...(op.specDigest !== specDigest(entry) || op.generation !== entry.manifest.metadata.generation ? { pendingGeneration: entry.manifest.metadata.generation } : {}),
+            ...(op.state === 'intent' ? { resolvedOperation: op.id, receipt } : {}) });
+        } else if (op) decision = row(entry, 'Hold', 'Hold', 'prior start intent or incarnation exists; acknowledgement/loss requires observation, never start twice');
+        else if (s.role === 'logs-triage' || (viewer && s.viewer !== 'brain-structured-events')) decision = row(entry, 'Hold', 'KEEP', 'protected slot; triage activation belongs to later stages');
+        else if (pane.emptyConfirmed !== true || !pane.terminal_id || pane.agent || pane.agent_session?.value || pane.restore_error || pane.launch_pending) decision = row(entry, 'Hold', 'Hold', 'missing occupant is not proven empty; keep unknown processes');
+        else decision = row(entry, 'Missing', 'WouldStart', 'missing occupant in an adopted standard slot', {
+          observed: { target, terminalId: pane.terminal_id }, action: { kind: 'start-standard-slot', uid, target,
+            generation: entry.manifest.metadata.generation, specDigest: specDigest(entry), spec: entry.resolvedSpec } });
+      }
     }
     decision.reset ??= resetAssessment(entry, input);
     decision.recovery ??= { state: 'not-required-or-unconfirmed' };
@@ -188,15 +222,17 @@ export function planSessions(input) {
     return decision;
   });
   for (const d of decisions) {
+    d.lifecycleRequested = Boolean(facts.resetRequests?.[d.uid] || facts.recovery?.[d.uid]);
     d.reset ??= { eligible: false, vetoes: [d.reason] };
     d.recovery ??= { state: 'unknown' };
   }
   // An unresolved ownership/launch hold fences the pass, including other slots.
-  if (decisions.some(d => d.decision === 'Hold')) for (const d of decisions.filter(d => d.action)) {
-    d.action = null; d.decision = 'Hold'; d.reason = 'another desired session has unresolved ownership or evidence';
+  const held = decisions.find(d => d.decision === 'Hold');
+  if (held) for (const d of decisions.filter(d => d.action)) {
+    d.action = null; d.decision = 'Hold'; d.reason = `another desired session has unresolved ownership or evidence: ${held.reason}`;
   }
   const actionable = decisions.filter(d => d.action);
-  for (const deferred of actionable.slice(1)) { deferred.action = null; deferred.decision = 'Defer'; deferred.reason = 'one action per pass; another missing slot selected'; }
+  for (const deferred of actionable.slice(1)) { deferred.deferredAction = deferred.action; deferred.action = null; deferred.decision = 'Defer'; deferred.reason = 'one action per pass; another missing slot selected'; }
   return { apiVersion: 'session-plan/v1', project: inspection.project, valid: inspection.valid,
     diagnostics: inspection.diagnostics, errors, decisions, action: actionable[0]?.action ?? null };
 }
@@ -316,7 +352,7 @@ export async function reconcileOnce({ inspection, read, actions, approvePlan }) 
             Object.assign(op, { state: 'withheld', reason: failure });
             durableWrite(paths.journal, journal);
           }
-          else try { await actions.start(op); } catch (error) { failure = error.message; }
+          else try { await actions[op.kind === 'create-standard-slot' ? 'create' : 'start'](op); } catch (error) { failure = error.message; }
           // The returned acknowledgement alone is insufficient. Only exact
           // receipt evidence in a new observation can acknowledge an intent.
           plan = await observe();

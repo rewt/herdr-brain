@@ -66,16 +66,21 @@ export function validParticipant(p) {
     p.specDigest === digest({ kind: p.kind, spec: p.spec }) && validBinding(p.binding, p.kind) && text(p.incarnation);
 }
 export function validStartOperation(op) {
-  return exact(op, ['id', 'uid', 'kind', 'generation', 'specDigest', 'target', 'spec', 'state', 'receipt', 'reason', 'disposition']) &&
-    op.kind === 'start-standard-slot' && text(op.id) && text(op.uid) && hash(op.specDigest) && object(op.spec) &&
-    Number.isSafeInteger(op.generation) && op.generation > 0 && exact(op.target, bindingKeys.slice(0, 5)) &&
-    bindingKeys.slice(0, 5).every(k => text(op.target[k])) && ['intent', 'acknowledged', 'withheld', 'never-started'].includes(op.state) &&
+  const create = op.kind === 'create-standard-slot', keys = create ? ['server', 'workspace', 'checkout'] : bindingKeys.slice(0, 5);
+  return exact(op, ['id', 'uid', 'kind', 'generation', 'specDigest', 'target', 'spec', 'state', 'receipt', 'reason', 'disposition', ...(create ? ['standardSlot'] : [])]) &&
+    (create || op.kind === 'start-standard-slot') && text(op.id) && text(op.uid) && hash(op.specDigest) && object(op.spec) &&
+    (!create || ['chat', 'supervisor'].includes(op.spec.role) && op.standardSlot === op.spec.role && op.spec.standardSlot === op.standardSlot && op.spec.intent?.kind !== 'work-item') &&
+    Number.isSafeInteger(op.generation) && op.generation > 0 && exact(op.target, keys) &&
+    keys.every(k => text(op.target[k])) && ['intent', 'acknowledged', 'withheld', 'never-started'].includes(op.state) &&
     (op.state === 'never-started' ? !op.receipt && validStartDisposition(op, op.disposition?.request) &&
       exact(op.disposition, ['request', 'recordedAt', 'observationDigest']) &&
       Number.isFinite(Date.parse(op.disposition.recordedAt)) && hash(op.disposition.observationDigest) : op.disposition === undefined) &&
-    (op.state !== 'withheld' || text(op.reason)) && (op.state !== 'acknowledged' ||
-      op.receipt?.operationId === op.id && op.receipt.uid === op.uid && op.receipt.generation === op.generation && op.receipt.specDigest === op.specDigest &&
-      bindingKeys.slice(0, 5).every(k => op.receipt.binding?.[k] === op.target[k]));
+    (op.state !== 'withheld' || text(op.reason)) && (op.state !== 'acknowledged' || validLaunchReceipt(op, op.receipt));
+}
+export function validLaunchReceipt(op, receipt) {
+  const keys = op.kind === 'create-standard-slot' ? ['server', 'workspace', 'checkout'] : bindingKeys.slice(0, 5);
+  return receipt?.operationId === op.id && receipt.uid === op.uid && receipt.generation === op.generation && receipt.specDigest === op.specDigest &&
+    validBinding(receipt.binding, op.spec.viewer ? 'LogViewer' : 'Session') && keys.every(k => receipt.binding[k] === op.target[k]);
 }
 // A supervisor's historical claim, bound to the exact unresolved intent and
 // hashed source files. Native absence alone is never proof of non-invocation.
@@ -179,7 +184,7 @@ export function validIncarnationLinks(journal) {
     const op = journal.operations.find(op => op.id === i.operationId), p = op?.participants?.find(p => p.uid === i.uid);
     const r = op?.receipt?.incarnations?.find(r => r.id === i.id);
     const baseline = journal.bindings.find(b => b.uid === i.uid);
-    const start = journal.operations.find(op => op.uid === i.uid && op.kind === 'start-standard-slot' && op.state === 'acknowledged');
+    const start = journal.operations.find(op => op.uid === i.uid && ['start-standard-slot', 'create-standard-slot'].includes(op.kind) && op.state === 'acknowledged');
     const prior = current.get(i.uid) ?? (baseline ? { id: `run:${baseline.run}`, binding: baseline.binding }
       : start ? { id: `start:${start.id}`, binding: start.receipt?.binding } : null);
     if (!p || !r || r.uid !== i.uid || i.previous !== prior?.id || p.incarnation !== prior?.id || !equalBinding(p.binding, prior.binding) ||

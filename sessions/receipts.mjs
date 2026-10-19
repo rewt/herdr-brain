@@ -54,6 +54,13 @@ export function readStandardSlots(common) {
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     const history = load(common);
     const slots = validate(history, common), journal = readControllerJournal(common);
+    for (const op of journal.operations.filter(op => op.kind === 'create-standard-slot' && op.state === 'acknowledged')) {
+      const b = op.receipt.binding;
+      if (slots.some(s => s.server === b.server && (s.tab === b.tab || s.workspace === b.workspace && s.standardSlot === op.standardSlot)))
+        throw Error('created standard slot conflicts with adopted binding');
+      slots.push({ uid: op.uid, common, server: b.server, workspace: b.workspace, checkout: b.checkout,
+        tab: b.tab, standardSlot: op.standardSlot, panes: [{ pane: b.pane, paneSlot: 'primary' }], controllerOperation: op.id });
+    }
     // Add KEEP for replacement layouts without withdrawing the old receipt.
     // Only a bound, validated incarnation can extend the protection set.
     for (const op of journal.operations.filter(op => op.history?.includes('restarted'))) {

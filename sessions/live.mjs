@@ -15,12 +15,14 @@ import { quote } from '../lib/shell.mjs';
 import { transferSessionInbox } from '../messages/session-transfer.mjs';
 import { parseUniqueJson } from './json.mjs';
 import { durableWrite, readControllerJournal } from './runtime.mjs';
-import { agentBinding } from './observe.mjs';
+import { agentBinding, readSessionFacts } from './observe.mjs';
+import { readStandardSlots } from './receipts.mjs';
+import { claimsPosition, unownedWorkspaceReason } from './create-safety.mjs';
 import { lastTabCloseVeto, unexpectedWorkspaceRemoval } from './close-safety.mjs';
 import { checkAuthorization } from './authorization.mjs';
 import { safeProjectPath } from './project.mjs';
 import { nativeResumeVeto } from './native-conversation.mjs';
-import { digest, equalBinding, validBinding, verifyHandoff, validCloseReceipt, validMaterializationReceipt, validInboxReceipt } from './lifecycle-evidence.mjs';
+import { digest, equalBinding, validBinding, validLaunchReceipt, verifyHandoff, validCloseReceipt, validMaterializationReceipt, validInboxReceipt } from './lifecycle-evidence.mjs';
 
 const product = fileURLToPath(new URL('../', import.meta.url));
 const receiptFile = common => path.join(common, 'sessions/adapter-receipts.json');
@@ -49,8 +51,7 @@ export function readAdapterReceipts(common) {
     keys.add(key);
     const valid = r.kind === 'close' ? validCloseReceipt(op, r) : ['respawn', 'resume', 'native-restore'].includes(r.kind)
       ? validMaterializationReceipt(op, r) : r.kind === 'inbox' ? validInboxReceipt(op, r, op.receipt?.incarnations.map(i => i.id) ?? [])
-      : op.kind === 'start-standard-slot' && r.uid === op.uid && r.generation === op.generation && r.specDigest === op.specDigest &&
-        validBinding(r.binding, op.spec.viewer ? 'LogViewer' : 'Session') && ['server', 'workspace', 'tab', 'pane', 'checkout'].every(k => r.binding[k] === op.target[k]);
+      : ['start-standard-slot', 'create-standard-slot'].includes(op.kind) && validLaunchReceipt(op, r);
     if (!valid) throw Error('invalid adapter operation evidence');
   }
   return saved.receipts;
@@ -68,6 +69,7 @@ export function safeStandard(op) {
       !['chat', 'supervisor', 'logs'].includes(s.role) || !s.standardSlot || s.role === 'reviewer' ||
       (s.role === 'logs' && s.viewer !== 'brain-structured-events'))) throw Error('controller actions are restricted to supported standard slots; workers and triage are observation-only');
   if (specs.length !== 1) throw Error('multi-pane activation awaits the triage stage; keep the whole layout');
+  if (op.kind === 'create-standard-slot' && !['chat', 'supervisor'].includes(op.spec.role)) throw Error('creation supports only chat and supervisor');
 }
 function workspace(o, project, b) {
   const rows = o.workspaces.filter(w => w.workspace_id === b.workspace);
@@ -141,7 +143,7 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     const supplied = structuredClone(op);
     delete supplied.target?.terminalId; // Private shell observation, not durable target identity.
     if (!saved || digest(saved) !== digest(supplied)) fail('adapter requires the exact durable journal intent');
-    const action = op.kind === 'start-standard-slot' ? { kind: op.kind } : { kind: 'lifecycle', stage:
+    const action = ['start-standard-slot', 'create-standard-slot'].includes(op.kind) ? { kind: op.kind } : { kind: 'lifecycle', stage:
       ({ 'close-intent': 'close', 'respawn-intent': 'respawn', 'resume-intent': 'resume', 'inbox-intent': 'transfer' })[op.state] };
     const r = checkAuthorization({ file: authorization, project, workspace: workspaceRef, action, env });
     if (['server', 'workspace', 'checkout'].some(k => op.target[k] !== r.workspace[k])) fail('adapter target is outside authorization');
@@ -152,6 +154,7 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     return gate(op);
   };
   const before = async op => { safeStandard(op); await permit(op); return observe(); };
+  const createWitnesses = new Map();
   const record = receipt => saveReceipt(project.common, receipt);
   const launch = (op, p, create, resume, shellTarget) => {
     const spec = p?.spec ?? op.spec, target = shellTarget ?? p?.binding ?? op.target;
@@ -186,7 +189,18 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     // Synchronous: no await separates these reads from the launch owner's input.
     permit(op);
     const o = physicalObservation(op);
-    if (!receipt && create) { layout(o, project, op.participants.map(p => p.binding), { absent: true }); permit(op); return; }
+    if (op.kind === 'create-standard-slot') {
+      creationGuard(op, o, receipt);
+      if (!receipt) {
+        if (createWitnesses.has(op.id)) fail('create was already invoked; inspect retained tab');
+        createWitnesses.set(op.id, { tabs: o.tabs.map(t => t.tab_id), panes: o.panes.map(p => p.pane_id), terminals: o.panes.map(p => p.terminal_id) });
+      } else {
+        const prior = createWitnesses.get(op.id);
+        if (!prior || receipt.workspace !== op.target.workspace || prior.tabs.includes(receipt.tab) || prior.panes.includes(receipt.pane) ||
+            prior.terminals.includes(receipt.terminalId)) fail('create returned existing tab, pane or terminal; preserve existing work');
+      }
+    } else if (!receipt && create) { layout(o, project, op.participants.map(p => p.binding), { absent: true }); permit(op); return; }
+    if (!receipt && op.kind === 'create-standard-slot') { permit(op); return; }
     const b = { ...op.target, ...receipt, server: op.target.server, checkout: op.target.checkout };
     workspace(o, project, b);
     const pane = o.panes.find(p => p.pane_id === b.pane), process = herdr(['pane', 'process-info', '--pane', b.pane]).process_info;
@@ -196,6 +210,21 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
         !Number.isSafeInteger(process?.shell_pid) || process.shell_pid < 1 || process.foreground_processes?.length !== 1 ||
         process.foreground_processes[0].pid !== process.shell_pid) fail('physical launch target changed or is not a sole shell');
     permit(op);
+  }
+  function creationGuard(op, o, receipt) {
+    workspace(o, project, op.target);
+    const enrollment = readStandardSlots(project.common), journal = readControllerJournal(project.common);
+    if (enrollment.errors.length) fail(enrollment.errors.join('; '));
+    if (enrollment.slots.some(s => s.server === op.target.server && s.workspace === op.target.workspace && s.standardSlot === op.standardSlot) ||
+        journal.operations.some(other => other.id !== op.id && claimsPosition(other, op.uid, op.target, op.standardSlot)))
+      fail('create position is no longer unadopted');
+    const facts = readSessionFacts({ project, env });
+    if (facts.stopped || facts.closeHold || facts.errors.length) fail('STOP, close hold or unreadable current facts; creation withheld');
+    const unowned = unownedWorkspaceReason(o, journal, facts, op.target);
+    if (unowned) fail(unowned);
+    if (receipt && (enrollment.slots.some(s => s.tab === receipt.tab && s.server === op.target.server) ||
+        o.tabs.filter(t => t.tab_id === receipt.tab && t.workspace_id === op.target.workspace).length !== 1 ||
+        o.panes.filter(p => p.tab_id === receipt.tab).length !== 1)) fail('created tab is not a new sole-pane layout');
   }
   function saveContext(op, uid, generation, specDigest, route, binding, instructionsSha256) {
     if (!binding.nativeSessionId) return;
@@ -220,6 +249,14 @@ export function createLiveActions({ project, workspace: workspaceRef, authorizat
     return b;
   }
   return {
+    async create(op) {
+      const o = await before(op);
+      creationGuard(op, o);
+      const made = launch(op, null, true, false), after = await observe();
+      const binding = launchedBinding(after, made, op.spec, op.target);
+      saveContext(op, op.uid, op.generation, op.specDigest, op.spec.resolvedRoute, binding, made.instructionsSha256);
+      return record({ operationId: op.id, uid: op.uid, generation: op.generation, specDigest: op.specDigest, binding });
+    },
     async start(op) {
       const o = await before(op), pane = o.panes.find(p => p.pane_id === op.target.pane);
       const target = { ...op.target, terminalId: pane?.terminal_id };

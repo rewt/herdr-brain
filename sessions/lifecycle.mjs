@@ -4,7 +4,7 @@ import { agentBinding } from './observe.mjs';
 import { lastTabCloseVeto, unexpectedWorkspaceRemoval } from './close-safety.mjs';
 import { nativeResumeVeto } from './native-conversation.mjs';
 import { digest, specDigest, equalBinding, validBinding, strings, sameStrings, text, verifyHandoff,
-  validCloseReceipt, validMaterializationReceipt, validInboxReceipt, validLifecycleOperation } from './lifecycle-evidence.mjs';
+  validCloseReceipt, validMaterializationReceipt, validInboxReceipt, validLifecycleOperation, validLaunchReceipt } from './lifecycle-evidence.mjs';
 
 const isLifecycle = op => ['reset', 'recovery'].includes(op.kind);
 export const lifecycleOperation = isLifecycle;
@@ -53,7 +53,7 @@ function known(entry, input) {
     if (op?.state === 'acknowledged' && op.receipt?.operationId === op.id && op.receipt.uid === uid &&
         claims.length <= 1 && (!claims.length || same(claims[0], op.receipt)) &&
         op.receipt.generation === op.generation && op.receipt.specDigest === op.specDigest && validBinding(op.receipt.binding, entry.manifest.kind) &&
-        Object.keys(targetOf(op.receipt.binding)).every(k => op.target[k] === op.receipt.binding[k])) {
+        validLaunchReceipt(op, op.receipt)) {
       source = { binding: op.receipt.binding, incarnation: `start:${op.id}`, generation: op.generation, specDigest: op.specDigest };
     }
   }

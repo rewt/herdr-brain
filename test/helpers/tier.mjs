@@ -68,6 +68,7 @@ const promotion = [
   'test/sanitization.test.mjs',
   'test/session-release.test.mjs',
   'test/setup.test.mjs',
+  'test/setup-apply.test.mjs',
   'test/suite.test.mjs',
   'test/tidy-tabs.test.mjs',
   'test/tier-plan.test.mjs',

@@ -1,11 +1,14 @@
 # Session manifests
 
 Stages 1–4 of ARCH-33: manifests, an offline inspector, KEEP-only receipts,
-foreground planning, and an explicitly authorized single-action apply path.
+foreground planning, and an explicitly authorized single-action apply path for
+starting adopted panes or creating never-adopted chat/supervisor positions.
 Node built-ins only. `inspect` and `plan` are read-only. `authorize` writes only a
 scope receipt; `apply` can act only on an explicitly enrolled workspace with a
 valid receipt and fresh matching saved plan. There is no enrollment CLI, default
-apply workspace, controller loop, background process, or record writer.
+apply workspace in this CLI, controller loop, background process, or record writer.
+[`setup apply`](../setup/README.md#apply) composes bounded create/start steps from
+a saved workspace dry run and defaults its workspace reference to `home`.
 All model work is declared as a Herdr session on the subscription; the service
 and controller remain model-free. Native harness settings retain permission
 ownership. Assertions in a document grant no authority or capability.
@@ -231,6 +234,13 @@ Withdrawal only removes this KEEP input and never bypasses holds, warm chains,
 native identity, live references, focus, processes or guarded Git removal.
 The executor freshly observes both receipt and record evidence before acting.
 
+An acknowledged `create-standard-slot` in the existing controller journal also
+derives a protected adopted slot, with `controllerOperation` naming its source.
+An intent alone never enrolls a tab. These derived slots and replacement KEEP
+layouts are excluded from the original enrollment digest, so a scoped
+authorization survives successful creation. An entirely unenrolled workspace
+still stays `workspace-not-enrolled` in setup; this is no implicit enrollment.
+
 Offline tests: `node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/sessions.test.mjs test/retire.test.mjs test/retire-paths.test.mjs`.
 
 ## Foreground reconciliation and planning
@@ -285,7 +295,11 @@ mutation. The status cache is not read at all.
 | STOP or canonical close hold | Observe only; keep exact occupants |
 | Exact live standard incarnation, including idle | `KEEP`; no brief/prompt replay |
 | Missing occupant in an existing adopted chat/supervisor pane, confirmed empty with no prior intent | At most one `WouldStart`; later candidates defer |
-| Missing tab/pane, prior incarnation gone, or uncertain launch | `Hold` unless stage 4's exact transition evidence resolves it |
+| Never-adopted chat/supervisor position in an enrolled, exactly owned workspace, with no prior operation | At most one `WouldCreate`; later candidates defer; recorded `never-started` operations do not claim the position |
+| Missing adopted tab/pane, prior incarnation gone, or uncertain launch | `Hold` unless stage 4's exact transition evidence resolves it |
+| Unacknowledged create without an exact receipt | `Hold`: create intent unresolved; inspect retained tab; never create twice |
+| Missing logs/triage layout | Non-fencing `Observe`: creation unsupported: logs layout awaits triage activation |
+| Unowned live workspace agent before creation | `Hold`: preserve, never create beside it; exact controller or recorded work-item bindings required |
 | Start withheld after intent because evidence changed; delegate never invoked | `Hold` with the durable reason, pending an explicit later operator disposition; stage 4 does not resolve it |
 | Post-close respawn or inbox delegate provably never invoked after a final check failed | `respawn-pending` / `inbox-pending` with the durable reason; observe while blocked, then retry that stage once with fresh evidence |
 | Missing model-free structured viewer with positive empty-process evidence | At most one `WouldStart`; renders the existing foreground viewer once |
@@ -309,7 +323,8 @@ endpoint, then sandwiches `pane process-info` between matching `pane get`
 reads. Only a sole foreground shell in the exact enrolled checkout can be empty.
 The shared launcher subsequently proves shell readiness before input.
 
-`reconcileOffline` still requires `{offline: true, start(operation)}`. `apply`
+`reconcileOffline` still requires `{offline: true, start(operation)}` and a fake
+`create(operation)` when testing creation. `apply`
 uses the same journal executor with `live.mjs` adapters. Native arguments and
 readiness remain owned by `supervisor/chats.mjs`, whose existing argument builder
 also serves the exact chat/supervisor opener and native resume. The adapters never
@@ -543,7 +558,10 @@ project and original enrollment (the following values are illustrative):
 
 Present this scope with the question for the operator to inspect before answering.
 Only the listed action names are accepted; requested actions must be a nonempty
-subset. Common directory, server, native workspace ID and checkout must match
+subset. The additional accepted name `create-standard-slot` must also be in the
+scope before the answer, and in `authorize --actions`, when workspace apply will
+create a position; it is never inferred from start permission. Common directory,
+server, native workspace ID and checkout must match
 exactly. Scope missing at answer time or changed afterward is refused. The receipt
 binds the record path and hash of the answer transaction and approved scope;
 every use rechecks that evidence, including a later overrule or reopening.

@@ -13,7 +13,7 @@ import { digest } from './lifecycle-evidence.mjs';
 import { lifecycleEdgeVeto } from './lifecycle.mjs';
 
 export async function apply(options = {}) {
-  const { workspace, authorization, planFile, env = process.env, now = Date.now } = options;
+  const { workspace, authorization, planFile, savedPlan, env = process.env, now = Date.now } = options;
   // No receipt means the identical read-only planner, without creating a lease,
   // journal, directory, context or mutation adapter.
   const preview = await plan(options);
@@ -24,10 +24,10 @@ export async function apply(options = {}) {
     if (!workspace) throw Error('an explicit --workspace is required');
     const brakes = (options.readFacts ?? readSessionFacts)({ project: preview.project, env });
     if (brakes.stopped || brakes.closeHold || brakes.errors.length) throw Error('STOP, close hold or unreadable current facts; observe only');
-    if (!planFile) throw Error('a fresh --plan FILE is required');
+    if (!planFile && !savedPlan) throw Error('a fresh --plan FILE is required');
     const held = preview.decisions.find(d => d.decision === 'Hold' && d.holdCode);
     if (held) throw Error(held.reason);
-    expected = parseUniqueJson(readPlainFile(planFile));
+    expected = savedPlan ?? parseUniqueJson(readPlainFile(planFile));
     const age = now() - Date.parse(expected.observedAt);
     if (!Number.isFinite(age) || age < 0 || age > 60000 || expected.workspace !== workspace ||
         expected.selectionDigest !== selectionDigest(expected) || expected.selectionDigest !== selectionDigest(preview)) throw Error('saved plan is stale or has drifted');
@@ -47,7 +47,7 @@ export async function apply(options = {}) {
   const permit = op => {
     const age = now() - Date.parse(expected.observedAt);
     if (age < 0 || age > 60000) throw Error('selected plan expired before the physical action');
-    const action = op.kind === 'start-standard-slot' ? { kind: op.kind } : { kind: 'lifecycle', stage:
+    const action = ['start-standard-slot', 'create-standard-slot'].includes(op.kind) ? { kind: op.kind } : { kind: 'lifecycle', stage:
       ({ 'close-intent': 'close', 'respawn-intent': 'respawn', 'resume-intent': 'resume', 'inbox-intent': 'transfer' })[op.state] };
     const receipt = checkAuthorization({ file: authorization, project, workspace, action, env, now });
     if (['server', 'workspace', 'checkout'].some(k => op.target[k] !== receipt.workspace[k])) throw Error('action target differs from authorized workspace');
@@ -55,7 +55,7 @@ export async function apply(options = {}) {
     if (facts.stopped || facts.closeHold || facts.errors.length) throw Error('STOP, close hold or unreadable current facts; action withheld');
     const current = inspect(options);
     if (!current.valid || digest(current.entries) !== digest(inspection.entries)) throw Error('desired manifests drifted before action');
-    if (op.kind !== 'start-standard-slot') {
+    if (!['start-standard-slot', 'create-standard-slot'].includes(op.kind)) {
       const experiment = experimentEvidence(options.evidence, project, receipt.workspace);
       if (!experiment) throw Error('current lifecycle experiment evidence required');
       const entry = current.entries.find(e => e.manifest.metadata.uid === op.uid);

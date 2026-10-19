@@ -26,9 +26,7 @@ export function planInputs({ files = [], cwd = process.cwd(), workspace = 'home'
         (facts.workspaceRefs[branch] ??= []).push(slot.workspace);
       } catch (error) { facts.errors.push(`workspace binding ${slot.workspace}: ${error.message}`); }
     }
-    const { observation, experiment } = evidence
-      ? await observeLive({ observer, project, workspace, evidence, env })
-      : { observation: await observer.observe(), experiment: null };
+    const { observation, experiment } = await observeLive({ observer, project, workspace, evidence, env });
     if (experiment) for (const key of ['resetRequests', 'recovery', 'quiescence']) facts[key] = experiment[key];
     return { enrollment, facts, observation, env };
   };

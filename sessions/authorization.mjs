@@ -13,7 +13,7 @@ import { parseUniqueJson } from './json.mjs';
 import { durableWrite, acquireControllerLease } from './runtime.mjs';
 import { digest, strings, text } from './lifecycle-evidence.mjs';
 
-export const ACTIONS = ['start-standard-slot', 'close', 'respawn', 'resume', 'transfer'];
+export const ACTIONS = ['start-standard-slot', 'create-standard-slot', 'close', 'respawn', 'resume', 'transfer'];
 export function enrolledWorkspace(project, ref) {
   if (!text(ref)) throw Error('an explicit --workspace is required');
   const enrollment = readStandardSlots(project.common);
@@ -107,6 +107,6 @@ export function checkAuthorization({ file, project, workspace, action, env = pro
   if (r.common !== project.common || digest(r.workspace) !== digest(bound)) throw Error('authorization workspace or enrollment mismatch');
   if (Date.parse(r.createdAt) > now() || Date.parse(r.expiresAt) <= now()) throw Error('authorization expired or not yet valid');
   if (digest(decisionEvidence(project, env, r.operatorDecision, bound, r.actions)) !== digest(r.operatorDecision)) throw Error('operator decision evidence changed');
-  if (action && !r.actions.includes(action.kind === 'lifecycle' ? action.stage : action.kind)) throw Error('action kind is not authorized');
+  if (action && !r.actions.includes(action.kind === 'lifecycle' ? action.stage : action.kind)) throw Error(`action kind is not authorized: ${action.kind === 'lifecycle' ? action.stage : action.kind}`);
   return r;
 }

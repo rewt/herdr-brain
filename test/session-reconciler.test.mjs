@@ -70,6 +70,61 @@ function fixture(t, names = ['chat']) {
 }
 const decision = p => p.decisions[0];
 
+function removeChatAdoption(f) {
+  recordStandardSlot({ cwd: f.cwd, action: 'withdraw', uid: 'slot-chat', actor: 'fixture', why: 'never-adopted creation fixture' });
+  f.observation.tabs = f.observation.tabs.filter(t => t.tab_id !== 'w:t-chat');
+  f.observation.panes = f.observation.panes.filter(p => p.pane_id !== 'w:p-chat');
+}
+
+test('never-adopted chat creates once through a durable intent and acknowledged receipt derives KEEP enrollment', async t => {
+  const f = fixture(t, ['chat', 'supervisor']); removeChatAdoption(f);
+  assert.equal(decision(await f.preview()).decision, 'WouldCreate');
+  f.actions.create = async op => {
+    assert.equal(readControllerJournal(f.project.common).operations.at(-1).state, 'intent');
+    assert.deepEqual(Object.keys(op.target).sort(), ['checkout', 'server', 'workspace']);
+    f.calls.push(op);
+    const target = { ...op.target, tab: 'new-tab', pane: 'new-pane' };
+    f.observation.tabs.push({ tab_id: target.tab, workspace_id: target.workspace });
+    f.observation.panes.push({ pane_id: target.pane, tab_id: target.tab, workspace_id: target.workspace, terminal_id: 'new-terminal' });
+    f.materialize({ ...op, target });
+  };
+  const first = await f.run(); assert.equal(decision(first).decision, 'KEEP', JSON.stringify(first));
+  const op = readControllerJournal(f.project.common).operations[0]; assert.equal(op.state, 'acknowledged');
+  assert.equal(readStandardSlots(f.project.common).slots.find(s => s.standardSlot === 'chat').controllerOperation, op.id);
+  await f.run(); // starts the existing empty supervisor; chat stays KEEP.
+  assert.equal(decision(await f.preview()).decision, 'KEEP'); assert.equal(f.calls.filter(op => op.kind === 'create-standard-slot').length, 1);
+});
+
+test('a create intent without an exact receipt holds and fences every later action', async t => {
+  const f = fixture(t, ['chat', 'supervisor']); removeChatAdoption(f);
+  f.actions.create = async op => { f.calls.push(op); throw Error('reply lost after create'); };
+  const first = await f.run(); assert.match(decision(first).reason, /create intent unresolved/);
+  assert.ok(first.decisions.every(d => d.decision === 'Hold'));
+  await f.run(); assert.equal(f.calls.length, 1);
+});
+
+test('missing logs positions Observe without fencing a chat or supervisor action', async t => {
+  const f = fixture(t);
+  for (const name of ['logs-viewer', 'logs-triage']) f.inspection.entries.push(validateManifest(example(name), { project: f.project, config: ROUTE_PRESET }));
+  const p = await f.preview(); assert.equal(p.action.kind, 'start-standard-slot');
+  for (const d of p.decisions.slice(1)) {
+    assert.equal(d.decision, 'Observe'); assert.equal(d.reason, 'creation unsupported: logs layout awaits triage activation');
+  }
+});
+
+test('workspace-wide unowned agents block creation, while a recorded live work-item binding is preserved', async t => {
+  const f = fixture(t, ['chat', 'supervisor']); removeChatAdoption(f);
+  const a = { name: 'retained-worker', workspace_id: 'w', tab_id: 'worker-tab', pane_id: 'worker-pane', terminal_id: 'worker-term', cwd: f.cwd,
+    agent_session: { value: 'worker-native' }, agent_status: 'working' };
+  f.observation.agents.push(a);
+  assert.match(decision(await f.preview()).reason, /unowned live occupant in workspace: retained-worker/);
+  f.facts.record.runs.push({ id: 'R-99', item: 'ENG-9', workspace: f.cwd, started: { seq: 1 }, meta: {
+    agent: a.name, pane: a.pane_id, terminal_id: a.terminal_id, worker_workspace: 'w', agent_session_id: 'worker-native' } });
+  assert.equal(decision(await f.preview()).decision, 'WouldCreate');
+  f.facts.record.runs[0].meta.agent_session_id = 'different';
+  assert.match(decision(await f.preview()).reason, /unowned live occupant/);
+});
+
 test('one journaled fake delegate, then idempotent KEEP even idle; cache loss cannot launch or replay', async t => {
   const f = fixture(t);
   assert.equal(decision(await f.preview()).decision, 'WouldStart');

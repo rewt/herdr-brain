@@ -20,6 +20,7 @@ export function experimentEvidence(file, project, bound) {
 export async function observeLive({ observer, project, workspace, evidence, env, herdr = herdrEdge(env) }) {
   const o = await observer.observe(), receipts = readAdapterReceipts(project.common);
   o.receipts = [...(o.receipts ?? []), ...receipts];
+  if (!evidence) return { observation: o, experiment: null };
   const bound = enrolledWorkspace(project, workspace), e = experimentEvidence(evidence, project, bound);
   if (!e) return { observation: o, experiment: null };
   if (o.server !== bound.server || !o.complete) throw Error('experiment endpoint or snapshot changed');

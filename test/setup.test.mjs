@@ -116,7 +116,7 @@ test('a proven empty adopted viewer has a concrete create preview and never laun
   const f = fixture(t, ['logs-viewer']); enroll(f, 'logs'); const before = snapshot(f.scratch);
   const result = await plan(f.options);
   assert.equal(result.outcome, 'planned', JSON.stringify(result));
-  assert.equal(result.changes[0].outcome, 'create'); assert.equal(result.changes[0].operation, 'start-standard-slot');
+  assert.equal(result.changes[0].outcome, 'start'); assert.equal(result.changes[0].operation, 'start-standard-slot');
   assert.equal(result.changes[0].target.pane, 'viewer'); assert.deepEqual(result.changes[0].reasons, []);
   assert.deepEqual(snapshot(f.scratch), before);
 });
@@ -129,7 +129,7 @@ test('unverifiable native trust is advisory and permits ready diagnosis and a re
   assert.equal(trust.reasons[0].code, 'native-trust-unverified');
   const result = await plan(f.options), change = result.changes[0];
   assert.equal(result.outcome, 'planned', JSON.stringify(result));
-  assert.equal(change.outcome, 'create'); assert.equal(change.operation, 'start-standard-slot');
+  assert.equal(change.outcome, 'start'); assert.equal(change.operation, 'start-standard-slot');
   assert.deepEqual(change.reasons, []); assert.equal(change.advisories[0].code, 'native-trust-unverified');
   assert.deepEqual(snapshot(f.scratch), before);
 });
@@ -219,9 +219,9 @@ test('setup help ships in copied products and rejects unknown verbs, fields and 
   for (const file of ['setup/setup.mjs', 'setup/README.md', 'sessions/templates/workspace.md']) assert.ok(productFiles(source).includes(file), file);
   const cli = path.join(installed, 'setup/setup.mjs');
   const run = args => spawnSync(process.execPath, [cli, ...args], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
-  const help = run(['--help']); assert.equal(help.status, 0, help.stderr); assert.match(help.stdout, /doctor\|plan/);
-  for (const args of [['init'], ['apply'], ['doctor', '--unknown'], ['plan', 'file.md'], ['doctor', '--authorization', 'receipt.json']]) {
+  const help = run(['--help']); assert.equal(help.status, 0, help.stderr); assert.match(help.stdout, /doctor\|plan\|apply/);
+  for (const args of [['init'], ['apply', '--model', 'opus'], ['apply', '--effort', 'high'], ['doctor', '--unknown'], ['plan', 'file.md'], ['doctor', '--authorization', 'receipt.json']]) {
     const result = run(args); assert.equal(result.status, 1); assert.equal(result.stdout, '');
-    assert.match(result.stderr, /expected doctor or plan|Unknown option/);
+    assert.match(result.stderr, /expected doctor, plan or apply|Unknown option|apply options only/);
   }
 });

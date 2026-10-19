@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
 import { ownerAlive } from '../../lib/process-owner.mjs';
+import { matchingRun } from '../../lib/retire.mjs';
 import { harnessEnvironment, initializeHerdrOwnership } from '../run.mjs';
 import { createLiveSessionTemp } from '../temp.mjs';
 import { testSlotEnvironment, scratchProductHomes } from '../environment.mjs';
@@ -149,6 +150,11 @@ test('real default-cycle dispatch admits its owned fleet worktree and cwd while 
   assert.ok(calls().some(args => args[0] === 'pane' && args[1] === 'run' && args[3].startsWith(' . ')), 'live fleet cwd admits the private environment handoff');
   assert.ok(calls().some(args => args[0] === 'pane' && args[1] === 'run' && args[3].includes('worker.mjs')), 'agent start passes its live fleet cwd check');
   assert.ok(calls().some(args => args[0] === 'agent' && args[1] === 'prompt'), 'real dispatch reaches brief delivery');
+  const listed = command(process.execPath, [path.join(root, 'herdr.mjs'), 'agent', 'list']);
+  assert.equal(listed.status, 0, listed.stderr);
+  const observed = JSON.parse(listed.stdout).result.agents.find(agent => agent.name === saved.job.agent);
+  assert.equal(matchingRun(observed, { runs: [saved.info] })?.id, saved.job.run,
+    'the actual adapter listing matches the identity recorded by default dispatch');
 
   // Stop receipt-owned producers before changing the fake pane's cwd for the
   // foreign-root probes; their lifecycle reads are allowed native UI calls.

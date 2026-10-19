@@ -171,19 +171,25 @@ for (const phase of ['cwd', 'registration']) test(`the real adapter bounds a slo
 
 
 test('failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed', async () => {
-  let state = 'idle', abandoned = false, closed = false;
+  let state = 'idle', abandoned = false, closed = false, exited = false;
   const job = { run: 'R-2', pane: 'owned:pane', lane: 'missing', watcher: { log: '/scratch/watch.log' } };
   await abandonWatcher(job, {
     record: args => { assert.deepEqual(args.slice(0, 2), ['abandon', 'R-2']); abandoned = true; },
     h: (...args) => { state = args[args.indexOf('--state') + 1]; },
     read: () => { assert.equal(abandoned, true); return 'R-2 was abandoned; stopping'; },
-    until: async predicate => {
+    until: async (predicate, label) => {
+      if (label === 'R-2 watcher exits') {
+        assert.equal(state, 'idle'); assert.equal(closed, false);
+        assert.equal(predicate(), false, 'the abandonment log precedes process exit');
+        exited = true; assert.equal(predicate(), true); return;
+      }
       // The watcher is still confirming its delivered notice. The transition
       // must remain observable when it later arms agent.wait --until working.
       for (let i = 0; i < 3; i++) { assert.equal(state, 'working'); await new Promise(resolve => setImmediate(resolve)); }
       assert.equal(predicate(), true);
     },
-    close: topic => { assert.equal(state, 'idle'); assert.equal(topic, 'missing'); closed = true; },
+    alive: () => !exited,
+    close: topic => { assert.equal(exited, true); assert.equal(state, 'idle'); assert.equal(topic, 'missing'); closed = true; },
   });
   assert.equal(closed, true);
 });

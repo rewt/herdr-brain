@@ -465,6 +465,38 @@
       "location": "<record>/{dispatch,settle}/*.routes.json",
       "rule": "additive",
       "notCovered": "Frozen routing snapshots are produced with coordinator journals; OLD route resolution on those snapshots is not separately covered."
+    },
+    {
+      "id": "promotion-tests/v1",
+      "version": 1,
+      "writer": "promote/test-plan.mjs",
+      "location": "<common>/promote/batches/*/train.json attempts[].test_plan",
+      "rule": "additive",
+      "notCovered": "Embedded focused test selection is not present in the refused train; needs OLD planned-attempt recovery coverage."
+    },
+    {
+      "id": "promotion-selector-shadow/v1",
+      "version": 1,
+      "writer": "promote/selector.mjs",
+      "location": "<common>/promote/batches/*/train.json attempts[].selector_shadow",
+      "rule": "additive",
+      "notCovered": "Embedded shadow selection is written only after candidate preparation; no gate/selection expansion is authorized here."
+    },
+    {
+      "id": "project-cycle-time/v1",
+      "version": 1,
+      "writer": "supervisor/cycle-time.mjs",
+      "location": "<record>/published/cycle-time.{json,md}",
+      "rule": "additive",
+      "notCovered": "Published cycle-time projection needs an OLD publication consumer witness."
+    },
+    {
+      "id": "slot-handoff",
+      "version": "unversioned",
+      "writer": "lib/handoffs.mjs",
+      "location": "<record>/handoffs/<workspace>/<slot>/*.md and handoff.recorded events",
+      "rule": "closed",
+      "notCovered": "Immutable hash-bound continuity payload; needs OLD handoff hash/path validation coverage beyond ordinary generated prose."
     }
   ]
 }

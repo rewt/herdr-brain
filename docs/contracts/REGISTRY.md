@@ -226,6 +226,10 @@ receipts have their own rows when they have an independent version/consumer.
 | `log-watermarks`, 1 <!-- persisted: log-watermarks --> | `logs/journal.mjs`; `<journal-partition>/watermarks-<sha256>.jsonl` | closed; owned by the named module. |
 | `lane-session-registry`, unversioned <!-- persisted: lane-session-registry --> | `lanes/board/registry.mjs`; `<canonical>/.lane/sessions.json and .d/*.json` | additive; owned by the named module. |
 | `route-snapshot`, unversioned <!-- persisted: route-snapshot --> | `dispatch/dispatch.mjs; settle/settle.mjs`; `<record>/{dispatch,settle}/*.routes.json` | additive; owned by the named module. |
+| `promotion-tests/v1`, 1 <!-- persisted: promotion-tests/v1 --> | `promote/test-plan.mjs`; `<common>/promote/batches/*/train.json attempts[].test_plan` | additive; owned by the named module. |
+| `promotion-selector-shadow/v1`, 1 <!-- persisted: promotion-selector-shadow/v1 --> | `promote/selector.mjs`; `<common>/promote/batches/*/train.json attempts[].selector_shadow` | additive; owned by the named module. |
+| `project-cycle-time/v1`, 1 <!-- persisted: project-cycle-time/v1 --> | `supervisor/cycle-time.mjs`; `<record>/published/cycle-time.{json,md}` | additive; owned by the named module. |
+| `slot-handoff`, unversioned <!-- persisted: slot-handoff --> | `lib/handoffs.mjs`; `<record>/handoffs/<workspace>/<slot>/*.md and handoff.recorded events` | closed; owned by the named module. |
 
 ## Offline old-reader evidence
 

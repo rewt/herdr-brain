@@ -58,6 +58,7 @@ const promotion = [
   'test/retire-status.test.mjs',
   'test/review-children.test.mjs',
   'test/sanitization.test.mjs',
+  'test/session-release.test.mjs',
   'test/setup.test.mjs',
   'test/suite.test.mjs',
   'test/tidy-tabs.test.mjs',

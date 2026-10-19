@@ -168,6 +168,26 @@ test('policy off keeps both kinds of eligible session; invalid overrides fail cl
   }
 });
 
+for (const enabled of [false, true]) test(`a closed landed chain uses ordinary retirement with per-run policy ${enabled ? 'on' : 'off'}`, t => {
+  const f = openFixture(t, { landed: true }), events = loadEvents(f.org).events;
+  for (const id of ['ENG-2', 'REV-1', 'ENG-1']) events.push({ type: 'item.closed', id, as: 'done' });
+  writeEvents(f, events);
+  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), JSON.stringify({ release_sessions: enabled }));
+  const eventBytes = fs.readFileSync(f.eventFile), r = f.retirement(), plan = r.plan();
+  assert.equal(plan.close.length, 1, 'the core close must not become a per-run KEEP');
+  assert.equal(plan.close[0].tab_id, 'w:t');
+  assert.equal(plan.sessionReleases?.length ?? 0, 0, 'ordinary retirement needs no pane-release transaction');
+  const results = r.apply(plan);
+  assert.equal(results.filter(row => row.action === 'closed' && row.tab_id === 'w:t').length, 1, JSON.stringify(results));
+  assert.equal(results.some(row => row.action === 'session-released'), false);
+  assert.deepEqual(releaseEvents(f), []);
+  assert.deepEqual(fs.readFileSync(f.eventFile), eventBytes);
+  const actions = [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']];
+  assert.deepEqual(f.read().actions, actions, 'the native exit and tab close each run once');
+  r.apply(r.plan());
+  assert.deepEqual(f.read().actions, actions, 'a later observation cannot handle the tab twice');
+});
+
 test('apply rechecks native identity, head, policy and references before recording pane-release', t => {
   for (const change of ['identity', 'head', 'policy', 'reference', 'hold']) {
     const f = openFixture(t, { reviewer: true }), r = f.retirement(), plan = r.plan();

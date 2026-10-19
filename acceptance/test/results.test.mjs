@@ -38,6 +38,13 @@ test('ordinary missing capability and source-attribution gaps fail without a saf
   }
 });
 
+test('a passing focus check displays its attribution warning on the release screen', () => {
+  const detail = 'zero attributable harness focus changes\nWARNING: 2 NOT-ATTRIBUTABLE focus moves; source unknown; see focus-summary.json';
+  const result = { id: '19', name: 'Background work preserves operator focus', status: 'PASS', origin: 'product', detail };
+  assert.match(resultLine(result), /PASS.*WARNING: 2 NOT-ATTRIBUTABLE.*focus-summary.json/);
+  assert.doesNotMatch(resultLine({ ...result, detail: 'zero harness focus changes' }), /WARNING/);
+});
+
 test('dependent cutover/default-cycle cases preserve prerequisite causes and origins', () => {
   const scenarios=[
     {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new Pending('pass --bch-cloak LIVE_REPO'))},

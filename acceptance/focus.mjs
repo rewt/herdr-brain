@@ -1,6 +1,6 @@
 // A separate process keeps observing while the runner blocks in spawnSync.
-// All Herdr operations here are read-only. Never restore focus: owned or
-// correlated changes fail; unrelated operator/client activity re-baselines.
+// All Herdr operations here are read-only. Never restore focus. Correlated
+// changes fail; ambiguous navigation retains a warning and evidence.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fork } from 'node:child_process';
@@ -9,6 +9,7 @@ import { HerdrClient } from '../lanes/board/herdr-client.mjs';
 import { HarnessLimit, ProductBoundary } from './limits.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { isMain } from '../lib/cli-help.mjs';
+import { targetsDestination, focusCallContext, recordFocusChange } from './focus-classification.mjs';
 
 const FILE = fileURLToPath(import.meta.url);
 // Herdr 0.8.2's EventHub retains at most 512 lifecycle events (all kinds).
@@ -19,18 +20,6 @@ const STARTUP_TIMEOUT_MS = 60_000;
 function readCalls(evidence) {
   const file = path.join(evidence, 'focus-calls.jsonl');
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
-}
-function targetsDestination(call, pane, workspace) {
-  if (call.targets?.panes?.includes(pane) || call.targets?.workspaces?.includes(workspace)) return true;
-  if (call.created?.panes?.includes(pane) || call.created?.workspaces?.includes(workspace)) return true;
-  return [call.args, call.requested].some((argv) => {
-    const args = argv.slice(0, argv.includes('--') ? argv.indexOf('--') : argv.length);
-    if (['pane', 'agent'].includes(args[0]) && args[2] === pane) return true;
-    if (workspace && args[0] === 'workspace' && args[2] === workspace) return true;
-    return args.some((arg, index) =>
-      (arg === '--pane' && args[index + 1] === pane) ||
-      (workspace && arg === '--workspace' && args[index + 1] === workspace));
-  });
 }
 export function assertFocus(summary, { evidence, error } = {}) {
   const attempts = evidence ? readCalls(evidence).filter((row) => row.type === 'forbidden-focus') : summary?.forbiddenAttempts ?? [];
@@ -52,7 +41,9 @@ export function assertFocus(summary, { evidence, error } = {}) {
   if (!summary?.baseline || summary.samples < 2 || summary.errors.length) {
     throw new HarnessLimit(`operator focus trace incomplete: ${summary?.errors?.join('; ') || 'missing baseline or samples'}`);
   }
-  return `${summary.samples} samples plus pane_focused events over ${summary.elapsedMs}ms; zero harness focus changes; ${summary.externalChanges?.length ?? 0} external changes recorded and re-baselined; ${summary.baseline} -> ${summary.currentBaseline ?? summary.baseline}`;
+  const warnings = summary.notAttributableChanges?.length ?? 0;
+  return `${summary.samples} samples plus pane_focused events over ${summary.elapsedMs}ms; zero ${warnings ? 'attributable ' : ''}harness focus changes; ${summary.externalChanges?.length ?? 0} external changes recorded and re-baselined; ${summary.baseline} -> ${summary.currentBaseline ?? summary.baseline}`
+    + (warnings ? `\nWARNING: ${warnings} NOT-ATTRIBUTABLE focus move(s) during operator activity; source unknown; see focus-summary.json and focus-trace.jsonl` : '');
 }
 
 export async function startFocusMonitor({ socketPath, evidence, ownership = path.join(path.dirname(evidence), 'ownership.json'), intervalMs = 200 }) {
@@ -93,34 +84,14 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   const client = new HerdrClient({ socketPath });
   const trace = path.join(evidence, 'focus-trace.jsonl');
   const summaryPath = path.join(evidence, 'focus-summary.json');
-  const summary = { baseline: null, currentBaseline: null, samples: 0, events: 0, startupEvents: [], changes: [], externalChanges: [], errors: [], startedAt: Date.now() };
+  const summary = { baseline: null, currentBaseline: null, samples: 0, events: 0, startupEvents: [], changes: [], externalChanges: [], notAttributableChanges: [], errors: [], startedAt: Date.now() };
   let stopping = false, monitoring = false, timer, inFlight, lastEventAt = 0, previousPane, observations = Promise.resolve();
   const ownedPanes = new Set(), ownedWorkspaces = new Set(), paneWorkspaces = new Map();
   const append = (row) => fs.appendFileSync(trace, JSON.stringify(row) + '\n');
   const context = (at) => {
     const phaseFile = path.join(evidence, 'focus-phase.json');
     const phase = fs.existsSync(phaseFile) ? JSON.parse(fs.readFileSync(phaseFile)) : { key: 'setup' };
-    const rows = readCalls(evidence);
-    const active = new Map(), completed = [], history = new Map();
-    for (const row of rows) {
-      if (row.type === 'start') { active.set(row.id, row); history.set(row.id, row); }
-      else if (row.type === 'end') {
-        const call = active.get(row.id);
-        active.delete(row.id);
-        if (call) {
-          const ended = { ...call, created: row.created, completedAt: row.at };
-          history.set(row.id, ended);
-          if (at - row.at < 1000) completed.push(ended);
-        }
-      }
-    }
-    // Capture temporal overlap as diagnostics. Only a matching destination
-    // establishes correlation, including one second after its call completes.
-    const nearestCalls = {};
-    for (const origin of ['harness', 'product']) nearestCalls[origin] = [...history.values()]
-      .filter(call => call.origin === origin && call.at <= at)
-      .sort((a, b) => (b.completedAt ?? b.at) - (a.completedAt ?? a.at))[0];
-    return { phase, nearestCalls, nearbyCalls: [...active.values(), ...completed.sort((a, b) => b.completedAt - a.completedAt)] };
+    return { phase, ...focusCallContext(readCalls(evidence), at) };
   };
   const error = (value) => {
     summary.errors.push(value.message ?? String(value));
@@ -171,20 +142,12 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
           receipts = readCalls(evidence);
         }
         retainOwnership();
-        const matching = row.nearbyCalls.map((call) => ({ ...call,
+        row.nearbyCalls = row.nearbyCalls.map((call) => ({ ...call,
           created: receipts.find((receipt) => receipt.type === 'end' && receipt.id === call.id)?.created ?? call.created,
-        })).filter((call) => targetsDestination(call, panes[0], workspace));
-        row.calls = matching.some((call) => call.completedAt === undefined)
-          ? matching.filter((call) => call.completedAt === undefined) : matching.slice(0, 1);
+        }));
         row.workspaces = workspace ? [workspace] : [];
         row.owned = ownedPanes.has(panes[0]) || ownedWorkspaces.has(workspace);
-        row.classification = row.owned || row.calls.length ? 'harness' : 'external';
-        if (row.classification === 'harness') summary.changes.push(row);
-        else {
-          summary.externalChanges.push(row);
-          summary.currentBaseline = panes[0];
-          row.rebaseline = panes[0];
-        }
+        recordFocusChange(summary, row);
       }
       append(row);
     }).catch(error);

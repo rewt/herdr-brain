@@ -38,3 +38,22 @@ The gate needs Node, Git, Bash, zsh, rg, tar, npm and Herdr. It never mutates a 
 project record or operator pane. Focus monitoring and ownership checks remain
 required for a complete live gate. Run `node --test acceptance/test/FILE.test.mjs`
 for the changed offline contract tests.
+
+The focus gate keeps every observation in `focus-trace.jsonl` and its classified
+changes in `focus-summary.json`. A move to a call's destination while it is active
+or within five seconds of its completion fails, even during operator navigation.
+This fixed attribution window includes delayed create, split and send effects;
+it extends the previous one-second completion window and is not load-scaled.
+An unexplained move into a harness-owned pane or workspace also fails by default.
+
+A distinct, uncorrelated move between two panes outside harness ownership is
+evidence of operator activity for the next 60 seconds. During that window an
+unexplained move into a harness workspace is retained as `not-attributable`,
+including the preceding operator move, its age, ownership and nearest calls.
+The check can pass with a visible `WARNING: NOT-ATTRIBUTABLE` count in its detail
+and release screen. Such a warning means the source is unknown, not that focus
+preservation was proved for that move. Sixty seconds covers the observed
+55-second operator navigation gap without exempting the rest of a long build.
+Harness visits, unchanged samples and returns from harness panes never renew the
+window. Attributed moves, forbidden focus attempts and incomplete traces still
+fail or remain pending as before; no later operator activity erases a failure.

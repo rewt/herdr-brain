@@ -167,8 +167,8 @@ test('external sampled and transient event moves are recorded and re-baseline wi
   assert.equal(rows.filter((r) => r.classification === 'external').length, 3);
 });
 
-test('an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup', async (t) => {
-  const { monitor, change, ownership } = await fixture(t, { workspaces: ['scratch'] });
+test('an unlisted owned pane retains a warning during operator activity, even through cleanup', async (t) => {
+  const { root, monitor, change, ownership } = await fixture(t, { workspaces: ['scratch'] });
   change(['external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
   // Cleanup removes the ledger. The lifetime creation receipts still count.
@@ -177,12 +177,39 @@ test('an unlisted pane in an owned workspace fails after an external re-baseline
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
-  assert.equal(summary.externalChanges.length, 1);
-  assert.equal(summary.changes[0].from, 'external:p1');
-  assert.equal(summary.changes[0].owned, true);
-  assert.deepEqual(summary.changes[0].workspaces, ['scratch']);
-  assert.equal(summary.changes[0].calls.length, 0);
-  assert.throws(() => assertFocus(summary), /from external:p1 to unlisted:p3.*harness-owned destination/);
+  assert.equal(summary.externalChanges.length, 2);
+  assert.equal(summary.changes.length, 0);
+  const warning = summary.notAttributableChanges[0];
+  assert.equal(warning.from, 'external:p1');
+  assert.equal(warning.owned, true);
+  assert.deepEqual(warning.workspaces, ['scratch']);
+  assert.equal(warning.calls.length, 0);
+  assert.deepEqual(warning.operatorActivity.from, 'operator:p7');
+  assert.match(assertFocus(summary), /WARNING: 1 NOT-ATTRIBUTABLE/);
+  const rows = fs.readFileSync(path.join(root, 'focus-trace.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(rows.filter(row => row.classification === 'not-attributable'), [warning]);
+  const saved = JSON.parse(fs.readFileSync(path.join(root, 'focus-summary.json')));
+  assert.deepEqual(saved.notAttributableChanges, [warning]);
+});
+
+test('a delayed product focus move still fails during observed operator activity', async t => {
+  const { root, monitor, change } = await fixture(t, { workspaces: ['scratch'] });
+  change(['external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const at = Date.now() - 3000;
+  fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), [
+    { type: 'start', id: 'delayed-send', at: at - 100, origin: 'product',
+      args: ['pane', 'send-keys', 'scratch:p2', 'Enter'], requested: ['agent', 'prompt', 'worker', 'continue'] },
+    { type: 'end', id: 'delayed-send', at },
+  ].map(JSON.stringify).join('\n') + '\n');
+  change(['scratch:p2', 'external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.changes.length, 1);
+  assert.equal(summary.notAttributableChanges.length, 0);
+  assert.equal(summary.changes[0].calls[0].id, 'delayed-send');
+  assert.throws(() => assertFocus(summary), /pane send-keys scratch:p2 Enter/);
 });
 
 test('external moves during unrelated active and completed calls re-baseline without failing', async (t) => {

@@ -12,6 +12,7 @@ const promotion = [
   'acceptance/test/cases.test.mjs',
   'acceptance/test/deadlines.test.mjs',
   'acceptance/test/environment.test.mjs',
+  'acceptance/test/focus-classification.test.mjs',
   'acceptance/test/load.test.mjs',
   'acceptance/test/probe.test.mjs',
   'acceptance/test/results.test.mjs',

@@ -9,6 +9,7 @@ import { fixture, hold, isolatedEnv } from './helpers/retire-fixture.mjs';
 import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
 import { retirementDeadline } from '../lib/retire-lock.mjs';
 import { fileURLToPath } from 'node:url';
+import { readLiveReferences, readDeclaredReferences } from '../lib/retire-runtime.mjs';
 
 function shellSnapshot(receipted = false) {
   const shell = { pid: 5, ppid: 1, pgid: 5, identity: 'shell-birth', command: '[zsh]', state: 'S' };
@@ -312,3 +313,277 @@ test('runtime remembers an agent observed in the window after its registry entry
   const plan = retirement.plan(); assert.equal(plan.close.length, 0); assert.match(plan.keep[0].why, /occupant claim/);
   assert.deepEqual(f.read().actions, []);
 });
+
+function openLaneSnapshot() {
+  const s = shellSnapshot(true), run = s.record.runs[0];
+  s.git[0].clean = false; s.git[0].integrated = false;
+  delete s.record.items[0].closed; delete run.report;
+  run.meta = { lane: 'topic', agent: 'worker', pane: 'w:worker', worker_workspace: 'w', terminal_id: 'worker-terminal', agent_session_id: 'worker-session' };
+  s.tabs.push({ tab_id: 'w:t2', workspace_id: 'w' });
+  s.panes.push({ pane_id: 'w:worker', tab_id: 'w:t2', workspace_id: 'w', terminal_id: 'worker-terminal', shellOnly: false,
+    process_info: { shell_pid: 10, process_tree_complete: true,
+      process_tree: [{ pid: 10, ppid: 1, identity: 'worker-shell', command: '[zsh]', state: 'S' },
+        { pid: 20, ppid: 10, identity: 'worker-process', command: '[codex]', state: 'S' }],
+      foreground_processes: [{ pid: 20, name: 'codex' }] } });
+  s.agents.push({ name: 'worker', agent: 'codex', agent_status: 'working', pane_id: 'w:worker', tab_id: 'w:t2', workspace_id: 'w',
+    cwd: '/repo/lane', terminal_id: 'worker-terminal', agent_session: { value: 'worker-session' }, state_change_seq: 3 });
+  s.removal = { cwd: '/repo/lane', branch: 'lane/topic', tip: 'tip' };
+  return s;
+}
+const targetDecision = plan => [...plan.close, ...plan.keep].find(t => t.tab_id === 'w:t');
+
+test('pristine creation tab alone releases in an open dirty unmerged lane, retaining the agent and every lane-removal guard', () => {
+  const s = openLaneSnapshot();
+  s.references = [{ kind: 'sibling callback', run: 'R-1', pane: 'w:worker', tab: 'w:t2', terminal: 'worker-terminal' },
+    { kind: 'lane job', item: 'ENG-1', lane: 'topic', cwd: '/repo/lane' }, { kind: 'lane head', head: 'tip' }];
+  const before = JSON.stringify(s), plan = planRetirement(s), closed = [], logs = [];
+  assert.deepEqual(plan.close.map(t => t.tab_id), ['w:t']); assert.deepEqual(plan.keep.map(t => t.tab_id), ['w:t2']);
+  assert.equal(plan.close[0].rule, 'pristine-first-tab/v1'); assert.deepEqual(plan.close[0].receipt, s.initialShells[0]);
+  assert.equal(plan.close[0].observed.shell.identity, 'shell-birth');
+  assert.equal(plan.close[0].survivor.run, 'R-1'); assert.equal(plan.close[0].survivor.agent, 'worker');
+  assert.equal(plan.close[0].survivor.tab, 'w:t2'); assert.equal(plan.close[0].survivor.pane, 'w:worker');
+  assert.equal(plan.close[0].survivor.terminal, 'worker-terminal'); assert.equal(plan.close[0].survivor.session, 'worker-session');
+  assert.equal(plan.laneClose.length, 0); assert.match(plan.laneKeep[0].why, /open recorded run/);
+  assert.deepEqual(plan.workspaceClose ?? [], []); assert.deepEqual(plan.sessionReleases ?? [], []);
+  const result = executeRetirement(plan, { observe: () => structuredClone(s), close: tab => closed.push(tab),
+    exit: () => assert.fail('tab-only action must not exit an agent'), removeLane: () => assert.fail('must retain lane'),
+    closeWorkspace: () => assert.fail('must retain workspace'), log: row => logs.push(row) });
+  assert.deepEqual(closed, ['w:t']); assert.equal(result[0].action, 'closed');
+  assert.deepEqual(logs[0].receipt, s.initialShells[0]); assert.deepEqual(logs[0].survivor, plan.close[0].survivor);
+  assert.deepEqual(result[0].observations, [plan.close[0].observed, plan.close[0].observed]);
+  assert.equal(JSON.stringify(s), before, 'the exception cannot change items or its authority inputs');
+  s.tabs.shift(); s.panes.shift();
+  const after = planRetirement(s);
+  assert.equal(after.laneClose.length, 0); assert.equal(after.laneKeep[0].why, plan.laneKeep[0].why);
+  assert.deepEqual(after.workspaceClose ?? [], []); assert.deepEqual(after.close, []);
+});
+
+const pristineRefusals = [
+  ['no creation receipt', s => { delete s.initialShells; }],
+  ['claimed receipt', s => { s.initialShells[0].claimed = true; }],
+  ['ambiguous receipt', s => s.initialShells.push(structuredClone(s.initialShells[0]))],
+  ['unknown receipt schema', s => { s.initialShells[0].schema = 'other/v1'; }],
+  ['second target pane', s => s.panes.push({ ...s.panes[0], pane_id: 'w:split' })],
+  ['child process', s => s.panes[0].process_info.process_tree.push({ pid: 9, identity: 'job', command: '[sleep]', state: 'S' })],
+  ['foreground job', s => { s.panes[0].process_info.foreground_processes = [{ pid: 9, name: 'sleep' }]; }],
+  ['raw zombie child', s => { s.panes[0].process_info.process_tree_raw = [...s.panes[0].process_info.process_tree, { pid: 9, command: '[sleep]', state: 'Z', identity: 'job' }]; }],
+  ['incomplete process tree', s => { s.panes[0].process_info.process_tree_complete = false; }],
+  ['unknown terminal observation', s => { s.panes[0].shellObservationError = 'unreadable'; }],
+  ['ambiguous terminal ownership', s => s.panes.push({ pane_id: 'w:other', tab_id: 'w:t2', workspace_id: 'w', terminal_id: 'terminal' })],
+  ['unread record', s => { s.shellEvidence.recordRead = false; }],
+  ['unread references', s => { s.shellEvidence.referencesRead = false; }],
+  ['launch reservation', s => { s.panes[0].launch_pending = true; }],
+  ['native pane claim', s => { s.panes[0].name = 'operator shell'; }],
+  ['remembered claim', s => s.shellClaims.push('w:p')],
+  ['run pane claim', s => s.record.runs.push({ id: 'R-2', meta: { pane: 'w:p' } })],
+  ['run terminal claim', s => s.record.runs.push({ id: 'R-2', meta: { terminal_id: 'terminal' } })],
+  ['missing agent', s => { s.agents = []; }],
+  ['missing survivor pane', s => { s.panes.pop(); }],
+  ['last tab', s => { s.tabs.pop(); }],
+  ['unrecorded survivor', s => { s.record.runs[0].meta.agent_session_id = 'unknown'; }],
+  ['survivor from another lane', s => { s.record.runs[0].meta.lane = 'other'; }],
+  ['survivor in another workspace', s => {
+    s.tabs[1].workspace_id = 'other'; s.panes[1].workspace_id = 'other'; s.agents[0].workspace_id = 'other';
+    s.record.runs[0].meta.worker_workspace = 'other';
+    s.workspaces.push({ ...s.workspaces[0], workspace_id: 'other' });
+  }],
+  ['survivor process gone', s => { s.panes[1].shellOnly = true; }],
+  ['survivor topology disagreement', s => { s.panes[1].terminal_id = 'unknown'; }],
+  ['ambiguous survivor agent', s => s.agents.push({ ...s.agents[0], name: 'duplicate' })],
+  ['HOLD', s => { s.retirementHold = 'canonical HOLD'; }],
+  ['operator tab focus', s => { s.tabs[0].focused = true; }],
+  ['operator pane focus', s => { s.panes[0].focused = true; }],
+  ['protected workspace', s => { s.workspaces[0].persistent = true; }],
+  ['operator workspace', s => { s.workspaces[0].operator = true; }],
+  ['lab workspace', s => { s.labWorkspaces = ['w']; }],
+];
+for (const [name, change] of pristineRefusals) test(`pristine tab keeps on ${name} in planning and at the close edge`, () => {
+  const s = openLaneSnapshot(), plan = planRetirement(s), changed = structuredClone(s); change(changed);
+  assert.equal(targetDecision(plan).decision, 'release'); assert.equal(targetDecision(planRetirement(changed)).decision, 'keep');
+  const result = executeRetirement(plan, { observe: () => changed, close: () => assert.fail('must keep target') });
+  assert.equal(result[0].decision, 'keep'); assert.equal(result[0].action, name === 'HOLD' ? 'held' : 'skip-close');
+  assert.equal(result[0].rule, 'pristine-first-tab/v1'); assert.deepEqual(result[0].receipt, plan.close[0].receipt);
+});
+
+for (const field of ['common', 'cwd', 'workspace', 'tab', 'pane', 'terminal', 'shell.pid', 'shell.identity', 'shell.command'])
+  test(`pristine tab keeps with mismatched receipt ${field}`, () => {
+    const s = openLaneSnapshot(), plan = planRetirement(s), changed = structuredClone(s), [key, subkey] = field.split('.');
+    if (subkey) changed.initialShells[0][key][subkey] = subkey === 'pid' ? 99 : 'different';
+    else changed.initialShells[0][key] = 'different';
+    assert.equal(targetDecision(planRetirement(changed)).decision, 'keep');
+    assert.equal(executeRetirement(plan, { observe: () => changed, close: () => assert.fail('receipt must bind target') })[0].action, 'skip-close');
+  });
+
+for (const reference of [
+  { pane: 'w:p' }, { tab: 'w:t' }, { terminal: 'terminal' }, { pane_id: 'w:p' }, { tab_id: 'w:t' }, { terminal_id: 'terminal' },
+  { global: true }, { item: 'ENG-1' }, { run: 'unknown', cwd: '/repo/lane' }, { pane: 'unknown', lane: 'topic' },
+  { terminal: 'unknown', run: 'R-1' }, { tab: 'unknown', lane: 'topic' }, { pane: 'w:worker', tab: 'w:t' }, {},
+]) test(`pristine tab keeps a target or unclear reference ${JSON.stringify(reference)}`, () => {
+  const s = openLaneSnapshot(), plan = planRetirement(s), changed = structuredClone(s);
+  changed.references.push({ kind: 'pending job', ...reference });
+  assert.equal(targetDecision(planRetirement(changed)).decision, 'keep');
+  const result = executeRetirement(plan, { observe: () => changed, close: () => assert.fail('must keep target') });
+  assert.equal(result[0].action, 'skip-close'); assert.equal(result[0].decision, 'keep');
+});
+
+test('pristine references keep contradictory native owners even within the same surviving tab', () => {
+  const s = openLaneSnapshot();
+  s.panes.push({ pane_id: 'w:other', tab_id: 'w:t2', workspace_id: 'w', terminal_id: 'other-terminal' });
+  s.references.push({ pane: 'w:worker', terminal: 'other-terminal' });
+  assert.equal(targetDecision(planRetirement(s)).decision, 'keep');
+});
+
+test('pristine reference adapter preserves queued native identities and rejects malformed declared tab or terminal scopes', t => {
+  const f = fixture(t), directory = path.join(f.common, 'promote'); fs.mkdirSync(directory, { recursive: true });
+  for (const native of [{ tab: 'w:t' }, { terminal: 'terminal' }, { tab_id: 'w:t' }, { terminal_id: 'terminal' },
+    { pane: 'w:worker', pane_id: 'w:p' }, { terminal: 'worker-terminal', terminal_id: 'terminal' }]) {
+    fs.writeFileSync(path.join(directory, 'queue.json'), JSON.stringify({ identity: f.common, pending: [{ id: 'job', lane: 'topic', ...native }], results: [] }));
+    const refs = readLiveReferences({ common: f.common, org: f.org, env: f.env });
+    assert.deepEqual(refs.errors, []);
+    for (const [key, value] of Object.entries(native)) assert.equal(refs.references[0][key], value);
+    const s = openLaneSnapshot(); s.references = refs.references;
+    assert.equal(targetDecision(planRetirement(s)).decision, 'keep');
+  }
+  for (const scope of ['tab', 'terminal', 'tab_id', 'terminal_id']) {
+    fs.writeFileSync(path.join(f.org, 'references/job.json'), JSON.stringify({ schema: 'herdr-reference/v1', state: 'running',
+      owner: 'test', kind: 'pending job', job: 'job', item: 'ENG-1', [scope]: 7,
+      created_at: '2026-01-01T00:00:00Z', expires_at: '2999-01-01T00:00:00Z' }));
+    const refs = readDeclaredReferences(f.org);
+    assert.equal(refs.references.length, 0); assert.match(refs.errors[0], /invalid herdr-reference.*project kept/);
+  }
+});
+
+for (const change of ['terminal', 'pane', 'tab', 'session', 'agent', 'process', 'status-sequence'])
+  test(`pristine token binds a still-eligible survivor's ${change}`, () => {
+    const s = openLaneSnapshot(), plan = planRetirement(s), changed = structuredClone(s), agent = changed.agents[0], run = changed.record.runs[0];
+    if (change === 'terminal') { agent.terminal_id = changed.panes[1].terminal_id = run.meta.terminal_id = 'new-terminal'; }
+    if (change === 'pane') { agent.pane_id = changed.panes[1].pane_id = run.meta.pane = 'w:new-pane'; }
+    if (change === 'tab') { agent.tab_id = changed.panes[1].tab_id = changed.tabs[1].tab_id = 'w:new-tab'; }
+    if (change === 'session') { agent.agent_session.value = run.meta.agent_session_id = 'new-session'; }
+    if (change === 'agent') { agent.name = run.meta.agent = 'new-agent'; }
+    if (change === 'process') changed.panes[1].process_info.process_tree[1].identity = 'new-birth';
+    if (change === 'status-sequence') agent.state_change_seq++;
+    const fresh = targetDecision(planRetirement(changed));
+    assert.equal(fresh.rule, 'pristine-first-tab/v1'); assert.notEqual(fresh.token, targetDecision(plan).token);
+    const result = executeRetirement(plan, { observe: () => changed, close: () => assert.fail('survivor changed') });
+    assert.equal(result[0].action, 'skip-close'); assert.match(result[0].why, /authority changed/);
+  });
+
+for (const exit of [false, true]) test(`pristine tab cannot borrow an agent tab scheduled for ${exit ? 'exit' : 'release'}`, () => {
+  const s = openLaneSnapshot(); s.agents[0].agent_status = 'idle'; s.record.runs[0].report = { seq: 2, outcome: 'done' };
+  s.releases = [{ run: 'R-1', confirmed: true, pane: 'w:worker', terminal: 'worker-terminal', session: 'worker-session', workspace: 'w', cwd: '/repo/lane', head: 'tip', seq: 4 }];
+  if (exit) s.panes[1].process_info.process_tree.push({ pid: 30, ppid: 20, identity: 'helper', command: '[node]', state: 'S' });
+  const plan = planRetirement(s);
+  assert.equal(targetDecision(plan).decision, 'keep'); assert.equal(plan.close[0].tab_id, 'w:t2');
+  assert.equal(plan.close[0].decision, exit ? 'exit' : 'release');
+});
+
+test('pristine tab cannot borrow a prospective per-run session-release tab', () => {
+  const s = openLaneSnapshot(); s.sessionReleasePolicy = true; s.agents[0].agent_status = 'idle';
+  s.record.items[0].role = 'reviewer'; s.record.runs[0].report = { seq: 2, outcome: 'done', extra: { verdict: 'PASS' } };
+  const plan = planRetirement(s);
+  assert.equal(plan.sessionReleases[0].tab_id, 'w:t2'); assert.equal(targetDecision(plan).decision, 'keep');
+});
+
+test('pristine authority follows creation evidence, not tab order or a t1 name', () => {
+  const s = openLaneSnapshot(); s.tabs.reverse();
+  s.tabs[1].tab_id = s.panes[0].tab_id = s.initialShells[0].tab = 'w:arbitrary-creation';
+  const plan = planRetirement(s);
+  assert.equal(plan.close[0].tab_id, 'w:arbitrary-creation'); assert.equal(plan.close[0].rule, 'pristine-first-tab/v1');
+});
+
+test('pristine executor holds the target and survivor locks across recheck and close and releases both on failure', () => {
+  for (const failure of ['none', 'survivor lock', 'observation', 'close']) {
+    const s = openLaneSnapshot(), plan = planRetirement(s), locks = new Set(), logs = [];
+    const result = executeRetirement(plan, { lockTab: id => {
+      if (id === 'w:t2' && failure === 'survivor lock') throw Error('survivor locked');
+      assert.equal(locks.has(id), false); locks.add(id); return () => locks.delete(id);
+    }, observe: () => {
+      assert.deepEqual([...locks], ['w:t', 'w:t2']);
+      if (failure === 'observation') throw Error('observation failed');
+      return s;
+    }, close: () => {
+      assert.deepEqual([...locks], ['w:t', 'w:t2']);
+      if (failure === 'close') throw Error('close failed');
+    }, log: row => logs.push(row) });
+    assert.equal(locks.size, 0); assert.equal(result[0].action, failure === 'none' ? 'closed' : 'close-failed');
+    assert.equal(logs[0].rule, 'pristine-first-tab/v1'); assert.equal(logs[0].survivor.tab, 'w:t2');
+  }
+});
+
+function openInitialFixture(t, command) {
+  const f = fixture(t, { merged: false }), state = f.state;
+  state.tabs.push({ tab_id: 'w:t2', workspace_id: 'w' });
+  state.agents[0].tab_id = 'w:t2'; state.agents[0].agent_status = 'working';
+  state.panes[0] = { pane_id: 'w:initial', tab_id: 'w:t', workspace_id: 'w', terminal_id: 'initial-terminal', foreground_cwd: f.lane };
+  state.panes.push({ pane_id: 'w:p', tab_id: 'w:t2', workspace_id: 'w', terminal_id: 'term', foreground_cwd: f.lane });
+  state.info = { shell_pid: 5, foreground_processes: [{ pid: 5, name: 'zsh' }], process_tree_complete: true,
+    process_tree: [{ pid: 5, identity: 'birth', command: '[zsh]', state: 'S' }] }; f.save();
+  const events = f.eventBytes.trim().split('\n').map(JSON.parse).filter(e => ['item.added', 'run.started'].includes(e.type));
+  const eventBytes = events.map(e => JSON.stringify(e) + '\n').join(''); fs.writeFileSync(f.eventFile, eventBytes);
+  fs.writeFileSync(path.join(f.lane, 'seed'), 'unfinished dirty work');
+  recordInitialShell({ common: f.common, cwd: f.lane,
+    created: { already_open: false, workspace: { workspace_id: 'w' }, tab: state.tabs[0], root_pane: state.panes[0] },
+    h: args => args[1] === 'get' ? { pane: state.panes[0] } : { process_info: state.info } });
+  const invoke = (exe, args, options) => {
+    command?.(f, exe, args);
+    if (exe === f.job.herdr && args[0] === 'pane' && args[1] === 'process-info' && args.at(-1) === 'w:p')
+      return { status: 0, stdout: JSON.stringify({ result: { process_info: { shell_pid: 10, process_tree_complete: true,
+        foreground_processes: [{ pid: 20, name: 'native' }],
+        process_tree: [{ pid: 10, ppid: 1, identity: 'worker-shell', command: '[zsh]', state: 'S' },
+          { pid: 20, ppid: 10, identity: 'worker-process', command: '[native]', state: 'S' }] } } }) };
+    return spawnSync(exe, args, options);
+  };
+  return { ...f, eventBytes, retirement: options => f.retirement({ command: invoke, ...options }), receiptFile: initialShellFile(f.common, 'w:t') };
+}
+
+test('runtime closes only the pristine creation tab under the shared dispatch lock, preserving the dirty open lane and record', t => {
+  let closeLocked = false;
+  const f = openInitialFixture(t, (fixture, exe, args) => {
+    if (exe === fixture.job.herdr && args[0] === 'tab' && args[1] === 'close') {
+      assert.throws(() => initialShellLock(fixture.common, 'w:t'), /locked:/);
+      assert.throws(() => initialShellLock(fixture.common, 'w:t2'), /locked:/); closeLocked = true;
+    }
+  });
+  const logs = [], retirement = f.retirement({ log: row => logs.push(row) }), snapshot = retirement.observe();
+  const receipt = JSON.parse(fs.readFileSync(f.receiptFile)), plan = planRetirement(snapshot);
+  assert.equal(snapshot.git[0].clean, false); assert.equal(snapshot.git[0].integrated, false);
+  assert.equal(snapshot.record.runs[0].report, null); assert.equal(snapshot.record.items[0].closed, null);
+  assert.deepEqual(plan.close.map(t => t.tab_id), ['w:t']); assert.deepEqual(plan.laneClose, []);
+  f.traceGit(); const result = retirement.apply(plan, undefined, snapshot);
+  assert.equal(result[0].action, 'closed'); assert.equal(closeLocked, true);
+  assert.equal(result[0].rule, 'pristine-first-tab/v1'); assert.deepEqual(result[0].receipt, receipt);
+  assert.equal(result[0].survivor.terminal, 'term'); assert.ok(logs.some(row => row.action === 'closed' && row.survivor.tab === 'w:t2'));
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]); assert.deepEqual(f.read().tabs.map(t => t.tab_id), ['w:t2']);
+  assert.equal(f.read().workspaces.length, 1); assert.equal(f.read().agents.length, 1);
+  assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head); assert.ok(fs.existsSync(f.lane));
+  assert.equal(fs.readFileSync(path.join(f.lane, 'seed'), 'utf8'), 'unfinished dirty work');
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes); assert.equal(fs.existsSync(f.receiptFile), false);
+  assert.deepEqual(f.gitCalls().filter(a => a.includes('worktree') && a.includes('remove')), []);
+  assert.equal(retirement.plan().close.length, 0, 'remaining agent is retained by ordinary retirement');
+});
+
+for (const race of ['survivor', 'target reference', 'HOLD', 'dispatch lock', 'survivor lock'])
+  test(`runtime pristine close edge refuses a new ${race}`, t => {
+    let armed = false;
+    const f = openInitialFixture(t, (fixture, exe, args) => {
+      if (!armed || exe !== fixture.job.herdr || args[0] !== 'workspace' || args[1] !== 'list') return;
+      armed = false;
+      assert.throws(() => initialShellLock(fixture.common, 'w:t'), /locked:/);
+      assert.throws(() => initialShellLock(fixture.common, 'w:t2'), /locked:/);
+      if (race === 'survivor') { fixture.state.agents[0].terminal_id = fixture.state.panes[1].terminal_id = 'replacement'; fixture.save(); }
+      if (race === 'target reference') fs.writeFileSync(path.join(fixture.org, 'references/late.json'), JSON.stringify({
+        schema: 'herdr-reference/v1', state: 'running', owner: 'test', kind: 'pending job', job: 'late', item: 'ENG-1',
+        tab: 'w:t', created_at: '2026-01-01T00:00:00Z', expires_at: '2999-01-01T00:00:00Z' }));
+      if (race === 'HOLD') hold(fixture);
+    });
+    const retirement = f.retirement(), snapshot = retirement.observe(), plan = planRetirement(snapshot);
+    assert.equal(plan.close[0].rule, 'pristine-first-tab/v1');
+    const unlock = ['dispatch lock', 'survivor lock'].includes(race) ? initialShellLock(f.common, race === 'dispatch lock' ? 'w:t' : 'w:t2') : null;
+    armed = !unlock;
+    try {
+      const result = retirement.apply(plan, undefined, snapshot);
+      assert.equal(result[0].decision === 'keep' || result[0].action === 'close-failed', true);
+      assert.deepEqual(f.read().actions, []); assert.equal(fs.existsSync(f.receiptFile), true);
+    } finally { unlock?.(); }
+  });

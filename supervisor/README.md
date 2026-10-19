@@ -310,6 +310,20 @@ it cannot release the worker. Unknown legacy reviewers stay kept.
 After guarded tab closure the executor can close an empty policy-released native
 workspace; its Git worktree, branch and open item chain remain intact.
 
+A proven, unclaimed `initial-shell/v1` creation tab can also close while its lane
+is open, dirty or unmerged under `pristine-first-tab/v1` (Astra, 2026-10-19).
+The sole pane must still contain its original inert login shell, with complete
+process and terminal observations and no jobs, launch reservation or later claim.
+A recorded agent must survive in another tab of the same workspace, outside all
+planned exits and session releases. The decision token binds that agent's run,
+tab, pane, terminal, native session and process identity; the existing locks for
+both tabs and a fresh observation protect the close edge. Target pane, tab or terminal references
+and unclear ownership keep the shell; lane-scoped work and the sibling's references
+do not. HOLD, focus and workspace protections still apply. The log retains the
+creation receipt, both target observations, surviving agent and outcome. This
+exception closes only the tab, with no workspace or lane-removal follow-up.
+Legacy shells without creation receipts retain the ordinary terminal-chain rules.
+
 Short-lived watcher and settle/executive/plan launches can write a mechanical
 `retirement-occupant/v1` receipt under `ORG/retirement/occupants/`. It binds the
 canonical common directory, cwd, workspace, tab, pane, shell PID and kernel birth,
@@ -370,12 +384,17 @@ atomic rename and remove their own files when the job ends. Its exact format is:
 ```
 
 `schema`, `owner`, `kind`, `job`, `state`, `item`, `created_at` and `expires_at`
-are required; `run`, `lane`, `cwd` and `pane` are optional. State is `pending` or
+are required; `run`, `lane`, `cwd`, `pane`, `tab` and `terminal` are optional.
+The native aliases `pane_id`, `tab_id` and `terminal_id` are also accepted.
+State is `pending` or
 `running`. Cwd is absolute; timestamps must parse. An unexpired reference keeps
 on any item, run, lane, cwd or pane match. Expired references are ignored and
 reported. A malformed, unreadable or unknown-schema file keeps the entire
 project and is reported, even if its apparent expiry is past. References only
 ever keep; the planner never writes them.
+The pristine creation-tab exception uses the narrower resource scope described
+above, including tab and terminal references. An unknown native resource or run,
+or an unscoped reference, keeps the creation tab.
 
 Report ingestion, review/disposition and job completion coalesce a foreground
 request in `ORG/retirement/request.json`. This is a revision hint, never stored

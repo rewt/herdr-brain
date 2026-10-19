@@ -14,13 +14,13 @@ import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { receiptDirectory } from './context.mjs';
 import { noticeLock } from './notice-lock.mjs';
 import { cleanPassScope } from './clean-pass.mjs';
-import { greenIdentity, greenPassScope } from './green-pass.mjs';
+import { greenIdentity, greenPassScope, greenEnvironment } from './green-pass.mjs';
 import { fastPathTiming } from './fast-path-timing.mjs';
 import { liveNativeWorker } from '../promote/native-context.mjs';
 import { queueJobs } from '../promote/promote.mjs';
 
 export const POLICY = 'notice-autopilot/v1';
-const liveGreen = { identity: greenIdentity, scope: greenPassScope };
+const liveGreen = { identity: greenIdentity, scope: greenPassScope, environment: greenEnvironment };
 const local = name => fileURLToPath(new URL(name, import.meta.url));
 const digest = value => createHash('sha256').update(value).digest('hex');
 const read = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
@@ -43,8 +43,8 @@ function execute(file, args, options) {
   return spawnSync(process.execPath, [file, ...args], { ...options, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 }
 
-function runIdentity(project, run) {
-  try { return run.workspace && gitProject(run.workspace).identity; }
+function runIdentity(project, run, env = process.env) {
+  try { return run.workspace && gitProject(run.workspace, { env }).identity; }
   catch {
     const settle = read(path.join(project.org, 'settle', `${run.id}.json`));
     const dispatch = run.meta.dispatch_journal && read(run.meta.dispatch_journal);
@@ -53,9 +53,10 @@ function runIdentity(project, run) {
 }
 
 function authority(project, runId, { pendingReport = false, green = liveGreen } = {}) {
-  const live = gitProject(project.repo);
-  if (live.identity !== project.identity || live.canonical !== project.repo || fs.realpathSync(project.org) !== project.org) throw Error('autopilot project binding changed');
   const settings = autopilotSettings(project.repo);
+  const environment = settings.cohort === 'green-pass' ? green.environment() : process.env;
+  const live = gitProject(project.repo, { env: environment });
+  if (live.identity !== project.identity || live.canonical !== project.repo || fs.realpathSync(project.org) !== project.org) throw Error('autopilot project binding changed');
   if (!settings.enabled) throw Error('AUTOPILOT_DISABLED: autopilot disabled in project config');
   if (!['clean-pass', 'green-pass'].includes(settings.cohort)) throw Error('AUTOPILOT_COHORT_UNKNOWN: select the clean-pass or green-pass cohort or use the ordinary path');
   if (settings.cohort === 'green-pass') green.identity({ ...project, bindings: settings.green });
@@ -86,7 +87,7 @@ function authority(project, runId, { pendingReport = false, green = liveGreen } 
     if (!decision?.category || ['publish', 'priorities'].includes(decision.category) || approvalPolicy(config, decision.category) !== 'auto') throw Error('report decision needs operator judgment');
   }
   if (reportCategoryFlags(config, report).length) throw Error('report category evidence needs inspection');
-  if (runIdentity(project, run) !== project.identity) throw Error('run has no verified project binding');
+  if (runIdentity(project, run, environment) !== project.identity) throw Error('run has no verified project binding');
   return { state, run, item, report, settings };
 }
 
@@ -137,7 +138,7 @@ export function autopilotNotice(entry, { execute: call = execute, nativeWorker: 
   let runId = report?.[1], alreadyClosed;
   const exception = (code, reason) => { receipt.exception = code; return finish('wake', `${code}: ${reason}`, code === 'AUTOPILOT_DISABLED'); };
   const git = (cwd, args) => {
-    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    const r = spawnSync('git', ['-C', cwd, ...args], { env: autopilotSettings(project.repo).cohort === 'green-pass' ? green.environment() : process.env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
     if (r.error || r.status !== 0) throw Error(`AUTOPILOT_SCOPE_UNKNOWN: ${r.stderr || r.error?.message || 'Git unavailable'}`);
     return r.stdout.trim();
   };
@@ -236,7 +237,7 @@ export function autopilotNotice(entry, { execute: call = execute, nativeWorker: 
       if (JSON.stringify(current.settings) !== JSON.stringify(selected)) throw Error('AUTOPILOT_COHORT_CHANGED: cohort configuration changed during admission');
       const action = { name, file, args, phase: 'started', at: new Date().toISOString() };
       receipt.actions.push(action); save();
-      const reply = call(file, args, { cwd: project.repo, env: { ...process.env, ORG_DIR: project.org, ORG_ACTOR: 'supervisor-autopilot' } });
+      const reply = call(file, args, { cwd: project.repo, env: { ...(selected.cohort === 'green-pass' ? green.environment() : process.env), ORG_DIR: project.org, ORG_ACTOR: 'supervisor-autopilot' } });
       // Legacy/injected executors return stdout for successful calls. The
       // native executor retains the exit and streams, including refusals.
       const r = typeof reply === 'string' ? { status: 0, stdout: reply } : reply;
@@ -308,7 +309,7 @@ export function autopilotNotice(entry, { execute: call = execute, nativeWorker: 
     if (!scope.eligible) return exception(scope.code, scope.reason);
     if (!worker(project.identity)) return exception('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
     const why = `${POLICY}: clean PASS promotes in ${scope.area}; project tooling authority is auto; settle and queue recheck readiness`;
-    const promoted = command('enqueue promotion', supervisor, ['promote', runId, '--existing-worker', '--why', why, ...args]);
+    const promoted = command('enqueue promotion', supervisor, ['promote', runId, '--existing-worker', '--why', why, ...(scope.requiredTests?.length ? ['--required-tests', JSON.stringify(scope.requiredTests)] : []), ...args]);
     if (promoted.phase !== 'acknowledged') return finish('wake', promoted.reason ?? promoted.result ?? 'promotion enqueue not acknowledged');
     return finish('handled', 'clean PASS promotion queued');
   } catch (error) {

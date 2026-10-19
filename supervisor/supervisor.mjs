@@ -41,11 +41,14 @@ export function main(argv = process.argv.slice(2)) {
     'review-route': { type: 'string' }, 'fix-route': { type: 'string' }, timeout: { type: 'string' },
     'existing-worker': { type: 'boolean' }, retry: { type: 'boolean' }, 'review-again': { type: 'boolean' },
     'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'accept-findings': { type: 'boolean' },
-    'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
+    'required-tests': { type: 'string' }, 'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
   } });
   const forwarded = forwardRelease('supervisor/supervisor.mjs', opt.repo);
   if (forwarded !== null) { process.exitCode = forwarded; return; }
   const [action = 'brief', requested] = positionals;
+  const requiredTests = opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']);
+  if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('invalid required test files');
+  if (opt['required-tests'] !== undefined && action !== 'promote') throw Error('--required-tests belongs to promote');
   if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
   if ((opt['fix-findings'] || opt['review-round-cap'] !== undefined) && action !== 'handle') throw new Error('--fix-findings and --review-round-cap belong to handle');
   if (positionals.length > 2 || !['brief', 'safe-point', 'status', 'entry', 'checkpoint', 'handle', 'promote'].includes(action)) throw new Error('usage: supervisor.mjs brief|status [--json] | safe-point --pane ID [--json] | entry --role supervisor | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT; mutations require --role supervisor');
@@ -181,6 +184,7 @@ export function main(argv = process.argv.slice(2)) {
         const { prior_attempts, ...attempt } = saved;
         prior = [...(prior_attempts ?? []), attempt];
       } else {
+        if (requiredTests.some(file => !(saved.requiredTests ?? []).includes(file))) throw Error('required tests differ from the acknowledged promotion; inspect queue evidence');
         if (saved.phase !== 'acknowledged') throw new Error(`promotion enqueue is uncertain; inspect ${file} and ${doc.promotion_queue}; do not blindly enqueue again`);
         if (!opt.retry) { print(saved); return; }
         const jobs = saved.queue?.jobs;
@@ -211,7 +215,8 @@ export function main(argv = process.argv.slice(2)) {
     const result = JSON.parse(call(settle, settleArgs));
     if (!['promotable', 'promotable_with_findings'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
-    const saved = { identity: project.identity, org: project.org, run: id, lane: result.lane, release: bundleRelease(),
+    const tests = [...new Set([...requiredTests, ...(result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : [])])].sort();
+    const saved = { identity: project.identity, org: project.org, run: id, requiredTests: tests, lane: result.lane, release: bundleRelease(),
       reviewed_commit: result.reviewed_commit, head: result.head,
       ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',
       ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),
@@ -223,7 +228,7 @@ export function main(argv = process.argv.slice(2)) {
       saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
         '--expected-head', result.head, '--if-current-run', id,
         ...(opt['existing-worker'] ? ['--existing-worker'] : []),
-        ...(result.test_evidence && !result.test_evidence.reexecuted ? ['--required-tests', JSON.stringify(result.test_evidence.files)] : []), ...(opt.to ? ['--to', opt.to] : [])]));
+        ...(tests.length ? ['--required-tests', JSON.stringify(tests)] : []), ...(opt.to ? ['--to', opt.to] : [])]));
     } catch (error) {
       let refusal;
       try { refusal = JSON.parse(error.cause?.stdout); } catch { /* Other failures remain uncertain. */ }

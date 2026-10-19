@@ -26,40 +26,102 @@
   ],
   "externalConsumers": [
     {
+      "entry": "bin/org.mjs",
+      "kind": "command",
+      "source": "installed release",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
+      "entry": "promote/promote.mjs",
+      "kind": "command",
+      "source": "installed release",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
+      "entry": "dispatch/record-worker.mjs",
+      "kind": "command",
+      "source": "installed release",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
+      "entry": "supervisor/reconcile.mjs",
+      "kind": "command",
+      "source": "installed release by default; explicit manual/reuse root may select a checkout",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
       "entry": "contrib/settle-watch.mjs",
-      "source": "immutable installed release",
+      "kind": "command",
+      "source": "installed release",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
+      "entry": "lib/store.mjs",
+      "kind": "imported-api",
+      "source": "installed release by default; explicit manual/reuse root may select a checkout",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
+      "entry": "lib/state.mjs",
+      "kind": "imported-api",
+      "source": "installed release by default; explicit manual/reuse root may select a checkout",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
+      "entry": "lib/report.mjs",
+      "kind": "imported-api",
+      "source": "installed release",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
+      "entry": "lib/roles.mjs",
+      "kind": "imported-api",
+      "source": "installed release by default; explicit manual/reuse root may select a checkout",
+      "switch": "release suites, live acceptance and BCH seam checks"
+    },
+    {
+      "entry": "lanes/validation.mjs",
+      "kind": "imported-api",
+      "source": "installed release by default; explicit manual/reuse root may select a checkout",
       "switch": "release suites, live acceptance and BCH seam checks"
     }
   ],
+  "consumerEvidence": "docs/evidence/ENG-396/R-570/bch-confirmation.txt",
   "contracts": [
     "supervisor/GREEN-CONTRACTS.md"
   ],
   "environment": {
-    "DYLD_INSERT_LIBRARIES": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "DYLD_LIBRARY_PATH": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "GIT_CONFIG_COUNT": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
-    "GIT_CONFIG_KEY_0": "c69f268fb43e3b0bd46436177505f548fe105ce296445b5ba5a428f122453429",
-    "GIT_CONFIG_KEY_1": "61f51870656028552e7e9168d8a8e598e0322f554b73b23bc4f106868155562a",
-    "GIT_CONFIG_KEY_2": "ee8d3388271d171c44da18d2410a1d9d1ebcda4c164fb98365fbd6c5f8f8b66f",
-    "GIT_CONFIG_VALUE_0": "da287d3295c045aeb5a2bc3567ea4d920d92e13e0880e11b9184275a3ee5cc5f",
-    "GIT_CONFIG_VALUE_1": "faed84e2aed546128e4d3ac6c3f0cc9e1a14e3693fc6e4853649a2e3c04e40ef",
-    "GIT_CONFIG_VALUE_2": "1215f172399d60c2f8ec29488a1ff2fcf9cae3dd37aa8577982474db4f4fb0f8",
-    "GIT_PAGER": "77af778b51abd4a3c51c5ddd97204a9c3ae614ebccb75a606c3b6865aed6744e",
-    "HERDR_MONITOR_FLEET": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "HOME": "54a97fa39722426568d64ece47598653a01b5a3154ddd764a1b6a7afd063177b",
-    "LD_LIBRARY_PATH": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "LD_PRELOAD": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "NODE_OPTIONS": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "NODE_PATH": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S": "c1ab6b02a9cccbf3da12f58e0619f3838bd47b383e4beee2c124be49baaca96f",
-    "PATH": "1e31690a9ca6e98d8ea17bfca23d2e82aff92967b9a2a4c5e522894834de334b",
-    "XDG_CONFIG_HOME": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "version": 1,
+    "requiredAbsent": [
+      "NODE_OPTIONS",
+      "NODE_PATH"
+    ],
+    "requiredAbsentPrefixes": [
+      "DYLD_",
+      "LD_"
+    ],
+    "childStripPrefixes": [
+      "GIT_",
+      "NODE_",
+      "DYLD_",
+      "LD_"
+    ],
+    "selectionKeys": [
+      "HOME",
+      "XDG_CONFIG_HOME",
+      "HERDR_MONITOR_FLEET"
+    ],
+    "selection": {
+      "HOME": "/Users/rewt",
+      "XDG_CONFIG_HOME": null,
+      "HERDR_MONITOR_FLEET": null
+    }
   },
   "node": {
     "path": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node",
     "sha256": "d1c54537f00093999715de0617c0ef2191dbf1875720201d4c2fde16195a9287",
     "version": "v20.19.4",
-    "execArgv_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    "execArgv": []
   },
   "git": {
     "path": "/opt/homebrew/bin/git",
@@ -191,7 +253,7 @@
     ".lane.validation.json": {
       "mode": "100644",
       "sha256": "e93f7a39bfde12ea1bfa467226abf3b704b4eed196684556659017585a7b18f4",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     ".nvmrc": {
       "mode": "100644",
@@ -201,7 +263,7 @@
     ".promotion-selector.json": {
       "mode": "100644",
       "sha256": "2e3fde662c204f3fb28a28029447bd6ddf842a1ef735553f4f9cf288303f50e3",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "AGENTS.md": {
       "mode": "100644",
@@ -411,7 +473,7 @@
     "contrib/settle-watch.mjs": {
       "mode": "100755",
       "sha256": "9f1e3ea484e0b2103ee291e60586264c1be35e929e5f4816e8a1d143aa1920f6",
-      "role": "runtime-or-configuration"
+      "role": "bch-entry"
     },
     "discovery/README.md": {
       "mode": "100644",
@@ -456,7 +518,7 @@
     "dispatch/record-worker.mjs": {
       "mode": "100644",
       "sha256": "a923cc9fc035766725e2da41d31f1b4191712cff4dd2175942d8cc0d9a2d46df",
-      "role": "runtime-or-configuration"
+      "role": "bch-entry"
     },
     "dispatch/session-bind-command.mjs": {
       "mode": "100644",
@@ -756,7 +818,7 @@
     "lib/report.mjs": {
       "mode": "100644",
       "sha256": "73a32b105b8eff208511415b55f2cfc8ada410a5e5ffa6d4ff6fcdefe2454a5c",
-      "role": "runtime-or-configuration"
+      "role": "bch-entry"
     },
     "lib/retire-age.mjs": {
       "mode": "100644",
@@ -806,7 +868,7 @@
     "lib/roles.mjs": {
       "mode": "100644",
       "sha256": "c5722efe6515439421593fc6606fe9a97aa9e3276e57bc378c514c9bf9d3c64e",
-      "role": "runtime-or-configuration"
+      "role": "bch-entry"
     },
     "lib/run-timing.mjs": {
       "mode": "100644",
@@ -831,12 +893,12 @@
     "lib/state.mjs": {
       "mode": "100644",
       "sha256": "6c379650bf9414c58e2a3462a4726036d270dcd4c58c7d0500280de1cef03557",
-      "role": "runtime-or-configuration"
+      "role": "bch-entry"
     },
     "lib/store.mjs": {
       "mode": "100644",
       "sha256": "d2eb7a1506fe6485f949efffcd80837c194bf62a68e8c0c5b669acfd9aacdb16",
-      "role": "runtime-or-configuration"
+      "role": "bch-entry"
     },
     "lib/today.mjs": {
       "mode": "100644",
@@ -956,7 +1018,7 @@
     "package.json": {
       "mode": "100644",
       "sha256": "ff3bc1743163ed25dd91a0488a987b6d42a10ec661c994ba20dbe7f1353bdaec",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "promote/README.md": {
       "mode": "100644",
@@ -1255,7 +1317,7 @@
     },
     "supervisor/autopilot.mjs": {
       "mode": "100644",
-      "sha256": "d40920c5305f359cccf70f190f1fe87c0b055ca04d47ecdad06ecfb5ae383c67",
+      "sha256": "40e7170020d9c05add919fe19d0bddbef7e29d2081d8a05550df306c871a72a5",
       "role": "promotion-authority"
     },
     "supervisor/chats.mjs": {
@@ -1360,7 +1422,7 @@
     },
     "supervisor/supervisor.mjs": {
       "mode": "100644",
-      "sha256": "f2a16a9686a4d58d535d1b434c3737b0bb1b23dbf63b34089049b34a16eee64e",
+      "sha256": "4b2d612ee70ee638d9c32275e0f63996215759a898e9c6549e1f816b13c10352",
       "role": "promotion-authority"
     },
     "supervisor/tidy-tabs.mjs": {
@@ -1682,7 +1744,10 @@
         "lanes/validation.mjs",
         "test/helpers/**",
         "acceptance/**",
-        "supervisor/GREEN-CONTRACTS.md"
+        "supervisor/GREEN-CONTRACTS.md",
+        ".lane.validation.json",
+        ".promotion-selector.json",
+        "package.json"
       ]
     },
     {

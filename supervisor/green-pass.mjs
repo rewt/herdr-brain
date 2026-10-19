@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir } from '../lib/store.mjs';
-import { manifestScope, checkActivation, checkDeployment } from './green-manifest.mjs';
+import { manifestScope, checkActivation, checkDeployment, recordedActivation, childEnvironment } from './green-manifest.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const contractFile = 'supervisor/green-contracts.json';
@@ -15,7 +15,7 @@ const contractBytes = fs.readFileSync(new URL('./green-contracts.json', import.m
 export const GREEN_CONTRACTS = JSON.parse(contractBytes);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const commit = value => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value ?? '');
-const env = () => ({ ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_') && k !== 'ORG_DIR')), ORG_DIR: '', GIT_OPTIONAL_LOCKS: '0' });
+const env = (manifest = GREEN_CONTRACTS) => childEnvironment(manifest);
 const utf8 = bytes => {
   const decoded = bytes.toString('utf8');
   if (!Buffer.from(decoded).equals(bytes)) throw Error('non-UTF-8 input');
@@ -42,9 +42,9 @@ export function greenContractRefusal(file, { contracts = GREEN_CONTRACTS, author
   return rule && refusal(rule.code, `${authority ? 'eligibility/evidence authority' : 'declared contract'}: ${file}`);
 }
 
-function gitAt(workspace) {
+function gitAt(workspace, manifest) {
   return (args, raw = false) => {
-    const r = spawnSync('git', ['--no-optional-locks', '-C', workspace, ...args], { env: env(), encoding: null, timeout: 30000, maxBuffer: 32 * 1024 * 1024 });
+    const r = spawnSync(manifest.git.path, ['--no-optional-locks', '-C', workspace, ...args], { env: env(manifest), encoding: null, timeout: 30000, maxBuffer: 32 * 1024 * 1024 });
     if (r.error || r.status !== 0) throw Error(r.stderr?.toString('utf8').trim() || r.error?.message || 'Git unavailable');
     return raw ? r.stdout : utf8(r.stdout);
   };
@@ -72,26 +72,26 @@ function readTree(git, ref, root) {
   return { files, root, bytes, read: file => text(bytes(file)) };
 }
 
-function declaredPair(pair) {
+function declaredPair(pair, manifest) {
   if (!pair || typeof pair !== 'object' || Array.isArray(pair) || Object.keys(pair).length !== 3 ||
       !['repo', 'identity', 'org'].every(k => typeof pair[k] === 'string' && path.isAbsolute(pair[k]) && fs.realpathSync(pair[k]) === pair[k])) identityError('declarations require canonical repo, identity and org paths');
-  const project = gitProject(pair.repo, { env: env(), timeoutMs: 10000 });
+  const project = gitProject(pair.repo, { env: env(manifest), timeoutMs: 10000 });
   if (project.canonical !== pair.repo || project.checkout !== pair.repo || project.identity !== pair.identity) identityError('declared canonical Git identity changed');
-  const discovered = findOrgDir({ cwd: pair.repo, env: env() });
+  const discovered = findOrgDir({ cwd: pair.repo, env: env(manifest) });
   if (!discovered || fs.realpathSync(discovered) !== pair.org) identityError('declared record differs from discovered project record');
   return pair;
 }
 
-export function greenManifestIdentity({ repo, org, identity: expected, bindings }, { manifest, sourceRoot }) {
+export function greenManifestIdentity({ repo, org, identity: expected, bindings }, { manifest, sourceRoot, manifestDigest = hash(JSON.stringify(manifest)) }) {
     try {
-      checkActivation(bindings?.activatedAt);
+      checkActivation(bindings?.activatedAt, Date.now(), recordedActivation(manifest.bindings.brain.org, manifestDigest));
       if (!bindings || Object.keys(bindings).some(k => !['brain', 'lab', 'activatedAt'].includes(k)) || !bindings.brain) identityError('declare the manifest Brain binding');
       if (!['brain', 'lab'].every(kind => ['repo', 'identity', 'org'].every(key => (bindings[kind]?.[key] ?? null) === (manifest.bindings[kind]?.[key] ?? null)))) identityError('configuration differs from reviewed manifest identities');
-      const brain = declaredPair(bindings.brain), lab = bindings.lab && declaredPair(bindings.lab);
+      const brain = declaredPair(bindings.brain, manifest), lab = bindings.lab && declaredPair(bindings.lab, manifest);
       if (lab && (brain.identity === lab.identity || brain.org === lab.org)) identityError('Brain and lab must have independent identities and records');
-      const source = gitProject(sourceRoot, { env: env(), timeoutMs: 10000 });
+      const source = gitProject(sourceRoot, { env: env(manifest), timeoutMs: 10000 });
       if (source.identity !== brain.identity || source.canonical !== brain.repo) identityError('Brain declaration differs from this source checkout');
-      const project = gitProject(repo, { env: env(), timeoutMs: 10000 });
+      const project = gitProject(repo, { env: env(manifest), timeoutMs: 10000 });
       const kind = ['brain', 'lab'].find(k => bindings[k]?.identity === project.identity);
       if (!kind || project.checkout !== project.canonical || project.canonical !== bindings[kind].repo || repo !== project.canonical || org !== bindings[kind].org ||
           (expected !== undefined && expected !== project.identity)) identityError('admission is outside the declared canonical project and record');
@@ -126,14 +126,14 @@ export function createGreenCohort(sourceRoot = root) {
   function identity(options) {
     if (sourceError) throw Error(`GREEN_REACH_UNKNOWN: ${sourceError}`);
     checkDeployment(manifest, trusted);
-    return greenManifestIdentity(options, { manifest, sourceRoot });
+    return greenManifestIdentity(options, { manifest, sourceRoot, manifestDigest: hash(policyBytes) });
   }
   function scope(options) {
     const { repo, org, workspace, base, head, review, report, run, reportRoot, item } = options;
     try {
-      const binding = identity(options), git = gitAt(workspace);
-      const candidate = gitProject(workspace, { env: env(), timeoutMs: 10000 });
-      const record = findOrgDir({ cwd: workspace, env: env() });
+      const binding = identity(options), git = gitAt(workspace, manifest);
+      const candidate = gitProject(workspace, { env: env(manifest), timeoutMs: 10000 });
+      const record = findOrgDir({ cwd: workspace, env: env(manifest) });
       if (candidate.identity !== binding.identity || !record || fs.realpathSync(record) !== org) return refusal('GREEN_IDENTITY_MISMATCH', 'candidate workspace or record differs from admission', {
         expected: { identity: binding.identity, org }, observed: { identity: candidate.identity, org: record && fs.realpathSync(record) } });
       if (!commit(base) || !commit(head) || git(['rev-parse', 'HEAD']).trim() !== head || git(['status', '--porcelain=v1', '--untracked-files=all']).trim()) return refusal('GREEN_REACH_UNKNOWN', 'candidate head/base missing, changed or dirty');
@@ -176,14 +176,14 @@ export function createGreenCohort(sourceRoot = root) {
         try { controls = lifecycleEvidence({ report, run, reportRoot, binding, base, head, review, workspace, git, after }); }
         catch (error) { return refusal('GREEN_LIFECYCLE_EVIDENCE', error.message); }
       }
-      return { eligible: true, cohort: 'green-pass', area: lifecycle ? 'green-lifecycle' : 'green', base, head, paths, repo, binding, reach: evidence, authority, manifest: { sha256: hash(policyBytes), components: execution.components },
+      return { eligible: true, cohort: 'green-pass', area: lifecycle ? 'green-lifecycle' : 'green', base, head, paths, repo, binding, requiredTests: execution.requiredTests, reach: evidence, authority, manifest: { sha256: hash(policyBytes), components: execution.components },
         ...(controls ? { lifecycle: controls } : {}) };
     } catch (error) {
       const named = /^(GREEN_[A-Z_]+):\s*/.exec(error.message);
       return refusal(named?.[1] ?? 'GREEN_REACH_UNKNOWN', named ? error.message.slice(named[0].length) : error.message);
     }
   }
-  return { identity, scope };
+  return { identity, scope, environment: () => childEnvironment(manifest) };
 }
 
 export const LIFECYCLE_CASES = {
@@ -234,3 +234,5 @@ export function lifecycleEvidence({ report, run, reportRoot, binding, base, head
 const live = createGreenCohort();
 export const greenIdentity = live.identity;
 export const greenPassScope = live.scope;
+
+export const greenEnvironment = live.environment;

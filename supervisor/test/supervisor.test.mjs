@@ -141,14 +141,23 @@ test('handle explicitly sends capped findings back once and adopts its saved cor
 function promotionHarness(f, run) {
   const cli = path.join(f.root, 'deferred-promote.mjs');
   fs.writeFileSync(cli, `import {parseArgs} from 'node:util'; import {queueFor,enqueue} from ${JSON.stringify(path.join(root, 'promote/promote.mjs'))};
-const {values:o,positionals:p}=parseArgs({allowPositionals:true,options:Object.fromEntries(['repo','org','to','expected-head','if-current-run'].map(k=>[k,{type:'string'}]))});
-const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expected-head'],run:o['if-current-run'],to:o.to??'supervisor',attempts:1,retry:0,herdr:'herdr',laneCLI:${JSON.stringify(path.join(root, 'lanes/lane.mjs'))},validate:process.env.LANE_VALIDATE??null});console.log(JSON.stringify({jobs,queue:q.file}));\n`);
+const {values:o,positionals:p}=parseArgs({allowPositionals:true,options:Object.fromEntries(['repo','org','to','expected-head','if-current-run','required-tests'].map(k=>[k,{type:'string'}]))});
+const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expected-head'],run:o['if-current-run'],requiredTests:JSON.parse(o['required-tests']??'[]'),to:o.to??'supervisor',attempts:1,retry:0,herdr:'herdr',laneCLI:${JSON.stringify(path.join(root, 'lanes/lane.mjs'))},validate:process.env.LANE_VALIDATE??null});console.log(JSON.stringify({jobs,queue:q.file}));\n`);
   const queue = queueFor(f.repo);
   const promote = (extra = []) => invoke(f, ['promote', run, '--role', 'supervisor', '--why', 'Reviewed work under test authority', '--promote-cli', cli, ...extra]);
   const drain = () => result(f.exec(process.execPath, [path.join(root, 'promote/promote.mjs'), '--repo', f.repo, '--drain']));
   const handle = (job) => result(invoke(f, ['handle', '--notice', `[promote-queue] id=${job.id} lane=${job.topic}`, '--role', 'supervisor']));
   return { queue, promote, drain, handle };
 }
+
+test('supervisor promotion forwards required component tests into the real queue', t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'promotable');
+  const h = promotionHarness(f, run), required = ['test/board-view.test.mjs'];
+  const saved = result(h.promote(['--required-tests', JSON.stringify(required)]));
+  assert.deepEqual(saved.requiredTests, required);
+  assert.deepEqual(h.queue.load().pending[0].requiredTests, required);
+});
 
 test('STOP arriving during review retains a resumable correction without launching another worker', { timeout: 25000 }, (t) => {
   const f = fixture(t, { actor: 'supervisor-review-stop-test' }), run = f.start(); f.commit('wrong\n'); f.report(run);

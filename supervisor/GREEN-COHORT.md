@@ -9,8 +9,8 @@ explicit empty Findings, clean PASS and checked promotion still apply. `clean-pa
 keeps its own map and behavior.
 
 `green-contracts.json` is the manifest: exact canonical identities/records, optional
-empty lab slot, allowed component profiles, actual mutable BCH entry, immutable
-release consumer, promotion authority, runtime/configuration pins, external launcher
+empty lab slot, allowed component profiles, owner-confirmed BCH command and API entries, installed defaults and explicit
+alternate roots, promotion authority, runtime/configuration pins, external launcher
 and config pins, loader environment, and Node version/executable. The detailed
 contracts are in [GREEN-CONTRACTS.md](GREEN-CONTRACTS.md), itself frozen.
 
@@ -24,8 +24,8 @@ exact independently hashed generated review addition retains its existing exempt
 ## Bootstrap and activation
 
 1. Take ordinary independent review of the manifest, its contracts, the checker,
-   deployment facts and positive/refusal evidence. Confirm BCH still consumes only
-   the mutable reconcile entry and immutable installed settle-watch.
+   deployment facts and positive/refusal evidence. Reconfirm BCH's ten-entry owner inventory and configured installed reconcile root,
+   including the documented manual/reuse alternate selectors.
 2. Rebuild the manifest's pins from the exact ordinary bootstrap candidate if its
    boundary changed. `buildManifest(tree, {bindings, externalInputs})` in
    `green-manifest.mjs` produces review input from a Git tree reader. Preserve the
@@ -36,12 +36,18 @@ exact independently hashed generated review addition retains its existing exempt
 3. Review the concrete external input inventory. It must include Git executable/
    configuration, project/ancestor `.lane.json`, `.housekeeping.json`, fleet,
    relevant release pins and record configuration. Each absence is pinned too.
-   Loader-affecting environment and Node are versioned. A deployment using different
+   The plain-text environment policy and Node launcher are versioned; harness Git
+   and Node selectors are stripped from child launches, not hashed per session. A deployment using different
    inputs needs ordinary manifest review. The committed manifest describes Brain;
    no lab exists. Adding a lab binding/components is an ordinary reviewed amendment.
 4. After bootstrap PASS and deployment acceptance, the supervisor can enable the
    existing cohort in canonical `.supervisor.json` with the manifest's exact pairs
-   and an `activatedAt` ISO timestamp. The interim lasts ten days from activation
+   and an `activatedAt` ISO timestamp. First calculate SHA-256 of the exact
+   reviewed `supervisor/green-contracts.json` bytes and append through the existing
+   record CLI: `record note ENG-396 "green-activation/v1 MANIFEST_SHA256"`.
+   Use that first note's event `at` as `activatedAt`; no custom event type or
+   direct log write is needed. A missing note, later reset or different digest
+   refuses. A repeated note for the same digest cannot extend the interim. The interim lasts ten days from activation
    or until the reviewed successor replaces it, whichever comes first. Future,
    missing or expired activation dates refuse; expiry returns work to ordinary
    handling. This lane never activates it.
@@ -79,8 +85,11 @@ profile: identity, HOLD, live-reference and recoverability evidence must bind th
 run/base/head/record and immutable artifact/log hashes. It is not an initial
 lifecycle admission route.
 
-`supervisor/test/green-main.test.mjs` probes an actual Git `main` snapshot plus the
-explicit ordinary bootstrap overlay, without writing refs/config/records/source.
+`supervisor/test/green-main.test.mjs` probes actual Git `main` plus the complete
+checkout HEAD overlay. Pins and trusted bytes both come from that HEAD tree,
+including unrelated promotion edits/deletions. Release snapshots without a Git
+work tree or main ref skip with the established release-snapshot reason. The
+probe discovers no live record and writes no operator refs/config/records/source.
 It requires a one-line renderer change to pass containment and entry, authority,
 manifest, boundary-drift and foreign-project controls to refuse. It records exact
 base/candidate bytes and hashes. This is engineer containment evidence; it is not
@@ -89,6 +98,8 @@ A full admission fixture separately exercises canonical identity, clean committe
 candidates, optional lab, expiry and autopilot review/promotion checks.
 
 Engineer-focused checks and one independent ready review still apply per candidate.
+The renderer's declared test is passed as required test evidence to the promotion
+queue, so planner budgets cannot defer it.
 Release-wide suites, live acceptance and BCH seam checks run once per switch
 candidate in the supervisor's agreed window. No lane runs live acceptance or a
 release, changes native permissions, lifts a HOLD, pushes, or activates this cohort.

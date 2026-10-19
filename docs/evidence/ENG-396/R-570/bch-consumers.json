@@ -1,0 +1,30 @@
+{
+  "schema": "bch-brain-consumer-confirmation/v1",
+  "ownerIdentity": "bastian",
+  "request": "rewt R-570 / ENG-396; R-566.fix.md; green-cohort/7ece822-r1.md",
+  "commandEntries": [
+    {"entry":"bin/org.mjs","commands":["check","ingest"],"caller":"scripts/auto-promote/auto-promote.mjs:125,127","additionalSurface":"PATH org and org-guarded also forward record CLI commands; reconcile complete-batch and record-worker use it transitively","root":"installed current; auto-promote realpaths once"},
+    {"entry":"promote/promote.mjs","caller":"scripts/auto-promote/auto-promote.mjs:148","root":"installed current realpathed by auto-promote","arguments":"TOPIC --expected-head SHA --if-current-run R --org BCH_ORG [--superseded-runs JSON]"},
+    {"entry":"dispatch/record-worker.mjs","callers":["scripts/supervisor-bundle/files/dispatch.sh:267,270","scripts/supervisor-bundle/files/continue-run.sh:26,27"],"root":"$HOME/.local/share/herdr-monitor/current"},
+    {"entry":"supervisor/reconcile.mjs","commands":["prepare","finish"],"callers":["scripts/supervisor-bundle/files/.pre-reuse-promote.sh:60,122","scripts/cycle-time/reuse-promotion.mjs:35,54,88"],"root":"ordinary: HERDR_BRAIN_ROOT or installed current; promote-launch strips override; explicit reuse: request.brain"},
+    {"entry":"contrib/settle-watch.mjs","caller":"scripts/lane/launch-supervisor.mjs:12,46-56","root":"$HOME/.local/share/herdr-monitor/current","routing":"scripts/lane/routing.json supplies --model --effort --lane-config"}
+  ],
+  "directImportedApis": [
+    {"entry":"lib/store.mjs","callers":["scripts/auto-promote/auto-promote.mjs","scripts/auto-promote/review-receipt.mjs","scripts/cycle-time/pre-window.mjs"]},
+    {"entry":"lib/state.mjs","callers":["scripts/auto-promote/auto-promote.mjs","scripts/auto-promote/review-receipt.mjs","scripts/cycle-time/pre-window.mjs"]},
+    {"entry":"lib/report.mjs","callers":["scripts/auto-promote/auto-promote.mjs"]},
+    {"entry":"lib/roles.mjs","callers":["scripts/cycle-time/pre-window.mjs"]},
+    {"entry":"lanes/validation.mjs","callers":["scripts/cycle-time/validation-reuse.mjs:260"],"conditional":"explicit BCH_CLOAK_REUSE_REQUEST; request.brain supplies the root"}
+  ],
+  "liveReconcile": {
+    "configuredRoot":"/Users/rewt/.local/share/herdr-monitor/current",
+    "resolvedRoot":"/Users/rewt/.local/share/herdr-monitor/releases/rc-20261019T042359000Z-cc585d9f33",
+    "commit":"cc585d9f334c9842b459ef2b7ff3f693d57eb08b",
+    "HERDR_BRAIN_ROOT":"absent in observed supervisor process and inspection shell; excluded by promote-launch env -i; stripped by auto-promote",
+    "BCH_CLOAK_REUSE_REQUEST":"absent in observed supervisor process and inspection shell; excluded by promote-launch env -i",
+    "activeReconcileProcessAtCapture":false,
+    "historicalExecutionTraceClaim":false
+  },
+  "transitiveClosure":"The direct entry inventory does not replace pinning each entry's Brain runtime/configuration dependencies.",
+  "evidence":"CONFIRMATION.txt; capture.json; selected-release.json; live-process.json; snapshot-index.json; tracked-installed-comparison.json; tracked-production-search.json; SHA256SUMS"
+}

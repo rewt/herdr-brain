@@ -1,0 +1,147 @@
+R-570 / ENG-396 — BCH owner-side Brain consumer confirmation
+2026-10-19; bastian identity; evidence capture 15:05–15:06 UTC
+
+For the rewt desk and lane-green-cohort, responding to R-566.fix.md and
+docs/reviews/green-cohort/7ece822-r1.md. This confirms the current BCH integration
+inventory for the lane's supervisor/green-contracts.json and GREEN-CONTRACTS.md.
+No BCH source, installed supervisor script, launcher, configuration, or Brain
+file was changed. Evidence and the requested note in the bastian record are the
+only writes. This is an owner-side inspection, not an independent code-review
+PASS, a release acceptance result, or permission to enable the green cohort.
+
+Binding
+-------
+BCH canonical repo: /Users/rewt/development/bastian/bch-cloak
+Git identity: /Users/rewt/development/bastian/bch-cloak/.git
+BCH HEAD: 6cd8e881b293da0d6d7338e43bfa37bc7ae64f02; tracked tree clean.
+Owner record: /Users/rewt/development/bastian/.org
+Installed Brain selector: /Users/rewt/.local/share/herdr-monitor/current
+Resolved bundle: /Users/rewt/.local/share/herdr-monitor/releases/rc-20261019T042359000Z-cc585d9f33
+Brain commit: cc585d9f334c9842b459ef2b7ff3f693d57eb08b
+Read-only selectRelease(BCH canonical repo) returned selection=current and that
+same bundle. BCH has no .herdr-release.json. See capture.json and
+selected-release.json; entry hashes are in capture.json.
+
+Complete direct command-entry inventory for the inspected tracked BCH production
+auto-promotion, dispatch, watcher and promotion-wrapper paths
+-------------------------------------------------------------------------
+1. bin/org.mjs
+   scripts/auto-promote/auto-promote.mjs:125,127 invokes check REPORT, then
+   ingest REPORT --run R --if-current-run R when the current review needs ingest.
+   The tracked supervisor-bundle copy and live .lane/supervisor copy match.
+   The broader wrapper seam also reaches this same entry through the PATH org
+   launcher: dispatch starts/abandons runs and has a set fallback; continuation
+   uses org-guarded; direct-review/apply-settle check, ingest and manage record
+   items; settle/tidy-tabs/promote-launch read the record. org-guarded forwards
+   argv to org, so this entry must not be described as check/ingest-only.
+   /Users/rewt/.local/bin/org routes to runRelease('bin/org.mjs', argv).
+   Brain reconcile also invokes this entry transitively as complete-batch;
+   record-worker invokes its import-relative bin/org.mjs transitively.
+
+2. promote/promote.mjs — an additional entry beyond the review's four paths.
+   scripts/auto-promote/auto-promote.mjs:148 invokes TOPIC --expected-head SHA
+   --if-current-run R --org BCH_ORG [--superseded-runs JSON]. The --enqueue
+   wrapper delegates to this bridge. Brain owns its queue/drain and completion
+   closure. Auto-promotion realpaths current once for that operation; subprocess
+   cwd is BCH canonical repo, ORG_DIR is BCH's record, ORG_ACTOR is
+   supervisor-auto-promote. It deletes HERDR_BRAIN_ROOT, LANE_*, NODE_OPTIONS,
+   selected GIT_* and Herdr pane/tab/workspace variables from the child env.
+
+3. dispatch/record-worker.mjs
+   scripts/supervisor-bundle/files/dispatch.sh:267,270 and continue-run.sh:26,27
+   invoke RUN --agent NAME --pane ID --cwd LAUNCH_WORKTREE --org BCH_ORG,
+   with available --worker-workspace, --terminal-id and --agent-session-id facts.
+   Root is $HOME/.local/share/herdr-monitor/current, independent of
+   HERDR_BRAIN_ROOT. This is the worker-identity seam, not dispatch/dispatch.mjs.
+
+4. supervisor/reconcile.mjs
+   scripts/supervisor-bundle/files/promote.sh delegates the ordinary path to
+   .pre-reuse-promote.sh. The latter selects BRAIN at line 15 and invokes
+   prepare at line 60 and finish at line 122, with explicit --repo BCH_REPO,
+   --org BCH_ORG and --role supervisor. The selected Node is BCH's .nvmrc
+   v22.22.3; cwd is BCH canonical repo. This wrapper does not invoke refresh.
+   scripts/cycle-time/reuse-promotion.mjs:35,54,88 also invokes prepare/finish
+   on the optional explicit reuse path, using request.brain and request.profile.env.
+
+5. contrib/settle-watch.mjs
+   scripts/lane/launch-supervisor.mjs:12,46-56 selects the installed current
+   entry and launches it with process.execPath. arm-watch.sh and continue.sh
+   reach it through that launcher. Existing forwarded arguments include the
+   explicit BCH --org/--cwd and checklist; --model, --effort and --lane-config
+   are appended from scripts/lane/routing.json, not caller overrides.
+
+Direct imported API entries (also BCH-consumed executable source)
+---------------------------------------------------------------
+6. lib/store.mjs: auto-promote and review-receipt dynamically import
+   loadEvents/findOrgDir; pre-window imports loadEvents.
+7. lib/state.mjs: auto-promote imports fold/blockersOf/releases/itemStatus/
+   openRuns; review-receipt imports fold; pre-window imports fold/blockersOf.
+8. lib/report.mjs: auto-promote imports readReport.
+9. lib/roles.mjs: scripts/cycle-time/pre-window.mjs:39 imports roleIs.
+   The normal focused-checks adapter supplies current as the Brain root;
+   the optional reuse path supplies request.brain.
+10. lanes/validation.mjs: scripts/cycle-time/validation-reuse.mjs:260 imports
+    validateTree from request.brain on the explicit BCH_CLOAK_REUSE_REQUEST path.
+    This is conditional, but belongs in a complete supported consumer inventory.
+    That adapter also hashes Brain's lanes/, lib/ and test-slot/ trees as engine
+    inputs; the hash walk is a data read, not an additional executable entry.
+
+These are direct BCH-to-Brain boundaries. Their transitive Brain dependency
+closures remain containment inputs; this list does not imply that only ten files
+need protection. inventory.json separates command entries and imported APIs.
+
+Actual root, overrides, and evidence limits
+------------------------------------------
+The ordinary live reconcile root is the installed current alias above, not
+/Users/rewt/development/rewt/herdr-brain. The tracked manual wrapper still
+supports HERDR_BRAIN_ROOT as an explicit alternate root. Its currently installed
+bytes match the tracked bytes. The installed tracked promote-launch.sh uses
+env -i with an allowlist at lines 21-23; HERDR_BRAIN_ROOT and
+BCH_CLOAK_REUSE_REQUEST are not admitted. Its call to promote.sh at line 71
+   therefore uses the installed default. Auto-promote likewise strips
+HERDR_BRAIN_ROOT and selects installed Brain itself.
+
+Live supervisor-events PID 1764, started 2026-10-13, runs the canonical installed
+BCH supervisor script on Node v22.22.3. Filtered live process environment inspection
+found neither HERDR_BRAIN_ROOT nor BCH_CLOAK_REUSE_REQUEST; its HOME is /Users/rewt.
+The installed LaunchAgent also declares neither. This inspection's environment
+has neither. See live-process.json and sources/launchers/supervisor-events.plist.
+No BCH reconcile process was active at capture; no promotion/reconciliation was
+launched to manufacture runtime evidence. The statement is current configured
+root plus observed launcher environment, not a trace of every historical run.
+
+The optional reuse path is a separate explicit selector: a nonempty
+BCH_CLOAK_REUSE_REQUEST selects JSON whose brain field is an absolute root.
+Do not silently classify that path as unconditionally installed-release-only.
+An explicit manual HERDR_BRAIN_ROOT or request.brain pointing at a checkout must
+be represented as an alternate boundary or cause ordinary handling. No active
+reuse/checkout override was observed. The manual wrapper resolves the current
+alias on each child invocation; unlike auto-promote, it does not realpath the
+bundle once for the entire prepare/finish pair. This snapshot does not pin future
+release switches.
+
+Correction to bind in the Brain lane
+-----------------------------------
+Include all five direct command entries in externalConsumers and document the
+five direct API imports, especially conditional lanes/validation.mjs. Correct
+the claim that reconcile currently runs from the Brain source checkout. Brain's
+AGENTS.md / current GREEN-CONTRACTS.md and BCH WORK-PATTERN.md retain stale
+checkout-root wording; the actual tracked+installed wrapper and launcher say
+otherwise. No owner-source edit is requested or performed here. Preserve the
+alternate-root qualification and release-switch checks in the lane's contract.
+
+Method and reproducibility
+--------------------------
+Read-only Git/filesystem/process inspection; no tests, gates, dispatch, settle,
+promotion, reconciliation, install, activation or release switch executed.
+160 tracked non-test script files were searched, and the root selections,
+dynamic imports, call sites and forwarding wrappers were inspected.
+tracked-production-search.json records the exact searched files and matches.
+snapshot-index.json binds copies of the relevant sources and request/review.
+tracked-installed-comparison.json records equality for every sampled installed
+supervisor-bundle counterpart, including all five-entry caller wrappers.
+capture.py captures the static evidence; live-process.json is separately captured
+from ps with only named root-selection/environment keys retained. SHA256SUMS
+binds the completed evidence packet. This is complete for that stated production
+integration scope at the captured revision, not a claim about arbitrary ad hoc
+commands, test fixtures, historical archives, or future callers.

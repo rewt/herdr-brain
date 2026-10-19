@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { loadEvents } from '../lib/store.mjs';
 import { sourceReach } from './green-reach.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -10,7 +11,16 @@ const fail = (code, reason, extra = {}) => ({ eligible: false, code, reason, ...
 const regular = mode => mode === '100644';
 const safePath = file => typeof file === 'string' && /^[\w./-]+$/.test(file) && !path.isAbsolute(file) && file.split('/').every(p => p && p !== '.' && p !== '..');
 export const INTERIM_MS = 10 * 24 * 60 * 60 * 1000;
-export function checkActivation(activatedAt, now = Date.now()) {
+export const activationNote = digest => `green-activation/v1 ${digest}`;
+export function recordedActivation(org, digest) {
+  const { events, tornTail } = loadEvents(org);
+  if (tornTail) throw Error('GREEN_EXPIRED: incomplete activation record');
+  const first = events.find(event => event.type === 'note.added' && event.text === activationNote(digest));
+  if (!first) throw Error('GREEN_EXPIRED: no recorded activation for this manifest digest');
+  return first.at;
+}
+export function checkActivation(activatedAt, now = Date.now(), recordedAt = activatedAt) {
+  if (activatedAt !== recordedAt) throw Error('GREEN_EXPIRED: activation differs from the first recorded activation for this manifest');
   const start = Date.parse(activatedAt);
   if (typeof activatedAt !== 'string' || !Number.isFinite(start) || new Date(start).toISOString() !== activatedAt || start > now || now - start >= INTERIM_MS)
     throw Error('GREEN_EXPIRED: activation is missing, in the future or outside the ten-day interim');
@@ -43,10 +53,12 @@ export const BOOTSTRAP_FILES = [
   'supervisor/green-reach.mjs', 'supervisor/green-manifest.mjs',
   'supervisor/GREEN-COHORT.md', 'supervisor/GREEN-CONTRACTS.md',
 ];
+export const CHECK_SELECTION = ['.lane.validation.json', '.promotion-selector.json', 'package.json'];
 export function boundaryRole(file) {
+  if (CHECK_SELECTION.includes(file)) return 'promotion-authority';
   if (/^(?:promote|settle|acceptance|test\/helpers)\//.test(file) ||
       /^(?:supervisor\/(?:autopilot|clean-pass|fast-path-timing|supervisor|entry|context|notice-lock|status|safe-point)\.mjs|lanes\/validation\.mjs)$/.test(file)) return 'promotion-authority';
-  if (file === 'supervisor/reconcile.mjs' || file === 'bin/org.mjs') return 'bch-entry';
+  if (BCH_ENTRIES.includes(file)) return 'bch-entry';
   return 'runtime-or-configuration';
 }
 export function boundaryInput(file) {
@@ -57,10 +69,31 @@ export function boundaryInput(file) {
   // directories are a closed universe, not a list of executable suffixes.
   return true;
 }
-export const LOADER_ENV = ['NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES', 'DYLD_LIBRARY_PATH', 'PATH', 'HERDR_MONITOR_FLEET', 'HOME', 'XDG_CONFIG_HOME'];
-export const loaderEnvironment = () => Object.fromEntries([...new Set([...LOADER_ENV,
-  ...Object.keys(process.env).filter(key => /^(?:GIT_|NODE_|DYLD_|LD_)/.test(key)),
-])].sort().map(key => [key, hash(process.env[key] ?? '')]));
+// Reviewable policy, independent of the engineer's harness key set. Loader
+// injection must already be absent in the running process. Child Git/Node
+// launches drop harness selectors and use the reviewed launcher directories.
+export const ENV_POLICY = {
+  version: 1, requiredAbsent: ['NODE_OPTIONS', 'NODE_PATH'], requiredAbsentPrefixes: ['DYLD_', 'LD_'],
+  childStripPrefixes: ['GIT_', 'NODE_', 'DYLD_', 'LD_'],
+  selectionKeys: ['HOME', 'XDG_CONFIG_HOME', 'HERDR_MONITOR_FLEET'],
+};
+export const loaderEnvironment = () => ({ ...ENV_POLICY,
+  selection: Object.fromEntries(ENV_POLICY.selectionKeys.map(key => [key, process.env[key] ?? null])),
+});
+export function checkEnvironment(environment) {
+  if (JSON.stringify(environment) !== JSON.stringify(loaderEnvironment())) throw Error('environment selection or policy drift');
+  if (ENV_POLICY.requiredAbsent.some(key => process.env[key]) ||
+      Object.keys(process.env).some(key => ENV_POLICY.requiredAbsentPrefixes.some(prefix => key.startsWith(prefix)) && process.env[key]))
+    throw Error('loader environment must be absent');
+}
+export function childEnvironment(manifest, source = process.env) {
+  const env = Object.fromEntries(Object.entries(source).filter(([key]) => !ENV_POLICY.childStripPrefixes.some(prefix => key.startsWith(prefix)) && !key.startsWith('ORG_')));
+  for (const [key, value] of Object.entries(manifest.environment.selection)) {
+    if (value === null) delete env[key]; else env[key] = value;
+  }
+  env.PATH = [...new Set([path.dirname(manifest.node.path), path.dirname(manifest.git.path), path.join(manifest.environment.selection.HOME ?? '', '.local/bin'), '/opt/homebrew/bin', '/usr/bin', '/bin'])].join(path.delimiter);
+  return { ...env, ORG_DIR: '', GIT_OPTIONAL_LOCKS: '0' };
+}
 export function externalDescriptor(file) {
   if (!path.isAbsolute(file)) throw Error('external input requires an absolute path');
   const stat = fs.lstatSync(file, { throwIfNoEntry: false });
@@ -75,6 +108,11 @@ export function executableDescriptor(name) {
   if (!selected || fs.statSync(selected).size > 128 * 1024 * 1024) throw Error(`missing or oversized executable: ${name}`);
   return { path: selected, realpath: fs.realpathSync(selected), sha256: hash(fs.readFileSync(selected)) };
 }
+// Owner-confirmed inventory: docs/evidence/ENG-396/R-570/bch-confirmation.txt.
+// The installed default does not waive explicit manual/reuse checkout roots.
+export const BCH_ENTRIES = ['bin/org.mjs', 'promote/promote.mjs', 'dispatch/record-worker.mjs',
+  'supervisor/reconcile.mjs', 'contrib/settle-watch.mjs', 'lib/store.mjs', 'lib/state.mjs',
+  'lib/report.mjs', 'lib/roles.mjs', 'lanes/validation.mjs'];
 export function buildManifest(tree, { bindings, externalInputs = [] }) {
   const boundary = {};
   for (const file of [...tree.files.keys()].filter(boundaryInput).sort()) {
@@ -86,9 +124,12 @@ export function buildManifest(tree, { bindings, externalInputs = [] }) {
     version: 2, bindings: { brain: bindings.brain, lab: bindings.lab ?? null },
     interimDays: 10, bootstrapFiles: BOOTSTRAP_FILES,
     entries: [{ project: 'brain', path: 'supervisor/reconcile.mjs', contract: 'reconcile-complete-batch/v1' }],
-    externalConsumers: [{ entry: 'contrib/settle-watch.mjs', source: 'immutable installed release', switch: 'release suites, live acceptance and BCH seam checks' }],
+    externalConsumers: BCH_ENTRIES.map((entry, i) => ({ entry, kind: i < 5 ? 'command' : 'imported-api',
+      source: ['supervisor/reconcile.mjs', 'lib/store.mjs', 'lib/state.mjs', 'lib/roles.mjs', 'lanes/validation.mjs'].includes(entry) ? 'installed release by default; explicit manual/reuse root may select a checkout' : 'installed release',
+      switch: 'release suites, live acceptance and BCH seam checks' })),
+    consumerEvidence: 'docs/evidence/ENG-396/R-570/bch-confirmation.txt',
     contracts: ['supervisor/GREEN-CONTRACTS.md'],
-    environment: loaderEnvironment(), node: { path: fs.realpathSync(process.execPath), sha256: hash(fs.readFileSync(process.execPath)), version: 'v20.19.4', execArgv_sha256: hash(JSON.stringify(process.execArgv)) },
+    environment: loaderEnvironment(), node: { path: fs.realpathSync(process.execPath), sha256: hash(fs.readFileSync(process.execPath)), version: 'v20.19.4', execArgv: process.execArgv },
     git: executableDescriptor('git'), externalInputs: externalInputs.map(externalDescriptor),
     components: [{ project: 'brain', path: 'board/render.mjs', profile: 'board-default-width/v1',
       shape_sha256: componentShape(tree.read('board/render.mjs'), 'board-default-width/v1').sha256,
@@ -105,9 +146,9 @@ export function checkDeployment(manifest, trusted) {
       if (!safePath(file) || hash(trusted(file, pin.mode, true)) !== pin.sha256) throw Error(`running boundary drift: ${file}`);
     }
     if (process.version !== manifest.node?.version || fs.realpathSync(process.execPath) !== manifest.node.path ||
-        hash(fs.readFileSync(process.execPath)) !== manifest.node.sha256 || hash(JSON.stringify(process.execArgv)) !== manifest.node.execArgv_sha256) throw Error('Node launcher drift');
+        hash(fs.readFileSync(process.execPath)) !== manifest.node.sha256 || JSON.stringify(process.execArgv) !== JSON.stringify(manifest.node.execArgv)) throw Error('Node launcher drift');
     if (JSON.stringify(executableDescriptor('git')) !== JSON.stringify(manifest.git)) throw Error('Git launcher drift');
-    if (JSON.stringify(loaderEnvironment()) !== JSON.stringify(manifest.environment)) throw Error('loader/environment drift');
+    checkEnvironment(manifest.environment);
     for (const descriptor of manifest.externalInputs) {
       if (JSON.stringify(externalDescriptor(descriptor.path)) !== JSON.stringify(descriptor)) throw Error(`external configuration drift: ${descriptor.path}`);
     }
@@ -150,6 +191,7 @@ export function manifestScope(before, after, { manifest, trusted, project = 'bra
       if (![change.before, change.after].every(regular)) return fail('GREEN_NATIVE_ISOLATION', `only regular non-executable component modifications qualify: ${change.file}`);
       const component = manifest.components.find(c => c.project === project && c.path === change.file);
       if (!component) return fail('GREEN_REACH_UNKNOWN', `outside reviewed component contracts: ${change.file}`);
+      if (!Array.isArray(component.validation) || !component.validation.length || component.validation.some(file => !safePath(file) || !file.endsWith('.test.mjs') || [before, after].some(tree => !regular(tree.files.get(file)?.mode)))) throw Error('missing component validation');
       if (component.lifecycle) throw Error('no protected lifecycle profile has been established');
       for (const tree of [before, after]) if (componentShape(tree.read(change.file), component.profile).sha256 !== component.shape_sha256) throw Error(`component boundary expanded: ${change.file}`);
       components.push({ path: change.file, profile: component.profile, before: componentShape(before.read(change.file), component.profile).width,
@@ -157,6 +199,7 @@ export function manifestScope(before, after, { manifest, trusted, project = 'bra
     }
     if (!components.length) throw Error('no reviewed component change');
     return { eligible: true, components, lifecycle: false,
+      requiredTests: [...new Set(components.flatMap(({ path }) => manifest.components.find(c => c.path === path).validation))].sort(),
       reach: { contract: 'reviewed-manifest/v2', paths: Object.keys(manifest.boundary) },
       authority: { paths: Object.keys(manifest.boundary).filter(file => manifest.boundary[file].role === 'promotion-authority') } };
   } catch (error) { return fail('GREEN_REACH_UNKNOWN', error.message); }

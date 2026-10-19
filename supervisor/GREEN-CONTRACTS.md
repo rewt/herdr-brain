@@ -28,7 +28,9 @@ launcher (`board/source.mjs`), validation (`board/rows.mjs`), host reads
 may run project-declared programs; this contract does not change their selection,
 argv, cwd, env, queue access or project targets. Changing them is ordinary work.
 No board output is interpreted as a command or promotion result. The focused
-validation is `test/board-view.test.mjs`; its body is ordinary test code, while
+validation is `test/board-view.test.mjs`, returned by scope and forwarded through
+autopilot and supervisor to the promotion queue as required tests, bypassing the
+affected-test planner's file/time deferral limits; its body is ordinary test code, while
 runners and result interpretation remain promotion authority. Ordinary tests are
 not implicitly admitted: this first component does not authorize editing them.
 There is no blanket documentation, evidence or test permission.
@@ -40,10 +42,14 @@ recoverability boundary before a genuine lifecycle candidate can qualify. The
 existing lifecycle artifact validator is retained; synthetic artifacts prove its
 validation rules, not permission to admit lifecycle code.
 
-## BCH mutable entry: reconcile-complete-batch/v1
+## BCH entry contract: reconcile-complete-batch/v1
 
-BCH invokes `supervisor/reconcile.mjs` from this checkout for promotion preparation,
-finish and refresh. Its full file and all runtime/configuration inputs are frozen.
+BCH's owner confirmed the installed current release as the configured ordinary
+`supervisor/reconcile.mjs` root for preparation and finish on 2026-10-19. The
+manual wrapper allows `HERDR_BRAIN_ROOT`; the optional reuse path uses
+`request.brain`. A checkout remains a supported alternate boundary, so reconcile
+and its full closure stay frozen. The Brain CLI also supports refresh; the BCH
+ordinary wrapper invokes only prepare/finish. Its full file and all runtime/configuration inputs are frozen.
 The Git wrapper calls the PATH-selected `git` executable, with `--no-optional-locks`
 and `-C` bound to the explicit canonical project. Calls perform status, ref,
 worktree and ancestry reads. `lib/project.mjs` also uses Git to resolve common-dir
@@ -57,7 +63,11 @@ Receipt paths and receipt JSON are data reads, not executable targets. The cwd i
 the explicitly verified canonical project; env inherits the launching environment
 and sets `ORG_DIR` to that project's explicit discovered record and `ORG_ACTOR` to
 the inherited actor or `supervisor-completion`. Encoding and timeout are fixed.
-The Node executable/version/digest and loader environment are manifest pins.
+Brain admission binds its Node 20.19.4 executable/version/digest. BCH selects its
+own Node 22.22.3; no claim is made that BCH uses Brain's Node launcher. Loader
+injection keys must be absent in Brain admission; launcher/configuration inputs
+remain frozen. The existing reconcile child inherits its caller environment;
+this amendment does not rewrite that BCH seam.
 Native settings remain owned by the harness; this implements no permissions.
 
 `bin/org.mjs` eagerly imports project, fleet, release selection, store, fold,
@@ -87,18 +97,47 @@ relevant route/config files are external version pins. Immutable release consume
 receive changes only through the existing switch candidate's release suites, live
 acceptance and BCH seam checks. Missing or changed inputs mean ordinary handling.
 
-BCH's other declared consumer, `contrib/settle-watch.mjs`, runs from the installed
-immutable release with its existing `--model` and `--effort` flags. It is not a
-second mutable checkout entry. Its source and release shipping remain frozen.
-The supervisor must reconfirm this consumer inventory before bootstrap/activation;
-a trace can falsify it but absence from a trace never grants eligibility.
+The owner-confirmed direct inventory is recorded in
+[the confirmation](../docs/evidence/ENG-396/R-570/bch-confirmation.txt) and
+[the structured inventory](../docs/evidence/ENG-396/R-570/bch-consumers.json):
+
+| Entry | BCH use |
+| --- | --- |
+| `bin/org.mjs` | auto-promote check/ingest; PATH `org` and `org-guarded` also forward record commands; transitive complete-batch and worker recording |
+| `promote/promote.mjs` | auto-promote queue, expected head and current run |
+| `dispatch/record-worker.mjs` | dispatch and continuation worker identity recording |
+| `supervisor/reconcile.mjs` | ordinary and explicit reuse prepare/finish |
+| `contrib/settle-watch.mjs` | installed watcher with routing-selected `--model`, `--effort`, `--lane-config` |
+| `lib/store.mjs` | auto-promote/review receipt/pre-window record reads |
+| `lib/state.mjs` | auto-promote/review receipt/pre-window fold and derived state |
+| `lib/report.mjs` | auto-promote report parsing |
+| `lib/roles.mjs` | pre-window role checks |
+| `lanes/validation.mjs` | conditional explicit reuse `validateTree` API |
+
+The observed current alias resolved to
+`rc-20261019T042359000Z-cc585d9f33`, Brain commit
+`cc585d9f334c9842b459ef2b7ff3f693d57eb08b`. BCH has no project release pin.
+The installed promotion launcher removes both alternate-root selectors with its
+`env -i` allowlist; auto-promote strips `HERDR_BRAIN_ROOT`. The observed supervisor
+process and LaunchAgent supplied neither selector. No live reconcile was running
+at capture, so this is configured-root evidence, not a historical execution trace.
+It corrects older checkout-root wording, including AGENTS.md's description.
+
+All ten entries appear in `externalConsumers`; their transitive closures remain
+frozen. Manual/reuse alternate roots require the same frozen boundary or ordinary
+handling. The validation-reuse adapter's hash walks over lanes/lib/test-slot are
+data reads, not additional executable entries. Immutable release consumption and
+`contrib/` plus `lib/cli-help.mjs` shipping remain intact. A future switch still
+requires release suites, live acceptance and BCH seam checks. Before activation,
+the supervisor reconfirms that this captured consumer/root inventory still holds.
 
 ## Promotion authority and unresolved edges
 
 The manifest separately labels the code selecting checks, interpreting results,
 validating review/receipt evidence, authorizing promotion and selecting execution
 targets: `supervisor/autopilot.mjs`, supervisor handle/notice glue, `settle/`,
-`promote/`, `lanes/validation.mjs`, `test/helpers/` and `acceptance/`. Other supporting
+`promote/`, `.lane.validation.json`, `.promotion-selector.json`, `package.json`,
+`lanes/validation.mjs`, `test/helpers/` and `acceptance/`. Other supporting
 runtime/configuration files are frozen without claiming every ordinary module or
 test is promotion authority. None can be changed through this cohort. Bootstrap
 files compare against captured trusted bytes, avoiding circular hashes; all other
@@ -115,7 +154,19 @@ reach requires ordinary contract review and a new manifest.
 
 The reviewed external inputs list binds canonical Git configuration, relevant
 project and ancestor route/configuration, fleet, release pins and the Git launcher.
-Mutable event/queue/receipt *data* is not hashed as configuration. Activation time
-is supervisor configuration, outside the candidate; it expires after ten days.
+Mutable event/queue/receipt *data* is not hashed as configuration. The environment
+policy is plain text: HOME, XDG_CONFIG_HOME and HERDR_MONITOR_FLEET select pinned
+configuration; NODE_OPTIONS/NODE_PATH and DYLD_/LD_ injection must be absent.
+Harness-specific GIT_ and NODE_ keys are not session hash pins. Checker Git and
+autopilot Node children strip GIT_/NODE_/DYLD_/LD_ selectors and ORG_ overrides,
+use the reviewed Node/Git directories plus HOME/.local/bin and fixed system bins,
+and receive the explicit record/actor. Git and Node executables remain byte pinned.
+The running Node's execArgv is also bound as a readable array.
+
+Activation is the first append-only `note.added` event whose exact text is
+`green-activation/v1 MANIFEST_SHA256`, in the manifest Brain record. Its event
+`at` must equal configured `activatedAt`; missing evidence, torn records and later
+reset timestamps refuse. Repeating the note cannot restart the ten-day interim.
+The checker reads this evidence and never writes the event log.
 Any boundary drift, missing input, unknown component or foreign project returns
 to ordinary handling immediately. No mandatory tracing campaign is introduced.

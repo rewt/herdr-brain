@@ -8,11 +8,14 @@ import { createHash } from 'node:crypto';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { createGreenCohort, greenContractRefusal, GREEN_CONTRACTS, lifecycleEvidence, LIFECYCLE_CASES } from '../green-pass.mjs';
-import { buildManifest, BOOTSTRAP_FILES, INTERIM_MS, checkActivation } from '../green-manifest.mjs';
+import { buildManifest, BOOTSTRAP_FILES, INTERIM_MS, checkActivation, activationNote, recordedActivation } from '../green-manifest.mjs';
 import { sourceReach, executionClosure } from '../green-reach.mjs';
-import { autopilotNotice } from '../autopilot.mjs';
-import { fixture as settleFixture } from '../../settle/test/fixture.mjs';
+import { autopilotNotice, autopilotSettings } from '../autopilot.mjs';
 
+
+// The bounded runner policy is already loaded and continues containing every
+// child. Model the production parent's required-absent loader environment here.
+delete process.env.NODE_OPTIONS;
 const digest = value => createHash('sha256').update(value).digest('hex');
 const renderer = fs.readFileSync(new URL('../../board/render.mjs', import.meta.url), 'utf8');
 function setup(t, { binary = false } = {}) {
@@ -29,11 +32,17 @@ function setup(t, { binary = false } = {}) {
   fs.appendFileSync(path.join(repo, '.git/info/exclude'), '\n.org/\n.supervisor.json\n');
   put('.org/events.jsonl', '');
   for (const file of BOOTSTRAP_FILES) put(file, '// trusted bootstrap fixture\n');
-  for (const file of ['board/rows.mjs', 'board/board.mjs', 'supervisor/reconcile.mjs', 'bin/org.mjs', 'supervisor/autopilot.mjs', 'housekeeping/config.mjs', 'lib/state.mjs']) put(file, 'export const unchanged = true;\n');
+  for (const file of ['board/rows.mjs', 'board/board.mjs', 'supervisor/reconcile.mjs', 'bin/org.mjs', 'supervisor/autopilot.mjs', 'housekeeping/config.mjs', 'lib/state.mjs', 'dispatch/record-worker.mjs', 'contrib/settle-watch.mjs']) put(file, 'export const unchanged = true;\n');
+  for (const file of ['.lane.validation.json', '.promotion-selector.json', 'package.json']) put(file, '{}');
   put('test/board-view.test.mjs', '// ordinary tests, not promotion authority\n');
   put('board/render.mjs', renderer);
+  const record = args => {
+    const result = spawnSync(process.execPath, [new URL('../../bin/org.mjs', import.meta.url).pathname, ...args], { cwd: repo, encoding: 'utf8', env: { ...process.env, ORG_DIR: path.join(repo, '.org'), ORG_ACTOR: 'green-fixture' } });
+    assert.equal(result.status, 0, result.stderr || result.stdout); return result.stdout.trim();
+  };
+  const item = record(['add', 'Offline renderer', '--role', 'engineer']).split(' ')[0];
   const brain = { repo, identity: gitProject(repo).identity, org: path.join(repo, '.org') };
-  const sourceFiles = new Map(BOOTSTRAP_FILES.concat(['board/render.mjs', 'board/rows.mjs', 'board/board.mjs', 'supervisor/reconcile.mjs', 'bin/org.mjs', 'supervisor/autopilot.mjs', 'housekeeping/config.mjs', 'lib/state.mjs', 'test/board-view.test.mjs']).map(file => [file, { mode: '100644' }]));
+  const sourceFiles = new Map(BOOTSTRAP_FILES.concat(['.lane.validation.json', '.promotion-selector.json', 'package.json', 'board/render.mjs', 'board/rows.mjs', 'board/board.mjs', 'supervisor/reconcile.mjs', 'bin/org.mjs', 'supervisor/autopilot.mjs', 'housekeeping/config.mjs', 'lib/state.mjs', 'dispatch/record-worker.mjs', 'contrib/settle-watch.mjs', 'test/board-view.test.mjs']).map(file => [file, { mode: '100644' }]));
   if (binary) { put('lib/native/launcher', Buffer.from([0xcf, 0xfa, 0, 0xfe])); fs.chmodSync(path.join(repo, 'lib/native/launcher'), 0o755); sourceFiles.set('lib/native/launcher', { mode: '100755' }); }
   const external = path.join(root, 'launcher.json'); fs.writeFileSync(external, '{}');
   const manifest = { ...buildManifest({ files: sourceFiles, bytes: file => fs.readFileSync(path.join(repo, file)), read: file => fs.readFileSync(path.join(repo, file), 'utf8') }, { bindings: { brain }, externalInputs: [external] }), exclusions: GREEN_CONTRACTS.exclusions };
@@ -41,20 +50,26 @@ function setup(t, { binary = false } = {}) {
   git(['add', '.']); git(['commit', '-qm', 'Reviewed bootstrap fixture']);
   const base = git(['rev-parse', 'HEAD']); git(['worktree', 'add', '-qb', 'lane/change', workspace]);
   const bindings = { brain, lab: null, activatedAt: new Date().toISOString() }, checker = createGreenCohort(repo);
+  const activate = () => {
+    const bytes = fs.readFileSync(path.join(repo, 'supervisor/green-contracts.json'));
+    record(['note', item, activationNote(digest(bytes))]);
+    bindings.activatedAt = recordedActivation(brain.org, digest(bytes));
+  };
+  activate();
   const options = () => ({ ...brain, workspace, base, head: git(['rev-parse', 'HEAD'], workspace), bindings, run: 'R-1' });
   const change = (file = 'board/render.mjs', bytes = renderer.replace('width = 120,', 'width = 121,')) => {
     put(file, bytes, workspace); git(['add', '.'], workspace); git(['commit', '-qm', 'Candidate'], workspace); return git(['rev-parse', 'HEAD'], workspace);
   };
-  return { root, repo, workspace, brain, bindings, base, checker, options, manifest, put, git, change, external,
+  return { root, repo, workspace, brain, bindings, base, record, item, activate, checker, options, manifest, put, git, change, external,
     scope: (extra = {}) => checker.scope({ ...options(), ...extra }) };
 }
 
 test('raw binary launcher pins and Git selector environment changes preserve containment', t => {
   const f = setup(t, { binary: true }); f.change(); const opts = f.options();
   assert.equal(f.scope().eligible, true);
-  for (const key of ['GIT_CONFIG_SYSTEM', 'GIT_R566_NEW_SELECTOR']) {
+  for (const key of ['GIT_CONFIG_SYSTEM', 'GIT_CONFIG_COUNT', 'GIT_PAGER', 'GIT_R566_NEW_SELECTOR', 'NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S']) {
     const prior = process.env[key];
-    try { process.env[key] = '/unreviewed/config'; assert.equal(f.checker.scope(opts).code, 'GREEN_REACH_UNKNOWN'); }
+    try { process.env[key] = '/unreviewed/config'; assert.equal(f.checker.scope(opts).eligible, true); assert.equal(f.checker.environment()[key], undefined); }
     finally { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; }
   }
   assert.equal(f.scope().eligible, true);
@@ -65,6 +80,8 @@ test('a real committed renderer candidate qualifies under a candidate-immutable 
   const f = setup(t); f.change(); const result = f.scope();
   assert.equal(result.eligible, true, JSON.stringify(result)); assert.equal(result.area, 'green');
   assert.deepEqual(result.manifest.components, [{ path: 'board/render.mjs', profile: 'board-default-width/v1', before: 120, after: 121 }]);
+  assert.deepEqual(result.requiredTests, ['test/board-view.test.mjs']);
+  assert.ok(result.authority.paths.includes('.lane.validation.json')); assert.ok(result.authority.paths.includes('.promotion-selector.json'));
   assert.equal(f.manifest.bindings.lab, null); assert.ok(!f.manifest.boundary['test/board-view.test.mjs']);
 });
 for (const bytes of [
@@ -79,8 +96,10 @@ for (const bytes of [
   const f = setup(t); f.change('board/render.mjs', bytes); assert.equal(f.scope().code, 'GREEN_REACH_UNKNOWN');
 });
 for (const [file, code] of [
+  ...['.lane.validation.json', '.promotion-selector.json', 'package.json'].map(file => [file, 'GREEN_SELF_AUTHORITY']),
   ['supervisor/green-contracts.json', 'GREEN_SELF_AUTHORITY'], ['supervisor/green-pass.mjs', 'GREEN_SELF_AUTHORITY'],
   ['supervisor/green-manifest.mjs', 'GREEN_SELF_AUTHORITY'], ['supervisor/GREEN-CONTRACTS.md', 'GREEN_SELF_AUTHORITY'],
+  ['dispatch/record-worker.mjs', 'GREEN_BCH_CONSUMED'], ['contrib/settle-watch.mjs', 'GREEN_BCH_CONSUMED'],
   ['supervisor/autopilot.mjs', 'GREEN_SELF_AUTHORITY'], ['supervisor/reconcile.mjs', 'GREEN_BCH_CONSUMED'],
   ['blue/hotfix.mjs', 'GREEN_BLUE_HOTFIX'], ['discovery/native-sandbox.mjs', 'GREEN_NATIVE_ISOLATION'],
   ['test-slot/ticket-queue.mjs', 'GREEN_HOST_RESOURCE'], ['sessions/authorization.mjs', 'GREEN_CROSS_PROJECT_AUTHORITY'],
@@ -118,7 +137,7 @@ test('an absent external configuration appearing later invalidates the reviewed 
   const f = setup(t); const missing = path.join(f.root, 'new-config.json');
   f.manifest.externalInputs.push({ path: missing, sha256: null });
   f.put('supervisor/green-contracts.json', JSON.stringify(f.manifest)); f.git(['add', '.']); f.git(['commit', '-qm', 'Ordinary reviewed absence']);
-  f.git(['rebase', 'main'], f.workspace); const checker = createGreenCohort(f.repo); f.change();
+  f.git(['rebase', 'main'], f.workspace); const checker = createGreenCohort(f.repo); f.activate(); f.change();
   const base = f.git(['rev-parse', 'main']);
   assert.equal(checker.scope({ ...f.options(), base }).eligible, true);
   fs.writeFileSync(missing, '{}'); assert.equal(checker.scope({ ...f.options(), base }).eligible, false);
@@ -177,29 +196,61 @@ for (const damage of ['none', 'missing', 'digest', 'stale-head', 'failed', 'syml
   else assert.throws(call);
 });
 
-test('live autopilot retains clean PASS and existing-worker promotion for a manifest renderer', t => {
-  const brain = setup(t), f = settleFixture(t), project = gitProject(f.repo);
-  // This separate cycle fixture isolates the existing settlement/receipt glue.
-  // Production containment itself is exercised above with real Git candidates.
-  fs.writeFileSync(path.join(f.repo, 'work.txt'), 'correct\n'); f.git(['add', 'work.txt']); f.git(['commit', '-qm', 'Seed review claim']); f.git(['rebase', 'main'], f.workspace);
-  fs.writeFileSync(path.join(f.workspace, 'work.txt'), 'correct candidate\n'); f.git(['add', 'work.txt'], f.workspace); f.git(['commit', '-qm', 'Candidate'], f.workspace);
-  fs.appendFileSync(path.join(f.repo, '.git/info/exclude'), '\n.supervisor.json\n');
-  fs.writeFileSync(path.join(f.repo, '.supervisor.json'), JSON.stringify({ autopilot: { enabled: true, cohort: 'green-pass', green: brain.bindings } }));
-  const run = f.start(); f.report(run); f.record(['ingest', f.show(run).report_path]);
-  const config = JSON.parse(fs.readFileSync(path.join(f.org, 'config.json'))); config.approvals.categories.tooling = 'auto'; fs.writeFileSync(path.join(f.org, 'config.json'), JSON.stringify(config));
-  const entry = { id: 'green-report', to: 'supervisor-test', project: { repo: f.repo, org: f.org, identity: project.identity }, message: `[org-report] run=${run} item=${f.show(run).item} outcome=done headline=Changed` };
-  const calls = [];
-  const execute = (_file, args) => {
-    calls.push(args); if (args[0] === 'promote') return JSON.stringify({ phase: 'acknowledged' });
-    const head = f.git(['rev-parse', 'HEAD'], f.workspace), text = '## Findings\nNone\n\n## Analysis\nIndependent PASS.\n';
+for (const mode of ['admit', 'refuse', 'cohort-change', 'binding-change']) test(`autopilot drives the real green checker: ${mode}`, t => {
+  const f = setup(t); f.change('board/render.mjs', mode === 'refuse' ? renderer + 'import(spec);\n' : renderer.replace('width = 120,', 'width = 121,'));
+  const settings = { autopilot: { enabled: true, cohort: 'green-pass', green: structuredClone(f.bindings) } };
+  const configFile = path.join(f.repo, '.supervisor.json'); fs.writeFileSync(configFile, JSON.stringify(settings));
+  const run = f.record(['start', f.item, '--workspace', f.workspace]).match(/R-\d+/)[0];
+  const runInfo = JSON.parse(f.record(['show', run, '--json']));
+  fs.writeFileSync(runInfo.report_path, `---\nrun: ${run}\noutcome: done\nsummary: Renderer change\nheadline: Renderer changed\nblockers: []\n---\n`);
+  f.record(['ingest', runInfo.report_path]);
+  const config = { approvals: { categories: { tooling: 'auto' } } }; fs.writeFileSync(path.join(f.brain.org, 'config.json'), JSON.stringify(config));
+  const entry = { id: 'green-report', to: 'supervisor-test', project: f.brain, message: `[org-report] run=${run} item=${f.item} outcome=done headline=Changed` };
+  const calls = [], scopes = [];
+  const execute = (_file, args, options) => {
+    calls.push({ args, options }); if (args[0] === 'promote') return JSON.stringify({ phase: 'acknowledged' });
+    const head = f.git(['rev-parse', 'HEAD'], f.workspace), text = '## Findings\nNone\n\n## Analysis\nOffline independent-review stand-in.\n';
     const review = { verdict: 'PASS', text, sha256: digest(text), path: path.join(f.workspace, 'docs/reviews/green.md') };
     const result = { result: 'promotable', run, head, reviewed_commit: head, review };
-    fs.mkdirSync(path.join(f.org, 'settle'), { recursive: true }); fs.writeFileSync(path.join(f.org, 'settle', run + '.json'), JSON.stringify({ common: project.identity, org: f.org, run, stage: 'complete', head, finalHead: head, mainHead: f.git(['rev-parse', 'main']), review, result }));
+    fs.mkdirSync(path.join(f.brain.org, 'settle'), { recursive: true }); fs.writeFileSync(path.join(f.brain.org, 'settle', run + '.json'), JSON.stringify({ common: f.brain.identity, org: f.brain.org, run, stage: 'complete', head, finalHead: head, mainHead: f.base, review, result }));
     return JSON.stringify(result);
   };
-  const green = { identity: () => project, scope: () => ({ eligible: true, cohort: 'green-pass', area: 'green' }) };
-  const result = autopilotNotice(entry, { execute, nativeWorker: () => ({ pid: 1 }), green });
-  assert.equal(result.disposition, 'handled', fs.readFileSync(result.receipt, 'utf8')); assert.deepEqual(calls.map(args => args[0]), ['handle', 'promote']); assert.ok(calls[1].includes('--existing-worker'));
+  // Observe the actual inputs while delegating all eligibility to the checker.
+  const green = { ...f.checker, scope: options => { const result = f.checker.scope(options); scopes.push({ options, result }); return result; } };
+  const result = autopilotNotice(entry, { execute, nativeWorker: () => {
+    if (mode === 'cohort-change') { settings.autopilot = { enabled: true, cohort: 'clean-pass' }; fs.writeFileSync(configFile, JSON.stringify(settings)); }
+    if (mode === 'binding-change') { settings.autopilot.green.brain.org = f.root; fs.writeFileSync(configFile, JSON.stringify(settings)); }
+    return { pid: 1 };
+  }, green });
+  const receipt = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(result.disposition, mode === 'admit' ? 'handled' : 'wake', JSON.stringify(receipt));
+  assert.equal(receipt.exception, mode === 'refuse' ? 'GREEN_REACH_UNKNOWN' : mode === 'cohort-change' ? 'AUTOPILOT_COHORT_CHANGED' : mode === 'binding-change' ? 'GREEN_IDENTITY_MISMATCH' : undefined);
+  assert.ok(scopes.length);
+  for (const { options } of scopes) {
+    assert.deepEqual(options.bindings, f.bindings); assert.equal(options.run, run); assert.equal(options.report.outcome, 'done');
+    assert.equal(options.reportRoot, path.dirname(runInfo.report_path));
+  }
+  if (mode === 'admit') {
+    assert.deepEqual(calls.map(call => call.args[0]), ['handle', 'promote']);
+    const args = calls[1].args; assert.ok(args.includes('--existing-worker'));
+    assert.deepEqual(JSON.parse(args[args.indexOf('--required-tests') + 1]), ['test/board-view.test.mjs']);
+    assert.equal(calls[1].options.env.NODE_OPTIONS, undefined); assert.equal(calls[1].options.env.GIT_CONFIG_COUNT, undefined);
+  } else assert.ok(!calls.some(call => call.args[0] === 'promote'));
+});
+test('clean-pass rejects a green configuration key', t => {
+  const f = setup(t);
+  fs.writeFileSync(path.join(f.repo, '.supervisor.json'), JSON.stringify({ autopilot: { enabled: true, cohort: 'clean-pass', green: f.bindings } }));
+  assert.throws(() => autopilotSettings(f.repo), /autopilot.enabled/);
+});
+test('first activation for a manifest digest cannot be restarted by configuration or a later note', t => {
+  const f = setup(t); f.change();
+  const first = f.bindings.activatedAt;
+  f.activate(); assert.equal(f.bindings.activatedAt, first);
+  assert.equal(f.scope().eligible, true);
+  const changed = structuredClone(f.bindings); changed.activatedAt = new Date(Date.parse(first) + 1).toISOString();
+  assert.equal(f.scope({ bindings: changed }).code, 'GREEN_EXPIRED');
+  assert.throws(() => recordedActivation(f.brain.org, 'f'.repeat(64)), /no recorded activation/);
+  assert.throws(() => checkActivation(first, Date.parse(first) + INTERIM_MS, first), /GREEN_EXPIRED/);
 });
 
 test('source scanning never executes a candidate and follows literal loads inside templates', () => {

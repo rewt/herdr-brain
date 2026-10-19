@@ -111,3 +111,5 @@ if (worker) {
   child.once('exit', () => { if (!finished) finish(1); });
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => finish(1));
 }
+
+// R-566 refusal control

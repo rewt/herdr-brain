@@ -124,7 +124,7 @@ export function housekeepingCommand(argv) {
     if (!positionals.length && !Object.keys(patch).length && !values.unset && values.expect === undefined) result = housekeepingSnapshot();
     else if (positionals.length === 1 && positionals[0] === 'pause' && !Object.keys(patch).length && !values.unset) result = setHousekeeping({ enabled: false }, { expect: values.expect });
     else if (positionals.length === 1 && positionals[0] === 'set' && (Object.keys(patch).length || values.unset?.length)) result = setHousekeeping(patch, { expect: values.expect, unset: values.unset });
-    else throw Error('usage: record housekeeping [--json] | pause [--expect REV] | set --enabled true|false --resume true|false --tick-seconds N --cleanup-seconds N [--unset KEY] [--expect REV]');
+    else throw Error('usage: record housekeeping [--json] | pause [--expect REV] | set --enabled true|false --resume true|false --release-sessions true|false --tick-seconds N --cleanup-seconds N [--unset KEY] [--expect REV]');
     process.stdout.write(values.json ? JSON.stringify(result, null, 2) + '\n' : renderHousekeeping(result));
     return 0;
   } catch (error) { throw new UserError(error.message); }

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-export const DEFAULTS = Object.freeze({ enabled: true, resume: true, tick_seconds: 60, cleanup_seconds: 600 });
+export const DEFAULTS = Object.freeze({ enabled: true, resume: true, tick_seconds: 60, cleanup_seconds: 600, release_sessions: true });
 export const FIELDS = Object.keys(DEFAULTS);
 
 export function validateConfig(config) {

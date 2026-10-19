@@ -37,8 +37,13 @@ remain supported.
 The detached process is a timer, not an agent: tidy finished tabs and resume every
 60 seconds, with settled-lane cleanup on startup and every 600 seconds. Every
 tick runs `supervisor/tidy-tabs.mjs` through the same pure retirement planner
-and guarded executor as settled cleanup. Ingested reports keep their pane while
-review, correction, integration or a live resource reference can return to it.
+and guarded executor as settled cleanup. The default-on `release_sessions` policy
+releases a recorded reviewer after its PASS verdict, and a worker after its exact
+run's PASS is consumed by landed integration or a confirmed different successor
+is retained. This does not wait for the item's other children to finish.
+NEEDS-WORK, a reused pane/terminal/session, mismatched identity, HOLD and live
+references keep the session. Other ingested reports keep their pane while
+review, correction or integration can return to it.
 Unrecorded reviews, sessions and watcher shells stay. See the exact eligibility
 and generic reference contract in [the supervisor README](../supervisor/README.md#safe-retirement).
 Tidy failures are logged and do not prevent recovery or subsequent ticks.
@@ -48,6 +53,16 @@ a request written during apply remains pending, as does a request under the
 project HOLD. A preview never acknowledges a request. No schedule is added.
 Dry-run previews the plan without closing tabs or removing worktrees, including
 `would-remove-lane` rows for eligible integrated lanes.
+The policy uses the same guarded transaction as `record pane-release`, recording
+its authority, exact session/terminal/pane/head and evidence before retirement.
+It never removes an open Git lane. The existing exit receipt closes an unchanged
+bare shell; a freshly verified empty workspace closes with its last tab while
+its worktree and branch remain available. A failed close is retryable.
+
+To disable these automatic per-run releases, run
+`record housekeeping set --release-sessions false`. This writes the canonical
+project's `.housekeeping.json`; `--unset release_sessions` restores the default.
+Malformed policy settings keep the project. The setting changes no schedule.
 Each canonical live cleanup pass also refreshes the owner's
 [`record summary`](../docs/PROJECT-SUMMARY.md), reusing its observed retirement
 snapshot after cleanup and recovery. Recovery-only ticks, scoped checks and dry-run
@@ -95,7 +110,7 @@ for canonical-supervisor startup and the manual one-time backlog procedure.
   Both identities are checked when recorded. Legacy runs missing pane, workspace,
   cwd or occupant identity are preserved; session registry data cannot fill it in.
 - Both per-tick and settled cleanup require report ingestion and a terminal chain,
-  or an explicit confirmed handoff to a retained successor. Pending promote,
+  an exact pane release, or an eligible per-run policy release. Pending promote,
   verify, host-slot, declared references and watcher callbacks keep panes.
 - Every occupant and process in a tab must qualify. The executor rechecks record,
   jobs, Git path/head/common directory, pane, terminal and native session against
@@ -156,7 +171,7 @@ remains in Git history).
 An optional `.housekeeping.json` in the canonical checkout overrides defaults:
 
 ```json
-{ "enabled": true, "resume": true, "tick_seconds": 60, "cleanup_seconds": 600 }
+{ "enabled": true, "resume": true, "tick_seconds": 60, "cleanup_seconds": 600, "release_sessions": true }
 ```
 
 Use the validating CLI from the project or one of its worktrees; it always targets
@@ -170,8 +185,9 @@ record housekeeping set --unset=resume
 ```
 
 `--unset KEY` may repeat and removes only the named override, restoring its default.
-`set` also accepts `--enabled=true|false`. Unknown keys, invalid booleans and intervals
-below one second are refused. Config is a JSON object with these four optional keys.
+`set` also accepts `--enabled=true|false` and `--release-sessions=true|false`.
+Unknown keys, invalid booleans and intervals below one second are refused. Config
+is a JSON object with these five optional keys.
 Writes reject symlinks, hardlinks and conflicting writers, preserve other overrides,
 and replace the file atomically. `--expect REV` rejects a stale revision from
 `record housekeeping --json`. The optional config belongs in Git; add and commit it

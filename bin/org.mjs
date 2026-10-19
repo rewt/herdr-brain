@@ -88,7 +88,7 @@ Runs and reports
   record sync                             record every report waiting at an open run's report path
   record handoff R-old --to R-new --confirm --why TEXT
                                           confirm a retained successor; reports stay immutable
-  record pane-release R-n --session S --terminal T --pane P --head SHA --authority TEXT --next TEXT --unresolved TEXT --evidence PATH... --confirm --why TEXT
+  record pane-release R-n [--reviewer] --session S --terminal T --pane P --head SHA --authority TEXT --next TEXT --unresolved TEXT --evidence PATH... --confirm --why TEXT
   record abandon <R-n> [--note T]         give up on a run (a later report is still accepted)
   record brief <R-n>                      print the brief a run was given
 

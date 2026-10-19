@@ -290,8 +290,24 @@ retirement, so unrecorded reviewer, session and watcher tabs stay.
 for one ingested run, binding its exact native session, terminal, pane, worker
 workspace, checkout and Git head. It can release the idle session's whole tab
 while its chain stays open; another kept occupant keeps the tab. It never releases
-a lane, worktree or workspace. BCH's `HOLD-WORKER-TAB-CLOSE` still holds it, and
-a same-pane or same-session continuation keeps the tab.
+a lane or worktree. BCH's `HOLD-WORKER-TAB-CLOSE` still holds it, and
+a same-pane, same-terminal or same-session continuation keeps the tab.
+
+The project `release_sessions` housekeeping policy defaults on. It applies this
+same pane-release transaction to reviewers with recorded PASS verdicts, and to
+workers whose exact run has a PASS consumed by `promotion.reconciled` or a
+confirmed retained successor with different pane, terminal and native session.
+Open sibling work does not retain those completed sessions. NEEDS-WORK retains
+both sessions pending correction/disposition. Reuse, missing or mismatched launch
+identity, HOLD and live references remain keeps in the lanes view. Turn off only
+these automatic releases with `record housekeeping set --release-sessions false`.
+No fold keys or session display metadata grant this authority.
+Settle reviewers have no separate worker run: after validating and publishing the
+review, lane review records immutable `retirement.reviewed` evidence bound to its
+launch receipt. Their pane release uses `--reviewer` to bind that exact occupant;
+it cannot release the worker. Unknown legacy reviewers stay kept.
+After guarded tab closure the executor can close an empty policy-released native
+workspace; its Git worktree, branch and open item chain remain intact.
 
 Short-lived watcher and settle/executive/plan launches can write a mechanical
 `retirement-occupant/v1` receipt under `ORG/retirement/occupants/`. It binds the

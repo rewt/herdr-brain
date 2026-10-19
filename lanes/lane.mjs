@@ -2342,6 +2342,14 @@ async function review(topic, args, memoryChecked = false) {
       fail("mutation after public review creation caused late publication failure; inspect retained evidence before recovery");
     }
     if (Date.now() > deadline) fail("review timed out after public review creation; inspect retained evidence before recovery");
+    if (options.run) try {
+      createRetirement({ cwd: REPO_ROOT, main: MAIN, deadline: Math.min(deadline, Date.now() + 10000) }).recordReviewVerdict({
+        pane: session.pane, run: options.run, verdict: parsed.verdict, head, evidence: publicPath,
+        sha256: createHash('sha256').update(publicRecord).digest('hex'),
+      });
+    } catch (error) {
+      process.stderr.write(`lane review: warning: verdict release evidence could not be recorded (${error.message}); tab retained\n`);
+    }
     process.stderr.write(`lane review: private review: ${privatePath}\n`);
     process.stderr.write(`lane review: public review: ${publicPath}\n`);
     process.stdout.write(`${parsed.verdict}\n`);

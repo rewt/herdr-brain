@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tierFiles } from './helpers/tier.mjs';
+import { releasePhases } from './helpers/release-suites.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 test('tier selection covers every current test once in promotion or release and excludes support modules', () => {
@@ -26,6 +27,20 @@ test('tier selection covers every current test once in promotion or release and 
   assert.ok(!tierFiles('fast', root).includes('lanes/test/validation.test.mjs'));
   assert.ok(tierFiles('fast', root).every(file => promotion.includes(file)));
   assert.throws(() => tierFiles('unknown', root), /unknown test tier/);
+});
+
+test('split lane CLI files keep release placement and individual suite deadlines', () => {
+  const files = ['lanes/test/lane.test.mjs', 'lanes/test/lane-dispatch.test.mjs', 'lanes/test/lane-review.test.mjs'];
+  const release = tierFiles('release', root);
+  const phases = releasePhases(release);
+  for (const file of files) {
+    assert.equal(release.filter(candidate => candidate === file).length, 1);
+    assert.deepEqual(phases.filter(([, rows]) => rows.includes(file)).map(([, rows]) => rows), [[file]]);
+    for (const tier of ['fast', 'promotion', 'lanes']) assert.ok(!tierFiles(tier, root).includes(file));
+  }
+  for (const tier of ['fast', 'promotion', 'release', 'lanes']) {
+    assert.ok(!tierFiles(tier, root).includes('lanes/test/lane-fixture.mjs'));
+  }
 });
 
 test('a module folder removed from the planned tree contributes no tests instead of failing the plan', () => {

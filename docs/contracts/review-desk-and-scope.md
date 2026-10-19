@@ -4,7 +4,8 @@ Schema: `brain.review-scope/v1`. Owner: **supervisor-herdr**. **opus accepts BCH
 parity; Astra accepts this contract. State: proposed until Astra accepts it.**
 Implementation evidence is the ENG-443 lane commit introducing this file (resolve
 with `git log --diff-filter=A -1 --format=%H -- docs/contracts/review-desk-and-scope.md`)
-and run R-599's report. This document does not activate BCH or retire its scripts.
+and the reports for runs R-599 and R-603 (including the rebase correction). This document
+does not activate BCH or retire its scripts.
 
 ## Brain semantics
 
@@ -24,7 +25,8 @@ An earlier run's report cannot authorize settlement after a newer run supersedes
 
 `reviewScope({ workspace, base, head, artifacts })` in `settle/review-range.mjs`
 uses only read-only Git and no record access. Settle passes its captured main
-commit as `base` and the captured lane tip as `head`. The returned `base` is their
+commit as `base` and the captured lane tip as `head`, preserving both as
+`job.deliveryRange` before any settle-applied rebase. The returned `base` is their
 merge-base; `commits` is `git rev-list <mainHead>..<head>`. This includes pre-merge
 lane commits when the lane has merged main, and excludes main-only commits when
 main advanced after the fork. The run's `start_head` never selects the range.
@@ -79,9 +81,16 @@ review session launches. When available, `review_scope` is additive in the finis
 result and escalation handoff JSON. There is no new flag, notice format or exit
 code. Readers ignore extra fields; older receipts may omit the field. This is an
 internally generated receipt, not an arbitrary external-document ingestion API.
-Breaking semantics require a new schema. Review entry recomputes scope on retries,
-including an unreviewed head replayed after main moves; a prior scope receipt
-cannot authorize a reviewer for different commits.
+Breaking semantics require a new schema. Scope remains bound to the original
+report-time range when settle rebases an unreviewed head after main moves: its
+applied rebase receipt proves the replayed tree preserves the delivery. Both
+explicit retries and the automatic base-move retry retain original delivery
+claims, while independent review binds the new head and diff. Review entry
+computes scope only for journals without a scope receipt, using `deliveryRange`
+or recovering the original base/source from applied tree-preserving replay
+receipts in older journals. A journal without either uses its captured current
+range. Existing HEAD/branch/clean checks still reject changes made outside settle;
+a scope receipt never authorizes such a change.
 
 ## BCH mapping and deliberate differences
 
@@ -125,7 +134,10 @@ does not authorize promotion, push, deletion or release.
 
 Offline coverage also includes advanced-main merge-base edges, main merged into
 the lane, rebased delivery versus an old tested implementation, abbreviated IDs,
-unknown claims, non-commit objects and token boundaries. The promotion inventory
-includes this fixture file; `test/contracts-conformance.test.mjs` has a named
+unknown claims, non-commit objects and token boundaries. It also covers
+SHA-bearing delivery reports through explicit and automatic main-move
+retries, older journals across repeated proved replays, and external lane changes.
+The promotion inventory includes this fixture file;
+`test/contracts-conformance.test.mjs` has a named
 `brain.review-scope/v1` witness and explicitly skips installed bundles predating
 the writer. No BCH files, notices or compatibility entrypoints change here.

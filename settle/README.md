@@ -65,13 +65,17 @@ run supersession checks before review resumes.
 Only that run's own done outcome is reopened while review is pending.
 
 Before launching a reviewer, settle checks delivered-commit claims in the report's
-`artifacts` against `mainHead..head` and saves a `brain.review-scope/v1` receipt as
-`review_scope` in its result and any scope handoff. Use `Commit: SHA`, `HEAD: SHA`,
-`Branch head: SHA`, or a bare SHA (optionally `on lane/topic`) for delivery claims.
+`artifacts` against the originally captured `mainHead..head` and saves a
+`brain.review-scope/v1` receipt as `review_scope` in its result and any scope
+handoff. Use `Commit: SHA`, `HEAD: SHA`, `Branch head: SHA`, or a bare SHA
+(optionally `on lane/topic`) for delivery claims.
 An outside or unresolved claim escalates with `named-commit-outside-range` or
 `named-commit-unresolved`. Bases, tested implementations, earlier rounds, quoted
 commands, paths and prose remain informational; HEAD is bound mechanically and
-need not be named. The [review desk and scope contract](../docs/contracts/review-desk-and-scope.md)
+need not be named. Settle's proved rebases preserve this original delivery scope,
+including claims naming the worker's original commit; independent review binds
+the replayed head. External lane changes still fail the HEAD and clean checks.
+The [review desk and scope contract](../docs/contracts/review-desk-and-scope.md)
 records the BCH mapping and the parity/activation work still required.
 
 Ingest and reopen use the record CLI's optional `--if-current-run R-n` guard,

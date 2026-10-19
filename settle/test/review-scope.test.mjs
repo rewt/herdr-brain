@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { reviewScope } from '../review-range.mjs';
 import { readReport } from '../../lib/report.mjs';
 import { fixture } from './fixture.mjs';
+import { moveMainOnSave } from './auto-retry-fixture.mjs';
 
 function history(t) {
   const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'review-scope-')));
@@ -142,20 +143,87 @@ test('R-2444 replay: a continuation without lane metadata and quoted in-range ar
   assert.equal(f.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt' && args[3]?.includes('Private record file: ')).length, 1);
 });
 
-test('settle rechecks scope when a retry recaptures main and replays an unreviewed head', t => {
+const receipt = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
+const reviews = f => f.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt' && args[3]?.includes('Private record file: '));
+function advance(f, file = 'upstream') {
+  fs.writeFileSync(path.join(f.repo, file), 'main advanced\n');
+  f.git(['add', file]); f.git(['commit', '-qm', 'Advance main']);
+}
+
+test('settle preserves delivery claims when a retry recaptures main and replays an unreviewed head', t => {
   const f = fixture(t), run = f.start(); f.commit('correct\n');
   const delivered = f.git(['rev-parse', 'HEAD'], f.workspace);
   f.report(run, 'done', { artifacts: [`Commit: ${delivered}`] });
   const marker = path.join(f.root, 'review-fail'); fs.writeFileSync(marker, 'fail');
   assert.equal(f.settle(run).status, 1);
-  const launches = f.calls().filter(args => args[1] === 'start').length;
+  const original = receipt(f, run).reviewScope;
+  assert.equal(reviews(f).length, 1);
   fs.unlinkSync(marker);
-  fs.writeFileSync(path.join(f.repo, 'upstream'), 'main advanced\n');
-  f.git(['add', 'upstream']); f.git(['commit', '-qm', 'Advance main']);
+  advance(f);
   const result = settled(f.retry(run, ['--review-again']));
-  assert.equal(result.result, 'escalate'); assert.equal(result.review, null);
-  assert.equal(result.review_scope.deferred, 'named-commit-outside-range');
-  assert.deepEqual(result.review_scope.outside, [delivered]);
-  assert.notEqual(result.review_scope.head, delivered);
-  assert.equal(f.calls().filter(args => args[1] === 'start').length, launches, 'no second reviewer launches');
+  const saved = receipt(f, run);
+  assert.equal(result.result, 'promotable'); assert.equal(result.review.verdict, 'PASS');
+  assert.deepEqual(result.review_scope, original); assert.equal(result.review_scope.deferred, null);
+  assert.deepEqual(result.review_scope.claims, [delivered]); assert.deepEqual(result.review_scope.outside, []);
+  assert.equal(result.review_scope.head, delivered); assert.notEqual(saved.head, delivered);
+  assert.equal(saved.rebase.from, delivered); assert.equal(saved.rebase.to, result.reviewed_commit);
+  assert.equal(saved.rebase.state, 'applied'); assert.equal(saved.rebase.expected_tree, saved.rebase.actual_tree);
+  assert.equal(reviews(f).length, 2);
+});
+
+for (const stage of ['validate', 'review']) test(`automatic main-move retry at ${stage} preserves the original delivered commit claim`, t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n');
+  const delivered = f.git(['rev-parse', 'HEAD'], f.workspace), base = f.git(['rev-parse', 'main']);
+  f.report(run, 'done', { artifacts: [`Commit: ${delivered}`] });
+  const marker = moveMainOnSave(f, run, stage);
+  const result = settled(f.settle(run)), saved = receipt(f, run);
+  assert.equal(result.result, 'promotable'); assert.equal(result.review.verdict, 'PASS');
+  assert.equal(saved.automaticBaseRetry.stage, stage); assert.equal(saved.recaptures.length, 1);
+  assert.deepEqual(saved.deliveryRange, { base, head: delivered });
+  assert.equal(result.review_scope.deferred, null); assert.deepEqual(result.review_scope.claims, [delivered]);
+  assert.equal(result.review_scope.base, base); assert.equal(result.review_scope.head, delivered);
+  assert.deepEqual(result.review_scope.outside, []); assert.notEqual(saved.head, delivered);
+  assert.equal(saved.rebase.from, delivered); assert.equal(saved.rebase.to, result.reviewed_commit);
+  assert.equal(saved.rebase.state, 'applied'); assert.equal(saved.rebase.expected_tree, saved.rebase.actual_tree);
+  const beforeMove = JSON.parse(fs.readFileSync(marker, 'utf8'));
+  if (stage === 'review') assert.deepEqual(result.review_scope, beforeMove.reviewScope);
+  else assert.equal(beforeMove.reviewScope, undefined, 'move precedes the initial scope check');
+  assert.ok(fs.readFileSync(path.join(f.root, 'review-prompt'), 'utf8').includes(`Reviewed commit: ${saved.head}`));
+  assert.equal(reviews(f).length, 1); assert.deepEqual(f.show(result.item).runs, [run]);
+});
+
+test('legacy journals without scope or range recover the original claims from proved replay receipts across recaptures', t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n');
+  const delivered = f.git(['rev-parse', 'HEAD'], f.workspace), base = f.git(['rev-parse', 'main']);
+  f.report(run, 'done', { artifacts: [`Commit: ${delivered}`] });
+  const marker = path.join(f.root, 'review-fail'); fs.writeFileSync(marker, 'fail');
+  assert.equal(f.settle(run).status, 1);
+  advance(f);
+  assert.equal(f.retry(run, ['--review-again']).status, 1);
+  const file = path.join(f.org, 'settle', `${run}.json`), legacy = receipt(f, run);
+  assert.equal(legacy.rebase.state, 'applied'); assert.notEqual(legacy.head, delivered);
+  delete legacy.reviewScope; delete legacy.deliveryRange;
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  advance(f, 'second-upstream'); fs.unlinkSync(marker);
+  const result = settled(f.retry(run, ['--review-again'])), saved = receipt(f, run);
+  assert.equal(result.result, 'promotable'); assert.equal(result.review.verdict, 'PASS');
+  assert.equal(saved.recaptures.length, 2); assert.equal(saved.recaptures[1].rebase.from, delivered);
+  assert.equal(result.review_scope.base, base); assert.equal(result.review_scope.head, delivered);
+  assert.deepEqual(result.review_scope.claims, [delivered]); assert.equal(result.review_scope.deferred, null);
+  assert.equal(reviews(f).length, 3);
+});
+
+test('a retained scope never authorizes a lane head moved by someone other than settle', t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n');
+  const delivered = f.git(['rev-parse', 'HEAD'], f.workspace);
+  f.report(run, 'done', { artifacts: [`Commit: ${delivered}`] });
+  const marker = path.join(f.root, 'review-fail'); fs.writeFileSync(marker, 'fail');
+  assert.equal(f.settle(run).status, 1); fs.unlinkSync(marker);
+  f.commit('external change\n'); const moved = f.git(['rev-parse', 'HEAD'], f.workspace);
+  advance(f);
+  const result = f.retry(run, ['--review-again']);
+  assert.equal(result.status, 1); assert.match(result.stderr, /lane HEAD or branch moved/);
+  assert.equal(JSON.parse(result.stdout).result, 'escalate');
+  assert.equal(f.git(['rev-parse', 'HEAD'], f.workspace), moved);
+  assert.equal(receipt(f, run).rebase, undefined); assert.equal(reviews(f).length, 1);
 });

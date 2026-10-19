@@ -258,9 +258,22 @@ function escalate(reason) {
       ? { resume_stage: job.stage } : {}) });
 }
 function reviewScopeProblem() {
-  job.reviewScope = reviewScope({ workspace: job.workspace, base: job.mainHead, head: job.head,
-    artifacts: readReport(job.reportText).report.artifacts });
-  save();
+  if (!job.reviewScope) {
+    // Delivery claims bind the report-time range. A proved settle replay may
+    // change the review input, but cannot invalidate those original commit IDs.
+    // Older journals can lack both the scope and the immutable range capture;
+    // recover their source only from an applied, tree-preserving replay receipt.
+    const recaptures = [...(job.recaptures ?? []), ...(job.recapture ? [job.recapture] : [])];
+    const replay = [...recaptures.map(capture => capture.rebase), job.rebase].find(receipt =>
+      receipt?.state === 'applied' && receipt.from && receipt.to && receipt.expected_tree &&
+      receipt.expected_tree === receipt.actual_tree);
+    const range = job.deliveryRange ?? (replay
+      ? { base: recaptures[0]?.from ?? job.mainHead, head: replay.from }
+      : { base: job.mainHead, head: job.head });
+    job.reviewScope = reviewScope({ workspace: job.workspace, ...range,
+      artifacts: readReport(job.reportText).report.artifacts });
+    save();
+  }
   const scope = job.reviewScope;
   return scope.deferred ? `Review scope deferred: ${scope.deferred}: ${
     (scope.outside.length ? scope.outside : scope.unresolved).map(sha => sha.slice(0, 12)).join(', ')}` : null;
@@ -661,6 +674,7 @@ function main() {
       stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
       blockers: parsed.report.blockers, proposals: parsed.report.proposals, questions: parsed.report.extra?.questions ?? [],
       outcome: parsed.report.outcome, round: 1, reviewPolicy: policy };
+    job.deliveryRange = { base: job.mainHead, head: job.head };
     // Only routing fields enter this snapshot. Lifecycle settings keep their
     // original source files, including relative worktree-root provenance.
     job.routeConfig = routesSnapshot(config); save();
@@ -736,8 +750,8 @@ function settlePending() {
     unchanged(); job.round++; job.stage = 'review'; save();
   }
   if (job.stage === 'review') {
-    // Retries can recapture main and replay an unreviewed head, or resume a
-    // journal created before scope receipts existed. Check that input too.
+    // Preserve a captured scope across settle's proved rebases. Only journals
+    // without a scope receipt need the review-entry compatibility check.
     const scopeProblem = reviewScopeProblem();
     if (scopeProblem) return escalate(scopeProblem);
     try { waitForMemory({ label: 'settle review', check: checkLaunchStop }); }

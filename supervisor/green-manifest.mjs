@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { loadEvents } from '../lib/store.mjs';
-import { sourceReach } from './green-reach.mjs';
+import { sourceReach, executionClosure } from './green-reach.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const fail = (code, reason, extra = {}) => ({ eligible: false, code, reason, ...extra });
@@ -15,12 +15,16 @@ export const activationNote = digest => `green-activation/v1 ${digest}`;
 export function recordedActivation(org, digest) {
   const { events, tornTail } = loadEvents(org);
   if (tornTail) throw Error('GREEN_EXPIRED: incomplete activation record');
-  const first = events.find(event => event.type === 'note.added' && event.text === activationNote(digest));
-  if (!first) throw Error('GREEN_EXPIRED: no recorded activation for this manifest digest');
-  return first.at;
+  const activations = events.filter(event => event.type === 'note.added' && /^green-activation\/v1 [a-f0-9]{64}$/.test(event.text));
+  const first = activations[0];
+  if (!first || !activations.some(event => event.id === first.id && event.text === activationNote(digest))) throw Error('GREEN_EXPIRED: no recorded activation for this reviewed manifest');
+  // The event sequence identifies the cohort activation across reviewed digest
+  // refreshes. A later manifest note binds new bytes, never a new interim.
+  return { id: first.seq, at: first.at };
 }
-export function checkActivation(activatedAt, now = Date.now(), recordedAt = activatedAt) {
-  if (activatedAt !== recordedAt) throw Error('GREEN_EXPIRED: activation differs from the first recorded activation for this manifest');
+export function checkActivation({ activatedAt, activationId } = {}, now = Date.now(), recorded) {
+  if (!Number.isSafeInteger(activationId) || activationId < 1 || activationId !== recorded?.id || activatedAt !== recorded.at)
+    throw Error('GREEN_EXPIRED: activation differs from the first recorded cohort activation');
   const start = Date.parse(activatedAt);
   if (typeof activatedAt !== 'string' || !Number.isFinite(start) || new Date(start).toISOString() !== activatedAt || start > now || now - start >= INTERIM_MS)
     throw Error('GREEN_EXPIRED: activation is missing, in the future or outside the ten-day interim');
@@ -54,10 +58,18 @@ export const BOOTSTRAP_FILES = [
   'supervisor/GREEN-COHORT.md', 'supervisor/GREEN-CONTRACTS.md',
 ];
 export const CHECK_SELECTION = ['.lane.validation.json', '.promotion-selector.json', 'package.json'];
-export function boundaryRole(file) {
-  if (CHECK_SELECTION.includes(file)) return 'promotion-authority';
-  if (/^(?:promote|settle|acceptance|test\/helpers)\//.test(file) ||
-      /^(?:supervisor\/(?:autopilot|clean-pass|fast-path-timing|supervisor|entry|context|notice-lock|status|safe-point)\.mjs|lanes\/validation\.mjs)$/.test(file)) return 'promotion-authority';
+export const PROMOTION_ENTRIES = ['settle/settle.mjs', 'promote/promote.mjs',
+  'supervisor/supervisor.mjs', 'supervisor/autopilot.mjs', 'supervisor/entry.mjs', 'acceptance/run.mjs'];
+export function promotionAuthority(tree) {
+  const entries = [...PROMOTION_ENTRIES, ...CHECK_SELECTION,
+    ...[...tree.files.keys()].filter(file => file.startsWith('test/helpers/'))].filter(file => tree.files.has(file));
+  // Known import/launch edges label authority, even when a frozen wrapper also
+  // has unresolved reach. This inventory is never containment proof.
+  const authorityTree = { ...tree, files: new Map([...tree.files].filter(([file]) => boundaryInput(file) || BOOTSTRAP_FILES.includes(file))) };
+  return new Set(executionClosure(authorityTree, entries).paths);
+}
+export function boundaryRole(file, authority) {
+  if (CHECK_SELECTION.includes(file) || authority.has(file)) return 'promotion-authority';
   if (BCH_ENTRIES.includes(file)) return 'bch-entry';
   return 'runtime-or-configuration';
 }
@@ -114,11 +126,11 @@ export const BCH_ENTRIES = ['bin/org.mjs', 'promote/promote.mjs', 'dispatch/reco
   'supervisor/reconcile.mjs', 'contrib/settle-watch.mjs', 'lib/store.mjs', 'lib/state.mjs',
   'lib/report.mjs', 'lib/roles.mjs', 'lanes/validation.mjs'];
 export function buildManifest(tree, { bindings, externalInputs = [], consumerEvidenceBinding }) {
-  const boundary = {};
+  const boundary = {}, authority = promotionAuthority(tree);
   for (const file of [...tree.files.keys()].filter(boundaryInput).sort()) {
     const mode = tree.files.get(file).mode;
     if (!['100644', '100755'].includes(mode)) throw Error(`non-regular boundary input: ${file}`);
-    boundary[file] = { mode, sha256: hash(tree.bytes ? tree.bytes(file) : tree.read(file)), role: boundaryRole(file) };
+    boundary[file] = { mode, sha256: hash(tree.bytes ? tree.bytes(file) : tree.read(file)), role: boundaryRole(file, authority) };
   }
   return {
     version: 2, bindings: { brain: bindings.brain, lab: bindings.lab ?? null },
@@ -169,7 +181,7 @@ export function manifestScope(before, after, { manifest, trusted, project = 'bra
     // to execute arbitrary lab files, copy Brain policy, or target another record.
     if (project !== 'brain') return fail('GREEN_REACH_UNKNOWN', 'no reviewed lab component contract');
     for (const change of changes) {
-      if (BOOTSTRAP_FILES.includes(change.file) || boundaryRole(change.file) === 'promotion-authority') return fail('GREEN_SELF_AUTHORITY', `frozen eligibility or promotion authority: ${change.file}`);
+      if (BOOTSTRAP_FILES.includes(change.file) || manifest.boundary[change.file]?.role === 'promotion-authority') return fail('GREEN_SELF_AUTHORITY', `frozen eligibility or promotion authority: ${change.file}`);
       if (manifest.boundary[change.file]) return fail(manifest.boundary[change.file].role === 'bch-entry' ? 'GREEN_BCH_CONSUMED' : 'GREEN_BOUNDARY_CHANGED', `reviewed boundary input changed: ${change.file}`);
     }
     // Both committed trees must contain exactly the reviewed boundary universe.

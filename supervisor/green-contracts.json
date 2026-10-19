@@ -311,7 +311,7 @@
     ".lane.json": {
       "mode": "100644",
       "sha256": "91a013763fe82d1fe8d1bae5cdd255f3c1a0767a4328797a9193e60b7f7d610c",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     ".lane.validation.json": {
       "mode": "100644",
@@ -330,7 +330,7 @@
     },
     "AGENTS.md": {
       "mode": "100644",
-      "sha256": "ad27f1b839df7ce6dc5b1a6efb44dcf5816cc836d63ee923c3dc707739b3117e",
+      "sha256": "d21ace344537411aae66f44ebe610b44a065cf16f4bfeec5c629c44204629b28",
       "role": "runtime-or-configuration"
     },
     "README.md": {
@@ -341,12 +341,12 @@
     "acceptance/DEADLINES.md": {
       "mode": "100644",
       "sha256": "f31b43ef7b9ddce5f2ebfd46665b146e68b6210f1bf54156977ae4e78d9f5094",
-      "role": "promotion-authority"
+      "role": "runtime-or-configuration"
     },
     "acceptance/README.md": {
       "mode": "100644",
       "sha256": "b8bbaf5088bc6acd93bfa11502772b2f76a734020d6fc662a90a358a2b8693fa",
-      "role": "promotion-authority"
+      "role": "runtime-or-configuration"
     },
     "acceptance/cases.mjs": {
       "mode": "100644",
@@ -426,7 +426,7 @@
     "acceptance/record-shim.mjs": {
       "mode": "100644",
       "sha256": "95bd195704eab1f72ca30438f05aeaa2b442fc090ad51db94f413f6f5e1c4221",
-      "role": "promotion-authority"
+      "role": "runtime-or-configuration"
     },
     "acceptance/results.mjs": {
       "mode": "100644",
@@ -476,7 +476,7 @@
     "bin/org.mjs": {
       "mode": "100755",
       "sha256": "563472c487679eb7aa3b598246c319d74980278c1ad213a7e63a00c649cc10c3",
-      "role": "bch-entry"
+      "role": "promotion-authority"
     },
     "board/README.md": {
       "mode": "100644",
@@ -491,7 +491,7 @@
     "board/brain.mjs": {
       "mode": "100644",
       "sha256": "a5264f4cc8b371a6c97c7ba40d189b1ca57741a6eb2abf8b7f3224ffad5f1b37",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "board/facts.mjs": {
       "mode": "100644",
@@ -501,12 +501,12 @@
     "board/rows.mjs": {
       "mode": "100644",
       "sha256": "c2b5bac4e69e377fbcce944b0d50cb5f81fc49f641fce301af3c2eab43ddfa74",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "board/source.mjs": {
       "mode": "100644",
       "sha256": "847e18a9a56a0852365463ff3ada7be1609e29c0288a0b3263386a0c771fd07f",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "brain/.gitignore": {
       "mode": "100644",
@@ -536,7 +536,7 @@
     "contrib/settle-watch.mjs": {
       "mode": "100755",
       "sha256": "9f1e3ea484e0b2103ee291e60586264c1be35e929e5f4816e8a1d143aa1920f6",
-      "role": "bch-entry"
+      "role": "promotion-authority"
     },
     "discovery/README.md": {
       "mode": "100644",
@@ -546,17 +546,17 @@
     "discovery/client.mjs": {
       "mode": "100644",
       "sha256": "95c2644bc99a654db133f84d8d4aa9590a2aaf8b6636f3d0a86fc6e294457ed3",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "discovery/lessons.mjs": {
       "mode": "100644",
       "sha256": "0d7f2260fc5a093d2f86da4c93e08a1e34c0f0e81d7d6cda9996706a5ec7895d",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "discovery/policy.mjs": {
       "mode": "100644",
       "sha256": "fa89c1360fd552c5e29975f6a8f8108d955128f42c2acc89138370b3b3512b76",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "dispatch/README.md": {
       "mode": "100644",
@@ -566,32 +566,32 @@
     "dispatch/dispatch.mjs": {
       "mode": "100644",
       "sha256": "10a921aaa3e11e9b87ab37d586a05fcb0a339999ef9d6245ae82695f53fa2b43",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "dispatch/hook-review.mjs": {
       "mode": "100644",
       "sha256": "32a4e567ece38b0e3890d1bd5be25e8e7c15b3008f757b5da20522278a66301c",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "dispatch/metrics.mjs": {
       "mode": "100644",
       "sha256": "323fd9429bb4164ccd1185e7720e82d09ce682a65fc5aef8c62c026d9809aa19",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "dispatch/record-worker.mjs": {
       "mode": "100644",
       "sha256": "a923cc9fc035766725e2da41d31f1b4191712cff4dd2175942d8cc0d9a2d46df",
-      "role": "bch-entry"
+      "role": "promotion-authority"
     },
     "dispatch/session-bind-command.mjs": {
       "mode": "100644",
       "sha256": "0814f5dd950385caae806fb7288a166317e789d8c8dd2157edc5491f9072d198",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "dispatch/session-bind.mjs": {
       "mode": "100644",
       "sha256": "904b35fce7ad628e881a77e80d98ec022eafc48af221f0366bf5afa3b2e7f37d",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "herdr/README.md": {
       "mode": "100644",
@@ -620,28 +620,28 @@
     },
     "housekeeping/README.md": {
       "mode": "100644",
-      "sha256": "872e7f2bde55ea29be52ace2a62c3103bda74a0b4fbe767387b0de70d4b79bbd",
+      "sha256": "9258db3ca328d54254295c16702f5c8a1208b5ef4ece5778a75255e45a4bd22f",
       "role": "runtime-or-configuration"
     },
     "housekeeping/command.mjs": {
       "mode": "100644",
       "sha256": "17738c445aca35027b0ca706638fd3690e31a8e542283131b67860c1344b999c",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "housekeeping/config.mjs": {
       "mode": "100644",
       "sha256": "77317953e6fd12e3182489932b582460df01f7d571bb7c7f715f3aa4d801893a",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "housekeeping/housekeeping.mjs": {
       "mode": "100644",
       "sha256": "581e6d2f1e3a54907383e5ce91502270fdb32abf536fd6c9dde4c9ace9eb9afa",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "housekeeping/retirement-notices.mjs": {
       "mode": "100644",
       "sha256": "786bcfce90e1bd8c671813886e5c52273cc7d8d29a58bcca5970924dc1ec7084",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/.gitignore": {
       "mode": "100644",
@@ -660,23 +660,23 @@
     },
     "lanes/README.md": {
       "mode": "100644",
-      "sha256": "baffe809d409f98d4bd44d24a0a3184900b12251797da4cd9921672fcf61189c",
+      "sha256": "2abe3ec6a91f965b4fcb0e31826f580f9a536621c21162b5923b7794349f9c6e",
       "role": "runtime-or-configuration"
     },
     "lanes/board/herdr-client.mjs": {
       "mode": "100644",
       "sha256": "ae030084780d1caa00de7cb84ef599000ad402219b568f3818ab88257a1aefdf",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/board/registry.mjs": {
       "mode": "100644",
       "sha256": "db2a992b57350f48c5ce65802e6ddb4c43f9e8b932b848776600aa0fad5832b1",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/composer.mjs": {
       "mode": "100644",
       "sha256": "1f2b155870b169035f7471db55841073b95611ae69d211fa2c4db98c68ce729c",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/docs/BRIEF_TEMPLATE.md": {
       "mode": "100644",
@@ -685,7 +685,7 @@
     },
     "lanes/docs/REFERENCE.md": {
       "mode": "100644",
-      "sha256": "6df3c0f66f5748769eb1a0c26a76c9188626d59df6aec664279c68fdd07ff9b7",
+      "sha256": "668b51c032f14f9ec5775b6b9dcf27605ca748c445ccf8b2e4f034c6f6cea7b6",
       "role": "runtime-or-configuration"
     },
     "lanes/docs/REVIEW_TEMPLATE.md": {
@@ -696,37 +696,37 @@
     "lanes/lane.mjs": {
       "mode": "100755",
       "sha256": "3ab650bdb1086fb3636acc6b9f35066829dcbf970bb3e8b5b16572232fd11c1b",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/package.json": {
       "mode": "100644",
       "sha256": "3d2360f24b89ae76fb1346c9145c67dc0652dea653af73dba2e9486692823831",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/preset.mjs": {
       "mode": "100644",
       "sha256": "317940cf29002e0afdb43695520be4a577e10ad01b8c91337a7ad2c3df40c2c8",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/promotion-lock.mjs": {
       "mode": "100644",
       "sha256": "e358ab38efb1e206d6cc8221f39c4acc0a5fcd12d9f9344d2286ce85990bac5c",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/review-evidence.mjs": {
       "mode": "100644",
       "sha256": "dbfbbc9192ddd31195d9eade12be942104db52ebd779db3097f2715ed4ef88cd",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/routes-command.mjs": {
       "mode": "100644",
       "sha256": "3ad2b722361298b7b60e485285a0e1b5fd1619e0ae6b6c55767cd35b3fb96f7e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/routes.mjs": {
       "mode": "100644",
       "sha256": "19b7880d700728bca20738e78c88a6700738041e9bea3653971519788bb6f65e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lanes/validation.mjs": {
       "mode": "100644",
@@ -736,67 +736,67 @@
     "lib/cli-help.mjs": {
       "mode": "100644",
       "sha256": "4d452709a077fa4ed854d03a01156025764aa2bc524d9069aec6c588b6361004",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/completion.mjs": {
       "mode": "100644",
       "sha256": "01ebe3a7405e6cfeca95eb98679a41bde261adfc10d60f591c5930a01f7f0498",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/deadline.mjs": {
       "mode": "100644",
       "sha256": "59b73afa796b2061986d86b51fd7aa09f33b9ddad6b5554960b99d2cd3cee0b0",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/discernment.mjs": {
       "mode": "100644",
       "sha256": "48cb379f329f9242579effb39baed9914b36442d042f2e986894c932d7caa15e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/files.mjs": {
       "mode": "100644",
       "sha256": "8790830f733de75286a124cacbfe68460dec2c6ac9b261c85614aa42bfcd7249",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/fleet.mjs": {
       "mode": "100644",
       "sha256": "511e3cc63a657e3af683dd9c4865bd3aa280250c30fc916f5ba4c625f5353ee8",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/handoffs-command.mjs": {
       "mode": "100644",
       "sha256": "5314d4cf65adb31bc70298342be6d58055322016beada8dce7bc2e8a52fe1eb2",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/handoffs.mjs": {
       "mode": "100644",
       "sha256": "b0f722a13d69a02f57e3f268bd91f73c28c510d962222ded81259622319fc76c",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/initial-shell.mjs": {
       "mode": "100644",
       "sha256": "7fffd9a310e6fd5cc0a8eb3f3a199cd19621d696cfa20e59e399a5bff4289feb",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/install-lock.mjs": {
       "mode": "100644",
       "sha256": "2a77bf779e46029e5e64131f9ec553a0cda98b6842bafbce054cfebcc8e311c8",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/lane-removal.mjs": {
       "mode": "100644",
-      "sha256": "5f9e9c7cd58bc54423f2a74f05519197b3c1613b937e4d0138153471317c750a",
-      "role": "runtime-or-configuration"
+      "sha256": "31c5519c7a2d2e879762d5c543853a10d98959433d510a158bf487f439e7f359",
+      "role": "promotion-authority"
     },
     "lib/lessons.mjs": {
       "mode": "100644",
       "sha256": "691598def3f3164c229fb61c244d327422bd32932e706ff38856fbf4898ee2c0",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/memory.mjs": {
       "mode": "100644",
       "sha256": "f667f0466e4c0701e261683e2f55a84432f16a5a494e208b83a036395c3cc5cb",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/native/README.md": {
       "mode": "100644",
@@ -811,7 +811,7 @@
     "lib/native/manifest.json": {
       "mode": "100644",
       "sha256": "6bccb36c3fe02efaef72cddb5716d95527d208aea7d03c20875ff1a0cefdf8b2",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/native/process-source-darwin-arm64": {
       "mode": "100755",
@@ -826,7 +826,7 @@
     "lib/process-owner.mjs": {
       "mode": "100644",
       "sha256": "33e46cae16427de2bcfb427ce7b67e4fcc9527d6e1ca701b526e97bc68d4666e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/process-source.c": {
       "mode": "100644",
@@ -836,7 +836,7 @@
     "lib/processes.mjs": {
       "mode": "100644",
       "sha256": "18d019a3b3650796952447d401236ebaac56e9a55e411970edabd7b2b0fb9139",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/product-files.mjs": {
       "mode": "100644",
@@ -846,32 +846,32 @@
     "lib/project-publication.mjs": {
       "mode": "100644",
       "sha256": "4566d9399bb0be16c1e83d5e2b60cbef1f352ea107afca19489de7a7f6ffe593",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/project-summary.mjs": {
       "mode": "100644",
       "sha256": "b0e1a418bd1e02023fbd471e3bae8d3d6b35e325cdbb2ea446c8aa1476578a2e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/project.mjs": {
       "mode": "100644",
       "sha256": "76c9e5b8d9882cfa77f2479c28be1c7ac544627a47a679d66f23f9295ecd31a9",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/release-record.mjs": {
       "mode": "100644",
       "sha256": "761bb8979056790ca1d2ea010a03d68ce1c6b4772b56e9576baaf89d8ecfc350",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/releases.mjs": {
       "mode": "100644",
       "sha256": "e33b1fbc95e1e56fe84c3023923baf254b0b5081123319ebb420f6e541467396",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/render.mjs": {
       "mode": "100644",
       "sha256": "172bb321eaf8500703e89d1e247419043f200e598ce9e75f5a18c73ecb976368",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/report-feed.mjs": {
       "mode": "100644",
@@ -881,97 +881,102 @@
     "lib/report.mjs": {
       "mode": "100644",
       "sha256": "73a32b105b8eff208511415b55f2cfc8ada410a5e5ffa6d4ff6fcdefe2454a5c",
-      "role": "bch-entry"
+      "role": "promotion-authority"
     },
     "lib/retire-age.mjs": {
       "mode": "100644",
       "sha256": "7f6c2d9ef87d5a3236075c7a4913d14cb3bc6135ce91a56381c32709978305c2",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
+    },
+    "lib/retire-archive.mjs": {
+      "mode": "100644",
+      "sha256": "c48311e1bc42575d586063addfc4bdde9df174622ada55d94d8035120853b092",
+      "role": "promotion-authority"
     },
     "lib/retire-command.mjs": {
       "mode": "100644",
       "sha256": "eba1c529dd61749ac2024eb2adf56526bf3334a9897aca2b61263d1a10f9284d",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/retire-hold.mjs": {
       "mode": "100644",
       "sha256": "8b0a8a428587d5b7e21d208225abcef8ed70e3ea80f476d4bc33109766c2106e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/retire-lock.mjs": {
       "mode": "100644",
       "sha256": "b3af95ccb9d362e16ec39cd33a5379191116b152790af4bcec07940f71a96e5a",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/retire-runtime.mjs": {
       "mode": "100644",
-      "sha256": "44d37510443b209ff9acbc10173d867ced403b384328243643326707a9bfb31e",
-      "role": "runtime-or-configuration"
+      "sha256": "2c254dfb7fc999de741b1716462882d0a664e6966f9e4d0cae80fea1f40ac9b9",
+      "role": "promotion-authority"
     },
     "lib/retire-status.mjs": {
       "mode": "100644",
-      "sha256": "15186a5697bec182f92c8ace2fdac523ec918a4ca627ee97240145045593b191",
-      "role": "runtime-or-configuration"
+      "sha256": "a674538f72a88251a2d174f30593b21ff171f69ea90457542d28a8813f85e6de",
+      "role": "promotion-authority"
     },
     "lib/retire-trigger.mjs": {
       "mode": "100644",
       "sha256": "1bc557bb8bdfcd9259a7b945b740e509747659b41bffe73ed0fbb7a08be71481",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/retire.mjs": {
       "mode": "100644",
-      "sha256": "b1d546588609076394e5631f843f4ddd8897e5f6a4b762fdeaedffce67e0b638",
-      "role": "runtime-or-configuration"
+      "sha256": "70d0904e918a761fcc98c3416cb6c4055236519c5111c91abc44807dcd4dd0c6",
+      "role": "promotion-authority"
     },
     "lib/review-verdict.mjs": {
       "mode": "100644",
       "sha256": "38d331e0c329f55a94df7206f0fbb97342f2eecee328d84cccb8d700892b4cc3",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/roles.mjs": {
       "mode": "100644",
       "sha256": "c5722efe6515439421593fc6606fe9a97aa9e3276e57bc378c514c9bf9d3c64e",
-      "role": "bch-entry"
+      "role": "promotion-authority"
     },
     "lib/run-timing.mjs": {
       "mode": "100644",
       "sha256": "e76eb2d1395ff777f4462d60a4b1603516019b0f97958342fb098bc06b5c3d03",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/sanitize.mjs": {
       "mode": "100644",
       "sha256": "a3a3477361f13d237af4e1dd37f6e2a4854d24217c44b00ce846acfc49f427a5",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/session-release.mjs": {
       "mode": "100644",
       "sha256": "35f364d76394b9130254ac5453c70b9e1867a3673eb6b8d07b1498774c04404a",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/shell.mjs": {
       "mode": "100644",
       "sha256": "0de580ddf37f6785fe580ec4089befeb8399d8316f38992ce5e3ed63ea8136cc",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/state.mjs": {
       "mode": "100644",
       "sha256": "6c379650bf9414c58e2a3462a4726036d270dcd4c58c7d0500280de1cef03557",
-      "role": "bch-entry"
+      "role": "promotion-authority"
     },
     "lib/store.mjs": {
       "mode": "100644",
       "sha256": "68817019529b92b70338c6c025cc87ba0650648fc753be82e78ba4bf0298611b",
-      "role": "bch-entry"
+      "role": "promotion-authority"
     },
     "lib/today.mjs": {
       "mode": "100644",
       "sha256": "dcfa70b8b1363f599203f269006cd54d287db5240278e0ea37e130030cf563ae",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "lib/worker-identity.mjs": {
       "mode": "100644",
       "sha256": "f0d686116498208334a30f7a502779a681746167e16ea71101a1be08173cc9b8",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "logs/README.md": {
       "mode": "100644",
@@ -981,27 +986,27 @@
     "logs/inputs.mjs": {
       "mode": "100644",
       "sha256": "b5bb8b6316af3c505aff1725da4259e7cee64f59363ddb8329578ed946bcf1a7",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "logs/journal.mjs": {
       "mode": "100644",
       "sha256": "995d8ce4457643f9d4f0acafa478f36bb89e1ab8b8e3f3b9c3f7addce12ea84e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "logs/logs.mjs": {
       "mode": "100644",
       "sha256": "19edb22d8f6172a26e5b6acafd8b75e73311fc12c4043b7c5da4d3df2161a2cf",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "logs/rules.mjs": {
       "mode": "100644",
       "sha256": "a6617f64a7a49a88fabe1dc2b2a9eed85365bf1c46268a395439ab18834f1e76",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "logs/view.mjs": {
       "mode": "100644",
       "sha256": "3722c12770f9639ddb3a95417762e5bd875f0dc76692ae845a85c64b14f390cb",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/README.md": {
       "mode": "100644",
@@ -1011,7 +1016,7 @@
     "messages/classify.mjs": {
       "mode": "100644",
       "sha256": "074e93852d9f8f7b08694888f8d97d670366af7876797e9c6d0679dd00615a96",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/codex-hooks.template.json": {
       "mode": "100644",
@@ -1021,7 +1026,7 @@
     "messages/fixture.mjs": {
       "mode": "100644",
       "sha256": "e3115e9cfb10ec08467dd13c737ff609a256104cd4302983443ee2af13c8595c",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/hook-nudge.mjs": {
       "mode": "100644",
@@ -1031,17 +1036,17 @@
     "messages/hook-pull.mjs": {
       "mode": "100644",
       "sha256": "2d910bcecadab2ca9ba8d8e6b11e1ac06f67d6c354f6879fe01937130e8f998a",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/hook-session.mjs": {
       "mode": "100644",
       "sha256": "05c72e4213e4be6cc61a02b164ea8631d9163b88067f57ee0a523872c51aca52",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/journal.mjs": {
       "mode": "100644",
       "sha256": "3123beeae01439ea653ee679603a9cb0502e9b4fb1441aeaf25a2b59d22632d4",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/messages.mjs": {
       "mode": "100644",
@@ -1051,22 +1056,22 @@
     "messages/mirror.mjs": {
       "mode": "100644",
       "sha256": "92eac2fa8eee0126a9fc09fc4cf3523fcee11bc9ed4a3f405a9b45de0f035169",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/receiver.mjs": {
       "mode": "100644",
       "sha256": "c890ba74202d3441ade2b3122549a6b4c94bd9474eab564c3e897d4bda4c21a6",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/schema.mjs": {
       "mode": "100644",
       "sha256": "befb0fa7f6a5fd27c3ece27c4e9728fac83e3cdafb9322478616c2e6547935d2",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/session-transfer.mjs": {
       "mode": "100644",
       "sha256": "580f94ccdaad8734ea15b853e533fe185b7e004207d8bb17ffa6a34af9f88cd2",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "messages/transfer.mjs": {
       "mode": "100644",
@@ -1086,7 +1091,7 @@
     "promote/README.md": {
       "mode": "100644",
       "sha256": "83316a8352597858e5918c7942f54fb0bc1aad086ec0a819406aec311034a2c0",
-      "role": "promotion-authority"
+      "role": "runtime-or-configuration"
     },
     "promote/completion.mjs": {
       "mode": "100644",
@@ -1095,7 +1100,7 @@
     },
     "promote/evidence.mjs": {
       "mode": "100644",
-      "sha256": "0bdd8a9cd325ecad77feb488dbb8a7a446fc4307675298a6f4754f6844d0586a",
+      "sha256": "574c3099c817b37fd1a93d20742aae9fe473421bfdf31db06cd93b94a8da1760",
       "role": "promotion-authority"
     },
     "promote/gate-profile.mjs": {
@@ -1141,7 +1146,7 @@
     "promote/shadow.mjs": {
       "mode": "100644",
       "sha256": "61930f4261bdae19d7edd2005600aca630ac5d1687e4263e67842020696ec9c3",
-      "role": "promotion-authority"
+      "role": "runtime-or-configuration"
     },
     "promote/test-plan.mjs": {
       "mode": "100644",
@@ -1161,92 +1166,92 @@
     "sessions/apply.mjs": {
       "mode": "100644",
       "sha256": "2cca40c00a06f4c45b32f06abeab9bd5266cbfc67e5df91dd8b9998df32c148b",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/authorization.mjs": {
       "mode": "100644",
       "sha256": "bc666c6692327ab73a491c835bd4858be0d824c7cccb6cbf84c8e949ddeda224",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/close-safety.mjs": {
       "mode": "100644",
       "sha256": "6a9d99e080085feac2e5155ec9b63b7d5a501d45747ae79877dc0e89ebf09c74",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/disposition.mjs": {
       "mode": "100644",
       "sha256": "ff0dfa9c18db34de4a9393da6c26d15400c86220f548ef88eef7e683f65ed629",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/json.mjs": {
       "mode": "100644",
       "sha256": "94169763547bc3bfabc969da16137e18672a69bed5f4762393943ebbc57e2c56",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/lifecycle-evidence.mjs": {
       "mode": "100644",
       "sha256": "7dce5a2d79c768c6c99056ecd6e4557a1cab00812c70d565dbd05efe7eaacf59",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/lifecycle.mjs": {
       "mode": "100644",
       "sha256": "211cee0dc2ec0fbabec71dbe8e3b410cc60dc14edbcc954c88b2e4516916e12d",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/live-observe.mjs": {
       "mode": "100644",
       "sha256": "9244ea120b2f6ab41537b6cf340ea4d4a1d622b5bcb02a372450fa37da928be1",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/live.mjs": {
       "mode": "100644",
       "sha256": "a0f82f059fbbdbb44dfda14e093f367ed0fa7b7de6321d07726e09f63c6a3c55",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/manifest.mjs": {
       "mode": "100644",
       "sha256": "ee01761f807a6f11a6a08990a4093954fa923e890dcdefba57bc27eaa00f6d8b",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/native-conversation.mjs": {
       "mode": "100644",
       "sha256": "4572ade9040dfb4966cde558fa3b7036d99cd752519091d5205d08868ecaf273",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/observe.mjs": {
       "mode": "100644",
       "sha256": "e3c1c46b1990b8bec9e536910397cb0ea0e9bde5dfd1117f9387e0562fb7925d",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/plan.mjs": {
       "mode": "100644",
       "sha256": "07faa8b767649e055c47d45a4c42989294997f7e157ec119cd839bde472df510",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/project.mjs": {
       "mode": "100644",
       "sha256": "8a05a00671cbe96c3aa84a787e207a6688100b23abf29e093305e64e0da0edf0",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/receipts.mjs": {
       "mode": "100644",
       "sha256": "9f59e427ac8ef54f683eb231e421c8c3e0d2191a5120985fa2ba6589621f314b",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/reconcile.mjs": {
       "mode": "100644",
       "sha256": "8c43415983612fee7075a50ecd2770bcda68ba58daad5ebb3c45954e79a1a191",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/runtime.mjs": {
       "mode": "100644",
       "sha256": "2b7fdbcf8dadd54b12fee8a8864e78550ba42e07f6243b7e423357ff1368effb",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/sessions.mjs": {
       "mode": "100644",
       "sha256": "993167ca2914e93bcaeac5a1cc93e62df24324d176d9f942850008870aa827e4",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "sessions/templates/chat.md": {
       "mode": "100644",
@@ -1291,7 +1296,7 @@
     "settle/README.md": {
       "mode": "100644",
       "sha256": "0bf0975385cda44a62192269d2290c4473495aa22394217384d8003f1a7dbd1a",
-      "role": "promotion-authority"
+      "role": "runtime-or-configuration"
     },
     "settle/config.mjs": {
       "mode": "100644",
@@ -1370,7 +1375,7 @@
     },
     "supervisor/README.md": {
       "mode": "100644",
-      "sha256": "6519713af8705ab6cfd7bd542dc172bf25a05c435dd28769599203f88b446f74",
+      "sha256": "d4aafb80dc2d440fe1664d990eb9af903479355022831231f92bac0c865a2e7e",
       "role": "runtime-or-configuration"
     },
     "supervisor/arm-watch.sh": {
@@ -1386,7 +1391,7 @@
     "supervisor/chats.mjs": {
       "mode": "100644",
       "sha256": "1d790c81c2f2b2ce07b39471937e5ffcb20ceea83bda688d0515bb70b2d52f70",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "supervisor/clean-pass.mjs": {
       "mode": "100644",
@@ -1396,7 +1401,7 @@
     "supervisor/composer.mjs": {
       "mode": "100644",
       "sha256": "e25633516411e51f8839e127d2e0a40741a3aca8def9cb03b13d817420429d9e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "supervisor/context.mjs": {
       "mode": "100644",
@@ -1441,7 +1446,7 @@
     "supervisor/herdr-edge.mjs": {
       "mode": "100644",
       "sha256": "f7890dabe67bfc91ab69666450c9037c945a84472d1243df14f8132e95c2d31d",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "supervisor/notice-lock.mjs": {
       "mode": "100644",
@@ -1451,27 +1456,27 @@
     "supervisor/prompt-supervisor.mjs": {
       "mode": "100755",
       "sha256": "028dd99f589cd4d88413e261153e8d7944f652e28666bc3dde77e45c3ec5634f",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "supervisor/protocol.mjs": {
       "mode": "100644",
       "sha256": "0fd525e51304ac268709bccb72235cf9527d60948bd158009c1904f99b2e435c",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "supervisor/reconcile.mjs": {
       "mode": "100644",
       "sha256": "f00d3ee4a35dcf985c05ecd67f865ee199a0312bf5d0e45be7c7bebf37072932",
-      "role": "bch-entry"
+      "role": "promotion-authority"
     },
     "supervisor/request.mjs": {
       "mode": "100644",
       "sha256": "2797daca1cf2df2dd987c3906012f8fa8a2189f2c09df366ca03e4d266857def",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "supervisor/retire.mjs": {
       "mode": "100644",
       "sha256": "72e911c08800c5358518427dd8ef7c80634e0a996605e7bd181dc21ede2e7fd0",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "supervisor/safe-point.mjs": {
       "mode": "100644",
@@ -1485,13 +1490,13 @@
     },
     "supervisor/supervisor.mjs": {
       "mode": "100644",
-      "sha256": "4b2d612ee70ee638d9c32275e0f63996215759a898e9c6549e1f816b13c10352",
+      "sha256": "16481846fba2d0c535f49cc445029613f15629d383d264d672d224a86973a57f",
       "role": "promotion-authority"
     },
     "supervisor/tidy-tabs.mjs": {
       "mode": "100644",
       "sha256": "d2ab74b1d2e8af4806c019483a8701e4f838410249e2b73ca192bc7e6207775d",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/README.md": {
       "mode": "100644",
@@ -1501,37 +1506,37 @@
     "test-slot/limits.mjs": {
       "mode": "100644",
       "sha256": "7e185e565195fc69b822ee75c254d16b7d7b4dfa890cd2634f19e5556f4345ce",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/lock-support.mjs": {
       "mode": "100644",
       "sha256": "b51723fd5dceae689997a86bfcf4dfc6d0c42cffe88b9319c2d28d86dbeb226e",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/measurement.mjs": {
       "mode": "100644",
       "sha256": "60bbf369297b50a5b34bdaee4f62cbf9365c05930f8f763fe3f4bb2e7ddd4f67",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/occupancy.mjs": {
       "mode": "100644",
       "sha256": "e49a8430a625e15b5d9fb287d588104bc5ee92dc6c713118d653a326b6927da8",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/resources.mjs": {
       "mode": "100644",
       "sha256": "2f7f9d5c842f82f16a10345ac9336d0b96d73c32c29cda4fce74f4839273d586",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/retention.mjs": {
       "mode": "100644",
       "sha256": "a1cecc8c25d7026da36dea5399bfdac55b7441bae8feb029264b8694fd3232d4",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/run.mjs": {
       "mode": "100644",
       "sha256": "0aa730524e84cd0820a844f24fd333a89c6b2ed649802e40236bb9d491640e6f",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/summarize.mjs": {
       "mode": "100644",
@@ -1541,22 +1546,22 @@
     "test-slot/test-slot.mjs": {
       "mode": "100644",
       "sha256": "4a36aa1a058bf22d1b5e31e88c55b4a9f709a06b6184f50785b9680d82f8f8da",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/ticket-queue.mjs": {
       "mode": "100644",
       "sha256": "37ad65dc7f6cff885985c20a1ab0ea4924b77984d35ce517e6d822c562cef646",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/validation-resources.json": {
       "mode": "100644",
       "sha256": "92d1874089633aaeaf0a10847d83bd5d30b31de97353e73be9ad836047b6e717",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test-slot/watchdog.mjs": {
       "mode": "100644",
       "sha256": "8c2ce8023689cadbd52b5ab6fd7dbe2a0503403c29f6d0ce8aef6b3862d18db9",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "test/helpers/affected-tests.mjs": {
       "mode": "100644",
@@ -1745,7 +1750,7 @@
     },
     "test/helpers/tier.mjs": {
       "mode": "100644",
-      "sha256": "1b8a1e1f2b5d1365a5302abd05629c2891224f47c3f8a014b82f2d212852fad2",
+      "sha256": "376b1887e14d1f74c3fa38eaf52d6685e5edfdf3d533a1ea01200c256beb378f",
       "role": "promotion-authority"
     },
     "verify/README.md": {
@@ -1776,17 +1781,17 @@
     "watch/lock.mjs": {
       "mode": "100644",
       "sha256": "3b843ce1f70d0d5835f81d0d132c74cd7eaf1c1be489760f40bc72c1d46e24f9",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "watch/notice.mjs": {
       "mode": "100644",
       "sha256": "a6edf0ad469c679171a71069abca7fa398ead7ccddede546c7c76f8c9c18b6cb",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     },
     "watch/watch.mjs": {
       "mode": "100644",
       "sha256": "f1eea8832ec8d6e0b2bbd1bdbc26dd4e9b43a0ecc32df05fa3c50cec42a19778",
-      "role": "runtime-or-configuration"
+      "role": "promotion-authority"
     }
   },
   "exclusions": [

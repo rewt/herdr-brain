@@ -14,7 +14,10 @@ export function verifyTrainResult(result, { project, saved }) {
         job?.expectedHead !== saved.head || job.run !== saved.run || job.org !== saved.org || job.topic !== saved.lane) return false;
     const attempt = plan.attempts.find(a => ['integrated', 'complete'].includes(a.phase) && a.tips[result.id] === result.tip);
     const captured = attempt?.jobs.find(j => j.id === result.id);
-    if (saved.test_evidence && !saved.test_evidence.reexecuted && JSON.stringify(job.requiredTests) !== JSON.stringify(saved.test_evidence.files)) return false;
+    // The request binds the union of component checks and deferred review
+    // evidence. Older requests stored only the latter.
+    const required = saved.requiredTests ?? (saved.test_evidence && !saved.test_evidence.reexecuted ? saved.test_evidence.files : undefined);
+    if (required !== undefined && JSON.stringify(job.requiredTests ?? []) !== JSON.stringify(required)) return false;
     if (captured?.sourceHead !== saved.head || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) return false;
     const git = args => {
       const r = spawnSync('git', ['-C', project.canonical, ...args], { encoding: 'utf8' });

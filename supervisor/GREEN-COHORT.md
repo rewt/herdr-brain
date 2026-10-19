@@ -41,14 +41,30 @@ exact independently hashed generated review addition retains its existing exempt
    and Node selectors are stripped from child launches, not hashed per session. A deployment using different
    inputs needs ordinary manifest review. The committed manifest describes Brain;
    no lab exists. Adding a lab binding/components is an ordinary reviewed amendment.
-4. After bootstrap PASS and deployment acceptance, the supervisor can enable the
+4. After bootstrap PASS and deployment acceptance, the supervisor must run a fresh
+   `checkDeployment` of the committed manifest against the canonical checkout,
+   using the reviewed Node, environment and execArgv, before writing any activation
+   note. With the committed manifest's empty execArgv, run from the canonical root:
+
+   ```sh
+   node <<'NODE'
+   import('./supervisor/green-pass.mjs').then(({ createGreenCohort }) => createGreenCohort().deployment());
+   NODE
+   ```
+
+   Any refusal requires ordinary handling and re-review of changed pins. A passing
+   probe in a lane does not replace this canonical deployment check.
+   The supervisor can then enable the
    existing cohort in canonical `.supervisor.json` with the manifest's exact pairs
-   and an `activatedAt` ISO timestamp. First calculate SHA-256 of the exact
+   and the first activation event's `activationId` and `activatedAt`. Calculate SHA-256 of the exact
    reviewed `supervisor/green-contracts.json` bytes and append through the existing
-   record CLI: `record note ENG-396 "green-activation/v1 MANIFEST_SHA256"`.
-   Use that first note's event `at` as `activatedAt`; no custom event type or
-   direct log write is needed. A missing note, later reset or different digest
-   refuses. A repeated note for the same digest cannot extend the interim. The interim lasts ten days from activation
+   record CLI: `record note ENG-396 "green-activation/v1 MANIFEST_SHA256" --decision`.
+   Use the first cohort activation note's event `seq` as `activationId` and `at`
+   as `activatedAt`; no custom event type or direct log write is needed. Every
+   refreshed digest requires ordinary independent review, a fresh canonical
+   deployment check and a new note on that same item. The configured id and time
+   still name the first cohort activation across all digests. Missing digest
+   evidence or reset ids/timestamps refuse. The interim lasts ten days from activation
    or until the reviewed successor replaces it, whichever comes first. Future,
    missing or expired activation dates refuse; expiry returns work to ordinary
    handling. This lane never activates it.
@@ -56,7 +72,7 @@ exact independently hashed generated review addition retains its existing exempt
 ```json
 {"autopilot":{"enabled":true,"cohort":"green-pass","green":{
   "brain":{"repo":"/Users/rewt/development/rewt/herdr-brain","identity":"/Users/rewt/development/rewt/herdr-brain/.git","org":"/Users/rewt/development/rewt/.org"},
-  "lab":null,"activatedAt":"SUPERVISOR_SETS_AT_ACTIVATION"
+  "lab":null,"activationId":12345,"activatedAt":"SUPERVISOR_SETS_AT_ACTIVATION"
 }}}
 ```
 
@@ -86,11 +102,14 @@ profile: identity, HOLD, live-reference and recoverability evidence must bind th
 run/base/head/record and immutable artifact/log hashes. It is not an initial
 lifecycle admission route.
 
-`supervisor/test/green-main.test.mjs` probes actual Git `main` plus the complete
-checkout HEAD overlay. Pins and trusted bytes both come from that HEAD tree,
-including unrelated promotion edits/deletions. Release snapshots without a Git
-work tree or main ref skip with the established release-snapshot reason. The
-probe discovers no live record and writes no operator refs/config/records/source.
+`supervisor/test/green-main.test.mjs` reads actual Git `main` boundary blobs,
+then applies the explicit ordinary-bootstrap diff from main to the committed
+lane HEAD. It uses the committed manifest bytes and owner consumer-evidence
+binding, without regenerating pins. An unrelated main input with stale pins
+refuses. Outside Brain's canonical Git identity, including release snapshots,
+the real-main probe skips explicitly. The probe reads declared external inputs
+under the manifest's environment selection, discovers no live record or fleet,
+and writes no operator refs/config/records/source.
 It requires a one-line renderer change to pass containment and entry, authority,
 manifest, boundary-drift and foreign-project controls to refuse. It records exact
 base/candidate bytes and hashes. This is engineer containment evidence; it is not
@@ -101,6 +120,9 @@ candidates, optional lab, expiry and autopilot review/promotion checks.
 Engineer-focused checks and one independent ready review still apply per candidate.
 The renderer's declared test is passed as required test evidence to the promotion
 queue, so planner budgets cannot defer it.
+Deferred review evidence joins that required set. Train verification checks the
+saved union, and bare recovery or refused/timed-out retries inherit all earlier
+requirements; an explicit attempt to remove any is refused.
 Release-wide suites, live acceptance and BCH seam checks run once per switch
 candidate in the supervisor's agreed window. No lane runs live acceptance or a
 release, changes native permissions, lifts a HOLD, pushes, or activates this cohort.

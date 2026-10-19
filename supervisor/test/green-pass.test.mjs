@@ -54,8 +54,9 @@ function setup(t, { binary = false } = {}) {
   const bindings = { brain, lab: null, activatedAt: new Date().toISOString() }, checker = createGreenCohort(repo);
   const activate = () => {
     const bytes = fs.readFileSync(path.join(repo, 'supervisor/green-contracts.json'));
-    record(['note', item, activationNote(digest(bytes))]);
-    bindings.activatedAt = recordedActivation(brain.org, digest(bytes));
+    record(['note', item, activationNote(digest(bytes)), '--decision']);
+    const activation = recordedActivation(brain.org, digest(bytes));
+    bindings.activatedAt = activation.at; bindings.activationId = activation.id;
   };
   activate();
   const options = () => ({ ...brain, workspace, base, head: git(['rev-parse', 'HEAD'], workspace), bindings, run: 'R-1' });
@@ -159,9 +160,11 @@ for (const kind of ['foreign', 'record', 'identity', 'lane-record', 'lab-without
 });
 test('ten-day interim is measured from activation, including the exact expiry boundary', () => {
   const start = '2026-10-19T12:00:00.000Z', now = Date.parse(start);
-  assert.doesNotThrow(() => checkActivation(start, now + INTERIM_MS - 1));
-  for (const value of [undefined, 'invalid', '2026-10-19']) assert.throws(() => checkActivation(value, now), /GREEN_EXPIRED/);
-  assert.throws(() => checkActivation(start, now + INTERIM_MS), /GREEN_EXPIRED/);
+  const bindings = { activatedAt: start, activationId: 7 }, recorded = { at: start, id: 7 };
+  assert.doesNotThrow(() => checkActivation(bindings, now + INTERIM_MS - 1, recorded));
+  for (const value of [undefined, 'invalid', '2026-10-19']) assert.throws(() => checkActivation({ ...bindings, activatedAt: value }, now, recorded), /GREEN_EXPIRED/);
+  for (const activationId of [undefined, 8, '7']) assert.throws(() => checkActivation({ ...bindings, activationId }, now, recorded), /GREEN_EXPIRED/);
+  assert.throws(() => checkActivation(bindings, now + INTERIM_MS, recorded), /GREEN_EXPIRED/);
 });
 test('blue metadata, executable modes, dirty candidates and record mismatch remain ordinary', t => {
   const f = setup(t); f.change();
@@ -246,15 +249,53 @@ test('clean-pass rejects a green configuration key', t => {
   fs.writeFileSync(path.join(f.repo, '.supervisor.json'), JSON.stringify({ autopilot: { enabled: true, cohort: 'clean-pass', green: f.bindings } }));
   assert.throws(() => autopilotSettings(f.repo), /autopilot.enabled/);
 });
-test('first activation for a manifest digest cannot be restarted by configuration or a later note', t => {
+test('cohort activation cannot be restarted by configuration, a later note or a reviewed manifest refresh', t => {
   const f = setup(t); f.change();
-  const first = f.bindings.activatedAt;
-  f.activate(); assert.equal(f.bindings.activatedAt, first);
+  const first = { at: f.bindings.activatedAt, id: f.bindings.activationId };
+  f.activate(); assert.equal(f.bindings.activatedAt, first.at); assert.equal(f.bindings.activationId, first.id);
   assert.equal(f.scope().eligible, true);
-  const changed = structuredClone(f.bindings); changed.activatedAt = new Date(Date.parse(first) + 1).toISOString();
+  const changed = structuredClone(f.bindings); changed.activatedAt = new Date(Date.parse(first.at) + 1).toISOString();
   assert.equal(f.scope({ bindings: changed }).code, 'GREEN_EXPIRED');
   assert.throws(() => recordedActivation(f.brain.org, 'f'.repeat(64)), /no recorded activation/);
-  assert.throws(() => checkActivation(first, Date.parse(first) + INTERIM_MS, first), /GREEN_EXPIRED/);
+  // An ordinary-reviewed refresh changes the exact digest, while keeping the
+  // cohort's first event identity and start. No new note means no admission.
+  f.put('housekeeping/config.mjs', 'export const ordinaryReviewedRefresh = true;\n');
+  f.manifest.boundary['housekeeping/config.mjs'].sha256 = digest('export const ordinaryReviewedRefresh = true;\n');
+  f.put('supervisor/green-contracts.json', JSON.stringify(f.manifest));
+  const refreshedDigest = digest(JSON.stringify(f.manifest));
+  assert.throws(() => recordedActivation(f.brain.org, refreshedDigest), /no recorded activation/);
+  f.git(['add', 'supervisor/green-contracts.json', 'housekeeping/config.mjs']); f.git(['commit', '-qm', 'Reviewed manifest refresh']);
+  f.git(['rebase', 'main'], f.workspace);
+  const checker = createGreenCohort(f.repo), base = f.git(['rev-parse', 'main']);
+  f.activate();
+  const recorded = recordedActivation(f.brain.org, refreshedDigest);
+  assert.deepEqual(recorded, first);
+  assert.equal(checker.scope({ ...f.options(), base }).eligible, true);
+  assert.throws(() => checkActivation(f.bindings, Date.parse(first.at) + INTERIM_MS, recorded), /GREEN_EXPIRED/);
+  const reset = { ...f.bindings, activationId: recorded.id + 1, activatedAt: new Date(Date.parse(first.at) + 1000).toISOString() };
+  assert.throws(() => checkActivation(reset, Date.parse(first.at) + 1000, recorded), /GREEN_EXPIRED/);
+});
+
+test('promotion authority follows import and launch edges into routes and review-record validation', () => {
+  const sources = new Map([
+    ['settle/settle.mjs', "import '../lanes/routes.mjs'; const lane = new URL('../lanes/lane.mjs', import.meta.url);\n"],
+    ['lanes/routes.mjs', "import './review-helper.mjs';\n"], ['lanes/lane.mjs', 'export const review = true;\n'],
+    ['lanes/review-helper.mjs', 'export const route = true;\n'], ['board/render.mjs', renderer],
+    ['test/board-view.test.mjs', "import '../board/render.mjs';\n"],
+  ]);
+  const tree = { files: new Map([...sources.keys()].map(file => [file, { mode: '100644' }])), read: file => sources.get(file) };
+  const manifest = buildManifest(tree, { bindings: { brain: {} } });
+  for (const file of ['lanes/routes.mjs', 'lanes/lane.mjs', 'lanes/review-helper.mjs']) assert.equal(manifest.boundary[file].role, 'promotion-authority', file);
+  assert.equal(manifest.boundary['test/board-view.test.mjs'], undefined);
+  assert.equal(manifest.boundary['board/render.mjs'], undefined);
+});
+
+test('pre-activation deployment check refuses stale committed pins before any activation note', t => {
+  const f = setup(t), before = fs.readFileSync(path.join(f.brain.org, 'events.jsonl'));
+  assert.doesNotThrow(() => f.checker.deployment());
+  f.put('board/rows.mjs', '// unreviewed deployment drift\n');
+  assert.throws(() => f.checker.deployment(), /running boundary drift/);
+  assert.deepEqual(fs.readFileSync(path.join(f.brain.org, 'events.jsonl')), before);
 });
 
 test('source scanning never executes a candidate and follows literal loads inside templates', () => {

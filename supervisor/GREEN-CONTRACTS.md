@@ -166,11 +166,14 @@ the supervisor reconfirms that this captured consumer/root inventory still holds
 
 The manifest separately labels the code selecting checks, interpreting results,
 validating review/receipt evidence, authorizing promotion and selecting execution
-targets: `supervisor/autopilot.mjs`, supervisor handle/notice glue, `settle/`,
-`promote/`, `.lane.validation.json`, `.promotion-selector.json`, `package.json`,
-`lanes/validation.mjs`, `test/helpers/` and `acceptance/`. Other supporting
-runtime/configuration files are frozen without claiming every ordinary module or
-test is promotion authority. None can be changed through this cohort. Bootstrap
+targets. `promotionAuthority(tree)` derives known import/launch closures from
+the settle, promote, supervisor and acceptance entries, check-selection files
+and test helpers. This includes `lanes/routes.mjs` (routes and launch commands)
+and `lanes/lane.mjs` (review-record validation), plus their known dependencies.
+Unresolved scanner edges do not erase known authority paths or establish
+containment proof. Ordinary test bodies are excluded from the boundary roles;
+the candidate renderer remains a separate component. Other runtime/configuration
+files remain frozen. None can be changed through this cohort. Bootstrap
 files compare against captured trusted bytes, avoiding circular hashes; all other
 boundary files have exact mode and SHA-256 pins in both trees and running source.
 
@@ -194,10 +197,14 @@ use the reviewed Node/Git directories plus HOME/.local/bin and fixed system bins
 and receive the explicit record/actor. Git and Node executables remain byte pinned.
 The running Node's execArgv is also bound as a readable array.
 
-Activation is the first append-only `note.added` event whose exact text is
-`green-activation/v1 MANIFEST_SHA256`, in the manifest Brain record. Its event
-`at` must equal configured `activatedAt`; missing evidence, torn records and later
-reset timestamps refuse. Repeating the note cannot restart the ten-day interim.
+Activation is the first append-only `note.added` event matching
+`green-activation/v1 MANIFEST_SHA256` for any digest in the manifest Brain record.
+Its event `seq` identifies the cohort activation as configured `activationId`;
+its `at` must equal configured `activatedAt`. Each refreshed manifest requires
+ordinary independent review and its own exact-digest note on the same item,
+written only after a fresh canonical `checkDeployment` pass of the committed
+manifest. Digest refreshes and repeated notes retain the original event id and
+ten-day clock. Missing digest evidence, torn records and reset ids/timestamps refuse.
 The checker reads this evidence and never writes the event log.
 Any boundary drift, missing input, unknown component or foreign project returns
 to ordinary handling immediately. No mandatory tracing campaign is introduced.

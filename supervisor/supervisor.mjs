@@ -46,7 +46,7 @@ export function main(argv = process.argv.slice(2)) {
   const forwarded = forwardRelease('supervisor/supervisor.mjs', opt.repo);
   if (forwarded !== null) { process.exitCode = forwarded; return; }
   const [action = 'brief', requested] = positionals;
-  const requiredTests = opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']);
+  let requiredTests = opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']);
   if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('invalid required test files');
   if (opt['required-tests'] !== undefined && action !== 'promote') throw Error('--required-tests belongs to promote');
   if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
@@ -180,11 +180,15 @@ export function main(argv = process.argv.slice(2)) {
     if (fs.existsSync(file)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (saved.identity !== project.identity || saved.org !== project.org || saved.run !== id) throw new Error('promotion receipt identity changed');
+      const inheritedTests = [...new Set([...(saved.prior_attempts ?? []), saved].flatMap(attempt =>
+        attempt.requiredTests ?? (attempt.test_evidence && !attempt.test_evidence.reexecuted ? attempt.test_evidence.files : [])))].sort();
+      if (opt['required-tests'] !== undefined && inheritedTests.some(file => !requiredTests.includes(file))) throw Error('required tests cannot be removed from an earlier promotion attempt');
+      requiredTests = [...new Set([...inheritedTests, ...requiredTests])].sort();
       if (saved.phase === 'not-queued' && saved.refusal?.code === 'AUTOPILOT_NO_NATIVE_WORKER' && !saved.queue) {
         const { prior_attempts, ...attempt } = saved;
         prior = [...(prior_attempts ?? []), attempt];
       } else {
-        if (requiredTests.some(file => !(saved.requiredTests ?? []).includes(file))) throw Error('required tests differ from the acknowledged promotion; inspect queue evidence');
+        if (requiredTests.some(file => !inheritedTests.includes(file))) throw Error('required tests differ from the acknowledged promotion; inspect queue evidence');
         if (saved.phase !== 'acknowledged') throw new Error(`promotion enqueue is uncertain; inspect ${file} and ${doc.promotion_queue}; do not blindly enqueue again`);
         if (!opt.retry) { print(saved); return; }
         const jobs = saved.queue?.jobs;

@@ -151,20 +151,71 @@ const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expec
   return { queue, promote, drain, handle };
 }
 
-test('supervisor promotion forwards required component tests into the real queue', t => {
-  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+function readyPromotion(f, run, testEvidence) {
   f.record(['ingest', f.show(run).report_path]);
-  // This check exercises supervisor -> enqueue forwarding. Supply readiness
-  // through the existing settle-cli seam; native review transport is independent.
+  // Readiness uses the existing settle-cli seam. The supervisor, queue, train,
+  // Git and record completion remain real; no native reviewer is needed here.
   const head = f.git(['rev-parse', 'HEAD'], f.workspace), journal = path.join(f.org, 'settle', run + '.json');
-  const ready = { result: 'promotable', run, lane: 'topic', head, reviewed_commit: head, journal };
+  const ready = { result: 'promotable', run, lane: 'topic', head, reviewed_commit: head, journal,
+    ...(testEvidence ? { test_evidence: testEvidence } : {}) };
   fs.mkdirSync(path.dirname(journal), { recursive: true });
   fs.writeFileSync(journal, JSON.stringify({ common: gitProject(f.repo).identity, stage: 'complete', result: ready }));
   const settleCLI = path.join(f.root, 'ready.mjs'); fs.writeFileSync(settleCLI, `console.log(${JSON.stringify(JSON.stringify(ready))});`);
+  return settleCLI;
+}
+
+test('supervisor promotion forwards required component tests into the real queue', t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  const settleCLI = readyPromotion(f, run);
   const h = promotionHarness(f, run), required = ['test/board-view.test.mjs'];
   const saved = result(h.promote(['--settle-cli', settleCLI, '--required-tests', JSON.stringify(required)]));
   assert.deepEqual(saved.requiredTests, required);
   assert.deepEqual(h.queue.load().pending[0].requiredTests, required);
+});
+
+test('green-pass promotion replays deferred and component checks and verifies train completion', { timeout: 45000 }, t => {
+  const f = fixture(t), checks = ['deferred.test.mjs', 'test/board-view.test.mjs'];
+  fs.mkdirSync(path.join(f.repo, 'test'));
+  for (const file of checks) fs.writeFileSync(path.join(f.repo, file),
+    `import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(path.join(f.root, 'required-runs'))},${JSON.stringify(file + '\n')});\n`);
+  fs.writeFileSync(path.join(f.repo, 'planner.mjs'), `import {spawnSync} from 'node:child_process';
+if(process.argv[2]==='--plan')console.log(JSON.stringify({files:JSON.parse(process.argv[5]),covered:[]}));
+else for(const file of JSON.parse(process.argv[3])){const r=spawnSync(process.execPath,[file],{stdio:'inherit'});if(r.status!==0)process.exit(r.status??1);}\n`);
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ promotion: `${process.execPath} test.mjs`, promotion_tests: 'planner.mjs' }));
+  f.git(['add', ...checks, 'planner.mjs', '.lane.validation.json']); f.git(['commit', '-qm', 'Declare component and deferred checks']);
+  f.git(['rebase', 'main'], f.workspace);
+  const run = f.start(); f.commit('correct\n'); f.report(run);
+  const settleCLI = readyPromotion(f, run, { reexecuted: false, files: [checks[0]] });
+  const h = promotionHarness(f, run), saved = result(h.promote(['--settle-cli', settleCLI, '--required-tests', JSON.stringify([checks[1]])]));
+  assert.deepEqual(saved.requiredTests, checks); assert.deepEqual(h.queue.load().pending[0].requiredTests, checks);
+  fs.writeFileSync(path.join(f.repo, 'upstream'), 'main moved after review\n');
+  f.git(['add', 'upstream']); f.git(['commit', '-qm', 'Advance main before train replay']);
+  assert.equal(h.drain().outcome, 'promoted');
+  const promoted = h.queue.load().results[0], plan = JSON.parse(fs.readFileSync(promoted.receipt));
+  assert.notEqual(promoted.tip, saved.head, 'must exercise verifyTrainResult rather than the exact-head shortcut');
+  assert.deepEqual(plan.jobs[0].requiredTests, checks); assert.deepEqual(plan.attempts[0].test_plan.required, checks);
+  assert.deepEqual(fs.readFileSync(path.join(f.root, 'required-runs'), 'utf8').trim().split('\n').sort(), checks);
+  assert.equal(h.handle(promoted).result, 'recorded_promotion'); assert.equal(f.show(f.show(run).item).status, 'done');
+});
+
+for (const outcome of ['not-queued', 'refused', 'timeout']) test(`bare promotion retains required tests after ${outcome} and refuses explicit removal`, t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  const required = ['deferred.test.mjs', 'test/board-view.test.mjs'];
+  const settleCLI = readyPromotion(f, run, { reexecuted: false, files: [required[0]] }), h = promotionHarness(f, run);
+  const args = ['--settle-cli', settleCLI, '--required-tests', JSON.stringify([required[1]])];
+  if (outcome === 'not-queued') {
+    const cli = path.join(f.root, 'no-worker.mjs');
+    fs.writeFileSync(cli, `console.log(JSON.stringify({result:'not_queued',code:'AUTOPILOT_NO_NATIVE_WORKER'}));process.exitCode=1;\n`);
+    assert.equal(h.promote([...args, '--existing-worker', '--promote-cli', cli]).status, 1);
+  } else {
+    result(h.promote(args));
+    h.queue.transaction(queue => { queue.results.push({ ...queue.pending.shift(), outcome }); });
+  }
+  const retry = outcome === 'not-queued' ? [] : ['--retry'];
+  assert.match(h.promote(['--settle-cli', settleCLI, ...retry, '--required-tests', JSON.stringify([required[0]])]).stderr, /cannot be removed/);
+  const saved = result(h.promote(['--settle-cli', settleCLI, ...retry]));
+  assert.deepEqual(saved.requiredTests, required); assert.deepEqual(h.queue.load().pending[0].requiredTests, required);
+  assert.equal(saved.prior_attempts.length, 1); assert.deepEqual(saved.prior_attempts[0].requiredTests, required);
 });
 
 test('STOP arriving during review retains a resumable correction without launching another worker', { timeout: 25000 }, (t) => {

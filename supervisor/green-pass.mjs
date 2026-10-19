@@ -84,8 +84,8 @@ function declaredPair(pair, manifest) {
 
 export function greenManifestIdentity({ repo, org, identity: expected, bindings }, { manifest, sourceRoot, manifestDigest = hash(JSON.stringify(manifest)) }) {
     try {
-      checkActivation(bindings?.activatedAt, Date.now(), recordedActivation(manifest.bindings.brain.org, manifestDigest));
-      if (!bindings || Object.keys(bindings).some(k => !['brain', 'lab', 'activatedAt'].includes(k)) || !bindings.brain) identityError('declare the manifest Brain binding');
+      checkActivation(bindings, Date.now(), recordedActivation(manifest.bindings.brain.org, manifestDigest));
+      if (!bindings || Object.keys(bindings).some(k => !['brain', 'lab', 'activatedAt', 'activationId'].includes(k)) || !bindings.brain) identityError('declare the manifest Brain binding');
       if (!['brain', 'lab'].every(kind => ['repo', 'identity', 'org'].every(key => (bindings[kind]?.[key] ?? null) === (manifest.bindings[kind]?.[key] ?? null)))) identityError('configuration differs from reviewed manifest identities');
       const brain = declaredPair(bindings.brain, manifest), lab = bindings.lab && declaredPair(bindings.lab, manifest);
       if (lab && (brain.identity === lab.identity || brain.org === lab.org)) identityError('Brain and lab must have independent identities and records');
@@ -123,9 +123,12 @@ export function createGreenCohort(sourceRoot = root) {
   let sourceError;
   try { for (const file of manifest.bootstrapFiles ?? []) snapshots.set(file, trusted(file, '100644')); }
   catch (error) { sourceError = error.message; }
-  function identity(options) {
+  function deployment() {
     if (sourceError) throw Error(`GREEN_REACH_UNKNOWN: ${sourceError}`);
     checkDeployment(manifest, trusted);
+  }
+  function identity(options) {
+    deployment();
     return greenManifestIdentity(options, { manifest, sourceRoot, manifestDigest: hash(policyBytes) });
   }
   function scope(options) {
@@ -183,7 +186,7 @@ export function createGreenCohort(sourceRoot = root) {
       return refusal(named?.[1] ?? 'GREEN_REACH_UNKNOWN', named ? error.message.slice(named[0].length) : error.message);
     }
   }
-  return { identity, scope, environment: () => childEnvironment(manifest) };
+  return { identity, scope, deployment, environment: () => childEnvironment(manifest) };
 }
 
 export const LIFECYCLE_CASES = {

@@ -454,8 +454,9 @@ STOP, paused housekeeping (`enabled: false`), malformed configuration, and recor
 damage disable automatic actions. The project kill switch is a canonical
 `.supervisor.json` containing `{"autopilot":{"enabled":false}}`. Absence means
 **off**. The schema accepts `autopilot.enabled` as a boolean and `autopilot.cohort`
-as a string. The pilot requires both `enabled: true` and `cohort: "clean-pass"`;
-a missing/unknown cohort wakes with `AUTOPILOT_COHORT_UNKNOWN`. A separate
+as a string. The pilot requires `enabled: true` with `cohort: "clean-pass"` or
+`cohort: "green-pass"`; a missing/unknown cohort wakes with `AUTOPILOT_COHORT_UNKNOWN`.
+The `green` key is accepted only with `green-pass`. The separate
 [`green-pass` cohort](GREEN-COHORT.md) uses a reviewed, candidate-immutable
 containment manifest bound to Brain, with an optional empty lab slot, exact boundary
 pins and a ten-day activation period. Its initial renderer contract admits only a

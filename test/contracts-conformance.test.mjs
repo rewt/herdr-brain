@@ -1,0 +1,278 @@
+// Writer -> current-reader witnesses for the shared contracts. Never enroll live storage.
+import test from './helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fixtureFleet } from './helpers/offline-herdr.mjs';
+import { readFleet } from '../lib/fleet.mjs';
+import { fold } from '../lib/state.mjs';
+import { publishedSummaryStatus, projectSummary } from '../lib/project-summary.mjs';
+import { renderProjectSummary } from '../lib/render.mjs';
+import { renderRetirementStatus } from '../lib/retire-status.mjs';
+import { validateDocument } from '../board/rows.mjs';
+import { readTestSlotOccupancy } from '../test-slot/occupancy.mjs';
+import { projectPin, releaseHome, checkRelease, checkBundle } from '../lib/releases.mjs';
+import { parseEvent } from '../messages/schema.mjs';
+import { LogJournal } from '../logs/journal.mjs';
+import { Receiver, addressKey, readTransport, foldTransport } from '../messages/receiver.mjs';
+import { hookHandoff } from '../messages/hook-pull.mjs';
+import { readDeclaredReferences } from '../lib/retire-runtime.mjs';
+
+const source = fileURLToPath(new URL('../', import.meta.url));
+const at = '2026-10-18T12:00:00.000Z';
+const extra = { future_field: { version: 2 } };
+const load = (root, file) => import(pathToFileURL(path.join(root, file)).href);
+const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+function write(file, value, mode = 0o600) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(value) + '\n', { mode });
+}
+function fixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'brain-transport-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fixtureFleet(t, root);
+  fs.chmodSync(root, 0o700);
+  fs.writeFileSync(path.join(root, 'FIXTURE'), 'brain.transport-fixture/v1\n', { mode: 0o600 });
+  const env = { ...process.env, HOME: root, HERDR_ORG_CONSOLE_CONFIG: path.join(root, 'absent-console.json') };
+  for (const key of Object.keys(env)) if (key.startsWith('GIT_') || /^(ORG_DIR|LANE_.*|HERDR_(PANE|TAB|WORKSPACE)_ID)$/.test(key)) delete env[key];
+  const run = (command, args, cwd = root) => {
+    const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return result.stdout.trim();
+  };
+  const repo = () => {
+    const cwd = path.join(root, 'project'); fs.mkdirSync(cwd);
+    run('git', ['init', '-qb', 'main', cwd]);
+    run('git', ['-C', cwd, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'fixture']);
+    return cwd;
+  };
+  return { root, env, run, repo };
+}
+
+// Resolve once, before scratch project creation. A bad accepted pin is a failure,
+// never a fallback. Unpinned source projects still check an installed current.
+let installed;
+function installedWriter() {
+  if (installed) return installed;
+  const pin = projectPin(source), home = releaseHome();
+  if (pin?.release) installed = { ...checkRelease(home, pin.release), selection: 'project pin' };
+  else {
+    let root;
+    try { root = fs.realpathSync(path.join(home, 'current')); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      return installed = { skip: 'no installed release (no project pin or current)' };
+    }
+    // Legacy installed bundles may predate the manifest protocol.
+    installed = fs.existsSync(path.join(root, '.release-manifest.json'))
+      ? { ...checkBundle(root), selection: 'unpinned current' }
+      : { root, id: path.basename(root), selection: 'legacy unpinned current' };
+  }
+  return installed;
+}
+
+const contracts = [
+  ['fleet.json', ['lib/fleet.mjs'], async (f, root) => {
+    const writer = await load(root, 'lib/fleet.mjs'), cwd = f.repo();
+    const record = path.join(cwd, '.org');
+    fs.mkdirSync(record); fs.writeFileSync(path.join(record, 'events.jsonl'), '');
+    const joined = writer.joinFleet({ cwd, env: f.env, record, worktrees: path.join(f.root, 'lanes'), layers: [] });
+    const doc = json(joined.file), read = () => readFleet(f.env);
+    assert.equal(doc.version, 1); assert.equal(read().projects[joined.name].identity, path.join(cwd, '.git'));
+    write(joined.file, { ...doc, ...extra, projects: { [joined.name]: { ...doc.projects[joined.name], ...extra } } });
+    assert.equal(read().projects[joined.name].record, record);
+    write(joined.file, { ...doc, version: 999 });
+    assert.throws(read, /invalid fleet/);
+  }],
+  ['project-summary/v1', ['lib/project-summary.mjs'], async (f, root) => {
+    const writer = await load(root, 'lib/project-summary.mjs');
+    const project = { identity: path.join(f.root, '.git'), canonical: path.join(f.root, 'project') };
+    const doc = writer.projectSummary({ project, state: fold([]), lanes: { counts: {}, rows: [] }, now: at,
+      releases: { current: 'fixture', pinned: 'fixture' } });
+    const org = path.join(f.root, 'record'); fs.mkdirSync(org);
+    writer.writeProjectSummary(org, doc);
+    const file = path.join(org, 'published/summary.json'), written = json(file);
+    assert.equal(written.schema, 'project-summary/v1');
+    assert.equal(publishedSummaryStatus(org, { now: at, project }).status, 'fresh');
+    assert.match(renderProjectSummary(written), /fixture/);
+    const markdown = renderProjectSummary(written);
+    write(file, { ...written, ...extra, project: { ...written.project, ...extra } });
+    assert.equal(publishedSummaryStatus(org, { now: at, project }).status, 'fresh');
+    assert.equal(renderProjectSummary(json(file)), markdown);
+    // The status reader only needs the original freshness/identity envelope.
+    write(file, { schema: written.schema, project: written.project, generated_at: written.generated_at,
+      stale_after_seconds: written.stale_after_seconds });
+    assert.equal(publishedSummaryStatus(org, { now: at, project }).status, 'fresh');
+    write(file, { ...written, schema: 'project-summary/v999' });
+    assert.equal(publishedSummaryStatus(org, { now: at, project }).status, 'invalid');
+  }],
+  ['lanes-status/v1', ['lib/retire-status.mjs'], async (f, root) => {
+    const writer = await load(root, 'lib/retire-status.mjs');
+    const doc = writer.retirementStatus({ common: f.root, errors: ['fixture diagnostic'] }, { generatedAt: at });
+    assert.equal(doc.schema, 'lanes-status/v1'); assert.equal(doc.counts.UNKNOWN, 1);
+    const rendered = renderRetirementStatus(doc);
+    assert.match(rendered, /fixture diagnostic/);
+    const enriched = { ...doc, ...extra, rows: doc.rows.map(row => ({ ...row, ...extra })) };
+    assert.equal(renderRetirementStatus(enriched), rendered);
+    // Exercise the actual summary consumer too; it reads counts and diagnostics.
+    const summary = lanes => projectSummary({ project: { identity: f.root, canonical: f.root }, state: fold([]), lanes, now: at });
+    assert.deepEqual(summary(enriched), summary(doc));
+  }],
+  ['board-rows/v1', ['board/brain.mjs'], async (f, root) => {
+    const writer = await load(root, 'board/brain.mjs'), common = path.join(f.root, '.git');
+    write(path.join(common, 'promote/queue.json'), { identity: common, pending: [{ id: 'job-1', topic: 'topic', queued: at }], results: [] });
+    const doc = await writer.brainSource({ identity: common, name: 'fixture', worktrees: [] }, { now: Date.parse(at), logClocks: false, show: () => null });
+    const read = value => validateDocument(value, { roots: [common] });
+    assert.equal(doc.schema, 'board-rows/v1');
+    const parsed = read(doc); assert.equal(parsed.rows[0].id, 'job-1'); assert.equal(parsed.rows[0].phase, 'queued');
+    assert.deepEqual(read({ ...doc, ...extra, rows: doc.rows.map(row => ({ ...row, ...extra, status: { ...row.status, ...extra } })) }), parsed);
+    const older = structuredClone(doc); for (const row of older.rows) delete row.clocks;
+    assert.deepEqual(read(older).rows[0].clocks, []);
+    assert.equal(read({ ...doc, schema: 'board-rows/v999' }).rows[0].id, 'source-schema');
+  }],
+  ['occupancy/v1', ['test-slot/occupancy.mjs'], async (f, root) => {
+    const writer = await load(root, 'test-slot/occupancy.mjs'), lock = path.join(f.root, 'slot.lock');
+    const held = writer.sharedOccupancy(lock, 'contract fixture', { reason: 'offline conformance' });
+    try {
+      const doc = json(held.occupancyPath);
+      const read = () => readTestSlotOccupancy(lock, { kill: () => {}, startRecord: () => ({ start: doc.processStart, birth: doc.processBirth }) });
+      assert.equal(doc.schema, 'occupancy/v1'); assert.equal(read()[0].state, 'live'); assert.equal(read()[0].record.pid, process.pid);
+      write(held.occupancyPath, { ...doc, ...extra }); assert.equal(read()[0].state, 'live');
+      const older = { ...doc }; for (const key of ['processBirth', 'groupBirth', 'cwd', 'startedAt', 'profile_id']) delete older[key];
+      write(held.occupancyPath, older); assert.equal(read()[0].state, 'live');
+      write(held.occupancyPath, { ...doc, schema: 'occupancy/v2' });
+      assert.deepEqual(read(), []); assert.ok(fs.existsSync(held.occupancyPath), 'unknown versions cannot be pruned');
+    } finally { held.release(); }
+  }],
+  ['herdr-release/v1', ['herdr/releases.mjs'], async (f, root) => {
+    // Small inventory, real manifest writer. Mandatory entrypoint/hash drift is
+    // covered comprehensively by release-pins, not duplicated here.
+    const bundle = path.join(f.root, 'bundle'); fs.mkdirSync(bundle);
+    for (const file of ['bin/org.mjs', 'lanes/lane.mjs', 'lib/releases.mjs', 'supervisor/supervisor.mjs', 'promote/promote.mjs',
+      'housekeeping/housekeeping.mjs', 'contrib/settle-watch.mjs', 'lib/cli-help.mjs', 'lanes/docs/REVIEW_TEMPLATE.md']) {
+      fs.mkdirSync(path.dirname(path.join(bundle, file)), { recursive: true }); fs.writeFileSync(path.join(bundle, file), '// fixture\n');
+    }
+    fs.writeFileSync(path.join(bundle, '.release-commit'), 'a'.repeat(40) + '\n');
+    f.run(process.execPath, [path.join(root, 'herdr/releases.mjs'), 'manifest', bundle]);
+    const file = path.join(bundle, '.release-manifest.json'), doc = json(file);
+    assert.equal(doc.schema, 'herdr-release/v1'); assert.equal(checkBundle(bundle, { verifyFiles: true }).commit, 'a'.repeat(40));
+    write(file, { ...doc, ...extra }); assert.equal(checkBundle(bundle, { verifyFiles: true }).protocol, 1);
+    write(file, { ...doc, protocol: 999 }); assert.throws(() => checkBundle(bundle), /incompatible release/);
+  }],
+  ['.herdr-release.json', ['herdr/releases.mjs'], async (f, root) => {
+    const cwd = f.repo();
+    // unpin is the same writer as pin, without manufacturing a second release.
+    f.run(process.execPath, [path.join(root, 'herdr/releases.mjs'), 'unpin', path.join(f.root, 'installation'), cwd]);
+    const file = path.join(cwd, '.herdr-release.json'); assert.deepEqual(json(file), { release: null });
+    const commit = () => f.run('git', ['-C', cwd, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qam', 'pin fixture']);
+    f.run('git', ['-C', cwd, 'add', '.herdr-release.json']); commit();
+    assert.equal(projectPin(cwd).release, null);
+    write(file, { release: 'fixture-release' }); commit(); assert.equal(projectPin(cwd).release, 'fixture-release');
+    // Explicit exception to extensible versioned documents: this selector is a
+    // closed unversioned config. Preserve its current rejection of extra keys.
+    write(file, { release: 'fixture-release', ...extra }); commit();
+    assert.throws(() => projectPin(cwd), /invalid .herdr-release.json/);
+  }],
+  ['brain.log/v1', ['logs/journal.mjs', 'logs/inputs.mjs'], async (f, root) => {
+    const writer = await load(root, 'logs/journal.mjs'), inputs = await load(root, 'logs/inputs.mjs');
+    const commonDir = path.join(f.root, '.git'); fs.mkdirSync(commonDir);
+    const scope = { identity: 'fixture', commonDir, root: path.join(f.root, 'logs') };
+    const journal = new writer.LogJournal({ ...scope, clock: () => at });
+    const event = inputs.sourceGap({ source: 'fixture', reason: 'offline fixture' }, scope, at);
+    await journal.appendRaw(event);
+    const reader = new LogJournal(scope), state = await reader.read();
+    assert.equal(state.entries.length, 1); assert.equal(parseEvent(JSON.stringify(state.entries[0])).eventId, event.eventId);
+    const file = path.join(journal.directory, state.segments[0].name);
+    const enriched = { ...state.entries[0], ...extra, payload: { ...state.entries[0].payload, ...extra } };
+    write(file, enriched); assert.equal((await reader.read()).entries[0].eventId, event.eventId);
+    const older = { ...event }; delete older.source;
+    assert.equal(parseEvent(JSON.stringify(older)).eventId, event.eventId);
+    assert.throws(() => parseEvent(JSON.stringify({ ...event, schema: 'brain.log/v999' })), /schema/);
+  }],
+  ['brain.transport/v1', ['messages/receiver.mjs'], async (f, root) => {
+    const writer = await load(root, 'messages/receiver.mjs');
+    const common = path.join(f.root, '.git');
+    const address = { identity: 'fixture', projectRef: common, role: { name: 'supervisor', bindingRef: 'fixture-launch' } };
+    const receiver = new writer.Receiver({ root: f.root });
+    await receiver.initialize({ supervisor: address, recipients: [{ address, consumer: 'fixture' }],
+      senders: [{ receipt: 'launch', producer: 'sender', epoch: 'one', address, recipients: [addressKey(address)], bodyRoots: [f.root] }] });
+    const records = readTransport(f.root); assert.equal(records.length, 1); assert.equal(foldTransport(records).config.supervisor.identity, 'fixture');
+    const file = path.join(f.root, 'transport.jsonl');
+    write(file, { ...records[0], ...extra });
+    assert.equal(new Receiver({ root: f.root }).state().config.recipients[0].consumer, 'fixture');
+    fs.appendFileSync(file, JSON.stringify({ schema: 'brain.transport/v1', sequence: 2, at, type: 'future.inert', ...extra }) + '\n');
+    assert.equal(new Receiver({ root: f.root }).state().entries.length, 0);
+    write(file, { ...records[0], schema: 'brain.transport/v999' }); assert.throws(() => readTransport(f.root), /corrupt transport/);
+  }],
+  ['hook-pull/v1', ['messages/receiver.mjs', 'messages/hook-pull.mjs'], async (f, root) => {
+    const writer = await load(root, 'messages/receiver.mjs'), hook = await load(root, 'messages/hook-pull.mjs');
+    const common = path.join(f.root, '.git');
+    const sender = { identity: 'fixture', projectRef: common, role: { name: 'supervisor', bindingRef: 'launch' } };
+    const address = { identity: 'fixture', projectRef: common, session: { uid: 'worker', incarnation: 'one' } }, recipient = addressKey(address);
+    const receiver = new writer.Receiver({ root: f.root });
+    await receiver.initialize({ supervisor: sender, recipients: [{ address: sender, consumer: 'sender' }, { address, consumer: 'worker' }],
+      senders: [{ receipt: 'launch', producer: 'sender', epoch: 'one', address: sender, recipients: [recipient], bodyRoots: [f.root] }] });
+    const event = { schema: 'brain.log/v1', eventId: 'contract-message', producer: { id: 'sender', epoch: 'one', sequence: 1 }, occurredAt: at,
+      type: 'session.message.v1', level: 'info', identity: 'fixture', project: { commonDir: common }, payload: { from: sender, to: [address],
+        kind: 'request', refs: [], reply_to: null, priority: 'normal', reply_by: null, summary: 'Contract fixture', body_ref: null, decision_ref: null } };
+    await receiver.accept(event, { sender: 'launch', recipient });
+    const session = { root: f.root, recipient, consumer: 'worker', cwd: f.root, kind: 'claude', rendering: 'plain' };
+    const output = JSON.parse(await hook.hookOutput({ session_id: 'native', cwd: f.root, hook_event_name: 'Stop', ...extra }, session));
+    assert.equal(output.decision, 'block'); assert.match(output.reason, /Contract fixture/);
+    const current = new Receiver({ root: f.root });
+    const receipt = current.state().entries[0].receipts.at(-1); assert.equal(receipt.transport, 'hook-pull/v1');
+    assert.deepEqual(hookHandoff(session).claimedIds, [event.eventId]);
+    const records = readTransport(f.root), last = records.at(-1);
+    last.receipt = { ...last.receipt, ...extra };
+    fs.writeFileSync(path.join(f.root, 'transport.jsonl'), records.map(row => JSON.stringify({ ...row, ...extra })).join('\n') + '\n');
+    assert.deepEqual(hookHandoff(session).claimedIds, [event.eventId]);
+    await current.consume(event.eventId, recipient, { consumer: 'worker' });
+    assert.deepEqual(hookHandoff(session).claimedIds, []);
+  }],
+  ['herdr-reference/v1', ['supervisor/README.md'], async (f, root) => {
+    // No bundled writer exists: the claiming tool follows this published example.
+    const guide = fs.readFileSync(path.join(root, 'supervisor/README.md'), 'utf8');
+    const example = /```json\s*(\{\s*"schema": "herdr-reference\/v1",[\s\S]*?\})\s*```/.exec(guide);
+    assert.ok(example, 'declared reference writer example remains available');
+    const doc = JSON.parse(example[1]), file = path.join(f.root, 'references/job.json');
+    const read = () => readDeclaredReferences(f.root, Date.parse(doc.created_at));
+    write(file, doc); assert.equal(read().errors.length, 0); assert.equal(read().references[0].job, doc.job);
+    const older = { ...doc, ...extra }; for (const key of ['run', 'lane', 'cwd', 'pane']) delete older[key];
+    write(file, older); assert.equal(read().references[0].owner, doc.owner);
+    write(file, { ...doc, schema: 'herdr-reference/v999' });
+    assert.equal(read().references.length, 0); assert.match(read().errors[0], /project kept/);
+  }],
+  ['identity desks', ['supervisor/request.mjs'], async (f, root) => {
+    const writer = await load(root, 'supervisor/request.mjs');
+    // Procedural contract, no request JSON schema or model-side text validator.
+    // Fake only Herdr's physical seam; no real desk is created or prompted.
+    for (const enriched of [false, true]) {
+      const calls = [], text = 'What: inspect. Why: contract. Done: reply. Evidence: fixture.\nKeep literal $(text).';
+      const agent = { name: 'desk-fixture', workspace_id: 'w1', pane_id: 'w1:p1', agent_status: 'idle', ...(enriched ? extra : {}) };
+      const result = await writer.request(['fixture', text], { env: f.env, mirror: () => {}, execute: (_command, args) => {
+        calls.push(args);
+        const result = args[1] === 'list' ? { agents: [agent] } : args[1] === 'get' ? { agent } : {};
+        return { status: 0, stdout: JSON.stringify({ result, ...(enriched ? extra : {}) }) };
+      } });
+      assert.equal(result.desk, 'desk-fixture');
+      assert.deepEqual(calls, [['agent', 'list'], ['agent', 'get', 'desk-fixture'], ['agent', 'prompt', 'desk-fixture', text]]);
+    }
+  }],
+];
+
+for (const [name, files, conform] of contracts) {
+  test(`${name}: current writer -> current reader; compatible shape`, async t => {
+    await conform(fixture(t), source);
+  });
+  test(`${name}: installed writer -> current reader; compatible shape`, async t => {
+    const release = installedWriter();
+    if (release.skip) return t.skip(release.skip);
+    const missing = files.filter(file => !fs.existsSync(path.join(release.root, file)));
+    if (missing.length) return t.skip(`installed ${release.id} predates contract writer: ${missing.join(', ')}`);
+    t.diagnostic(`${release.selection}: ${release.id} (${release.root})`);
+    await conform(fixture(t), release.root);
+  });
+}

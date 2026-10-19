@@ -27,6 +27,7 @@ const promotion = [
   'promote/test/train.test.mjs',
   'promote/test/workflow-train.test.mjs',
   'test/bch-cloak-contract.test.mjs',
+  'test/contracts-conformance.test.mjs',
   'supervisor/test/request.test.mjs',
   'settle/test/rebase-paths.test.mjs',
   'settle/test/rebase-review.test.mjs',

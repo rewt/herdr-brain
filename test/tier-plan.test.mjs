@@ -10,6 +10,7 @@ test('tier selection covers every current test once in promotion or release and 
   const directories = ['test', 'brain/test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'verify/test', 'settle/test', 'supervisor/test', 'lanes/test', 'acceptance/test'];
   const expected = directories.flatMap(dir => fs.readdirSync(path.join(root, dir)).filter(file => file.endsWith('.test.mjs')).map(file => `${dir}/${file}`));
   const promotion = tierFiles('promotion', root);
+  assert.ok(promotion.includes('test/contracts-conformance.test.mjs'), 'shared contracts run at promotion');
   const fullFileSteps = ['core', 'cycle', 'lanes', 'acceptance'].flatMap(tier => tierFiles(tier, root));
   assert.deepEqual(fullFileSteps.sort(), [...promotion].sort(), 'release steps cover promotion files once');
   const release = tierFiles('release', root), all = [...promotion, ...release];

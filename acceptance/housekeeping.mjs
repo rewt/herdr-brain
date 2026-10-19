@@ -6,7 +6,13 @@ export function assertHousekeepingActions(text, { closedTab, keptTabs }) {
   const actions = text.split('\n').filter(Boolean).map(JSON.parse);
   const closed = (tab) => actions.some((entry) => entry.dryRun !== true && (
     (entry.action === 'closed' && entry.tab_id === tab) ||
-    (entry.action === 'tidy-tabs' && entry.output?.split('\n').some((line) => line.startsWith(`closed ${tab} "`)))
+    (entry.action === 'tidy-tabs' && entry.output?.split('\n').some((line) => {
+      if (line.startsWith(`closed ${tab} "`)) return true;
+      try {
+        const action = JSON.parse(line);
+        return action.action === 'closed' && action.tab_id === tab && action.dryRun !== true;
+      } catch { return false; }
+    }))
   ));
   assert.ok(closed(closedTab), `housekeeping must log closure of eligible worker tab ${closedTab}`);
   for (const tab of keptTabs) {

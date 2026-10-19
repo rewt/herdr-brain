@@ -4,11 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fixture } from '../../test/helpers/retire-fixture.mjs';
-import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { spawnChild, spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createRetirement } from '../../lib/retire-runtime.mjs';
 import { matchingRun } from '../../lib/retire.mjs';
 import { ownerIdentity, ownerAlive } from '../../lib/process-owner.mjs';
+import { lookupProcess } from '../../lib/processes.mjs';
+import { readLaneCwdReferences } from '../../lib/lane-removal.mjs';
 import { configuredCommands, harnessEnvironment, awaitWatcherExit, abandonWatcher, promoteAndComplete, assertWorkerKept } from '../run.mjs';
+import { scriptedProcesses, retireScriptedWorker } from '../retirement.mjs';
+import { scratchProductHomes } from '../environment.mjs';
 import { waitUntil } from '../load.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
@@ -55,7 +59,34 @@ function configuredFixture(t, { merged = true } = {}) {
     fs.writeFileSync(report, `---\nrun: R-1\noutcome: ${outcome}\nsummary: Scripted acceptance round.\nheadline: The scripted round completed\nblockers: ${outcome === 'done' ? '[]' : '["Acceptance needs a decision"]'}\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
     commands.record(['check', report]); commands.record(['ingest', report, '--run', 'R-1']);
   };
-  return { ...f, adapter, env, node, events, saveEvents, observe, job, ingest, record: commands.record, runLane: commands.lane };
+  return { ...f, adapter, env, node, events, saveEvents, observe, job, ingest, retire: commands.retire, record: commands.record, runLane: commands.lane };
+}
+
+async function scriptedFixture(t) {
+  const f = configuredFixture(t, { merged: false }), root = f.scratch;
+  for (const file of ['worker.mjs', 'producers.mjs', 'environment.mjs'])
+    fs.copyFileSync(path.join(source, 'acceptance', file), path.join(root, file));
+  fs.copyFileSync(path.join(source, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
+  // Only native lifecycle reporting is simulated. The actual worker, shell,
+  // process reader, guarded retirement and cwd-removal guard run unchanged.
+  fs.writeFileSync(path.join(root, 'herdr.mjs'), "console.log('{\"result\":{}}');\n");
+  fs.writeFileSync(path.join(root, 'product-home-env.json'), JSON.stringify({ realHome: process.env.HOME,
+    roots: [root], homes: scratchProductHomes(root) }));
+  const executable = path.join(root, 'codex');
+  fs.copyFileSync(process.execPath, executable, fs.constants.COPYFILE_FICLONE);
+  const command = [executable, path.join(root, 'worker.mjs'), root, 'worker', 'worker'].map(quote).join(' ');
+  const shell = spawnScenarioChild(t, '/bin/sh', ['-c', `${command}; sleep 0.3; while IFS= read -r line; do :; done`],
+    { cwd: f.lane, env: { ...f.env, HERDR_PANE_ID: f.job.pane }, stdio: ['pipe', 'pipe', 'pipe'] });
+  await waitUntil(() => fs.existsSync(path.join(root, 'script-panes', f.job.pane)), 'real scripted worker ready', 5000);
+  const observed = lookupProcess(undefined, { identityOnly: true }); assert.equal(observed.ok, true, observed.error);
+  const shellRow = observed.value.get(shell.pid);
+  const worker = [...observed.value.values()].find(row => row.ppid === shell.pid && row.command === '[codex]');
+  assert.ok(worker, 'actual copied Node worker is a child of the live shell');
+  f.state.info = { shell_pid: shell.pid, foreground_processes: [{ pid: worker.pid, name: 'codex' }],
+    process_tree_complete: true, process_tree: [shellRow, worker] };
+  f.save();
+  const h = (...args) => JSON.parse(f.node(path.join(source, 'acceptance/herdr.mjs'), args, {}).stdout).result;
+  return { ...f, h, shell, worker };
 }
 
 test('configured retirement matches dispatch identity and completes open work after real ingestion and integration', t => {
@@ -155,4 +186,47 @@ for (const outcome of ['blocked', 'needs_human']) test(`actual lane close keeps 
   assertWorkerKept(f.job, { lane: f.runLane, reason: /R-1 awaits correction or disposition/ });
   assert.equal(JSON.parse(f.record(['show', 'ENG-1', '--json'])).closed, null);
   assert.deepEqual(f.read().actions, []);
+});
+
+test('scripted retirement closes the recorded tab and waits for its real shell and worker before lane removal', async t => {
+  const f = await scriptedFixture(t);
+  f.ingest(); promoteAndComplete(f.job, { lane: f.runLane, record: f.record });
+  const before = readLaneCwdReferences(f.lane, { env: f.env });
+  for (const pid of [f.shell.pid, f.worker.pid]) assert.ok(before.some(ref => ref.job === String(pid)));
+  assert.match(f.runLane(['close', 'topic'], f.repo, { ok: false }), /process cwd reference/);
+  assert.deepEqual(f.read().actions, [], 'lane preflight does not dispose of its live occupants');
+  let waited = false;
+  const receipt = await retireScriptedWorker(f.job, { h: f.h,
+    retire: job => {
+      const result = f.retire(job); // Actual scoped product apply and native close receipt.
+      f.shell.stdin.end(); // Native PTY hangup is asynchronous after that receipt.
+      return result;
+    },
+    until: (predicate, label, ms) => {
+      assert.equal(predicate(), false, 'tab closure has not yet drained its PTY processes'); waited = true;
+      return waitUntil(predicate, label, ms);
+    },
+  });
+  assert.equal(waited, true);
+  assert.deepEqual(receipt.processes.map(row => row.pid).sort((a, b) => a - b), [f.shell.pid, f.worker.pid].sort((a, b) => a - b));
+  assert.equal((await waitForExit(f.shell)).code, 0);
+  for (const process of receipt.processes) assert.equal(ownerAlive(process), false);
+  assert.deepEqual(readLaneCwdReferences(f.lane, { env: f.env }), []);
+  assert.match(f.runLane(['close', 'topic']), /removed worktree/);
+  assert.equal(fs.existsSync(f.lane), false);
+  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t1'], ['workspace', 'close', 'w']]);
+});
+
+test('scripted retirement preserves open work and the real stand-in obeys the native exit command', async t => {
+  const f = await scriptedFixture(t);
+  await assert.rejects(retireScriptedWorker(f.job, { h: f.h, retire: f.retire,
+    until: () => assert.fail('a refused retirement cannot await process disposal') }), /did not close its worker/);
+  assert.deepEqual(f.read().actions, []); assert.equal(ownerAlive(f.worker), true);
+  const processes = scriptedProcesses(f.job, { h: f.h });
+  assert.ok(processes.some(row => row.pid === f.shell.pid)); assert.ok(processes.some(row => row.pid === f.worker.pid));
+  f.shell.stdin.write('/exit\n');
+  await waitUntil(() => !ownerAlive(f.worker), 'native exit command ends stand-in', 5000);
+  assert.equal(ownerAlive(processes.find(row => row.pid === f.shell.pid)), true, 'exiting the worker alone leaves its shell');
+  assert.ok(fs.readFileSync(path.join(f.scratch, 'worker-input.jsonl'), 'utf8').includes('"line":"/exit"'));
+  f.shell.stdin.end(); assert.equal((await waitForExit(f.shell)).code, 0);
 });

@@ -11,6 +11,7 @@ const closure = 'closed done:t1 "agent:housekeeping-done": worker finished and i
 test('housekeeping accepts either its direct closure or auto-tidy for the eligible worker', () => {
   assertHousekeepingActions(log({ action: 'closed', tab_id: 'done:t1' }), expected);
   assertHousekeepingActions(log(tidy(closure + '\ntidy-tabs: closed 1 of 1 finished tab(s) for project')), expected);
+  assertHousekeepingActions(log(tidy(JSON.stringify({ action: 'closed', tab_id: 'done:t1', decision: 'release' }))), expected);
 });
 
 test('housekeeping rejects unrelated closures, dry runs and failed tidy output', () => {
@@ -22,12 +23,15 @@ test('housekeeping rejects unrelated closures, dry runs and failed tidy output',
     tidy('would close done:t1 "agent:done"'),
     tidy('tidy-tabs: closed 1 of 1 finished tab(s) for project'),
     { action: 'tidy-failed', output: closure },
+    tidy(JSON.stringify({ action: 'closed', tab_id: 'other:t1' })),
+    tidy(JSON.stringify({ action: 'closed', tab_id: 'done:t1', dryRun: true })),
+    tidy(JSON.stringify({ action: 'skip-close', tab_id: 'done:t1', decision: 'release' })),
   ]) assert.throws(() => assertHousekeepingActions(log(entry), expected), /must log closure/);
 });
 
 test('housekeeping rejects closure of any ineligible worker through either path', () => {
   for (const tab_id of expected.keptTabs) {
-    for (const entry of [{ action: 'closed', tab_id }, tidy(`closed ${tab_id} "worker": finished`)]) {
+    for (const entry of [{ action: 'closed', tab_id }, tidy(`closed ${tab_id} "worker": finished`), tidy(JSON.stringify({ action: 'closed', tab_id }))]) {
       assert.throws(() => assertHousekeepingActions(log(tidy(closure), entry), expected), /must not close ineligible/);
     }
   }

@@ -28,6 +28,7 @@ import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
 import { noticeDeliveryBudgetMs } from './notice-budget.mjs';
 import { matchingRun } from '../supervisor/tidy-tabs.mjs';
 import { ownerAlive } from '../lib/process-owner.mjs';
+import { scriptedProcesses, awaitScriptedExit, retireScriptedWorker } from './retirement.mjs';
 
 // The configured fixture keeps its record outside the checkout. Both command
 // paths must select it; lane retirement otherwise observes an empty record.
@@ -37,6 +38,8 @@ export function configuredCommands(node, candidate, { repo, org }) {
   return {
     record: (args, options = {}) => call('bin/org.mjs', args, repo, options),
     lane: (args, cwd = repo, options = {}) => call('lanes/lane.mjs', args, cwd, options),
+    retire: (job, options = {}) => JSON.parse(call('supervisor/retire.mjs',
+      ['apply', '--repo', repo, '--org', org, '--lane', job.info.workspace], repo, options)),
   };
 }
 
@@ -107,7 +110,7 @@ fs.mkdirSync(evidence);
 const started = Date.now();
 const load = createLoadMonitor({ record: (sample) => fs.appendFileSync(path.join(evidence, 'load.jsonl'), JSON.stringify(sample) + '\n') });
 const results = [];
-let logFile, candidateCommit, fixture, supervisor, defaultOrg, record, lane;
+let logFile, candidateCommit, fixture, supervisor, defaultOrg, record, lane, retire;
 let focusMonitor, focusError;
 let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
@@ -226,6 +229,11 @@ async function final(job, { ingest = true } = {}) {
   await awaitWatcherExit(job, { until });
 }
 const stopWatcher = job => abandonWatcher(job, { record, h, until, read });
+async function closeWorker(job) {
+  const receipt = await retireScriptedWorker(job, { h, retire, until });
+  fs.appendFileSync(logFile, JSON.stringify(receipt) + '\n');
+  lane(['close', job.lane]);
+}
 
 function cleanupScope() {
   return cleanupPromise ??= closeScope();
@@ -397,7 +405,7 @@ try {
     fs.symlinkSync(path.join(candidate, 'lanes/lane.mjs'), path.join(bin, 'lane'));
     env.PATH = `${bin}:${process.env.PATH}`;
     fixture = { repo: path.join(root, 'configured-project'), org: path.join(root, 'record'), brief: path.join(root, 'ask.md') };
-    ({ record, lane } = configuredCommands(node, candidate, fixture));
+    ({ record, lane, retire } = configuredCommands(node, candidate, fixture));
     initRepo(fixture.repo);
     write(fixture.brief, 'Commit a scratch work file and write the supplied report. No model.\n');
     write(path.join(fixture.repo, '.lane.json'), JSON.stringify({ main: 'main', validate: 'node --test',
@@ -437,7 +445,7 @@ try {
     promoteAndComplete(job, { lane, record });
     assert.equal(git(fixture.repo, ['rev-parse', 'main']), git(job.info.workspace, ['rev-parse', 'HEAD']));
     assert.equal(git(fixture.repo, ['rev-list', '--merges', 'main']), '');
-    lane(['close', job.lane]);
+    await closeWorker(job);
     assert.ok(!fs.existsSync(job.info.workspace));
     return `${job.run}: one notice, recorded report, green fast-forward, lane removed; red/dirty gates refused`;
   });
@@ -519,7 +527,7 @@ try {
     await until(() => ['idle', 'done'].includes(h('agent', 'get', first.agent).agent.agent_status), 'worker idle');
     const second = await dispatch('done', first.lane, { item: first.item, reuse: first.run });
     assert.equal(first.agent, second.agent); assert.equal(first.pane, second.pane); assert.notEqual(first.run, second.run);
-    await final(second); lane(['check'], second.info.workspace); promoteAndComplete(second, { lane, record }); lane(['close', second.lane]);
+    await final(second); lane(['check'], second.info.workspace); promoteAndComplete(second, { lane, record }); await closeWorker(second);
     return `${first.run} -> ${second.run}: blocked report then done, same PTY, distinct run/report`;
   });
   await test(cases.grace, async () => {
@@ -541,7 +549,7 @@ try {
     assert.ok(!read(log).includes('[watch-no-report]'), 'no early no-report notice');
     write(path.join(root, 'mode'), 'done');
     h('agent', 'prompt', job.agent, `You are run ${job.run}. Write the report to ${job.info.report_path};`);
-    await final(job); assert.match(read(log), /\[org-report\]/); promoteAndComplete(job, { lane, record }); lane(['close', job.lane]);
+    await final(job); assert.match(read(log), /\[org-report\]/); promoteAndComplete(job, { lane, record }); await closeWorker(job);
     return '900-second configuration stayed quiet for observed interval, resume/report woke it, duplicate refused (full 900s expiry not tested)';
   });
   await test(cases.housekeeping, async () => {
@@ -554,6 +562,7 @@ try {
     await final(human);
     const tabFor = (job) => h('pane', 'get', job.pane).pane.tab_id;
     const closedTab = tabFor(done), keptTabs = [blocked, human].map(tabFor);
+    const doneProcesses = scriptedProcesses(done, { h });
     const state = path.join(root, 'housekeeping-state');
     let failure;
     try {
@@ -567,6 +576,8 @@ try {
     const close = node(path.join(root, 'herdr.mjs'), ['pane', 'get', done.pane], { ok: false });
     assert.notEqual(close.status, 0, 'one real housekeeping pass left the promoted, ingested done worker open; inspect canonical workspace metadata and action log');
     assertHousekeepingActions(read(path.join(state, 'actions.jsonl')), { closedTab, keptTabs });
+    await awaitScriptedExit(done, doneProcesses, { until });
+    fs.appendFileSync(logFile, JSON.stringify({ action: 'scripted-worker-retired', run: done.run, processes: doneProcesses }) + '\n');
     for (const job of [blocked, human]) assertWorkerKept(job, { lane, reason: /awaits correction or disposition/ });
     return 'actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved';
   });
@@ -638,6 +649,8 @@ try {
     const defaultLane = args => commands.lane(args, repo, { extra });
     commands.lane(['check'], info.workspace, { extra });
     promoteAndComplete(job, { lane: defaultLane, record: args => commands.record(args, { extra }) });
+    const retired = await retireScriptedWorker({ ...job, info }, { h, until, retire: job => commands.retire(job, { extra }) });
+    fs.appendFileSync(logFile, JSON.stringify(retired) + '\n');
     defaultLane(['close', job.lane]);
     return `${job.run}: supervisor initialized record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation, fast-forward and record completion passed`;
   });

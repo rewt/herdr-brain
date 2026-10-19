@@ -65,7 +65,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const settings = { enabled: true, cohort, ...(cohort === 'green-pass' ? { green: { brain, lab: null, activatedAt: activation.at, activationId: activation.id } } : {}) };
   let project = repo;
   if (foreign) {
-    project = path.join(root, 'foreign'); git(['clone', '-q', repo, project]); ignore(project);
+    project = path.join(root, 'foreign'); git(['clone', '--no-local', '-q', repo, project]); ignore(project);
     git(['config', 'user.name', 'Foreign fixture'], project); git(['config', 'user.email', 'foreign@example.invalid'], project);
     record(['init', path.join(project, '.org')], project);
   }
@@ -91,6 +91,11 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const guard = { canonical: project, identity, org, workspace, topic: 'candidate', expectedHead: head, run, existingWorker: true };
   const { withPromotionGuard } = await import(pathToFileURL(path.join(repo, 'promote/guard.mjs')));
   const check = operation => withPromotionGuard(guard, operation);
+  const herdr = path.join(root, 'herdr');
+  fs.writeFileSync(herdr, `#!${process.execPath}
+const a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));
+else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
+else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   let workerDone;
   t.after(async () => {
     fs.writeFileSync(path.join(root, 'release-anchor'), 'release');
@@ -99,7 +104,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
     fs.rmSync(root, { recursive: true, force: true });
   });
   return { root, repo, project, org, workspace, env, exec, ok, git, put, record, show, run, item, base, head, settings, configure,
-    settled, save, guard, check, change, gate, checked, brain, manifest, worker: done => { workerDone = done; } };
+    settled, save, guard, check, change, gate, checked, brain, manifest, herdr, worker: done => { workerDone = done; } };
 }
 
 function damage(f, kind) {
@@ -168,7 +173,7 @@ for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existi
   const started = path.join(f.root, 'anchor-started'), release = path.join(f.root, 'release-anchor');
   const anchorGate = path.join(f.root, 'anchor.cjs');
   fs.writeFileSync(anchorGate, `const fs=require('fs');fs.writeFileSync(${JSON.stringify(started)},'started');const end=Date.now()+${loadTimeout(30000)};while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<end)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);process.exitCode=1;`);
-  enqueue(queue, ['anchor'], { to: 'offline', herdr: 'herdr', attempts: 1, retry: 0, org: null,
+  enqueue(queue, ['anchor'], { to: 'offline', herdr: f.herdr, attempts: 1, retry: 0, org: null,
     laneCLI: path.join(f.repo, 'lanes/lane.mjs'), validate: `${process.execPath} ${anchorGate}` });
   const child = spawnScenarioChild(t, process.execPath, [cli, '--drain', '--repo', f.project], { cwd: f.project, env: f.env });
   const done = waitForExit(child); f.worker(done);
@@ -179,13 +184,13 @@ for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existi
   if (kind !== 'foreign') f.check(); // A valid admission precedes late drift.
   damage(f, kind);
   const result = f.exec(process.execPath, [cli, 'candidate', '--existing-worker', '--repo', f.project, '--org', f.org,
-    '--if-current-run', f.run, '--expected-head', f.guard.expectedHead, '--delivery-attempts', '1', '--retry-seconds', '0']);
+    '--if-current-run', f.run, '--expected-head', f.guard.expectedHead, '--delivery-attempts', '1', '--retry-seconds', '0', '--herdr', f.herdr]);
   const reply = JSON.parse(f.ok(result)); assert.deepEqual(reply.worker, { already_running: true });
   assert.equal(queue.load().pending.find(job => job.run === f.run).existingWorker, true);
   fs.writeFileSync(release, 'release');
   const exit = await done; assert.equal(exit.code, 0, exit.stderr);
   const row = queue.load().results.find(job => job.run === f.run);
-  const evidence = JSON.stringify({ row, log: row?.log && fs.readFileSync(row.log, 'utf8') });
+  const evidence = JSON.stringify({ row, log: row?.log && fs.existsSync(row.log) ? fs.readFileSync(row.log, 'utf8') : null });
   assert.ok(row, evidence);
   if (kind === 'admitted') {
     assert.equal(row.outcome, 'promoted', evidence);

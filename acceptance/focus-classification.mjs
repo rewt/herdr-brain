@@ -3,15 +3,22 @@
 export const ATTRIBUTION_WINDOW_MS = 5000;
 export const OPERATOR_ACTIVITY_WINDOW_MS = 60_000;
 
-export function targetsDestination(call, pane, workspace) {
-  if (call.targets?.panes?.includes(pane) || call.targets?.workspaces?.includes(workspace)) return true;
-  if (call.created?.panes?.includes(pane) || call.created?.workspaces?.includes(workspace)) return true;
+const paneWorkspace = pane => typeof pane === 'string' ? /^([^:]+):p\d+$/.exec(pane)?.[1] : undefined;
+
+export function targetsDestination(call, pane, workspace, { includeSiblingPanes = false } = {}) {
+  // Only broaden attribution after ownership of the destination is established.
+  // Native pane IDs carry their workspace prefix, including newly split panes.
+  if (includeSiblingPanes) workspace ??= paneWorkspace(pane);
+  const matchesPane = target => target === pane ||
+    (includeSiblingPanes && workspace && paneWorkspace(target) === workspace);
+  if (call.targets?.panes?.some(matchesPane) || call.targets?.workspaces?.includes(workspace)) return true;
+  if (call.created?.panes?.some(matchesPane) || call.created?.workspaces?.includes(workspace)) return true;
   return [call.args, call.requested].some((argv = []) => {
     const args = argv.slice(0, argv.includes('--') ? argv.indexOf('--') : argv.length);
-    if (['pane', 'agent'].includes(args[0]) && args[2] === pane) return true;
+    if (['pane', 'agent'].includes(args[0]) && matchesPane(args[2])) return true;
     if (workspace && args[0] === 'workspace' && args[2] === workspace) return true;
     return args.some((arg, index) =>
-      (arg === '--pane' && args[index + 1] === pane) ||
+      (arg === '--pane' && matchesPane(args[index + 1])) ||
       (workspace && arg === '--workspace' && args[index + 1] === workspace));
   });
 }
@@ -41,7 +48,8 @@ export function focusCallContext(rows, at) {
 // Called only for a changed destination, after native identity and late creation
 // receipts resolve. The same classifier consumes synthetic offline traces.
 export function recordFocusChange(summary, row) {
-  const matching = row.nearbyCalls.filter(call => targetsDestination(call, row.panes[0], row.workspaces[0]));
+  const matching = row.nearbyCalls.filter(call => targetsDestination(call, row.panes[0], row.workspaces[0],
+    { includeSiblingPanes: row.owned }));
   row.calls = matching.some(call => call.completedAt === undefined)
     ? matching.filter(call => call.completedAt === undefined) : matching.slice(0, 1);
   const activity = summary.operatorActivity;

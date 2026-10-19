@@ -192,7 +192,7 @@ test('an unlisted owned pane retains a warning during operator activity, even th
   assert.deepEqual(saved.notAttributableChanges, [warning]);
 });
 
-test('a delayed product focus move still fails during observed operator activity', async t => {
+test('a delayed product focus move to a sibling owned pane still fails during observed operator activity', async t => {
   const { root, monitor, change } = await fixture(t, { workspaces: ['scratch'] });
   change(['external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
@@ -202,12 +202,14 @@ test('a delayed product focus move still fails during observed operator activity
       args: ['pane', 'send-keys', 'scratch:p2', 'Enter'], requested: ['agent', 'prompt', 'worker', 'continue'] },
     { type: 'end', id: 'delayed-send', at },
   ].map(JSON.stringify).join('\n') + '\n');
-  change(['scratch:p2', 'external:p1']);
+  change(['scratch:p3', 'external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.changes.length, 1);
   assert.equal(summary.notAttributableChanges.length, 0);
+  assert.equal(summary.changes[0].classification, 'harness');
+  assert.deepEqual(summary.changes[0].panes, ['scratch:p3']);
   assert.equal(summary.changes[0].calls[0].id, 'delayed-send');
   assert.throws(() => assertFocus(summary), /pane send-keys scratch:p2 Enter/);
 });

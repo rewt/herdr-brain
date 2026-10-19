@@ -42,6 +42,9 @@ for the changed offline contract tests.
 The focus gate keeps every observation in `focus-trace.jsonl` and its classified
 changes in `focus-summary.json`. A move to a call's destination while it is active
 or within five seconds of its completion fails, even during operator navigation.
+For an owned destination, a call targeting any pane in the same workspace also
+attributes the move, including a new pane after a split or a sibling after a send.
+This uses native pane ID workspace prefixes and applies only to owned destinations.
 This fixed attribution window includes delayed create, split and send effects;
 it extends the previous one-second completion window and is not load-scaled.
 An unexplained move into a harness-owned pane or workspace also fails by default.

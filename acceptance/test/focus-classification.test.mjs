@@ -73,16 +73,19 @@ test('the exact October 19 operator sequence retains unknown harness visits as w
   assert.match(resultLine(results[0]), /PASS.*WARNING: 2 NOT-ATTRIBUTABLE.*source unknown/);
 });
 
-test('product create, split and send focus steals fail immediately and after a multi-second delay despite operator activity', () => {
+test('create, split and send focus steals to new or sibling owned panes fail immediately and after a multi-second delay', () => {
   const operations = [
-    { args: ['workspace', 'create', '--no-focus'], created: { workspaces: ['scratch'] } },
-    { args: ['pane', 'split', 'scratch:p2'] },
-    { args: ['pane', 'send-keys', 'scratch:p2', 'Enter'] },
+    { args: ['workspace', 'create', '--no-focus'], created: { workspaces: ['scratch'] }, destination: 'scratch:p2' },
+    { args: ['pane', 'split', 'scratch:p2'], destination: 'scratch:p3' },
+    { args: ['pane', 'send-keys', 'scratch:p2', 'Enter'], destination: 'scratch:p3' },
   ];
-  for (const operation of operations) for (const delay of [0, 750, 3000, ATTRIBUTION_WINDOW_MS]) {
-    const { summary } = replay([[1000, 'external:p1'], [2000 + delay, 'scratch:p2']], completedCall(operation.args, operation));
-    assert.equal(summary.changes.length, 1, `${operation.args.join(' ')} after ${delay}ms`);
-    assert.equal(summary.changes[0].calls[0].origin, 'product');
+  for (const origin of ['product', 'harness']) for (const operation of operations) for (const delay of [0, 750, 3000, ATTRIBUTION_WINDOW_MS]) {
+    const { summary } = replay([[1000, 'external:p1'], [2000 + delay, operation.destination]],
+      completedCall(operation.args, { ...operation, origin }));
+    assert.equal(summary.changes.length, 1, `${origin} ${operation.args.join(' ')} after ${delay}ms`);
+    assert.equal(summary.changes[0].classification, 'harness');
+    assert.equal(summary.changes[0].panes[0], operation.destination);
+    assert.equal(summary.changes[0].calls[0].origin, origin);
     assert.equal(summary.changes[0].calls[0].completedAt, 2000);
     assert.equal(summary.notAttributableChanges.length, 0);
     assert.throws(() => assertFocus(summary), /operator focus changed/);
@@ -92,11 +95,55 @@ test('product create, split and send focus steals fail immediately and after a m
 test('harness calls and overlapping product calls also take precedence over operator activity', () => {
   for (const origin of ['product', 'harness']) {
     const calls = completedCall(['pane', 'run', 'scratch:p2', 'worker'], { origin }).slice(0, 1);
-    const { summary } = replay([[1000, 'external:p1'], [9000, 'scratch:p2']], calls);
+    const { summary } = replay([[1000, 'external:p1'], [9000, 'scratch:p3']], calls);
     assert.equal(summary.changes.length, 1);
+    assert.equal(summary.changes[0].classification, 'harness');
     assert.equal(summary.changes[0].calls[0].origin, origin);
     assert.equal(summary.notAttributableChanges.length, 0);
     assert.throws(() => assertFocus(summary), /operator focus changed/);
+  }
+});
+
+test('pane option, resolved agent and creation receipts attribute sibling owned panes', () => {
+  const operations = [
+    { args: ['pane', 'split', '--pane', 'scratch:p2'] },
+    { args: ['agent', 'send-keys', 'worker', 'Enter'], targets: { panes: ['scratch:p2'] } },
+    { args: ['tab', 'create'], created: { panes: ['scratch:p2'] } },
+  ];
+  for (const operation of operations) {
+    const { summary } = replay([[1000, 'external:p1'], [5000, 'scratch:p3']], completedCall(operation.args, operation));
+    assert.equal(summary.changes.length, 1);
+    assert.equal(summary.changes[0].classification, 'harness');
+    assert.equal(summary.notAttributableChanges.length, 0);
+    assert.throws(() => assertFocus(summary), /operator focus changed/);
+  }
+});
+
+test('a known owned pane without a workspace field still uses its native workspace prefix for attribution', () => {
+  const { summary } = replay([[1000, 'external:p1']]);
+  const row = { at: 5000, panes: ['scratch:p3'], workspaces: [], owned: true,
+    from: 'external:p1', previousPane: 'external:p1', previousOwnership: 'operator',
+    ...focusCallContext(completedCall(['pane', 'send-keys', 'scratch:p2', 'Enter']), 5000) };
+  recordFocusChange(summary, row);
+  assert.equal(row.classification, 'harness');
+  assert.equal(summary.notAttributableChanges.length, 0);
+  assert.throws(() => assertFocus(summary), /operator focus changed/);
+});
+
+test('same-workspace attribution stays limited to owned destinations and the existing call window', () => {
+  const scenarios = [
+    { args: ['pane', 'send-keys', 'foreign:p2', 'Enter'], destination: 'foreign:p3', at: 5000, classification: 'external' },
+    { args: ['pane', 'send-keys', 'scratch-other:p2', 'Enter'], destination: 'scratch:p3', at: 5000, classification: 'not-attributable' },
+    { args: ['pane', 'send-keys', 'other:p2', 'scratch:p2'], destination: 'scratch:p3', at: 5000, classification: 'not-attributable' },
+    { args: ['pane', 'run', 'other:p2', '--', '--pane', 'scratch:p2'], destination: 'scratch:p3', at: 5000, classification: 'not-attributable' },
+    { args: ['agent', 'send-keys', 'scratch:worker', 'Enter'], destination: 'scratch:p3', at: 5000, classification: 'not-attributable' },
+    { args: ['pane', 'split', 'scratch:p2'], destination: 'scratch:p3', at: 2000 + ATTRIBUTION_WINDOW_MS + 1, classification: 'not-attributable' },
+  ];
+  for (const scenario of scenarios) {
+    const { summary, rows } = replay([[1000, 'external:p1'], [scenario.at, scenario.destination]], completedCall(scenario.args));
+    assert.equal(rows.at(-1).classification, scenario.classification, scenario.args.join(' '));
+    assert.equal(summary.changes.length, 0);
+    assert.doesNotThrow(() => assertFocus(summary));
   }
 });
 

@@ -63,6 +63,17 @@ run owns the outcome. Saved outcome-owner refusals from older folds are rechecke
 on the next invocation or retry, with the same report, identity, tree and actual
 run supersession checks before review resumes.
 Only that run's own done outcome is reopened while review is pending.
+
+Before launching a reviewer, settle checks delivered-commit claims in the report's
+`artifacts` against `mainHead..head` and saves a `brain.review-scope/v1` receipt as
+`review_scope` in its result and any scope handoff. Use `Commit: SHA`, `HEAD: SHA`,
+`Branch head: SHA`, or a bare SHA (optionally `on lane/topic`) for delivery claims.
+An outside or unresolved claim escalates with `named-commit-outside-range` or
+`named-commit-unresolved`. Bases, tested implementations, earlier rounds, quoted
+commands, paths and prose remain informational; HEAD is bound mechanically and
+need not be named. The [review desk and scope contract](../docs/contracts/review-desk-and-scope.md)
+records the BCH mapping and the parity/activation work still required.
+
 Ingest and reopen use the record CLI's optional `--if-current-run R-n` guard,
 checked inside the event-log transaction, so a newer report arriving between the
 precheck and either write cannot have its outcome overwritten or cleared.

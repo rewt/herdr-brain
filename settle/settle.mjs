@@ -23,6 +23,7 @@ import { canonicalTestPlan } from './test-plan.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
 import { deferredTests, recordedTestEvidence, TEST_ESCALATION } from './test-evidence.mjs';
 import { reportIngestReceipt, remainingUnverified, RECORD_CHECK_CLAIM } from './report-evidence.mjs';
+import { reviewScope } from './review-range.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
@@ -199,6 +200,7 @@ function finish(result, reason, extra = {}) {
     review: job.review ? { verdict: job.review.verdict, path: job.review.path, route: job.review.route, sha256: job.review.sha256 } : null,
     journal, rounds: show(job.item).runs.length, budget: show(job.item).budget ?? {},
     ...(job.testEvidence ? { test_evidence: job.testEvidence } : {}),
+    ...(job.reviewScope ? { review_scope: job.reviewScope } : {}),
     review_policy: job.reviewPolicy ?? { cap: 0, source: 'legacy' },
     ...(job.rebase ? { rebase: job.rebase } : {}), ...extra };
   const policy = job.result.review_policy;
@@ -248,11 +250,20 @@ function escalate(reason) {
   const text = `# Settle handoff for ${id}\n\n${reason}\n\nRecommendation: inspect this evidence and decide whether to resume review, dispatch a correction, change scope, or ask the operator.\n\n${JSON.stringify({ item: item.title, acceptance: item.accept, record_blockers: item.blocked_by, record_status: item.status, record_outcome: item.outcome, record_runs: item.runs,
     report: job.report, summary: job.summary, blockers: job.blockers, proposals: job.proposals,
     questions: job.questions, review: job.review, validation: job.validation, rebase: job.rebase,
+    ...(job.reviewScope ? { review_scope: job.reviewScope } : {}),
     workspace: job.workspace, head: job.head, journal }, null, 2)}\n`;
   finish('escalate', reason, { handoff: evidence('handoff.md', text), recommendation: 'supervisor judgment',
     options: ['continue with a correction', 'change scope', 'ask the operator with these findings'],
     ...(transientRecordRefusal(reason) && ['validate', 'rebase', 'ready', 'fix', 'dispatching'].includes(job.stage)
       ? { resume_stage: job.stage } : {}) });
+}
+function reviewScopeProblem() {
+  job.reviewScope = reviewScope({ workspace: job.workspace, base: job.mainHead, head: job.head,
+    artifacts: readReport(job.reportText).report.artifacts });
+  save();
+  const scope = job.reviewScope;
+  return scope.deferred ? `Review scope deferred: ${scope.deferred}: ${
+    (scope.outside.length ? scope.outside : scope.unresolved).map(sha => sha.slice(0, 12)).join(', ')}` : null;
 }
 function inheritedEvidence() {
   let text = 'No worker validation receipt at the captured tree. The promotion queue runs the promotion tier on the integration batch before main moves.\n';
@@ -713,6 +724,8 @@ function settlePending() {
     const open = activeWork();
     if (open.length) return escalate(`Another run is open: ${open.map((r) => r.id).join(', ')}`);
     if (job.outcome !== 'done') return escalate(`Worker reported ${job.outcome}: ${job.summary}. Read the report's blockers, proposals and questions`);
+    const scopeProblem = reviewScopeProblem();
+    if (scopeProblem) return escalate(scopeProblem);
     const blocker = correctionBlocker();
     if (blocker) return escalate(blocker);
     inheritedEvidence();
@@ -723,6 +736,10 @@ function settlePending() {
     unchanged(); job.round++; job.stage = 'review'; save();
   }
   if (job.stage === 'review') {
+    // Retries can recapture main and replay an unreviewed head, or resume a
+    // journal created before scope receipts existed. Check that input too.
+    const scopeProblem = reviewScopeProblem();
+    if (scopeProblem) return escalate(scopeProblem);
     try { waitForMemory({ label: 'settle review', check: checkLaunchStop }); }
     catch (error) {
       if (error.code !== 'SETTLE_STOPPED') throw error;

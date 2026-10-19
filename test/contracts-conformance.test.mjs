@@ -96,6 +96,24 @@ test('installed writer selection skips an absent pinned bundle but rejects a pre
 });
 
 const contracts = [
+  ['brain.review-scope/v1', ['settle/review-range.mjs'], async (f, root) => {
+    const writer = await load(root, 'settle/review-range.mjs'), workspace = f.repo();
+    const base = f.run('git', ['rev-parse', 'HEAD'], workspace);
+    f.run('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'delivery'], workspace);
+    const head = f.run('git', ['rev-parse', 'HEAD'], workspace);
+    const scope = writer.reviewScope({ workspace, base, head, artifacts: [`Commit: ${head}`, `Base: ${base}`] });
+    // Like settle's result consumers, read known fields of an internally made
+    // receipt. There is no arbitrary external scope-document/version reader.
+    const read = doc => ({ schema: doc.schema, base: doc.base, head: doc.head, commits: doc.commits,
+      claims: doc.claims, context: doc.context, outside: doc.outside, unresolved: doc.unresolved, deferred: doc.deferred });
+    const expected = { schema: 'brain.review-scope/v1', base, head, commits: [head], claims: [head],
+      context: [base], outside: [], unresolved: [], deferred: null };
+    assert.deepEqual(read(JSON.parse(JSON.stringify(scope))), expected);
+    assert.deepEqual(read({ ...scope, ...extra }), expected);
+    assert.equal({ result: 'promotable' }.review_scope, undefined, 'older results omit this additive field');
+    const deferred = writer.reviewScope({ workspace, base, head, artifacts: [`HEAD: ${base}`] });
+    assert.equal(deferred.deferred, 'named-commit-outside-range'); assert.deepEqual(deferred.outside, [base]);
+  }],
   ['fleet.json', ['lib/fleet.mjs'], async (f, root) => {
     const writer = await load(root, 'lib/fleet.mjs'), cwd = f.repo();
     const record = path.join(cwd, '.org');
@@ -292,7 +310,7 @@ for (const [name, files, conform] of contracts) {
     const release = installed ??= installedWriter();
     if (release.skip) return t.skip(release.skip);
     const missing = files.filter(file => !fs.existsSync(path.join(release.root, file)));
-    if (missing.length) return t.skip(`installed ${release.id} predates contract writer: ${missing.join(', ')}`);
+    if (missing.length) return t.skip(`installed ${release.id} predates ${name} contract writer: ${missing.join(', ')}`);
     t.diagnostic(`${release.selection}: ${release.id} (${release.root})`);
     await conform(fixture(t), release.root);
   });

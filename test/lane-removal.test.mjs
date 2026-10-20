@@ -175,6 +175,17 @@ if(a[0]==='agent'&&a[1]==='list'){
   assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
 });
 
+test('lane evidence reference scanning also skips stray non-JSON entries without deleting them', t => {
+  const f = fixture(t), directory = path.join(f.org, 'references');
+  fs.appendFileSync(path.join(f.common, 'info/exclude'), '\nnode_modules/\n');
+  fs.mkdirSync(path.join(f.lane, 'node_modules')); fs.writeFileSync(path.join(f.lane, 'node_modules/generated'), 'disposable');
+  fs.mkdirSync(path.join(directory, '.claude'), { recursive: true }); fs.mkdirSync(path.join(directory, 'unexpected.json'));
+  for (const name of ['notes.txt', '.hidden.json']) fs.writeFileSync(path.join(directory, name), '{');
+  const before = fs.readdirSync(directory).sort(), r = f.close();
+  assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(fs.existsSync(f.lane), false);
+  assert.deepEqual(fs.readdirSync(directory).sort(), before);
+});
+
 test('a Git index writer lock keeps the worktree, branch and lock intact', t => {
   const f = fixture(t, { merged: true });
   const metadata = f.git(['rev-parse', '--absolute-git-dir'], f.lane), lock = path.join(metadata, 'index.lock');

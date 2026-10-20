@@ -209,18 +209,27 @@ test('historical promoted results without reconciliation release only after thei
   }
 });
 
-test('a close before admission does not release a reopened run during green reconciliation', t => {
+for (const shape of ['batch', 'legacy single job', 'historical result']) test(`a pre-admission close cannot release a reopened run (${shape})`, t => {
   const f = fixture(t);
   f.queue.transaction(data => { data.pending = []; });
   f.ok(['close', f.item, '--if-current-run', f.run]); f.ok(['reopen', f.item]);
   const [job] = enqueue(f.queue, ['reopened-work'], { org: f.dir, run: f.run, expectedHead: f.head });
-  const b = f.batch('complete');
-  const train = JSON.parse(fs.readFileSync(b.receipt));
-  train.results[job.id] = { outcome: 'promoted', tip: f.head };
-  fs.writeFileSync(b.receipt, JSON.stringify(train));
+  if (shape === 'batch') {
+    const b = f.batch('complete');
+    const train = JSON.parse(fs.readFileSync(b.receipt));
+    train.results[job.id] = { outcome: 'promoted', tip: f.head };
+    fs.writeFileSync(b.receipt, JSON.stringify(train));
+  } else f.queue.transaction(data => {
+    const admitted = data.pending.shift();
+    if (shape === 'historical result') data.results.push({ ...admitted, outcome: 'promoted', tip: f.head });
+    else data.current = { ...admitted, phase: 'completed', result: { outcome: 'promoted', tip: f.head } };
+  });
   f.refuse(['note', f.item, 'Still waiting for this promotion to reconcile']);
   // Old queues have no admission boundary; retain their historical close rule.
-  f.queue.transaction(data => { delete data.current.jobs[0].admittedSeq; });
+  f.queue.transaction(data => {
+    const queued = shape === 'batch' ? data.current.jobs[0] : shape === 'historical result' ? data.results[0] : data.current;
+    delete queued.admittedSeq;
+  });
   f.ok(['note', f.item, 'Historical queue compatibility']);
 });
 

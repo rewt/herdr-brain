@@ -82,15 +82,36 @@ export function resumeKey(run, agent) {
   return JSON.stringify([run.id, agent.pane_id, agent.terminal_id, agent.agent_session?.value, agent.state_change_seq]);
 }
 
+// Ownership refusals disable retirement only. Recovery and publication remain
+// useful even while another lifecycle operation owns the project.
+function scheduledRetirement({ cwd, common, dryRun, log }) {
+  let release;
+  try {
+    const project = gitProject(cwd);
+    const transferred = () => {
+      if (!closeoutPolicy(project.canonical)) return false;
+      release?.(); release = null;
+      log({ action: 'retirement-skipped', why: 'retirement ownership transferred to closeout queue' });
+      return true;
+    };
+    if (transferred()) return { allowed: false };
+    if (!dryRun) release = claimRetirementOwner(common ?? project.identity, { waitMs: 1000 });
+    if (transferred()) return { allowed: false };
+    return { allowed: true, release };
+  } catch (error) {
+    release?.();
+    log({ action: 'retirement-skipped', outcome: error.message.startsWith('locked:') ? 'contended' : 'unavailable', why: error.message });
+    return { allowed: false, failed: true };
+  }
+}
+
 // Finished sessions are independent of lane promotion and the slower cleanup
 // interval. A failed tidy is evidence for the log, never a reason to skip recovery.
 export function tidyFinishedTabs({ cwd, org, herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
   dryRun = false, command = spawnSync, log = () => {} }) {
-  const project = gitProject(cwd);
-  if (closeoutPolicy(project.canonical)) { log({ action: 'retirement-skipped', why: 'retirement ownership transferred to closeout queue' }); return true; }
-  const ownership = dryRun ? null : claimRetirementOwner(project.identity, { waitMs: 1000 });
+  const access = scheduledRetirement({ cwd, dryRun, log });
+  if (!access.allowed) return !access.failed;
   try {
-  if (closeoutPolicy(project.canonical)) { log({ action: 'retirement-skipped', why: 'retirement ownership transferred to closeout queue' }); return true; }
   const args = [TIDY, '--cwd', cwd, '--org', org, '--herdr', herdr,
     '--org-cli', record[0], ...record.slice(1).flatMap((arg) => ['--org-cli-arg', arg]),
     ...(dryRun ? ['--dry-run'] : [])];
@@ -108,7 +129,7 @@ export function tidyFinishedTabs({ cwd, org, herdr = 'herdr', record = [process.
     log({ action: 'tidy-failed', error: error.message, output, dryRun });
     return false;
   }
-  } finally { ownership?.(); }
+  } finally { access.release?.(); }
 }
 
 export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
@@ -139,15 +160,13 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
   }
   function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath, cleanupSeconds,
     now = new Date().toISOString() } = {}) {
-    const queueRequested = closeoutPolicy(gitProject(cwd).canonical);
-    const releaseOwnership = dryRun || queueRequested ? null : claimRetirementOwner(common, { waitMs: 1000 });
+    const access = scheduledRetirement({ cwd, common, dryRun, log });
     try {
-    const queueOwned = queueRequested || closeoutPolicy(gitProject(cwd).canonical);
-    if (queueOwned) log({ action: 'retirement-skipped', why: 'retirement ownership transferred to closeout queue' });
+    const retirementSkipped = !access.allowed;
     let consumed;
     // A hint is only a reason to re-observe through the guarded executor. Do
     // not acknowledge requests during previews or workspace-scoped checks.
-    if (!queueOwned && !dryRun && !workspacePath) {
+    if (!retirementSkipped && !dryRun && !workspacePath) {
       try {
         consumed = consumeRetirement({ org, deadline: Date.now() + loadTimeout(30000),
           retirement: ({ deadline }) => createRetirement({ cwd, org, main, herdr, record, command, selfTab, log, deadline }) });
@@ -155,21 +174,21 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       } catch (error) { log({ action: 'retirement-failed', error: error.message }); }
     }
     const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
-    if (!queueOwned && !workspacePath) try {
+    if (!retirementSkipped && !workspacePath) try {
       noticeIdleRetirement({ status: retirementStatus(snapshot, { generatedAt: now }), snapshot,
         stateDir, cwd, org, herdr, dryRun, log });
     } catch (error) { log({ action: 'retirement-notice-failed', error: error.message }); }
     const selected = workspacePath ? new Set(snapshot.workspaces.filter(w => canonicalPath(w.worktree.checkout_path) === canonicalPath(workspacePath)).map(w => w.workspace_id)) : null;
-    const allPlan = cleanup && !queueOwned ? tidy(snapshot) : { close: [], keep: [] };
+    const allPlan = cleanup && !retirementSkipped ? tidy(snapshot) : { close: [], keep: [] };
     const plan = selected ? { ...allPlan, close: allPlan.close.filter(t => selected.has(t.workspace_id)), keep: allPlan.keep.filter(t => selected.has(t.workspace_id)) } : allPlan;
     log({ action: 'scan', close: plan.close.length, keep: plan.keep.length, cleanup, resume, dryRun });
     for (const tab of plan.keep) log({ action: 'keep', ...tab, dryRun });
     for (const diagnostic of plan.diagnostics ?? []) log({ action: 'reference-diagnostic', ...diagnostic });
     if (dryRun) for (const tab of plan.close) log({ action: 'would-close', ...tab });
-    else if (!queueOwned && !consumed?.results) retirement.apply(plan, workspacePath, snapshot);
+    else if (!retirementSkipped && !consumed?.results) retirement.apply(plan, workspacePath, snapshot);
     // A per-tick tidy or this pass may have closed the last pane. Finish only
     // the existing bounded cleanup checkpoints; no later drain is required.
-    if (!queueOwned && cleanup && !workspacePath && !dryRun && fs.existsSync(path.join(common, 'promote/queue.json'))) try {
+    if (!retirementSkipped && cleanup && !workspacePath && !dryRun && fs.existsSync(path.join(common, 'promote/queue.json'))) try {
       retryCleanup(queueFor(cwd), { now: Date.parse(now) });
       log({ action: 'promotion-cleanup-retried' });
     } catch (error) { log({ action: 'promotion-cleanup-failed', error: error.message }); }
@@ -198,7 +217,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
         log({ action: 'resumed', run: run.id, pane: agent.pane_id, seq: agent.state_change_seq, why: 'interrupted open run with only mouse-wheel escape text in the composer' });
       } catch (error) { log({ action: 'resume-failed', run: run.id, pane: agent.pane_id, error: error.message }); }
     }
-    if (!queueOwned && cleanup && !workspacePath) try {
+    if (!retirementSkipped && cleanup && !workspacePath) try {
       // Allow a ten-minute deletion plus preflight and branch cleanup, still
       // bounded per foreground pass. Queue-owned pending cleanup keeps its own
       // retry bounds and is not retried here.
@@ -210,7 +229,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       log({ action: 'summary-published', generated_at: summary.generated_at });
     } catch (error) { log({ action: 'summary-publish-failed', error: error.message }); }
     return plan;
-    } finally { releaseOwnership?.(); }
+    } finally { access.release?.(); }
   }
   return { tick, common };
 }

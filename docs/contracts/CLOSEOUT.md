@@ -45,6 +45,11 @@ the existing launch/verdict receipt. This avoids binding the queue to the head
 before settle's review-only commit. Direct lane reviews record their verdict at
 their existing completion point. An adapter without proven native launch
 identity cannot invent that identity from a label or verdict; its pane stays.
+`lane review ... --run R-n --followup-expected` and `settle R-n
+--followup-expected` explicitly retain the reviewer for a same-session follow-up.
+The declaration defaults to false, is preserved on settle retry, and is carried
+through the native verdict receipt into `review.verdict`. Finish the follow-up
+with the named `followup-ended` command below; silence never releases it.
 
 Queue entries are `closeout-entry/v1`, stored at
 `<canonical-git-common-dir>/closeout/entries/<key>.json`, next to `promote/`.
@@ -94,6 +99,15 @@ revision, completion or KEEP reason, named resolving event, and explicit retry
 command. It is not status in the state fold. Completed effects remain
 idempotent. Older folds ignore these new event types and older releases do not
 read the queue.
+Once a matching completion receipt is durable, the next queue transaction
+prunes its request file and fsyncs the directory. The append-only source binding,
+evaluation and effects retain all exact-run evidence; replaying the source cannot
+recreate a completed request. Only deferred requests remain in the active queue.
+Promotion completion retries only its own exact run/topic/head entries whose
+latest evaluation awaits `lifecycle-lock-released`, and only if no resolving
+revision is already pending. An empty promotion drain never retries history.
+The promotion completion checkpoint carries a bounded notification outbox until
+that targeted enqueue succeeds, so a restart can recover an interrupted handoff.
 
 Landed requests run immediately, apart from lifecycle-lock contention. The
 lanes view exposes `finishedLanesOpenOver30Minutes` and a worktree's

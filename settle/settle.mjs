@@ -34,7 +34,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node settle/sett
   brief: { type: 'string' }, 'review-route': { type: 'string' }, 'fix-route': { type: 'string' },
   to: { type: 'string' }, reuse: { type: 'boolean' }, retry: { type: 'boolean' },
   'resolve-tests': { type: 'boolean' }, status: { type: 'boolean' }, 'review-again': { type: 'boolean' }, timeout: { type: 'string' },
-  'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' },
+  'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'followup-expected': { type: 'boolean' },
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'dispatch-cli': { type: 'string' },
   'watch-cli': { type: 'string' },
 }});
@@ -579,7 +579,7 @@ function fix() {
 }
 function main() {
   if (!positionals.length) {
-    process.stdout.write('settle R-n [--repo DIR] [--org DIR] [--brief FILE] [--review-round-cap N] [--review-route ROUTE] [--fix-route ROUTE] [--reuse] [--retry [--fix-findings] | --status]\n'); return;
+    process.stdout.write('settle R-n [--repo DIR] [--org DIR] [--brief FILE] [--review-round-cap N] [--review-route ROUTE] [--fix-route ROUTE] [--followup-expected] [--reuse] [--retry [--fix-findings] | --status]\n'); return;
   }
   if (positionals.length !== 1 || !/^R-\d+$/.test(id)) throw new Error('settle requires one run ID');
   if (opt['review-again'] && !opt.retry) throw new Error('--review-again requires --retry after inspecting the old reviewer');
@@ -617,7 +617,7 @@ function main() {
     // Reread under the lock; an older pending receipt binds its selection once.
     bindLaneConfig(job);
     if (!Object.hasOwn(job, 'laneConfig')) { job.laneConfig = laneConfig; save(); }
-    if (opt.retry && ['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout', 'review-round-cap'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
+    if (opt.retry && ['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout', 'review-round-cap', 'followup-expected'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
     if (opt['resolve-tests']) {
       if (!opt.retry || job.stage !== 'complete' || job.result?.result !== 'escalate' || job.result.reason !== TEST_ESCALATION || job.review?.verdict !== 'PASS') throw new Error('test resolution requires a saved PASS escalation solely for test evidence');
       unchanged({ movingMain: true }); cleanCanonical();
@@ -686,6 +686,7 @@ function main() {
       main: config.main ?? 'main', head: git(['rev-parse', 'HEAD'], workspace),
       mainHead: git(['rev-parse', config.main ?? 'main'], repo), ask, reviewRoute, fixRoute, timeout,
       workerRoute: run.meta?.route ?? null,
+      followupExpected: opt['followup-expected'] ?? false,
       reuse: opt.reuse ?? settings.reuse ?? false, to: opt.to ?? settings.to ?? 'supervisor-herdr',
       stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
       blockers: parsed.report.blockers, proposals: parsed.report.proposals, questions: parsed.report.extra?.questions ?? [],
@@ -790,7 +791,8 @@ function settlePending() {
     job.review_started_at = new Date().toISOString();
     job.stage = 'reviewing'; save();
     const r = call(cli('lane', '../lanes/lane.mjs'), ['review', lane, '--round', String(job.round), '--brief', supplement,
-      '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--run', id, '--memory-checked', '--settle-commits-review']);
+      '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--run', id, '--memory-checked', '--settle-commits-review',
+      ...(job.followupExpected ? ['--followup-expected'] : [])]);
     job.review_finished_at = new Date().toISOString();
     job.reviewLog = evidence(`review-r${job.round}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`); save();
     if (!r.error && r.status === 3 && r.stdout?.trim().startsWith('{')) {

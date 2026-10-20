@@ -19,6 +19,8 @@ import { fixture as retirementFixture } from '../../test/helpers/retire-fixture.
 import { sweepCommands } from '../../test/helpers/retire-sweep-fixture.mjs';
 import { finishCleanup } from '../../promote/promote.mjs';
 import { recordInitialShell } from '../../lib/initial-shell.mjs';
+import { retirementLock } from '../../lib/retire-lock.mjs';
+import { retirementOwnerLock } from '../../lib/closeout.mjs';
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
@@ -70,6 +72,20 @@ function fixture(t, { promoted = true, reported = true } = {}) {
     command: f.command, log: (entry) => f.logs.push(entry), selfTab: null, ...extra });
   return f;
 }
+
+for (const condition of ['contention', 'invalid policy']) test(`retirement ${condition} preserves interrupted-worker recovery and summary publication`, t => {
+  const f = fixture(t, { promoted: false, reported: false });
+  const release = condition === 'contention' ? retirementLock(retirementOwnerLock(f.common)) : () => {};
+  if (condition === 'invalid policy') fs.writeFileSync(path.join(f.repo, '.lane.json'), '{invalid');
+  try {
+    assert.doesNotThrow(() => f.runner().tick({ cleanup: true, resume: true }));
+    assert.ok(f.logs.some(r => r.action === 'retirement-skipped' && r.outcome === (condition === 'contention' ? 'contended' : 'unavailable')));
+    assert.ok(f.logs.some(r => r.action === 'resumed'));
+    assert.ok(f.logs.some(r => r.action === 'summary-published'));
+    assert.equal(f.actions.some(a => ['tab', 'workspace'].includes(a[0]) && a[1] === 'close'), false);
+    assert.equal(fs.existsSync(f.lane), true);
+  } finally { release(); }
+});
 
 test('interruption requires the current banner and an exclusively wheel-junk composer', () => {
   assert.equal(interruptedComposer(screen), true);

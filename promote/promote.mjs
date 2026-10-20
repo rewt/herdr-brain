@@ -4,7 +4,7 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { closeoutPolicy, claimRetirementOwner, retryCloseout, readCloseoutEntries } from '../lib/closeout.mjs';
+import { closeoutPolicy, claimRetirementOwner, retryPromotionCloseout } from '../lib/closeout.mjs';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
@@ -317,14 +317,7 @@ function cleanupRevision(job, queue) {
 export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
   const delegated = () => ({ ...result, cleanup: { state: 'complete', owner: 'closeout-queue' },
     reason: 'green fast-forward; closeout delegated to the event queue' });
-  if (closeoutPolicy(queue.project.canonical)) return delegated();
-  const ownership = claimRetirementOwner(queue.project.identity, { waitMs: 1000 });
-  try {
-    if (closeoutPolicy(queue.project.canonical)) return delegated();
-    return finishLegacyCleanup(job, result, queue, { now });
-  } finally { ownership(); }
-}
-function finishLegacyCleanup(job, result, queue, { now }) {
+  let ownership;
   const warnings = [];
   let held;
   const checkHold = () => {
@@ -335,6 +328,9 @@ function finishLegacyCleanup(job, result, queue, { now }) {
   };
   const diagnostics = (result.warnings ?? []).filter(w => w.startsWith('velocity record:'));
   try {
+    if (closeoutPolicy(queue.project.canonical)) return delegated();
+    ownership = claimRetirementOwner(queue.project.identity, { waitMs: 1000 });
+    if (closeoutPolicy(queue.project.canonical)) return delegated();
     checkHold();
     if (job.run) {
       const env = { ...process.env, ORG_DIR: job.org };
@@ -370,6 +366,7 @@ function finishLegacyCleanup(job, result, queue, { now }) {
         }
       } });
   } catch (error) { warnings.push(`lane cleanup: ${error.message}`); }
+  finally { ownership?.(); }
   let revision;
   try { revision = cleanupRevision(job, queue); } catch (e) { revision = `unreadable:${e.message}`; }
   const attempts = (result.cleanup?.revision === revision ? result.cleanup.attempts ?? 0 : 0) + 1;
@@ -420,14 +417,18 @@ function retryCleanupLocked(queue, { now = Date.now() } = {}) {
 
 function consumeRequests(queue) {
   try {
+    if (closeoutPolicy(queue.project.canonical)) {
+      const completedJobs = queue.load().closeout_pending ?? [];
+      for (const org of new Set(completedJobs.map(job => job.org).filter(Boolean)))
+        retryPromotionCloseout({ cwd: queue.project.canonical, org, jobs: completedJobs.filter(job => job.org === org) });
+      if (completedJobs.length) queue.transaction(data => {
+        data.closeout_pending = (data.closeout_pending ?? []).filter(job => !completedJobs.some(done => done.id === job.id));
+      });
+      return;
+    }
     const jobs = queueJobs(queue.load());
     const discovered = findOrgDir({ cwd: queue.project.canonical });
     const orgs = new Set([discovered, ...jobs.map(j => j.org)].filter(Boolean));
-    if (closeoutPolicy(queue.project.canonical)) {
-      for (const org of orgs) for (const topic of new Set(readCloseoutEntries(queue.project.identity).filter(e => e.org === org && e.signal === 'landed').map(e => e.branch.slice(5))))
-        retryCloseout({ cwd: queue.project.canonical, org, topic, why: 'promotion completion released its references and lifecycle lock' });
-      return;
-    }
     const ownership = claimRetirementOwner(queue.project.identity, { waitMs: 1000 });
     try {
     for (const org of orgs) try {
@@ -519,6 +520,15 @@ async function deliver(job, result, queue) {
 export async function drain(queue, { attempted = new Set() } = {}) {
   let release;
   let handedOff = false;
+  const rememberCompletion = (data, job, result) => {
+    if (job.org && job.run && result.outcome === 'promoted' && result.tip && result.reconciliation?.state !== 'pending' && result.cleanup?.owner === 'closeout-queue') {
+      // Persist the bounded notification outbox with completion. A crash before
+      // finally can replay these exact jobs without visiting promotion history.
+      data.closeout_pending ??= [];
+      if (!data.closeout_pending.some(row => row.id === job.id))
+        data.closeout_pending.push({ id: job.id, org: job.org, topic: job.topic, run: job.run, tip: result.tip });
+    }
+  };
   // Serialize the startup/empty-exit handoff with enqueuers. A worker releases
   // ownership while still holding queue.lock, so an enqueue cannot be stranded.
   queue.transaction(() => {
@@ -673,6 +683,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
           const delivery = await deliver(member.job, result, queue);
           queue.transaction(data => {
             data.results.push({ ...member.job, ...result, ...delivery, finished: new Date().toISOString() });
+            rememberCompletion(data, member.job, result);
             batch.deliveredCount = index + 1; batch.phase = 'batch-delivering'; data.current = batch;
           });
           process.stdout.write(JSON.stringify({ id: member.job.id, topic: member.job.topic, ...result, ...delivery }) + '\n');
@@ -703,6 +714,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
       const delivery = await deliver(job, result, queue);
       queue.transaction((data) => {
         data.results.push({ ...job, ...result, ...delivery, finished: new Date().toISOString() });
+        rememberCompletion(data, job, result);
         data.current = null;
       });
       process.stdout.write(JSON.stringify({ id: job.id, topic: job.topic, ...result, ...delivery }) + '\n');

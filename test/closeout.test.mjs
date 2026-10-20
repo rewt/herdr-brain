@@ -15,11 +15,11 @@ import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
-  closeoutPolicy, recordCompletedReview, retirementOwnerLock } from '../lib/closeout.mjs';
+  closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision } from '../lib/closeout.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { drainCloseout } from '../lib/closeout-consumer.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
-import { finishCleanup } from '../promote/promote.mjs';
+import { finishCleanup, retryCleanup, drain as drainPromotions, queueFor } from '../promote/promote.mjs';
 import { retirementStatus, renderRetirementStatus } from '../lib/retire-status.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -76,6 +76,91 @@ test('default off is inert, malformed policy keeps, and a lane copy cannot opt i
   assert.throws(() => closeoutPolicy(f.repo), /invalid/);
 });
 
+test('default-off promotion contention remains pending and retries every cleanup row after release', t => {
+  const f = exitFixture(t); isolatedEnv(t, f);
+  const queue = f.queue(), release = retirementLock(retirementOwnerLock(f.common));
+  let released = false;
+  try {
+    const result = finishCleanup(f.job, { outcome: 'promoted', tip: f.head, workspace: f.lane }, queue, { now: 1000 });
+    assert.equal(result.outcome, 'promoted'); assert.equal(result.cleanup.state, 'pending');
+    assert.match(result.cleanup.last_refusal, /locked:.*retirement\/owner.lock/);
+    assert.match(result.reason, /^integrated-but-cleanup-pending:/);
+    queue.transaction(data => data.results.push(...['first', 'second'].map(id => ({ ...f.job, ...result, id }))));
+    assert.doesNotThrow(() => retryCleanup(queue, { now: result.cleanup.next_attempt_at }));
+    assert.deepEqual(queue.load().results.map(r => r.cleanup.attempts), [2, 2], 'contention cannot abort later rows');
+    assert.deepEqual(f.read().actions, []); assert.equal(fs.existsSync(f.lane), true);
+    const due = queue.load().results[0].cleanup.next_attempt_at;
+    release(); released = true;
+    retryCleanup(queue, { now: due });
+    assert.deepEqual(queue.load().results.map(r => r.cleanup.state), ['complete', 'complete']);
+    assert.equal(fs.existsSync(f.lane), false);
+  } finally { if (!released) release(); }
+});
+
+test('ready ignores detached, non-Git and foreign workspaces, including a foreign lane with the same topic', t => {
+  const f = setup(t), detached = path.join(f.scratch, 'detached'), plain = path.join(f.scratch, 'plain'), foreign = path.join(f.scratch, 'foreign');
+  f.git(['worktree', 'add', '--detach', detached]); fs.mkdirSync(plain); fs.mkdirSync(foreign);
+  f.git(['init', '-b', 'lane/topic'], foreign); f.git(['config', 'user.name', 'Fixture'], foreign);
+  f.git(['config', 'user.email', 'fixture@example.invalid'], foreign); f.git(['commit', '--allow-empty', '-m', 'foreign'], foreign);
+  f.append([detached, plain, foreign].map((workspace, i) => ({ type: 'run.started', id: `R-${i + 2}`, item: 'ENG-1', workspace, meta: {} })));
+  assert.deepEqual(readyLane({ cwd: f.repo, org: f.org, topic: 'topic', start: false }), { run: 'R-1', signal: 'ready' });
+  assert.equal(readCloseoutEntries(f.common)[0].cwd, f.lane);
+});
+
+test('non-lane done reports are not applicable, while an unavailable registered lane still records a binding failure', t => {
+  const f = setup(t), plain = path.join(f.scratch, 'planning'); fs.mkdirSync(plain);
+  const stderr = process.stderr.write, messages = [];
+  process.stderr.write = chunk => { messages.push(String(chunk)); return true; };
+  try {
+    const added = f.append([f.repo, plain].flatMap((workspace, i) => [
+      { type: 'run.started', id: `R-${i + 2}`, item: 'ENG-1', workspace, meta: {} },
+      { type: 'report.ingested', run: `R-${i + 2}`, report: { outcome: 'done' } },
+    ]));
+    for (const e of added.filter(e => e.type === 'report.ingested')) {
+      assert.deepEqual(e.closeout_targets, []); assert.equal(e.closeout_binding_errors, undefined);
+      assert.equal(e.closeout_binding_error, undefined);
+    }
+    assert.deepEqual(readCloseoutEntries(f.common), []); assert.deepEqual(messages, []);
+    fs.renameSync(f.lane, `${f.lane}-unavailable`);
+    const [bad] = f.report();
+    assert.equal(bad.closeout_binding_errors[0].run, 'R-1');
+    assert.match(messages.join(''), /no durable target binding/);
+  } finally { process.stderr.write = stderr; }
+});
+
+test('promotion retries only its exact deferred lock target; empty drains never revisit completed or unrelated history', async t => {
+  const f = setup(t); f.report(); f.land();
+  for (let i = 2; i <= 5; i++) {
+    const workspace = path.join(f.scratch, `target-${i}`);
+    f.git(['worktree', 'add', '-b', `lane/target-${i}`, workspace]);
+    f.append([{ type: 'item.added', id: `ENG-${i}`, kind: 'work', role: 'engineer' },
+      { type: 'run.started', id: `R-${i}`, item: `ENG-${i}`, workspace, meta: {} },
+      { type: 'promotion.reconciled', identity: f.common, heads: [{ run: `R-${i}`, head: f.head }], runs: [`R-${i}`], items: [`ENG-${i}`] }]);
+  }
+  const entries = readCloseoutEntries(f.common).filter(e => e.signal === 'landed');
+  f.append(entries.map(entry => ({ type: 'closeout.evaluated', key: entry.key, identity: f.common, run: entry.run, item: entry.item,
+    source: entry.source, revision: closeoutRevision(entry, events(f)), completed: entry.run === 'R-3',
+    waiting: { event: entry.run === 'R-4' ? 'target-record-changed' : 'lifecycle-lock-released' } })));
+  const jobs = entries.filter(e => e.run !== 'R-2').map(e => ({ id: e.key, org: f.org, run: e.run, topic: e.branch.slice(5), tip: e.run === 'R-5' ? '0'.repeat(40) : e.head }));
+  const queue = queueFor(f.repo);
+  const before = events(f).length;
+  await drainPromotions(queue);
+  assert.equal(events(f).length, before, 'empty promotion drain does not retry historical entries');
+  // A previous drain durably completed these jobs but stopped before notifying
+  // the closer. Keep its consumer claimed so this fixture tests enqueue only.
+  queue.transaction(data => { data.closeout_pending = jobs; });
+  const release = retirementLock(path.join(f.common, 'closeout/consumer.lock'));
+  try { await drainPromotions(queue); } finally { release(); }
+  const added = events(f).filter(e => e.seq > before && e.type === 'closeout.retry');
+  assert.equal(added.length, 1); assert.deepEqual(added[0].keys, [entries.find(e => e.run === 'R-1').key]);
+  assert.deepEqual(queue.load().closeout_pending, [], 'bounded completion outbox is acknowledged after the durable enqueue');
+  assert.deepEqual(retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false }), [], 'an already requested retry adds no churn');
+  assert.equal(readCloseoutEntries(f.common).some(e => e.run === 'R-3'), false, 'completed request file is pruned after its durable receipt');
+  const completed = entries.find(e => e.run === 'R-3'), source = events(f).find(e => e.seq === completed.source.seq);
+  assert.deepEqual(publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [source], start: false }), [], 'replay cannot resurrect a completed key');
+  assert.equal(events(f).find(e => e.seq === source.seq).closeout_targets[0].gitIdentity.ino, completed.gitIdentity.ino, 'exact-run evidence remains in record');
+});
+
 test('optional ready, repeated ready and ingested done are one entry; NEEDS-WORK retains its worker', t => {
   const f = setup(t);
   readyLane({ cwd: f.repo, org: f.org, topic: 'topic', start: false });
@@ -99,6 +184,7 @@ for (const project of ['bch-cloak', 'herdr-brain']) test(`${project}: a landed e
   const landed = readCloseoutEntries(f.common).find(e => e.signal === 'landed');
   assert.equal(landed.source.type, 'promotion.reconciled');
   f.drain(); assertRemoved(f);
+  assert.deepEqual(readCloseoutEntries(f.common), [], 'only durable record evidence remains after completion');
   const actions = effects(f).map(e => e.action);
   for (const action of ['exit-observed', 'closed', 'lane-preflight', 'worktree-removed', 'branch-removed', 'lane-removed']) assert.ok(actions.includes(action), action);
   const proof = effects(f).find(e => e.action === 'lane-preflight');
@@ -387,7 +473,7 @@ test('named manual recovery records a fresh bound request for a legacy lane with
   assert.equal(result.status, 0, result.stdout + result.stderr);
   await waitForChange([f.eventFile], () => effects(f).some(e => e.action === 'lane-removed') && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), { timeoutMs: 60000 });
   assertRemoved(f);
-  assert.equal(readCloseoutEntries(f.common).find(e => e.signal === 'landed').source.type, 'lane.recovery-requested');
+  assert.equal(events(f).find(e => e.type === 'lane.recovery-requested').closeout_targets[0].signal, 'landed');
 });
 
 function child(exe, args, options) {

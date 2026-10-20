@@ -1486,9 +1486,14 @@ function parseReviewOptions(args) {
   const seen = new Set();
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
-    if (flag === '--settle-commits-review') { options.deferCloseout = true; continue; }
+    if (['--settle-commits-review', '--followup-expected'].includes(flag)) {
+      if (seen.has(flag)) fail(`duplicate review option: ${flag}`);
+      seen.add(flag);
+      options[flag === '--settle-commits-review' ? 'deferCloseout' : 'followupExpected'] = true;
+      continue;
+    }
     if (!["--round", "--brief", "--change", "--route", "--route-config", "--timeout", "--run"].includes(flag)) {
-      fail(`usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n] (unknown operand: ${flag})`);
+      fail(`usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n [--followup-expected]] (unknown operand: ${flag})`);
     }
     if (seen.has(flag)) fail(`duplicate review option: ${flag}`);
     seen.add(flag);
@@ -1501,6 +1506,7 @@ function parseReviewOptions(args) {
   }
   if (!Number.isSafeInteger(options.round) || options.round < 1) fail("--round must be a positive safe integer");
   if (options.run !== undefined && !/^R-[1-9]\d*$/u.test(options.run)) fail("--run must be a run id (R-n)");
+  if (options.followupExpected && !options.run) fail('--followup-expected requires --run R-n');
   if (!Number.isInteger(options.timeout) || options.timeout < REVIEW_MIN_TIMEOUT_SECONDS || options.timeout > 7200) {
     fail(`--timeout must be an integer from ${REVIEW_MIN_TIMEOUT_SECONDS} through 7200 seconds`);
   }
@@ -2249,7 +2255,7 @@ async function waitForPrivateReview(path, deadline, interrupted, session) {
 
 async function review(topic, args, memoryChecked = false) {
   repositoryRoot({ requiredBy: "review" });
-  if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n]");
+  if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n [--followup-expected]]");
   const options = parseReviewOptions(args);
   const branch = laneBranch(topic);
   // Explicit route choices must fail before a memory wait. Resolve the implicit
@@ -2354,6 +2360,7 @@ async function review(topic, args, memoryChecked = false) {
       createRetirement({ cwd: REPO_ROOT, main: MAIN, deadline: Math.min(deadline, Date.now() + 10000) }).recordReviewVerdict({
         pane: session.pane, run: options.run, verdict: parsed.verdict, head, evidence: publicPath,
         deferCloseout: options.deferCloseout,
+        followup_expected: options.followupExpected ?? false,
         sha256: createHash('sha256').update(publicRecord).digest('hex'),
       });
     } catch (error) {
@@ -2860,6 +2867,7 @@ switch (command) {
         "                   in .lane.json routes/dispatch\n" +
         "  review <topic> --round N [--brief <path>] [--change <name>]\n" +
         "                   [--route <name>] [--route-config <path>] [--timeout <seconds>]\n" +
+        "                   [--run R-n [--followup-expected]]\n" +
         "                   run one foreground independent review; route defaults to\n" +
         "                   review and timeout defaults to 1800 seconds\n" +
         "  prepare <topic>  run .lane.json prepare steps in the lane worktree; a\n" +

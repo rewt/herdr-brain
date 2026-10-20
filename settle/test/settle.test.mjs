@@ -10,10 +10,10 @@ import { INHERITED_GATE_NON_CLAIM } from '../../lanes/review-evidence.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 const journal = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
-test('settle review launch records its native occupant against the run under review', t => {
+for (const followup of [false, true]) test(`settle review launch records its native occupant and follow-up declaration (${followup}) against the run under review`, t => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
   f.env.SETTLE_TEST_REVIEW_IDENTITY = '1';
-  const settled = result(f.settle(run));
+  const settled = result(f.settle(run, followup ? ['--followup-expected'] : []));
   assert.equal(settled.result, 'promotable'); assert.equal(settled.review.verdict, 'PASS');
   const directory = path.join(f.org, 'retirement/occupants'), files = fs.readdirSync(directory);
   assert.equal(files.length, 1);
@@ -42,7 +42,9 @@ test('settle review launch records its native occupant against the run under rev
   assert.equal(completion.head, journal(f, run).finalHead, 'queue target binds the committed review head');
   assert.equal(completion.reviewed_head, verdict.head);
   assert.equal(completion.review.process.identity, receipt.process.identity);
-  assert.equal(completion.review.followup_expected, false);
+  assert.equal(verdict.followup_expected, followup);
+  assert.equal(completion.review.followup_expected, followup);
+  assert.equal(journal(f, run).followupExpected, followup, 'retry retains the original declaration');
   assert.doesNotMatch(fs.readFileSync(journal(f, run).reviewLog, 'utf8'), /launch identity could not be recorded/);
   assert.doesNotMatch(fs.readFileSync(journal(f, run).reviewLog, 'utf8'), /verdict release evidence could not be recorded/);
 });

@@ -8,6 +8,8 @@ import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { configureCliFixture } from './helpers/cli-fixture.mjs';
 import { tidyFinishedTabs } from '../housekeeping.mjs';
 import { planTidy, reviewedAgentsFromRecords } from '../../supervisor/tidy-tabs.mjs';
+import { retirementLock } from '../../lib/retire-lock.mjs';
+import { retirementOwnerLock } from '../../lib/closeout.mjs';
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-tidy-'));
@@ -94,6 +96,21 @@ test('terminal integrated worker tabs close while working, blocked, unnamed and 
   f.save();
   assert.equal(f.tidy(), true);
   assert.deepEqual(f.read().actions.map(a => a[2]).sort(), ['finished', 'finished-round-2', 'finished-round-3']);
+});
+
+test('default-off owner contention skips only retirement through a complete housekeeping iteration', t => {
+  const f = fixture(t), release = retirementLock(retirementOwnerLock(fs.realpathSync(path.join(f.repo, '.git'))));
+  try {
+    assert.equal(f.tidy(), false);
+    assert.equal(f.logs[0].action, 'retirement-skipped'); assert.equal(f.logs[0].outcome, 'contended');
+    assert.deepEqual(f.read().actions, []);
+    const r = spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: f.env });
+    assert.equal(r.status, 0, r.stderr);
+    const rows = r.stdout.trim().split('\n').map(JSON.parse);
+    assert.equal(rows.filter(row => row.action === 'retirement-skipped' && row.outcome === 'contended').length, 2, 'tidy and tick both tolerate the held claim');
+    assert.ok(rows.some(row => row.action === 'summary-published'));
+    assert.deepEqual(f.read().actions, []);
+  } finally { release(); }
 });
 
 test('dry-run previews finished tabs and never closes, including through housekeeping --once', t => {

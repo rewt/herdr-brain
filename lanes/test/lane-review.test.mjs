@@ -22,6 +22,20 @@ import {
 assert.equal(LANE, resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs")));
 assert.equal(HERDR_CLIENT, resolve(HERE, "..", "board", "herdr-client.mjs"));
 
+test('review follow-up declaration requires a run and rejects duplicate or valued boolean flags', () => {
+  const review = makeReviewFixture('review-followup-option');
+  try {
+    for (const [args, reason] of [
+      [['--followup-expected'], /requires --run/],
+      [['--run', 'R-1', '--followup-expected', '--followup-expected'], /duplicate review option/],
+      [['--run', 'R-1', '--followup-expected', 'false'], /unknown operand: false/],
+    ]) {
+      const r = lane(review.fixture, ['review', 'review-followup-option', '--round', '1', '--brief', review.brief, ...args]);
+      assert.equal(r.status, 2, r.stderr); assert.match(r.stderr, reason);
+    }
+  } finally { review.fixture.cleanup(); }
+});
+
 test("review preserves a final finding immediately before the next section heading", () => {
   const findings = [
     "- [Major] first.txt:1 - first issue; Fix: fix the first issue",

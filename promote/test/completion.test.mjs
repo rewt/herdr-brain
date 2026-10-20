@@ -96,7 +96,9 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     fs.writeFileSync(path.join(workspace, bad ? 'bad' : topic), topic); git(['add', '.'], workspace); git(['commit', '-qm', topic], workspace);
     const item = record(['add', topic]);
     const superseded = options.supersede ? [record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0]] : [];
+    for (const previous of superseded) record(['claim', previous, '--controller', 'brain']);
     const run = record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0];
+    record(['claim', run, '--controller', 'brain']);
     const report = path.join(root, `${topic}.md`);
     const proposals = options.proposals?.length ? `proposals:\n${options.proposals.map(p => Object.entries(p).map(([key, value], i) => `${i ? '    ' : '  - '}${key}: ${JSON.stringify(value)}`).join('\n')).join('\n')}\n` : '';
     fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Implemented ${topic}\nheadline: Implemented ${topic}\n${proposals}${options.questions ? "questions:\n  - question: Does this behavior need adjustment?\n    category: design\n    recommend: no\n    why: The implementation is complete\n" : ""}---\n`);
@@ -104,7 +106,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     if (options.childBeforeAdmission) record(['add', 'New engineering scope', '--role', 'engineer', '--parent', item]);
     const head = git(['rev-parse', 'HEAD'], workspace);
     const job = enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0,
-      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, expectedHead: head, superseded })[0];
+      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, claimedBy: 'brain', expectedHead: head, superseded })[0];
     const member = { topic, workspace, item, run, head, job, superseded }; members.push(member); return member;
   };
   const drain = () => {

@@ -27,12 +27,13 @@ function fixture(t, { done = true, question = false, launched = false } = {}) {
   const child = f.ok(['add', 'Existing child', '--parent', item]).trim();
   f.ok(['block', item, '--by', blocker]);
   const run = f.ok(['start', item, '--workspace', f.root]).match(/^R-\d+/)[0];
+  f.ok(['claim', run, '--controller', 'brain']);
   if (launched) f.ok(['worker', run, '--agent', 'old-worker', '--pane', 'w:p', '--worker-workspace', 'w', '--cwd', f.root, '--terminal-id', 'term', '--agent-session-id', 'session']);
   const file = path.join(f.root, '.org/runs', run, 'report.md');
   if (done) { fs.writeFileSync(file, report(`run: ${run}\noutcome: done\nsummary: Implemented`)); f.ok(['ingest', file]); }
   const other = f.ok(['add', 'Unrelated work']).trim();
   const queue = queueFor(f.root), head = git(['rev-parse', 'HEAD']);
-  const job = enqueue(queue, ['guarded-work'], { org: f.dir, run, expectedHead: head })[0];
+  const job = enqueue(queue, ['guarded-work'], { org: f.dir, claimedBy: 'brain', run, expectedHead: head })[0];
   const batch = (phase = 'prepared', result) => {
     const id = 'batch-guard', jobs = queue.load().pending;
     const receipt = path.join(queue.directory, 'batches', id, 'train.json');
@@ -98,6 +99,7 @@ test('queued recovery overrides require the exact job and lifecycle commands can
 
 test('enqueue serializes a concurrent writer that would otherwise commit from an unqueued snapshot', async t => {
   const f = fixture(t), run = f.ok(['start', f.other, '--workspace', f.root]).match(/^R-\d+/)[0];
+  f.ok(['claim', run, '--controller', 'brain']);
   const status = path.join(f.dir, 'race-status'), release = path.join(f.dir, 'release-writer'), preload = path.join(f.dir, 'race.cjs');
   // Pause the real writer immediately after it snapshots queue.json. With
   // admission locking it instead stops at the record lock, then reads the
@@ -125,7 +127,7 @@ require('node:module').syncBuiltinESMExports();`);
     fs.writeFileSync(release, 'continue'); return result;
   };
   try {
-    const admitted = enqueue(f.queue, ['other-work'], { org: f.dir, run, expectedHead: f.head })[0];
+    const admitted = enqueue(f.queue, ['other-work'], { org: f.dir, claimedBy: 'brain', run, expectedHead: f.head })[0];
     const reply = await completed;
     assert.equal(reply.code, 3, reply.err); assert.ok(reply.err.includes(admitted.id));
     assert.ok(!f.events().some(e => e.type === 'note.added' && e.text === 'Concurrent stale note'));
@@ -213,7 +215,7 @@ for (const shape of ['batch', 'legacy single job', 'historical result']) test(`a
   const f = fixture(t);
   f.queue.transaction(data => { data.pending = []; });
   f.ok(['close', f.item, '--if-current-run', f.run]); f.ok(['reopen', f.item]);
-  const [job] = enqueue(f.queue, ['reopened-work'], { org: f.dir, run: f.run, expectedHead: f.head });
+  const [job] = enqueue(f.queue, ['reopened-work'], { org: f.dir, claimedBy: 'brain', run: f.run, expectedHead: f.head });
   if (shape === 'batch') {
     const b = f.batch('complete');
     const train = JSON.parse(fs.readFileSync(b.receipt));
@@ -257,9 +259,10 @@ test('validated batch completion allows collateral hits on pending and interrupt
     if (relation === 'blocker') f.ok(['block', dependent, '--by', f.item]);
     else f.ok(['set', f.item, `parent=${dependent}`, ...(relation === 'review-child' ? ['role=reviewer'] : [])]);
     const dependentRun = f.ok(['start', dependent]).match(/^R-\d+/)[0];
+    f.ok(['claim', dependentRun, '--controller', 'brain']);
     f.queue.transaction(data => { data.pending = [original]; });
     const b = f.batch('complete', { outcome: 'promoted', tip: f.head, reconciliation: { state: 'pending' } });
-    const pending = enqueue(f.queue, ['dependent-work'], { org: f.dir, run: dependentRun, expectedHead: f.head })[0];
+    const pending = enqueue(f.queue, ['dependent-work'], { org: f.dir, claimedBy: 'brain', run: dependentRun, expectedHead: f.head })[0];
     if (relation === 'review-child') f.queue.transaction(data => {
       data.interrupted = [{ ...data.pending.shift(), phase: 'prepared' }];
     });
@@ -285,9 +288,10 @@ test('recovery override must name exactly all batch and job ids touched by one w
   const original = f.queue.load().pending[0];
   f.queue.transaction(data => { data.pending = []; });
   const otherRun = f.ok(['start', f.other]).match(/^R-\d+/)[0];
+  f.ok(['claim', otherRun, '--controller', 'brain']);
   f.queue.transaction(data => { data.pending = [original]; });
   const b = f.batch();
-  const otherJob = enqueue(f.queue, ['other-work'], { org: f.dir, run: otherRun, expectedHead: f.head })[0];
+  const otherJob = enqueue(f.queue, ['other-work'], { org: f.dir, claimedBy: 'brain', run: otherRun, expectedHead: f.head })[0];
   const args = ['block', f.item, '--by', f.other];
   for (const override of [b.id, otherJob.id, `${b.id},wrong`, `${b.id},${otherJob.id},extra`, `${b.id},${otherJob.id},`]) {
     f.refuse(args, { env: { ORG_GUARD_OVERRIDE: override } });

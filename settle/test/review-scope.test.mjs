@@ -130,6 +130,7 @@ test('R-2444 replay: a continuation without lane metadata and quoted in-range ar
   const f = fixture(t), previous = f.start();
   f.report(previous); f.record(['ingest', f.show(previous).report_path]);
   const run = f.record(['start', f.show(previous).item, '--workspace', f.workspace]).match(/R-\d+/)[0];
+  f.record(['claim', run, '--controller', 'brain']);
   assert.equal(f.show(run).meta?.lane, undefined);
   const base = f.git(['rev-parse', 'main']);
   f.commit('first delivery\n'); const first = f.git(['rev-parse', 'HEAD'], f.workspace);

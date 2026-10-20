@@ -46,6 +46,7 @@ function fixture(t) {
   const start = (name, pid = deadPid) => {
     const item = record(['add', name]).split('\n')[0];
     const id = record(['start', item, '--workspace', repo, '--report', path.join(scratch, `${item}.md`)]).match(/R-\d+/)[0];
+    record(['claim', id, '--controller', 'brain']);
     record(['set', id, `agent=worker-${id}`, `watcher_pid=${pid}`, ...(pid === deadPid ? [] : [`watcher_identity=${ownerIdentity(pid)}`])]); return id;
   };
   return { root: scratch, repo, org, project, binding, record, git, start };

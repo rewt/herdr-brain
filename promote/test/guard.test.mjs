@@ -83,6 +83,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   change('board/render.mjs', renderer.replace('width = 120,', 'width = 121,'));
   const item = record(['add', 'Reviewed candidate', '--role', 'engineer'], project).split(' ')[0];
   const run = record(['start', item, '--workspace', workspace], project).match(/^R-\d+/)[0];
+  record(['claim', run, '--controller', 'brain'], project);
   const show = id => JSON.parse(record(['show', id, '--json'], project));
   const reportPath = show(run).report_path;
   fs.writeFileSync(reportPath, `---\nrun: ${run}\noutcome: done\nsummary: Private fixture completed\nheadline: Private fixture completed\n---\n`);
@@ -260,7 +261,7 @@ for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existi
   if (kind !== 'foreign') f.check(); // A valid admission precedes late drift.
   const restore = damage(f, kind);
   const result = f.exec(process.execPath, [cli, 'candidate', '--existing-worker', '--repo', f.project, '--org', f.org,
-    '--if-current-run', f.run, '--expected-head', f.guard.expectedHead, '--delivery-attempts', '1', '--retry-seconds', '0', '--herdr', f.herdr]);
+    '--if-current-run', f.run, '--claimed-by', 'brain', '--claim-generation', String(f.show(f.run).owner_generation), '--expected-head', f.guard.expectedHead, '--delivery-attempts', '1', '--retry-seconds', '0', '--herdr', f.herdr]);
   const reply = JSON.parse(f.ok(result)); assert.deepEqual(reply.worker, { already_running: true });
   assert.equal(queue.load().pending.find(job => job.run === f.run).existingWorker, true);
   fs.writeFileSync(release, 'release');

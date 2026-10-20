@@ -206,6 +206,7 @@ for (const mode of ['admit', 'refuse', 'cohort-change', 'binding-change']) test(
   const settings = { autopilot: { enabled: true, cohort: 'green-pass', green: structuredClone(f.bindings) } };
   const configFile = path.join(f.repo, '.supervisor.json'); fs.writeFileSync(configFile, JSON.stringify(settings));
   const run = f.record(['start', f.item, '--workspace', f.workspace]).match(/R-\d+/)[0];
+  f.record(['claim', run, '--controller', 'brain']);
   const runInfo = JSON.parse(f.record(['show', run, '--json']));
   fs.writeFileSync(runInfo.report_path, `---\nrun: ${run}\noutcome: done\nsummary: Renderer change\nheadline: Renderer changed\nblockers: []\n---\n`);
   f.record(['ingest', runInfo.report_path]);

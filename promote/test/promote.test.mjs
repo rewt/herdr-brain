@@ -617,6 +617,7 @@ for (const failVelocity of [false, true]) test(failVelocity
   const item = record(['add', 'Finished first lane', '--role', 'engineer']).split(/\s/)[0];
   const report = path.join(f.root, 'report.md');
   const run = record(['start', item, '--harness', 'codex', '--model', 'offline', '--effort', 'high', '--workspace', wt, '--report', report]).split(/\s/)[0];
+  record(['claim', run, '--controller', 'brain']);
   record(['set', run, 'agent=worker', 'pane=w:p1', 'worker_workspace=w', 'terminal_id=terminal-first', 'agent_session_id=session-first', 'lane=first']);
   fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Finished.\nheadline: Finished lane\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
   record(['ingest', report]);
@@ -652,7 +653,8 @@ cp.spawnSync=function(cmd,args,options){
 };require('module').syncBuiltinESMExports();`);
     f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}`;
   }
-  f.launch(['first', '--org', org, '--expected-head', f.git(['rev-parse', 'HEAD'], wt), '--if-current-run', run]);
+  f.launch(['first', '--org', org, '--expected-head', f.git(['rev-parse', 'HEAD'], wt), '--if-current-run', run,
+    '--claimed-by', 'brain', '--claim-generation', String(JSON.parse(record(['show', run, '--json'])).owner_generation)]);
   await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(f.results()[0].outcome, 'promoted', f.results()[0].reason);
   if (failVelocity) {

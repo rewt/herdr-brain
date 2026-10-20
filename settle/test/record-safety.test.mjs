@@ -193,8 +193,16 @@ const r = spawnSync(process.execPath, [cli, ...args], { env: process.env, encodi
 if (guardedStart) fs.writeFileSync(${JSON.stringify(path.join(f.root, 'race-start-result.json'))}, JSON.stringify({ status: r.status, stderr: r.stderr }));
 process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1);
 `, { mode: 0o755 });
-  const refused = f.settle(old, ['--org-cli', adapter]); assert.equal(refused.status, 1);
+  const capture = path.join(f.root, 'capture-dispatch.mjs'), captured = path.join(f.root, 'dispatch-result.json');
+  fs.writeFileSync(capture, `#!${process.execPath}
+import fs from 'node:fs'; import { spawnSync } from 'node:child_process';
+const r = spawnSync(process.execPath, [${JSON.stringify(path.join(f.source, 'dispatch/dispatch.mjs'))}, ...process.argv.slice(2)], { env: process.env, encoding: 'utf8' });
+fs.writeFileSync(${JSON.stringify(captured)}, r.stdout);
+process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1);
+`, { mode: 0o755 });
+  const refused = f.settle(old, ['--org-cli', adapter, '--dispatch-cli', capture]); assert.equal(refused.status, 1);
   assert.match(refused.stderr, /superseded/); assert.equal(JSON.parse(refused.stdout).result, 'escalate');
+  assert.equal(JSON.parse(fs.readFileSync(captured, 'utf8')).code, 'FROM_RUN_SUPERSEDED');
   const before = JSON.parse(fs.readFileSync(path.join(f.root, 'race-item.json'), 'utf8')), after = f.show(item);
   assert.deepEqual(after.outcome, before.outcome); assert.deepEqual(after.closed, before.closed);
   assert.deepEqual(after.runs, before.runs); assert.equal(after.status, before.status); assert.equal(workerPrompts(f).length, 0);

@@ -161,6 +161,11 @@ function view(ctx) {
   return { orgDir: ctx.dir, events: ctx.events, tornTail: ctx.tornTail, config: ctx.config, now: ctx.now, cli: cliString(ctx.dir) };
 }
 
+function briefArchive(workspace) {
+  try { return { archive: workspace ? discoverArchive({ cwd: workspace }).dirs : [] }; }
+  catch (error) { return { archive: [], archiveError: error?.message || String(error) }; }
+}
+
 let warnedUnattributed = false;
 function mutate(ctx, fn, authority) {
   const who = writer();
@@ -668,7 +673,7 @@ function start(argv) {
   for (const key of ['harness', 'model', 'effort']) if (values[key]) meta[key] = values[key];
   if (values.escalation) meta.escalation = true;
   const workspace = path.resolve(values.workspace ?? process.cwd());
-  const archive = discoverArchive({ cwd: workspace }).dirs;
+  const archive = briefArchive(workspace);
   const ctx = openOrg();
   const { result } = mutate(ctx, (s) => {
     const item = requireItem(s, id);
@@ -696,7 +701,7 @@ function start(argv) {
 
   const after = openOrg();
   const run = after.state.runs.get(result.runId);
-  const brief = renderBrief(after.state, run.id, { ...view(after), archive });
+  const brief = renderBrief(after.state, run.id, { ...view(after), ...archive });
   writeFileAtomic(run.brief_path, brief);
   fs.mkdirSync(path.dirname(run.report_path), { recursive: true });
 
@@ -926,7 +931,7 @@ function brief(argv) {
   const run = ctx.state.runs.get(positionals[0]);
   if (!run) throw new UserError(`unknown run ${positionals[0]}`);
   if (!fs.existsSync(run.brief_path)) writeFileAtomic(run.brief_path, renderBrief(ctx.state, run.id,
-    { ...view(ctx), archive: run.workspace ? discoverArchive({ cwd: run.workspace }).dirs : [] }));
+    { ...view(ctx), ...briefArchive(run.workspace) }));
   out(fs.readFileSync(run.brief_path, 'utf8'));
   return 0;
 }

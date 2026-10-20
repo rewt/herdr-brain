@@ -22,6 +22,8 @@ The JSON schema is `project-summary/v1`. Its explicit field allowlist is:
   Declared directories need not exist yet; `dirs: []` suppresses the default.
   The Markdown rendering names these archive directories too. Older readers
   ignore the field. These locations convey no access or cleanup authority.
+  A failed archive lookup publishes an empty list and the fixed exception name
+  `archive-unavailable`; the raw error stays out of both published formats.
 - `status.counts`: counts of the existing derived item statuses.
 - `today`: local calendar date and UTC bounds (the same day definition as
   `record today`), landings and decisions, with item/run ids, times and one-line
@@ -48,7 +50,8 @@ The JSON schema is `project-summary/v1`. Its explicit field allowlist is:
   Missing/unrecognised current links stay null, never a candidate or guessed tag.
 - `exceptions`: sorted, fixed names for missing summaries, partial record tails,
   unknown/unavailable lanes or worktrees, unknown owner/age, a retirement hold,
-  unreadable promotion queue, and unavailable release ids/status.
+  unreadable promotion queue, unavailable archive directories, and unavailable
+  release ids/status.
 
 Sources are the owner's event fold, its promotion queue and canonical checkout,
 the shared retirement status projection's existing Git/Herdr facts, housekeeping

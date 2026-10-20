@@ -132,6 +132,35 @@ test('the publisher resolves archive directories and preserves their paths as th
   assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), f.eventBytes);
 });
 
+for (const [name, config] of [
+  ['malformed JSON', '{"archive": "PLANTED-PRIVATE-CONTENT"'],
+  ['invalid archive directories', '{"archive":{"dirs":"PLANTED-PRIVATE-CONTENT"}}'],
+  ['invalid routing fields', '{"routes":{"engineer":{"kind":42}}}'],
+]) test(`summary publication survives archive lookup with ${name} and publishes only a fixed exception`, t => {
+  const f = fixture(t), file = path.join(f.repo, '.lane.json');
+  fs.writeFileSync(file, config);
+  const check = doc => {
+    assert.deepEqual(doc.archive, { dirs: [] });
+    assert.equal(doc.exceptions.filter(e => e.name === 'archive-unavailable').length, 1);
+    assert.doesNotMatch(JSON.stringify(doc) + renderProjectSummary(doc), /PLANTED|route config|archive\.dirs must|routes\.engineer|\.lane\.json/);
+    assert.equal(doc.today.landings.length, 1, 'other sources still publish');
+    assert.equal(publishedSummaryStatus(f.org, { now: NOW, project: f.project }).status, 'fresh');
+  };
+  check(f.publish());
+  // Housekeeping supplies its already-observed snapshot to this same collector.
+  check(f.publish({ snapshot: { events: events(f.repo), common: f.project.identity, errors: [] } }));
+  const herdr = path.join(f.root, 'unavailable-herdr');
+  fs.writeFileSync(herdr, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  const cli = f.cli(['publish', '--json', '--herdr', herdr]);
+  assert.equal(cli.status, 0, cli.stderr);
+  check(JSON.parse(cli.stdout));
+  fs.writeFileSync(file, JSON.stringify({ archive: { dirs: ['recovered-archive'] } }));
+  const recovered = f.publish();
+  assert.deepEqual(recovered.archive, { dirs: [path.join(f.repo, 'recovered-archive')] });
+  assert.equal(recovered.exceptions.some(e => e.name === 'archive-unavailable'), false);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), f.eventBytes);
+});
+
 test('identical inputs give byte-identical JSON and Markdown, including after publication', t => {
   const input = inputs();
   assert.equal(JSON.stringify(projectSummary(input)), JSON.stringify(projectSummary(structuredClone(input))));

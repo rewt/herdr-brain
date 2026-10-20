@@ -36,8 +36,8 @@ function report(fields) {
   return `---\n${fields}\n---\nDetails.\n`;
 }
 
-for (const declared of [true, false]) test(`record start and regenerated brief show durable locations ${declared ? 'with an archive' : 'without an archive'}`, t => {
-  const { dir, ok } = setup(), root = path.dirname(dir), workspace = path.join(root, 'project');
+function briefWorkspace(t) {
+  const f = setup(), root = path.dirname(f.dir), workspace = path.join(root, 'project');
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(workspace);
   const git = args => {
@@ -46,12 +46,17 @@ for (const declared of [true, false]) test(`record start and regenerated brief s
   };
   git(['init', '-qb', 'main']);
   git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'seed']);
+  const env = { LANE_CONFIG: undefined, HERDR_MONITOR_FLEET: path.join(root, 'fleet') };
+  return { ...f, root, workspace, env };
+}
+
+for (const declared of [true, false]) test(`record start and regenerated brief show durable locations ${declared ? 'with an archive' : 'without an archive'}`, t => {
+  const { dir, ok, root, workspace, env } = briefWorkspace(t);
   if (declared) fs.writeFileSync(path.join(workspace, '.lane.json'), JSON.stringify({ archive: { dirs: ['docs/reports'] } }));
   // Start outside the workspace and pass a routing-only snapshot, like dispatch.
   // Neither the caller's config nor the frozen route config supplies the archive.
   const route = path.join(root, 'routes.json');
   fs.writeFileSync(route, JSON.stringify({ routes: { engineer: { kind: 'codex' } } }));
-  const env = { LANE_CONFIG: undefined, HERDR_MONITOR_FLEET: path.join(root, 'fleet') };
   const id = ok(['add', 'Save durable results'], { env }).trim();
   ok(['start', id, '--workspace', workspace, '--route', 'engineer', '--route-config', route], { env });
   const file = path.join(dir, 'runs/R-1/brief.md'), first = fs.readFileSync(file, 'utf8');
@@ -68,6 +73,58 @@ for (const declared of [true, false]) test(`record start and regenerated brief s
   fs.unlinkSync(file);
   check(ok(['brief', 'R-1'], { env }));
   assert.equal(fs.readFileSync(file, 'utf8'), first);
+});
+
+for (const [name, config, reason] of [
+  ['malformed JSON', '{\n  "archive":', /cannot read route config/],
+  ['invalid archive directories', '{"archive":{"dirs":42}}', /archive\.dirs must be an array/],
+  ['invalid routing fields', '{"routes":{"engineer":{"kind":42}}}', /routes\.engineer\.kind/],
+]) test(`archive lookup with ${name} cannot block record start or brief regeneration`, t => {
+  const { dir, org, ok, workspace, env } = briefWorkspace(t);
+  const layer = path.join(workspace, '.lane.json');
+  fs.writeFileSync(layer, config);
+  const id = ok(['add', 'Work despite unavailable archive'], { env }).trim();
+  const started = org(['start', id, '--workspace', workspace], { env });
+  assert.equal(started.code, 0, started.err);
+  assert.match(started.out, /^R-1 started/);
+  assert.doesNotMatch(started.err, /\n\s+at /);
+  const file = path.join(dir, 'runs/R-1/brief.md');
+  const check = text => {
+    const section = text.split('## Durable locations\n')[1].split('\n\n')[0];
+    assert.equal(section.split('\n').length, 1, 'archive errors occupy one line');
+    assert.match(section, /^Archive unavailable: /);
+    assert.match(section, reason);
+    assert.match(text, /## When you stop: write one report/);
+  };
+  check(fs.readFileSync(file, 'utf8'));
+  assert.equal(JSON.parse(ok(['show', 'R-1', '--json'], { env })).workspace, workspace);
+  const events = fs.readFileSync(path.join(dir, 'events.jsonl'));
+  fs.unlinkSync(file);
+  check(ok(['brief', 'R-1'], { env }));
+  fs.writeFileSync(layer, JSON.stringify({ archive: { dirs: ['recovered-archive'] } }));
+  fs.unlinkSync(file);
+  const recovered = ok(['brief', 'R-1'], { env });
+  assert.ok(recovered.includes(path.join(workspace, 'recovered-archive')));
+  assert.doesNotMatch(recovered, /Archive unavailable/);
+  assert.deepEqual(fs.readFileSync(path.join(dir, 'events.jsonl')), events, 'brief rendering never appends record events');
+});
+
+test('relative LANE_CONFIG uses the caller for routed start and brief regeneration outside the workspace', t => {
+  const { dir, ok, root, workspace, env } = briefWorkspace(t);
+  const config = { routes: { engineer: { kind: 'codex' } }, archive: { dirs: ['caller-archive'] } };
+  fs.writeFileSync(path.join(root, 'explicit.json'), JSON.stringify(config));
+  fs.writeFileSync(path.join(workspace, 'explicit.json'), JSON.stringify({ ...config, archive: { dirs: ['wrong-workspace-archive'] } }));
+  env.LANE_CONFIG = 'explicit.json';
+  const id = ok(['add', 'Use the caller configuration'], { env }).trim();
+  ok(['start', id, '--workspace', workspace, '--route', 'engineer'], { env });
+  const file = path.join(dir, 'runs/R-1/brief.md');
+  const check = text => {
+    assert.ok(text.includes(path.join(root, 'caller-archive')));
+    assert.doesNotMatch(text, /wrong-workspace-archive|Archive unavailable/);
+  };
+  check(fs.readFileSync(file, 'utf8'));
+  fs.unlinkSync(file);
+  check(ok(['brief', 'R-1'], { env }));
 });
 
 function outcomeEvents(entries) {

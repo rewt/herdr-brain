@@ -116,6 +116,14 @@
       "probe": "events"
     },
     {
+      "id": "run-ownership/v1",
+      "version": 1,
+      "writer": "lib/run-owner.mjs",
+      "location": "<record>/events.jsonl run.claimed events",
+      "rule": "additive",
+      "notCovered": "The record-events probe creates an unclaimed run; it does not cover run.claimed owner/generation, saved-release adoption or transfer recovery through OLD consumers. Dedicated claimed-run old-reader/recovery coverage is not provided; older writers still require explicit drain."
+    },
+    {
       "id": "record-config",
       "version": "unversioned",
       "writer": "lib/store.mjs",

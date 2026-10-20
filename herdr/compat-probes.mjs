@@ -218,12 +218,14 @@ const probes = {
   settle: {
     async write() {
       git(['worktree', 'add', '-qb', 'lane/compat-topic', path.join(directory, 'lane')]); report('blocked');
+      // NEW settlement requires explicit admission once ownership is supported.
+      if (fs.existsSync(path.join(root, 'lib/run-owner.mjs'))) record(['claim', 'R-1', '--controller', 'brain']);
       // A real blocked outcome finishes without creating a reviewer or running
       // a gate. The journal still contains the real report/release bindings.
       const result = spawnSync(process.execPath, [path.join(root, 'settle/settle.mjs'), 'R-1', '--repo', repo, '--org', org],
         { cwd: repo, env: process.env, encoding: 'utf8', timeout: 30000 });
       const file = path.join(org, 'settle/R-1.json'); assert.ok(fs.existsSync(file), result.stderr + result.stdout);
-      save({}, [file], 'blocked settlement with report and release evidence; no review dispatch');
+      save({}, [file], 'blocked settlement with report and release evidence; no review dispatch or ownership recovery coverage');
     },
     async read() { const doc = JSON.parse(cli('settle/settle.mjs', ['R-1', '--status', '--repo', repo, '--org', org])); assert.equal(doc.run, 'R-1'); assert.ok(doc.reportHash); console.log('OLD settle --status; retry is outside this probe'); },
   },

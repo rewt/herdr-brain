@@ -15,7 +15,7 @@ import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
-  closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision } from '../lib/closeout.mjs';
+  closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout } from '../lib/closeout.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { drainCloseout } from '../lib/closeout-consumer.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
@@ -159,6 +159,32 @@ test('promotion retries only its exact deferred lock target; empty drains never 
   const completed = entries.find(e => e.run === 'R-3'), source = events(f).find(e => e.seq === completed.source.seq);
   assert.deepEqual(publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [source], start: false }), [], 'replay cannot resurrect a completed key');
   assert.equal(events(f).find(e => e.seq === source.seq).closeout_targets[0].gitIdentity.ino, completed.gitIdentity.ino, 'exact-run evidence remains in record');
+});
+
+test('source replay waiting on queue.lock cannot recreate a request completed and pruned during its wait', async t => {
+  const f = setup(t, { occupied: false }), [source] = f.report(), [entry] = readCloseoutEntries(f.common);
+  const lock = path.join(f.common, 'closeout/queue.lock'), marker = path.join(f.scratch, 'publisher-waiting');
+  const release = retirementLock(lock);
+  const replay = child(process.execPath, ['--input-type=module', '-e', `
+    import fs from 'node:fs';
+    import { publishCloseoutEvents } from ${JSON.stringify(new URL('../lib/closeout.mjs', import.meta.url).href)};
+    const original = fs.readFileSync;
+    fs.readFileSync = (...args) => {
+      if (args[0] === ${JSON.stringify(path.join(lock, 'owner.json'))}) fs.writeFileSync(${JSON.stringify(marker)}, 'waiting');
+      return original(...args);
+    };
+    console.log(JSON.stringify(publishCloseoutEvents({ cwd: ${JSON.stringify(f.repo)}, org: ${JSON.stringify(f.org)}, added: [${JSON.stringify(source)}], start: false })));
+  `], { cwd: f.repo, env: f.env });
+  try {
+    await waitForChange([marker], () => fs.existsSync(marker), { timeoutMs: 10000 });
+    transact(f.org, () => ({ add: [{ type: 'closeout.evaluated', key: entry.key, identity: f.common, run: entry.run,
+      item: entry.item, source: entry.source, revision: source.seq, completed: true }] }));
+    pruneCompletedCloseout(f.common, f.org, [entry], events(f));
+    assert.deepEqual(readCloseoutEntries(f.common), []);
+  } finally { release(); }
+  const result = await replay;
+  assert.equal(result.status, 0, result.stderr); assert.deepEqual(JSON.parse(result.stdout), []);
+  assert.deepEqual(readCloseoutEntries(f.common), []);
 });
 
 test('optional ready, repeated ready and ingested done are one entry; NEEDS-WORK retains its worker', t => {

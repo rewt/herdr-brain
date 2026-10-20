@@ -872,8 +872,9 @@ for (const stage of ['open', 'worker']) {
     assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'open').length, 1);
   });
 }
-test('one command records exact route/worker fields, arms watch before prompt, and preserves briefs',t=>{
+for (const configured of [false, true]) test(`worker prompt preserves the final test selection (declared fast tier ${configured})`,t=>{
   const f=fixture(t), before=fs.readFileSync(f.brief,'utf8');
+  if (configured) fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ fast: 'npm run test:fast' }));
   const r=f.start(['--report','docs/reports/round.md','--extra','Fix round: inspect the review.']);assert.equal(r.status,0,r.stderr);
   const result=JSON.parse(r.stdout),run=f.show(result.run);
   assert.deepEqual([run.meta.route,run.meta.harness,run.meta.model,run.meta.effort,run.meta.lane],['engineer','codex','model-a','high','topic']);
@@ -884,9 +885,10 @@ test('one command records exact route/worker fields, arms watch before prompt, a
   assert.deepEqual(calls.find(x=>x.type==='lane'&&x.a[0]==='open').a, ['open','topic','--git-only']);
   assert.match(promptCalls(f)[0].a[3],new RegExp(result.run));assert.ok(promptCalls(f)[0].a[3].includes(run.brief_path));
   assert.ok(promptCalls(f)[0].a[3].includes(run.report_path));assert.match(promptCalls(f)[0].a[3],/Fix round/);
-  assert.match(promptCalls(f)[0].a[3], /check on the clean committed candidate/);
+  assert.match(promptCalls(f)[0].a[3], /Run the ask's final test selection once through.*check --cmd 'COMMAND' on the clean committed candidate/);
+  assert.match(promptCalls(f)[0].a[3], /Only when the ask names no test selection, use check without --cmd/);
   assert.match(promptCalls(f)[0].a[3], /default test command without configuration/);
-  assert.match(promptCalls(f)[0].a[3], /check --cmd 'COMMAND'/);
+  assert.match(promptCalls(f)[0].a[3], /Do not add a tier run or repeat tests/);
   assert.match(promptCalls(f)[0].a[3], /\.lane\/gate\.json.*TAP totals and Node version/);
   assert.equal(fs.readFileSync(f.brief,'utf8'),before);
   assert.equal(f.dispatch(['--retry',result.run]).status,0);assert.equal(promptCalls(f).length,1);

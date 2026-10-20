@@ -54,11 +54,12 @@ Continuing work never resets earlier completed reviews; reviewing that new run
 later consumes its own round. Continuation chains have no separate length cap.
 
 Precedence is item `meta.settle_review_round_cap`, project `.lane.json`
-`settle.review_round_cap`, then 0 (unlimited). `--review-round-cap N` persists
+`settle.review_round_cap`, then 3 completed review rounds. `--review-round-cap N` persists
 the item override. Each intake snapshots cap/source/round/prior runs as
 `review_policy`; retry uses that snapshot. Total `rounds` and record budgets
 remain advisory. Legacy pending receipts without a cap snapshot remain unlimited.
-This change leaves the unconfigured default 0 and Brain's project cap 1 intact.
+The unconfigured default and herdr-brain's project cap are both 3 review rounds;
+explicit project values, including 0 for unlimited reviews, retain their meaning.
 
 BCH's **two fix rounds after failed reviews of any severity** correspond to
 **review cap 3**: reviews 1 and 2 may each dispatch a fix; review 3 stops automatic

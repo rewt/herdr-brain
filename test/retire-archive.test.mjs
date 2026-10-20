@@ -18,6 +18,39 @@ function boundedSummary(summary) {
   assert.ok(Buffer.byteLength(JSON.stringify(summary)) < 1024);
 }
 
+test('canonical HOLD skips archival probes in inventory, status and sweep', async t => {
+  const f = landed(t);
+  hold(f);
+  for (const sweep of [false, true]) {
+    const commands = sweepCommands(f);
+    const trees = readRetirementWorktrees(f.common, { main: 'main', env: f.env, ...commands, sweep, archivalRetirement: true });
+    assert.equal(trees.find(row => row.branch === 'lane/topic').archival, undefined);
+    assert.deepEqual(commands.calls.filter(archivalProbe), []);
+  }
+  const commands = sweepCommands(f);
+  await readRetirementStatus({ cwd: f.repo, org: f.org, env: f.env, herdr: f.job.herdr, ...commands });
+  assert.deepEqual(commands.calls.filter(archivalProbe), []);
+  const result = sweep(f);
+  kept(f, result, /retirement held/);
+  assert.deepEqual(result.calls.filter(archivalProbe), []);
+});
+
+test('incomplete archival observations retain their diagnostic in decisions and logs', t => {
+  const f = landed(t), commands = sweepCommands(f), command = commands.command, logs = [];
+  commands.command = (exe, args, options) => exe === 'git' && args.includes('cherry') ?
+    { status: 1, stdout: '', stderr: 'fixture history unavailable' } : command(exe, args, options);
+  const tree = readRetirementWorktrees(f.common, { main: 'main', env: f.env, ...commands, archivalRetirement: true }).find(row => row.branch === 'lane/topic');
+  const decision = integratedLaneDecision(f.retirement(commands).observe(), tree);
+  assert.equal(decision.decision, 'keep');
+  assert.equal(decision.archival.error, tree.archival.error);
+  assert.match(decision.archival.error, /fixture history unavailable/);
+  boundedSummary(decision.archival);
+  const results = f.retirement({ ...commands, log: row => logs.push(row) }).sweepIntegratedLanes();
+  for (const row of [...results, ...logs].filter(row => row.archival)) assert.equal(row.archival.error, tree.archival.error);
+  assert.ok(logs.some(row => row.archival));
+  assert.equal(fs.existsSync(f.lane), true);
+});
+
 const policy = (f, value = true, extra = {}) => fs.writeFileSync(path.join(f.repo, '.lane.json'),
   JSON.stringify({ retirement: { archival_retirement: value, ...extra } }));
 function landed(t, { method = 'cherry-pick', enabled = true, occupied = false } = {}) {

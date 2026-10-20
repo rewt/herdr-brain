@@ -49,6 +49,17 @@ test('split lane CLI files keep release placement and individual suite deadlines
   }
 });
 
+test('split completion files retain release coverage with separate bounded suites', () => {
+  const files = ['promote/test/completion.test.mjs', 'promote/test/completion-recovery.test.mjs'];
+  const release = tierFiles('release', root), phases = releasePhases(release);
+  for (const file of files) {
+    assert.equal(release.filter(candidate => candidate === file).length, 1);
+    assert.deepEqual(phases.filter(([, rows]) => rows.includes(file)).map(([, rows]) => rows), [[file]]);
+    assert.ok(!tierFiles('promotion', root).includes(file));
+  }
+  assert.ok(!release.includes('promote/test/completion-fixture.mjs'));
+});
+
 test('a module folder removed from the planned tree contributes no tests instead of failing the plan', () => {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'tier-missing-'));
   try {

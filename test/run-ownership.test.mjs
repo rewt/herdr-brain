@@ -6,12 +6,14 @@ import { copyProduct } from '../lib/product-files.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { spawnSync } from 'node:child_process';
+import cp from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { fixture } from '../settle/test/fixture.mjs';
 import { loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { fold as oldFold } from './fixtures/state-pre-session-bind.mjs';
-import { claimRun, ownerBinding, fenceOwner, readOwnedRun, outstandingEffects, adoptedPromotionBinding } from '../lib/run-owner.mjs';
+import { claimRun, ownerBinding, fenceOwner, readOwnedRun, assertOwner, outstandingEffects, adoptedPromotionBinding } from '../lib/run-owner.mjs';
 import { queueFor, enqueue } from '../promote/promote.mjs';
 import { readInbox } from '../supervisor/prompt-supervisor.mjs';
 import { receiptDirectory } from '../supervisor/context.mjs';
@@ -55,6 +57,66 @@ const reviewResult = (f, result) => {
 const reviews = f => f.calls().filter(a => a[0] === 'agent' && a[1] === 'start').length;
 
 test('promotion inventory includes the ownership witnesses', () => assert.ok(tierFiles('promotion').includes('test/run-ownership.test.mjs')));
+
+test('ownership reads reuse only the unchanged record fold and keep fresh Git fences', t => {
+  const f = fixture(t), run = f.start(), file = path.join(f.org, 'events.jsonl');
+  const read = fs.readFileSync, exec = cp.execFileSync;
+  let reads = 0, probes = 0;
+  fs.readFileSync = function(name, ...args) { if (name === file) reads++; return read.call(this, name, ...args); };
+  cp.execFileSync = function(command, ...args) { if (command === 'git') probes++; return exec.call(this, command, ...args); };
+  syncBuiltinESMExports();
+  try {
+    const first = readOwnedRun(f.org, run), expected = structuredClone(first), firstProbes = probes;
+    first.owner.controller = 'caller mutation'; first.meta.changed = true;
+    assert.deepEqual(readOwnedRun(f.org, run), expected, 'callers cannot mutate the cached fold');
+    assert.equal(reads, 1, 'unchanged record is read and folded once');
+    assert.equal(firstProbes, 2, 'root discovery combines path queries but still verifies canonical checkout');
+    assert.equal(probes, firstProbes * 2, 'the second fence still probes Git');
+    const directory = path.join(f.repo, 'nested'); fs.mkdirSync(directory);
+    assert.equal(gitProject(directory).identity, gitProject(f.repo).identity, 'subdirectory discovery retains its original semantics');
+  } finally { fs.readFileSync = read; cp.execFileSync = exec; syncBuiltinESMExports(); }
+});
+
+test('ownership fold cache observes rewrites, claim changes, torn tails and live Git identity loss', t => {
+  const f = fixture(t), run = f.start(), file = path.join(f.org, 'events.jsonl');
+  const original = fs.readFileSync(file, 'utf8'), stamp = fs.statSync(file), expected = binding(f, run);
+  const altered = original.replace('"controller":"brain"', '"controller":"other"');
+  assert.notEqual(altered, original); assert.equal(Buffer.byteLength(altered), Buffer.byteLength(original));
+  fs.writeFileSync(file, altered); fs.utimesSync(file, stamp.atime, stamp.mtime);
+  assert.throws(() => assertOwner(readOwnedRun(f.org, run), expected), { code: 'RUN_OWNED_ELSEWHERE' });
+  fs.writeFileSync(file, original);
+  assertOwner(readOwnedRun(f.org, run), expected);
+  const claim = events(f).find(e => e.type === 'run.claimed');
+  fs.appendFileSync(file, JSON.stringify({ ...claim, seq: events(f).at(-1).seq + 1 }) + '\n');
+  assert.throws(() => assertOwner(readOwnedRun(f.org, run), expected), { code: 'RUN_OWNED_ELSEWHERE' });
+  fs.appendFileSync(file, '{"type":');
+  assert.throws(() => readOwnedRun(f.org, run), { code: 'RUN_CLAIM_INVALID' });
+  fs.writeFileSync(file + '.replacement', original); fs.renameSync(file + '.replacement', file);
+  assertOwner(readOwnedRun(f.org, run), expected);
+  fs.renameSync(path.join(f.repo, '.git'), path.join(f.repo, '.git.saved'));
+  try { assert.throws(() => readOwnedRun(f.org, run), { code: 'RUN_CLAIM_INVALID' }); }
+  finally { fs.renameSync(path.join(f.repo, '.git.saved'), path.join(f.repo, '.git')); }
+  assertOwner(readOwnedRun(f.org, run), expected);
+});
+
+test('ownership fold cache never associates bytes from a changed record alias with the old record', t => {
+  const f = fixture(t), run = f.start(), alias = path.join(f.root, 'record-alias'), other = path.join(f.root, 'other-record');
+  const file = path.join(f.org, 'events.jsonl');
+  fs.mkdirSync(other);
+  fs.writeFileSync(path.join(other, 'events.jsonl'), events(f).map(e => JSON.stringify(e.type === 'run.claimed'
+    ? { ...e, record: other, owner: { ...e.owner, controller: 'other' } } : e) + '\n').join(''));
+  fs.symlinkSync(f.org, alias);
+  const stat = fs.statSync; let moved = false;
+  fs.statSync = function(name, options) {
+    const result = stat.call(this, name, options);
+    if (!moved && name === file && options?.bigint) { moved = true; fs.unlinkSync(alias); fs.symlinkSync(other, alias); }
+    return result;
+  };
+  try { assert.throws(() => readOwnedRun(alias, run), { code: 'RUN_CLAIM_INVALID' }); }
+  finally { fs.statSync = stat; fs.unlinkSync(alias); fs.symlinkSync(f.org, alias); }
+  assert.equal(moved, true);
+  assert.equal(readOwnedRun(f.org, run).owner.controller, 'brain');
+});
 
 test('ambiguous legacy late delivery is held; another owner refuses before any settle journal or review', t => {
   const f = fixture(t), run = f.start({ owned: false }); f.commit('correct\n'); f.report(run);

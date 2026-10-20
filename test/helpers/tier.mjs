@@ -6,6 +6,7 @@ import { main as suite } from './suite.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const fast = ['test/main-module.test.mjs', 'test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'lanes/test/routes.test.mjs'];
+const completionFiles = ['promote/test/completion.test.mjs', 'promote/test/completion-recovery.test.mjs'];
 // Whole-file promotion coverage stays explicit; future files default to release.
 // Mixed files also supply selected fast cases through the promotion scripts.
 const promotion = [
@@ -103,8 +104,10 @@ function testFiles(directory, dir) {
 export function tierFiles(tier, directory = root) {
   if (tier === 'fast') return [...fast];
   if (tier === 'promotion') return [...promotion];
-  if (tier === 'release') return Object.values(directories).flat().flatMap(dir => testFiles(directory, dir))
-    .filter(file => !promotion.includes(file));
+  if (tier === 'release') {
+    const files = Object.values(directories).flat().flatMap(dir => testFiles(directory, dir)).filter(file => !promotion.includes(file));
+    return [...completionFiles.filter(file => files.includes(file)), ...files.filter(file => !completionFiles.includes(file))];
+  }
   if (!directories[tier]) throw Error(`unknown test tier: ${tier}`);
   return directories[tier].flatMap(dir => testFiles(directory, dir))
     .filter(file => promotion.includes(file));

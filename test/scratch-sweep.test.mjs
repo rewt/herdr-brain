@@ -48,14 +48,38 @@ test('run marker wins over topic names, manifest precedes removal, and only the 
 
 test('longest topic removes owned scratch and keeps the prefix sibling and an undelimited prefix', t => {
   const f = setup(t), own = f.directory('topic-review'), named = f.directory('topic-review-r1');
-  const sibling = f.directory('topic-ds3-review'), prefix = f.directory('topical-review'), unknownRun = f.directory('topic-review-r12');
+  const sibling = f.directory('topic-ds3-review'), prefix = f.directory('topical-review'), round = f.directory('topic-review-r2');
   const sweep = f.prepare(); sweep.execute();
-  for (const file of [own, named]) assert.equal(fs.existsSync(file), false);
-  for (const file of [sibling, prefix, unknownRun]) assert.ok(fs.existsSync(file));
+  for (const file of [own, named, round]) assert.equal(fs.existsSync(file), false);
+  for (const file of [sibling, prefix]) assert.ok(fs.existsSync(file));
   assert.equal(f.read(sweep).entries.find(e => e.path === own).size, 3);
+  assert.equal(f.read(sweep).entries.find(e => e.path === round).matchedBy, 'longest topic');
   assert.equal(f.read(sweep).entries.find(e => e.path === sibling).owner, 'topic-ds3');
   assert.match(f.read(sweep).entries.find(e => e.path === sibling).reason, /longer lane topic/);
   assert.equal(f.read(sweep).entries.some(e => e.path === prefix), false);
+});
+
+test('the measured gap name uses longest-topic fallback when its run token is not in the closing lane', t => {
+  const f = setup(t), own = f.directory('eng1685-pair-review-r2493');
+  const sweep = f.prepare({ topic: 'eng1685-pair', topics: ['eng1685-pair', 'eng1685-pair-ds3'] });
+  sweep.execute();
+  assert.equal(fs.existsSync(own), false);
+  const entry = f.read(sweep).entries.find(e => e.path === own);
+  assert.equal(entry.owner, 'eng1685-pair'); assert.equal(entry.matchedBy, 'longest topic');
+  assert.equal(entry.disposition, 'removed');
+});
+
+test('unmarked same-topic scratch uses the documented project-ambiguous fallback; a foreign marker keeps it', t => {
+  const f = setup(t), otherCommon = path.join(f.scratch, 'other-project/.git');
+  fs.mkdirSync(otherCommon, { recursive: true });
+  // Both scratch creators use topic. Only the marker can distinguish projects.
+  const unmarked = f.directory('topic-other-review'), marked = f.directory('topic-marked-review', { topic: 'topic', common: otherCommon });
+  const sweep = f.prepare();
+  assert.match(f.read(sweep).entries.find(e => e.path === unmarked).reason, /not project-bound; same-topic scratch from another project may match/);
+  sweep.execute();
+  assert.equal(fs.existsSync(unmarked), false); assert.ok(fs.existsSync(marked));
+  assert.match(f.read(sweep).entries.find(e => e.path === unmarked).reason, /removed.*not project-bound/);
+  assert.match(f.read(sweep).entries.find(e => e.path === marked).reason, /another project/);
 });
 
 for (const late of [false, true]) test(`an open file ${late ? 'appearing after planning' : 'at planning'} keeps its scratch`, t => {
@@ -172,6 +196,70 @@ test('guarded removal writes its manifest before Git removes the lane and warns 
   assert.ok(stderr.some(message => message.includes('cites evidence outside the archive and lane')));
   assert.ok(JSON.parse(fs.readFileSync(manifest)).warnings.some(message => message.includes('outside-evidence')));
 });
+
+for (const archive of [true, false]) for (const refusal of ['HOLD', 'deadline'])
+  test(`a post-prepare ${refusal} refusal finalizes the ${archive ? 'archive' : 'fallback'} manifest on each retry`, t => {
+    const f = setup(t), own = f.directory('topic-review');
+    if (archive) fs.mkdirSync(path.join(f.scratch, 'archive'));
+    let now = Date.now(); const start = now, deadline = start + 120000;
+    t.mock.method(Date, 'now', () => now);
+    const manifests = [], proofs = [];
+    const retirement = f.retirement({ scratchRoots: [f.root], command: sweepCommands(f).command, deadline, log: row => {
+      if (row.action === 'lane-preflight') proofs.push(row.evidence);
+      if (row.action !== 'scratch-manifest') return;
+      manifests.push(row.manifest);
+      assert.equal(JSON.parse(fs.readFileSync(row.manifest)).phase, 'planned');
+      if (refusal === 'HOLD') hold(f);
+      else now = deadline;
+    } });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      now = start;
+      fs.rmSync(path.join(f.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'), { force: true });
+      assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true }),
+        refusal === 'HOLD' ? /retirement held/ : { code: 'RETIREMENT_DEADLINE' });
+      assert.ok(fs.existsSync(f.lane)); assert.ok(fs.existsSync(own));
+      assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head);
+    }
+    assert.equal(manifests.length, 2); assert.equal(new Set(manifests).size, 2);
+    for (const manifest of manifests) {
+      const data = JSON.parse(fs.readFileSync(manifest));
+      assert.equal(data.phase, 'not-executed'); assert.ok(data.completed_at);
+      assert.match(data.reason, refusal === 'HOLD' ? /retirement held/ : /deadline/i);
+      const entry = data.entries.find(e => e.path === own);
+      assert.equal(entry.disposition, 'kept'); assert.match(entry.reason, /lane removal not completed/);
+      assert.doesNotMatch(entry.reason, /awaiting final/);
+    }
+    assert.equal(proofs.length, 2);
+    for (const proof of proofs) assert.equal(fs.existsSync(proof.directory), false, 'duplicate evidence is still discarded');
+    assert.equal(f.herdrCalls().some(args => args[0] === 'workspace' && args[1] === 'close'), false);
+  });
+
+for (const [failAt, phase] of [[1, 'intent'], [2, 'outcome'], [3, 'completion']])
+  test(`a manifest made unwritable at ${phase} warns and logs while workspace closure still completes`, t => {
+    const f = setup(t), own = f.directory('topic-review', { run: 'R-1' });
+    fs.mkdirSync(path.join(f.scratch, 'archive'));
+    const stderr = [], logs = []; let manifest, writes = 0;
+    t.mock.method(process.stderr, 'write', message => { stderr.push(String(message)); return true; });
+    const open = fs.openSync;
+    t.mock.method(fs, 'openSync', (file, flags, ...rest) => {
+      if (manifest && typeof file === 'string' && file.startsWith(manifest + '.') && flags === 'wx' && ++writes >= failAt)
+        throw Object.assign(Error('injected archive write failure'), { code: 'EACCES' });
+      return open(file, flags, ...rest);
+    });
+    const retirement = f.retirement({ scratchRoots: [f.root], command: sweepCommands(f).command, log: row => {
+      logs.push(row); if (row.action === 'scratch-manifest') manifest = row.manifest;
+    } });
+    const proof = retirement.removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true });
+    assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+    assert.deepEqual(proof.pending, []); assert.deepEqual(f.read().workspaces, []);
+    assert.ok(f.herdrCalls().some(args => args[0] === 'workspace' && args[1] === 'close'));
+    assert.equal(fs.existsSync(own), failAt === 1, 'unlink requires a durably written intent');
+    assert.ok(stderr.some(message => /Sweep manifest.*update failed.*injected archive write failure/.test(message)));
+    const errors = logs.filter(row => row.action === 'scratch-manifest-error');
+    assert.ok(errors.length); assert.ok(errors.every(row => row.why === 'injected archive write failure'));
+    assert.deepEqual(errors.at(-1).removed, failAt === 1 ? [] : [own], 'the log retains actual removal evidence');
+    assert.deepEqual(fs.readdirSync(path.dirname(manifest)), [path.basename(manifest)], 'failed writes leave no temporary manifests');
+  });
 
 test('the guarded closer honors the real HOLD file before sweeping', t => {
   const f = setup(t), own = f.directory('topic-review'); hold(f);

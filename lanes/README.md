@@ -298,6 +298,11 @@ lane removal it writes `lane-scratch-sweep/v1` into the first declared archive's
 helper: layer-relative `.lane.json` `archive.dirs`, otherwise an existing sibling
 `archive/`; an explicit empty list opts out. Without an archive, the manifest sits
 beside the lane's preservation bundle under `GIT_COMMON_DIR/lane-archive/<topic>/`.
+Refused or deferred closes finalize their manifests as `not-executed`, with the
+refusal reason, before discarding duplicate preservation evidence. A manifest
+update failure warns on stderr and in the lifecycle log; it retains remaining
+scratch and allows workspace closure after Git removal. The last durable
+manifest may then show an unfinished intent; the log records any removed paths.
 
 Scratch creators can write `.herdr-scratch.json` containing
 `{"schema":"herdr-scratch/v1","common":"/absolute/git/common","run":"R-123"}`
@@ -306,9 +311,18 @@ a run must belong to the closing lane and have reported or been abandoned.
 Invalid, active or foreign markers keep scratch and prevent name fallback.
 Unmarked scratch uses the longest complete lane topic at the start of its name,
 including known branch, archive-tag and record topics. A matching run-id token
-also has to belong to an ended run in that lane. An unmarked run id alone cannot
-prove project ownership. For example, closing `topic` keeps `topic-ds3-review`
-when `topic-ds3` is known, and never matches `topical-review`.
+refines ownership only when it belongs to a run in the closing lane; an active
+matching run keeps scratch. Other run-like tokens, including review-round
+suffixes such as `topic-review-r2` and `eng1685-pair-review-r2493`, are ignored
+for longest-topic fallback. An unmarked run id alone cannot prove project
+ownership. For example, closing `topic` keeps `topic-ds3-review` when `topic-ds3`
+is known, and never matches `topical-review`.
+
+Unmarked topic matches are not project-bound. Projects sharing temporary roots
+can reuse lane topics, so idle, unmarked scratch from another project with the
+same topic may be swept. Every topic-name match records that residual risk in
+its manifest reason. Creators sharing these roots should write the project-bound
+marker; a foreign marker prevents fallback and keeps that project's scratch.
 
 After successful lane removal the same executor sweeps only verified owned
 scratch. Unmerged lanes keep it with their archive tag. HOLD, open process files

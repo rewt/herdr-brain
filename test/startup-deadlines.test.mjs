@@ -54,7 +54,18 @@ const child=new EventEmitter();child.pid=123;child.connected=true;child.unref=()
 timer(()=>child.emit('message',{ready:${JSON.stringify(module === 'watch' ? 'R-1' : true)},pid:123}),150);
 return child;};require('node:module').syncBuiltinESMExports();`);
     let args;
-    if (module === 'watch') args = [local('../watch/watch.mjs'), 'R-1', '--org', root, '--detach', '--cwd', repo, '--log', path.join(root, 'watch.log')];
+    if (module === 'watch') {
+      const record = args => {
+        const result = spawnSync(process.execPath, [local('../bin/org.mjs'), ...args], { cwd: repo, env: { ...env, ORG_DIR: root }, encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
+      };
+      record(['init', root]);
+      const item = record(['add', 'Delayed watch startup', '--role', 'engineer']).split(' ')[0];
+      const run = record(['start', item, '--workspace', repo]).match(/^R-\d+/)[0];
+      assert.equal(run, 'R-1', 'the delayed acknowledgement names this real run');
+      record(['claim', run, '--controller', 'brain']);
+      args = [local('../watch/watch.mjs'), run, '--org', root, '--detach', '--cwd', repo, '--log', path.join(root, 'watch.log')];
+    }
     if (module === 'promote') args = [local('../promote/promote.mjs'), 'topic', '--repo', repo, '--org', root];
     if (module === 'housekeeping') args = [installRuntime(repo), '--start', '--cwd', repo, '--org', root,
       '--state-dir', path.join(root, 'state'), '--org-cli', '/usr/bin/true'];

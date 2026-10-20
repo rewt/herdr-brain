@@ -13,7 +13,7 @@ import { fixture } from '../settle/test/fixture.mjs';
 import { loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { fold as oldFold } from './fixtures/state-pre-session-bind.mjs';
-import { claimRun, ownerBinding, fenceOwner, readOwnedRun, assertOwner, outstandingEffects, adoptedPromotionBinding } from '../lib/run-owner.mjs';
+import { claimRun, ownerBinding, fenceOwner, readOwnedRun, assertOwner, outstandingEffects, adoptedPromotionBinding, guardPromotionJob } from '../lib/run-owner.mjs';
 import { queueFor, enqueue } from '../promote/promote.mjs';
 import { readInbox } from '../supervisor/prompt-supervisor.mjs';
 import { receiptDirectory } from '../supervisor/context.mjs';
@@ -57,6 +57,30 @@ const reviewResult = (f, result) => {
 const reviews = f => f.calls().filter(a => a[0] === 'agent' && a[1] === 'start').length;
 
 test('promotion inventory includes the ownership witnesses', () => assert.ok(tierFiles('promotion').includes('test/run-ownership.test.mjs')));
+
+test('missing records give ownership readers and consumers a named refusal before any effect', t => {
+  const f = fixture(t), org = path.join(f.root, 'missing-record');
+  fs.mkdirSync(org);
+  const message = dir => `RUN_RECORD_MISSING: no record at ${dir}; run ownership requires the run's record`;
+  for (const dir of [org, path.join(org, 'absent')]) {
+    assert.throws(() => readOwnedRun(dir, 'R-1'), { code: 'RUN_RECORD_MISSING', message: message(dir) });
+  }
+  assert.throws(() => guardPromotionJob({ org, run: 'R-1' }), { code: 'RUN_RECORD_MISSING', message: message(org) });
+  assert.throws(() => readOwnedRun(f.org, 'R-1'), { code: 'RUN_CLAIM_INVALID', message: 'RUN_CLAIM_INVALID: unknown run R-1' });
+  for (const [file, args] of [
+    ['watch/watch.mjs', ['R-1', '--org', org, '--cwd', f.repo, '--detach']],
+    ['dispatch/dispatch.mjs', ['ENG-1', '--org', org, '--from-run', 'R-1', '--lane', 'topic', '--route', 'engineer', '--brief', path.join(f.root, 'ask with spaces.md')]],
+    ['settle/settle.mjs', ['R-1', '--org', org]],
+    ['promote/promote.mjs', ['topic', '--org', org, '--if-current-run', 'R-1']],
+  ]) {
+    const result = node(f, file, args);
+    assert.equal(result.status, 1, `${file}: ${result.stderr}`);
+    assert.ok(result.stderr.includes(message(org)), `${file}: ${result.stderr}`);
+    assert.doesNotMatch(result.stderr, /ENOENT/);
+  }
+  assert.deepEqual(fs.readdirSync(org), [], 'no operation receipt or watcher was created');
+  assert.equal(f.calls().length, 0, 'no worker, reviewer or transport call was made');
+});
 
 test('ownership reads reuse only the unchanged record fold and keep fresh Git fences', t => {
   const f = fixture(t), run = f.start(), file = path.join(f.org, 'events.jsonl');

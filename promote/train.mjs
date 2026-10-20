@@ -11,6 +11,7 @@ import { fold } from '../lib/state.mjs';
 import { captureCompletionMember, accountUncapturedMember } from './completion.mjs';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
+import { guardPromotionJob } from '../lib/run-owner.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
 import { probeNativeGate } from './native-context.mjs';
@@ -50,6 +51,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (git(['symbolic-ref', '--short', 'HEAD']) !== main) throw new Error(`canonical checkout must be on ${main}`);
   };
   const capture = job => {
+    guardPromotionJob(job);
     if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(job.topic)) throw new Error('invalid train lane topic');
     const entry = git(['worktree', 'list', '--porcelain']).split('\n\n').find(e => e.split('\n').includes(`branch refs/heads/lane/${job.topic}`));
     const workspace = entry?.split('\n').find(l => l.startsWith('worktree '))?.slice(9);
@@ -154,7 +156,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         const job = plan.jobs.find(j => j.id === id);
         try { jobs.push(capture(job)); }
         catch (error) {
-          result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
+          result(job, { outcome: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), batch: plan.id });
         }
       }
       if (!jobs.length) return null;
@@ -208,7 +210,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     let invalid = false;
     for (const job of attempt.jobs) {
       try { capture(job); }
-      catch (error) { result(job, { outcome: 'refused', reason: error.message, batch: plan.id }); invalid = true; }
+      catch (error) { result(job, { outcome: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), batch: plan.id }); invalid = true; }
     }
     if (invalid) { attempt.phase = 'invalid'; save(); return null; }
     clean(attempt.scratch);
@@ -337,7 +339,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     let invalid = false;
     for (const job of attempt.jobs) {
       try { capture(job); }
-      catch (error) { result(job, { outcome: 'refused', reason: error.message, batch: plan.id }); invalid = true; }
+      catch (error) { result(job, { outcome: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), batch: plan.id }); invalid = true; }
     }
     if (invalid) { attempt.phase = 'invalid'; save(); return false; }
     clean(attempt.scratch);

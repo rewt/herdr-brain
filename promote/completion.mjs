@@ -11,6 +11,7 @@ import { fold } from '../lib/state.mjs';
 import { completionFingerprint, completionEvents, digest, stable } from '../lib/completion.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { verifyTrainResult } from './evidence.mjs';
+import { guardPromotionJob } from '../lib/run-owner.mjs';
 
 const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 // Terminal results can be produced before capture by canonical/host guards.
@@ -124,6 +125,9 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
             reason: result.reason || result.outcome, next_action: `Inspect retained lane ${job.topic}, resolve ${result.outcome}, then authorize a new queue request.` });
           continue;
         }
+        // A completed train can resume directly into bookkeeping. Keep its
+        // claim fence even though admission refusals are isolated by the train.
+        guardPromotionJob(job);
         if (result.receipt !== file || !verifyTrainResult({ ...result, id: job.id }, { project, saved: { head: job.expectedHead, run: job.run, org: job.org, lane: job.topic } })) throw Error(`integrated proof differs for ${job.topic}`);
         git(project.canonical, ['merge-base', '--is-ancestor', result.tip, tip]);
         included.push({ item: binding.item, run: binding.run, expected: binding.expected, superseded: binding.superseded,

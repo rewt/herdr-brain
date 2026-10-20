@@ -22,6 +22,8 @@ import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
 import { promotionWorkers } from '../../test/helpers/promotion-worker.mjs';
 import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
+import { runTrain } from '../train.mjs';
+import { resolveValidation } from '../../lanes/validation.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -98,7 +100,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     const superseded = options.supersede ? [record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0]] : [];
     for (const previous of superseded) record(['claim', previous, '--controller', 'brain']);
     const run = record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0];
-    record(['claim', run, '--controller', 'brain']);
+    if (options.owned !== false) record(['claim', run, '--controller', 'brain']);
     const report = path.join(root, `${topic}.md`);
     const proposals = options.proposals?.length ? `proposals:\n${options.proposals.map(p => Object.entries(p).map(([key, value], i) => `${i ? '    ' : '  - '}${key}: ${JSON.stringify(value)}`).join('\n')).join('\n')}\n` : '';
     fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Implemented ${topic}\nheadline: Implemented ${topic}\n${proposals}${options.questions ? "questions:\n  - question: Does this behavior need adjustment?\n    category: design\n    recommend: no\n    why: The implementation is complete\n" : ""}---\n`);
@@ -106,7 +108,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     if (options.childBeforeAdmission) record(['add', 'New engineering scope', '--role', 'engineer', '--parent', item]);
     const head = git(['rev-parse', 'HEAD'], workspace);
     const job = enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0,
-      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, claimedBy: 'brain', expectedHead: head, superseded })[0];
+      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, claimedBy: options.owned === false ? undefined : 'brain', expectedHead: head, superseded })[0];
     const member = { topic, workspace, item, run, head, job, superseded }; members.push(member); return member;
   };
   const drain = () => {
@@ -260,6 +262,56 @@ for (const mode of ['unknown-run', 'wrong-record', 'duplicate-item']) test(`nati
   for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
   assert.deepEqual(f.events().find(e => e.type === 'promotion.reconciled').items, [first.item, second.item]);
   f.drain(); assert.equal(f.gates(), 1);
+});
+
+const ownershipRefusals = ['unclaimed', 'other-owner', 'stale-generation', 'missing-binding'];
+function corruptOwnership(f, member, mode, expected) {
+  const job = f.queue.load().pending.find(j => j.id === member.job.id);
+  const ownership = mode === 'unclaimed' ? expected : structuredClone(job.ownership);
+  if (mode === 'other-owner') ownership.owner.controller = 'other';
+  if (mode === 'stale-generation') ownership.generation++;
+  // An unclaimed legacy admission rewritten to claim a Brain binding must
+  // refuse, just like a queued binding whose owner or generation is stale.
+  rewriteJob(f, member, { ownership: mode === 'missing-binding' ? undefined : ownership });
+}
+
+for (const mode of ownershipRefusals) test(`native admission isolates ${mode} ownership while valid members reconcile`, t => {
+  const f = fixture(t), first = f.lane('first'), bad = f.lane('invalid', false, { owned: mode !== 'unclaimed' }), second = f.lane('second');
+  corruptOwnership(f, bad, mode, f.queue.load().pending[0].ownership);
+  f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  const rows = f.queue.load().results, refused = rows.find(r => r.id === bad.job.id);
+  assert.equal(refused.outcome, 'refused');
+  assert.match(refused.reason, new RegExp(mode === 'unclaimed' ? 'RUN_OWNER_UNCLAIMED' : 'RUN_OWNED_ELSEWHERE'));
+  assert.ok(fs.existsSync(bad.workspace)); assert.equal(f.show(bad.item).closed, null);
+  for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
+  assert.deepEqual(f.events().find(e => e.type === 'promotion.reconciled').items, [first.item, second.item]);
+  f.drain(); assert.equal(f.gates(), 1);
+});
+
+test('train capture isolates ownership refusals and prepares only valid siblings before the native gate', async t => {
+  const f = fixture(t), first = f.lane('first');
+  const bad = ownershipRefusals.map(mode => ({ mode, member: f.lane(`invalid-${mode}`, false, { owned: mode !== 'unclaimed' }) }));
+  const second = f.lane('second'), jobs = f.queue.load().pending;
+  for (const { mode, member } of bad) corruptOwnership(f, member, mode, jobs[0].ownership);
+  const file = path.join(f.queue.directory, 'capture-test/train.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ schema: 'promotion-train/v1', id: 'capture-test', identity: f.queue.project.identity, jobs: f.queue.load().pending }));
+  // Exercise real capture/preparation without changing native capability
+  // checks. A sandbox refusal may stop the gate, but cannot hide admission.
+  const release = acquireLock(path.join(f.queue.project.identity, 'lane-promote.lock'));
+  try {
+    await runTrain({ file, canonical: f.repo, identity: f.queue.project.identity, main: 'main', prepare: [],
+      validation: resolveValidation({ root: f.repo, env: f.env }) });
+  } finally { release(); }
+  const train = JSON.parse(fs.readFileSync(file));
+  assert.deepEqual(train.attempts.map(a => a.ids), [[first.job.id, second.job.id]]);
+  assert.deepEqual(train.completion.jobs.map(j => j.job), [first.job.id, second.job.id]);
+  assert.deepEqual(train.completion.refused, bad.map(({ member }) => member.job.id));
+  for (const { mode, member } of bad) {
+    assert.equal(train.results[member.job.id].outcome, 'refused');
+    assert.match(train.results[member.job.id].reason, new RegExp(mode === 'unclaimed' ? 'RUN_OWNER_UNCLAIMED' : 'RUN_OWNED_ELSEWHERE'));
+    assert.ok(fs.existsSync(member.workspace)); assert.equal(f.show(member.item).closed, null);
+  }
 });
 
 test('bound and unbound requests use separate native batches', t => {

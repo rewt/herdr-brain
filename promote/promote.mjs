@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
-import { adoptedPromotionBinding, readOwnedRun, requireController, assertOwner, ownerBinding, sameOwner, brainOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
+import { guardPromotionJob, readOwnedRun, requireController, ownerBinding, sameOwner, brainOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { bundleRelease, forwardRelease, operationFile } from '../lib/releases.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
@@ -170,15 +170,6 @@ export function enqueue(queue, topics, options) {
   return options.run ? withLock(options.org, admit) : admit();
 }
 
-function guardPromotionJob(job) {
-  if (!job.run) return;
-  // Admission's durable queue member fences transfer through completion,
-  // delivery and cleanup. A restart still verifies that exact claim binding.
-  const run = readOwnedRun(job.org, job.run);
-  if (job.ownership) assertOwner(run, job.ownership);
-  else if (run.owner && !run.owner.legacy && !adoptedPromotionBinding(job.org, run, job)) throw Error(`RUN_OWNED_ELSEWHERE: ${run.id} owner=${JSON.stringify(run.owner)}`);
-}
-
 function cleanup(job, queue, workspace) {
   guardPromotionJob(job);
   const org = job.org ?? findOrgDir({ cwd: queue.project.canonical });
@@ -240,7 +231,8 @@ function perform(job, queue) {
 }
 
 function performBatch(batch, queue, settings) {
-  for (const job of batch.jobs) guardPromotionJob(job);
+  // The train checks ownership inside per-member capture. Checking all jobs
+  // here would turn one invalid binding into an interruption of every sibling.
   const first = batch.jobs[0], cwd = queue.project.canonical;
   const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;

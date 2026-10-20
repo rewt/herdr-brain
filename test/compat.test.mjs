@@ -32,6 +32,11 @@ for (const probe of ['events', 'closeout']) test(`${probe} opt-in preserves comm
   assert.equal(status.status, 0, status.stderr); assert.equal(status.stdout, '');
 });
 test('NEW real writers -> archived OLD own readers without an OLD formats list', t => {
+  const worktree = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: source, encoding: 'utf8' });
+  if (worktree.status !== 0 || worktree.stdout.trim() !== 'true') {
+    t.skip('archived OLD readers need a Git checkout; release snapshots carry none');
+    return;
+  }
   const root = scratch(t), old = path.join(root, 'old'); fs.mkdirSync(old);
   const archive = spawnSync('git', ['archive', 'main', 'bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch',
     'settle', 'promote', 'test-slot', 'verify', 'supervisor', 'brain', 'messages', 'contrib', 'sessions', 'setup', 'logs', 'board', 'package.json', '.nvmrc'],
@@ -52,6 +57,18 @@ test('NEW real writers -> archived OLD own readers without an OLD formats list',
   assert.match(result.formats.find(f => f.id === 'promotion-closeout-outbox').reason, /acknowledgement/);
   assert.ok(result.formats.filter(f => f.status === 'not-covered').every(f => f.reason));
   assert.equal(result.formats.length, Object.values(result.counts).reduce((a, b) => a + b));
+});
+test('non-Git release snapshots skip archived OLD readers with a named reason', t => {
+  const root = scratch(t), snapshot = path.join(root, 'snapshot');
+  copyProduct(source, snapshot);
+  fs.cpSync(path.join(source, 'test/helpers'), path.join(snapshot, 'test/helpers'), { recursive: true });
+  fs.copyFileSync(fileURLToPath(import.meta.url), path.join(snapshot, 'test/compat.test.mjs'));
+  assert.equal(fs.existsSync(path.join(snapshot, '.git')), false);
+  const result = spawnSync(process.execPath, ['--test',
+    '--test-name-pattern=^NEW real writers -> archived OLD own readers without an OLD formats list$',
+    path.join(snapshot, 'test/compat.test.mjs')], { cwd: snapshot, env: scratchEnvironment(root), encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /ok \d+ - NEW real writers -> archived OLD own readers without an OLD formats list # SKIP archived OLD readers need a Git checkout; release snapshots carry none/);
 });
 test('reader failures retain OLD stderr, exit nonzero, write JSON and require KEEP; missing readers are named', t => {
   const root = scratch(t), old = path.join(root, 'old'), newer = path.join(root, 'new');

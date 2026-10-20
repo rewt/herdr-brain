@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { isMain } from '../lib/cli-help.mjs';
 
 const worker = fileURLToPath(new URL('./compat-probes.mjs', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -106,6 +107,6 @@ export function main(args = process.argv.slice(2)) {
   process.exitCode = result.counts.fail ? 1 : 0;
 }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try { main(); } catch (error) { console.error(`compat: ${error.message}`); process.exitCode = 1; }
 }

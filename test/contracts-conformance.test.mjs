@@ -216,7 +216,9 @@ const contracts = [
       write(held.path, missing); assert.equal(readProvingReservations(lock, { prune: true })[0].state, 'unknown');
       assert.ok(fs.existsSync(held.path));
       write(held.path, { ...doc, schema: 'host-reservation/v999' });
-      assert.deepEqual(readProvingReservations(lock, { prune: true }), []); assert.ok(fs.existsSync(held.path));
+      assert.deepEqual(readProvingReservations(lock, { prune: true }), [
+        { path: held.path, record: null, state: 'unknown', why: 'unsupported reservation schema' }
+      ]); assert.ok(fs.existsSync(held.path));
     } finally { fs.writeFileSync(held.path, bytes); held.release(); }
   }],
   ['herdr-release/v1', ['herdr/releases.mjs'], async (f, root) => {

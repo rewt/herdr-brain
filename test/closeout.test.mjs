@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { exitFixture } from './helpers/retire-exit-fixture.mjs';
 import { fixture, hold, isolatedEnv } from './helpers/retire-fixture.mjs';
 import { sweepCommands } from './helpers/retire-sweep-fixture.mjs';
+import { assertFixtureScratch } from './helpers/scratch-fixture.mjs';
 import { setTimeout as pause } from 'node:timers/promises';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { initOrg, loadEvents, transact } from '../lib/store.mjs';
@@ -42,6 +43,7 @@ function setup(t, { occupied = true, merged = true, terminal = false } = {}) {
   fs.writeFileSync(f.eventFile, events(f).filter(e => e.type !== 'item.closed' && e.type !== 'report.ingested').map(e => JSON.stringify(e) + '\n').join(''));
   const commands = sweepCommands(f);
   const options = { herdr: f.job.herdr, command: commands.command,
+    log: row => { if (row.action === 'scratch-manifest') assertFixtureScratch(row.manifest, f.env, options.scratchRoots); },
     readOwner: owner => (f.read().info?.process_tree ?? []).some(p => p.pid === owner.pid && p.identity === owner.identity) };
   f.append = add => {
     const result = transact(f.org, current => bindCloseoutSources({ cwd: f.repo, org: f.org, events: current, mutation: { add } }), { actor: 'fixture' });
@@ -271,11 +273,10 @@ for (const project of ['bch-cloak', 'herdr-brain']) test(`${project}: a landed e
   const f = setup(t, { terminal: true });
   fs.mkdirSync(path.join(f.lane, '.lane'));
   fs.writeFileSync(path.join(f.lane, '.lane/evidence'), 'unique report and scratch\n');
-  const scratch = path.join(f.scratch, 'owned-scratch'), payload = path.join(scratch, 'run-review');
+  const [scratch] = JSON.parse(f.env.HERDR_TEST_SCRATCH_ROOTS), payload = path.join(scratch, 'run-review');
   fs.mkdirSync(payload, { recursive: true });
   fs.writeFileSync(path.join(payload, '.herdr-scratch.json'), JSON.stringify({ schema: 'herdr-scratch/v1', common: f.common, run: 'R-1' }));
   fs.writeFileSync(path.join(payload, 'result'), 'disposable');
-  f.options.scratchRoots = [scratch];
   const nativeCommand = f.options.command;
   f.options.command = (exe, args, options) => exe === '/usr/sbin/lsof' && args.includes('-Fpfn0')
     ? { status: 0, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\n` }
@@ -444,6 +445,8 @@ test('restart after agent exit and a failed shell close resumes the shell withou
 
 test('restart after worktree removal revalidates preservation and finishes branch/workspace separately', t => {
   const f = setup(t, { terminal: true });
+  const [root] = JSON.parse(f.env.HERDR_TEST_SCRATCH_ROOTS), own = path.join(root, 'topic-review');
+  fs.mkdirSync(own); fs.writeFileSync(path.join(own, 'result'), 'disposable');
   let refuse = 'worktree';
   const base = f.options.command;
   f.options.command = (exe, args, opt) => exe === 'git' && ((args.includes('-D') && refuse === 'branch') ||
@@ -453,15 +456,25 @@ test('restart after worktree removal revalidates preservation and finishes branc
   assert.equal(fs.existsSync(f.lane), true);
   const discarded = effects(f).find(e => e.action === 'lane-preflight');
   assert.equal(fs.existsSync(discarded.evidence.directory), false, 'failed-removal duplicate was safely discarded');
+  assert.equal(fs.existsSync(discarded.scratchManifest), false, 'fallback attempt was discarded with its duplicate evidence');
+  assert.ok(fs.existsSync(own));
   refuse = 'branch';
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'worktree removal recovered', start: false });
   f.drain();
   assert.equal(fs.existsSync(f.lane), false);
   assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  assert.ok(fs.existsSync(own), 'scratch survives partial Git removal');
+  const interrupted = effects(f).findLast(e => e.action === 'lane-preflight');
+  assert.equal(JSON.parse(fs.readFileSync(interrupted.scratchManifest)).phase, 'not-executed');
   assert.ok(effects(f).some(e => e.action === 'worktree-removed'));
   refuse = null;
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'branch deletion recovered', start: false });
   f.drain(); assertRemoved(f);
+  assert.equal(fs.existsSync(own), false, 'queue recovery uses the guarded scratch sweep');
+  const completed = effects(f).find(e => e.action === 'lane-removed');
+  const manifest = assertFixtureScratch(completed.scratchManifest, f.env);
+  assert.equal(manifest.phase, 'complete'); assert.equal(manifest.recovery.manifest, interrupted.scratchManifest);
+  assert.equal(manifest.entries.find(entry => entry.path === own).disposition, 'removed');
   assert.equal(effects(f).filter(e => e.action === 'worktree-removed').length, 1);
   assert.equal(effects(f).filter(e => e.action === 'lane-preflight').length, 2, 'each preservation manifest retains its own receipt');
 });

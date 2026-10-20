@@ -299,7 +299,13 @@ helper: layer-relative `.lane.json` `archive.dirs`, otherwise an existing siblin
 `archive/`; an explicit empty list opts out. Without an archive, the manifest sits
 beside the lane's preservation bundle under `GIT_COMMON_DIR/lane-archive/<topic>/`.
 Refused or deferred closes finalize their manifests as `not-executed`, with the
-refusal reason, before discarding duplicate preservation evidence. A manifest
+refusal reason, before discarding duplicate preservation evidence. Once that
+duplicate is discarded, its fallback manifest is removed too; a declared archive
+retains one `<topic>-<project-identity-hash>-not-executed.json`, overwritten by
+later refusals of that project's topic. Partial
+Git removals retain their evidence and attempt manifest for recovery. Recovery
+writes a new manifest linking the recorded proof, completes lane removal and
+executes the same final scratch checks before closing workspaces. A manifest
 update failure warns on stderr and in the lifecycle log; it retains remaining
 scratch and allows workspace closure after Git removal. The last durable
 manifest may then show an unfinished intent; the log records any removed paths.

@@ -12,6 +12,7 @@ import { testSlotEnvironment } from '../../../test/helpers/test-slot-env.mjs';
 import { loadTimeout } from '../../../lib/deadline.mjs';
 import { commandAllowance } from '../../../test/helpers/command-allowance.mjs';
 import { stopFixtureInbox } from '../../../test/helpers/inbox.mjs';
+import { scratchEnvironment } from '../../../test/helpers/scratch-fixture.mjs';
 
 const source = fileURLToPath(new URL('../../../', import.meta.url));
 const host = path.join(source, 'promote/host-gate.mjs');
@@ -26,7 +27,7 @@ export function fixture(t, { externalLock = false, ...changes } = {}) {
   fixtureFleet(t, root);
   fs.mkdirSync(repo);
   // These lifecycle cases inspect synchronous delivery; opt into a bounded wait.
-  const env = { ...testSlotEnvironment(), HOME: path.join(root, 'home'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '10' };
+  const env = { ...testSlotEnvironment(), ...scratchEnvironment(root), HOME: path.join(root, 'home'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '10' };
   env.HERDR_FIXTURE_GATE_LIFETIME = '1';
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)|MONITOR_PROMOTION_|.*TEST_SLOT_TOKEN)/.test(key)) delete env[key];
   const slot = path.join(root, 'slot'); env.MONITOR_TEST_SLOT_PATH = env.MONITOR_TEST_SLOT_COMPAT_PATH = slot;
@@ -63,6 +64,10 @@ export function fixture(t, { externalLock = false, ...changes } = {}) {
   const asyncRun = () => spawnChild(t, process.execPath, [host, repo, receipt, ...argv], { cwd: repo, env });
   const saved = () => JSON.parse(fs.readFileSync(path.join(directory, 'host-gate.json')));
   const slotSaved = () => JSON.parse(fs.readFileSync(path.join(directory, 'test-slot-wait.json')));
+  const diagnostics = () => JSON.stringify(Object.fromEntries(['host-gate.json', 'train.json', 'train.log'].map(name => {
+    const file = path.join(directory, name);
+    return [name, fs.existsSync(file) ? fs.readFileSync(file, 'utf8').slice(-32768) : 'not written'];
+  })));
   t.after(async () => {
     await until(() => !fs.existsSync(path.join(repo, '.git/promote/worker.lock')));
     await stopFixtureInbox(path.join(repo, '.git/supervisor/inbox.log'), {
@@ -70,5 +75,5 @@ export function fixture(t, { externalLock = false, ...changes } = {}) {
     });
     fs.rmSync(root, { recursive: true, force: true });
   });
-  return { root, repo, env, bin, gate, slot, directory, receipt, head, before, git, run, asyncRun, saved, slotSaved, declare };
+  return { root, repo, env, bin, gate, slot, directory, receipt, head, before, git, run, asyncRun, saved, slotSaved, declare, diagnostics };
 }

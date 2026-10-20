@@ -32,6 +32,7 @@ import { planRetirement } from '../../lib/retire.mjs';
 import { ownerProcess } from '../../lib/process-owner.mjs';
 import { initialShellFile } from '../../lib/initial-shell.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { scratchEnvironment, assertCloseScratch } from '../../test/helpers/scratch-fixture.mjs';
 // Bounded evidence polling avoids the shared host's exhausted FSEvents pool.
 async function waitForFile(file, predicate = () => true, { timeoutMs = 10000 } = {}) {
   const deadline = Date.now() + loadTimeout(timeoutMs);
@@ -147,6 +148,7 @@ function makeFixture(config = { main: "main", validate: "true" }, { repoParts = 
     bin,
     env: {
       ...healthyMemoryEnvironment(hermeticGitEnvironment()),
+      ...scratchEnvironment(root),
       PATH: bin,
       LANE_CONFIG: configPath,
       LANE_WORKTREE_ROOT: worktrees,
@@ -175,11 +177,13 @@ function lane(fixture, args, options = {}) {
     writeFileSync(reader, `#!${process.execPath}\nconst a=process.argv.slice(2);if(a[1]==='list')console.log(JSON.stringify({result:{workspaces:[],agents:[],tabs:[],panes:[]}}));else process.exit(1);\n`);
     chmodSync(reader, 0o755);
   }
-  return spawnSync(process.execPath, [options.executable ?? LANE, ...args], {
+  const result = spawnSync(process.execPath, [options.executable ?? LANE, ...args], {
     cwd: options.cwd ?? fixture.repo,
     env: hermeticGitEnvironment(options.env ?? fixture.env),
     encoding: "utf8",
   });
+  if (args[0] === 'close') assertCloseScratch(result, options.env ?? fixture.env);
+  return result;
 }
 
 function laneProcess(fixture, args, options = {}) {

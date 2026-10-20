@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
 import { measureLaneEvidence, readLaneCwdReferences } from '../lib/lane-removal.mjs';
+import { scratchEnvironment, assertCloseScratch } from './helpers/scratch-fixture.mjs';
 
 const cli = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
 function fixture(t, { merged = false } = {}) {
@@ -16,7 +17,7 @@ function fixture(t, { merged = false } = {}) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const repo = path.join(root, 'repo'), lane = path.join(root, 'lane'), org = path.join(root, 'record');
   fs.mkdirSync(repo); fs.mkdirSync(org);
-  const env = { ...healthyMemoryEnvironment(), ORG_DIR: org, HERDR_MONITOR_FLEET: path.join(root, 'fleet'),
+  const env = { ...healthyMemoryEnvironment(), ...scratchEnvironment(root), ORG_DIR: org, HERDR_MONITOR_FLEET: path.join(root, 'fleet'),
     MONITOR_TEST_SLOT_PATH: path.join(root, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'slot'),
     XDG_STATE_HOME: path.join(root, 'state'), HERDR_TAB_ID: '', HERDR_PANE_ID: '' };
   for (const key of Object.keys(env)) if (/^LANE_|^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|CONFIG)/.test(key)) delete env[key];
@@ -36,8 +37,12 @@ function fixture(t, { merged = false } = {}) {
   env.HERDR_RETIRE_HERDR = herdr;
   fs.writeFileSync(path.join(org, 'events.jsonl'), '');
   const config = path.join(root, 'lane.json'); fs.writeFileSync(config, JSON.stringify({ main: 'main', validate: 'true', worktree_root: root })); env.LANE_CONFIG = config;
-  const close = ({ preload, gitOnly = true } = {}) => spawnSync(process.execPath,
-    [...(preload ? ['--import', preload] : []), cli, 'close', 'topic', ...(gitOnly ? ['--git-only'] : [])], { cwd: repo, env, encoding: 'utf8' });
+  const close = ({ preload, gitOnly = true } = {}) => {
+    const result = spawnSync(process.execPath,
+      [...(preload ? ['--import', preload] : []), cli, 'close', 'topic', ...(gitOnly ? ['--git-only'] : [])], { cwd: repo, env, encoding: 'utf8' });
+    assertCloseScratch(result, env);
+    return result;
+  };
   const kept = r => { assert.notEqual(r.status, 0, r.stdout); assert.ok(fs.existsSync(lane)); assert.equal(git(['rev-parse', 'lane/topic']), head); assert.match(git(['worktree', 'list', '--porcelain']), /branch refs\/heads\/lane\/topic/); };
   const evidence = () => {
     fs.mkdirSync(path.join(lane, '.lane', 'empty'), { recursive: true });

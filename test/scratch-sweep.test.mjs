@@ -7,6 +7,7 @@ import { sweepCommands } from './helpers/retire-sweep-fixture.mjs';
 import { prepareScratchSweep, SCRATCH_OWNER_FILE } from '../lib/scratch-sweep.mjs';
 import { readProcessFileReferences } from '../lib/lane-removal.mjs';
 import { discoverArchive } from '../lib/archive.mjs';
+import { assertFixtureScratch } from './helpers/scratch-fixture.mjs';
 
 function setup(t, options) {
   const f = fixture(t, { occupied: false, ...options }), root = path.join(f.scratch, 'scratch');
@@ -26,6 +27,23 @@ function setup(t, options) {
   const read = sweep => JSON.parse(fs.readFileSync(sweep.manifest));
   return { ...f, root, runs, evidence, prepare, directory, warnings, log, read };
 }
+
+for (const transport of ['runtime', 'CLI']) test(`the ${transport} retirement fixture inventories only its private scratch directory`, t => {
+  const f = fixture(t, { occupied: false }), [root] = JSON.parse(f.env.HERDR_TEST_SCRATCH_ROOTS);
+  const own = path.join(root, 'topic-review'), outside = path.join(f.scratch, 'topic-other-review');
+  fs.mkdirSync(own); fs.mkdirSync(outside);
+  let manifest;
+  if (transport === 'runtime') manifest = f.retirement({ command: sweepCommands(f).command })
+    .removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true }).scratchManifest;
+  else {
+    const result = f.close(); assert.equal(result.status, 0, result.stdout + result.stderr);
+    manifest = result.stdout.split('\n').filter(line => line.startsWith('{')).map(JSON.parse)
+      .find(row => row.action === 'scratch-manifest').manifest;
+  }
+  const data = assertFixtureScratch(manifest, f.env);
+  assert.deepEqual(data.entries.map(entry => entry.path), [own], 'the private root was actually inventoried');
+  assert.ok(fs.existsSync(outside), 'a same-topic directory outside the private root is untouched');
+});
 
 test('run marker wins over topic names, manifest precedes removal, and only the closed run is removed', t => {
   const f = setup(t), owned = f.directory('unrelated-name', { run: 'R-1' });
@@ -198,30 +216,37 @@ test('guarded removal writes its manifest before Git removes the lane and warns 
 });
 
 for (const archive of [true, false]) for (const refusal of ['HOLD', 'deadline'])
-  test(`a post-prepare ${refusal} refusal finalizes the ${archive ? 'archive' : 'fallback'} manifest on each retry`, t => {
+  test(`post-prepare ${refusal} retries bound ${archive ? 'archive' : 'fallback'} manifests after discarding duplicate evidence`, t => {
     const f = setup(t), own = f.directory('topic-review');
     if (archive) fs.mkdirSync(path.join(f.scratch, 'archive'));
     let now = Date.now(); const start = now, deadline = start + 120000;
     t.mock.method(Date, 'now', () => now);
-    const manifests = [], proofs = [];
+    const manifests = [], proofs = [], retained = [];
     const retirement = f.retirement({ scratchRoots: [f.root], command: sweepCommands(f).command, deadline, log: row => {
       if (row.action === 'lane-preflight') proofs.push(row.evidence);
+      if (row.action === 'scratch-attempt-discarded' && row.retained) retained.push(row.manifest);
       if (row.action !== 'scratch-manifest') return;
       manifests.push(row.manifest);
       assert.equal(JSON.parse(fs.readFileSync(row.manifest)).phase, 'planned');
       if (refusal === 'HOLD') hold(f);
       else now = deadline;
     } });
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       now = start;
       fs.rmSync(path.join(f.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'), { force: true });
       assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true }),
         refusal === 'HOLD' ? /retirement held/ : { code: 'RETIREMENT_DEADLINE' });
       assert.ok(fs.existsSync(f.lane)); assert.ok(fs.existsSync(own));
       assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head);
+      const directory = path.dirname(manifests.at(-1));
+      const remaining = fs.readdirSync(directory).filter(name => name.endsWith('.json'));
+      assert.equal(remaining.length, archive ? 1 : 0, 'refused retries do not accumulate orphan manifests');
+      for (const name of remaining) assert.equal(JSON.parse(fs.readFileSync(path.join(directory, name))).phase, 'not-executed');
     }
-    assert.equal(manifests.length, 2); assert.equal(new Set(manifests).size, 2);
-    for (const manifest of manifests) {
+    assert.equal(manifests.length, 3); assert.equal(new Set(manifests).size, 3);
+    for (const manifest of manifests) assert.equal(fs.existsSync(manifest), false);
+    assert.equal(new Set(retained).size, archive ? 1 : 0);
+    for (const manifest of new Set(retained)) {
       const data = JSON.parse(fs.readFileSync(manifest));
       assert.equal(data.phase, 'not-executed'); assert.ok(data.completed_at);
       assert.match(data.reason, refusal === 'HOLD' ? /retirement held/ : /deadline/i);
@@ -229,10 +254,42 @@ for (const archive of [true, false]) for (const refusal of ['HOLD', 'deadline'])
       assert.equal(entry.disposition, 'kept'); assert.match(entry.reason, /lane removal not completed/);
       assert.doesNotMatch(entry.reason, /awaiting final/);
     }
-    assert.equal(proofs.length, 2);
+    assert.equal(proofs.length, 3);
     for (const proof of proofs) assert.equal(fs.existsSync(proof.directory), false, 'duplicate evidence is still discarded');
     assert.equal(f.herdrCalls().some(args => args[0] === 'workspace' && args[1] === 'close'), false);
   });
+
+for (const integrated of [true, false]) test(`branch deletion failure recovers through the same sweep for an ${integrated ? 'integrated' : 'unmerged'} lane`, t => {
+  const f = setup(t, { merged: integrated }), own = f.directory('topic-review', { run: 'R-1' });
+  const logs = [], command = sweepCommands(f).command; let refuse = true;
+  const retirement = f.retirement({ scratchRoots: [f.root], command: (exe, args, options) => {
+    if (exe === 'git' && args[2] === 'branch' && args[3] === '-D' && refuse) {
+      refuse = false;
+      return { status: 1, stdout: '', stderr: 'injected branch deletion refusal' };
+    }
+    return command(exe, args, options);
+  }, log: row => logs.push(row) });
+  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true }), /branch deletion refusal/);
+  const { action, ...proof } = logs.find(row => row.action === 'lane-preflight');
+  assert.equal(fs.existsSync(f.lane), false); assert.ok(fs.existsSync(own));
+  assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head);
+  assert.equal(JSON.parse(fs.readFileSync(proof.scratchManifest)).phase, 'not-executed');
+  assert.ok(fs.existsSync(proof.evidence.directory), 'partial removal retains its recovery evidence');
+  const resumed = retirement.resumeLaneRemoval(proof);
+  assert.equal(f.git(['branch', '--list', 'lane/topic']), ''); assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).workspaces, []);
+  assert.equal(fs.existsSync(own), !integrated);
+  assert.notEqual(resumed.scratchManifest, proof.scratchManifest);
+  const manifest = JSON.parse(fs.readFileSync(resumed.scratchManifest));
+  assert.equal(manifest.phase, 'complete');
+  assert.deepEqual(manifest.recovery, { manifest: proof.scratchManifest, evidence: proof.evidence });
+  const entry = manifest.entries.find(entry => entry.path === own);
+  assert.equal(entry.disposition, integrated ? 'removed' : 'kept');
+  assert.match(entry.reason, integrated ? /owned scratch removed/ : /unmerged lane/);
+  const preparation = logs.findIndex(row => row.action === 'scratch-manifest' && row.manifest === resumed.scratchManifest);
+  const removal = logs.findIndex(row => row.action === 'lane-removed' && row.reconciled);
+  assert.ok(preparation < removal, 'recovery writes its manifest before removal completes');
+  assert.equal(logs[removal].scratchManifest, resumed.scratchManifest);
+});
 
 for (const [failAt, phase] of [[1, 'intent'], [2, 'outcome'], [3, 'completion']])
   test(`a manifest made unwritable at ${phase} warns and logs while workspace closure still completes`, t => {

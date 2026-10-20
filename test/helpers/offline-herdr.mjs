@@ -19,6 +19,8 @@ export function fixtureFleet(t, scratch) {
 // put their own fake before this refusal adapter, but never inherit live IDs.
 export function offlineHerdr() {
   isolateGateHistory();
+  // Even a fixture that forgets its own override cannot scan host scratch.
+  process.env.HERDR_TEST_SCRATCH_ROOTS = '[]';
   if (process.env.HERDR_TEST_OFFLINE_ROOT) {
     // Each test file gets its own machine registry; product children inherit it.
     process.env.HERDR_MONITOR_FLEET = path.join(process.env.HERDR_TEST_OFFLINE_ROOT, `f${process.pid}`);

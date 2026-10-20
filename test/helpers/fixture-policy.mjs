@@ -31,6 +31,7 @@ function containedEnv(env = process.env, command, args) {
   // socket. Explicit fixture sockets remain available for fake server tests.
   if (process.env.HERDR_TEST_OFFLINE_ROOT) {
     result.HERDR_TEST_OFFLINE_ROOT ??= process.env.HERDR_TEST_OFFLINE_ROOT;
+    result.HERDR_TEST_SCRATCH_ROOTS ??= process.env.HERDR_TEST_SCRATCH_ROOTS ?? '[]';
     result.HERDR_SOCKET_PATH ??= process.env.HERDR_SOCKET_PATH;
     result.HERDR_MONITOR_FLEET ??= process.env.HERDR_MONITOR_FLEET;
     result.ORG_ACTOR ??= process.env.ORG_ACTOR;

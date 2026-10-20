@@ -19,10 +19,10 @@ const source = fileURLToPath(new URL('../../', import.meta.url));
 const slotCLI = path.join(source, 'test-slot/test-slot.mjs');
 const kernelLockOptions = { skip: !fs.existsSync('/bin/zsh') && 'external kernel-lock tests require /bin/zsh' };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function until(fn) {
+async function until(fn, diagnostics = () => '') {
   const deadline = Date.now() + loadTimeout(10000);
   while (Date.now() < deadline) { if (fn()) return; await pause(25); }
-  assert.fail('fixture did not become ready');
+  assert.fail(`fixture did not become ready: ${diagnostics()}`);
 }
 
 async function holdSlot(t, f) {
@@ -145,7 +145,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));
     assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false);
     memory.set(healthyMemory);
     const result = await done; assert.equal(result.code, 0, result.stderr);
-    const data = queue.load(); assert.deepEqual(data.results.map(r => r.outcome), ['promoted', 'refused']);
+    const data = queue.load(); assert.deepEqual(data.results.map(r => r.outcome), ['promoted', 'refused'], f.diagnostics());
     assert.ok(data.results.every(r => r.delivered));
     assert.match(data.results[1].reason, /STOP/); assert.equal(data.interrupted?.length ?? 0, 0); assert.equal(data.current, null);
     const saved = JSON.parse(fs.readFileSync(f.receipt));
@@ -190,7 +190,7 @@ for (const stage of ['--held', '--execute', 'project-lock']) test(`profile press
   fs.writeFileSync(f.gate.external_lock, 'keep');
   const worker = f.asyncRun(), done = waitForExit(worker);
   try {
-    await until(() => fs.existsSync(memory.ready));
+    await until(() => fs.existsSync(memory.ready), f.diagnostics);
     assert.notEqual(probeExternal(f), 0);
     if (stage !== '--held') assert.ok(fs.existsSync(f.slot), 'slot acquired before injected pressure');
     if (stage === 'project-lock') assert.ok(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')));
@@ -284,7 +284,7 @@ test('a released legacy lock admits the waiting train and stays held for the com
   const worker = f.asyncRun(); await until(() => fs.existsSync(path.join(f.directory, 'host-gate.json')) && f.saved().phase === 'waiting-external-lock');
   owner.stdin.end('release\n'); await waitForExit(owner);
   const result = await waitForExit(worker); assert.equal(result.code, 0, result.stderr);
-  assert.equal(f.saved().external_lock.state, 'acquired'); assert.equal(f.git(['rev-parse', 'main']), f.head);
+  assert.equal(f.saved().external_lock.state, 'acquired'); assert.equal(f.git(['rev-parse', 'main']), f.head, f.diagnostics());
   const receipt = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(receipt.external_lock_required, true);
   assert.equal(receipt.external_lock_started_at, f.saved().external_lock.started_at);
@@ -465,6 +465,7 @@ test('three-lane red bisection fits the host envelope and promotes both healthy 
   const train = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(train.attempts.length, 5);
   for (const attempt of train.attempts) {
+    assert.ok(attempt.gate, f.diagnostics());
     assert.equal(attempt.gate.limits.wall_seconds, 12000);
     assert.equal(attempt.gate.gate_timeout, null);
   }

@@ -880,6 +880,10 @@ test('one command records exact route/worker fields, arms watch before prompt, a
   assert.deepEqual(calls.find(x=>x.type==='lane'&&x.a[0]==='open').a, ['open','topic','--git-only']);
   assert.match(promptCalls(f)[0].a[3],new RegExp(result.run));assert.ok(promptCalls(f)[0].a[3].includes(run.brief_path));
   assert.ok(promptCalls(f)[0].a[3].includes(run.report_path));assert.match(promptCalls(f)[0].a[3],/Fix round/);
+  assert.match(promptCalls(f)[0].a[3], /check on the clean committed candidate/);
+  assert.match(promptCalls(f)[0].a[3], /default test command without configuration/);
+  assert.match(promptCalls(f)[0].a[3], /check --cmd 'COMMAND'/);
+  assert.match(promptCalls(f)[0].a[3], /\.lane\/gate\.json.*TAP totals and Node version/);
   assert.equal(fs.readFileSync(f.brief,'utf8'),before);
   assert.equal(f.dispatch(['--retry',result.run]).status,0);assert.equal(promptCalls(f).length,1);
 });

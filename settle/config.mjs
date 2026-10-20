@@ -1,7 +1,7 @@
 // Project desk settings; runtime flags and item overrides are applied at intake.
 import { resolveLaunchRoute } from '../lanes/routes.mjs';
 export const DESK_FIELDS = ['review_route', 'fix_route', 'review_round_cap', 'timeout', 'reuse', 'to'];
-export const DESK_DEFAULTS = { review_round_cap: 0, timeout: 1800, reuse: false, to: 'supervisor-herdr' };
+export const DESK_DEFAULTS = { review_round_cap: 3, timeout: 1800, reuse: false, to: 'supervisor-herdr' };
 export function deskFallback(key, config) {
   if (key === 'fix_route') return 'worker route, otherwise engineer';
   const choice = config.selection_policy?.by_task_class?.review;

@@ -34,6 +34,24 @@ function dispatchWorker(f, item, extra = []) {
   return receipt;
 }
 
+test('unconfigured projects stop after three reviews and two automatic fix rounds', { timeout: 60000 }, t => {
+  const f = fixture(t); review(f);
+  const run = landed(f), first = result(f.settle(run));
+  assert.equal(first.result, 'fix_round');
+  assert.deepEqual(first.review_policy, { cap: 3, source: 'default', round: 1, prior_runs: [] });
+  const second = result(f.settle(first.fix.run));
+  assert.equal(second.result, 'fix_round');
+  const launches = f.calls().filter(a => a[1] === 'prompt' && a[3].startsWith('You are run ')).length;
+  const third = result(f.settle(second.fix.run));
+  assert.equal(third.result, 'promotable_with_findings');
+  assert.equal(third.review_policy.round, 3);
+  assert.deepEqual(third.review_policy.prior_runs, [run, first.fix.run]);
+  assert.match(third.reason, /supervisor must decide/);
+  assert.equal(launches, 2);
+  assert.equal(f.calls().filter(a => a[1] === 'prompt' && a[3].startsWith('You are run ')).length, launches);
+  assert.deepEqual(result(f.retry(second.fix.run)), third);
+});
+
 test('project cap counts completed reviews across fix runs and records the no-dispatch decision', { timeout: 45000 }, (t) => {
   const f = fixture(t, { actor: 'settle-cap-project-test' }); config(f, 2); review(f, 'NEEDS-WORK', `${moderate}\n${minor}`);
   const run = landed(f), first = result(f.settle(run));

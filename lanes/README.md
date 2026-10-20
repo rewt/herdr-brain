@@ -64,7 +64,14 @@ Every field is optional. Undeclared tiers use the legacy `validate` command,
 otherwise `npm test` (`node --test` for a project with `test/` and no declared npm test script).
 The tracked file overrides individual tiers from lane config. `LANE_VALIDATE`
 overrides commands for CLI adapters; `check --cmd` wins for that invocation.
-Workers may run `lane check` (fast); settle performs code/report review with no
+Workers capture their tests with `lane check` (fast), including projects with no
+validation configuration. Use `lane check --cmd 'COMMAND'` for the declared
+focused command. Run it on the committed clean candidate before reporting; it
+executes that command and writes `.lane/gate.json` plus the log and receipt in
+`GIT_COMMON_DIR/lane-validation/`. The receipt includes the actual command, exit
+status, Node version and each top-level TAP summary (null when absent). Settle
+inherits this evidence through the same path for configured and default projects.
+Settle performs code/report review with no
 suite, and the promotion train runs the promotion tier on each integration batch.
 Workers never run the release gate; `bash herdr/release.sh build TAG`
 runs the declared release command and timeout inside the tagged snapshot.

@@ -19,6 +19,20 @@ export const VALIDATION_FILE = '.lane.validation.json';
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
+// Keep each TAP summary: a declared command can run several suites. Only
+// unindented totals belong to a top-level suite, never nested subtests.
+export function tapTotals(output) {
+  const suites = [];
+  let current;
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^# (tests|suites|pass|fail|cancelled|skipped|todo) (\d+)$/.exec(line);
+    if (!match) continue;
+    if (!current || Object.hasOwn(current, match[1])) { current = {}; suites.push(current); }
+    current[match[1]] = Number(match[2]);
+  }
+  return suites.length ? suites : null;
+}
+
 export function validateValidation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
   for (const [key, command] of Object.entries(value)) {
@@ -192,7 +206,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     if (usesSlot) {
       try { execution = JSON.parse(readPlainFile(executionReceipt)); } catch { /* A refusal has no command clocks. */ }
     }
-    const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, release: admittedRelease, environment_fingerprint: fingerprint,
+    const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, node_version: process.version, tap_totals: tapTotals(output), release: admittedRelease, environment_fingerprint: fingerprint,
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
       duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
       execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits,

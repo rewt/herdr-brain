@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 import { fixture } from './fixture.mjs';
+import { DESK_DEFAULTS } from '../config.mjs';
 
 const result = (r) => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
@@ -35,10 +36,22 @@ test('a project with only settle settings and no parent routes completes indepen
   assert.equal(settled.validation.executed, false);
   assert.equal(workerPrompts(f).length, 0);
   const job = receipt(f, run);
+  assert.equal(DESK_DEFAULTS.review_round_cap, 3);
+  assert.deepEqual(job.reviewPolicy, { cap: 3, source: 'default', round: 1, prior_runs: [] });
   const routes = JSON.parse(fs.readFileSync(job.routeConfig, 'utf8'));
   assert.ok(routes.routes.review);
   assert.equal(Object.hasOwn(routes, 'settle'), false);
   assert.equal(job.laneConfig, null);
+});
+
+test('a project with an explicit zero review cap keeps unlimited semantics', t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ settle: { review_round_cap: 0 } }));
+  f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Explicit unlimited reviews']);
+  f.git(['rebase', 'main'], f.workspace);
+  const run = f.start(); f.commit('correct\n'); f.report(run);
+  assert.equal(result(f.settle(run)).review_policy.cap, 0);
+  assert.equal(receipt(f, run).reviewPolicy.source, 'project');
 });
 
 test('relative LANE_CONFIG uses the intake file for canonical review without running validation', (t) => {

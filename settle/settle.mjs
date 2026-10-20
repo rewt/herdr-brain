@@ -16,7 +16,7 @@ import { itemStatus, laterRuns, releases } from '../lib/state.mjs';
 import { snapshotState, waitingOutcome } from './record-state.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, readRoutesConfig, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../lanes/review-evidence.mjs';
-import { validateDeskSettings } from './config.mjs';
+import { DESK_DEFAULTS, validateDeskSettings } from './config.mjs';
 import { acquire } from './lock.mjs';
 import { changedPaths } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from './test-plan.mjs';
@@ -164,7 +164,7 @@ function reviewPolicy(item, settings, identity) {
     item.meta = { ...item.meta, settle_review_round_cap: cap };
   }
   const override = item.meta?.settle_review_round_cap;
-  const cap = roundCap(override ?? settings.review_round_cap ?? 0, 'review round cap');
+  const cap = roundCap(override ?? settings.review_round_cap ?? DESK_DEFAULTS.review_round_cap, 'review round cap');
   // Count completed independent reviews, once per reported run, across correction
   // runs on this item. Worker starts and uncertain reviewer retries are not rounds.
   const prior = [];

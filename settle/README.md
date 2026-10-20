@@ -178,8 +178,11 @@ or record a per-item override with
 `record set ENG-123 meta.settle_review_round_cap=3`. `--review-round-cap 3`
 on settle (or supervisor `handle`) records the same item override. Item values
 win over project defaults; 0 disables the cap, including an inherited project
-default. Values must be nonnegative safe integers. With no setting, behaviour
-remains unlimited. Each intake snapshots the effective cap and its source;
+default. Values must be nonnegative safe integers. With no setting, the default
+is **3 review rounds**: the initial review and at most two automatic fix rounds.
+Reaching the cap hands remaining findings to the supervisor. Explicit project
+values, including 0 for unlimited reviews, retain their meaning. Each intake
+snapshots the effective cap and its source;
 retries use that snapshot, and future correction runs read the item override.
 
 The current completed review counts toward the cap. Count one completed

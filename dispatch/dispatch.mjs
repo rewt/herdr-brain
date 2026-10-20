@@ -491,7 +491,8 @@ async function main() {
         }
       }
       if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
-      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.${job.extra ? `\n\n${job.extra}` : ''}`;
+      const validation = `Capture worker test execution through ${JSON.stringify(process.execPath)} ${JSON.stringify(local('../lanes/lane.mjs'))} check on the clean committed candidate before reporting. It uses the project's declared fast command, or the default test command without configuration. For a declared focused command, use check --cmd 'COMMAND' and run it once through this wrapper. This writes .lane/gate.json and the shared lane-validation receipt with command, exit status, TAP totals and Node version for settle to inherit. Follow the ask's test selection and limits; do not rerun tests solely to create a receipt.`;
+      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${validation}${job.extra ? `\n\n${job.extra}` : ''}`;
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);

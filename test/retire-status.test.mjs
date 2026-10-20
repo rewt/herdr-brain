@@ -135,6 +135,7 @@ const reasonCases = [
   ['inert shell cwd differs from lane', 'UNKNOWN'],
   ['initial shell launch identity changed', 'UNKNOWN'],
   ['inert shell has a later occupant claim', 'UNKNOWN'],
+  ['inert shell has a live or unknown claim holder', 'UNKNOWN'],
   ['inert shell record or references were not read', 'UNKNOWN'],
   ['inert shell checkout is not clean and integrated', 'UNKNOWN'],
   ['ambiguous initial shell receipts', 'UNKNOWN'],

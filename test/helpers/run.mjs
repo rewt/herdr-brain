@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { registerProcess, killProcess, auditGroup } from './processes.mjs';
 import { offlineHerdr } from './offline-herdr.mjs';
+import { runnerLimits } from './runner-limits.mjs';
 
 const cleanupHerdr = offlineHerdr();
 
@@ -24,15 +25,12 @@ const testNamePatterns = nameOption ? [new RegExp(nameOption.slice('--test-name-
 const fixedDeadlines = argv.includes('--fixed-deadlines');
 const factorOption = argv.find(arg => arg.startsWith('--load-factor='));
 const factor = factorOption ? Number(factorOption.split('=')[1]) : loadFactor();
-if (!Number.isFinite(factor) || factor < 1) throw Error('invalid test load factor');
-function bound(name, fallback, maximum = fallback) {
+function timeoutOption(name) {
   const option = argv.find(arg => arg.startsWith(`--${name}=`));
-  const value = option ? Number(option.split('=')[1]) : fallback;
-  if (!Number.isInteger(value) || value < 1 || value > maximum) throw Error(`${name} must be 1..${maximum} milliseconds`);
-  return fixedDeadlines ? value : loadTimeout(value, factor);
+  return option ? Number(option.split('=')[1]) : undefined;
 }
-const fileTimeout = bound('file-timeout', 300_000, 480_000);
-const suiteTimeout = bound('suite-timeout', 360_000, 540_000);
+const { concurrency, fileTimeout, suiteTimeout } = runnerLimits({ factor, fixedDeadlines,
+  fileTimeout: timeoutOption('file-timeout'), suiteTimeout: timeoutOption('suite-timeout') });
 if (!files.length && selected.size) { cleanupHerdr(); process.exit(0); }
 if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] [--fixed-deadlines] [--test-name-pattern=REGEX] TEST_FILES...');
 
@@ -46,7 +44,7 @@ if (worker) {
   };
   process.once('disconnect', cleanup);
   process.once('message', async () => {
-    const stream = run({ files, concurrency: Math.max(1, Math.floor(4 / factor)), timeout: fileTimeout, testNamePatterns });
+    const stream = run({ files, concurrency, timeout: fileTimeout, testNamePatterns });
     let code = 0;
     stream.on('test:fail', () => { code = 1; });
     try { await pipeline(stream.compose(tap), process.stdout, { end: false }); }

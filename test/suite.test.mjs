@@ -7,8 +7,35 @@ import { fileURLToPath } from 'node:url';
 import { phases } from './helpers/suite.mjs';
 import { tierFiles } from './helpers/tier.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
+import { runnerLimits } from './helpers/runner-limits.mjs';
 
 process.env.ORG_ACTOR = 'suite-tests';
+
+for (const [factor, concurrency, fileTimeout, suiteTimeout] of [
+  [1, 4, 300_000, 360_000],
+  [1.5, 2, 450_000, 720_000],
+  [2.6, 1, 780_000, 1_440_000],
+  [5, 1, 1_500_000, 1_800_000],
+]) test(`runner deadlines cover reduced file concurrency at load factor ${factor}`, () => {
+  const limits = runnerLimits({ factor });
+  assert.deepEqual(limits, { concurrency, fileTimeout, suiteTimeout });
+  assert.ok(limits.suiteTimeout >= 360_000 * (4 / limits.concurrency));
+});
+
+test('runner overrides retain their ceilings, fixed cancellation deadlines and finite timer bounds', () => {
+  assert.deepEqual(runnerLimits({ factor: 2.6, fileTimeout: 480_000, suiteTimeout: 540_000 }),
+    { concurrency: 1, fileTimeout: 1_248_000, suiteTimeout: 2_160_000 });
+  assert.deepEqual(runnerLimits({ factor: 2.6, fixedDeadlines: true, fileTimeout: 5000, suiteTimeout: 1000 }),
+    { concurrency: 1, fileTimeout: 5000, suiteTimeout: 1000 });
+  const extreme = runnerLimits({ factor: Number.MAX_VALUE });
+  assert.deepEqual(extreme, { concurrency: 1, fileTimeout: 2 ** 31 - 1, suiteTimeout: 2 ** 31 - 1 });
+  for (const factor of [0, 0.9, NaN, Infinity]) assert.throws(() => runnerLimits({ factor }), /invalid test load factor/);
+  for (const [name, maximum] of [['fileTimeout', 480_000], ['suiteTimeout', 540_000]]) {
+    for (const value of [0, -1, 1.5, NaN, Infinity, maximum + 1])
+      assert.throws(() => runnerLimits({ factor: 1, [name]: value }), /must be 1\.\./);
+  }
+});
+
 test('npm phases preserve every file once and group module families', () => {
   const files = ['test/a.mjs', 'discovery/test/lessons.test.mjs', 'watch/test/b.mjs', 'settle/test/c.mjs', 'supervisor/test/d.mjs'];
   const groups = phases(files);

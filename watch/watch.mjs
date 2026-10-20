@@ -17,6 +17,7 @@ import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
 import { bundleRelease, continueRelease, forwardRelease } from '../lib/releases.mjs';
 
 import { acquireWatcherLock } from './lock.mjs';
+import { createRunEventTail } from './record-tail.mjs';
 import { readReport } from '../lib/report.mjs';
 import { BRAIN_CONTROLLER, readOwnedRun, requireController, assertOwner, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { writeFileAtomic } from '../lib/store.mjs';
@@ -197,7 +198,7 @@ function fileStamp(file) {
   }
 }
 
-function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp, beforeRecordStamp, stopFile) {
+function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp, recordChanged, stopFile) {
   return new Promise((resolve) => {
     let settled = false;
     let watcher;
@@ -232,11 +233,11 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp, beforeR
       } catch { /* Herdr state still wakes us. */ }
     }
     // Completion/transfer and STOP need not change the worker or its report.
-    // Keep one blocking Herdr wait, waking only on a changed record or STOP.
+    // Unrelated appends advance only the byte cursor, keeping this same wait.
     // Cheap stats cover lost watches, replacement and removed directories.
     const checkControl = () => {
-      if (fileStamp(recordFile) !== beforeRecordStamp) finish('record');
-      else if (fs.existsSync(stopFile)) finish('stop');
+      if (fs.existsSync(stopFile)) finish('stop');
+      else if (recordChanged()) finish('record');
     };
     for (const file of [recordFile, stopFile]) {
       const directory = existingDirectory(file);
@@ -462,7 +463,9 @@ async function watch() {
   }
 
   for (;;) {
-    const beforeRecordStamp = fileStamp(recordFile);
+    // Capture the cursor before reading state so an append during inspection
+    // is still checked after the filesystem subscriptions become live.
+    const recordChanged = createRunEventTail(recordFile, { run: runId, item });
     if (fs.existsSync(stopFile)) { log('Supervisor STOP; stopping without delivery'); return; }
     let owned;
     try { owned = assertOwner(readOwnedRun(opt.org, runId), ownership); } catch (error) { log(`${error.message}; stopping without delivery`); return; }
@@ -544,7 +547,7 @@ async function watch() {
         log(`waiting up to ${startGraceMs / 1_000}s for ${agent} to start before treating ${state ?? 'gone'} as terminal`);
         startupWaitingLogged = true;
       }
-      const signal = await waitForSignal(agent, ['working'], reportPath, startupGraceRemaining, beforeStamp, beforeRecordStamp, stopFile);
+      const signal = await waitForSignal(agent, ['working'], reportPath, startupGraceRemaining, beforeStamp, recordChanged, stopFile);
       if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, startupGraceRemaining));
       continue;
     }
@@ -555,7 +558,7 @@ async function watch() {
       }
       const remaining = Math.max(0, idleGraceUntil - Date.now());
       if (remaining > 0) {
-        const signal = await waitForSignal(agent, ['working', 'blocked'], reportPath, remaining, beforeStamp, beforeRecordStamp, stopFile);
+        const signal = await waitForSignal(agent, ['working', 'blocked'], reportPath, remaining, beforeStamp, recordChanged, stopFile);
         if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, remaining));
         continue;
       }
@@ -606,7 +609,7 @@ async function watch() {
     const untilLong = !longNotified && workerStillRunning
       ? Math.max(0, longNextAt - Date.now())
       : undefined;
-    const signal = await waitForSignal(agent, until, reportPath, untilLong, beforeStamp, beforeRecordStamp, stopFile);
+    const signal = await waitForSignal(agent, until, reportPath, untilLong, beforeStamp, recordChanged, stopFile);
     if (signal === 'long') continue;
     if (signal === 'wait-failed') {
       log(`Herdr wait failed; rechecking after ${retryAfterMs / 1_000}s`);

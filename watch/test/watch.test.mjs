@@ -22,6 +22,7 @@ import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { gitProject } from '../../lib/project.mjs';
+import { createRunEventTail } from '../record-tail.mjs';
 
 const TEST_ENV = { ...process.env, BRAIN_SHADOW_ROOT: process.env.BRAIN_SHADOW_ROOT || path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'), ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
@@ -75,9 +76,80 @@ function startWatcher(t, args) {
   return spawnChild(t, process.execPath, args, { env: TEST_ENV });
 }
 
+function eventTailFixture(t, { readLimit = Infinity } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-record-tail-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'events.jsonl');
+  fs.writeFileSync(file, JSON.stringify({ type: 'note.added', id: 'R-940', text: 'old history' }) + '\n');
+  const reads = [];
+  const changed = createRunEventTail(file, { run: 'R-940', item: 'ENG-9', io: { ...fs,
+    readSync(fd, buffer, start, length, position) {
+      const bytes = fs.readSync(fd, buffer, start, Math.min(length, readLimit), position);
+      reads.push({ position, bytes }); return bytes;
+    },
+  } });
+  const append = (event, newline = true) => fs.appendFileSync(file, JSON.stringify(event) + (newline ? '\n' : ''));
+  return { file, reads, changed, append };
+}
+
+test('record tail reads only appended bytes and ignores unrelated lifecycle and own metadata events', t => {
+  const f = eventTailFixture(t), initial = fs.statSync(f.file).size;
+  assert.equal(f.changed(), false); assert.deepEqual(f.reads, []);
+  for (const event of [
+    { type: 'run.claimed', run: 'R-941' }, { type: 'run.abandoned', id: 'R-941' },
+    { type: 'report.ingested', run: 'R-941' }, { type: 'item.closed', id: 'ENG-10' },
+    { type: 'run.updated', id: 'R-940', meta: { process_end: 'observed' } },
+    { type: 'note.added', id: 'R-940', text: 'x'.repeat(130_000) },
+    { type: 'future.event', run: 'R-940' },
+  ]) f.append(event);
+  assert.equal(f.changed(), false);
+  const firstEnd = fs.statSync(f.file).size;
+  assert.equal(f.reads[0].position, initial);
+  assert.equal(f.reads.reduce((sum, read) => sum + read.bytes, 0), firstEnd - initial);
+  assert.ok(f.reads.every(read => read.bytes <= 64 * 1024));
+  const count = f.reads.length;
+  assert.equal(f.changed(), false); assert.equal(f.reads.length, count, 'unchanged stat never opens or reads history');
+  f.append({ type: 'note.added', id: 'R-941', text: 'next append' });
+  assert.equal(f.changed(), false); assert.equal(f.reads[count].position, firstEnd);
+  f.append({ type: 'report.ingested', run: 'R-940' });
+  assert.equal(f.changed(), true);
+});
+
+for (const event of [
+  { type: 'report.ingested', run: 'R-940' }, { type: 'run.claimed', run: 'R-940' },
+  { type: 'run.abandoned', id: 'R-940' }, { type: 'item.closed', id: 'ENG-9' },
+]) test(`record tail wakes for ${event.type} of its run or item`, t => {
+  const f = eventTailFixture(t); f.append(event); assert.equal(f.changed(), true);
+});
+
+test('record tail keeps byte offsets across split UTF-8 and complete events without a final newline', t => {
+  const f = eventTailFixture(t, { readLimit: 7 }), initial = fs.statSync(f.file).size;
+  f.append({ type: 'note.added', id: 'R-941', text: '😀 café 漢字'.repeat(10) }, false);
+  assert.equal(f.changed(), false);
+  const end = fs.statSync(f.file).size, count = f.reads.length;
+  assert.equal(f.reads.reduce((sum, read) => sum + read.bytes, 0), end - initial);
+  fs.appendFileSync(f.file, '\n');
+  f.append({ type: 'run.claimed', run: 'R-940' }, false);
+  assert.equal(f.changed(), true); assert.equal(f.reads[count].position, end);
+});
+
+for (const damage of ['missing', 'truncated', 'replaced', 'malformed', 'torn']) {
+  test(`record tail wakes for a ${damage} record`, t => {
+    const f = eventTailFixture(t);
+    if (damage === 'missing') fs.unlinkSync(f.file);
+    if (damage === 'truncated') fs.truncateSync(f.file, 0);
+    if (damage === 'replaced') {
+      fs.writeFileSync(f.file + '.new', fs.readFileSync(f.file)); fs.renameSync(f.file + '.new', f.file);
+    }
+    if (damage === 'malformed') fs.appendFileSync(f.file, '{broken}\n');
+    if (damage === 'torn') fs.appendFileSync(f.file, '{"type":"report.ingested"');
+    assert.equal(f.changed(), true);
+  });
+}
+
 for (const fallback of [false, true]) {
   for (const change of ['reported', 'abandoned', 'claim moved', 'record removed', 'org removed', 'STOP']) {
-    test(`a blocking watcher exits on ${change}${fallback ? ' when filesystem watches are unavailable' : ''}`, async t => {
+    test(`a blocking watcher exits on ${change}${fallback ? ' after ignoring unrelated events without filesystem watches' : ''}`, async t => {
       const f = watcherFixture('R-940');
       t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
       if (!fallback && !await requireFileWatch(t, f.root)) return;
@@ -104,7 +176,7 @@ else if(a[0]==='agent'&&a[1]==='wait') {
   fs.writeFileSync(${JSON.stringify(waiting)},'waiting');setInterval(()=>{},1000);
 } else process.exit(2);
 `, { mode: 0o755 });
-      const preloads = [];
+      const preloads = [], tailRead = path.join(f.root, 'tail-read');
       if (fallback) {
         const preload = path.join(f.root, 'lost-watches.mjs');
         // Exercise the production fallback without a thirty-second test wait.
@@ -112,6 +184,14 @@ else if(a[0]==='agent'&&a[1]==='wait') {
 fs.watch=()=>{throw Error('fixture: fs.watch unavailable');};
 const interval=globalThis.setInterval;
 globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===30000?50:ms,...args);
+const open=fs.openSync,close=fs.closeSync,read=fs.readSync,records=new Set();
+fs.openSync=(file,...args)=>{const fd=open(file,...args);if(file===${JSON.stringify(record)})records.add(fd);return fd;};
+fs.closeSync=fd=>{records.delete(fd);return close(fd);};
+fs.readSync=(fd,buffer,start,length,position)=>{
+  const bytes=read(fd,buffer,start,length,position);
+  if(records.has(fd)&&Number.isInteger(position))fs.appendFileSync(${JSON.stringify(tailRead)},String(position+bytes)+'\\n');
+  return bytes;
+};
 `);
         preloads.push('--import', preload);
       }
@@ -125,8 +205,24 @@ globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===30000?50:ms,...args);
         assert.equal(fs.existsSync(path.join(f.root, '.org/watch/R-940.json')), false);
       }
       const events = fs.readFileSync(record, 'utf8').trim().split('\n').map(JSON.parse);
-      const append = event => fs.appendFileSync(record, JSON.stringify({ ...event, seq: 3,
+      let sequence = 2;
+      const append = event => fs.appendFileSync(record, JSON.stringify({ ...event, seq: ++sequence,
         at: new Date().toISOString(), by: 'fixture' }) + '\n');
+      if (fallback) {
+        for (const batch of [
+          [{ type: 'run.started', id: 'R-941', item: 'ENG-10', meta: {} },
+            { ...events[1], run: 'R-941' }, { type: 'report.ingested', run: 'R-941', report: { outcome: 'done' } }],
+          [{ type: 'run.abandoned', id: 'R-941' }, { type: 'item.closed', id: 'ENG-10', as: 'done' },
+            { type: 'run.updated', id: 'R-940', meta: { process_end: 'observed' } }],
+        ]) {
+          for (const event of batch) append(event);
+          await untilText(tailRead, new RegExp(`^${fs.statSync(record).size}$`, 'm'));
+          assert.equal(child.exitCode, null);
+          assert.equal(fs.existsSync(ended), false, 'unrelated lifecycle and own metadata retain the exact wait');
+          assert.equal(fs.readFileSync(f.calls, 'utf8').trim().split('\n').length, 2, 'no Herdr respawn pass');
+          assert.equal(fs.existsSync(path.join(f.root, '.org/watch/R-940.json')), false);
+        }
+      }
       if (change === 'reported') append({ type: 'report.ingested', run: 'R-940', report: { outcome: 'done' } });
       if (change === 'abandoned') append({ type: 'run.abandoned', id: 'R-940' });
       if (change === 'claim moved') append({ ...events[1], owner: { ...events[1].owner, controller: 'successor' } });

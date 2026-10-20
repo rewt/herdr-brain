@@ -13,8 +13,15 @@ removed record or STOP ends the watcher without another notice. An ingested
 report also ends the wait; a stopped worker's valid final report still delivers
 the existing final notice. A 30-second record stat and STOP check covers lost
 filesystem notifications without restarting Herdr's wait while nothing changes.
+Only appended lifecycle events for this run or its item's closure wake the wait;
+events for other runs and routine metadata writes advance the byte cursor alone.
 A separate timer emits one distinct long-running notice. It never writes
 `events.jsonl` or ingests a report.
+
+STOP ends the watcher permanently; clearing STOP does not restart it. After STOP
+clears, a supervisor entry cold start re-arms the run. Alternatively, use
+`dispatch --retry R-n`: the first retry clears a saved dead watcher and refuses;
+the second retry re-arms it without replaying a delivered worker prompt.
 
 It saves its terminal decision as run `process_end` metadata through
 `record set`, independently of report time. Initial idle/gone states wait for

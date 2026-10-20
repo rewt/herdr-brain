@@ -147,7 +147,7 @@ import { syncBuiltinESMExports } from 'node:module';
 const fault = ${JSON.stringify(fault)}, marker = ${JSON.stringify(reached)};
 const exec = cp.execFileSync, lstat = fs.lstatSync;
 cp.execFileSync = function(command, args, ...rest) {
-  if (fault === 'canonical' && command === 'git' && args.at(-1) === '--git-common-dir') {
+  if (fault === 'canonical' && command === 'git' && args.at(-1) === '--git-common-dir' && ${JSON.stringify([repo, fs.realpathSync(repo)])}.includes(args[1])) {
     fs.writeFileSync(marker, 'canonical');
     throw Object.assign(Error('injected canonical lookup failure'), { status: 128,
       stderr: 'fatal: not a git repository (or any of the parent directories): .git\\n' });

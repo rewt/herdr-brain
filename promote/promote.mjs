@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
-import { readOwnedRun, requireController, assertOwner, ownerBinding, sameOwner, brainOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
+import { adoptedPromotionBinding, readOwnedRun, requireController, assertOwner, ownerBinding, sameOwner, brainOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { bundleRelease, forwardRelease, operationFile } from '../lib/releases.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
@@ -176,7 +176,7 @@ function guardPromotionJob(job) {
   // delivery and cleanup. A restart still verifies that exact claim binding.
   const run = readOwnedRun(job.org, job.run);
   if (job.ownership) assertOwner(run, job.ownership);
-  else if (run.owner && !run.owner.legacy) throw Error(`RUN_OWNED_ELSEWHERE: ${run.id} owner=${JSON.stringify(run.owner)}`);
+  else if (run.owner && !run.owner.legacy && !adoptedPromotionBinding(job.org, run, job)) throw Error(`RUN_OWNED_ELSEWHERE: ${run.id} owner=${JSON.stringify(run.owner)}`);
 }
 
 function cleanup(job, queue, workspace) {

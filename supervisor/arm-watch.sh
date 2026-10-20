@@ -2,6 +2,11 @@
 # Arms the one worker watcher. It validates the stopped worker's report and
 # tells the long-running supervisor; supervisor/PROTOCOL.md tells that supervisor how to
 # open a fresh settle session as a separate action.
+# External Brain launch: record start -> record claim R-n --controller brain
+# -> dispatch/record-worker.mjs -> arm-watch.sh. For an existing own worker with
+# no operation receipts, explicitly claim with --admit-worker before re-arming.
+# Old Brain receipts use --adopt-brain-receipt FILE; see PROTOCOL.md. This script
+# never implicitly claims an ambiguous legacy run.
 # Usage: arm-watch.sh R-n [--org RECORD] [--cwd PROJECT] [--to NAME]
 #                     [--detach --log FILE | --dry-run]
 set -eu

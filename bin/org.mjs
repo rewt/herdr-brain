@@ -67,8 +67,6 @@ Lessons (durable knowledge, separate from work items)
           [--path PATH]... [--module NAME]...   propose a short claim (at most 400 code points)
   record lesson activate L-n [--supersedes L-n]... [--reason TEXT]
                                           activate and atomically supersede older lessons
-  record claim R-n --controller NAME [--legacy] [--release-root DIR]
-    [--transfer-from NAME --expected-owner JSON --expected-generation N --why TEXT]
   record lesson retire L-n --reason TEXT  retain the lesson and why it stopped helping
   record lessons [--path PATH] [--module NAME] [--scope S] [--state S] [--json]
                                           active by default; text shows five, JSON all matches
@@ -83,6 +81,9 @@ Runs and reports
                                           standard headings; missing sections are advisory
   record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [--workspace DIR]
           [--report PATH] [--escalation] [--meta key=value]... [--if-current-run R-n]
+  record claim R-n --controller NAME [--legacy] [--release-root DIR]
+    [--transfer-from NAME --expected-owner JSON --expected-generation N --why TEXT]
+    [--admit-worker | --adopt-brain-receipt FILE]
   record worker <R-n> --agent NAME --pane ID --worker-workspace ID --cwd DIR
           [--terminal-id ID] [--agent-session-id ID]
                                           launcher receipt; use dispatch/record-worker.mjs at launch

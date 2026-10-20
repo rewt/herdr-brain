@@ -87,6 +87,27 @@ instead of being overwritten. Failed promotions receive a judgment handoff.
    `promote RUN --retry --why REASON --role supervisor` to recheck readiness and
    bind a new attempt while retaining the previous receipt.
 
+Before activating run ownership, inventory in-flight work. Old Brain operations
+can drain on their saved release. To continue them through the new entry points,
+explicitly run `record claim R-n --controller brain --adopt-brain-receipt FILE`,
+using the existing `.org/settle/R-n.json`, `.org/dispatch/REQUEST.json`, or
+`.org/supervisor/PROJECT-HASH/R-n.json` receipt. The claim verifies the canonical
+record/project/run and binds the receipt's available release, not the new pin.
+Repeat the original settle/dispatch retry or supervisor handle after claiming;
+uncertain review/launch outcomes still require the existing inspection/recovery.
+Do this before allowing a queued old Brain job to resume under the new runtime;
+its original unbound queue member is accepted only with matching adoption
+provenance. Do not use a Brain receipt to adopt ambiguous BCH work: inventory and
+drain that work with its legacy controller instead.
+
+An external Brain launcher should run `record claim R-n --controller brain`
+after `record start`, before `dispatch/record-worker.mjs` and `arm-watch.sh`.
+For pre-upgrade workers already recorded without a claim, explicitly use
+`record claim R-n --controller brain --admit-worker` only after confirming this
+is Brain's worker. This admits its own worker callback but refuses operation
+receipts or other pending effects. Then re-run `supervisor entry` or arm watch.
+See [run ownership](../docs/contracts/RUN-OWNERSHIP.md) for the full contract.
+
 For a manually assembled or legacy promotion batch, use the shared
 [batch completion protocol](PROMOTION-COMPLETION.md). Bind every included item,
 excluded item and superseded open run before the gate; a green fast-forward is

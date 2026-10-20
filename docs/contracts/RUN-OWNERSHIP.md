@@ -2,9 +2,10 @@
 
 A run has one owning controller in its canonical Git common-directory project
 and canonical record. `run.claimed` binds those paths and the run to
-`owner: {controller, release: {id, commit, root} | null, legacy}`. The event sequence
+`owner: {controller, release: {id, commit, root, identity?} | null, legacy}`. The event sequence
 is the claim generation (`owner_generation` in `show --json`). Source development
-uses its exact Git HEAD and `id: source`; installed jobs use the admitted bundle's
+uses `id: source`, `commit: null`, its canonical root and canonical Git common
+directory (`identity`); moving HEAD does not change its owner. Installed jobs use the admitted bundle's
 exact root, commit and id. Unclaimed runs have no additional JSON fields. Text
 `show` and notice formats are unchanged. Status remains derived from events.
 
@@ -27,6 +28,24 @@ Brain claims refuse existing outstanding legacy effects; dispatch claims at its
 own new-run admission. Repeated report ingestion, inbox notice IDs, settle receipts
 and promotion receipts retain their existing deduplication semantics.
 
+Upgrade admission is explicit. Before activation, inventory in-flight Brain and
+legacy work. Drain old Brain work on its saved release, or run `record claim R-n
+--controller brain --adopt-brain-receipt FILE` with that run's existing Brain
+settle, dispatch or supervisor promotion receipt. The command verifies its record,
+project, run and available saved release and records the adoption provenance in
+`run.claimed`. It binds that saved release, even when the project's pin has moved.
+Existing unbound queue members from that release may drain under this adoption;
+new enqueue still requires the exact claim. This is initial admission, never a
+transfer or permission to replay an uncertain model call. Inspect every existing
+effect before adopting; ambiguous BCH work remains on its legacy path.
+
+For external launches, explicitly claim Brain before `record-worker` and watch.
+For a pre-upgrade running worker with no operation receipts, `record claim R-n
+--controller brain --admit-worker` permits only its own worker callback. It refuses
+any watch, settle, dispatch or promotion receipt and other outstanding effects.
+Then `supervisor entry` or `arm-watch.sh` can re-arm it. Neither upgrade path is
+selected automatically from a report, worker name or absent claim.
+
 Transfer additionally requires `--transfer-from NAME --expected-owner JSON
 --expected-generation N --why TEXT`, comparing the entire current tuple and event
 sequence. It records previous owner/generation, new owner and reason. Stale
@@ -45,7 +64,10 @@ promotion (including validation/integration), unreconciled landing, cleanup,
 uncertain delivery or pending callback. Receipts never expire by age or dead PID.
 Recovery finishes only its original generation; uncertain effects never relaunch
 after ownership changes. Watchers share a canonical-record lock across TMPDIRs;
-on a moved claim they stop without delivery or cleanup. `watch --dry-run` is the
+on a moved claim they stop at the next wake-up without delivery or cleanup.
+An untimed Herdr wait remains blocking; it does not poll ownership each second.
+Self-tab cleanup checkpoints its completed hand-off under the owner fence before
+launching the detached close, since that close can terminate the watcher. `watch --dry-run` is the
 only passive comparison: no notice, ingest, process metadata, review, enqueue,
 claim or cleanup.
 

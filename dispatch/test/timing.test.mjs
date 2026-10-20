@@ -218,6 +218,7 @@ test('watch writes terminal observation through the record CLI and metrics reads
   const f = fixture(t);
   f.record(['init']); f.record(['add', 'Timing fixture', '--role', 'engineer']);
   f.record(['start', 'ENG-1', '--meta', 'lane=timing', '--meta', 'agent=worker', '--meta', `dispatch_journal=${f.journal}`]);
+  f.record(['claim', 'R-1', '--controller', 'brain']);
   const current = JSON.parse(f.record(['show', 'R-1', '--json']));
   fs.writeFileSync(current.report_path, '---\nrun: R-1\noutcome: done\nsummary: Timing fixture done.\nheadline: Timing fixture done\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n');
   const herdr = path.join(f.root, 'herdr');
@@ -245,6 +246,7 @@ test(`watch idle → working → done records the final terminal attempt with id
   const f = fixture(t);
   f.record(['init']); f.record(['add', 'Timing fixture', '--role', 'engineer']);
   f.record(['start', 'ENG-1', '--meta', 'lane=timing', '--meta', 'agent=worker', '--meta', `dispatch_journal=${f.journal}`]);
+  f.record(['claim', 'R-1', '--controller', 'brain']);
   const current = JSON.parse(f.record(['show', 'R-1', '--json']));
   const report = '---\nrun: R-1\noutcome: done\nsummary: Resumed worker done.\nheadline: Resumed worker done\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n';
   const herdr = path.join(f.root, 'herdr');
@@ -274,3 +276,10 @@ if (a[0] === 'agent' && a[1] === 'get' && a[2] === 'worker') {
   assert.deepEqual(events.at(-1), end);
 });
 }
+
+test('an already recorded process end does not reserve another effect', () => {
+  let reservations = 0, writes = 0;
+  const current = { id: 'R-1', item: 'ENG-1', meta: { process_end: JSON.stringify(event(2, 'process_end', 'idle')) } };
+  observeProcessEnd({ current, state: 'idle', eligible: true, beforeWrite: () => reservations++, record: () => writes++ });
+  assert.equal(reservations, 0); assert.equal(writes, 0);
+});

@@ -2,13 +2,16 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { copyProduct } from '../lib/product-files.mjs';
+import { bundleRelease } from '../lib/releases.mjs';
+import { gitProject } from '../lib/project.mjs';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { fixture } from '../settle/test/fixture.mjs';
 import { loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { fold as oldFold } from './fixtures/state-pre-session-bind.mjs';
-import { claimRun, ownerBinding, fenceOwner, readOwnedRun, outstandingEffects } from '../lib/run-owner.mjs';
+import { claimRun, ownerBinding, fenceOwner, readOwnedRun, outstandingEffects, adoptedPromotionBinding } from '../lib/run-owner.mjs';
 import { queueFor, enqueue } from '../promote/promote.mjs';
 import { readInbox } from '../supervisor/prompt-supervisor.mjs';
 import { receiptDirectory } from '../supervisor/context.mjs';
@@ -32,10 +35,10 @@ const waitUntil = async predicate => {
   const by = Date.now() + 10000;
   while (!predicate()) { assert.ok(Date.now() < by, 'fixture barrier timed out'); await new Promise(r => setTimeout(r, 20)); }
 };
-function enqueueAdapter(f) {
+function enqueueAdapter(f, runtime = source) {
   const file = path.join(f.root, 'enqueue.mjs');
   fs.writeFileSync(file, `import {parseArgs} from 'node:util';
-import {queueFor,enqueue} from ${JSON.stringify(pathToFileURL(path.join(source, 'promote/promote.mjs')).href)};
+import {queueFor,enqueue} from ${JSON.stringify(pathToFileURL(path.join(runtime, 'promote/promote.mjs')).href)};
 const {values:o,positionals:p}=parseArgs({allowPositionals:true,options:Object.fromEntries(['repo','org','expected-head','if-current-run','claimed-by','claim-generation','required-tests','to'].map(k=>[k,{type:'string'}]))});
 const q=queueFor(o.repo);console.log(JSON.stringify({queue:q.file,jobs:enqueue(q,p,{org:o.org,run:o['if-current-run'],expectedHead:o['expected-head'],claimedBy:o['claimed-by'],claimGeneration:Number(o['claim-generation']),requiredTests:JSON.parse(o['required-tests']??'[]')})}));`);
   return file;
@@ -43,6 +46,12 @@ const q=queueFor(o.repo);console.log(JSON.stringify({queue:q.file,jobs:enqueue(q
 // These promotion calls use the enqueue-only seam above; no drain worker is
 // launched. Keep their bookkeeping independent of a system-wide process census.
 const promote = (f, run, adapter, extra = []) => spawnSync(process.execPath, [path.join(source, 'supervisor/supervisor.mjs'), 'promote', run, '--role', 'supervisor', '--why', 'Fixture reviewed work', '--promote-cli', adapter, ...extra], { cwd: f.repo, env: { ...f.env, ORG_DIR: f.org }, encoding: 'utf8' });
+const localGit = (f, args, cwd = f.repo) => ok(spawnSync('git', args, { cwd, env: f.env, encoding: 'utf8' })).trim();
+const reviewResult = (f, result) => {
+  const file = path.join(f.org, 'settle/R-1.review-r1.log');
+  if (result.status !== 0 && fs.existsSync(file)) result.stderr += '\n' + fs.readFileSync(file, 'utf8');
+  return result;
+};
 const reviews = f => f.calls().filter(a => a[0] === 'agent' && a[1] === 'start').length;
 
 test('promotion inventory includes the ownership witnesses', () => assert.ok(tierFiles('promotion').includes('test/run-ownership.test.mjs')));
@@ -323,4 +332,199 @@ test('the canonical record and common-directory identity survive symlinks and se
   const claims = loadEvents(org).events.filter(e => e.type === 'run.claimed');
   assert.equal(claims.length, 1); assert.equal(claims[0].record, fs.realpathSync(org));
   assert.equal(claims[0].project, fs.realpathSync(metadata));
+});
+
+test('transfer input errors name the expected JSON object and positive integer', t => {
+  const f = fixture(t), run = f.start(), args = transferArgs(run, binding(f, run));
+  for (const value of ['{', '[]', 'null', '"brain"']) {
+    const bad = [...args]; bad[bad.indexOf('--expected-owner') + 1] = value;
+    const result = node(f, 'bin/org.mjs', bad);
+    assert.equal(result.status, 1); assert.match(result.stderr, /--expected-owner requires a JSON object/);
+    assert.doesNotMatch(result.stderr, /SyntaxError/);
+  }
+  for (const value of ['0', '-1', '1.5', 'NaN', '9007199254740992']) {
+    const bad = [...args]; bad.splice(bad.indexOf('--expected-generation'), 2, `--expected-generation=${value}`);
+    assert.match(node(f, 'bin/org.mjs', bad).stderr, /--expected-generation requires a positive integer/);
+  }
+});
+
+test('explicit own-worker admission permits re-arm but refuses every operation receipt', t => {
+  const f = fixture(t), run = f.start({ owned: false });
+  f.record(['set', run, 'terminal_id=own-terminal', 'agent_session_id=own-session']);
+  assert.match(claim(f, run).stderr, /RUN_CLAIM_TRANSFER_REFUSED/);
+  const queue = queueFor(f.repo);
+  const receipts = [
+    [path.join(f.org, 'watch', `${run}.json`), {}],
+    [path.join(f.org, 'settle', `${run}.json`), { stage: 'complete' }],
+    [path.join(f.org, 'dispatch', `${run}.json`), { run, stage: 'complete' }],
+    [path.join(receiptDirectory(f.org, queue.project.identity), `${run}.json`), { phase: 'acknowledged' }],
+    [queue.file, { identity: queue.project.identity, pending: [], current: null, results: [{ run, org: f.org, outcome: 'refused', delivered: true }] }],
+  ];
+  for (const [file, receipt] of receipts) {
+    put(file, receipt);
+    assert.match(bookkeeping(f, ['claim', run, '--controller', 'brain', '--admit-worker']).stderr, /only this run's own worker/);
+    fs.rmSync(file);
+  }
+  fs.rmdirSync(path.join(f.org, 'dispatch')); // Synthetic receipts only, with no worker.
+
+  ok(claim(f, run, ['--admit-worker']));
+  assert.equal(JSON.parse(ok(claim(f, run, ['--admit-worker']))).already, true);
+  // This is the same arm used by entry recovery, with a pre-upgrade worker.
+  f.report(run);
+  ok(node(f, 'watch/watch.mjs', [run, '--org', f.org, '--cwd', f.repo, '--start-grace', '0']));
+  assert.equal(readInbox(path.join(f.org, 'supervisor/inbox.log')).filter(e => e.id === `watch:${run}:final`).length, 1);
+});
+
+test('explicit Brain receipt adoption binds old dispatch, settle and queued promotion releases', t => {
+  for (const kind of ['dispatch', 'settle', 'supervisor']) {
+    const f = fixture(t), run = f.start({ owned: false }), project = gitProject(f.repo);
+    const release = bundleRelease();
+    const file = kind === 'supervisor' ? path.join(receiptDirectory(f.org, project.identity), `${run}.json`) : path.join(f.org, kind, `${run}.json`);
+    put(file, { run, org: f.org, repo: f.repo, common: project.identity, identity: project.identity, release,
+      stage: kind === 'dispatch' ? 'launching' : 'reviewing', phase: 'enqueuing' });
+    assert.match(bookkeeping(f, ['claim', run, '--controller', 'brain']).stderr, /RUN_CLAIM_TRANSFER_REFUSED/);
+    const result = bookkeeping(f, ['claim', run, '--controller', 'brain', '--adopt-brain-receipt', file]);
+    ok(result); assert.equal(binding(f, run).owner.release.root, release.root);
+    assert.equal(events(f).find(e => e.type === 'run.claimed').adoption.receipt, file);
+    assert.equal(JSON.parse(ok(bookkeeping(f, ['claim', run, '--controller', 'brain', '--adopt-brain-receipt', file]))).already, true);
+    if (kind === 'dispatch') fs.rmSync(path.join(f.org, 'dispatch'), { recursive: true }); // No worker launched.
+  }
+});
+
+test('Brain adoption refuses foreign receipts and unavailable saved releases without claiming', t => {
+  const f = fixture(t), run = f.start({ owned: false }), file = path.join(f.org, 'settle', `${run}.json`);
+  const saved = { run, org: f.org, common: gitProject(f.repo).identity, release: bundleRelease(), stage: 'reviewing' };
+  for (const wrong of [{ run: 'R-999' }, { org: f.root }, { common: f.root }, { release: null }, { release: { ...saved.release, commit: 'a'.repeat(40) } }]) {
+    put(file, { ...saved, ...wrong });
+    const result = bookkeeping(f, ['claim', run, '--controller', 'brain', '--adopt-brain-receipt', file]);
+    assert.equal(result.status, 1, result.stdout);
+    assert.equal(readOwnedRun(f.org, run).owner, undefined);
+  }
+});
+
+test('a blocking idle watcher keeps one wait and an unchanged receipt between signals', async t => {
+  const f = fixture(t), run = f.start(), herdr = path.join(f.root, 'bin/herdr');
+  const report = f.show(run).report_path;
+  fs.writeFileSync(herdr, fs.readFileSync(herdr, 'utf8').replace('await new Promise(r=>setTimeout(r,100));out({});', `while(!fs.existsSync(${JSON.stringify(report)}))await new Promise(r=>setTimeout(r,50));out({});`));
+  const w = f.concurrent(run, path.join(source, 'watch/watch.mjs'), ['--org', f.org, '--cwd', f.repo, '--start-grace', '0']);
+  await waitUntil(() => f.calls().some(a => a[0] === 'agent' && a[1] === 'wait'));
+  const file = path.join(f.org, 'watch', `${run}.json`), stat = fs.statSync(file).mtimeMs, count = f.calls().length;
+  await new Promise(resolve => setTimeout(resolve, 2300));
+  assert.equal(f.calls().length, count, 'no 1 Hz transport/probe loop');
+  assert.equal(fs.statSync(file).mtimeMs, stat, 'no idle receipt rewrites');
+  f.report(run); ok(await w.done);
+});
+
+test('self-tab close may kill its watcher without leaving an outstanding cleanup intent', async t => {
+  const f = fixture(t), run = f.start(); f.record(['abandon', run]);
+  const herdr = path.join(f.root, 'kill-close'), marker = path.join(f.root, 'closed');
+  fs.writeFileSync(herdr, `#!/bin/sh\nif [ "$1 $2" = 'tab close' ]; then\n  touch '${marker}'\n  kill -KILL "$PPID"\nfi\n`, { mode: 0o755 });
+  const preload = path.join(f.root, 'keep-alive.mjs'); fs.writeFileSync(preload, 'setInterval(()=>{},1000);');
+  const child = spawnChild(t, process.execPath, ['--import', preload, path.join(source, 'watch/watch.mjs'), run,
+    '--org', f.org, '--cwd', f.repo, '--herdr', herdr, '--close-tab-on-exit'], { cwd: f.repo, env: { ...f.env, HERDR_TAB_ID: 'own-tab' } });
+  const result = await waitForExit(child);
+  assert.equal(result.signal, 'SIGKILL', result.stderr);
+  assert.ok(fs.existsSync(marker));
+  const receipt = JSON.parse(fs.readFileSync(path.join(f.org, 'watch', `${run}.json`)));
+  assert.equal(receipt.intent, undefined); assert.equal(receipt.cleanup.state, 'handed-off');
+  assert.deepEqual(outstandingEffects(f.org, readOwnedRun(f.org, run)), []);
+  ok(node(f, 'bin/org.mjs', transferArgs(run, binding(f, run))));
+});
+
+test('legacy watch transport and supervisor restarts never create a Brain review or duplicate legacy enqueue', t => {
+  const f = fixture(t), run = f.start({ owned: false }); f.commit('correct\n'); f.report(run);
+  f.record(['claim', run, '--controller', 'legacy', '--legacy']);
+  const delivery = path.join(f.root, 'legacy-watch-delivery.mjs');
+  fs.writeFileSync(delivery, `import {promptSupervisor} from ${JSON.stringify(pathToFileURL(path.join(source, 'supervisor/prompt-supervisor.mjs')).href)};
+console.log(JSON.stringify(await promptSupervisor('supervisor-herdr',${JSON.stringify(`[org-report] run=${run} item=${f.show(run).item} outcome=done headline=Legacy final`)},${JSON.stringify({ org: f.org, cwd: f.repo, herdr: path.join(f.root, 'bin/herdr'), id: `watch:${run}:final`, attempts: 1, retrySeconds: 0 })})));`);
+  for (let restart = 0; restart < 2; restart++) {
+    ok(f.exec(process.execPath, [delivery]));
+    assert.match(handle(f, run, restart ? ['--retry'] : []).stderr, /RUN_OWNED_ELSEWHERE/);
+  }
+  const queue = queueFor(f.repo), options = { org: f.org, run, expectedHead: f.git(['rev-parse', 'HEAD'], f.workspace) };
+  assert.equal(enqueue(queue, ['topic'], options)[0].duplicate, false);
+  assert.equal(enqueue(queueFor(f.repo), ['topic'], options)[0].duplicate, true);
+  assert.equal(reviews(f), 0); assert.equal(queue.load().pending.length, 1);
+  assert.equal(readInbox(path.join(f.org, 'supervisor/inbox.log')).length, 1);
+  fs.rmSync(queue.file); // Legacy enqueue only; no drain process.
+});
+
+test('moving source HEAD retains settle, handle, re-arm, correction and promotion callback admission', t => {
+  const f = fixture(t), runtime = path.join(f.root, 'source-runtime'); copyProduct(source, runtime);
+  f.env.SETTLE_TEST_RECORD = path.join(runtime, 'bin/org.mjs');
+  f.git(['init', '-qb', 'main'], runtime); f.git(['config', 'user.name', 'Fixture'], runtime); f.git(['config', 'user.email', 'fixture@example.invalid'], runtime);
+  f.git(['add', '.'], runtime); f.git(['commit', '-qm', 'Initial source runtime'], runtime);
+  const run = f.start({ owned: false }); ok(claim(f, run, ['--release-root', runtime]));
+  const original = binding(f, run), before = f.git(['rev-parse', 'HEAD'], runtime);
+  f.git(['commit', '--allow-empty', '-qm', 'Another promotion advances source HEAD'], runtime);
+  assert.notEqual(f.git(['rev-parse', 'HEAD'], runtime), before);
+  assert.deepEqual(binding(f, run), original);
+  f.commit('correct\n'); f.report(run);
+  ok(node(f, 'watch/watch.mjs', [run, '--org', f.org, '--cwd', f.repo, '--start-grace', '0']));
+  const ready = JSON.parse(ok(reviewResult(f, f.settle(run)))); assert.equal(ready.result, 'promotable');
+  assert.equal(JSON.parse(ok(handle(f, run))).result, 'promotable');
+  const queue = queueFor(f.repo); ok(promote(f, run, enqueueAdapter(f, runtime)));
+  // The queue completion boundary is scripted; admission, callback, record and
+  // actual source/project HEAD moves remain real. No gate or worker is launched.
+  localGit(f, ['merge', '--ff-only', ready.head]);
+  localGit(f, ['commit', '--allow-empty', '-qm', 'This promotion advances source HEAD'], runtime);
+  const job = queue.load().pending[0];
+  queue.transaction(q => { q.pending = []; q.results.push({ ...job, outcome: 'promoted', tip: ready.head }); });
+  const callback = () => spawnSync(process.execPath, [path.join(source, 'supervisor/supervisor.mjs'), 'handle', '--notice', `[promote-queue] id=${job.id} lane=topic`, '--role', 'supervisor'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(JSON.parse(ok(callback())).result, 'recorded_promotion');
+  assert.equal(JSON.parse(ok(callback())).result, 'recorded_promotion');
+  fs.rmSync(queue.file);
+  const item = f.record(['add', 'Correction after source move', '--role', 'engineer']).split(' ')[0];
+  const previous = f.record(['start', item, '--workspace', f.workspace, '--meta', 'lane=topic']).match(/R-\d+/)[0];
+  ok(claim(f, previous, ['--release-root', runtime])); f.report(previous); f.record(['ingest', f.show(previous).report_path]);
+  f.git(['commit', '--allow-empty', '-qm', 'Advance before correction'], runtime);
+  const lane = path.join(f.root, 'stop-launch.mjs'); fs.writeFileSync(lane, `#!${process.execPath}\nif(process.argv[2]==='dispatch'){console.error('source correction admitted');process.exitCode=1;}`, { mode: 0o755 });
+  const correction = spawnSync(process.execPath, [path.join(source, 'dispatch/dispatch.mjs'), item, '--org', f.org, '--lane', 'topic', '--route', 'engineer', '--brief', path.join(f.root, 'ask with spaces.md'), '--from-run', previous, '--lane-cli', lane], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(correction.status, 1); assert.match(correction.stderr, /source correction admitted/);
+  const successor = [...fold(events(f)).runs.values()].at(-1);
+  assert.notEqual(successor.id, previous); assert.deepEqual(successor.owner, binding(f, previous).owner);
+  fs.rmSync(path.join(f.org, 'dispatch'), { recursive: true }); // Launch stopped before creating a worker.
+});
+
+test('adopted pre-upgrade settle and queue receipts finish without another review', t => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  const ready = JSON.parse(ok(reviewResult(f, handle(f, run)))), q = queueFor(f.repo);
+  ok(promote(f, run, enqueueAdapter(f)));
+  const settleFile = path.join(f.org, 'settle', `${run}.json`), requestFile = path.join(receiptDirectory(f.org, q.project.identity), `${run}.json`);
+  // Replay the real receipts as the previous release wrote them, before claims
+  // existed. No pending model/transport process is synthesized or discarded.
+  const older = events(f).filter(e => e.type !== 'run.claimed').map((e, i) => ({ ...e, seq: i + 1 }));
+  fs.writeFileSync(path.join(f.org, 'events.jsonl'), older.map(e => JSON.stringify(e) + '\n').join(''));
+  for (const file of [settleFile, requestFile]) {
+    const saved = JSON.parse(fs.readFileSync(file)); delete saved.ownership; delete saved.ownerActive; put(file, saved);
+  }
+  q.transaction(data => { delete data.pending[0].ownership; });
+  const count = reviews(f);
+  assert.match(handle(f, run).stderr, /RUN_OWNER_UNCLAIMED/);
+  ok(bookkeeping(f, ['claim', run, '--controller', 'brain', '--adopt-brain-receipt', requestFile]));
+  const job = q.load().pending[0], owned = readOwnedRun(f.org, run);
+  assert.equal(adoptedPromotionBinding(f.org, owned, job), true);
+  assert.equal(adoptedPromotionBinding(f.org, owned, { ...job, release: { ...job.release, root: f.root } }), false);
+  // Continue the completed settle checkpoint, retaining its original review.
+  assert.equal(JSON.parse(ok(handle(f, run, ['--retry']))).result, 'promotable');
+  assert.equal(reviews(f), count);
+  localGit(f, ['merge', '--ff-only', ready.head]);
+  q.transaction(data => { data.pending = []; data.results.push({ ...job, outcome: 'promoted', tip: ready.head }); });
+  const result = spawnSync(process.execPath, [path.join(source, 'supervisor/supervisor.mjs'), 'handle', '--notice', `[promote-queue] id=${job.id} lane=topic`, '--role', 'supervisor'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(JSON.parse(ok(result)).result, 'recorded_promotion');
+  assert.equal(reviews(f), count); assert.equal(q.load().results.length, 1);
+  fs.rmSync(q.file); // Scripted completed queue boundary; no native worker.
+});
+
+test('adopting an old installed dispatch receipt retries its saved release instead of current', t => {
+  const f = fixture(t), run = f.start({ owned: false }), root = path.join(f.root, 'old-runtime');
+  fs.mkdirSync(path.join(root, 'dispatch'), { recursive: true }); fs.writeFileSync(path.join(root, '.release-commit'), 'a'.repeat(40));
+  fs.writeFileSync(path.join(root, 'dispatch/dispatch.mjs'), "console.log('continued-original-dispatch');");
+  const file = path.join(f.org, 'dispatch', `${run}.json`);
+  put(file, { run, org: f.org, repo: f.repo, stage: 'launching', release: bundleRelease(root) });
+  ok(bookkeeping(f, ['claim', run, '--controller', 'brain', '--adopt-brain-receipt', file]));
+  const result = spawnSync(process.execPath, [path.join(source, 'dispatch/dispatch.mjs'), '--retry', file, '--org', f.org], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.match(ok(result), /continued-original-dispatch/);
+  assert.equal(events(f).filter(e => e.type === 'run.claimed').length, 1);
+  fs.rmSync(path.join(f.org, 'dispatch'), { recursive: true }); // Old runtime stub performs no launch.
 });

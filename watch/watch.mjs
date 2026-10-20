@@ -233,7 +233,7 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
       if (settled || signal === 'SIGTERM') return;
       finish(code === 0 ? 'agent' : 'wait-failed');
     });
-    timer = setTimeout(() => finish(timeoutMs !== undefined && timeoutMs <= 1000 ? 'long' : 'ownership'), Math.max(0, Math.min(timeoutMs ?? 1000, 1000)));
+    if (timeoutMs !== undefined) timer = setTimeout(() => finish('long'), Math.max(0, timeoutMs));
     // Close the gap between the caller's inspection and fs.watch becoming live.
     if (fileStamp(reportPath) !== beforeStamp) finish('report');
   });
@@ -375,14 +375,16 @@ async function closeOwnTab() {
     log(JSON.stringify({ action: 'held', tab_id: process.env.HERDR_TAB_ID, why: RETIREMENT_HOLD_REASON, error: error.message }));
     return;
   }
-  reserveWatch('cleanup');
-  await new Promise((resolve, reject) => {
+  // The close may kill this process. Commit the completed hand-off before
+  // spawning it, under the same owner fence; no post-close callback is needed.
+  fenceOwner(opt.org, runId, ownership, () => {
+    const prior = fs.existsSync(watchReceipt) ? JSON.parse(fs.readFileSync(watchReceipt, 'utf8')) : {};
+    if (prior.intent === 'cleanup') delete prior.intent;
+    writeFileAtomic(watchReceipt, JSON.stringify({ ...prior, ownership, cleanup: { tab: process.env.HERDR_TAB_ID, state: 'handed-off' } }) + '\n');
     const child = spawn(opt.herdr, ['tab', 'close', process.env.HERDR_TAB_ID], { detached: true, stdio: 'ignore' });
-    const timer = setTimeout(() => { child.kill('SIGTERM'); reject(new Error('watch tab cleanup outcome is uncertain')); }, loadTimeout(10000));
-    child.once('error', error => { clearTimeout(timer); reject(error); });
-    child.once('exit', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(`watch tab cleanup exited ${code}`)); });
+    child.once('error', error => log(`watch tab close failed: ${error.message}`));
+    child.unref();
   });
-  finishWatch();
 }
 
 async function watch() {
@@ -457,14 +459,14 @@ async function watch() {
     if (workerFinished) report = reportState(reportPath);
     const saveProcessEnd = () => {
       try {
-        reserveWatch('process-end');
+        let reserved = false;
         observeProcessEnd({ current, state, now: () => observedAt,
-          eligible: true, lastWorkingAt,
+          eligible: true, lastWorkingAt, beforeWrite: () => { reserveWatch('process-end'); reserved = true; },
           record: args => {
             const result = org(args);
             if (result.error || result.status !== 0) throw Error('process-end metadata write failed');
           } });
-        finishWatch();
+        if (reserved) finishWatch();
       } catch { log('run process-end metadata could not be saved; continuing to watch'); }
     };
     if (report.kind === 'valid' && workerFinished) {

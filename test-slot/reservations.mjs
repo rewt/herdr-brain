@@ -21,7 +21,7 @@ export function reservationState(record, { now = Date.now(), ...liveness } = {})
   if (record?.schema !== RESERVATION_SCHEMA || record.class !== 'proving' || !positive(record.pid) ||
       !start(record.processStart) || !start(record.groupStart) || !birth(record.processBirth) || !birth(record.groupBirth) ||
       !(record.pgid === null || positive(record.pgid)) || !time(record.acquiredAt) || !time(record.expectedEnd) || !time(record.expiresAt) ||
-      Date.parse(record.expiresAt) <= Date.parse(record.acquiredAt) ||
+      Date.parse(record.expiresAt) < Date.parse(record.acquiredAt) ||
       !['project', 'label', 'cwd', 'host'].every(key => text(record[key], 4096)) || !text(record.reason, 1024) ||
       (record.reserveGib !== undefined && !(Number.isFinite(record.reserveGib) && record.reserveGib >= 0)))
     return { state: 'unknown', why: 'malformed proving reservation or missing expiry' };
@@ -87,6 +87,7 @@ export function publishProvingReservation({ lockPath = process.env[COMPAT_PATH_E
   const onExit = () => { try { release(); } catch { /* Changed bytes are never deletion authority. */ } };
   process.on('exit', onExit);
   return { path: file, record,
+    assertOwned: owned,
     setGroup: (pgid, groupStart, groupBirth = null) => update({ pgid, groupStart, groupBirth }),
     renew: ({ expiresAt, expectedEnd = record.expectedEnd }) => update({ expectedEnd,
       expiresAt: new Date(Math.min(Date.parse(expiresAt), acquired + MAX_RESERVATION_MS)).toISOString() }),

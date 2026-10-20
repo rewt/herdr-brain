@@ -197,22 +197,21 @@ test('a killed shared owner stays reserved while its command group lives, then b
   await until(() => readTestSlotOccupancy(f.compat)[0].state === 'gone');
   readTestSlotOccupancy(f.compat, { prune: true }); assert.equal(fs.existsSync(record.path), false);
 });
-test('concurrent shared runs each publish one record; a nested declared-exclusive run takes nothing and never samples twice', async t => {
+test('concurrent shared runs each publish one record; a nested declared-exclusive run is refused before admission', async t => {
   const f = fixture(t), finish = path.join(f.root, 'finish'), inner = path.join(f.root, 'inner.json');
   const command = [process.execPath, '-e', 'console.log("nested")'];
   const parent = path.join(f.root, 'parent.cjs');
   fs.writeFileSync(parent, `const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict');
 const directory=${JSON.stringify(f.compat + '.occupancy')};const before=fs.readdirSync(directory).filter(n=>!n.startsWith('.')).sort();
 const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','inner','--result-path',${JSON.stringify(inner)},'--resource',${JSON.stringify(JSON.stringify(resourceStanza('fixture/proving', command, 'EXCLUSIVE')))},'--',...${JSON.stringify(command)}],{encoding:'utf8'});
-assert.equal(r.status,0,r.stderr);assert.deepEqual(fs.readdirSync(directory).filter(n=>!n.startsWith('.')).sort(),before);
+assert.equal(r.status,75,r.stderr);assert.match(r.stderr,/TEST_SLOT_PROFILE_REJECTED:.*inherited SHARED context/);assert.equal(r.stdout,'');assert.deepEqual(fs.readdirSync(directory).filter(n=>!n.startsWith('.')).sort(),before);
 fs.writeFileSync(${JSON.stringify(path.join(f.root, 'ready'))},'ready');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(finish)}))clearInterval(timer);},20);`);
   const a = f.start([cli, 'run', 'first', '--', process.execPath, '-e', `const timer=setInterval(()=>{if(require('fs').existsSync(${JSON.stringify(finish)}))clearInterval(timer);},20);`]);
   await until(() => readTestSlotOccupancy(f.compat).length === 1);
   const b = f.start([cli, 'run', 'second', '--', process.execPath, parent]);
   await until(() => fs.existsSync(path.join(f.root, 'ready')));
   assert.equal(readTestSlotOccupancy(f.compat).length, 2);
-  const saved = JSON.parse(fs.readFileSync(inner)); assert.equal(saved.class, 'shared');
-  assert.match(saved.measurement.status, /^nested; sampling owned/); assert.deepEqual(saved.measurement_attempts, []);
+  assert.equal(fs.existsSync(inner), false, 'a refused proving child writes no execution grant');
   assert.equal(fs.existsSync(f.lock), false); assert.equal(fs.existsSync(f.compat), false); assert.equal(fs.existsSync(`${f.lock}.queue`), false);
   fs.writeFileSync(finish, 'finish');
   for (const result of await Promise.all([a.done, b.done])) assert.equal(result.code, 0, result.stderr);
@@ -240,7 +239,7 @@ test('occupancy reserves EPERM and failed start reads, and is stale only after o
   assert.equal(fs.existsSync(file), true, 'unknown schemas are skipped and never removed');
 });
 
-test('inherited shared occupancy avoids exclusive admission and duplicate sampling when ancestry reads are denied', t => {
+test('inherited shared occupancy refuses exclusive admission even when ancestry reads are denied', t => {
   const f = fixture(t), parent = path.join(f.root, 'parent.cjs'), deny = path.join(f.root, 'deny-snapshot.mjs');
   fs.writeFileSync(deny, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
 const execute=cp.spawnSync,list=fs.readdirSync;
@@ -249,7 +248,7 @@ fs.readdirSync=(file,...rest)=>String(file)==='/proc'?(()=>{throw Object.assign(
   const command = [process.execPath, '-e', `const fs=require('fs');if(fs.readdirSync(${JSON.stringify(f.compat + '.occupancy')}).filter(n=>!n.startsWith('.')).length!==1)throw Error('double occupancy');if(fs.existsSync(${JSON.stringify(f.lock)})||fs.existsSync(${JSON.stringify(f.compat)}))throw Error('nested exclusive acquisition');`];
   fs.writeFileSync(parent, `const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict');
 const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','denied nested','--result-path',${JSON.stringify(path.join(f.root, 'inner.json'))},'--resource',${JSON.stringify(JSON.stringify(resourceStanza('fixture/proving', command, 'EXCLUSIVE')))},'--',...${JSON.stringify(command)}],{env:{...process.env,NODE_OPTIONS:(process.env.NODE_OPTIONS||'')+' --import='+${JSON.stringify(JSON.stringify(deny))}},encoding:'utf8'});
-assert.equal(r.status,0,r.stderr);const saved=JSON.parse(fs.readFileSync(${JSON.stringify(path.join(f.root, 'inner.json'))}));assert.equal(saved.class,'shared');assert.match(saved.measurement.status,/^nested;/);assert.deepEqual(saved.measurement_attempts,[]);`);
+assert.equal(r.status,75,r.stderr);assert.match(r.stderr,/TEST_SLOT_PROFILE_REJECTED:.*inherited SHARED context/);assert(!fs.existsSync(${JSON.stringify(path.join(f.root, 'inner.json'))}));`);
   const result = f.run([process.execPath, parent]);
   assert.equal(result.status, 0, result.stderr); assert.deepEqual(readTestSlotOccupancy(f.compat), []);
 });

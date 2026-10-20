@@ -1,6 +1,6 @@
 # Host proving reservations v1
 
-This is the shared host contract for ENG-424 and ENG-389, amended under
+This is the shared host contract for ENG-424, ENG-389 and ENG-354, amended under
 [Astra's binding 2026-10-20 ruling, section 4](/Users/rewt/development/rewt/.org/evidence/ASTRA-RULING-BC-CONTRACTS-20261020.md)
 (SHA-256 `70d464f77cbee41c2832b76c9fa70738138a662b1c61982f2b4676f191c094b2`).
 The ruling accepts the separate schema and existing exclusive bridge subject to
@@ -79,7 +79,7 @@ occupancy: BCH's reader enforces its closed key set.
 | `pgid`, `groupStart`, `groupBirth` | Nullable foreground group ID and identity. Published before the payload starts. |
 | `acquiredAt` | ISO acquisition time. |
 | `expectedEnd` | Required ISO estimated finish. An already passed estimate marks a live step overdue, never extends its authority. |
-| `expiresAt` | Required ISO expiry after acquisition, capped at acquisition plus six hours. Both writers and readers apply the cap. |
+| `expiresAt` | Required ISO expiry at or after acquisition, capped at acquisition plus six hours. Equal timestamps mean an already-expired immediate attempt, with no waiting authority. Both writers and readers apply the cap. |
 | `project` | Informational canonical Git common directory via `occupancyProject`; cwd basename fallback if discovery is unavailable. |
 | `label`, `cwd`, `host` | Bounded display/ownership context; never command text or a token. |
 | `reason` | Required nonempty bounded text, up to 1024 characters, normally item/run. |
@@ -185,7 +185,74 @@ Before a permitted timeout retry, the runner renews expiry from the retry's
 current time with the same wall limit and grace; the original six-hour cap remains.
 Those metadata options never change shared admission.
 
-## Mixed versions and the later admission protocol
+## Proving-step admission
+
+An exact resource stanza may declare `memory_floor_bytes`, a safe integer >= 0,
+only with explicit `admission_class: "EXCLUSIVE"`. The calling project owns its
+floor and margin data; Brain supplies no BCH number. `M_bytes` remains the unknown
+execution envelope and `reserveGib` remains display-only. A SHARED stanza with a
+floor gets `TEST_SLOT_PROFILE_REJECTED`, remains shared and never samples/waits
+for that floor. An invalid floor-bearing EXCLUSIVE declaration, including an
+invalid command binding, refuses with that code and exit 75 before taking locks.
+`--no-slot` cannot bypass a declared proving floor.
+
+The foreground order is one admission deadline (`run` entry + `--wait` seconds),
+ticketed compat then workspace acquisition, owned proving reservation, cancellable
+memory wait, fresh ownership and floor confirmation, group publication/start
+barrier, then payload. Both locks and the floor consume that one deadline; a
+second lock, sample or renewal never restarts it. Execution starts its own
+declared watchdog after admission. An EXCLUSIVE descendant already covered by
+an exclusive token or ancestry takes no second lock, reservation or floor.
+
+The floor wait polls `readMemory().available` asynchronously at intervals of at
+most one second, capped by the remaining budget. A fresh nonnegative safe-integer
+sample must meet the floor, with both lock tokens and exact owned reservation
+bytes revalidated before grant. Low measured memory waits until the deadline,
+then returns `TEST_SLOT_MEMORY/75` without a payload. An unreadable/invalid sample
+immediately returns `TEST_SLOT_HOLDER_UNKNOWN/75`; unknown is never measured zero.
+`--wait 0` permits exactly one immediate sample, with no sleep. The waiting
+reservation expires at the admission deadline; if acquisition has exhausted the
+budget, including an immediate attempt, a zero-duration row is already expired.
+It cannot pause launches. Only a successful floor grant renews the reservation
+for the execution wall allowance plus 30 seconds, before group publication and
+barrier release. The original six-hour maximum still applies, including retries.
+No admission retry resets the deadline; an authorized execution retry stays
+inside the existing exclusive hold.
+
+INT, TERM and HUP cancel the asynchronous wait promptly with their signal status
+(128 + signal). Before payload start, owned cleanup releases the reservation,
+both locks and any tickets, and writes no grant receipt. After start, cancellation
+and owner death preserve every live owned group under the same release rules.
+The reservation remains live during a nonzero floor wait, so named new-launch
+gates pause while compatible exclusive tickets retain their FIFO order. This
+reduces new launch pressure; admitted shared work continues, and legacy pollers
+can still jump ticketed participants. Neither memory availability nor host-wide
+starvation freedom is guaranteed.
+
+Nested proving admission under SHARED is deferred (D1). The entry refuses this
+context with `TEST_SLOT_PROFILE_REJECTED/75`, before a second record, lock or
+payload, including when the inherited occupancy path avoids an ancestry read.
+Never clear tokens to make a nested process appear top-level. BCH must verify
+the actual launch graph/runtime binding puts its proving command in its own
+top-level gate, outside `LANE_VALIDATE` and ordinary full/no-proof suites.
+
+For floor-bearing calls, `TEST_SLOT_MEMORY_ADMISSION` logs profile/binding, floor,
+deadline and wait budget; `TEST_SLOT_MEMORY_WAIT` logs each changed measurement;
+`TEST_SLOT_MEMORY_GRANTED` or the named refusal records the result. The bound
+request/profile and execution receipt identify candidate, exact command and Node
+runtime. A grant receipt is written only after successful admission. Existing
+output for runs without a floor is unchanged, apart from the newly refused
+EXCLUSIVE-under-SHARED case. Richer floor receipt fields (D4), the capability
+fingerprint exclusion (D2), and shared-parent sampling cleanup (D3) are deferred.
+
+BCH mapping: its `withProvingStep` becomes a declared EXCLUSIVE `test-slot run`;
+MEMORY maps to `TEST_SLOT_MEMORY`; HELD and HOLDER_UNKNOWN use Brain's existing
+`TEST_SLOT_HELD` and `TEST_SLOT_HOLDER_UNKNOWN` semantics. PROVER_RESERVED stays
+inside BCH's gnark/SP1/`.prover.lock` guards. Brain emits no `BCH_*`, NESTING or
+BRIDGE_FENCE codes, and acquires no inner prover claim. Shared occupancy count is
+never an admission predicate.
+
+## Mixed versions
 
 | Reader/writer | Shared occupancy | Proving reservation |
 | --- | --- | --- |
@@ -194,8 +261,12 @@ Those metadata options never change shared admission.
 | BCH ENG-1526 C local admission | Writes beside legacy; closed v1 keys; shared work never queues. | Its existing reader skips and preserves. Future `withProvingStep` adoption must use this owner/expiry/barrier contract. |
 | Legacy BCH test-slot | Continues honoring the legacy lock and ticket protocol where supported. | Ignores the occupancy directory. A bare holder does not identify proving. |
 
-ENG-354 remains a follow-up: no FIFO admission ledger, drain, v2 lock record,
-named claims or new namespace is introduced. That protocol can absorb these
-step-scoped records and display metadata without changing the legacy lock or
-adding keys to shared occupancy/v1. Schema adoption and reader upgrades require
-the cross-project review above; construction here does not activate BCH callers.
+The legacy holder still has no `schema` or `version` field. Live older/BCH v1
+holders with nullable birth identity are waited for, never taken over by age.
+Installed older exclusive runners and the floor runner exclude one another
+through the same bridge. Older reservation readers that require strictly positive
+duration classify immediate-attempt rows as unknown/nonblocking and preserve
+their bytes; they read execution renewals normally. Older runners do not enforce
+the new stanza floor: adopting callers must bind to a release implementing it.
+No FIFO admission ledger, drain, v2 lock record, named claims or new namespace is
+introduced. Construction here does not activate BCH callers.

@@ -42,6 +42,7 @@ import { probe, processStartRecord, processState, removeStaleLock } from "./lock
 import { readTestSlotQueue, testSlotTicket } from './ticket-queue.mjs';
 import { occupancyState, readTestSlotOccupancy, sharedOccupancy } from './occupancy.mjs';
 import { publishProvingReservation } from './reservations.mjs';
+import { waitForMemoryFloor, MEMORY_CODE } from './memory-floor.mjs';
 import { TEST_SLOT_PATH, PATH_ENV, COMPAT_PATH_ENV, LOCK_PATH_INVALID_CODE, slotPathOf, validateSlotPath } from './paths.mjs';
 export { TEST_SLOT_PATH, PATH_ENV, COMPAT_PATH_ENV, LOCK_PATH_INVALID_CODE, slotPathOf } from './paths.mjs';
 import { lookupProcess } from "../lib/processes.mjs";
@@ -57,6 +58,7 @@ export const WAIT_ENV = "MONITOR_TEST_SLOT_WAIT_SECONDS";
 export const RETRIED_ENV = "MONITOR_TEST_SLOT_TIMEOUT_RETRIED";
 export const HELD_CODE = "TEST_SLOT_HELD";
 export const HOLDER_UNKNOWN_CODE = "TEST_SLOT_HOLDER_UNKNOWN";
+export const PROFILE_REJECTED_CODE = 'TEST_SLOT_PROFILE_REJECTED';
 export const REFUSED_EXIT = 75;
 export const LEFTOVER_EXIT = 123;
 
@@ -241,9 +243,8 @@ export async function acquireTestSlot(label, { env = process.env, lockPath = slo
 /** Workspace slot plus the legacy bridge, acquired in a fixed order. Taking
  * both locks closes the race with bch-cloak while workspace paths migrate. */
 export async function acquireHostTestSlot(label, { env = process.env, lockPath = slotPathOf(env), compatPath = env[COMPAT_PATH_ENV] ?? TEST_SLOT_PATH,
-  waitSeconds = waitSecondsOf(env), pollMs = 100, onWait = () => {}, signal, provers } = {}) {
+  waitSeconds = waitSecondsOf(env), deadline = Date.now() + waitSeconds * 1000, pollMs = 100, onWait = () => {}, signal, provers } = {}) {
   const started = Date.now();
-  const deadline = started + waitSeconds * 1000;
   const slots = [];
   const paths = [...new Set([compatPath, lockPath])];
   validateSlotPath(lockPath, { provers });
@@ -255,6 +256,7 @@ export async function acquireHostTestSlot(label, { env = process.env, lockPath =
         ...(slots.length ? { token: slots[0].token } : {}) }));
     }
     return { nested: slots[0].nested, token: slots[0].token, holder: slots[0].holder,
+      assertOwned: () => { for (const slot of slots) slot.assertOwned?.(); },
       setGroup: (...args) => { for (const slot of slots) slot.setGroup(...args); },
       release: () => { let gone = true; for (const slot of [...slots].reverse()) gone = slot.release() !== false && gone; return gone; } };
   } catch (error) {
@@ -344,6 +346,9 @@ function held(lockPath, mine) {
     nested: false,
     token: mine.token,
     holder: mine,
+    assertOwned() {
+      if (!ours()) throw slotError(HOLDER_UNKNOWN_CODE, `the test slot at ${lockPath} is no longer this run's`);
+    },
     /** Records the command's process group, atomically, so the slot stays live while it runs. */
     setGroup(pgid, groupStart, groupBirth = null, gate = {}) {
       if (!ours()) throw new Error(`the test slot at ${lockPath} is no longer this run's`);
@@ -418,28 +423,40 @@ export async function run({ positional, options, child }) {
   const historyPath = historyFile(common, tier, child, historyKey);
   const { declaration, ...resource } = resolveResource(child, { resource: options.resource });
   if (resource.rejection) process.stderr.write(`${resource.reason}; admission ${resource.admission_class}\n`);
+  // A rejected floor-bearing proving declaration must never fall back to an
+  // exclusive run without its floor. Other profile rejection behavior is unchanged.
+  if (resource.rejection && resource.admission_class === 'EXCLUSIVE' && Object.hasOwn(declaration, 'memory_floor_bytes')) return REFUSED_EXIT;
+  const floor = resource.profile?.memory_floor_bytes;
   let slot;
   const waiting = new AbortController();
   const cancelWait = signal => { waiting.abort(signal); removeWaitingTickets(); };
   for (const signal of SIGNALS) process.on(signal, cancelWait);
   const wait = { schema: 'test-slot-wait/v1', state: 'waiting', started_at: new Date().toISOString(),
     wait_seconds: options.waitSeconds ?? waitSecondsOf(), waits: [] };
+  const deadline = Date.now() + wait.wait_seconds * 1000;
   try {
     const exclusive = resource.admission_class === 'EXCLUSIVE';
+    if (floor !== undefined && options.noSlot) throw slotError(PROFILE_REJECTED_CODE, 'a proving memory floor requires slot admission');
+    if (floor !== undefined) process.stderr.write(`TEST_SLOT_MEMORY_ADMISSION: ${label}; profile ${resource.profile.id}; binding ${resource.profile.binding_sha256}; floor ${floor} bytes; admission deadline ${new Date(deadline).toISOString()}; wait ${wait.wait_seconds}s\n`);
     slot = options.noSlot ? { nested: false, token: null, setGroup: () => {}, release: () => {} }
       : inheritedSlot([...new Set([options.lockPath, options.compatPath])], { exclusive })
-      ?? (exclusive ? await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs, signal: waiting.signal,
+      ?? (exclusive ? await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs, signal: waiting.signal, deadline,
       onWait: entry => {
         wait.waits.push({ ...entry, at: new Date().toISOString() });
         if (options.waitReceipt) process.stderr.write(`TEST_SLOT_WAIT: ${entry.holder}; ${entry.lock_path}; capped at ${wait.wait_seconds}s\n`);
       }, ...(options.waitSeconds === undefined ? {} : { waitSeconds: options.waitSeconds }) })
         : sharedOccupancy(options.compatPath, label, resource));
     slot.class ??= options.noSlot ? 'unslotted' : 'exclusive';
+    if (exclusive && slot.class === 'shared')
+      throw slotError(PROFILE_REJECTED_CODE, 'EXCLUSIVE proving admission does not support an inherited SHARED context; run the proving step as its own top-level gate');
     if (exclusive && !slot.nested && !options.noSlot) {
       const acquired = Date.now();
+      // A zero-budget attempt publishes an already-expired, zero-duration row.
+      // It grants no waiting authority and needs no artificial wait/grace.
       const reservation = publishProvingReservation({ lockPath: options.compatPath, label, reason: options.reason ?? label,
         expectedEnd: new Date(acquired + (options.expectedSeconds ?? limits.wall_seconds) * 1000).toISOString(),
-        expiresAt: new Date(acquired + (limits.wall_seconds + 30) * 1000).toISOString(), reserveGib: options.reserveGib, provers: options.provers });
+        expiresAt: new Date(floor === undefined ? acquired + (limits.wall_seconds + 30) * 1000 : Math.max(acquired, deadline)).toISOString(),
+        ...(floor === undefined ? {} : { now: () => acquired }), reserveGib: options.reserveGib, provers: options.provers });
       const setGroup = slot.setGroup, release = slot.release;
       slot.reservation = reservation;
       slot.setGroup = (...args) => { setGroup(...args); reservation.setGroup(...args); };
@@ -452,6 +469,21 @@ export async function run({ positional, options, child }) {
         }
         return release();
       };
+      if (floor !== undefined) {
+        const confirm = () => {
+          slot.assertOwned();
+          try { reservation.assertOwned(); }
+          catch (error) { throw slotError(HOLDER_UNKNOWN_CODE, error.message); }
+        };
+        const admission = { floor, deadline, immediate: wait.wait_seconds === 0, signal: waiting.signal, confirm };
+        await waitForMemoryFloor(admission);
+        waiting.signal.throwIfAborted();
+        confirm();
+        const granted = Date.now();
+        reservation.renew({ expectedEnd: new Date(granted + (options.expectedSeconds ?? limits.wall_seconds) * 1000).toISOString(),
+          expiresAt: new Date(granted + (limits.wall_seconds + 30) * 1000).toISOString() });
+        process.stderr.write(`TEST_SLOT_MEMORY_GRANTED: ${label}; floor ${floor} bytes; admission deadline ${new Date(deadline).toISOString()}\n`);
+      }
     }
     const acquiredAt = new Date().toISOString();
     Object.assign(wait, { state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt, nested: slot.nested,
@@ -461,7 +493,7 @@ export async function run({ positional, options, child }) {
   } catch (error) {
     slot?.release();
     if (waiting.signal.aborted) return exitOf(null, waiting.signal.reason);
-    if ([HELD_CODE, HOLDER_UNKNOWN_CODE, LOCK_PATH_INVALID_CODE].includes(error?.code)) {
+    if ([HELD_CODE, HOLDER_UNKNOWN_CODE, LOCK_PATH_INVALID_CODE, MEMORY_CODE, PROFILE_REJECTED_CODE].includes(error?.code)) {
       process.stderr.write(`${error.message}\n`);
       return REFUSED_EXIT;
     }
@@ -725,6 +757,6 @@ if (isMain(import.meta.url)) {
       callerWatch.unref();
     }
     process.exitCode = await main(parsed);
-  } catch (error) { process.stderr.write(`test-slot: ${error.message}\n`); process.exitCode = error.code === LOCK_PATH_INVALID_CODE ? REFUSED_EXIT : 2; }
+  } catch (error) { process.stderr.write(`test-slot: ${error.message}\n`); process.exitCode = [LOCK_PATH_INVALID_CODE, MEMORY_CODE, HOLDER_UNKNOWN_CODE, PROFILE_REJECTED_CODE].includes(error.code) ? REFUSED_EXIT : 2; }
   finally { clearInterval(callerWatch); }
 }

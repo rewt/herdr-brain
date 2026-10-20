@@ -91,6 +91,26 @@ test('malformed explicit stanza preserves EXCLUSIVE and an absent stanza stays q
   assert.deepEqual(resolveResource(argv, { cwd: f.root }), { admission_class: 'SHARED', reason: 'unprofiled' });
 });
 
+for (const floor of [-1, null, 0.5, Number.MAX_SAFE_INTEGER + 1, '0'])
+  test(`invalid proving floor ${JSON.stringify(floor)} refuses before either lock`, t => {
+    const f = fixture(t, 'EXCLUSIVE'); f.pkg.resources.prove.memory_floor_bytes = floor; f.save();
+    fs.unlinkSync(f.lock);
+    const result = f.run(); assert.equal(result.status, 75, result.stderr);
+    assert.match(result.stderr, /TEST_SLOT_PROFILE_REJECTED:.*memory_floor_bytes/);
+    assert.equal(fs.existsSync(f.marker), false); assert.equal(fs.existsSync(f.lock), false);
+    assert.equal(fs.existsSync(`${f.lock}.occupancy`), false); assert.equal(fs.existsSync(`${f.lock}.queue`), false);
+  });
+
+test('SHARED cannot carry a floor or inherit its wait, and a rejected floor-bearing proving binding cannot bypass its floor', t => {
+  const f = fixture(t, 'SHARED'); f.pkg.resources.prove.memory_floor_bytes = Number.MAX_SAFE_INTEGER; f.save();
+  const shared = f.run(); assert.equal(shared.status, 0, shared.stderr); assert.match(shared.stderr, /TEST_SLOT_PROFILE_REJECTED:.*memory_floor_bytes/);
+  assert.doesNotMatch(shared.stderr, /TEST_SLOT_MEMORY_/); assert.equal(JSON.parse(fs.readFileSync(f.receipt)).class, 'shared');
+  fs.unlinkSync(f.marker); f.pkg.resources.prove.admission_class = 'EXCLUSIVE'; f.pkg.resources.prove.command_sha256 = 'stale'; f.save();
+  const exclusive = f.run(); assert.equal(exclusive.status, 75, exclusive.stderr); assert.match(exclusive.stderr, /TEST_SLOT_PROFILE_REJECTED:.*command_sha256/);
+  assert.doesNotMatch(exclusive.stderr, /TEST_SLOT_HELD/); assert.equal(fs.existsSync(f.marker), false);
+  assert.equal(fs.readFileSync(f.lock, 'utf8'), f.holder);
+});
+
 test('shared occupancy supplies the holder-schema cwd for retirement matching', t => {
   const f = fixture(t, 'SHARED'), slot = sharedOccupancy(f.lock, 'gate', { reason: 'unprofiled' });
   try {

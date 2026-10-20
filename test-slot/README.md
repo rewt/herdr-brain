@@ -24,9 +24,11 @@ compatibility or workspace lock, publish no queue ticket and never poll those
 paths. They read holders once only to recognize nesting. They never wait on
 occupancy. One top-level record is published beside the selected compat lock
 in `<compatPath>.occupancy/`; different concurrent runs have different filenames.
-Nested runs, even a declared-exclusive child of a shared holder, remain inside
-the existing command group, take nothing and publish no second record. Sampling
-belongs only to a profiled top-level holder.
+Nested shared runs remain inside the existing command group, take nothing and
+publish no second record. A declared-exclusive child of a shared holder is refused
+with `TEST_SLOT_PROFILE_REJECTED/75`: nested proving admission is deferred, and
+proving must run as its own top-level gate. Never clear inherited tokens to
+disguise a shared wrapper. Sampling belongs only to a profiled top-level holder.
 `MONITOR_TEST_SLOT_OCCUPANCY_PATH` carries the holder's path to descendants;
 nesting still requires a live `occupancy/v1` record. Like the existing slot paths,
 it is coordination metadata excluded from validation fingerprints. It avoids a
@@ -153,6 +155,23 @@ not grant a fresh wait allowance for the second lock.
 
 FIFO applies among compatible ticketed exclusive participants. Legacy zero-wait
 pollers that ignore tickets can jump the queue; it is not host-wide fairness.
+
+An EXCLUSIVE proving stanza may add `memory_floor_bytes` (safe integer >= 0).
+The project owns its floor/margin; `M_bytes` and `reserveGib` do not change.
+The compat lock, workspace lock and asynchronous memory wait share one bounded
+`--wait` deadline. The reservation is live while waiting, expires at that deadline,
+and renews for execution only on a successful floor grant. Low memory at the
+deadline returns `TEST_SLOT_MEMORY/75`; an unreadable/invalid sample immediately
+returns `TEST_SLOT_HOLDER_UNKNOWN/75`. `--wait 0` samples once without sleeping;
+its initial reservation is already expired. INT/TERM/HUP cancel and clean up owned
+waiting state with the signal exit status. Fresh ownership/floor confirmation
+precedes the grant receipt, group publication and start barrier. An EXCLUSIVE
+child of an exclusive holder stays covered without resampling. SHARED with a
+floor gets a coded profile rejection and stays shared; invalid floor-bearing
+EXCLUSIVE profiles refuse before locking. Ordinary runs never inherit the floor.
+Floor calls log the resolved floor, deadline, profile binding and admission result;
+their existing bound execution receipts identify command/candidate/runtime.
+See [the proving-step contract](../docs/contracts/HOST-RESERVATIONS.md#proving-step-admission).
 
 A refusal exits **75**, with one coded line: `TEST_SLOT_HELD` for a live holder or earlier waiter,
 or `TEST_SLOT_HOLDER_UNKNOWN` when liveness cannot be established. Neither is a

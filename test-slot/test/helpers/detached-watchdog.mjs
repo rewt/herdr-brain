@@ -15,6 +15,7 @@ import { stopGateGroup } from '../../watchdog.mjs';
 import { healthyHistory } from '../../limits.mjs';
 import { readProvingReservations, waitForProvingHold } from '../../reservations.mjs';
 import { registerProcess, killProcess } from '../../../test/helpers/processes.mjs';
+import { resourceStanza } from '../../resources.mjs';
 
 const [root, mode] = process.argv.slice(2);
 const cli = fileURLToPath(new URL('../../test-slot.mjs', import.meta.url));
@@ -31,13 +32,14 @@ async function until(predicate) {
   assert.ok(predicate(), 'fixture became ready');
 }
 
-if (mode === 'reservation-expiry') test('expired reservation and both locks retain a dead wrapper\'s real owned group', { timeout: 10000 }, async t => {
+if (['reservation-expiry', 'floor-expiry'].includes(mode)) test('expired reservation and both locks retain a dead wrapper\'s real owned group', { timeout: 10000 }, async t => {
   const workspace = path.join(root, 'workspace-slot'), ready = path.join(root, 'payload-ready');
   env.MONITOR_TEST_SLOT_PATH = workspace;
   let group;
   t.after(() => { if (group) { const result = killProcess(group); assert.ok(result.ok, result.reason); } });
-  const owner = spawnChild(t, process.execPath, provingRun([cli, 'run', 'expiry owner', '--timeout-seconds', '60', '--', process.execPath, '-e',
-    `require('fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`]), { cwd: root, env });
+  const command = [process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`];
+  const resource = { ...resourceStanza('fixture/expiry', command, 'EXCLUSIVE'), ...(mode === 'floor-expiry' ? { memory_floor_bytes: 0 } : {}) };
+  const owner = spawnChild(t, process.execPath, [cli, 'run', 'expiry owner', '--timeout-seconds', '60', '--resource', JSON.stringify(resource), '--', ...command], { cwd: root, env });
   await until(() => fs.existsSync(ready));
   const row = readProvingReservations(lock)[0], pid = Number(fs.readFileSync(ready));
   assert.equal(row.record.pid, owner.pid); assert.equal(row.record.pgid, pid);
@@ -59,6 +61,22 @@ if (mode === 'reservation-expiry') test('expired reservation and both locks reta
   assert.equal(readProvingReservations(lock, { prune: true })[0].state, 'gone'); assert.equal(fs.existsSync(row.path), false);
   const next = run([], [process.execPath, '-e', 'console.log("next prover")']);
   assert.equal(next.status, 0, next.stderr); assert.match(next.stdout, /next prover/);
+});
+
+if (mode === 'floor-cancellation') test('cancellation retains a granted proving group until its signal cleanup completes', { timeout: 10000 }, async t => {
+  const ready = path.join(root, 'ready'), term = path.join(root, 'term');
+  const command = [process.execPath, '-e', `const fs=require('fs');process.on('SIGTERM',()=>fs.writeFileSync(${JSON.stringify(term)},'term'));
+    fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`];
+  const resource = { ...resourceStanza('fixture/cancel', command, 'EXCLUSIVE'), memory_floor_bytes: 0 };
+  const owner = spawnChild(t, process.execPath, [cli, 'run', 'cancel owner', '--timeout-seconds', '60', '--resource', JSON.stringify(resource), '--', ...command], { cwd: root, env });
+  await until(() => fs.existsSync(ready));
+  const row = readProvingReservations(lock)[0], group = registerProcess(Number(fs.readFileSync(ready)), true);
+  t.after(() => { const stopped = killProcess(group); assert.ok(stopped.ok, stopped.reason); });
+  owner.kill('SIGTERM'); await until(() => fs.existsSync(term));
+  assert.equal(readProvingReservations(lock)[0].state, 'live'); assert.ok(fs.existsSync(row.path)); assert.ok(fs.existsSync(lock));
+  assert.equal(JSON.parse(fs.readFileSync(lock)).pgid, group.pid);
+  const result = await waitForExit(owner); assert.equal(result.code, 137, result.stderr);
+  assert.equal(fs.existsSync(lock), false); assert.equal(fs.existsSync(row.path), false);
 });
 
 if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid after both wrappers die', { timeout: 10000 }, async t => {

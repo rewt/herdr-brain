@@ -61,6 +61,9 @@ export function resolveResource(argv, { cwd = process.cwd(), env = process.env, 
     }
     if (!resource) return { admission_class: 'SHARED', reason: 'unprofiled' };
     if (resource.rejection) return reject(resource.rejection.check, resource.rejection.profile_id);
+    if (Object.hasOwn(resource, 'memory_floor_bytes') &&
+        !(resource.admission_class === 'EXCLUSIVE' && Number.isSafeInteger(resource.memory_floor_bytes) && resource.memory_floor_bytes >= 0))
+      return reject('memory_floor_bytes');
     const checks = [
       [recipeCheck, !recipeCheck],
       ['id', typeof resource.id === 'string' && /^[\w:./-]+$/.test(resource.id)],

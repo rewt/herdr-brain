@@ -74,6 +74,10 @@ worktree, reused pane/session, dirty checkout or unknown fact keeps the target.
 Ready/reviewer requests can release only their bound panes. Workspace and Git
 removal require a separate landed/parked request and the executor's independent
 proofs. Parking alone never overrides an open run, reference or protected path.
+A worker's signal also binds older ended sessions in that same lane. Distinct
+predecessors are evaluated before their retained successors; reused panes bind
+only their latest recorded native occupant. This allows an exact supersession
+release to complete while its successor is still observable.
 
 `closeout.effect` records each successful release/observed agent exit, shell
 close, archive, preservation preflight, worktree removal, branch removal, lane

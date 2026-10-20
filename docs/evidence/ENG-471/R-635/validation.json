@@ -1,0 +1,193 @@
+{
+  "run": "R-635",
+  "item": "ENG-471",
+  "node": "v20.19.4",
+  "base": "0194c2d0d713e855cf405c60444f1ff71d8b5872",
+  "runner": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000",
+  "results": {
+    "development": {
+      "file": "development.tap.gz",
+      "sha256": "04618511d01f3457be1a4ba29d307330c529f29d06398d486bca381a98d01e85",
+      "counts": {
+        "tests": 744,
+        "pass": 688,
+        "fail": 56,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failures": [
+        "every planner reason expression is enumerated and mapped; source drift fails",
+        "status retains tab and pane inventory with missing record file",
+        "recorded promoted workers close through the shared tidy planner",
+        "only canonical cleanup ticks refresh the owner summary after cleanup; previews and scoped ticks never publish",
+        "a summary publication failure never blocks guarded cleanup or interruption recovery",
+        "notice failure never stalls cleanup or resume: enqueue",
+        "notice failure never stalls cleanup or resume: corrupt notice state",
+        "the housekeeping CLI record reader loads confirmed handoffs and reserves the successor",
+        "abandonment alone never substitutes for ingestion",
+        "a removed checkout with an archive stays unknown without an exact observed head",
+        "preserves open workers/tabs",
+        "preserves unpromoted workers/tabs",
+        "preserves dirty workers/tabs",
+        "preserves blocked workers/tabs",
+        "preserves working workers/tabs",
+        "preserves unknown workers/tabs",
+        "preserves unrecorded workers/tabs",
+        "preserves replaced workers/tabs",
+        "preserves waiting workers/tabs",
+        "preserves report-blocked workers/tabs",
+        "preserves report-needs-human workers/tabs",
+        "preserves new-open-run workers/tabs",
+        "preserves declined workers/tabs",
+        "preserves wrong-repo workers/tabs",
+        "preserves mixed-pane workers/tabs",
+        "preserves running-shell workers/tabs",
+        "preserves session-done workers/tabs",
+        "preserves review-file workers/tabs",
+        "latest open fix round defeats an older reported run using the same worker name",
+        "unknown finished sessions and unrecorded watcher shells stay",
+        "never closes or resumes its own tab",
+        "an interrupted open worker resumes once, and durable attempts survive a new runner",
+        "failed prompt is logged and never replayed at the same state sequence",
+        "unrecorded disk report, human words, other harness and absent identity prevent resume",
+        "dry run reports close/resume plans and persists no attempts or live actions",
+        "fresh state or record changes prevent deletion",
+        "a run completed during the pre-input recheck receives no resume input",
+        "a record change after clearing composer suppresses the prompt",
+        "receipt pruning preserves the input recovery record checks",
+        "incomplete or failed reads never authorize any action",
+        "promotion cleanup inspects and closes only the requested lane workspace",
+        "automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity",
+        "automatic review tidy preserves missing or mismatched occupant evidence without worker runs",
+        "replacement reviewers at the final observation keep their tabs without worker runs",
+        "red refusal is delivered; lane kept; next queued lane still promotes",
+        "crash during batch cleanup resumes without repeating the gate or trusting saved freshness",
+        "native 3-member batch reconciles atomically before cleanup and duplicate recovery",
+        "recovery refuses blocker and retains all integrated lanes",
+        "included item notes during the gate refuse at the writer and preserve successful reconciliation",
+        "bisected manual recovery covered accounts for newer excluded work",
+        "legacy queue and late notices recover only inspected exact coverage: new-run",
+        "fixture teardown waits for a concurrent child to finish writing before removing its directory",
+        "unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable",
+        "an item dropped or blocked during NEEDS-WORK review cannot launch a correction",
+        "uncertain fix delivery recovers the dispatch journal and never starts a second correction",
+        "a real detached owner stays alive through test end and stops in the after-hook"
+      ]
+    },
+    "focused-final": {
+      "file": "focused-final.tap.gz",
+      "sha256": "8ae23aa9ce614573f3df4919262c64df445c65518919dae6892f98d41c4eee69",
+      "counts": {
+        "tests": 327,
+        "pass": 327,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failures": []
+    },
+    "queue-final": {
+      "file": "queue-final.tap.gz",
+      "sha256": "144fd6f9f6c9c9ad2805f2ebbe3defdb3f20d567fbb8be5d41b182a68f2e255e",
+      "counts": {
+        "tests": 27,
+        "pass": 27,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "failures": []
+    },
+    "predecessors": {
+      "file": "predecessors.tap.gz",
+      "sha256": "49bf9a051b0692ffdbf581b09fa9850aff4f60742e65176bd1caa7746d95384a",
+      "counts": {
+        "tests": 27,
+        "pass": 3,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 24
+      },
+      "failures": []
+    },
+    "manual-recovery": {
+      "file": "manual-recovery.tap.gz",
+      "sha256": "0896a547fdf71ad9738931da5ba2c072d762df11b5d41608423b2e0390cb5b1a",
+      "counts": {
+        "tests": 28,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 27
+      },
+      "failures": []
+    },
+    "integration": {
+      "file": "integration.tap.gz",
+      "sha256": "20c3ae4b705d132975fc5a967b2e9b3ddba23d20f08a91aa672638b35c9ebdd4",
+      "counts": {
+        "tests": 55,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 53
+      },
+      "failures": []
+    },
+    "native-recheck": {
+      "file": "native-recheck.tap.gz",
+      "sha256": "62a9d0006ca70ab8c752cf2b826ac929119d75e1760182c73a1ef147cfb181f9",
+      "counts": {
+        "tests": 126,
+        "pass": 6,
+        "fail": 2,
+        "cancelled": 0,
+        "skipped": 118
+      },
+      "failures": [
+        "included item notes during the gate refuse at the writer and preserve successful reconciliation",
+        "uncertain fix delivery recovers the dispatch journal and never starts a second correction"
+      ]
+    }
+  },
+  "queue_acceptance": "27/27 full-file queue fixtures plus 1/1 new named manual recovery; latest predecessor delta 3/3. Counts overlap.",
+  "remaining_environment_limited_cases": [
+    {
+      "file": "promote/test/completion.test.mjs",
+      "case": "included item notes during the gate refuse at the writer and preserve successful reconciliation",
+      "reason": "PROMOTE_NATIVE_PROCESS_SOURCE_REFUSED, status 125, Operation not permitted; reproduced in native-recheck.tap.gz"
+    },
+    {
+      "file": "settle/test/settle.test.mjs",
+      "case": "uncertain fix delivery recovers the dispatch journal and never starts a second correction",
+      "reason": "fixture process tracker snapshot unavailable; Cannot confirm fixture watcher ownership; reproduced in native-recheck.tap.gz"
+    },
+    {
+      "file": "settle/test/settle.test.mjs",
+      "case": "fixture teardown waits for a concurrent child to finish writing before removing its directory",
+      "reason": "EMFILE from filesystem watch; development.tap.gz"
+    },
+    {
+      "file": "settle/test/settle.test.mjs",
+      "case": "unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable",
+      "reason": "EMFILE from filesystem watch; development.tap.gz"
+    },
+    {
+      "file": "settle/test/teardown.test.mjs",
+      "case": "a real detached owner stays alive through test end and stops in the after-hook",
+      "reason": "fixture process snapshot status 125, Operation not permitted; development.tap.gz"
+    }
+  ],
+  "protected_files_unchanged_sha256": {
+    "contrib/settle-watch.mjs": "9f1e3ea484e0b2103ee291e60586264c1be35e929e5f4816e8a1d143aa1920f6",
+    "supervisor/reconcile.mjs": "f00d3ee4a35dcf985c05ecd67f865ee199a0312bf5d0e45be7c7bebf37072932",
+    "lib/cli-help.mjs": "4d452709a077fa4ed854d03a01156025764aa2bc524d9069aec6c588b6361004",
+    "messages/schema.mjs": "befb0fa7f6a5fd27c3ece27c4e9728fac83e3cdafb9322478616c2e6547935d2"
+  },
+  "notes": [
+    "The broad development run was not green. Status projection regressions and outdated housekeeping native-detail mocks were fixed; focused-final is 327/327.",
+    "Six of eight initially failing native/settle cases passed on the post-rebase targeted recheck; two remain environment-limited. The cleanup-crash and structured settle verdict checks also passed in integration.",
+    "Name-filtered skips in targeted logs are selection, not unavailable cases.",
+    "No full baseline, npm test, test:* script, release, live acceptance harness, live schedule activation or model call was run."
+  ]
+}

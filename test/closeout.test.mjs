@@ -25,6 +25,7 @@ import { retirementStatus, renderRetirementStatus } from '../lib/retire-status.m
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const closer = fileURLToPath(new URL('../supervisor/closeout.mjs', import.meta.url));
 const lanes = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
+const retirementCLI = fileURLToPath(new URL('../supervisor/retire.mjs', import.meta.url));
 const events = f => loadEvents(f.org).events;
 async function waitForChange(_files, predicate, { timeoutMs = 60000 } = {}) {
   const deadline = Date.now() + loadTimeout(timeoutMs);
@@ -107,6 +108,52 @@ for (const project of ['bch-cloak', 'herdr-brain']) test(`${project}: a landed e
   assert.ok(Date.parse(completion.at) - Date.parse(source.at) < 1800000, 'no scheduling delay before closeout');
   const nativeActions = f.read().actions;
   f.drain(); assert.deepEqual(f.read().actions, nativeActions, 'completed effects do not repeat');
+});
+
+for (const abandoned of [false, true, 'at-landing']) test(`a fix round retains its ${abandoned === 'at-landing' ? 'unreported until landing' : abandoned ? 'record-superseded' : 'reported'} worker, and landing closes every ended session in that lane`, t => {
+  const f = setup(t);
+  if (abandoned) {
+    readyLane({ cwd: f.repo, org: f.org, topic: 'topic', start: false });
+    if (abandoned === true) f.append([{ type: 'run.abandoned', id: 'R-1', note: 'superseded by a fresh fix worker' }]);
+  } else f.report();
+  f.drain();
+  assert.deepEqual(f.read().actions, [], 'the worker stays available during review and fixes');
+  fs.writeFileSync(path.join(f.lane, 'seed'), 'fixed'); f.git(['commit', '-am', 'fix'], f.lane);
+  const head = f.git(['rev-parse', 'HEAD'], f.lane); f.git(['merge', '--ff-only', head]);
+  f.state.tabs.push({ tab_id: 'w:fix', workspace_id: 'w' });
+  f.state.panes.push({ pane_id: 'w:fix:p', tab_id: 'w:fix', workspace_id: 'w', terminal_id: 'fix-terminal' });
+  f.state.agents.push({ ...f.state.agents[0], name: 'fix-worker', pane_id: 'w:fix:p', tab_id: 'w:fix',
+    terminal_id: 'fix-terminal', agent_session: { value: 'fix-session' } });
+  f.save();
+  const base = f.options.command;
+  f.options.command = (exe, args, opt) => {
+    if (exe !== f.job.herdr) return base(exe, args, opt);
+    const current = f.read(), out = result => ({ status: 0, stdout: JSON.stringify({ result }), stderr: '' });
+    if (args[0] === 'pane' && args[1] === 'process-info') return out({ process_info: current.exited?.includes(args.at(-1)) ? {
+      shell_pid: 1, foreground_processes: [{ pid: 1, name: 'zsh' }], process_tree_complete: true, process_tree: [current.info.process_tree[0]],
+    } : current.info });
+    if (args[0] === 'agent' && args[1] === 'prompt') {
+      const agent = current.agents.find(a => a.name === args[2]);
+      current.actions.push(args); current.exited = [...(current.exited ?? []), agent.pane_id];
+      current.agents = current.agents.filter(a => a.name !== args[2]); fs.writeFileSync(f.file, JSON.stringify(current)); return out({});
+    }
+    return base(exe, args, opt);
+  };
+  f.append([{ type: 'run.started', id: 'R-2', item: 'ENG-1', workspace: f.lane, meta: { agent: 'fix-worker', pane: 'w:fix:p',
+    worker_workspace: 'w', terminal_id: 'fix-terminal', agent_session_id: 'fix-session', lane: 'topic' } },
+    { type: 'report.ingested', run: 'R-2', report: { outcome: 'done' } }]);
+  if (abandoned === 'at-landing') {
+    f.append([{ type: 'run.abandoned', id: 'R-1', note: 'explicit supersession at reconciliation' }, { type: 'item.closed', id: 'ENG-1', as: 'done' }]);
+    f.drain(); assert.deepEqual(f.read().actions, [], 'the successor remains observable for the new supersession proof');
+  }
+  f.append([...(abandoned === 'at-landing' ? [] : [{ type: 'item.closed', id: 'ENG-1', as: 'done' }]),
+    { type: 'promotion.reconciled', identity: f.common, heads: [{ run: 'R-2', item: 'ENG-1', head }], runs: ['R-2'], items: ['ENG-1'] }]);
+  const landed = readCloseoutEntries(f.common).find(e => e.signal === 'landed');
+  assert.deepEqual(landed.panes.map(p => p.run), ['R-1', 'R-2']);
+  f.drain(); assertRemoved(f);
+  assert.deepEqual(f.read().actions.filter(a => a[0] === 'agent').map(a => a[2]), ['worker', 'fix-worker']);
+  assert.equal(f.read().actions.filter(a => a[0] === 'tab').length, 2);
+  if (abandoned) assert.ok(events(f).some(e => e.type === 'retirement.release' && e.run === 'R-1'));
 });
 
 function reviewFixture(t, followup_expected = false) {
@@ -331,6 +378,16 @@ test('record complete-batch alone produces a landed entry and closes without sup
   assertRemoved(f);
   assert.equal(events(f).find(e => e.type === 'item.closed').as, 'done');
   assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
+});
+
+test('named manual recovery records a fresh bound request for a legacy lane without a landed queue entry', async t => {
+  const f = setup(t); f.report(); f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done' }]);
+  assert.equal(readCloseoutEntries(f.common).some(e => e.signal === 'landed'), false);
+  const result = spawnSync(process.execPath, [retirementCLI, 'sweep', '--lane', f.lane, '--repo', f.repo, '--org', f.org], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  await waitForChange([f.eventFile], () => effects(f).some(e => e.action === 'lane-removed') && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), { timeoutMs: 60000 });
+  assertRemoved(f);
+  assert.equal(readCloseoutEntries(f.common).find(e => e.signal === 'landed').source.type, 'lane.recovery-requested');
 });
 
 function child(exe, args, options) {

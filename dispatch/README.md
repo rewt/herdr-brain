@@ -77,8 +77,9 @@ apply; like other dispatch fields, a later `dispatch` object replaces that objec
 Admission reads the current setting again on retry and immediately before launch;
 route identity stays frozen separately.
 
-The count combines open runs with bound worker identities (including external
-`record worker` launches) and dispatch journals. Reported or abandoned workers
+The count covers open bound worker runs (including external `record worker`
+launches) and uncertain launches, plus recorded live or uncertain settle
+reviewers, deduplicated by immutable native identity. Reported or abandoned workers
 are excluded. Recorded settle reviewer sessions from
 `.org/retirement/occupants/` also count, including retained live reviewers after
 their worker report or review verdict. Repeated evidence for the same native
@@ -94,7 +95,11 @@ refusal names `session cap N reached: R-a, R-b, …`, gives the worker/reviewer
 breakdown and separately lists observed-live, unknown-liveness and
 uncertain-launch runs. Inspect those uncertain runs and their workers, then use
 the existing record abandon command for stale runs. It never kills or closes a
-session, or automatically abandons a run.
+session, or automatically abandons a run. This is a new-worker-dispatch admission
+cap, not a host census or a guarantee that the host has at most seven agents.
+It never authorizes closing or abandoning anything; cleanup requires the
+existing lifecycle authority. Reuse and prompt/watch recovery that create no
+new session remain admissible without consuming another session.
 
 Early admissions are lock-free advisory counts. After both memory gates and
 lane/record preparation, the final recount and durable worker launch are
@@ -166,7 +171,10 @@ supervisor directly.
 
 Dispatch records entry and grant for its two memory gates (`memory_open` before
 lane preparation and `memory_worker` before worker launch), including immediate
-grants. Project admission uses a bounded wait for overlapping final launches;
+grants. The `admission_lock` split records final admission lock acquisition,
+including immediate grants, with a 60000 ms allowance scaled by `loadTimeout`.
+Reused workers do not acquire that lock and have no sample for it. Project
+admission uses a bounded wait for overlapping final launches;
 there is no concurrency queue or fleet session limit. Its recovery lock refuses
 a second coordinator for the same request; that refusal is not a queue wait.
 Lane dispatch skips the redundant memory gate

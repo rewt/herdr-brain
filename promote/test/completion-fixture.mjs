@@ -107,4 +107,3 @@ export function manualRecovery(f, rows, mode = 'complete') {
   reconcile(['prepare', ...args, '--manifest', manifest, '--gate-log', log]);
   return reconcile(['finish', ...args, '--gate-exit', '0', '--tip', f.git(['rev-parse', 'main'])]);
 }
-

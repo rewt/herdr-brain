@@ -88,6 +88,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const reportPath = show(run).report_path;
   fs.writeFileSync(reportPath, `---\nrun: ${run}\noutcome: done\nsummary: Private fixture completed\nheadline: Private fixture completed\n---\n`);
   record(['ingest', reportPath], project);
+  assert.equal(fs.existsSync(path.join(project, '.git', 'closeout')), false, 'promotion fixture starts no closeout consumer');
   const reviewText = '## Findings\nNone\n\n## Analysis\nOffline independent review stand-in.\n';
   const review = { verdict: 'PASS', text: reviewText, sha256: hash(reviewText), path: path.join(workspace, 'docs/reviews/guard.md') };
   const reviewed = git(['rev-parse', 'HEAD'], workspace); change('docs/reviews/guard.md', reviewText);

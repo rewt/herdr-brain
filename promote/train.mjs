@@ -8,10 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
-import { captureCompletionMember, accountUncapturedMember } from './completion.mjs';
+import { captureCompletionMember, accountUncapturedMember, recordFor } from './completion.mjs';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
-import { guardPromotionJob } from '../lib/run-owner.mjs';
+import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
 import { probeNativeGate } from './native-context.mjs';
@@ -51,6 +51,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (git(['symbolic-ref', '--short', 'HEAD']) !== main) throw new Error(`canonical checkout must be on ${main}`);
   };
   const capture = job => {
+    // Reject a foreign record before reading its run or claim, preserving the
+    // canonical-record refusal even when that record has no matching run.
+    if (job.run) recordFor(canonical, job.org);
     guardPromotionJob(job);
     if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(job.topic)) throw new Error('invalid train lane topic');
     const entry = git(['worktree', 'list', '--porcelain']).split('\n\n').find(e => e.split('\n').includes(`branch refs/heads/lane/${job.topic}`));

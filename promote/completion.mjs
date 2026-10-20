@@ -11,7 +11,7 @@ import { fold } from '../lib/state.mjs';
 import { completionFingerprint, completionEvents, digest, stable } from '../lib/completion.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { verifyTrainResult } from './evidence.mjs';
-import { guardPromotionJob } from '../lib/run-owner.mjs';
+import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
 
 const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 // Terminal results can be produced before capture by canonical/host guards.
@@ -25,7 +25,7 @@ function git(canonical, args) {
   if (r.error || r.status !== 0) throw Error(r.stderr || r.error?.message || 'completion Git proof refused');
   return r.stdout.trim();
 }
-function recordFor(canonical, org) {
+export function recordFor(canonical, org) {
   const discovered = findOrgDir({ cwd: canonical, env: { ...process.env, ORG_DIR: '' } });
   if (!discovered || fs.realpathSync(discovered) !== fs.realpathSync(org)) throw Error('queue record differs from canonical project record');
   return fs.realpathSync(org);

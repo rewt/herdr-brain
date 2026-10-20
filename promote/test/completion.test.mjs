@@ -27,6 +27,30 @@ import { resolveValidation } from '../../lanes/validation.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 
+test('promotion claim checks keep supervisor cycle modules out of the lane static import graph', () => {
+  // Ask Node's parser for static dependencies without evaluating any module.
+  // This includes re-exports and multiline imports and stops at lazy loads.
+  const roots = ['lib/run-owner-guard.mjs', 'promote/train.mjs', 'promote/completion.mjs', 'promote/guard.mjs', 'lanes/lane.mjs'];
+  const probe = `import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';
+import {pathToFileURL,fileURLToPath} from 'node:url';
+const root=${JSON.stringify(source)},cache=new Map();
+function dependencies(file){if(!cache.has(file))cache.set(file,new vm.SourceTextModule(fs.readFileSync(file,'utf8')).dependencySpecifiers.filter(s=>s.startsWith('.')).map(s=>fileURLToPath(new URL(s,pathToFileURL(file)))));return cache.get(file);}
+const result={};for(const entry of ${JSON.stringify(roots)}){const seen=new Set(),pending=[path.join(root,entry)];while(pending.length){const file=pending.pop();if(seen.has(file))continue;seen.add(file);pending.push(...dependencies(file));}result[entry]=[...seen].map(f=>path.relative(root,f)).sort();}
+console.log(JSON.stringify(result));`;
+  const reply = spawnSync(process.execPath, ['--experimental-vm-modules', '--input-type=module', '-e', probe], { encoding: 'utf8' });
+  assert.equal(reply.status, 0, reply.stderr);
+  const closures = JSON.parse(reply.stdout);
+  for (const root of roots) {
+    const closure = closures[root];
+    // clean-pass is the existing guard's scope helper, not the notice cycle.
+    const expected = ['promote/train.mjs', 'promote/guard.mjs', 'lanes/lane.mjs'].includes(root) ? ['supervisor/clean-pass.mjs'] : [];
+    assert.deepEqual(closure.filter(f => f.startsWith('supervisor/')), expected, root);
+    assert.ok(!closure.includes('lib/run-owner.mjs'), root);
+    assert.ok(!closure.includes('promote/promote.mjs'), root);
+    if (root !== 'promote/guard.mjs') assert.ok(closure.includes('lib/run-owner-guard.mjs'), root);
+  }
+});
+
 test('worker receipt and session bind preserve main run bytes and completion fingerprints', () => {
   const meta = { dispatch_attempt: 'attempt', dispatch_journal: '/repo/.org/dispatch/attempt.json',
     dispatch_project: '/repo/.git', dispatch_record: '/repo/.org' };
@@ -190,6 +214,30 @@ test('integrated record refusal retains every lane and resumes records without a
   assert.equal((f.queue.load().interrupted ?? []).length, 0);
 });
 
+test('completed train ownership fence retains integrated proof and refuses record completion until its binding is restored', t => {
+  const f = fixture(t), first = f.lane('first'), second = f.lane('second');
+  fs.writeFileSync(f.fault, 'refuse'); f.drain();
+  assert.equal(f.gates(), 1);
+  const receipt = f.queue.load().results[0].receipt, proof = fs.readFileSync(receipt, 'utf8');
+  const recordReceipt = fs.readFileSync(receipt + '.record.json', 'utf8');
+  const original = structuredClone(f.queue.load().interrupted[0].jobs.find(j => j.id === first.job.id).ownership);
+  assert.ok(JSON.parse(proof).attempts.some(a => a.phase === 'complete' && a.gate.exit_code === 0));
+  fs.unlinkSync(f.fault);
+  f.queue.transaction(data => { data.interrupted[0].jobs.find(j => j.id === first.job.id).ownership.generation++; });
+  f.drain();
+  assert.equal(f.gates(), 1); assert.equal(fs.readFileSync(receipt, 'utf8'), proof);
+  assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), recordReceipt);
+  assert.equal(f.events().filter(e => e.type === 'promotion.reconciled').length, 0);
+  for (const m of [first, second]) { assert.equal(f.show(m.item).closed, null); assert.ok(fs.existsSync(m.workspace)); }
+  assert.ok(f.queue.load().results.slice(-2).every(r => r.reconciliation.state === 'pending' && /RUN_OWNED_ELSEWHERE/.test(r.reason)));
+  // The exact original binding resumes only reconciliation and cleanup.
+  f.queue.transaction(data => { data.interrupted[0].jobs.find(j => j.id === first.job.id).ownership = original; });
+  f.drain(); assert.equal(f.gates(), 1);
+  assert.equal(f.events().filter(e => e.type === 'promotion.reconciled').length, 1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, JSON.parse(proof).attempts);
+  for (const m of [first, second]) assert.equal(f.show(m.item).closed.as, 'done');
+});
+
 test('bisected batch accounts for its exclusion without mutating newer excluded work', t => {
   const f = fixture(t), first = f.lane('first'), second = f.lane('second'), bad = f.lane('broken', true);
   fs.writeFileSync(f.fault, 'refuse'); f.drain(); assert.equal(f.gates(), 3);
@@ -258,6 +306,7 @@ for (const mode of ['unknown-run', 'wrong-record', 'duplicate-item']) test(`nati
   f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
   const rows = f.queue.load().results;
   assert.equal(rows.find(r => r.id === bad.job.id).outcome, 'refused');
+  if (mode === 'wrong-record') assert.match(rows.find(r => r.id === bad.job.id).reason, /queue record differs from canonical project record/);
   assert.ok(fs.existsSync(bad.workspace)); assert.equal(f.show(bad.item).closed, null);
   for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
   assert.deepEqual(f.events().find(e => e.type === 'promotion.reconciled').items, [first.item, second.item]);
@@ -281,6 +330,7 @@ for (const mode of ownershipRefusals) test(`native admission isolates ${mode} ow
   f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
   const rows = f.queue.load().results, refused = rows.find(r => r.id === bad.job.id);
   assert.equal(refused.outcome, 'refused');
+  assert.equal(refused.code, mode === 'unclaimed' ? 'RUN_OWNER_UNCLAIMED' : 'RUN_OWNED_ELSEWHERE');
   assert.match(refused.reason, new RegExp(mode === 'unclaimed' ? 'RUN_OWNER_UNCLAIMED' : 'RUN_OWNED_ELSEWHERE'));
   assert.ok(fs.existsSync(bad.workspace)); assert.equal(f.show(bad.item).closed, null);
   for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
@@ -290,9 +340,14 @@ for (const mode of ownershipRefusals) test(`native admission isolates ${mode} ow
 
 test('train capture isolates ownership refusals and prepares only valid siblings before the native gate', async t => {
   const f = fixture(t), first = f.lane('first');
-  const bad = ownershipRefusals.map(mode => ({ mode, member: f.lane(`invalid-${mode}`, false, { owned: mode !== 'unclaimed' }) }));
+  const bad = [...ownershipRefusals, 'wrong-record'].map(mode => ({ mode, member: f.lane(`invalid-${mode}`, false, { owned: mode !== 'unclaimed' }) }));
   const second = f.lane('second'), jobs = f.queue.load().pending;
-  for (const { mode, member } of bad) corruptOwnership(f, member, mode, jobs[0].ownership);
+  for (const { mode, member } of bad) {
+    if (mode === 'wrong-record') {
+      const wrong = path.join(f.root, 'wrong-record'); f.record(['init', wrong]);
+      rewriteJob(f, member, { org: wrong });
+    } else corruptOwnership(f, member, mode, jobs[0].ownership);
+  }
   const file = path.join(f.queue.directory, 'capture-test/train.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ schema: 'promotion-train/v1', id: 'capture-test', identity: f.queue.project.identity, jobs: f.queue.load().pending }));
@@ -309,7 +364,11 @@ test('train capture isolates ownership refusals and prepares only valid siblings
   assert.deepEqual(train.completion.refused, bad.map(({ member }) => member.job.id));
   for (const { mode, member } of bad) {
     assert.equal(train.results[member.job.id].outcome, 'refused');
-    assert.match(train.results[member.job.id].reason, new RegExp(mode === 'unclaimed' ? 'RUN_OWNER_UNCLAIMED' : 'RUN_OWNED_ELSEWHERE'));
+    if (mode === 'wrong-record') assert.match(train.results[member.job.id].reason, /queue record differs from canonical project record/);
+    else {
+      assert.equal(train.results[member.job.id].code, mode === 'unclaimed' ? 'RUN_OWNER_UNCLAIMED' : 'RUN_OWNED_ELSEWHERE');
+      assert.match(train.results[member.job.id].reason, new RegExp(mode === 'unclaimed' ? 'RUN_OWNER_UNCLAIMED' : 'RUN_OWNED_ELSEWHERE'));
+    }
     assert.ok(fs.existsSync(member.workspace)); assert.equal(f.show(member.item).closed, null);
   }
 });

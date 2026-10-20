@@ -10,6 +10,7 @@ import { readRecordBytes, publishRecord, removeUnchanged } from './record-file.m
 
 export const RESERVATION_SCHEMA = 'host-reservation/v1';
 export const MAX_RESERVATION_MS = 6 * 60 * 60 * 1000;
+export const RESERVATION_WAIT_EXPIRED_CODE = 'HOST_RESERVATION_WAIT_EXPIRED';
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const text = (value, bound) => typeof value === 'string' && value.length > 0 && value.length <= bound && !/[\x00-\x1f\x7f-\x9f]/.test(value);
 const time = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
@@ -39,7 +40,8 @@ export function readProvingReservations(lockPath, { prune = false, ...options } 
     const file = path.join(directory, name);
     try {
       const bytes = readRecordBytes(file), record = JSON.parse(bytes);
-      if (record?.schema !== RESERVATION_SCHEMA) return [];
+      if (record?.schema !== RESERVATION_SCHEMA) return typeof record?.schema === 'string' && record.schema.startsWith('host-reservation/')
+        ? [{ path: file, record: null, state: 'unknown', why: 'unsupported reservation schema' }] : [];
       const state = reservationState(record, options);
       if (prune && state.state === 'gone') removeUnchanged(file, bytes);
       return [{ path: file, record, ...state }];
@@ -94,8 +96,10 @@ export function publishProvingReservation({ lockPath = process.env[COMPAT_PATH_E
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 export function waitForProvingHold({ label = 'cycle', check = () => {}, env = process.env,
   read = (file, options) => readProvingReservations(file, options), now = Date.now, sleep = pause, intervalMs = 1000,
-  notify = line => process.stderr.write(`${line}\n`) } = {}) {
+  deadline, clock = () => performance.now(), notify = line => process.stderr.write(`${line}\n`) } = {}) {
   if (!(Number.isFinite(intervalMs) && intervalMs > 0)) throw Error('invalid proving poll interval');
+  if (!Number.isFinite(deadline)) throw Error('proving wait requires a finite caller deadline');
+  const started = clock(), elapsed = () => Math.max(0, Math.ceil(clock() - started));
   const flagged = new Set(); let previous = '', waiting = false;
   for (;;) {
     check();
@@ -112,13 +116,21 @@ export function waitForProvingHold({ label = 'cycle', check = () => {}, env = pr
     }
     const live = rows.filter(row => ['live', 'overdue'].includes(row.state) && row.expiresAt > now());
     const description = live.map(row => `${row.record.project}: ${row.record.reason}; expiry ${new Date(row.expiresAt).toISOString()}${row.state === 'overdue' ? '; overdue' : ''}`).join(' | ');
+    // Wall-clock record expiry and the caller's monotonic budget are separate.
+    // New files, renewals and clock corrections cannot restart this deadline.
+    check({ waiting: Boolean(waiting || live.length) });
+    if ((waiting || live.length) && clock() >= deadline) {
+      const elapsed_ms = elapsed(), reason = description || previous;
+      throw Object.assign(Error(`${RESERVATION_WAIT_EXPIRED_CODE}: ${label}; waited ${elapsed_ms}ms; caller admission deadline exhausted; ${reason}; defer and retry launch`),
+        { code: RESERVATION_WAIT_EXPIRED_CODE, exitCode: 75, elapsed_ms, reason });
+    }
     if (!live.length) {
       check();
-      if (waiting) notify(`${label}: proving reservation ended; proceeding`);
+      if (waiting) notify(`${label}: proving reservation ended; proceeding; waited ${elapsed()}ms`);
       return;
     }
-    if (description !== previous) notify(`${label}: waiting; proving ${description}`);
+    if (description !== previous) notify(`${label}: waiting; proving ${description}; waited ${elapsed()}ms; admission remaining ${Math.max(0, Math.ceil(deadline - clock()))}ms`);
     previous = description; waiting = true; check();
-    sleep(Math.max(0, Math.min(intervalMs, ...live.map(row => row.expiresAt - now()))));
+    sleep(Math.max(0, Math.min(intervalMs, deadline - clock(), ...live.map(row => row.expiresAt - now()))));
   }
 }

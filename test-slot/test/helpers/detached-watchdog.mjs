@@ -13,6 +13,8 @@ import { testSlotEnvironment } from '../../../test/helpers/test-slot-env.mjs';
 import { lookupProcess } from '../../../lib/processes.mjs';
 import { stopGateGroup } from '../../watchdog.mjs';
 import { healthyHistory } from '../../limits.mjs';
+import { readProvingReservations, waitForProvingHold } from '../../reservations.mjs';
+import { registerProcess, killProcess } from '../../../test/helpers/processes.mjs';
 
 const [root, mode] = process.argv.slice(2);
 const cli = fileURLToPath(new URL('../../test-slot.mjs', import.meta.url));
@@ -28,6 +30,36 @@ async function until(predicate) {
   while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(predicate(), 'fixture became ready');
 }
+
+if (mode === 'reservation-expiry') test('expired reservation and both locks retain a dead wrapper\'s real owned group', { timeout: 10000 }, async t => {
+  const workspace = path.join(root, 'workspace-slot'), ready = path.join(root, 'payload-ready');
+  env.MONITOR_TEST_SLOT_PATH = workspace;
+  let group;
+  t.after(() => { if (group) { const result = killProcess(group); assert.ok(result.ok, result.reason); } });
+  const owner = spawnChild(t, process.execPath, provingRun([cli, 'run', 'expiry owner', '--timeout-seconds', '60', '--', process.execPath, '-e',
+    `require('fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`]), { cwd: root, env });
+  await until(() => fs.existsSync(ready));
+  const row = readProvingReservations(lock)[0], pid = Number(fs.readFileSync(ready));
+  assert.equal(row.record.pid, owner.pid); assert.equal(row.record.pgid, pid);
+  group = registerProcess(pid, true);
+  assert.equal(lookupProcess(pid, { identityOnly: true }).value.pgid, pid, 'the fixture owns a real detached process group');
+  owner.kill('SIGKILL'); await waitForExit(owner);
+  const now = Date.now(), expired = { ...row.record, acquiredAt: new Date(now - 60000).toISOString(),
+    expectedEnd: new Date(now - 30000).toISOString(), expiresAt: new Date(now - 1000).toISOString() };
+  const bytes = JSON.stringify(expired) + '\n'; fs.writeFileSync(row.path, bytes);
+  const locks = [lock, workspace].map(file => fs.readFileSync(file, 'utf8'));
+  assert.equal(readProvingReservations(lock, { prune: true })[0].state, 'expired');
+  waitForProvingHold({ env, deadline: performance.now(), notify: () => {}, sleep: () => assert.fail('expired launch wait') });
+  const blocked = run([], [process.execPath, '-e', 'throw Error("second prover started")']);
+  assert.equal(blocked.status, 75, blocked.stderr); assert.match(blocked.stderr, /TEST_SLOT_HELD|TEST_SLOT_HOLDER_UNKNOWN/);
+  assert.equal(fs.readFileSync(row.path, 'utf8'), bytes);
+  assert.deepEqual([lock, workspace].map(file => fs.readFileSync(file, 'utf8')), locks);
+  const stopped = killProcess(group); assert.ok(stopped.ok && stopped.signaled, stopped.reason); group = null;
+  await until(() => readProvingReservations(lock)[0].state === 'gone');
+  assert.equal(readProvingReservations(lock, { prune: true })[0].state, 'gone'); assert.equal(fs.existsSync(row.path), false);
+  const next = run([], [process.execPath, '-e', 'console.log("next prover")']);
+  assert.equal(next.status, 0, next.stderr); assert.match(next.stdout, /next prover/);
+});
 
 if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid after both wrappers die', { timeout: 10000 }, async t => {
   const ready = path.join(root, 'ready');

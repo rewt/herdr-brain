@@ -1,16 +1,18 @@
 # Host proving reservations v1
 
-This is the proposed shared host contract for ENG-424 and ENG-389. Implementation
-is ready for independent T2 review. Merge requires Astra's review and
-supervisor-opus's agreement on the schema name and location. BCH adoption remains
-a separate BCH-owned change, scheduled outside any demo or proving in flight.
+This is the shared host contract for ENG-424 and ENG-389, amended under
+[Astra's binding 2026-10-20 ruling, section 4](/Users/rewt/development/rewt/.org/evidence/ASTRA-RULING-BC-CONTRACTS-20261020.md)
+(SHA-256 `70d464f77cbee41c2832b76c9fa70738138a662b1c61982f2b4676f191c094b2`).
+The ruling accepts the separate schema and existing exclusive bridge subject to
+these amendments; it is not an independent review of their implementation.
+BCH adoption remains a separate BCH-owned change, outside proving in flight.
 
 ## Classes and authority
 
 `proving` is the only blocking class. A reservation covers one declared proving
 step, exclusively acquired through the existing legacy/workspace slot bridge.
 Gates, builds, tests, reviews, releases and engineering publish informational
-`occupancy/v1` with `class: "shared"`; they start immediately. There is no memory
+`occupancy/v1` with `class: "shared"`; admitted shared work continues. There is no memory
 reservation class. `reserveGib` is display-only, never a memory admission floor.
 Brain declares no proving profiles.
 
@@ -24,9 +26,38 @@ Only the launch gates wait: dispatch before lane open and worker launch; lane
 review and dispatch; lane promotion before its lock; and the unheld promotion
 host gate. The wait precedes the existing memory wait and remains within its
 existing timing kind (`memory_open` or `memory_worker` in dispatch). STOP is checked
-before reading and on every iteration. The next sleep ends at the earlier of the
-poll interval and the earliest reservation expiry. Expired or unknown rows never
-pause a launch. No background process, model, separate scheduler or queue is added.
+before reading and on every iteration, including before a deadline deferral.
+Expired or unknown rows never pause an ordinary launch. No background process,
+model, separate scheduler or queue is added.
+
+`waitForProvingHold` requires a finite monotonic caller `deadline`, separate from
+the wall-clock reservation timestamps. Dispatch and direct lane dispatch/review
+reuse the existing one-minute dispatch admission allowance, load-scaled once.
+Promotion uses the profile's existing `wait_seconds`; without a profile it uses
+`MONITOR_TEST_SLOT_WAIT_SECONDS`, then its legacy counterpart, then the existing
+train default of 7200 seconds. Explicit promotion allowances are not load-scaled.
+Each adopting gate samples its deadline once. Successive files, renewals, a new
+reason, record expiry or wall-clock corrections never restart that budget.
+The next sleep ends at the earliest poll interval, record expiry or caller deadline.
+These bounds apply to reservation coordination; ordinary memory-pressure waits
+and execution watchdogs retain their existing policies.
+
+An exhausted wait throws `HOST_RESERVATION_WAIT_EXPIRED`, with reason and
+`elapsed_ms`, before any launch grant. Dispatch and direct lane CLIs return a
+named `deferred` result and exit 75; a fresh promotion train records the same code
+as a pre-execution refusal with no validation attempt. Saved integration
+checkpoints are preserved. A zero budget allows one immediate observation: no
+live proving row proceeds, while a live row defers without sleeping. STOP takes
+precedence over deadline exhaustion. A resumed train's existing STOP recovery
+can proceed when no reservation blocks it; an actual reservation wait still
+cancels promptly under STOP and leaves its saved checkpoints intact.
+
+Compatible ticketed exclusive participants follow their existing FIFO queue.
+Legacy zero-wait pollers that do not honor tickets can still jump that queue;
+there is no host-wide starvation guarantee. Adopted proving workflows must use
+the existing compatible ticketed exclusive path. A reservation reduces pressure from new launches;
+shared work continues and unrelated host work is outside this protocol, so it
+does not guarantee free memory or a quiet machine.
 
 ## Namespace and fields
 
@@ -34,8 +65,9 @@ Each proving step owns one independently named JSON file in
 `<compat-lock>.occupancy/`, beside shared occupancy. The directory is created with
 mode 0700; files with mode 0600. Publish and update use a hidden same-directory
 temporary file followed by rename. Readers skip dot files. Records are at most
-1 MiB; readers open only bounded regular files with `O_NOFOLLOW`. Unknown schemas
-are skipped without deletion. Reservation fields must never be added to v1 shared
+1 MiB; readers open only bounded regular files with `O_NOFOLLOW`. Unrelated schemas
+are skipped without deletion. Unsupported `host-reservation/*` versions are
+visible as neutral unknown rows and are never pruned. Reservation fields must never be added to v1 shared
 occupancy: BCH's reader enforces its closed key set.
 
 `schema` is the first serialized field. The version is `host-reservation/v1`:
@@ -79,15 +111,23 @@ gone. Group numbers are never permission to signal another process.
 | --- | --- |
 | `live` | Owner/group present before estimate and expiry; pause launches. |
 | `overdue` | Past expected end, still present and unexpired; pause launches and show overdue. |
-| `expired` | Owner/group present but capped expiry reached; ignore for admission, flag, retain bytes. |
+| `expired` | Owner/group present but capped expiry reached; ignore for ordinary launch coordination, flag, retain bytes. |
 | `gone` | Owner and all groups proven gone; ignore. Optional pruning requires exact unchanged bytes. |
 | `unknown` | Malformed, unreadable, missing expiry or invalid required fields; flag, never pause or prune. |
 
-`release()` retains the record while its group survives, even if its owner is
-exiting. Ordinary shared occupancy follows the same group retention rule. A
+After payload start, `release()` retains the record while its owned group
+survives, even if its wrapper exits or dies. The legacy/workspace locks remain
+held under their existing owner/group liveness rules. Ordinary shared occupancy
+follows the same group retention rule. Before payload start, supported cancellation
+removes only unchanged owned state after its barrier group is confirmed gone;
+an abrupt death leaves recoverable state subject to those same liveness checks. A
 crashed owner needs no cleanup daemon: readers stop waiting once owner/group are
 gone or expiry arrives. Neither expiry nor a legacy holder permits deletion of a
-live owner's file. All pruning is explicit and opt-in; the board and launch gates
+live owner's file. Expiry is not process-death evidence: it never authorizes a
+second prover, lock takeover, deletion or retirement while an owner/group may
+live. Exclusive arbitration still requires the legacy/workspace bridge and native
+prover guards, independently of whether launch coordination ignores a row.
+All pruning is explicit and opt-in; the board and launch gates
 never prune. Retirement observes both schemas read-only and retains matching live
 references, including expired reservations whose owner/group still lives.
 If the CLI's reservation was removed or changed externally, release emits
@@ -96,8 +136,9 @@ group is confirmed gone, it still releases its own bridge locks and preserves
 the payload's exit code.
 
 The launch wait emits one stderr line whenever the set/state of live reservations
-changes, naming project, reason and capped expiry. It ends with
-`proving reservation ended; proceeding`. `HOST_RESERVATION_EXPIRED:` and
+changes, naming project, reason, capped expiry, elapsed wait and remaining caller
+budget. A successful wait ends with `proving reservation ended; proceeding` and
+elapsed wait; exhaustion returns the named deferral instead. `HOST_RESERVATION_EXPIRED:` and
 `HOST_RESERVATION_UNKNOWN:` are emitted once per affected file/state in one wait.
 The board reads workspace and compat occupancy directories, deduplicated by
 realpath, and shows project, reason, age, GiB, expected end, expiry and state. It

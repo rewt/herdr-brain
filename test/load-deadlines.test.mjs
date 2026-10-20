@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadFactor, loadTimeout } from '../lib/deadline.mjs';
+import { loadFactor, loadTimeout, admissionDeadline, ADMISSION_WAIT_MS } from '../lib/deadline.mjs';
+import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { lookupProcess, createProcessTracker } from './helpers/processes.mjs';
 import { environmentFingerprint } from '../lanes/validation.mjs';
 import { HerdrClient } from '../lanes/board/herdr-client.mjs';
@@ -33,6 +34,23 @@ test('measured load expands internal allowances without shorter, infinite or ove
     assert.equal(loadTimeout(milliseconds), milliseconds * 6);
   assert.equal(loadTimeout(2 ** 31), 2 ** 31 - 1);
   assert.throws(() => loadTimeout(-1));
+});
+
+test('reservation admission samples the existing loaded allowance once and wall-clock renewal never resets it', t => {
+  withLoad(t);
+  let elapsed = 0, wall = 1000000, reads = 0;
+  const deadline = admissionDeadline({ now: () => elapsed });
+  assert.equal(deadline, ADMISSION_WAIT_MS * 6);
+  os.loadavg = () => [2400, 2400, 2400];
+  assert.throws(() => waitForProvingHold({ deadline, clock: () => elapsed, now: () => wall,
+    env: { MONITOR_TEST_SLOT_PATH: '/unused/slot', MONITOR_TEST_SLOT_COMPAT_PATH: '/unused/slot' },
+    read: () => [{ path: `proof-${++reads}`, state: 'live', expiresAt: wall + 100000,
+      record: { project: 'loaded project', reason: 'renewed proving' } }], intervalMs: 10000,
+    sleep: ms => { elapsed += ms; wall -= 1000000; }, notify: () => {},
+  }), error => error.code === RESERVATION_WAIT_EXPIRED_CODE && error.elapsed_ms === deadline);
+  assert.equal(elapsed, ADMISSION_WAIT_MS * 6); assert.equal(reads, 37);
+  assert.equal(admissionDeadline({ budgetMs: 0, now: () => 7 }), 7);
+  assert.throws(() => admissionDeadline({ budgetMs: Infinity }), /invalid admission/);
 });
 
 test('a loaded native lookup receives time to answer and timeout retries back off with fresh output', t => {

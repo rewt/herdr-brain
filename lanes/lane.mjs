@@ -16,9 +16,9 @@ import { forwardRelease } from '../lib/releases.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { retirementHold } from '../lib/retire-hold.mjs';
 import { recordInitialShell, claimInitialShell, initialShellLock, recordLaneOpen } from '../lib/initial-shell.mjs';
-import { loadTimeout } from '../lib/deadline.mjs';
+import { loadTimeout, admissionDeadline } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
-import { waitForProvingHold } from '../test-slot/reservations.mjs';
+import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
 import { hookLaunchArguments } from '../messages/hook-session.mjs';
@@ -2257,7 +2257,7 @@ async function review(topic, args, memoryChecked = false) {
     resolveDispatch({ route: options.route, routeConfig: options.routeConfig });
   }
   if (!launchMemoryGate('lane review', memoryChecked)) {
-    process.exitCode = 3;
+    process.exitCode ??= 3;
     return;
   }
   const path = worktreeFor(branch);
@@ -2489,10 +2489,11 @@ function withPromotionLock(operation) {
 
 function promote(topic, options = {}) {
   const root = repositoryRoot({ requiredBy: "promote" });
-  waitForProvingHold({ label: 'lane promote', check: () => {
-    if (existsSync(join(root, '.lane/supervisor/STOP'))) fail('PROMOTION_STOPPED: supervisor STOP exists; nothing merged');
-  } });
-  waitForMemory({ label: 'lane promote' });
+  try { waitForPromotionMemory(root); }
+  catch (error) {
+    if (error.code === RESERVATION_WAIT_EXPIRED_CODE) { deferReservation(error); return; }
+    fail(error.message);
+  }
   return withPromotionLock(() => promoteLocked(topic, root, options));
 }
 
@@ -2646,14 +2647,22 @@ function launchMemoryGate(label, alreadyChecked = false) {
   };
   try {
     if (alreadyChecked) check();
-    else { waitForProvingHold({ label, check }); waitForMemory({ label, check }); }
+    else { waitForProvingHold({ label, check, deadline: admissionDeadline() }); waitForMemory({ label, check }); }
     return true;
   } catch (error) {
+    if (error.code === RESERVATION_WAIT_EXPIRED_CODE) return deferReservation(error);
     if (error.code !== 'LANE_STOPPED') throw error;
     process.stderr.write(`${label}: ${reason}\n`);
     process.stdout.write(`${JSON.stringify({ result: 'stopped', reason })}\n`);
     return false;
   }
+}
+
+function deferReservation(error) {
+  process.stderr.write(`${error.message}\n`);
+  process.stdout.write(`${JSON.stringify({ result: 'deferred', code: error.code, reason: error.message, elapsed_ms: error.elapsed_ms })}\n`);
+  process.exitCode = 75;
+  return false;
 }
 
 switch (command) {
@@ -2773,16 +2782,17 @@ switch (command) {
       const profile = resolveGateProfile(root);
       if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
       const refuse = error => {
-        if (!['PROMOTION_STOPPED', 'PROMOTION_MEMORY_PRESSURE'].includes(error.code)) throw error;
+        if (!['PROMOTION_STOPPED', 'PROMOTION_MEMORY_PRESSURE', RESERVATION_WAIT_EXPIRED_CODE].includes(error.code)) throw error;
         // A resumed train must reconcile its integration checkpoint and apply
         // its own STOP guards. Never replace that receipt with a fresh refusal.
         if (error.code === 'PROMOTION_STOPPED' && JSON.parse(readFileSync(resolve(topic), 'utf8')).attempts?.length) return false;
         refuseBeforeTrain({ file: resolve(topic), identity: REPO_IDENTITY, error });
         process.stderr.write(error.message + '\n');
+        if (error.code === RESERVATION_WAIT_EXPIRED_CODE) process.exitCode = 75;
         return true;
       };
       // A profiled batch already owns the external lock and slot here. Its
-      // untimed initial wait belongs to the host adapter, before either lock.
+      // initial memory/reservation wait belongs to the host adapter, before either lock.
       if (!profile) {
         try { waitForPromotionMemory(root); }
         catch (error) { if (refuse(error)) break; }
@@ -2793,7 +2803,10 @@ switch (command) {
         return runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
           main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings() });
       });
-    } catch (error) { fail(error.message); }
+    } catch (error) {
+      if (error.code === RESERVATION_WAIT_EXPIRED_CODE) deferReservation(error);
+      else fail(error.message);
+    }
     break;
   }
   case "promote": {

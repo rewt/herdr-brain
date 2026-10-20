@@ -16,6 +16,7 @@ import { resolveGateLimits, gateHistoryKey } from '../test-slot/limits.mjs';
 import { cliHelp } from '../lib/cli-help.mjs';
 import { probeNativeGate } from './native-context.mjs';
 import { waitForPromotionMemory } from './memory-gate.mjs';
+import { admissionDeadline } from '../lib/deadline.mjs';
 cliHelp(import.meta.url, "Usage: node promote/host-gate.mjs [--lock|--held|--execute] CANONICAL RECEIPT [COMMAND ARGS...]");
 
 const args = process.argv.slice(2);
@@ -49,7 +50,8 @@ try {
   if (!profile) throw new Error('promotion host adapter requires a declared gate profile');
   // Saved attempts may have integrated before losing their response. Keep all
   // memory waits, but leave resumed STOP reconciliation/refusals to runTrain.
-  const memoryOptions = { checkStop: !JSON.parse(fs.readFileSync(receipt, 'utf8')).attempts?.length };
+  const memoryOptions = { checkStop: !JSON.parse(fs.readFileSync(receipt, 'utf8')).attempts?.length,
+    deadline: admissionDeadline({ budgetMs: profile.waitSeconds * 1000, allowance: ms => ms }) };
   if (mode !== '--lock' && read().profile_fingerprint !== profile.fingerprint) throw new Error('promotion gate profile changed while waiting; enqueue again');
   if (mode === '--lock') {
     updateTrain({ started_at: new Date().toISOString(), external_lock_required: Boolean(profile.externalLock) });

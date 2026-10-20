@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { publishProvingReservation, readProvingReservations, reservationState, waitForProvingHold, MAX_RESERVATION_MS } from '../reservations.mjs';
+import { publishProvingReservation, readProvingReservations, reservationState, waitForProvingHold, MAX_RESERVATION_MS, RESERVATION_WAIT_EXPIRED_CODE } from '../reservations.mjs';
+import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
+import { waitForExit } from '../../test/helpers/child.mjs';
 import { readTestSlotOccupancy, sharedOccupancy } from '../occupancy.mjs';
 import { readSlot } from '../../board/facts.mjs';
 import { render } from '../../board/render.mjs';
@@ -67,7 +69,7 @@ test('a child proving owner pauses a foreground launch wait and owner exit resum
   const f = fixture(t), owner = f.start(`import {publishProvingReservation} from ${JSON.stringify(library)};
     publishProvingReservation({label:'proof',reason:'ENG-424 R-601',expiresAt:new Date(Date.now()+60000).toISOString()});console.log('ready');setInterval(()=>{},1000);`);
   await until(() => owner.stdout.includes('ready'));
-  const waiter = f.start(`import {waitForProvingHold} from ${JSON.stringify(library)};waitForProvingHold({label:'launch',intervalMs:20});console.log('launched');`);
+  const waiter = f.start(`import {waitForProvingHold} from ${JSON.stringify(library)};waitForProvingHold({label:'launch',intervalMs:20,deadline:performance.now()+${loadTimeout(8000)}});console.log('launched');`);
   await until(() => waiter.stderr.includes('waiting; proving'));
   assert.match(waiter.stderr, /ENG-424 R-601; expiry/); assert.equal(waiter.stdout, '');
   owner.child.kill('SIGKILL'); await owner.done;
@@ -106,7 +108,7 @@ test('a killed child owner keeps its live foreground group reserved until the gr
   const group = Number(owner.stdout.trim()); t.after(() => { try { process.kill(group, 'SIGKILL'); } catch {} });
   owner.child.kill('SIGKILL'); await owner.done;
   assert.equal(readProvingReservations(f.lock, { prune: true })[0].state, 'live');
-  const waiter = f.start(`import {waitForProvingHold} from ${JSON.stringify(library)};waitForProvingHold({label:'group launch',intervalMs:20});console.log('launched');`);
+  const waiter = f.start(`import {waitForProvingHold} from ${JSON.stringify(library)};waitForProvingHold({label:'group launch',intervalMs:20,deadline:performance.now()+${loadTimeout(8000)}});console.log('launched');`);
   await until(() => waiter.stderr.includes('waiting; proving')); assert.equal(waiter.stdout, '');
   process.kill(group, 'SIGKILL');
   assert.equal((await waiter.done).code, 0, waiter.stderr); assert.match(waiter.stdout, /launched/);
@@ -116,7 +118,7 @@ test('live expired owners never pause, remain on disk, and are flagged on the bo
   const f = fixture(t), now = Date.now(), h = f.publish({ now: () => now - 3000,
     expectedEnd: new Date(now - 2000).toISOString(), expiresAt: new Date(now - 1000).toISOString(), reserveGib: 17 });
   const lines = [];
-  waitForProvingHold({ env: f.env, now: () => now, notify: line => lines.push(line), sleep: () => assert.fail('expired wait') });
+  waitForProvingHold({ env: f.env, deadline: performance.now(), now: () => now, notify: line => lines.push(line), sleep: () => assert.fail('expired wait') });
   assert.equal(lines.length, 1); assert.match(lines[0], /^HOST_RESERVATION_EXPIRED:/);
   assert.equal(readProvingReservations(f.lock, { prune: true, now })[0].state, 'expired'); assert.ok(fs.existsSync(h.path));
   const slot = readSlot({ lockPath: f.lock, compatPath: f.lock, now });
@@ -128,10 +130,10 @@ test('wait caps each sleep at expiry, flags unknown once, and STOP still cancels
   const f = fixture(t); let now = Date.now(); const lines = [], h = f.publish({ now: () => now, expiresAt: new Date(now + 25).toISOString() });
   const unknown = path.join(`${f.lock}.occupancy`, 'bad.json'); fs.writeFileSync(unknown, '{');
   const sleeps = [];
-  waitForProvingHold({ env: f.env, now: () => now, intervalMs: 1000, sleep: ms => { sleeps.push(ms); now += ms; }, notify: line => lines.push(line) });
+  waitForProvingHold({ env: f.env, deadline: performance.now() + loadTimeout(8000), now: () => now, intervalMs: 1000, sleep: ms => { sleeps.push(ms); now += ms; }, notify: line => lines.push(line) });
   assert.deepEqual(sleeps, [25]); assert.equal(lines.filter(s => s.startsWith('HOST_RESERVATION_UNKNOWN:')).length, 1);
   assert.match(lines.at(-1), /ended; proceeding/); assert.ok(fs.existsSync(h.path));
-  assert.throws(() => waitForProvingHold({ env: f.env, check: () => { throw Error('STOP'); } }), /STOP/);
+  assert.throws(() => waitForProvingHold({ env: f.env, deadline: performance.now() + 1000, check: () => { throw Error('STOP'); } }), /STOP/);
 });
 
 test('shared classes, legacy lock and ticket, missing expiry and unknown schemas never wait', t => {
@@ -143,10 +145,42 @@ test('shared classes, legacy lock and ticket, missing expiry and unknown schemas
   fs.writeFileSync(h.path, JSON.stringify(record));
   fs.writeFileSync(path.join(`${f.lock}.occupancy`, 'future.json'), JSON.stringify({ schema: 'host-reservation/v2' }));
   const lines = [];
-  waitForProvingHold({ env: f.env, notify: line => lines.push(line), sleep: () => assert.fail('non-proving waited') });
-  assert.equal(lines.length, 1); assert.match(lines[0], /^HOST_RESERVATION_UNKNOWN:/);
+  waitForProvingHold({ env: f.env, deadline: performance.now(), notify: line => lines.push(line), sleep: () => assert.fail('non-proving waited') });
+  assert.equal(lines.length, 2); assert.ok(lines.every(line => line.startsWith('HOST_RESERVATION_UNKNOWN:')));
   readProvingReservations(f.lock, { prune: true, kill: gone }); assert.ok(fs.existsSync(h.path));
+  assert.equal(readProvingReservations(f.lock, { prune: true, kill: gone }).find(r => r.path.endsWith('future.json')).state, 'unknown');
+  assert.ok(fs.existsSync(path.join(`${f.lock}.occupancy`, 'future.json')));
+  const slot = readSlot({ lockPath: f.lock, compatPath: f.lock });
+  assert.equal(slot.reservations.filter(r => r.state === 'unknown').length, 2);
+  assert.match(render({ slot, rows: [], memory: null, herdr: 'unavailable' }, { width: 500 }), /HOST_RESERVATION_UNKNOWN:/);
   assert.equal(readTestSlotOccupancy(f.lock).length, 4);
+});
+
+test('successive reservations and renewals cannot extend a caller deadline, and STOP wins at the boundary', t => {
+  const f = fixture(t), lines = [], sleeps = []; let elapsed = 0, reads = 0;
+  const read = () => [{ path: `renewed-${++reads}`, state: 'live', expiresAt: 100000 + elapsed,
+    record: { project: 'project', reason: `proof ${reads}` } }];
+  const options = { env: f.env, deadline: 5, clock: () => elapsed, now: () => elapsed, read,
+    intervalMs: 2, sleep: ms => { sleeps.push(ms); elapsed += ms; }, notify: line => lines.push(line) };
+  assert.throws(() => waitForProvingHold(options), error => error.code === RESERVATION_WAIT_EXPIRED_CODE &&
+    error.elapsed_ms === 5 && error.exitCode === 75 && /proof 4/.test(error.reason));
+  assert.deepEqual(sleeps, [2, 2, 1]); assert.equal(reads, 4);
+  assert.ok(lines.every(line => /waited \d+ms; admission remaining \d+ms/.test(line)));
+  elapsed = 0;
+  assert.throws(() => waitForProvingHold({ ...options, check: () => { if (elapsed === 2) throw Error('STOP'); } }), /STOP/);
+  assert.equal(elapsed, 2);
+  elapsed = 5;
+  assert.throws(() => waitForProvingHold({ ...options, check: () => { throw Error('STOP at deadline'); } }), /STOP at deadline/);
+  for (const deadline of [undefined, Infinity, NaN]) assert.throws(() => waitForProvingHold({ ...options, deadline }), /finite caller deadline/);
+});
+
+test('a killed proving wrapper with an expired reservation cannot free either bridge lock while its owned group lives', async t => {
+  // Ordinary bounded fixtures deliberately force detached:false. Use the
+  // existing fixed native-group harness, with native alarms on descendants.
+  const { child } = spawnDetachedFixture(t, 'reservation-expiry');
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^# tests 1$/m); assert.match(result.stdout, /^# pass 1$/m);
 });
 
 test('readers skip other schemas and refuse symlinks, nonregular and oversized records without pruning', t => {

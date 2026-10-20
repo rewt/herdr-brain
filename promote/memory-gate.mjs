@@ -2,19 +2,32 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { waitForMemory } from '../lib/memory.mjs';
 import { waitForProvingHold } from '../test-slot/reservations.mjs';
+import { admissionDeadline } from '../lib/deadline.mjs';
+import { waitSecondsOf, WAIT_ENV, LEGACY_WAIT_ENV } from '../test-slot/test-slot.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 
 // An initial wait owns no promotion resources. Every re-check by a lock owner
 // has a fixed allowance, independent of the (potentially hours-long) slot wait.
 export const MEMORY_RECHECK_MS = 5000;
-export function waitForPromotionMemory(canonical, { held = false, checkStop = true } = {}) {
+export function waitForPromotionMemory(canonical, { held = false, checkStop = true, deadline, clock = () => performance.now() } = {}) {
   try {
-    const check = () => {
-      if (checkStop && fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) {
+    const stop = () => {
+      if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) {
         throw Object.assign(new Error('PROMOTION_STOPPED: supervisor STOP exists; nothing merged'), { code: 'PROMOTION_STOPPED' });
       }
     };
-    if (!held) waitForProvingHold({ label: 'lane promote', check });
+    const check = () => { if (checkStop) stop(); };
+    if (!held) {
+      // Match the existing train slot allowance, including explicit zero.
+      if (deadline === undefined) {
+        const seconds = waitSecondsOf({ [WAIT_ENV]: process.env[WAIT_ENV] ?? process.env[LEGACY_WAIT_ENV] ?? '7200' });
+        deadline = admissionDeadline({ budgetMs: seconds * 1000, now: clock, allowance: ms => ms });
+      }
+      // A resumed train may reconcile under STOP when no new launch is held.
+      // STOP still cancels an actual reservation wait, preserving its receipt.
+      waitForProvingHold({ label: 'lane promote', deadline, clock,
+        check: ({ waiting = false } = {}) => { if (checkStop || waiting) stop(); } });
+    }
     return waitForMemory({ label: 'lane promote', check, ...(held ? { maxWaitMs: MEMORY_RECHECK_MS, intervalMs: 1000 } : {}) });
   } catch (error) {
     if (error.code === 'MEMORY_PRESSURE_TIMEOUT') throw Object.assign(

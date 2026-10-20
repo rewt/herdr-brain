@@ -11,7 +11,8 @@ import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
-import { waitForProvingHold } from '../test-slot/reservations.mjs';
+import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
+import { admissionDeadline } from '../lib/deadline.mjs';
 import { readTiming, timedMemoryWait, timingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { bundleRelease, forwardRelease, continueRelease, operationFile } from '../lib/releases.mjs';
@@ -111,8 +112,9 @@ function syncTiming() {
   } catch { timingFailure('sync'); }
 }
 function memoryGate(kind, label, check) {
+  const deadline = admissionDeadline();
   return timedMemoryWait({ journal, run: job.run, item: job.item, lane: job.lane, kind,
-    wait: () => { waitForProvingHold({ label, check }); return waitForMemory({ label, check }); }, persist: syncTiming, onError: timingFailure });
+    wait: () => { waitForProvingHold({ label, check, deadline }); return waitForMemory({ label, check }); }, persist: syncTiming, onError: timingFailure });
 }
 function locate(value) {
   if (!/^R-\d+$/.test(value)) return path.resolve(value);
@@ -517,6 +519,10 @@ catch (error) {
   if (error.code === 'DISPATCH_STOPPED') {
     process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,
       reason: error.message, stage: job.stage, journal })}\n`);
+  } else if (error.code === RESERVATION_WAIT_EXPIRED_CODE) {
+    process.stdout.write(`${JSON.stringify({ result: 'deferred', code: error.code, reason: error.message,
+      elapsed_ms: error.elapsed_ms, run: job.run, item: job.item, stage: job.stage, journal })}\n`);
+    process.exitCode = 75;
   } else if (error.code === 'DISPATCH_HOOK_REVIEW') {
     process.stdout.write(`${JSON.stringify({ result: 'blocked', code: error.code, run: job.run, item: job.item,
       agent: job.worker.agentName, pane: job.worker.pane, reason: error.message, stage: job.stage, journal })}\n`);

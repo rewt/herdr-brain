@@ -4,7 +4,9 @@ Herdr Monitor supplies a dependency-free foreground command runner with shared
 occupancy, optional exclusive proving, process-family measurements and watchdogs.
 ARCH-34 records the operator's cross-project rule (2026-10-16): every job,
 including gates and releases, starts immediately and shares the machine; only a
-real, declared proving step pauses for a quiet machine at that step. Brain does
+real, declared proving step uses the exclusive bridge and publishes a reservation.
+Named new-launch gates can pause for that reservation; admitted shared work
+continues, so neither free memory nor a quiet machine is guaranteed. Brain does
 no proving. Its promotion, release and validation profiles are **SHARED**, even
 before measurement. The promote memory gate and integration `lane-promote.lock`
 remain unchanged guards.
@@ -148,6 +150,9 @@ stays unchanged. Shared admission writes the same grant sidecar immediately with
 retain their grant across preparation and the train invocation. The legacy bridge
 and configured workspace slot share one deadline, so acquiring the bridge does
 not grant a fresh wait allowance for the second lock.
+
+FIFO applies among compatible ticketed exclusive participants. Legacy zero-wait
+pollers that ignore tickets can jump the queue; it is not host-wide fairness.
 
 A refusal exits **75**, with one coded line: `TEST_SLOT_HELD` for a live holder or earlier waiter,
 or `TEST_SLOT_HOLDER_UNKNOWN` when liveness cannot be established. Neither is a

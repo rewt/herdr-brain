@@ -8,7 +8,7 @@ import { gitProject } from '../lib/project.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { nativeProcess } from './session-bind.mjs';
-import { loadTimeout } from '../lib/deadline.mjs';
+import { loadTimeout, ADMISSION_WAIT_MS } from '../lib/deadline.mjs';
 
 export const DEFAULT_SESSION_CAP = 7;
 const positive = n => Number.isSafeInteger(n) && n > 0;
@@ -20,7 +20,7 @@ const worker = w => w && ({ agent: w.agentName, pane: w.pane, worker_workspace: 
 // Separate from promotion locks: a launching journal reserves capacity even if
 // the coordinator dies while its launch child survives. Unique contenders
 // serialize cleanup too, so two reclaimers cannot remove a newly acquired lock.
-export function acquireSessionCapLock(common, { waitMs = 60000, allowance = loadTimeout, now = Date.now,
+export function acquireSessionCapLock(common, { waitMs = ADMISSION_WAIT_MS, allowance = loadTimeout, now = Date.now,
   pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms), check = () => {},
   kill = process.kill, readProcess = pid => lookupProcess(pid, { identityOnly: true }) } = {}) {
   const directory = path.join(common, 'dispatch-session-cap'), contenders = `${directory}.contenders`;

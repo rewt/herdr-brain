@@ -15,7 +15,7 @@ import { hookReviewDialog, codexProfile } from '../hook-review.mjs';
 import { runMetrics } from '../metrics.mjs';
 import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 import { fold } from '../../lib/state.mjs';
-import { publishProvingReservation } from '../../test-slot/reservations.mjs';
+import { publishProvingReservation, RESERVATION_WAIT_EXPIRED_CODE } from '../../test-slot/reservations.mjs';
 import { readTiming } from '../../lib/run-timing.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
@@ -783,6 +783,32 @@ test('a proving reservation pauses dispatch before lane open within the existing
   } finally { held.release(); await pending.done; }
   assert.equal(pending.child.exitCode, 0, stderr); assert.match(stderr, /proving reservation ended; proceeding/);
   assert.deepEqual(readTiming(f.jobs()[0]).filter(row => row.kind === 'memory_open').map(row => row.outcome), ['entry', 'granted']);
+});
+
+for (const stage of ['open', 'worker']) test(`dispatch ${stage} proving wait defers at the existing admission deadline and retains its stage`, async t => {
+  const f = fixture(t), lock = path.join(f.root, 'bounded-slot'); let journal;
+  if (stage === 'worker') {
+    f.fail('dispatch'); assert.equal(f.start().status, 1); f.fail(''); journal = f.jobs()[0];
+  }
+  const held = publishProvingReservation({ lockPath: lock, label: 'proof', reason: 'bounded dispatch', expiresAt: new Date(Date.now() + 60000).toISOString() });
+  t.after(() => held.release());
+  try {
+    const preload = path.join(f.root, 'fast-admission.mjs');
+    fs.writeFileSync(preload, `if(process.argv[1]===${JSON.stringify(DISPATCH)}){const now=performance.now.bind(performance);Object.defineProperty(performance,'now',{value:()=>now()*10000});}`);
+    const launches = f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length;
+    const args = journal ? ['--retry', journal, '--fresh'] : [f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief];
+    const pending = f.concurrent(args, { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` });
+    const result = await pending.done;
+    assert.equal(result.status, 75, result.stderr);
+    const reply = JSON.parse(result.stdout); assert.equal(reply.result, 'deferred'); assert.equal(reply.code, RESERVATION_WAIT_EXPIRED_CODE);
+    assert.equal(reply.stage, stage); assert.ok(reply.elapsed_ms >= 0); assert.match(reply.reason, /bounded dispatch/);
+    const job = JSON.parse(fs.readFileSync(f.jobs()[0])); assert.equal(job.stage, stage);
+    assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, launches);
+    assert.equal(promptCalls(f).length, 0);
+    if (stage === 'open') assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'open'), false);
+    assert.deepEqual(readTiming(f.jobs()[0]).filter(e => e.kind === `memory_${stage}`).map(e => e.outcome).slice(-2), ['entry', 'failed']);
+  } finally { held.release(); }
 });
 
 test('dispatch waits under simulated swap pressure before opening a lane and resumes the same request', async t => {

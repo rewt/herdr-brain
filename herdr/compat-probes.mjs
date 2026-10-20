@@ -35,6 +35,11 @@ function initialize() {
   git(['add', '.']); git(['commit', '-qm', 'compatibility fixture']);
   record(['init']); record(['add', 'Compatibility fixture', '--role', 'engineer']);
 }
+function enableCloseout() {
+  const file = path.join(repo, '.lane.json'), config = json(file);
+  writeInput(file, { ...config, retirement: { ...config.retirement, closeout_queue: true } });
+  git(['add', '.lane.json']); git(['commit', '-qm', 'Opt fixture into closeout']);
+}
 async function queue() {
   const writer = await load('promote/promote.mjs'), q = writer.queueFor(repo);
   const jobs = writer.enqueue(q, ['compat-topic'], { laneCLI: path.join(root, 'lanes/lane.mjs'),
@@ -55,7 +60,7 @@ const probes = {
       git(['worktree', 'add', '-qb', 'lane/compat-topic', path.join(directory, 'lane')]);
       report(); record(['note', 'ENG-1', 'Compatibility note']);
       const closeout = await load('lib/closeout.mjs');
-      writeInput(path.join(repo, '.lane.json'), { retirement: { closeout_queue: true } });
+      enableCloseout();
       closeout.readyLane({ cwd: repo, org, topic: 'compat-topic', run: 'R-1', start: false });
       (await load('lib/closeout-consumer.mjs')).drainCloseout({ cwd: repo, org });
       const events = (await load('lib/store.mjs')).loadEvents(org).events;
@@ -83,7 +88,7 @@ const probes = {
       const lane = path.join(directory, 'lane');
       git(['worktree', 'add', '-qb', 'lane/compat-topic', lane]);
       record(['start', 'ENG-1', '--workspace', lane]);
-      writeInput(path.join(repo, '.lane.json'), { retirement: { closeout_queue: true } });
+      enableCloseout();
       const writer = await load('lib/closeout.mjs');
       writer.readyLane({ cwd: repo, org, topic: 'compat-topic', run: 'R-1', start: false });
       const [entry] = writer.readCloseoutEntries(common);

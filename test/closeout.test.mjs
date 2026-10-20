@@ -12,6 +12,7 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { initOrg, loadEvents, transact } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
+import { joinFleet } from '../lib/fleet.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
@@ -74,6 +75,20 @@ test('default off is inert, malformed policy keeps, and a lane copy cannot opt i
   assert.deepEqual(readCloseoutEntries(f.common), []);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":"yes"}}');
   assert.throws(() => closeoutPolicy(f.repo), /invalid/);
+});
+
+test('source binding uses the supplied fleet environment through publication', t => {
+  const f = setup(t, { occupied: false }), env = { ...f.env, HERDR_MONITOR_FLEET: path.join(f.scratch, 'binding-fleet.json') };
+  fs.unlinkSync(path.join(f.repo, '.org'));
+  joinFleet({ cwd: f.repo, record: f.org, worktrees: path.join(f.scratch, 'worktrees'), layers: [], env });
+  const add = [{ type: 'report.ingested', run: 'R-1', report: { outcome: 'done', summary: 'Complete' }, sha256: 'fixture' }];
+  const unbound = bindCloseoutSources({ cwd: f.repo, org: f.org, events: events(f), mutation: { add }, env: f.env });
+  assert.equal(unbound.add[0].closeout_targets, undefined, 'an unrelated discovery environment grants no binding');
+  const committed = transact(f.org, current => bindCloseoutSources({ cwd: f.repo, org: f.org, events: current, mutation: { add }, env }));
+  assert.equal(committed.added[0].closeout_targets.length, 1);
+  const published = publishCloseoutEvents({ cwd: f.repo, org: f.org, added: committed.added, env, start: false });
+  assert.equal(published.length, 1);
+  assert.equal(readCloseoutEntries(f.common)[0].org, fs.realpathSync(f.org));
 });
 
 test('concurrent foreign-record CLI writers neither consume nor prune the project record queue', async t => {

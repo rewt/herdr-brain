@@ -126,6 +126,25 @@ test('retirement hold: executor checks each tab and empty workspace immediately 
   assert.deepEqual(actions, ['w:t', 'w']);
 });
 
+test('workspace close intent precedes the native callback and requires an actual callback', () => {
+  const s = fixture(); s.tabs = []; s.panes = []; s.agents = [];
+  const plan = { close: [], workspaceClose: [{ workspace_id: 'w', cwd: '/repo/lane', token: planRetirement(s).token }] };
+  const order = [];
+  const results = executeRetirement(plan, { observe: () => s, log: row => order.push(row),
+    closeWorkspace: id => order.push({ native: id }) });
+  assert.deepEqual(order[0], { action: 'workspace-close-requested', workspace_id: 'w' });
+  assert.deepEqual(order[1], { native: 'w' });
+  assert.equal(order[2].action, 'closed'); assert.equal(results[0].action, 'closed');
+  const omitted = [];
+  assert.deepEqual(executeRetirement(plan, { observe: () => s, log: row => omitted.push(row) }), []);
+  assert.deepEqual(omitted, []);
+  const refused = [];
+  executeRetirement(plan, { observe: () => ({ ...s, retirementHold: 'hold' }),
+    closeWorkspace: () => assert.fail('held workspace'), log: row => refused.push(row) });
+  assert.equal(refused[0].action, 'held');
+  assert.ok(refused.every(row => row.action !== 'workspace-close-requested'));
+});
+
 test('process state changes do not change identity tokens, but stopped processes still keep on fresh decision', () => {
   const s=fixture(), plan=planRetirement(s);
   s.panes[0].process_info.process_tree[1].state='R';

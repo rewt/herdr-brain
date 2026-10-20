@@ -15,6 +15,22 @@ function scratch(t) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }
+
+for (const probe of ['events', 'closeout']) test(`${probe} opt-in preserves committed fixture settings and a clean canonical tree`, t => {
+  const root = scratch(t), env = scratchEnvironment(root);
+  fs.mkdirSync(env.HOME); fs.mkdirSync(env.XDG_CONFIG_HOME);
+  fs.mkdirSync(path.join(root, 'bin'));
+  fs.writeFileSync(path.join(root, 'bin/herdr'), `#!${process.execPath}\nconst a=process.argv.slice(2);\nif(a[1]==='list') console.log(JSON.stringify({result:{workspaces:[],tabs:[],panes:[],agents:[]}}));\nelse { console.error('fixture refuses native effects'); process.exitCode=1; }\n`, { mode: 0o755 });
+  const written = spawnSync(process.execPath, [path.join(source, 'herdr/compat-probes.mjs'), 'write', source, probe, root],
+    { cwd: root, env, encoding: 'utf8', timeout: 60000 });
+  assert.equal(written.status, 0, written.stderr);
+  const repo = path.join(root, 'project');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(repo, '.lane.json'))), {
+    prepare: [], routes: { engineer: { kind: 'codex' }, review: { kind: 'codex' } }, retirement: { closeout_queue: true },
+  });
+  const status = spawnSync('git', ['-C', repo, 'status', '--porcelain'], { env, encoding: 'utf8' });
+  assert.equal(status.status, 0, status.stderr); assert.equal(status.stdout, '');
+});
 test('NEW real writers -> archived OLD own readers without an OLD formats list', t => {
   const root = scratch(t), old = path.join(root, 'old'); fs.mkdirSync(old);
   const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch',

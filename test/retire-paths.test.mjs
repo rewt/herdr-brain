@@ -16,6 +16,7 @@ import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
 import { recordStandardSlot, slotReceiptFile } from '../sessions/receipts.mjs';
 import { classifyRetirement } from '../lib/retire-status.mjs';
+import { initialShellDirectory } from '../lib/initial-shell.mjs';
 import { fixture, hold, heldReason, isolatedEnv, assertNoRemoval, completionFixture, traceLane } from './helpers/retire-fixture.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -38,6 +39,32 @@ function nativeExit(f, kind = 'codex') {
       { pid: 4, ppid: 3, identity: 'repl', state: 'S', command: '[node]' }] };
   f.save();
 }
+
+for (const kind of ['occupants', 'exits', 'initial-shells']) test(`retirement ignores non-JSON entries and directories in ${kind} without deleting them`, t => {
+  const f = fixture(t, { occupied: false });
+  const directory = kind === 'initial-shells' ? initialShellDirectory(f.common) : path.join(f.org, 'retirement', kind);
+  fs.mkdirSync(path.join(directory, '.claude'), { recursive: true });
+  fs.mkdirSync(path.join(directory, 'unexpected.json'));
+  if (kind === 'initial-shells') fs.mkdirSync(path.join(directory, `${'a'.repeat(64)}.json`));
+  fs.writeFileSync(path.join(directory, '.claude/.cc-writes'), '');
+  for (const name of ['notes.txt', '.hidden.json']) fs.writeFileSync(path.join(directory, name), '{');
+  fs.symlinkSync('notes.txt', path.join(directory, 'link.json'));
+  const before = fs.readdirSync(directory).sort(), retirement = f.retirement();
+  assert.deepEqual(retirement.observe(f.lane).errors, []);
+  const r = f.close(); assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(fs.existsSync(f.lane), false);
+  assert.deepEqual(fs.readdirSync(directory).sort(), before);
+  assert.equal(fs.readFileSync(path.join(directory, 'notes.txt'), 'utf8'), '{');
+});
+
+for (const kind of ['occupants', 'exits']) for (const contents of ['{', '{}']) test(`retirement keeps a malformed ${kind} JSON receipt: ${contents}`, t => {
+  const f = fixture(t, { occupied: false }), file = path.join(f.org, 'retirement', kind, 'bad.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, contents);
+  const r = f.close(); assert.notEqual(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stderr, /receipts unreadable.*project kept/);
+  assert.ok(fs.existsSync(f.lane)); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  assert.equal(fs.readFileSync(file, 'utf8'), contents);
+});
 
 for (const [kind, command] of [['codex', '/quit'], ['claude', '/exit']]) test(`native ${kind} exits once through route data, then closes only its unchanged bare shell`, t => {
   const f = fixture(t); nativeExit(f, kind);

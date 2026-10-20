@@ -159,6 +159,22 @@ test('branch-only close also goes through archive and metadata preflight', t => 
   assert.ok(r.stdout.includes('lane-removed'));
 });
 
+test('CLI lane close survives unrelated native state churn and record appends during every observation', t => {
+  const f = fixture(t), counter = path.join(f.root, 'observations');
+  fs.writeFileSync(f.env.HERDR_RETIRE_HERDR, `#!${process.execPath}
+const fs=require('node:fs'),a=process.argv.slice(2),counter=${JSON.stringify(counter)};
+if(a[0]==='agent'&&a[1]==='list'){
+ const n=fs.existsSync(counter)?Number(fs.readFileSync(counter,'utf8'))+1:1;fs.writeFileSync(counter,String(n));
+ fs.appendFileSync(${JSON.stringify(path.join(f.org, 'events.jsonl'))},JSON.stringify({type:'item.added',id:'ENG-'+n,role:'engineer',seq:n,at:'2026-01-01T00:00:00Z',by:'fixture'})+'\\n');
+ console.log(JSON.stringify({result:{agents:[{name:'unrelated',cwd:${JSON.stringify(path.join(f.root, 'other'))},workspace_id:'other',pane_id:'other:p',agent_status:n%2?'working':'idle',state_change_seq:n}]}}));
+}else console.log(JSON.stringify({result:{workspaces:[],panes:[],tabs:[]}}));
+`, { mode: 0o755 });
+  const r = f.close(); assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(Number(fs.readFileSync(counter, 'utf8')) >= 2, 'native state changed across fresh observations');
+  assert.match(r.stdout, /lane-removed/); assert.doesNotMatch(r.stdout + r.stderr, /authority changed since lane removal plan/);
+  assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+});
+
 test('a Git index writer lock keeps the worktree, branch and lock intact', t => {
   const f = fixture(t, { merged: true });
   const metadata = f.git(['rev-parse', '--absolute-git-dir'], f.lane), lock = path.join(metadata, 'index.lock');

@@ -35,7 +35,7 @@ function fixture() {
     agents: [{ name: 'worker', agent: 'native', agent_status: 'done', pane_id: 'w:p', tab_id: 'w:t', workspace_id: 'w',
       cwd: '/repo/lane', terminal_id: 'terminal', agent_session: { value: 'session' }, state_change_seq: 4 }],
     references: [], handoffs: [], errors: [] };
-  return snapshot;
+  return { ...snapshot, events };
 }
 const kept = s => { const p = planRetirement(s); assert.equal(p.close.length, 0); assert.equal(p.keep.length, 1); return p.keep[0].why; };
 
@@ -543,7 +543,16 @@ test('malformed, missing expiry, unknown schema, unreadable reference fail the w
     f.write(value); const s = fixture(); Object.assign(s, readDeclaredReferences(f.org, f.now)); assert.match(kept(s), /project kept/);
   }
   fs.writeFileSync(f.file, '{'); assert.equal(readDeclaredReferences(f.org, f.now).errors.length, 1);
-  fs.unlinkSync(f.file); fs.mkdirSync(f.file); assert.equal(readDeclaredReferences(f.org, f.now).errors.length, 1);
+  const read = fs.readFileSync;
+  fs.readFileSync = (file, ...args) => { if (file === f.file) throw Object.assign(Error('denied'), { code: 'EACCES' }); return read(file, ...args); };
+  try { assert.match(readDeclaredReferences(f.org, f.now).errors[0], /denied.*project kept/); }
+  finally { fs.readFileSync = read; }
+});
+test('declared references ignore directories, dotfiles and non-JSON files', t => {
+  const f = referenceFixture(t);
+  fs.mkdirSync(f.file); assert.deepEqual(readDeclaredReferences(f.org, f.now).errors, []);
+  for (const name of ['notes.txt', '.hidden.json']) fs.writeFileSync(path.join(f.org, 'references', name), '{');
+  assert.deepEqual(readDeclaredReferences(f.org, f.now).errors, []);
 });
 test('generic promote and trusted verify sources are read-only and include interrupted/reconcile holds', t => {
   const f = referenceFixture(t), common = path.join(f.org, 'common'), verifyStateDir = path.join(f.org, 'trusted');
@@ -735,6 +744,72 @@ test('lane removal uses fresh shared authority: new references and HOLD both sto
   delete s.retirementHold;
   const done = executeRetirement(planRetirement(s), { observe: () => s, removeLane: row => actions.push(row) });
   assert.equal(done[0].action, 'lane-removed'); assert.equal(actions.length, 1);
+});
+
+function removalSnapshot() {
+  const s = fixture(); s.tabs = []; s.panes = []; s.agents = [];
+  s.removal = { cwd: '/repo/lane', branch: 'lane/topic', tip: 'abc', integrated: true,
+    archiveTag: null, evidence: { sha256: 'hash' } };
+  return s;
+}
+
+for (const change of ['agent', 'record', 'workspace', 'tab', 'reference']) test(`lane removal ignores unrelated ${change} changes while global authority changes`, () => {
+  const s = removalSnapshot();
+  s.agents.push({ name: 'other', cwd: '/repo/other', pane_id: 'other:p', agent_status: 'working', state_change_seq: 1 });
+  s.workspaces.push({ workspace_id: 'other', worktree: { checkout_path: '/repo/other' } });
+  const plan = planRetirement(s);
+  if (change === 'agent') Object.assign(s.agents[0], { agent_status: 'idle', state_change_seq: 2 });
+  if (change === 'record') {
+    s.record = fold([...s.events, { type: 'item.added', id: 'ENG-2', role: 'engineer', seq: 5 }]);
+    s.record.revision = 5;
+  }
+  if (change === 'workspace') s.workspaces.push({ workspace_id: 'new', worktree: { checkout_path: '/repo/new' } });
+  if (change === 'tab') s.tabs.push({ tab_id: 'other:t', workspace_id: 'other' });
+  if (change === 'reference') s.references.push({ kind: 'other job', cwd: '/repo/other' });
+  const fresh = planRetirement(s);
+  assert.notEqual(fresh.token, plan.token);
+  assert.equal(fresh.laneClose[0].token, plan.laneClose[0].token);
+  const removed = [];
+  const result = executeRetirement({ ...plan, close: [] }, { observe: () => s, removeLane: row => removed.push(row) });
+  assert.equal(result[0].action, 'lane-removed'); assert.equal(removed.length, 1);
+});
+
+for (const change of ['pane', 'agent', 'run', 'terminal-run', 'chain', 'tip', 'archive', 'evidence', 'error', 'HOLD']) test(`lane removal rechecks its own ${change} authority`, () => {
+  const s = removalSnapshot(), plan = planRetirement(s);
+  if (change === 'pane') { s.tabs = fixture().tabs; s.panes = fixture().panes; }
+  if (change === 'agent') s.agents = fixture().agents;
+  if (change === 'run' || change === 'terminal-run') s.record.runs.set('R-2', { ...s.record.runs.get('R-1'), id: 'R-2', started: { seq: 10 },
+    ...(change === 'run' ? { report: null } : {}) });
+  if (change === 'chain') s.record.items.get('ENG-1').closed.as = 'dropped';
+  if (change === 'tip') s.git[0].head = 'new-tip';
+  if (change === 'archive') s.removal.archiveTag = 'archive/lane/topic';
+  if (change === 'evidence') s.removal.evidence.sha256 = 'new-hash';
+  if (change === 'error') s.errors.push('record unreadable; project kept');
+  if (change === 'HOLD') s.retirementHold = 'held by supervisor';
+  const fresh = planRetirement(s);
+  assert.notEqual([...fresh.laneClose, ...fresh.laneKeep][0].token, plan.laneClose[0].token);
+  const result = executeRetirement(plan, { observe: () => s, removeLane: () => assert.fail('changed lane authority') });
+  assert.equal(result[0].action, change === 'HOLD' ? 'held' : 'skip-close');
+  if (['terminal-run', 'chain', 'tip', 'archive', 'evidence'].includes(change)) assert.equal(result[0].why, 'authority changed since lane removal plan');
+});
+
+for (const ref of [{ global: true }, { item: 'ENG-1' }, { run: 'R-1' }, { lane: 'topic' },
+  { cwd: '/repo' }, { cwd: '/repo/lane/child' }, { head: 'abc' }, { label: 'job /repo/lane' }]) test(`lane removal retains a new matching reference: ${JSON.stringify(ref)}`, () => {
+  const s = removalSnapshot(), plan = planRetirement(s);
+  s.references.push({ kind: 'new callback', ...ref });
+  const result = executeRetirement(plan, { observe: () => s, removeLane: () => assert.fail('new lane reference') });
+  assert.equal(result[0].action, 'skip-close'); assert.match(result[0].why, /new callback reference/);
+});
+
+for (const change of ['pane', 'agent', 'tree', 'raw-tree']) test(`lane keep token binds its own ${change} even when the reason stays occupied`, () => {
+  const s = fixture(); s.removal = removalSnapshot().removal;
+  const before = planRetirement(s).laneKeep[0];
+  if (change === 'pane') s.panes[0].terminal_id = 'changed-terminal';
+  if (change === 'agent') s.agents[0].state_change_seq++;
+  if (change === 'tree') s.panes[0].process_info.process_tree[0].identity = 'new-birth';
+  if (change === 'raw-tree') s.panes[0].process_info.process_tree_raw = [{ pid: 99, identity: 'new', command: '[job]', state: 'Z' }];
+  const after = planRetirement(s).laneKeep[0];
+  assert.equal(after.why, before.why); assert.notEqual(after.token, before.token);
 });
 
 function nativeHelpers(s) {

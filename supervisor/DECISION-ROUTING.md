@@ -163,6 +163,15 @@ technical-delegate accuracy or the safety of skipping ordinary-feature reviews.
 The source's selected seed decisions are not an accuracy sample or a defensible
 denominator for automatic tier movement.
 
+## Appendix: herdr-brain
+
+- The operator's 2026-10-20 standing direction: “Let's update routing for all dispatched engineering to use Sol 6.1 Max instead of Astra. And let's reserve Astra for more of the UX UI type of tasks or site layouts or organization and keep difficult engineering efforts on Soul 6.1 max fast”.
+- Routine engineering dispatches on `gpt-6.1-sol`.
+- Difficult engineering and escalations use `engineer-max` (`gpt-6.1-sol`, max).
+- Contract, authority and architecture reviews that previously used Astra use `review-sol-max` (a Codex `gpt-6.1-sol` reviewer at max).
+- Astra is reserved for UX/UI, site layouts and information organization through `research-astra-max` (`gpt-6-astra`).
+- The operator's parent `.lane.json` layer defines these routes; this appendix names routes only and does not duplicate their settings.
+
 ## Appendix: bch-cloak
 
 BCH adopted v2 on 2026-10-14, source SHA-256

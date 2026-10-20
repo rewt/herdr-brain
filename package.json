@@ -18,7 +18,7 @@
     "test:release:steps": "npm test && node test-slot/test-slot.mjs run test:lanes --retry-timeout-under-load -- npm run test:lanes && node test-slot/test-slot.mjs run test:acceptance --retry-timeout-under-load -- npm run test:acceptance && npm run test:release:only",
     "test:promotion:core": "node test/helpers/tier.mjs promotion --file-timeout=480000 --suite-timeout=540000",
     "test:promotion:lanes": "node test/helpers/run.mjs --test-name-pattern='^(promote (refuses|leaves|rebases|accepts)|close (deletes|retires|refuses|preserves)|open refuses (symlink|ordinary)|registered paths are rejected|same-named repositories|a repository with a separate git directory|failed archive and post-close metadata|selected malformed, unreadable, and wrongly typed config|linked invocations use canonical repository config|bare repositories with only linked worktrees)' lanes/test/lane.test.mjs",
-    "test:release": "node test-slot/test-slot.mjs run test:release -- npm run test:release:steps",
+    "test:release": "node test-slot/test-slot.mjs run test:release:only -- node test/helpers/release-suites.mjs --file-timeout=480000 --suite-timeout=540000 test/startup-deadlines.test.mjs test/test-hangs.test.mjs watch/test/args.test.mjs watch/test/existing-project.test.mjs watch/test/watch.test.mjs promote/test/guard.test.mjs promote/test/metrics-profile.test.mjs promote/test/metrics.test.mjs promote/test/selector-log.test.mjs lanes/test/lane-dispatch.test.mjs",
     "test:release:only": "node test-slot/test-slot.mjs run test:release:only -- node test/helpers/release-suites.mjs --file-timeout=480000 --suite-timeout=540000"
   },
   "bin": {

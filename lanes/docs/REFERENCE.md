@@ -204,6 +204,15 @@ checkout's tracked `.lane.validation.json` overrides individual commands from
 is recorded verbatim. Before validation, `check` runs the configured `prepare`
 steps in the current worktree just as `promote` does.
 
+For projects opted in through a committed canonical `.validation-receipts.json`,
+`lane check --gate [--required-tests JSON]` builds the train's planned promotion
+command and records exact-input evidence; the lane must contain current canonical
+main. `--required-tests` is only valid with `--gate` and accepts the same JSON
+array as promote: at most 512 project-relative `.test.mjs` paths, without parent
+traversal. Supply the queue request's bound tests; the worker plans their sorted
+union just as the train does. See the [exact-validation contract](../../docs/contracts/exact-validation.md)
+for environment restrictions, selection refusals and receipt-reuse rules.
+
 The command refuses with exit 1 before validation when `git status --porcelain`
 is non-empty. `lane check` writes `.lane/gate.json`; Git must ignore `.lane/`, either
 through the target repository's `.gitignore` or the operator's global excludes file,

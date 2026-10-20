@@ -664,6 +664,15 @@ test("check rejects unknown options and missing or empty --cmd values", () => {
     const empty = lane(fixture, ["check", "--cmd", ""]);
     assert.equal(empty.status, 1);
     assert.equal(empty.stderr, "lane: usage: lane check [--cmd <validate command>]\n");
+
+    for (const value of [undefined, ""]) {
+      const args = ["check", "--gate", "--required-tests"];
+      if (value !== undefined) args.push(value);
+      const required = lane(fixture, args);
+      assert.equal(required.status, 1);
+      assert.equal(required.stderr, "lane: usage: lane check [--cmd <validate command>] | --gate [--required-tests JSON]\n");
+    }
+    assert.equal(existsSync(join(fixture.repo, ".lane", "gate.json")), false);
     negativeControl("check argument refusals");
   } finally {
     fixture.cleanup();
@@ -2209,6 +2218,10 @@ test("usage exits one with no command and with an unknown command", () => {
     assert.match(
       missing.stdout,
       /  check \[--cmd <validate command>\] \[--tier fast\|promotion\]\n                   validate this clean worktree/,
+    );
+    assert.match(
+      missing.stdout,
+      /  check --gate \[--required-tests JSON\]\n                   plan with the queue's bound test list/,
     );
     assert.doesNotMatch(missing.stdout, /lane board/u);
     assert.match(missing.stdout, /  config           print resolved configuration as key, JSON value, and source/);

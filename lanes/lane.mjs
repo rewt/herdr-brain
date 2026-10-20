@@ -2392,7 +2392,9 @@ function check(args) {
       fail(`usage: lane check [--cmd <validate command>] | --gate [--required-tests JSON] (unknown option: ${args[index]})`);
     }
     if (args[index + 1] === undefined || args[index + 1] === "") {
-      fail("usage: lane check [--cmd <validate command>] | --gate [--required-tests JSON]");
+      fail(args[index] === '--required-tests'
+        ? "usage: lane check [--cmd <validate command>] | --gate [--required-tests JSON]"
+        : "usage: lane check [--cmd <validate command>]");
     }
     if (args[index] === '--tier') tier = args[index + 1];
     else if (args[index] === '--required-tests') {
@@ -2840,9 +2842,10 @@ switch (command) {
         "                   then fails for environmental reasons that look real\n" +
         `  status           list open lanes vs ${MAIN}\n` +
         "  check [--cmd <validate command>] [--tier fast|promotion]\n" +
-        "        --gate [--required-tests JSON]  plan with the queue's bound test list\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
         "                   --tier fast (worker default) or promotion (integration CI); reuse exact trees\n" +
+        "  check --gate [--required-tests JSON]\n" +
+        "                   plan with the queue's bound test list\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
         "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",

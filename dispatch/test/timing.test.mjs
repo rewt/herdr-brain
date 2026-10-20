@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { appendTiming, readTiming, timingEvent, timingJournal, timingMetadata, timedMemoryWait, observeProcessEnd } from '../../lib/run-timing.mjs';
+import { appendTiming, readTiming, timingEvent, timingJournal, timingMetadata, timedMemoryWait, observeProcessEnd,
+  appendAdmissionTiming, readAdmissionTiming, admissionTimingEvent, admissionTimingJournal, admissionTimingMetadata } from '../../lib/run-timing.mjs';
 import { runMetrics, collectRunMetrics, renderRunMetrics } from '../metrics.mjs';
 import { ownFixtureLifetime } from '../../test/helpers/fixture-lifetime.mjs';
 
@@ -34,12 +35,20 @@ test('timing allowlist keeps a synthetic secret out of the journal and real run 
   const malicious = { ...event(1, 'memory_open', 'entry'), prompt: secret, path: `/tmp/${secret}`,
     screen: secret, env: { API_KEY: secret }, memory: { warning: secret } };
   appendTiming(f.journal, malicious);
+  const admission = { ...malicious, kind: 'admission_lock' };
+  appendAdmissionTiming(f.journal, admission);
   f.record(['set', 'R-1', `dispatch_waits=${timingMetadata([malicious], 'R-1')}`]);
+  f.record(['set', 'R-1', `dispatch_admission_waits=${admissionTimingMetadata([admission], 'R-1')}`]);
   const journal = fs.readFileSync(timingJournal(f.journal), 'utf8'), record = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  const separate = fs.readFileSync(admissionTimingJournal(f.journal), 'utf8');
   assert.ok(!journal.includes(secret)); assert.ok(!record.includes(secret));
+  assert.ok(!separate.includes(secret));
   assert.deepEqual(JSON.parse(journal), event(1, 'memory_open', 'entry'));
+  assert.deepEqual(JSON.parse(separate), event(1, 'admission_lock', 'entry'));
+  assert.throws(() => timingEvent(admission), /invalid run timing kind/);
   for (const key of ['kind', 'outcome', 'run', 'item', 'at', 'lane']) {
     assert.throws(() => timingEvent({ ...malicious, [key]: `/tmp/${secret}` }));
+    assert.throws(() => admissionTimingEvent({ ...admission, [key]: `/tmp/${secret}` }));
   }
 });
 
@@ -54,7 +63,9 @@ test('memory entry is durable while blocked, grants and stopped retries have exa
   clock = 10; wait('memory_worker', () => { clock = 17; });
   wait('admission_lock', () => { clock = 19; });
   assert.equal(syncs, 8);
-  const current = { id: 'R-1', item: 'ENG-1', started: { at: at(5) }, meta: { lane: 'timing', dispatch_waits: timingMetadata(readTiming(f.journal), 'R-1') } };
+  const current = { id: 'R-1', item: 'ENG-1', started: { at: at(5) }, meta: { lane: 'timing',
+    dispatch_waits: timingMetadata(readTiming(f.journal), 'R-1'),
+    dispatch_admission_waits: admissionTimingMetadata(readAdmissionTiming(f.journal), 'R-1') } };
   observeProcessEnd({ current, state: 'done', eligible: true, journal: f.journal, now: () => at(25),
     record: args => { current.meta.process_end = args[2].slice('process_end='.length); } });
   const m = runMetrics([current]);
@@ -65,6 +76,35 @@ test('memory entry is durable while blocked, grants and stopped retries have exa
   assert.equal(m.runs[0].dispatch_wait_s, 16);
   assert.equal(m.runs[0].process_end_after_run_start_s, 20);
   assert.equal(m.summary.dispatch_wait_s.missing, 0);
+});
+
+for (const mode of ['legacy', 'reuse']) test(`${mode} dispatch totals remain measured without an admission attempt`, () => {
+  const events = [event(1, 'memory_open', 'entry'), event(3, 'memory_open', 'granted'),
+    event(4, 'memory_worker', 'entry'), event(9, 'memory_worker', 'granted')];
+  const run = { id: 'R-1', item: 'ENG-1', started: { at: at(1) }, meta: { lane: 'timing',
+    ...(mode === 'reuse' ? { same_session: 'true', continuation_of: 'R-0' } : {}), dispatch_waits: timingMetadata(events, 'R-1') } };
+  const measured = runMetrics([run]);
+  assert.equal(measured.runs[0].dispatch_wait_s, 7);
+  assert.equal(measured.summary.dispatch_wait_s.samples, 1);
+  assert.equal(measured.summary.dispatch_wait_s.missing, 0);
+  assert.equal(measured.summary.invalid_metadata, 0);
+  assert.equal(measured.runs[0].waits.admission_lock.entries, 0);
+  for (const admission of [admissionTimingMetadata([event(9, 'admission_lock', 'entry')], 'R-1'),
+    admissionTimingMetadata([event(9, 'admission_lock', 'entry'), event(10, 'admission_lock', 'failed')], 'R-1'),
+    admissionTimingMetadata([event(9, 'admission_lock', 'entry')], 'R-2'), 'not-json']) {
+    const attempted = runMetrics([{ ...run, meta: { ...run.meta, dispatch_admission_waits: admission } }]);
+    assert.equal(attempted.runs[0].dispatch_wait_s, null, 'an attempted or malformed acquisition remains missing');
+  }
+});
+
+test('unfinished admission clocks resume separately and never enter the strict journal', t => {
+  const f = fixture(t);
+  appendAdmissionTiming(f.journal, event(1, 'admission_lock', 'entry'));
+  timedMemoryWait({ ...identity, journal: f.journal, kind: 'admission_lock', now: () => at(6), wait: () => {} });
+  assert.deepEqual(readAdmissionTiming(f.journal).map(e => [e.at, e.outcome]), [[at(1), 'entry'], [at(6), 'granted']]);
+  assert.deepEqual(readTiming(f.journal), []);
+  appendTiming(f.journal, event(7, 'process_end', 'done'));
+  assert.deepEqual(readTiming(f.journal), [event(7, 'process_end', 'done')]);
 });
 
 test('unfinished memory entries survive restart and legacy runs are missing rather than zero', t => {
@@ -94,7 +134,7 @@ test('admission lock exhaustion and STOP never fabricate granted wait samples', 
       now: () => at(clock), wait: () => { clock += 2; throw error; } }), value => value === error);
   }
   const run = { id: 'R-1', item: 'ENG-1', started: { at: at(1) },
-    meta: { lane: 'timing', dispatch_waits: timingMetadata(readTiming(f.journal), 'R-1') } };
+    meta: { lane: 'timing', dispatch_admission_waits: admissionTimingMetadata(readAdmissionTiming(f.journal), 'R-1') } };
   const measured = runMetrics([run]);
   assert.equal(measured.runs[0].waits.admission_lock.seconds, null);
   assert.equal(measured.runs[0].waits.admission_lock.failed, 1);
@@ -166,8 +206,9 @@ test('malformed, mismatched, reversed and duplicate clocks do not fabricate wait
 });
 
 test('only measured immediate grants count as zero; legacy clocks remain missing', () => {
-  const events = ['memory_open', 'memory_worker', 'admission_lock'].flatMap(kind => [event(1, kind, 'entry'), event(1, kind, 'granted')]);
-  const run = { id: 'R-1', item: 'ENG-1', started: { at: at(1) }, meta: { lane: 'timing', dispatch_waits: timingMetadata(events, 'R-1') } };
+  const events = ['memory_open', 'memory_worker'].flatMap(kind => [event(1, kind, 'entry'), event(1, kind, 'granted')]);
+  const run = { id: 'R-1', item: 'ENG-1', started: { at: at(1) }, meta: { lane: 'timing', dispatch_waits: timingMetadata(events, 'R-1'),
+    dispatch_admission_waits: admissionTimingMetadata([event(1, 'admission_lock', 'entry'), event(1, 'admission_lock', 'granted')], 'R-1') } };
   const m = runMetrics([run, { ...run, id: 'R-2', meta: { lane: 'timing' } }]);
   assert.equal(m.runs[0].dispatch_wait_s, 0); assert.equal(m.runs[1].dispatch_wait_s, null);
   assert.deepEqual(m.summary.dispatch_wait_s, { samples: 1, missing: 1, total: 0, median: 0, max: 0 });

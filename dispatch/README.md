@@ -180,7 +180,14 @@ a second coordinator for the same request; that refusal is not a queue wait.
 Lane dispatch skips the redundant memory gate
 through `--memory-checked` while still checking canonical STOP.
 
-Timing events live in the dispatch journal's companion `<request>.json.events.jsonl`.
+Memory and process-end timing events live in the dispatch journal's companion
+`<request>.json.events.jsonl`, retaining its strict kind list for older readers.
+Admission events live separately in `<request>.json.admission.jsonl` and mirror
+to the additive `dispatch_admission_waits` run metadata field. Older readers
+ignore this companion and field, preserving their memory totals and process end.
+Total dispatch wait requires both memory gates and includes admission only when
+attempted; an absent acquisition on reuse or a legacy run does not make the total
+missing. An attempted acquisition without a grant remains missing.
 Watch and dispatch append separate small lines so watch cannot overwrite the
 request's live recovery stage. Only timestamp, run id, item id, lane topic, kind
 and outcome are serialized; prompts, filesystem paths, screens, errors, memory

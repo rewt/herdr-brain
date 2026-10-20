@@ -229,11 +229,35 @@ const probes = {
   },
   timing: {
     async write() {
-      const journal = path.join(directory, 'dispatch.json');
-      (await load('lib/run-timing.mjs')).appendTiming(journal, { at, item: 'ENG-1', run: 'R-1', lane: 'compat-topic', kind: 'process_end', outcome: 'done' });
-      save({ journal }, [journal + '.events.jsonl'], 'allowlisted process-end event');
+      const journal = path.join(directory, 'dispatch.json'), timing = await load('lib/run-timing.mjs');
+      record(['start', 'ENG-1', '--workspace', repo, '--meta', 'lane=compat-topic']);
+      const start = JSON.parse(record(['show', 'R-1', '--json'])).started.at;
+      const event = (second, kind, outcome) => ({ at: new Date(Date.parse(start) + second * 1000).toISOString(),
+        item: 'ENG-1', run: 'R-1', lane: 'compat-topic', kind, outcome });
+      const waits = [[0, 'memory_open', 'entry'], [1, 'memory_open', 'granted'],
+        [1, 'memory_worker', 'entry'], [4, 'memory_worker', 'granted']].map(args => event(...args));
+      for (const row of waits) timing.appendTiming(journal, row);
+      const admission = [event(4, 'admission_lock', 'entry'), event(6, 'admission_lock', 'granted')];
+      for (const row of admission) timing.appendAdmissionTiming(journal, row);
+      const end = timing.appendTiming(journal, event(7, 'process_end', 'done'));
+      record(['set', 'R-1', `dispatch_waits=${timing.timingMetadata(waits, 'R-1')}`,
+        `dispatch_admission_waits=${timing.admissionTimingMetadata(admission, 'R-1')}`, `process_end=${JSON.stringify(end)}`]);
+      save({ journal }, [timing.timingJournal(journal), timing.admissionTimingJournal(journal), path.join(org, 'events.jsonl')],
+        'strict legacy memory/process-end journal plus separate admission companion and additive dispatch_admission_waits metadata; OLD ignores admission and preserves memory totals');
     },
-    async read() { assert.equal((await load('lib/run-timing.mjs')).readTiming(state().journal)[0].outcome, 'done'); console.log('run timing read'); },
+    async read() {
+      const rows = (await load('lib/run-timing.mjs')).readTiming(state().journal);
+      assert.equal(rows.length, 5); assert.equal(rows.at(-1).outcome, 'done');
+      assert.ok(rows.every(row => row.kind !== 'admission_lock'));
+      const run = JSON.parse(record(['show', 'R-1', '--json']));
+      assert.equal(JSON.parse(run.meta.dispatch_admission_waits).length, 2);
+      const metrics = (await load('dispatch/metrics.mjs')).runMetrics([run]);
+      assert.equal(metrics.summary.invalid_metadata, 0);
+      assert.equal(metrics.runs[0].process_end.outcome, 'done');
+      const admission = metrics.runs[0].waits.admission_lock;
+      assert.equal(metrics.runs[0].dispatch_wait_s, admission?.seconds === 2 ? 6 : 4);
+      console.log('OLD strict timing reader retained process end; metrics accepted additive admission metadata without invalidating memory totals');
+    },
   },
   validation: {
     async write() {

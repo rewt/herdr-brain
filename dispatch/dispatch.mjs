@@ -13,7 +13,7 @@ import { fold } from '../lib/state.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { admissionDeadline } from '../lib/deadline.mjs';
-import { readTiming, timedMemoryWait, timingMetadata } from '../lib/run-timing.mjs';
+import { readTiming, timedMemoryWait, timingMetadata, readAdmissionTiming, admissionTimingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { bundleRelease, forwardRelease, continueRelease, operationFile } from '../lib/releases.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
@@ -94,7 +94,7 @@ function checkReuseOccupant(prior, currentRun) {
 }
 const herdr = (args) => json(command(['herdr'], args));
 const note = (text) => record(['note', job.run, `Dispatch: ${text}`]);
-let dispatchWaits;
+let dispatchWaits, admissionWaits;
 function timingFailure(phase) {
   // Missing telemetry is visible without persisting arbitrary errors or making
   // the record CLI (or even this diagnostic write) a dispatch prerequisite.
@@ -106,9 +106,18 @@ function syncTiming() {
   if (!job.run) return;
   try {
     const value = timingMetadata(readTiming(journal).filter(e => e.kind !== 'process_end'), job.run);
-    if (value === dispatchWaits) return;
-    record(['set', job.run, `dispatch_waits=${value}`]);
-    dispatchWaits = value;
+    if (value !== dispatchWaits) {
+      record(['set', job.run, `dispatch_waits=${value}`]);
+      dispatchWaits = value;
+    }
+    const admission = readAdmissionTiming(journal);
+    if (admission.length) {
+      const value = admissionTimingMetadata(admission, job.run);
+      if (value !== admissionWaits) {
+        record(['set', job.run, `dispatch_admission_waits=${value}`]);
+        admissionWaits = value;
+      }
+    }
   } catch { timingFailure('sync'); }
 }
 function memoryGate(kind, label, check) {
@@ -388,6 +397,7 @@ async function main() {
     liveWorker({ ...job.worker, agentSessionId: identity.agent_session_id ?? job.worker.agentSessionId });
   }
   dispatchWaits = run.meta?.dispatch_waits;
+  admissionWaits = run.meta?.dispatch_admission_waits;
   syncTiming();
   // start may have committed the run before failing to materialize its brief.
   // The existing record command recreates a missing brief from durable context.

@@ -33,7 +33,7 @@ for (const probe of ['events', 'closeout']) test(`${probe} opt-in preserves comm
 });
 test('NEW real writers -> archived OLD own readers without an OLD formats list', t => {
   const root = scratch(t), old = path.join(root, 'old'); fs.mkdirSync(old);
-  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch',
+  const archive = spawnSync('git', ['archive', 'main', 'bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch',
     'settle', 'promote', 'test-slot', 'verify', 'supervisor', 'brain', 'messages', 'contrib', 'sessions', 'setup', 'logs', 'board', 'package.json', '.nvmrc'],
   { cwd: source, maxBuffer: 64 * 1024 * 1024 });
   assert.equal(archive.status, 0, archive.stderr.toString());
@@ -42,9 +42,12 @@ test('NEW real writers -> archived OLD own readers without an OLD formats list',
   assert.equal(fs.existsSync(path.join(old, 'docs/contracts/formats.json')), false);
   const result = checkCompatibility(old, source);
   assert.equal(result.counts.fail, 0, JSON.stringify(result.formats.filter(f => f.status === 'fail'), null, 2));
-  for (const id of ['record-events', 'closeout-entry/v1', 'promotion-queue', 'promotion-train/v1', 'lane-validation/v1', 'dispatch-journal', 'settle-journal', 'housekeeping-owner', '.herdr-release.json']) {
+  for (const id of ['record-events', 'closeout-entry/v1', 'promotion-queue', 'promotion-train/v1', 'lane-validation/v1', 'dispatch-journal', 'settle-journal', 'housekeeping-owner', '.herdr-release.json', 'run-timing']) {
     assert.equal(result.formats.find(f => f.id === id).status, 'pass', id);
   }
+  const timing = result.formats.find(f => f.id === 'run-timing');
+  assert.ok(timing.artifacts.some(file => file.path.endsWith('.admission.jsonl')));
+  assert.match(timing.scope, /separate admission companion/);
   assert.equal(result.formats.find(f => f.id === 'promotion-closeout-outbox').status, 'not-covered');
   assert.match(result.formats.find(f => f.id === 'promotion-closeout-outbox').reason, /acknowledgement/);
   assert.ok(result.formats.filter(f => f.status === 'not-covered').every(f => f.reason));

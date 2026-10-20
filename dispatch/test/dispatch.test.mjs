@@ -16,7 +16,7 @@ import { runMetrics } from '../metrics.mjs';
 import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 import { fold } from '../../lib/state.mjs';
 import { publishProvingReservation, RESERVATION_WAIT_EXPIRED_CODE } from '../../test-slot/reservations.mjs';
-import { readTiming } from '../../lib/run-timing.mjs';
+import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -39,7 +39,7 @@ function git(args) { const r=spawnSync('git',args,{encoding:'utf8'}); if(r.statu
 const entry=()=>git(['worktree','list','--porcelain']).split('\\n\\n').find(x=>x.includes('branch refs/heads/lane/topic'))?.split('\\n')[0].slice(9);
 if(type==='org') {
  if(fail==='after-prompt' && a[0]==='note' && a[2]?.startsWith('Dispatch: prompt sent')) {console.error('lost process after saved delivery');process.exit(1);}
- if(process.env.TEST_TIMING_FAILURE && a[0]==='set' && a[2]?.startsWith('dispatch_waits=')) { console.error('injected timing set failure');process.exit(1); }
+ if(process.env.TEST_TIMING_FAILURE && a[0]==='set' && /^(dispatch_waits|dispatch_admission_waits)=/.test(a[2]??'')) { console.error('injected timing set failure');process.exit(1); }
  const r=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...a],{stdio:'inherit'});
  if(fail==='bind-lost-reply' && a[0]==='session-bind') {console.error('lost bind reply');process.exit(1);}
  process.exit(r.status??1);
@@ -554,11 +554,14 @@ test('dispatch journals memory and final admission gates and mirrors allowlisted
   const events = fs.readFileSync(`${f.jobs()[0]}.events.jsonl`, 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(events.map(e => [e.kind, e.outcome]), [
     ['memory_open', 'entry'], ['memory_open', 'granted'], ['memory_worker', 'entry'], ['memory_worker', 'granted'],
-    ['admission_lock', 'entry'], ['admission_lock', 'granted'],
   ]);
+  const admission = readAdmissionTiming(f.jobs()[0]);
+  assert.deepEqual(admission.map(e => [e.kind, e.outcome]), [['admission_lock', 'entry'], ['admission_lock', 'granted']]);
   const metadata = JSON.parse(f.show(job.run).meta.dispatch_waits);
   assert.deepEqual(metadata, events.map(e => ({ ...e, run: job.run })));
-  for (const e of metadata) {
+  const extra = JSON.parse(f.show(job.run).meta.dispatch_admission_waits);
+  assert.deepEqual(extra, admission.map(e => ({ ...e, run: job.run })));
+  for (const e of [...metadata, ...extra]) {
     assert.deepEqual(Object.keys(e), ['at', 'run', 'item', 'lane', 'kind', 'outcome']);
     assert.equal(e.item, f.item); assert.equal(e.lane, 'topic');
   }
@@ -575,6 +578,7 @@ test('failed timing record sets leave lane open, launch and prompt delivery unch
   const job = JSON.parse(fs.readFileSync(failed.jobs()[0]));
   assert.equal(job.stage, 'complete'); assert.equal(job.timing_missing, 5);
   assert.equal(failed.show(job.run).meta.dispatch_waits, undefined);
+  assert.equal(failed.show(job.run).meta.dispatch_admission_waits, undefined);
   const { summary } = runMetrics([failed.show(job.run)]);
   assert.equal(summary.dispatch_wait_s.missing, 1);
   assert.equal(summary.waits_s.memory_worker.missing, 1);
@@ -584,7 +588,7 @@ test('recovery skips timing record sets when metadata already equals the journal
   const f = fixture(t, { timingRecord: true }); f.fail('watch');
   assert.equal(f.start().status, 1);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
-  const sets = () => f.calls().filter(c => c.type === 'org' && c.a[0] === 'set' && c.a[2].startsWith('dispatch_waits=')).length;
+  const sets = () => f.calls().filter(c => c.type === 'org' && c.a[0] === 'set' && /^(dispatch_waits|dispatch_admission_waits)=/.test(c.a[2])).length;
   const before = sets(); assert.equal(before, 5);
   f.fail(''); const result = f.dispatch(['--retry', job.run]);
   assert.equal(result.status, 0, result.stderr); assert.equal(sets(), before);

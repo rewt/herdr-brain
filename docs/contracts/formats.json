@@ -246,7 +246,7 @@
       "id": "run-timing",
       "version": "unversioned",
       "writer": "lib/run-timing.mjs",
-      "location": "<record>/dispatch/<attempt>.json.events.jsonl",
+      "location": "<record>/dispatch/<attempt>.json.events.jsonl; <attempt>.json.admission.jsonl; run meta dispatch_waits/dispatch_admission_waits/process_end",
       "rule": "additive",
       "probe": "timing"
     },

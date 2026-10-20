@@ -3,7 +3,9 @@
 import { isMain } from '../lib/cli-help.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
-import { timingEvent, waitKinds } from '../lib/run-timing.mjs';
+import { timingEvent, waitKinds, admissionTimingEvent } from '../lib/run-timing.mjs';
+
+const metricWaitKinds = [...waitKinds, 'admission_lock'];
 
 function splitWait(events, kind) {
   let entry = null, seconds = 0, entries = 0, grants = 0, stopped = 0, failed = 0, invalid = false;
@@ -45,7 +47,7 @@ export function runMetrics(runs, { since, until } = {}) {
     const start = Date.parse(run.started?.at);
     if (!Number.isFinite(start)) { missingStart++; if (lower !== null || upper !== null) continue; }
     if (lower !== null && start < lower || upper !== null && start >= upper) continue;
-    let events = [], end = null, invalid = false;
+    let events = [], admissionEvents = [], end = null, invalid = false, invalidAdmission = false;
     const matches = e => e.run === run.id && e.item === run.item && e.lane === (run.meta?.lane ?? null);
     try {
       if (run.meta?.dispatch_waits) {
@@ -56,15 +58,27 @@ export function runMetrics(runs, { since, until } = {}) {
       }
     } catch { invalid = true; events = []; }
     try {
+      if (run.meta?.dispatch_admission_waits !== undefined) {
+        const raw = JSON.parse(run.meta.dispatch_admission_waits);
+        if (!Array.isArray(raw)) throw Error('invalid admission waits');
+        admissionEvents = raw.map(admissionTimingEvent);
+        if (!admissionEvents.every(matches)) throw Error('foreign admission metadata');
+      }
+    } catch { invalid = true; invalidAdmission = true; admissionEvents = []; }
+    try {
       if (run.meta?.process_end) {
         end = timingEvent(JSON.parse(run.meta.process_end));
         if (!matches(end) || end.kind !== 'process_end' || Number.isFinite(start) && Date.parse(end.at) < start) throw Error('invalid process end');
       }
     } catch { invalid = true; end = null; }
-    const waits = Object.fromEntries(waitKinds.map(kind => [kind, splitWait(events, kind)]));
+    const waits = { ...Object.fromEntries(waitKinds.map(kind => [kind, splitWait(events, kind)])),
+      admission_lock: splitWait(admissionEvents, 'admission_lock') };
     invalid ||= Object.values(waits).some(w => w.invalid);
     if (invalid) invalidMetadata++;
-    const totals = Object.values(waits).map(w => w.seconds);
+    const totals = waitKinds.map(kind => waits[kind].seconds);
+    // Reuse and pre-admission-clock runs have no acquisition to measure. Once
+    // attempted, an unfinished or invalid admission clock keeps the sum missing.
+    if (admissionEvents.length || invalidAdmission) totals.push(waits.admission_lock.seconds);
     rows.push({ run: run.id, item: run.item,
       lane: /^[a-z0-9][a-z0-9-]{1,60}$/.test(run.meta?.lane ?? '') ? run.meta.lane : null,
       waits, dispatch_wait_s: totals.every(t => t !== null) ? totals.reduce((a, b) => a + b, 0) : null,
@@ -72,14 +86,14 @@ export function runMetrics(runs, { since, until } = {}) {
   }
   return { schema: 'run-timing-metrics/v1', window: { since: since ?? null, until: until ?? null, basis: 'run started.at; lower inclusive, upper exclusive' },
     summary: { runs: rows.length, invalid_metadata: invalidMetadata, missing_run_start: missingStart,
-      waits_s: Object.fromEntries(waitKinds.map(kind => [kind, summarize(rows.map(r => r.waits[kind].seconds))])),
+      waits_s: Object.fromEntries(metricWaitKinds.map(kind => [kind, summarize(rows.map(r => r.waits[kind].seconds))])),
       dispatch_wait_s: summarize(rows.map(r => r.dispatch_wait_s)),
       process_end_missing: rows.filter(r => !r.process_end).length,
       process_end_after_run_start_s: summarize(rows.map(r => r.process_end_after_run_start_s)) }, runs: rows,
     limitations: [
       'All record runs in the window are counted, including legacy and manual runs; missing clocks are null, never zero.',
       'Memory gates include the probe and any pressure wait. Resolved stopped/failed attempts are included after a later grant; unfinished gates remain missing.',
-      'The project session cap and recovery locks refuse. The final admission lock waits up to 60000 ms (scaled by loadTimeout); admission_lock measures that acquisition, including immediate grants. There is no fleet session limit or capacity wait clock. Reused workers do not acquire this lock and have no admission_lock sample.',
+      'The project session cap and recovery locks refuse. The final admission lock waits up to 60000 ms (scaled by loadTimeout); admission_lock measures that acquisition, including immediate grants. There is no fleet session limit or capacity wait clock. Reused workers and legacy runs have no admission_lock sample; totals include it only when attempted, and unfinished attempts remain missing.',
       'Process end is watch\'s idle/done/gone terminal decision after startup and idle report grace or with a valid report; later observed work lets the next terminal decision supersede it. Unavailable/blocked states are excluded. It is not report time or an OS exit timestamp.',
       'Run start precedes worker launch; process_end_after_run_start_s includes the worker memory gate and setup.',
       'Train slot and prepare splits are reported by promote/metrics.mjs from train receipts.',

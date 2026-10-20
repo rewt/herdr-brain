@@ -2,7 +2,12 @@
   "fast": "npm run test:fast",
   "promotion_tests": "test/helpers/affected-tests.mjs",
   "promotion": "npm run test:promotion",
-  "release": "npm run test:release",
-  "timeout_seconds": { "promotion": 3600, "release": 7200 },
-  "idle_timeout_seconds": { "promotion": 900 }
+  "release": "node test-slot/test-slot.mjs run test:release:only -- node test/helpers/release-suites.mjs --file-timeout=480000 --suite-timeout=540000 test/startup-deadlines.test.mjs test/test-hangs.test.mjs watch/test/args.test.mjs watch/test/existing-project.test.mjs watch/test/watch.test.mjs promote/test/guard.test.mjs promote/test/metrics-profile.test.mjs promote/test/metrics.test.mjs promote/test/selector-log.test.mjs lanes/test/lane-dispatch.test.mjs",
+  "timeout_seconds": {
+    "promotion": 3600,
+    "release": 7200
+  },
+  "idle_timeout_seconds": {
+    "promotion": 900
+  }
 }

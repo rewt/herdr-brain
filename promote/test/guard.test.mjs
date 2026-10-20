@@ -22,6 +22,22 @@ const source = fileURLToPath(new URL('../../', import.meta.url));
 const loader = fileURLToPath(new URL('./helpers/green-loader.mjs', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
+// Release sources are git archives, plus generated release/test state. Keep the
+// full archive universe: productFiles() omits root config and test/helpers/ that
+// the reviewed boundary includes.
+const snapshotOmit = new Set(['.git', '.org', '.lane', '.test-slot-executions', 'node_modules', '.DS_Store',
+  '.release-commit', '.release-acceptance.json', '.release-manifest.json']);
+function snapshotFiles(root, relative = '') {
+  const files = [];
+  for (const entry of fs.readdirSync(path.join(root, relative), { withFileTypes: true })) {
+    if (snapshotOmit.has(entry.name)) continue;
+    const file = path.join(relative, entry.name);
+    if (entry.isDirectory()) files.push(...snapshotFiles(root, file));
+    else if (entry.isFile() || entry.isSymbolicLink()) files.push(file);
+  }
+  return files.sort();
+}
+
 async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'promotion-green-guard-')));
   fixtureFleet(t, root);
@@ -35,7 +51,10 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const put = (file, bytes, cwd = repo) => { const target = path.join(cwd, file); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, bytes); };
   // Run the actual promotion/guard modules from a private canonical Brain.
   // No candidate module, checker or native-process implementation is stubbed.
-  const files = git(['ls-files', '-z'], source).split('\0').filter(file => file &&
+  const worktree = exec('git', ['rev-parse', '--is-inside-work-tree'], source);
+  const inventoryFiles = worktree.status === 0 && worktree.stdout.trim() === 'true'
+    ? git(['ls-files', '-z'], source).split('\0') : snapshotFiles(source);
+  const files = inventoryFiles.filter(file => file &&
     (boundaryInput(file) || BOOTSTRAP_FILES.includes(file)));
   for (const file of files) {
     const target = path.join(repo, file); fs.mkdirSync(path.dirname(target), { recursive: true });

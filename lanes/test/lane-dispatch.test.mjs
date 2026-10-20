@@ -1166,6 +1166,7 @@ test("review records one native launch identity before delivery and the planner 
     ].map((event, index) => ({ ...event, seq: index + 1, at: '2026-01-01T00:00:00Z', by: 'fixture' }));
     const eventFile = join(org, 'events.jsonl'), eventBytes = events.map(event => JSON.stringify(event) + '\n').join('');
     writeFileSync(eventFile, eventBytes);
+    const reviewedHead = git(review.path, ['rev-parse', 'HEAD']);
     const run = lane(fixture, ['review', 'review-occupant', '--round', '1', '--brief', review.brief, '--run', 'R-1']);
     assert.equal(run.status, 0, run.stderr); assert.equal(run.stdout, 'PASS\n');
     assert.doesNotMatch(run.stderr, /launch identity could not be recorded/);
@@ -1181,6 +1182,14 @@ test("review records one native launch identity before delivery and the planner 
       run: 'R-1', agent, terminal_id: 'fixture-terminal-1', agent_session_id: 'fixture-session-1' });
     const runtime = createRetirement({ cwd: fixture.repo, org, env: fixture.env, herdr: join(fixture.bin, 'herdr') });
     const snapshot = runtime.observe();
+    assert.equal(snapshot.reviewVerdicts.length, 1);
+    const [verdict] = snapshot.reviewVerdicts;
+    const evidence = join(review.path, 'docs/reviews/review-occupant', `${reviewedHead.slice(0, 7)}-r1.md`);
+    assert.deepEqual({ run: verdict.run, verdict: verdict.verdict, head: verdict.head,
+      evidence: verdict.evidence, sha256: verdict.sha256 }, {
+      run: 'R-1', verdict: 'PASS', head: reviewedHead, evidence,
+      sha256: createHash('sha256').update(readFileSync(evidence)).digest('hex'),
+    });
     assert.match(planRetirement({ ...snapshot, callbacks: [] }).keep[0].why, /unknown or mismatched recorded launch identity/);
     assert.equal(planRetirement(snapshot).keep[0].why, 'recorded callback process is still live or unknown');
     // An exited review on a clean, integrated terminal chain is recognised by
@@ -1202,7 +1211,14 @@ test("review records one native launch identity before delivery and the planner 
     assert.equal((second.stderr.match(/lane review: warning: launch identity could not be recorded/g) ?? []).length, 1);
     assert.match(second.stderr, /receipt belongs to a live process/);
     assert.equal(readFileSync(join(directory, files[0]), 'utf8'), bytes);
-    assert.equal(readFileSync(eventFile, 'utf8'), eventBytes);
+    const after = readFileSync(eventFile, 'utf8');
+    assert.equal(after.slice(0, eventBytes.length), eventBytes);
+    const appended = after.slice(eventBytes.length).trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(appended.length, 1);
+    assert.ok(Number.isFinite(Date.parse(appended[0].at)));
+    assert.deepEqual(appended, [{ seq: events.length + 1, at: appended[0].at, by: 'lane review',
+      type: 'review.verdict', common: repositoryIdentity(fixture.repo), run: 'R-1', item: 'ENG-1',
+      head: reviewedHead, review: verdict }]);
     assert.equal(review.fake.calls().some(args => ['close', 'send-keys'].includes(args[1])), false);
   } finally { fixture.cleanup(); }
 });

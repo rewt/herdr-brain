@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
+import { readOwnedRun, requireController, assertOwner, ownerBinding, sameOwner, brainOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { bundleRelease, forwardRelease, operationFile } from '../lib/releases.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
@@ -125,7 +126,7 @@ function settings(project, opt) {
   const org = opt.org ? fs.realpathSync(path.resolve(opt.org)) : findOrgDir({ cwd: project.canonical });
   if (run !== undefined && !org) throw new Error('--if-current-run requires a record');
   return { to, attempts, retry, herdr: opt.herdr ?? 'herdr', laneCLI,
-    org, expectedHead, run, existingWorker: opt['existing-worker'] === true,
+    org, expectedHead, run, claimedBy: opt['claimed-by'], claimGeneration: opt['claim-generation'] === undefined ? undefined : Number(opt['claim-generation']), existingWorker: opt['existing-worker'] === true,
     superseded: opt['superseded-runs'] === undefined ? [] : JSON.parse(opt['superseded-runs']),
     requiredTests: opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']),
     validate,
@@ -142,6 +143,14 @@ export function enqueue(queue, topics, options) {
   const admit = () => queue.transaction((data) => {
     if (options.existingWorker && !liveNativeWorker(queue.project.identity)) throw settingsRefusal('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
     return topics.map((topic) => {
+      const owned = options.run ? readOwnedRun(options.org, options.run) : null;
+      if (owned) {
+        if (options.claimedBy) {
+          const binding = requireController(owned, options.claimedBy);
+          if (!sameOwner(binding.owner, brainOwner(options.claimedBy)) || (options.claimGeneration !== undefined && binding.generation !== options.claimGeneration)) throw Error(`RUN_OWNED_ELSEWHERE: ${owned.id} owner=${JSON.stringify(owned.owner)} generation=${owned.owner_generation}`);
+        } else if (owned.owner && !owned.owner.legacy) throw Error(`RUN_OWNED_ELSEWHERE: ${owned.id} owner=${JSON.stringify(owned.owner)}`);
+        if (owned.owner) options.ownership = ownerBinding(owned);
+      }
       const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && ['refused', 'timeout'].includes(job.result?.outcome)));
       if (existing) {
         if (JSON.stringify(existing.superseded ?? []) !== JSON.stringify(options.superseded ?? []) || JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
@@ -161,7 +170,17 @@ export function enqueue(queue, topics, options) {
   return options.run ? withLock(options.org, admit) : admit();
 }
 
+function guardPromotionJob(job) {
+  if (!job.run) return;
+  // Admission's durable queue member fences transfer through completion,
+  // delivery and cleanup. A restart still verifies that exact claim binding.
+  const run = readOwnedRun(job.org, job.run);
+  if (job.ownership) assertOwner(run, job.ownership);
+  else if (run.owner && !run.owner.legacy) throw Error(`RUN_OWNED_ELSEWHERE: ${run.id} owner=${JSON.stringify(run.owner)}`);
+}
+
 function cleanup(job, queue, workspace) {
+  guardPromotionJob(job);
   const org = job.org ?? findOrgDir({ cwd: queue.project.canonical });
   // No record authorizes no tab retirement. This is a durable informational
   // outcome; Git-only cleanup must still prove vacancy through the lane guard.
@@ -183,6 +202,7 @@ function cleanup(job, queue, workspace) {
 }
 
 function perform(job, queue) {
+  guardPromotionJob(job);
   const native = probeNativeGate();
   if (!native.ok) return { outcome: 'refused', code: native.code, reason: native.reason, native_context: native };
   const cwd = queue.project.canonical;
@@ -220,6 +240,7 @@ function perform(job, queue) {
 }
 
 function performBatch(batch, queue, settings) {
+  for (const job of batch.jobs) guardPromotionJob(job);
   const first = batch.jobs[0], cwd = queue.project.canonical;
   const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
@@ -756,6 +777,7 @@ async function main() {
   const { values: opt, positionals } = parseArgs({ usage: "Usage: node promote/promote.mjs TOPIC [TOPIC ...] [OPTIONS] | --status | --drain", allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, to: { type: 'string' },
     validate: { type: 'string' }, herdr: { type: 'string' }, 'lane-cli': { type: 'string' },
+    'claimed-by': { type: 'string' }, 'claim-generation': { type: 'string' },
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },
     'superseded-runs': { type: 'string' }, 'required-tests': { type: 'string' }, 'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
     'existing-worker': { type: 'boolean' }, resume: { type: 'boolean' }, drain: { type: 'boolean' }, status: { type: 'boolean' },
@@ -766,7 +788,10 @@ async function main() {
   // --drain/--cleanup-job are continuations of recorded operations, not new
   // admissions. Their immutable path chooses the bundle even after a re-pin.
   if (!opt.drain && !opt['cleanup-job']) {
-    const forwarded = forwardRelease('promote/promote.mjs', opt.repo);
+    const org = opt.org ?? findOrgDir({ cwd: opt.repo });
+    const owned = opt['if-current-run'] && org ? readOwnedRun(org, opt['if-current-run']) : null;
+    const bound = owned?.owner && opt['claimed-by'] ? requireController(owned, opt['claimed-by']) : null;
+    const forwarded = bound ? continueOwnerRelease('promote/promote.mjs', bound) : forwardRelease('promote/promote.mjs', opt.repo);
     if (forwarded !== null) { process.exitCode = forwarded; return; }
   }
   const queue = queueFor(opt.repo);

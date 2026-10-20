@@ -140,7 +140,11 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   record(['init']);
   const item = record(['add', 'Produce correct work', '--role', 'engineer', '--accept', 'work.txt contains correct']).split(' ')[0];
   const brief = path.join(root, 'ask with spaces.md'); fs.writeFileSync(brief, '# Produce correct work\n\nwork.txt must contain correct.\n');
-  const start = () => record(['start', item, '--workspace', workspace, '--report', path.join(org, `report-${Date.now()}.md`), '--meta', 'lane=topic', '--meta', 'route=engineer', '--meta', 'harness=codex', '--meta', 'agent=original']).match(/R-\d+/)[0];
+  const start = ({ owned = true } = {}) => {
+    const id = record(['start', item, '--workspace', workspace, '--report', path.join(org, `report-${Date.now()}.md`), '--meta', 'lane=topic', '--meta', 'route=engineer', '--meta', 'harness=codex', '--meta', 'agent=original']).match(/R-\d+/)[0];
+    if (owned) record(['claim', id, '--controller', 'brain']);
+    return id;
+  };
   const show = (id) => JSON.parse(record(['show', id, '--json']));
   const report = (id, outcome = 'done', { artifacts = ['work.txt'], body = 'Claim: work.txt contains correct.' } = {}) => fs.writeFileSync(show(id).report_path, `---\nrun: ${id}\noutcome: ${outcome}\nsummary: The worker says the work is correct.\nheadline: The work is correct\nblockers: ${outcome === 'done' ? '[]' : '["A scope decision is needed"]'}\nproposals: []\nartifacts: ${artifacts.length ? `\n${artifacts.map(entry => `  - ${JSON.stringify(entry)}`).join('\n')}` : '[]'}\n---\n\n${body}\n`);
   const commit = (text) => { fs.writeFileSync(path.join(workspace, 'work.txt'), text); git(['add', 'work.txt'], workspace); git(['commit', '-qm', 'Implement work'], workspace); };

@@ -71,6 +71,7 @@ const promotion = [
   'test/processes.test.mjs',
   'test/report.test.mjs',
   'test/record-guard.test.mjs',
+  'test/run-ownership.test.mjs',
   'test/release-acceptance.test.mjs',
   'test/retire-status.test.mjs',
   'test/retire.test.mjs',

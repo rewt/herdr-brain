@@ -300,6 +300,7 @@ test('dirty lanes and foreign Git identities cannot be reviewed or dispatched', 
   assert.equal(f.calls().length, 0); fs.unlinkSync(path.join(f.workspace, 'dirty'));
   assert.equal(result(f.retry(run)).result, 'promotable');
   const foreign = fixture(t); foreign.record(['start', foreign.show(foreign.start()).item, '--workspace', f.workspace]);
+  foreign.record(['claim', 'R-2', '--controller', 'brain']);
   r = foreign.settle('R-2'); assert.equal(r.status, 1); assert.match(r.stderr, /another Git common directory/);
 });
 test('malformed reviews never silently retry models; inspected uncertain launches can start a new round', (t) => {

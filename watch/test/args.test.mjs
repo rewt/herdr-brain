@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from '../../test/helpers/bounded-test.mjs';
+import { seedOwnedRun } from '../../test/helpers/run-claim.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
 
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
@@ -52,6 +53,7 @@ for (const scenario of ['supplied', 'repeated', 'discovered']) {
     const receipts = createReceiptTracker();
     t.after(() => { receipts.cleanup(); fs.rmSync(root, { recursive: true, force: true }); });
     const cwd = path.join(root, 'checkout'), org = path.join(root, '.org');
+    seedOwnedRun(org, 'R-6');
     const capture = path.join(root, 'capture.mjs'), argvFile = path.join(root, 'argv.json');
     const orgCli = path.join(root, 'record'), log = path.join(root, 'watch.log');
     fs.mkdirSync(cwd);

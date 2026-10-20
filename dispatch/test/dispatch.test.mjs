@@ -1063,6 +1063,7 @@ test('from-run refuses another item and superseded origins before opening a lane
   const f=fixture(t),other=f.rec(['add','Other item','--role','engineer']).split(' ')[0];
   const first=f.rec(['start',f.item]).match(/R-\d+/)[0],later=f.rec(['start',f.item]).match(/R-\d+/)[0];
   const foreign=f.rec(['start',other]).match(/R-\d+/)[0];
+  for(const run of [first,later,foreign]) f.rec(['claim',run,'--controller','brain']);
   for(const [origin,code] of [[foreign,'FROM_RUN_OTHER_ITEM'],[first,'FROM_RUN_SUPERSEDED']]) {
     const events=fs.readFileSync(path.join(f.org,'events.jsonl'));
     const r=f.start(['--from-run',origin,'--awaited']);
@@ -1116,12 +1117,19 @@ test('reuse rechecks newer open occupant holders immediately before prompting',a
   const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
   const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
   workers[first.agent].agent_status='done';fs.writeFileSync(file,JSON.stringify(workers));
-  const hook=pauseHook(f,`const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+  const hook=pauseHook(f,`const rename=fs.renameSync,remove=fs.rmSync;let once=true,promptSaved=false;fs.renameSync=function(from,to) {
  const result=rename.call(fs,from,to);
  if(once && String(to).endsWith('.json')) {
   const job=JSON.parse(read.call(fs,to,'utf8'));
-  if(job.reuse && job.stage==='prompt') {once=false;pause();}
+  if(job.reuse && job.stage==='prompt') promptSaved=true;
  }
+ return result;
+};
+// Ownership reserves the intent under the record lock. Pause after releasing
+// that lock so this fixture can publish its competing occupant before prompt.
+fs.rmSync=function(target,...args) {
+ const result=remove.call(fs,target,...args);
+ if(once && promptSaved && String(target)===${JSON.stringify(path.join(f.org,'lock'))}) {once=false;pause();}
  return result;
 };`);
   const pending=f.concurrent([f.item,'--lane','topic','--route','engineer','--brief',f.brief,'--reuse',first.run],hook);
@@ -1158,12 +1166,19 @@ test('terminal-only reuse refused before prompting retries with a fresh session 
   // A newer worker receipt independently forbids late binding even if abandoned.
   const other=f.rec(['add','Temporary holder','--role','engineer']).split(' ')[0];
   const holder=f.rec(['start',other,'--workspace',prior.workspace]).match(/R-\d+/)[0];
-  const hook=pauseHook(f,`const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+  const hook=pauseHook(f,`const rename=fs.renameSync,remove=fs.rmSync;let once=true,promptSaved=false;fs.renameSync=function(from,to) {
  const result=rename.call(fs,from,to);
  if(once && String(to).endsWith('.json')) {
   const job=JSON.parse(read.call(fs,to,'utf8'));
-  if(job.reuse && job.stage==='prompt') {once=false;pause();}
+  if(job.reuse && job.stage==='prompt') promptSaved=true;
  }
+ return result;
+};
+// Ownership reserves the intent under the record lock. Pause after releasing
+// that lock so this fixture can publish its competing occupant before prompt.
+fs.rmSync=function(target,...args) {
+ const result=remove.call(fs,target,...args);
+ if(once && promptSaved && String(target)===${JSON.stringify(path.join(f.org,'lock'))}) {once=false;pause();}
  return result;
 };`);
   hook.NODE_OPTIONS+=` --require=${preload}`;

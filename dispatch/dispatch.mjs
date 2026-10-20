@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
+import { BRAIN_CONTROLLER, brainOwner, claimRun, readOwnedRun, requireController, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
@@ -24,6 +25,7 @@ import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL", allowPositionals: true, options: {
+  controller: { type: 'string', default: BRAIN_CONTROLLER },
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
   awaited: { type: 'boolean' }, 'awaited-step': { type: 'string' },
@@ -45,7 +47,19 @@ const atomic = (file, value) => {
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   fs.renameSync(temp, file);
 };
-const save = () => atomic(journal, job);
+const save = () => {
+  const write = () => atomic(journal, job);
+  if (job.ownership && job.run) return fenceOwner(job.org, job.run, job.ownership, write);
+  if (job.predecessor) return fenceOwner(job.org, job.predecessor.run, job.predecessor.binding, write);
+  return write();
+};
+function claimAdmission() {
+  if (!job.run) return;
+  const desired = job.predecessor?.binding.owner ?? brainOwner(opt.controller);
+  const claim = claimRun({ org: job.org, run: job.run, owner: desired, predecessor: job.predecessor, admission: true });
+  job.ownership = { owner: claim.owner, generation: claim.generation };
+  save();
+}
 function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
   const remaining = observationDeadline === undefined ? undefined : observationDeadline - Date.now();
   if (remaining !== undefined && remaining <= 0) throw Error('session observation deadline expired');
@@ -259,6 +273,18 @@ async function main() {
     lockJob();
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
+    const boundRun = saved.run ?? saved.fromRun;
+    if (boundRun) {
+      const binding = requireController(readOwnedRun(saved.org, boundRun), opt.controller);
+      if (saved.ownership && saved.ownership.generation !== binding.generation) throw new Error('RUN_OWNED_ELSEWHERE: dispatch receipt has an earlier claim');
+      const target = binding.owner.release.root;
+      if (target !== bundleRelease().root) {
+        fs.unlinkSync(lock); ownsLock = false;
+        fs.unlinkSync(contender); contender = null;
+        process.exitCode = continueOwnerRelease('dispatch/dispatch.mjs', binding); return;
+      }
+      continueOwnerRelease('dispatch/dispatch.mjs', binding);
+    }
     if (saved.release && saved.release.root !== bundleRelease().root) {
       operationFile('dispatch/dispatch.mjs', saved.release);
       // Read under the existing lock. Only transfer the bundle identity;
@@ -274,9 +300,16 @@ async function main() {
       if (job.fromRun && job.fromRun !== opt['from-run']) throw new Error('--from-run cannot replace the saved origin');
       checkOrigin(opt['from-run'], json(record(['show', job.item, '--json'])), !job.run && job.stage !== 'starting');
       job.fromRun = opt['from-run'];
+      job.predecessor ??= { run: job.fromRun, binding: requireController(readOwnedRun(job.org, job.fromRun), opt.controller) };
     }
   } else {
-    const forwarded = forwardRelease('dispatch/dispatch.mjs', opt.repo);
+    let predecessor;
+    if (opt['from-run']) {
+      predecessor = { run: opt['from-run'], binding: requireController(readOwnedRun(opt.org, opt['from-run']), opt.controller) };
+      const bound = continueOwnerRelease('dispatch/dispatch.mjs', predecessor.binding);
+      if (bound !== null) { process.exitCode = bound; return; }
+    }
+    const forwarded = predecessor ? null : forwardRelease('dispatch/dispatch.mjs', opt.repo);
     if (forwarded !== null) { process.exitCode = forwarded; return; }
     if (opt.adopt || opt.fresh || opt.resend || opt['accept-delivered'] || opt['recover-run']) throw new Error('recovery flags require --retry');
     if (positionals.length !== 1 || !opt.lane || !opt.route || !opt.brief) throw new Error('usage: dispatch.mjs ITEM --org DIR --lane TOPIC --route ROUTE --brief FILE [--report FILE] [--to AGENT] [--base REF] [--reuse R-n] [--extra TEXT] | --retry R-n|JOURNAL | --status R-n|JOURNAL');
@@ -303,7 +336,7 @@ async function main() {
     const directory = path.join(org, 'dispatch');
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
-    job = { token, repo, org, common, release: bundleRelease(), item: positionals[0], lane: opt.lane, route: opt.route,
+    job = { token, repo, org, common, predecessor, release: bundleRelease(), item: positionals[0], lane: opt.lane, route: opt.route,
       brief, report: opt.report ?? null, to: opt.to,
       base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null,
       declared: declaredFields,
@@ -330,7 +363,7 @@ async function main() {
   if (opt['recover-run']) {
     const run = json(record(['show', opt['recover-run'], '--json']));
     if (job.run || run.item !== job.item || run.meta?.dispatch_journal !== journal) throw new Error('recovery run does not belong to this request');
-    job.run = run.id; job.stage = 'worker'; save();
+    job.run = run.id; claimAdmission(); job.stage = 'worker'; save();
   }
   if (job.stage === 'open') {
     if (job.fromRun) checkOrigin(job.fromRun, json(record(['show', job.item, '--json'])));
@@ -351,7 +384,7 @@ async function main() {
     const matches = item.runs.map((id) => json(record(['show', id, '--json'])))
       .filter((run) => run.meta?.dispatch_journal === journal);
     if (matches.length === 1) {
-      job.run = matches[0].id; job.stage = 'worker'; save();
+      job.run = matches[0].id; claimAdmission(); job.stage = 'worker'; save();
     } else if (matches.length === 0 && job.startRefused) {
       job.stage = 'start'; save();
     } else {
@@ -376,9 +409,11 @@ async function main() {
     }
     job.run = output.match(/^(R-\d+) started/m)?.[1];
     if (!job.run) throw new Error('record start returned no run id; inspect record before retry');
+    claimAdmission();
     job.stage = 'worker'; save();
     note(`run started; request ${journal}`);
   }
+  claimAdmission();
   const run = json(record(['show', job.run, '--json']));
   if ((run.abandoned || run.report) && job.stage !== 'complete') throw new Error('run is already abandoned or reported; start a new run');
   if (run.item !== job.item || run.meta?.dispatch_journal !== journal || fs.realpathSync(run.workspace) !== job.workspace) throw new Error('run no longer matches dispatch request');
@@ -464,7 +499,7 @@ async function main() {
     liveWorker(job.worker);
     // Re-arm only through watch's exclusive per-run lock. It refuses duplicates.
     if (!job.watcher) {
-      job.watcher = json(command(watchCLI, [job.run, '--org', job.org, '--to', job.to,
+      job.watcher = json(command(watchCLI, [job.run, '--controller', opt.controller, '--org', job.org, '--to', job.to,
         '--cwd', job.repo, '--detach', '--log', path.join(job.org, 'dispatch', `${job.run}.watch.log`),
         ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : [])]));
       save();

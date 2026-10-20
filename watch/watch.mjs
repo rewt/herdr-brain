@@ -18,6 +18,8 @@ import { bundleRelease, continueRelease, forwardRelease } from '../lib/releases.
 
 import { acquireWatcherLock } from './lock.mjs';
 import { readReport } from '../lib/report.mjs';
+import { BRAIN_CONTROLLER, readOwnedRun, requireController, assertOwner, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
+import { writeFileAtomic } from '../lib/store.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { observeProcessEnd } from '../lib/run-timing.mjs';
 import { inboxPath, promptSupervisor, readInbox } from '../supervisor/prompt-supervisor.mjs';
@@ -38,6 +40,7 @@ const { values: opt, positionals, tokens } = parseArgs({ usage: "Usage: node wat
   tokens: true,
   options: {
     org: { type: 'string' },
+    controller: { type: 'string', default: BRAIN_CONTROLLER },
     to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr' },
     agent: { type: 'string' },
     report: { type: 'string' },
@@ -82,6 +85,23 @@ const longAfterMs = numberOption('long-after') * 1_000;
 const retryAfterMs = numberOption('retry-after') * 1_000;
 const deliveryAttempts = numberOption('delivery-attempts', { min: 1 });
 const dry = opt['dry-run'];
+let ownership;
+const watchReceipt = path.join(opt.org, 'watch', `${runId}.json`);
+function reserveWatch(intent, id) {
+  fenceOwner(opt.org, runId, ownership, () => {
+    const prior = fs.existsSync(watchReceipt) ? JSON.parse(fs.readFileSync(watchReceipt, 'utf8')) : {};
+    writeFileAtomic(watchReceipt, JSON.stringify({ ...prior, ownership, intent,
+      inbox: path.resolve(opt.inbox ?? inboxPath({ org: opt.org, cwd: opt.cwd })),
+      deliveries: [...new Set([...(prior.deliveries ?? []), ...(id ? [id] : [])])] }) + '\n');
+  });
+}
+function finishWatch() {
+  fenceOwner(opt.org, runId, ownership, () => {
+    const prior = JSON.parse(fs.readFileSync(watchReceipt, 'utf8'));
+    delete prior.intent;
+    writeFileAtomic(watchReceipt, JSON.stringify(prior) + '\n');
+  });
+}
 const orgCommand = opt['org-cli'] ? [opt['org-cli']] : [process.execPath, LOCAL_ORG];
 const log = (message) => process.stdout.write(`${new Date().toTimeString().slice(0, 8)}  ${message}\n`);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -213,7 +233,7 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
       if (settled || signal === 'SIGTERM') return;
       finish(code === 0 ? 'agent' : 'wait-failed');
     });
-    if (timeoutMs !== undefined) timer = setTimeout(() => finish('long'), Math.max(0, timeoutMs));
+    timer = setTimeout(() => finish(timeoutMs !== undefined && timeoutMs <= 1000 ? 'long' : 'ownership'), Math.max(0, Math.min(timeoutMs ?? 1000, 1000)));
     // Close the gap between the caller's inspection and fs.watch becoming live.
     if (fileStamp(reportPath) !== beforeStamp) finish('report');
   });
@@ -222,11 +242,12 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
 async function deliver(message, sound = 'request', id, { allowQueued = false, shadowEvidence } = {}) {
   log(message);
   if (dry) return true;
+  reserveWatch('delivery', id);
   const result = await promptSupervisor(opt.to, message, {
     org: opt.org, cwd: opt.cwd, inbox: opt.inbox, herdr: opt.herdr, attempts: deliveryAttempts,
     retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log, shadowEvidence,
   });
-  if (result.delivered) return true;
+  if (result.delivered) { finishWatch(); return true; }
   if (allowQueued && result.queued && Number.isInteger(result.owner_pid) && result.owner_pid > 0) return true;
   throw new Error(`could not deliver to ${opt.to}: ${result.delivery_error}; inbox=${result.inbox}`);
 }
@@ -342,7 +363,10 @@ function ownTabRetirementHold() {
   return retirementHold(gitProject(opt.cwd).canonical);
 }
 
-function closeOwnTab() {
+async function closeOwnTab() {
+  if (!dry && ownership) {
+    try { assertOwner(readOwnedRun(opt.org, runId), ownership); } catch { return; }
+  }
   if (dry || !opt['close-tab-on-exit'] || !process.env.HERDR_TAB_ID) return;
   try {
     const held = ownTabRetirementHold();
@@ -351,8 +375,14 @@ function closeOwnTab() {
     log(JSON.stringify({ action: 'held', tab_id: process.env.HERDR_TAB_ID, why: RETIREMENT_HOLD_REASON, error: error.message }));
     return;
   }
-  const child = spawn(opt.herdr, ['tab', 'close', process.env.HERDR_TAB_ID], { detached: true, stdio: 'ignore' });
-  child.unref();
+  reserveWatch('cleanup');
+  await new Promise((resolve, reject) => {
+    const child = spawn(opt.herdr, ['tab', 'close', process.env.HERDR_TAB_ID], { detached: true, stdio: 'ignore' });
+    const timer = setTimeout(() => { child.kill('SIGTERM'); reject(new Error('watch tab cleanup outcome is uncertain')); }, loadTimeout(10000));
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+    child.once('exit', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(`watch tab cleanup exited ${code}`)); });
+  });
+  finishWatch();
 }
 
 async function watch() {
@@ -405,6 +435,7 @@ async function watch() {
 
   for (;;) {
     current = readRun();
+    try { assertOwner(readOwnedRun(opt.org, runId), ownership); } catch (error) { log(`${error.message}; stopping without delivery`); return; }
     if (current.abandoned) {
       log(`${runId} was abandoned; stopping`);
       return;
@@ -426,12 +457,14 @@ async function watch() {
     if (workerFinished) report = reportState(reportPath);
     const saveProcessEnd = () => {
       try {
+        reserveWatch('process-end');
         observeProcessEnd({ current, state, now: () => observedAt,
           eligible: true, lastWorkingAt,
           record: args => {
             const result = org(args);
             if (result.error || result.status !== 0) throw Error('process-end metadata write failed');
           } });
+        finishWatch();
       } catch { log('run process-end metadata could not be saved; continuing to watch'); }
     };
     if (report.kind === 'valid' && workerFinished) {
@@ -550,6 +583,11 @@ try {
   // the project. Re-arm must still recover the dispatch's original bundle.
   const actual = bundleRelease();
   let saved;
+  if (!dry) {
+    ownership = requireController(readOwnedRun(opt.org, runId), opt.controller);
+    const bound = continueOwnerRelease('watch/watch.mjs', ownership);
+    if (bound !== null) process.exit(bound);
+  }
   if (actual.commit) {
     const current = readRun();
     if (current.meta?.dispatch_journal) {
@@ -565,7 +603,7 @@ try {
       }
     }
   }
-  const forwarded = saved ? (saved.root === actual.root ? null : continueRelease('watch/watch.mjs', saved))
+  const forwarded = ownership ? null : saved ? (saved.root === actual.root ? null : continueRelease('watch/watch.mjs', saved))
     : forwardRelease('watch/watch.mjs', opt.cwd);
   if (forwarded !== null) process.exit(forwarded);
   if (opt.detach && !dry) {
@@ -574,8 +612,11 @@ try {
     spawnWatcher();
   } else {
     const release = dry ? () => {} : acquireLock();
-    try { await watch(); } finally { release(); }
-    closeOwnTab();
+    try {
+      if (!dry) fenceOwner(opt.org, runId, ownership, () => {});
+      await watch();
+    } finally { release(); }
+    await closeOwnTab();
   }
 } catch (error) {
   process.stderr.write(`watch: ${error.message}\n`);

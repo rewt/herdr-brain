@@ -164,8 +164,8 @@ test('handle explicitly resumes a saved Major or FAIL cap escalation once', { ti
 function promotionHarness(f, run) {
   const cli = path.join(f.root, 'deferred-promote.mjs');
   fs.writeFileSync(cli, `import {parseArgs} from 'node:util'; import {queueFor,enqueue} from ${JSON.stringify(path.join(root, 'promote/promote.mjs'))};
-const {values:o,positionals:p}=parseArgs({allowPositionals:true,options:Object.fromEntries(['repo','org','to','expected-head','if-current-run','required-tests'].map(k=>[k,{type:'string'}]))});
-const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expected-head'],run:o['if-current-run'],requiredTests:JSON.parse(o['required-tests']??'[]'),to:o.to??'supervisor',attempts:1,retry:0,herdr:'herdr',laneCLI:${JSON.stringify(path.join(root, 'lanes/lane.mjs'))},validate:process.env.LANE_VALIDATE??null});console.log(JSON.stringify({jobs,queue:q.file}));\n`);
+const {values:o,positionals:p}=parseArgs({allowPositionals:true,options:Object.fromEntries(['repo','org','to','expected-head','if-current-run','required-tests','claimed-by','claim-generation'].map(k=>[k,{type:'string'}]))});
+const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expected-head'],run:o['if-current-run'],claimedBy:o['claimed-by'],claimGeneration:Number(o['claim-generation']),requiredTests:JSON.parse(o['required-tests']??'[]'),to:o.to??'supervisor',attempts:1,retry:0,herdr:'herdr',laneCLI:${JSON.stringify(path.join(root, 'lanes/lane.mjs'))},validate:process.env.LANE_VALIDATE??null});console.log(JSON.stringify({jobs,queue:q.file}));\n`);
   const queue = queueFor(f.repo);
   const promote = (extra = []) => invoke(f, ['promote', run, '--role', 'supervisor', '--why', 'Reviewed work under test authority', '--promote-cli', cli, ...extra]);
   const drain = () => result(f.exec(process.execPath, [path.join(root, 'promote/promote.mjs'), '--repo', f.repo, '--drain']));

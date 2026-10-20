@@ -96,7 +96,7 @@ test('queued integration records report-to-main time on the authorized run', t =
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
   const settled = result(f.settle(run)), queue = queueFor(f.repo);
   advance(f); // The already reviewed/authorized lane is now behind main.
-  enqueue(queue, ['topic'], { expectedHead: settled.head, run, org: f.org, to: 'test',
+  enqueue(queue, ['topic'], { claimedBy: 'brain', expectedHead: settled.head, run, org: f.org, to: 'test',
     herdr: path.join(f.root, 'bin/herdr'), laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 });
   const drained = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
   assert.equal(drained.status, 0, drained.stderr);
@@ -123,7 +123,7 @@ for (const change of ['start', 'note']) test(change === 'start'
   // writes now refuse; inspected recovery must still hit the L-23 recheck.
   fs.writeFileSync(checker, `const batch=JSON.parse(require('fs').readFileSync(${JSON.stringify(queue.file)})).current.id;
 require('child_process').execFileSync(process.execPath,${JSON.stringify([path.join(f.source, 'bin/org.mjs'), ...mutation])},{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)},ORG_GUARD_OVERRIDE:batch},stdio:'inherit'});`);
-  enqueue(queue, ['topic'], { expectedHead: settled.head, run, org: f.org, to: 'test', validate: `${process.execPath} ${checker}`,
+  enqueue(queue, ['topic'], { claimedBy: 'brain', expectedHead: settled.head, run, org: f.org, to: 'test', validate: `${process.execPath} ${checker}`,
     herdr: path.join(f.root, 'bin/herdr'), laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 });
   const base = f.git(['rev-parse', 'main']);
   const drained = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
@@ -172,8 +172,9 @@ test('a batch holds one shared record lock for two authorized lanes', t => {
   f.report(other); f.record(['ingest', f.show(other).report_path]);
   const queue = queueFor(f.repo), options = { org: f.org, to: 'test', herdr: path.join(f.root, 'bin/herdr'),
     laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 };
-  enqueue(queue, ['topic'], { ...options, expectedHead: settled.head, run });
-  enqueue(queue, ['second'], { ...options, expectedHead: f.git(['rev-parse', 'HEAD'], second), run: other });
+  enqueue(queue, ['topic'], { ...options, claimedBy: 'brain', expectedHead: settled.head, run });
+  f.record(['claim', other, '--controller', 'brain']);
+  enqueue(queue, ['second'], { ...options, claimedBy: 'brain', expectedHead: f.git(['rev-parse', 'HEAD'], second), run: other });
   const drained = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
   assert.equal(drained.status, 0, drained.stderr);
   assert.deepEqual(queue.load().results.map(r => r.outcome), ['promoted', 'promoted']);

@@ -3,9 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { bundleRelease, forwardRelease, continueRelease, releaseProject } from '../lib/releases.mjs';
+import { bundleRelease, forwardRelease, releaseProject } from '../lib/releases.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
+import { BRAIN_CONTROLLER, readOwnedRun, requireController, assertOwner, sameOwner, brainOwner, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { writeFileAtomic, findOrgDir } from '../lib/store.mjs';
 import { enterSupervisor } from './entry.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -53,13 +54,11 @@ function requestRelease(action, requested, opt) {
   }
   if (!saved) return null;
   if (saved.identity !== project.identity || saved.org !== org || (run && saved.run !== run)) throw Error('promotion receipt identity changed');
-  const actual = bundleRelease();
-  if (!saved.release && actual.commit && path.resolve(process.argv[1]) !== path.join(actual.root, 'supervisor/supervisor.mjs'))
-    throw Error('operation-release-missing: identify the legacy promotion runtime before resuming');
-  return saved.release ?? null;
+  return requireController(readOwnedRun(org, saved.run), opt.controller);
 }
 export function main(argv = process.argv.slice(2)) {
   const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|safe-point|status|entry|checkpoint|handle|promote [OPTIONS]", args: argv, allowPositionals: true, options: {
+    controller: { type: 'string', default: BRAIN_CONTROLLER },
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
     json: { type: 'boolean' }, 'since-seq': { type: 'string' }, through: { type: 'string' },
     workspace: { type: 'string' }, pane: { type: 'string' }, herdr: { type: 'string' },
@@ -70,8 +69,16 @@ export function main(argv = process.argv.slice(2)) {
     'required-tests': { type: 'string' }, 'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
   } });
   const [action = 'brief', requested] = positionals;
-  const admitted = requestRelease(action, requested, opt);
-  const forwarded = admitted ? continueRelease('supervisor/supervisor.mjs', admitted) : forwardRelease('supervisor/supervisor.mjs', opt.repo);
+  const ownerRun = requested ?? (opt.notice?.startsWith('[org-report] ') ? noticeRun(opt.notice) : null);
+  let ownership;
+  if (['handle', 'promote'].includes(action) && ownerRun) {
+    const org = opt.org ?? findOrgDir({ cwd: opt.repo });
+    ownership = requireController(readOwnedRun(org, ownerRun), opt.controller);
+    const bound = continueOwnerRelease('supervisor/supervisor.mjs', ownership);
+    if (bound !== null) { process.exitCode = bound; return; }
+  }
+  const admitted = ownership ? null : requestRelease(action, requested, opt);
+  const forwarded = ownership ? null : admitted ? continueOwnerRelease('supervisor/supervisor.mjs', admitted) : forwardRelease('supervisor/supervisor.mjs', opt.repo);
   if (forwarded !== null) { process.exitCode = forwarded; return; }
   let requiredTests = opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']);
   if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('invalid required test files');
@@ -119,22 +126,42 @@ export function main(argv = process.argv.slice(2)) {
   const handlePromotion = (receipt, result) => {
     const saved = receipt && jobAttempt(receipt, result.id);
     if (!saved || saved.identity !== project.identity || saved.org !== project.org || saved.phase !== 'acknowledged' || saved.lane !== result.topic) throw new Error('promotion outcome is not bound to an acknowledged supervisor request; inspect evidence');
-    if (result.run !== saved.run || result.expectedHead !== saved.head || result.org !== saved.org) throw new Error('promotion queue head or run binding differs from supervisor request; inspect evidence');
-    if (result.reconciliation?.state === 'pending') throw new Error('integrated; whole-batch reconciliation pending; retain lanes and retry bookkeeping');
-    if (result.outcome !== 'promoted') return { result: 'judge_promotion', run: saved.run, promotion: result };
-    if (result.tip !== saved.head && !verifyTrainResult(result, { project, saved })) throw new Error('promoted tip differs from authorized head without proved train replay; inspect evidence');
-    const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', result.tip, 'HEAD'], { cwd: project.canonical, encoding: 'utf8' });
-    if (ancestry.error || ancestry.status !== 0) throw new Error('promoted tip is not integrated in the canonical checkout; inspect evidence');
-    const run = JSON.parse(call(local('../bin/org.mjs'), ['show', saved.run, '--json']));
-    if (result.reconciliation) {
-      if (!recordedBatchCompletion({ result, project, run })) throw new Error('whole-batch record completion proof is missing or changed');
-      const item = JSON.parse(call(local('../bin/org.mjs'), ['show', run.item, '--json']));
-      if (item.runs.at(-1) !== run.id) throw new Error(`${run.id} is superseded after completion`);
-      if (!item.closed) throw new Error('item reopened after completion');
+    const callbackRelease = acquireLock(path.join(directory, `${receipt.run}.lock`));
+    const callbackFile = path.join(directory, `${receipt.run}.json`);
+    let binding, reserved = false;
+    try {
+      binding = requireController(readOwnedRun(project.org, receipt.run), opt.controller);
+      if (!sameOwner(binding.owner, brainOwner(opt.controller))) throw new Error('RUN_OWNED_ELSEWHERE: callback runtime differs from the owner');
+      // Reread after the operation lock: another callback or promotion may
+      // have advanced the receipt while this invocation waited.
+      receipt = JSON.parse(fs.readFileSync(callbackFile, 'utf8'));
+      if (receipt.ownership) assertOwner(readOwnedRun(project.org, receipt.run), receipt.ownership);
+      fenceOwner(project.org, receipt.run, binding, () => {
+        receipt.ownerActive = true; writeFileAtomic(callbackFile, JSON.stringify(receipt) + '\n'); reserved = true;
+      });
+      if (result.run !== saved.run || result.expectedHead !== saved.head || result.org !== saved.org) throw new Error('promotion queue head or run binding differs from supervisor request; inspect evidence');
+      if (result.reconciliation?.state === 'pending') throw new Error('integrated; whole-batch reconciliation pending; retain lanes and retry bookkeeping');
+      if (result.outcome !== 'promoted') return { result: 'judge_promotion', run: saved.run, promotion: result };
+      if (result.tip !== saved.head && !verifyTrainResult(result, { project, saved })) throw new Error('promoted tip differs from authorized head without proved train replay; inspect evidence');
+      const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', result.tip, 'HEAD'], { cwd: project.canonical, encoding: 'utf8' });
+      if (ancestry.error || ancestry.status !== 0) throw new Error('promoted tip is not integrated in the canonical checkout; inspect evidence');
+      const run = JSON.parse(call(local('../bin/org.mjs'), ['show', saved.run, '--json']));
+      if (result.reconciliation) {
+        if (!recordedBatchCompletion({ result, project, run })) throw new Error('whole-batch record completion proof is missing or changed');
+        const item = JSON.parse(call(local('../bin/org.mjs'), ['show', run.item, '--json']));
+        if (item.runs.at(-1) !== run.id) throw new Error(`${run.id} is superseded after completion`);
+        if (!item.closed) throw new Error('item reopened after completion');
+        return { result: 'recorded_promotion', run: saved.run, item: run.item, promotion: result };
+      }
+      call(local('../bin/org.mjs'), ['close', run.item, '--if-current-run', saved.run, '--note', `Promoted locally at ${result.tip}; queue ${result.id}; reviewed ${saved.reviewed_commit}. Authority: ${saved.why}`]);
       return { result: 'recorded_promotion', run: saved.run, item: run.item, promotion: result };
+    } finally {
+      try {
+        if (reserved) fenceOwner(project.org, receipt.run, binding, () => {
+          delete receipt.ownerActive; writeFileAtomic(callbackFile, JSON.stringify(receipt) + '\n');
+        });
+      } finally { callbackRelease(); }
     }
-    call(local('../bin/org.mjs'), ['close', run.item, '--if-current-run', saved.run, '--note', `Promoted locally at ${result.tip}; queue ${result.id}; reviewed ${saved.reviewed_commit}. Authority: ${saved.why}`]);
-    return { result: 'recorded_promotion', run: saved.run, item: run.item, promotion: result };
   };
   if (action === 'checkpoint') {
     const through = Number(opt.through);
@@ -167,7 +194,8 @@ export function main(argv = process.argv.slice(2)) {
   }
   if (!/^R-\d+$/.test(id ?? '')) throw new Error('a run ID or final report notice is required');
   const settle = opt['settle-cli'] ? path.resolve(opt['settle-cli']) : local('../settle/settle.mjs');
-  const settleArgs = [id, '--repo', project.canonical, '--org', project.org];
+  ownership ??= requireController(readOwnedRun(project.org, id), opt.controller);
+  const settleArgs = [id, '--controller', opt.controller, '--repo', project.canonical, '--org', project.org];
   if (action === 'handle') {
     // Promotion may have removed the checkout before a delayed report notice.
     // Recover from both receipts, using the same guards as the queue notice.
@@ -175,6 +203,7 @@ export function main(argv = process.argv.slice(2)) {
     if (fs.existsSync(file)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (saved.identity !== project.identity || saved.org !== project.org || saved.run !== id) throw new Error('promotion receipt identity changed');
+      if (saved.ownership) assertOwner(readOwnedRun(project.org, id), saved.ownership);
       if (saved.phase === 'acknowledged' && saved.queue?.jobs?.length === 1) {
         const promotion = completedJob(loadQueue(), saved.queue.jobs[0].id);
         if (promotion?.outcome === 'promoted') { print(handlePromotion(saved, promotion)); return; }
@@ -207,6 +236,7 @@ export function main(argv = process.argv.slice(2)) {
     if (fs.existsSync(file)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (saved.identity !== project.identity || saved.org !== project.org || saved.run !== id) throw new Error('promotion receipt identity changed');
+      if (saved.ownership) assertOwner(readOwnedRun(project.org, id), saved.ownership);
       const inheritedTests = [...new Set([...(saved.prior_attempts ?? []), saved].flatMap(attempt =>
         attempt.requiredTests ?? (attempt.test_evidence && !attempt.test_evidence.reexecuted ? attempt.test_evidence.files : [])))].sort();
       if (opt['required-tests'] !== undefined && inheritedTests.some(file => !requiredTests.includes(file))) throw Error('required tests cannot be removed from an earlier promotion attempt');
@@ -247,17 +277,17 @@ export function main(argv = process.argv.slice(2)) {
     if (!['promotable', 'promotable_with_findings'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
     const tests = [...new Set([...requiredTests, ...(result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : [])])].sort();
-    const saved = { identity: project.identity, org: project.org, run: id, requiredTests: tests, lane: result.lane, release: bundleRelease(),
+    const saved = { identity: project.identity, org: project.org, run: id, ownership, requiredTests: tests, lane: result.lane, release: bundleRelease(),
       reviewed_commit: result.reviewed_commit, head: result.head,
       ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',
       ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),
       ...(prior ? { prior_attempts: prior } : {}) };
-    writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n');
+    fenceOwner(project.org, id, ownership, () => writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n'));
     call(local('../bin/org.mjs'), ['note', id, `Request queue admission for ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion requested: ${saved.why}`]);
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
     try {
       saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
-        '--expected-head', result.head, '--if-current-run', id,
+        '--expected-head', result.head, '--if-current-run', id, '--claimed-by', opt.controller, '--claim-generation', String(ownership.generation),
         ...(opt['existing-worker'] ? ['--existing-worker'] : []),
         ...(tests.length ? ['--required-tests', JSON.stringify(tests)] : []), ...(opt.to ? ['--to', opt.to] : [])]));
     } catch (error) {

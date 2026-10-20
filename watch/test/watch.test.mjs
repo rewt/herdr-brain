@@ -17,6 +17,7 @@ import {
   reportNotice,
   unavailableNotice,
 } from '../notice.mjs';
+import { seedOwnedRun } from '../../test/helpers/run-claim.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
@@ -50,6 +51,7 @@ function reportText(run, headline = 'The report arrived') {
 
 function watcherFixture(run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-branch-'));
+  seedOwnedRun(path.join(root, '.org'), run);
   const report = path.join(root, 'report.md');
   const calls = path.join(root, 'herdr-calls');
   const org = path.join(root, 'org');
@@ -232,6 +234,7 @@ esac`);
 
 test('a valid report is checked and delivered without Herdr being present', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-'));
+  seedOwnedRun(path.join(root, '.org'), 'R-7');
   const report = path.join(root, 'report.md');
   const calls = path.join(root, 'herdr-calls');
   const org = path.join(root, 'org');
@@ -261,7 +264,7 @@ test('watch shadow uses the checked review verdict and scope while preserving th
   for (const [suffix, extra, route] of [['1', 'verdict: PASS', 'triage'], ['2', 'verdict: NEEDS-WORK', 'supervisor'], ['3', 'review_scope: deferred', 'supervisor'], ['4', 'verdict:\n  toString: inert-data', 'unknown']]) {
     const run = `R-99${suffix}`, f = watcherFixture(run);
     t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
-    fs.mkdirSync(path.join(f.root, '.org'));
+    fs.mkdirSync(path.join(f.root, '.org'), { recursive: true });
     fs.writeFileSync(f.report, reportText(run).replace('outcome: done', `outcome: done\n${extra}`));
     executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'
 case "$1 $2" in
@@ -343,6 +346,7 @@ else console.log('{}');\n`, { mode: 0o755 });
 
 test('a report landing wakes the watcher without polling Herdr', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-landing-'));
+  seedOwnedRun(path.join(root, '.org'), 'R-8');
   if (!await requireFileWatch(t, root)) return;
   const report = path.join(root, 'report.md');
   const calls = path.join(root, 'herdr-calls');

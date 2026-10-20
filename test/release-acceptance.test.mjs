@@ -1,4 +1,5 @@
 import test from './helpers/bounded-test.mjs';
+import { seedOwnedRun } from './helpers/run-claim.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -239,6 +240,7 @@ test('supervisor restart re-enters saved promotion requests for retry and comple
   fs.symlinkSync(green, path.join(f.home, 'current')); f.accept('green');
   fs.writeFileSync(path.join(blue, 'supervisor/supervisor.mjs'), `console.log('continued-blue');`);
   const org = path.join(f.root, 'org'); fs.mkdirSync(org);
+  seedOwnedRun(org, 'R-1', { workspace: f.repo, release: checkBundle(blue) });
   const identity = f.git('rev-parse', '--path-format=absolute', '--git-common-dir');
   const directory = receiptDirectory(org, identity); fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, 'R-1.json'), JSON.stringify({ identity, org, run: 'R-1',
@@ -251,6 +253,6 @@ test('supervisor restart re-enters saved promotion requests for retry and comple
   }
   const file = path.join(directory, 'R-1.json'), legacy = JSON.parse(fs.readFileSync(file));
   delete legacy.release; fs.writeFileSync(file, JSON.stringify(legacy));
-  assert.match(f.run(process.execPath, [path.join(f.home, 'current/supervisor/supervisor.mjs'), 'promote', 'R-1',
-    '--retry', '--why', 'fixture', '--repo', f.repo, '--org', org, '--role', 'supervisor']).stderr, /operation-release-missing/);
+  assert.equal(f.ok(f.run(process.execPath, [path.join(f.home, 'current/supervisor/supervisor.mjs'), 'promote', 'R-1',
+    '--retry', '--why', 'fixture', '--repo', f.repo, '--org', org, '--role', 'supervisor'])), 'continued-blue', 'an explicit owner binds the runtime even without a legacy request release');
 });

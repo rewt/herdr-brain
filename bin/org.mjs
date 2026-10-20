@@ -67,6 +67,8 @@ Lessons (durable knowledge, separate from work items)
           [--path PATH]... [--module NAME]...   propose a short claim (at most 400 code points)
   record lesson activate L-n [--supersedes L-n]... [--reason TEXT]
                                           activate and atomically supersede older lessons
+  record claim R-n --controller NAME [--legacy] [--release-root DIR]
+    [--transfer-from NAME --expected-owner JSON --expected-generation N --why TEXT]
   record lesson retire L-n --reason TEXT  retain the lesson and why it stopped helping
   record lessons [--path PATH] [--module NAME] [--scope S] [--state S] [--json]
                                           active by default; text shows five, JSON all matches
@@ -1014,6 +1016,7 @@ const COMMANDS = {
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
   start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.
+  claim: lazy('../lib/run-owner.mjs', 'claimCommand'),
   handoff: lazy('../lib/retire-command.mjs', 'handoffCommand'),
   'pane-release': lazy('../lib/retire-command.mjs', 'releaseCommand'),
   'session-bind': lazy('../dispatch/session-bind-command.mjs', 'sessionBindCommand'),

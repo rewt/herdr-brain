@@ -7,9 +7,10 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
+import { BRAIN_CONTROLLER, readOwnedRun, requireController, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
-import { bundleRelease, forwardRelease, continueRelease } from '../lib/releases.mjs';
+import { bundleRelease } from '../lib/releases.mjs';
 import { readReport } from '../lib/report.mjs';
 import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { itemStatus, laterRuns, releases } from '../lib/state.mjs';
@@ -30,6 +31,7 @@ import { readReviewVerdicts } from '../lib/review-verdict.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node settle/settle.mjs R-n [OPTIONS]", allowPositionals: true, options: {
+  controller: { type: 'string', default: BRAIN_CONTROLLER },
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   brief: { type: 'string' }, 'review-route': { type: 'string' }, 'fix-route': { type: 'string' },
   to: { type: 'string' }, reuse: { type: 'boolean' }, retry: { type: 'boolean' },
@@ -42,7 +44,8 @@ const id = positionals[0];
 const hash = (text) => createHash('sha256').update(text).digest('hex');
 const inheritedValidation = '- Validation is inherited from settle; the explicit zero-command review budget permits no independent execution.';
 const cli = (key, file) => opt[`${key}-cli`] ? [opt[`${key}-cli`]] : [process.execPath, local(file)];
-let job, journal, release, laneConfig = null;
+let admitted = false;
+let ownership, job, journal, release, laneConfig = null;
 function call(argv, args, cwd = job?.repo ?? path.resolve(opt.repo), options = {}) {
   const env = { ...process.env, ...options.env, ORG_DIR: opt.org };
   delete env.LANE_CONFIG;
@@ -80,7 +83,9 @@ function gitNul(args, cwd, options = {}) {
   if (r.error || r.status !== 0) throw new Error(`${args[0]}: ${(r.stderr?.toString('utf8') || r.error?.message || `exit ${r.status}`).trim()}`);
   return nulFields(r.stdout);
 }
-const save = () => writeFileAtomic(journal, `${JSON.stringify(job, null, 2)}\n`, 0o600);
+const save = () => fenceOwner(opt.org, id, ownership, () => {
+  writeFileAtomic(journal, `${JSON.stringify(job, null, 2)}\n`, 0o600); admitted = true;
+});
 const evidence = (name, text) => {
   const file = path.join(path.dirname(journal), `${id}.${name}`);
   writeFileAtomic(file, text, 0o600); return file;
@@ -503,7 +508,7 @@ function rebaseForPromotion() {
   return null;
 }
 function dispatchArgs() {
-  return [job.item, '--repo', job.repo, '--org', opt.org, '--lane', job.lane, '--route', job.fixRoute,
+  return [job.item, '--controller', opt.controller, '--repo', job.repo, '--org', opt.org, '--lane', job.lane, '--route', job.fixRoute,
     '--brief', job.fixBrief, '--to', job.to, '--from-run', id, ...(job.reuse && !job.reuse_skipped ? ['--reuse', id] : []),
     ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])];
 }
@@ -563,7 +568,7 @@ function fix() {
         pane: d.worker.pane, watcher: d.watcher, journal: recovery.file });
     } else {
       if (correctionStopped()) return;
-      output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), ['--retry', recovery.file, '--repo', job.repo, '--org', opt.org, '--from-run', id,
+      output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), ['--retry', recovery.file, '--controller', opt.controller, '--repo', job.repo, '--org', opt.org, '--from-run', id,
         ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])], undefined, { stdio: ['ignore', 'pipe', 'inherit'] });
     }
   } else {
@@ -591,10 +596,11 @@ function main() {
   if (opt.status) { process.stdout.write(fs.readFileSync(journal, 'utf8')); return; }
   // Resolve explicit selection once, relative to this invocation, before any
   // child changes directory. A receipt also pins discovery (null) on retries.
+  ownership = requireController(readOwnedRun(opt.org, id), opt.controller);
+  const bound = continueOwnerRelease('settle/settle.mjs', ownership);
+  if (bound !== null) { process.exitCode = bound; return; }
   const previous = fs.existsSync(journal) ? JSON.parse(fs.readFileSync(journal, 'utf8')) : {};
-  const forwarded = previous.release ? continueRelease('settle/settle.mjs', previous.release)
-    : fs.existsSync(journal) ? null : forwardRelease('settle/settle.mjs', opt.repo);
-  if (forwarded !== null) { process.exitCode = forwarded; return; }
+  if (previous.release && previous.release.root !== ownership.owner.release.root) throw new Error('RUN_OWNED_ELSEWHERE: settle receipt names a different release');
   if (!Object.hasOwn(previous, 'laneConfig') && process.env.LANE_CONFIG !== undefined) laneConfig = path.resolve(process.cwd(), process.env.LANE_CONFIG);
   bindLaneConfig(previous);
   const run = show(id);
@@ -614,6 +620,9 @@ function main() {
   if (fs.existsSync(journal)) {
     job = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (job.common !== identity || job.workspace !== workspace || job.org !== opt.org) throw new Error('settle receipt belongs to a different project or record');
+    fenceOwner(opt.org, id, ownership, () => {});
+    if (job.ownership && (job.ownership.generation !== ownership.generation || JSON.stringify(job.ownership.owner) !== JSON.stringify(ownership.owner))) throw new Error('RUN_OWNED_ELSEWHERE: settle journal belongs to an earlier claim');
+    job.ownership = ownership; job.ownerActive = true; save();
     // Reread under the lock; an older pending receipt binds its selection once.
     bindLaneConfig(job);
     if (!Object.hasOwn(job, 'laneConfig')) { job.laneConfig = laneConfig; save(); }
@@ -688,7 +697,7 @@ function main() {
       workerRoute: run.meta?.route ?? null,
       followupExpected: opt['followup-expected'] ?? false,
       reuse: opt.reuse ?? settings.reuse ?? false, to: opt.to ?? settings.to ?? 'supervisor-herdr',
-      stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
+      ownership, ownerActive: true, stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
       blockers: parsed.report.blockers, proposals: parsed.report.proposals, questions: parsed.report.extra?.questions ?? [],
       outcome: parsed.report.outcome, round: 1, reviewPolicy: policy };
     job.deliveryRange = { base: job.mainHead, head: job.head };
@@ -897,10 +906,12 @@ function settlePending() {
 }
 try { main(); }
 catch (error) {
-  if (job && release) {
+  if (admitted && job && release) {
     job.error = error.message; save();
     const handoff = evidence('handoff.md', `# Settle interrupted at ${job.stage}\n\n${error.message}\n\nInspect ${journal}. Retry with --retry; uncertain review requires --review-again after inspecting the reviewer. Dispatch uncertainty belongs to the dispatch journal: use its explicit recovery flags there, then retry settle.\n`);
     process.stdout.write(`${JSON.stringify({ result: 'escalate', run: id, reason: error.message, journal, handoff })}\n`);
   }
   process.stderr.write(`settle: ${error.message}\n`); process.exitCode = 1;
-} finally { release?.(); }
+} finally {
+  try { if (admitted && job && release && job.stage === 'complete') { delete job.ownerActive; save(); } } finally { release?.(); }
+}

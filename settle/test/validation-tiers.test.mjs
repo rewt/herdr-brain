@@ -35,7 +35,7 @@ test('distinct worker, settle and queue panes reuse each tree through same-tree 
   assert.equal(JSON.parse(cached.stdout).validation.executed, false);
   assert.equal(f.git(['status', '--porcelain'], f.workspace), '');
   const queue = queueFor(f.repo);
-  enqueue(queue, ['topic'], { expectedHead: result.head, run, org: f.org, to: 'scratch-supervisor',
+  enqueue(queue, ['topic'], { claimedBy: 'brain', expectedHead: result.head, run, org: f.org, to: 'scratch-supervisor',
     herdr: path.join(f.root, 'bin/herdr'), laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 });
   Object.assign(f.env, { HERDR_PANE_ID: 'queue:pane', HERDR_TAB_ID: 'queue:tab', HERDR_WORKSPACE_ID: 'queue:workspace' });
   const promoted = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);

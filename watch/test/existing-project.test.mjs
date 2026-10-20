@@ -49,6 +49,7 @@ function fixture(t, outcome = 'done', { autopilot = true } = {}) {
   fs.writeFileSync(path.join(org, 'config.json'), JSON.stringify(config));
   const item = record(['add', 'Offline worker', '--role', 'engineer']).split(' ')[0];
   const run = record(['start', item, '--workspace', lane, '--meta', 'agent=worker']).match(/R-\d+/)[0];
+  record(['claim', run, '--controller', 'brain']);
   const report = JSON.parse(record(['show', run, '--json'])).report_path;
   fs.writeFileSync(report, `---\nrun: ${run}\noutcome: ${outcome}\nsummary: Offline worker finished.\nheadline: Offline worker finished\nblockers: ${outcome === 'done' ? '[]' : '["Operator judgment needed"]'}\nproposals: []\n---\n`);
   const herdr = path.join(bin, 'herdr');

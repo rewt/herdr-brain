@@ -148,6 +148,35 @@ const refusalMessage = (f, kind) => {
   return `${code}: ${typeof reason === 'function' ? reason(f) : reason}; nothing merged`;
 };
 
+test('ordinary and clean-pass guards work without green modules, and disabled requests do no Git work', async t => {
+  const f = await fixture(t, { cohort: 'clean-pass' });
+  // A fresh process cannot hide eager initialization behind an import cache.
+  for (const file of ['supervisor/green-pass.mjs', 'supervisor/green-contracts.json']) fs.rmSync(path.join(f.repo, file));
+  const probe = path.join(f.root, 'unused-green.mjs');
+  fs.writeFileSync(probe, `import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import cp from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+import { withPromotionGuard } from ${JSON.stringify(pathToFileURL(path.join(f.repo, 'promote/guard.mjs')).href)};
+const guard = ${JSON.stringify(f.guard)}, config = ${JSON.stringify(path.join(f.repo, '.supervisor.json'))};
+const original = cp.execFileSync; let git = 0, admitted = 0;
+cp.execFileSync = function(command, ...args) { if(command === 'git') { git++; throw Error('disabled request inspected Git'); } return original.call(this, command, ...args); };
+syncBuiltinESMExports();
+withPromotionGuard({ ...guard, run: undefined, expectedHead: undefined, existingWorker: false }, () => admitted++);
+for (const policy of [undefined, {}, {enabled:false,cohort:'green-pass'}, {enabled:true,cohort:'unknown'}]) {
+  if (policy === undefined) fs.rmSync(config, {force:true}); else fs.writeFileSync(config, JSON.stringify({autopilot:policy}));
+  assert.throws(() => withPromotionGuard(guard), {message:'AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged'});
+}
+assert.equal(git, 0); assert.equal(admitted, 1);
+cp.execFileSync = original; syncBuiltinESMExports();
+fs.writeFileSync(config, JSON.stringify({autopilot:{enabled:true,cohort:'clean-pass'}}));
+withPromotionGuard(guard, () => admitted++);
+assert.equal(admitted, 2);
+console.log('ordinary and clean-pass admitted; disabled Git calls=0; green modules absent');
+`);
+  assert.equal(f.ok(f.exec(process.execPath, [probe])), 'ordinary and clean-pass admitted; disabled Git calls=0; green modules absent');
+});
+
 test('green guard admits the exact reviewed head under the record lock', async t => {
   const f = await fixture(t); let called = false;
   f.check(() => { called = true; assert.ok(fs.existsSync(path.join(f.org, 'lock'))); }); assert.equal(called, true);

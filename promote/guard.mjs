@@ -3,16 +3,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { roleIs } from '../lib/roles.mjs';
 import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { cleanPassScope } from '../supervisor/clean-pass.mjs';
-import { greenPassScope } from '../supervisor/green-pass.mjs';
 import { execFileSync } from 'node:child_process';
 import { loadEvents, withLock } from '../lib/store.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { fold, children, laterRuns, openRuns, blockersOf, releases, itemStatus, reviewsWithoutPass, openQuestionsFor } from '../lib/state.mjs';
 
+const require = createRequire(import.meta.url);
+
 export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, admittedSeq, completionExpected, existingWorker = false, superseded = [] }, operation = () => {}, recordLocked = false) {
+  // Refuse disabled requests before Git or green initialization. Enabled
+  // authority is still re-read under the record lock below.
+  if (existingWorker && run !== undefined) {
+    const file = path.join(canonical, '.supervisor.json');
+    const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8'))?.autopilot : undefined;
+    if (settings?.enabled !== true || !['clean-pass', 'green-pass'].includes(settings.cohort)) throw Error('AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged');
+  }
   const checkGit = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
     if (expectedHead !== undefined) {
@@ -71,7 +80,7 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
           review.sha256 !== createHash('sha256').update(review.text).digest('hex') || settled.result.review?.sha256 !== review.sha256)
         throw Error('AUTOPILOT_PASS_STALE: current clean PASS or head changed; nothing merged');
       const scope = settings.cohort === 'green-pass'
-        ? greenPassScope({ repo: canonical, identity, org, workspace, base: settled.mainHead, head: expectedHead, review,
+        ? require('../supervisor/green-pass.mjs').greenPassScope({ repo: canonical, identity, org, workspace, base: settled.mainHead, head: expectedHead, review,
           bindings: settings.green, report: current.report, run, item, reportRoot: path.dirname(current.report_path) })
         : cleanPassScope({ repo: canonical, workspace, base: settled.mainHead, head: expectedHead, review });
       if (!scope.eligible) throw Error(`${scope.code}: ${scope.reason}; nothing merged`);

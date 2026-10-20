@@ -69,7 +69,8 @@ else if (a[0] === 'agent' && a[1] === 'list') {
   if (s.replacement && s.agentReads >= 2) Object.assign(s.agents[0], s.replacement);
   if (s.waitingReport && s.agentReads >= 2) s.runs[0].report.outcome = s.waitingReport;
   save(); out({ agents: s.agents });
-} else if (a[0] === 'tab' && a[1] === 'close') {
+} else if (a[0] === 'agent' && a[1] === 'get') out({ agent: s.agents.find(agent => agent.name === a[2]) });
+else if (a[0] === 'tab' && a[1] === 'close') {
   s.actions.push(a); s.tabs = s.tabs.filter(t => t.tab_id !== a[2]);
   s.panes = s.panes.filter(p => p.tab_id !== a[2]); s.agents = s.agents.filter(g => g.tab_id !== a[2]);
   save(); out({});

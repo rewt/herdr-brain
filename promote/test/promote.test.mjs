@@ -732,7 +732,11 @@ test('crash during batch cleanup resumes without repeating the gate or trusting 
     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
   };
   f.onCleanup(stop);
-  await waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
+  try { await waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 }); }
+  catch (error) {
+    t.diagnostic(JSON.stringify({ cleanup_wait: f.queue.load().results.map(r => ({ outcome: r.outcome, reason: r.reason })) }));
+    throw error;
+  }
   blockedEntry = registerProcess(Number(fs.readFileSync(blocked.marker, 'utf8')), false);
   assert.ok(blockedEntry.command.includes(f.herdr), 'birth command belongs to the created cleanup fixture');
   const saved = f.queue.load().current;

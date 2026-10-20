@@ -112,6 +112,7 @@ const reasonCases = [
   ['mismatched standard-slot protection identity; project kept', 'UNKNOWN'],
   ['adopted standard slot ${slot.standardSlot} (${slot.uid}); explicit withdrawal required', 'PROTECTED', 'adopted standard slot chat (desk); explicit withdrawal required'],
   ['callback launch topology changed', 'UNKNOWN'],
+  ['reviewer same-session follow-up is expected', 'ACTIVE'],
   ['recorded callback process is still live or unknown', 'UNKNOWN'],
   ['callback has another, working or unknown occupant', 'UNKNOWN'],
   ['self-retiring watcher has an agent occupant', 'UNKNOWN'],

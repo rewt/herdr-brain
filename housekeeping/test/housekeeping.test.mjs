@@ -61,6 +61,7 @@ function fixture(t, { promoted = true, reported = true } = {}) {
     if (args[0] === 'pane' && args[1] === 'process-info') return result({ process_info: { shell_pid: 1,
       foreground_processes: [{ pid: f.shell ? 1 : 2, name: f.shell ? 'zsh' : 'node' }], process_tree_complete: true, process_tree: [{pid:1,identity:'shell',state:'S',command:'[zsh]'}, ...(f.shell ? [] : [{pid:2,identity:'extra',state:'S',command:'[node]'}])] } });
     if (args[0] === 'agent' && args[1] === 'list') return result({ agents: f.agents });
+    if (args[0] === 'agent' && args[1] === 'get') return result({ agent: f.agents.find(a => a.name === args[2]) });
     if (args[0] === 'agent' && args[1] === 'read') return { status: 0, stdout: f.text, stderr: '' };
     f.actions.push(args);
     return result({});

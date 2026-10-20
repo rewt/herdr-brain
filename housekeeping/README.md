@@ -37,7 +37,13 @@ remain supported.
 The detached process is a timer, not an agent: tidy finished tabs and resume every
 60 seconds, with settled-lane cleanup on startup and every 600 seconds. Every
 tick runs `supervisor/tidy-tabs.mjs` through the same pure retirement planner
-and guarded executor as settled cleanup. The default-on `release_sessions` policy
+and guarded executor as settled cleanup. Projects opting into
+`retirement.closeout_queue: true` in their canonical `.lane.json` transfer both
+scheduled retirement passes to the [event-driven closer](../docs/contracts/CLOSEOUT.md).
+The queue and updated legacy ticks share the retirement ownership lock; older
+housekeeping must be stopped/restarted before activation. Other housekeeping
+work continues. Named recovery is `node supervisor/retire.mjs sweep --lane PATH`.
+For projects retaining scheduled retirement, the default-on `release_sessions` policy
 releases a recorded reviewer after any validated verdict (PASS, NEEDS-WORK or
 FAIL), and a worker after its exact run's PASS is consumed by landed integration
 or a different successor is bound to its own native pane, terminal and session.

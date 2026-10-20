@@ -14,6 +14,7 @@
 import { cliHelp } from '../lib/cli-help.mjs';
 import { forwardRelease } from '../lib/releases.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
+import { readyLane } from '../lib/closeout.mjs';
 import { retirementHold } from '../lib/retire-hold.mjs';
 import { recordInitialShell, claimInitialShell, initialShellLock, recordLaneOpen } from '../lib/initial-shell.mjs';
 import { loadTimeout, admissionDeadline } from '../lib/deadline.mjs';
@@ -61,7 +62,7 @@ import {
   validateRoutesConfig,
 } from "./routes.mjs";
 
-cliHelp(import.meta.url, 'Usage: lane open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|close [TOPIC] [OPTIONS]');
+cliHelp(import.meta.url, 'Usage: lane open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|ready|close [TOPIC] [OPTIONS]');
 const forwardedRelease = forwardRelease('lanes/lane.mjs', process.cwd());
 if (forwardedRelease !== null) process.exit(forwardedRelease);
 
@@ -1485,6 +1486,7 @@ function parseReviewOptions(args) {
   const seen = new Set();
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
+    if (flag === '--settle-commits-review') { options.deferCloseout = true; continue; }
     if (!["--round", "--brief", "--change", "--route", "--route-config", "--timeout", "--run"].includes(flag)) {
       fail(`usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n] (unknown operand: ${flag})`);
     }
@@ -2351,6 +2353,7 @@ async function review(topic, args, memoryChecked = false) {
     if (options.run && session.reviewReceipt) try {
       createRetirement({ cwd: REPO_ROOT, main: MAIN, deadline: Math.min(deadline, Date.now() + 10000) }).recordReviewVerdict({
         pane: session.pane, run: options.run, verdict: parsed.verdict, head, evidence: publicPath,
+        deferCloseout: options.deferCloseout,
         sha256: createHash('sha256').update(publicRecord).digest('hex'),
       });
     } catch (error) {
@@ -2837,9 +2840,14 @@ switch (command) {
     close(topic, { gitOnly, expectedTip });
     break;
   }
+  case 'ready': {
+    if (!topic || (rest.length && (rest.length !== 2 || rest[0] !== '--run'))) fail('usage: lane ready <topic> [--run R-n]');
+    process.stdout.write(JSON.stringify(readyLane({ cwd: REPO, topic, run: rest[1] })) + '\n');
+    break;
+  }
   default:
     process.stdout.write(
-      "usage: lane <open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|close> [topic] [base-ref]\n" +
+      "usage: lane <open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|ready|close> [topic] [base-ref]\n" +
         `  open <topic> [base]  cut lane/<topic> into a herdr worktree; base defaults to\n` +
         `                       ${MAIN} — pass a kept branch or archive/* tag to resume it\n` +
         "  seams [pattern]  list kept unfinished work (branches + archive tags)\n" +
@@ -2864,6 +2872,7 @@ switch (command) {
         "  check --gate [--required-tests JSON]\n" +
         "                   plan with the queue's bound test list\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
+        "  ready <topic> [--run R-n]  optionally record the same closeout request as an ingested done report\n" +
         "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",
     );

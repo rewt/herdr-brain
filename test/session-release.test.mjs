@@ -314,7 +314,11 @@ function settleReviewer(t, verdict = 'PASS') {
   const eventBytes = fs.readFileSync(f.eventFile);
   r.recordReviewVerdict({ pane: 'w:p', run: 'R-1', verdict, head: f.head, evidence,
     sha256: createHash('sha256').update(bytes).digest('hex') });
-  assert.deepEqual(fs.readFileSync(f.eventFile), eventBytes, 'review verdict evidence leaves the event log unchanged');
+  assert.ok(fs.readFileSync(f.eventFile).length > eventBytes.length, 'reviewer completion is a structured record event');
+  const verdictEvent = loadEvents(f.org).events.find(e => e.type === 'review.verdict');
+  assert.equal(verdictEvent.review.session, 'session');
+  assert.equal(verdictEvent.review.process.identity, 'native');
+  assert.equal(verdictEvent.review.followup_expected, false);
   return { f, r };
 }
 

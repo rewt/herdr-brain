@@ -25,6 +25,8 @@ import { deferredTests, recordedTestEvidence, TEST_ESCALATION } from './test-evi
 import { reportIngestReceipt, remainingUnverified, RECORD_CHECK_CLAIM } from './report-evidence.mjs';
 import { reviewScope } from './review-range.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
+import { closeoutPolicy, retryCloseout, readCloseoutEntries, recordCompletedReview } from '../lib/closeout.mjs';
+import { readReviewVerdicts } from '../lib/review-verdict.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node settle/settle.mjs R-n [OPTIONS]", allowPositionals: true, options: {
@@ -189,9 +191,14 @@ function reviewFindings() {
 function recordSettlementDecision() {
   if (!job.settleDecision) return; // Older receipts already use their legacy note.
   const recorded = () => show(id).notes.some((note) => note.decision && note.text === job.settleDecision);
-  if (recorded()) return;
-  record(['note', id, job.settleDecision, '--decision']);
+  if (!recorded()) record(['note', id, job.settleDecision, '--decision']);
   if (!recorded()) throw new Error('Settlement decision is not recorded; retry to recover its receipt');
+  if (job.review) {
+    const receipt = readReviewVerdicts(opt.org, job.common).find(r => r.run === id && r.sha256 === job.review.sha256);
+    // Older/native-adapter jobs can lack a proven reviewer launch. Do not
+    // invent one from a verdict or session display metadata.
+    if (receipt) recordCompletedReview({ cwd: job.repo, org: opt.org, receipt, head: job.finalHead ?? job.head, item: job.item });
+  }
 }
 function finish(result, reason, extra = {}) {
   job.result = { result, run: id, item: job.item, lane: job.lane, reason,
@@ -208,6 +215,10 @@ function finish(result, reason, extra = {}) {
   job.settleDecision = `Settle: ${result}. ${reason}. Review round cap: ${policy.cap} (${policy.source}); round: ${policy.round ?? 'unknown'}. Reviewed ${job.result.reviewed_commit}; head ${job.result.head}. Evidence: ${journal}`;
   job.stage = 'complete'; save();
   recordSettlementDecision();
+  try {
+    if (closeoutPolicy(job.repo) && readCloseoutEntries(job.common).some(e => e.branch === `lane/${job.lane}`))
+      retryCloseout({ cwd: job.repo, org: opt.org, topic: job.lane, why: 'settle callback ended; verdict recorded' });
+  } catch (e) { process.stderr.write(`settle: closeout wake deferred: ${e.message}; retry the named lane\n`); }
   print();
 }
 function print() { process.stdout.write(`${JSON.stringify(job.result)}\n`); }
@@ -779,7 +790,7 @@ function settlePending() {
     job.review_started_at = new Date().toISOString();
     job.stage = 'reviewing'; save();
     const r = call(cli('lane', '../lanes/lane.mjs'), ['review', lane, '--round', String(job.round), '--brief', supplement,
-      '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--run', id, '--memory-checked']);
+      '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--run', id, '--memory-checked', '--settle-commits-review']);
     job.review_finished_at = new Date().toISOString();
     job.reviewLog = evidence(`review-r${job.round}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`); save();
     if (!r.error && r.status === 3 && r.stdout?.trim().startsWith('{')) {

@@ -21,6 +21,8 @@ import { readConfig } from './config.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { resumeInbox, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { queueFor, retryCleanup } from '../promote/promote.mjs';
+import { closeoutPolicy, claimRetirementOwner } from '../lib/closeout.mjs';
+import { gitProject } from '../lib/project.mjs';
 export { readConfig } from './config.mjs';
 
 const LOCAL_RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -84,6 +86,11 @@ export function resumeKey(run, agent) {
 // interval. A failed tidy is evidence for the log, never a reason to skip recovery.
 export function tidyFinishedTabs({ cwd, org, herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
   dryRun = false, command = spawnSync, log = () => {} }) {
+  const project = gitProject(cwd);
+  if (closeoutPolicy(project.canonical)) { log({ action: 'retirement-skipped', why: 'retirement ownership transferred to closeout queue' }); return true; }
+  const ownership = dryRun ? null : claimRetirementOwner(project.identity, { waitMs: 1000 });
+  try {
+  if (closeoutPolicy(project.canonical)) { log({ action: 'retirement-skipped', why: 'retirement ownership transferred to closeout queue' }); return true; }
   const args = [TIDY, '--cwd', cwd, '--org', org, '--herdr', herdr,
     '--org-cli', record[0], ...record.slice(1).flatMap((arg) => ['--org-cli-arg', arg]),
     ...(dryRun ? ['--dry-run'] : [])];
@@ -101,6 +108,7 @@ export function tidyFinishedTabs({ cwd, org, herdr = 'herdr', record = [process.
     log({ action: 'tidy-failed', error: error.message, output, dryRun });
     return false;
   }
+  } finally { ownership?.(); }
 }
 
 export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
@@ -131,10 +139,15 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
   }
   function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath, cleanupSeconds,
     now = new Date().toISOString() } = {}) {
+    const queueRequested = closeoutPolicy(gitProject(cwd).canonical);
+    const releaseOwnership = dryRun || queueRequested ? null : claimRetirementOwner(common, { waitMs: 1000 });
+    try {
+    const queueOwned = queueRequested || closeoutPolicy(gitProject(cwd).canonical);
+    if (queueOwned) log({ action: 'retirement-skipped', why: 'retirement ownership transferred to closeout queue' });
     let consumed;
     // A hint is only a reason to re-observe through the guarded executor. Do
     // not acknowledge requests during previews or workspace-scoped checks.
-    if (!dryRun && !workspacePath) {
+    if (!queueOwned && !dryRun && !workspacePath) {
       try {
         consumed = consumeRetirement({ org, deadline: Date.now() + loadTimeout(30000),
           retirement: ({ deadline }) => createRetirement({ cwd, org, main, herdr, record, command, selfTab, log, deadline }) });
@@ -142,21 +155,21 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       } catch (error) { log({ action: 'retirement-failed', error: error.message }); }
     }
     const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
-    if (!workspacePath) try {
+    if (!queueOwned && !workspacePath) try {
       noticeIdleRetirement({ status: retirementStatus(snapshot, { generatedAt: now }), snapshot,
         stateDir, cwd, org, herdr, dryRun, log });
     } catch (error) { log({ action: 'retirement-notice-failed', error: error.message }); }
     const selected = workspacePath ? new Set(snapshot.workspaces.filter(w => canonicalPath(w.worktree.checkout_path) === canonicalPath(workspacePath)).map(w => w.workspace_id)) : null;
-    const allPlan = cleanup ? tidy(snapshot) : { close: [], keep: [] };
+    const allPlan = cleanup && !queueOwned ? tidy(snapshot) : { close: [], keep: [] };
     const plan = selected ? { ...allPlan, close: allPlan.close.filter(t => selected.has(t.workspace_id)), keep: allPlan.keep.filter(t => selected.has(t.workspace_id)) } : allPlan;
     log({ action: 'scan', close: plan.close.length, keep: plan.keep.length, cleanup, resume, dryRun });
     for (const tab of plan.keep) log({ action: 'keep', ...tab, dryRun });
     for (const diagnostic of plan.diagnostics ?? []) log({ action: 'reference-diagnostic', ...diagnostic });
     if (dryRun) for (const tab of plan.close) log({ action: 'would-close', ...tab });
-    else if (!consumed?.results) retirement.apply(plan, workspacePath, snapshot);
+    else if (!queueOwned && !consumed?.results) retirement.apply(plan, workspacePath, snapshot);
     // A per-tick tidy or this pass may have closed the last pane. Finish only
     // the existing bounded cleanup checkpoints; no later drain is required.
-    if (cleanup && !workspacePath && !dryRun && fs.existsSync(path.join(common, 'promote/queue.json'))) try {
+    if (!queueOwned && cleanup && !workspacePath && !dryRun && fs.existsSync(path.join(common, 'promote/queue.json'))) try {
       retryCleanup(queueFor(cwd), { now: Date.parse(now) });
       log({ action: 'promotion-cleanup-retried' });
     } catch (error) { log({ action: 'promotion-cleanup-failed', error: error.message }); }
@@ -185,7 +198,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
         log({ action: 'resumed', run: run.id, pane: agent.pane_id, seq: agent.state_change_seq, why: 'interrupted open run with only mouse-wheel escape text in the composer' });
       } catch (error) { log({ action: 'resume-failed', run: run.id, pane: agent.pane_id, error: error.message }); }
     }
-    if (cleanup && !workspacePath) try {
+    if (!queueOwned && cleanup && !workspacePath) try {
       // Allow a ten-minute deletion plus preflight and branch cleanup, still
       // bounded per foreground pass. Queue-owned pending cleanup keeps its own
       // retry bounds and is not retried here.
@@ -197,6 +210,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       log({ action: 'summary-published', generated_at: summary.generated_at });
     } catch (error) { log({ action: 'summary-publish-failed', error: error.message }); }
     return plan;
+    } finally { releaseOwnership?.(); }
   }
   return { tick, common };
 }
@@ -303,7 +317,7 @@ async function main() {
   const identity = ownerIdentity(process.pid);
   fs.mkdirSync(lock); // Fail closed on overlap or an unrecovered crash.
   fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, identity, cwd, org: project.org, config: configFile,
-    script, record_cli: recordCLI, release: admittedRelease }));
+    script, record_cli: recordCLI, release: admittedRelease, retirement_queue_protocol: 1 }));
   let stopped = false, wake;
   const stop = () => { stopped = true; wake?.(); };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);

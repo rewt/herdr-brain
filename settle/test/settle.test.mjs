@@ -36,6 +36,13 @@ test('settle review launch records its native occupant against the run under rev
   const verdict = JSON.parse(fs.readFileSync(path.join(reviews, verdicts[0])));
   assert.equal(verdict.run, run); assert.equal(verdict.session, receipt.agent_session_id);
   assert.equal(verdict.pane, receipt.pane); assert.equal(verdict.verdict, 'PASS');
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  const completion = events.find(e => e.type === 'review.verdict' && e.run === run);
+  assert.ok(completion, 'settle completion is a structured record event');
+  assert.equal(completion.head, journal(f, run).finalHead, 'queue target binds the committed review head');
+  assert.equal(completion.reviewed_head, verdict.head);
+  assert.equal(completion.review.process.identity, receipt.process.identity);
+  assert.equal(completion.review.followup_expected, false);
   assert.doesNotMatch(fs.readFileSync(journal(f, run).reviewLog, 'utf8'), /launch identity could not be recorded/);
   assert.doesNotMatch(fs.readFileSync(journal(f, run).reviewLog, 'utf8'), /verdict release evidence could not be recorded/);
 });

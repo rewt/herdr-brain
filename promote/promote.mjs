@@ -4,6 +4,7 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { closeoutPolicy, claimRetirementOwner, retryCloseout, readCloseoutEntries } from '../lib/closeout.mjs';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
@@ -314,6 +315,16 @@ function cleanupRevision(job, queue) {
 }
 
 export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
+  const delegated = () => ({ ...result, cleanup: { state: 'complete', owner: 'closeout-queue' },
+    reason: 'green fast-forward; closeout delegated to the event queue' });
+  if (closeoutPolicy(queue.project.canonical)) return delegated();
+  const ownership = claimRetirementOwner(queue.project.identity, { waitMs: 1000 });
+  try {
+    if (closeoutPolicy(queue.project.canonical)) return delegated();
+    return finishLegacyCleanup(job, result, queue, { now });
+  } finally { ownership(); }
+}
+function finishLegacyCleanup(job, result, queue, { now }) {
   const warnings = [];
   let held;
   const checkHold = () => {
@@ -412,11 +423,19 @@ function consumeRequests(queue) {
     const jobs = queueJobs(queue.load());
     const discovered = findOrgDir({ cwd: queue.project.canonical });
     const orgs = new Set([discovered, ...jobs.map(j => j.org)].filter(Boolean));
+    if (closeoutPolicy(queue.project.canonical)) {
+      for (const org of orgs) for (const topic of new Set(readCloseoutEntries(queue.project.identity).filter(e => e.org === org && e.signal === 'landed').map(e => e.branch.slice(5))))
+        retryCloseout({ cwd: queue.project.canonical, org, topic, why: 'promotion completion released its references and lifecycle lock' });
+      return;
+    }
+    const ownership = claimRetirementOwner(queue.project.identity, { waitMs: 1000 });
+    try {
     for (const org of orgs) try {
       consumeRetirement({ org, retirement: () => createRetirement({ cwd: queue.project.canonical, org,
         herdr: jobs.find(j => j.org === org)?.herdr, log: result => process.stderr.write(JSON.stringify(result) + '\n') }),
         output: result => { if (result.action === 'held') process.stderr.write(JSON.stringify(result) + '\n'); } });
     } catch (e) { process.stderr.write(`integrated-but-cleanup-pending: retirement catch-up: ${e.message}\n`); }
+    } finally { ownership(); }
   } catch (e) { process.stderr.write(`integrated-but-cleanup-pending: retirement discovery: ${e.message}\n`); }
 }
 

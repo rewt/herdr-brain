@@ -1,4 +1,7 @@
 {
+  "retirement": {
+    "closeout_queue": true
+  },
   "settle": {
     "review_round_cap": 1
   }

@@ -16,6 +16,7 @@ import {
 } from '../lib/state.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { requestRetirement } from '../lib/retire-trigger.mjs';
+import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
@@ -168,13 +169,15 @@ function mutate(ctx, fn, authority) {
   }
   const res = transact(ctx.dir, (events) => {
     const state = fold(events);
-    return protectRecordMutation({ org: ctx.dir, events, state, mutation: fn(state, events), command: process.argv[2], ...authority });
+    return bindCloseoutSources({ org: ctx.dir, events, mutation: protectRecordMutation({ org: ctx.dir, events, state, mutation: fn(state, events), command: process.argv[2], ...authority }) });
   }, {
     at: ctx.now,
     actor: who.actor,
     unattributed: who.unattributed,
   });
   if (res.repaired) err('record: repaired an incomplete last event left by an interrupted write\n');
+  try { publishCloseoutEvents({ org: ctx.dir, added: res.added }); }
+  catch (e) { err(`record: closeout deferred: ${e.message}; source retained; recover with supervisor/closeout.mjs event --seq N\n`); }
   if (res.added.some(e => ['report.ingested', 'item.closed', 'item.reopened', 'question.answered', 'link.removed', 'run.abandoned', 'promotion.reconciled'].includes(e.type) || (e.type === 'note.added' && e.decision))) {
     try { requestRetirement({ org: ctx.dir, eventSeq: res.added.at(-1).seq, source: `record ${process.argv[2]}` }); }
     catch (e) { err(`record: retirement request deferred: ${e.message}\n`); }

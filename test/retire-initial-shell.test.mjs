@@ -27,6 +27,58 @@ function shellSnapshot(receipted = false) {
   return snapshot;
 }
 
+function terminalClaimSnapshot(receipted = false) {
+  const s = shellSnapshot(receipted);
+  Object.assign(s.record.runs[0].meta, { pane: 'w:p', terminal_id: 'terminal' });
+  return s;
+}
+
+for (const receipted of [false, true]) for (const disposition of ['reported', 'abandoned'])
+  test(`${receipted ? 'recorded' : 'legacy'} shell releases a ${disposition} worker's stored claim after self-exit`, () => {
+    const s = terminalClaimSnapshot(receipted), closed = [];
+    if (disposition === 'abandoned') { s.record.runs[0].report = null; s.record.runs[0].abandoned = { seq: 2 }; }
+    const plan = planRetirement(s); assert.equal(plan.close.length, 1);
+    assert.equal(executeRetirement(plan, { observe: () => structuredClone(s), close: tab => closed.push(tab) })[0].action, 'closed');
+    assert.deepEqual(closed, ['w:t']);
+  });
+
+const claimProtections = [
+  ['unreported run', s => { s.record.runs[0].report = null; }],
+  ['another unreported claimant', s => s.record.runs.push({ id: 'R-2', item: 'ENG-1', meta: { terminal_id: 'terminal' } })],
+  ['report without record sequence', s => { delete s.record.runs[0].report.seq; }],
+  ['conflicting identity', s => { s.record.sessionBindings = { 'R-1': [{ seq: 3 }] }; }],
+  ['live process', s => s.panes[0].process_info.process_tree.push({ pid: 9, identity: 'worker', state: 'S', command: '[codex]' })],
+  ['agent using the terminal', s => s.agents.push({ name: 'worker', pane_id: 'other:p', tab_id: 'other:t', terminal_id: 'terminal', agent_status: 'working' })],
+  ['live callback receipt', s => { s.callbacks = [{ tab: 'other:t', pane: 'w:p', process_gone: false }]; }],
+  ['exit receipt with conflicting topology', s => { s.exits = [{ tab: 'other:t', pane: 'w:p' }]; }],
+  ['terminal reference', s => s.references.push({ kind: 'pending callback', terminal_id: 'terminal' })],
+  ['run reference', s => s.references.push({ kind: 'pending callback', run: 'R-1' })],
+  ['unread process tree', s => { s.panes[0].process_info.process_tree_complete = false; }],
+  ['unread references', s => { s.shellEvidence.referencesRead = false; }],
+  ['open chain', s => { delete s.record.items[0].closed; }],
+  ['unmerged lane', s => { s.git[0].integrated = false; }],
+  ['dirty lane', s => { s.git[0].clean = false; }],
+  ['focus', s => { s.tabs[0].focused = true; }],
+  ['operator workspace', s => { s.workspaces[0].operator = true; }],
+  ['adopted slot', s => { s.standardSlots = { schema: 'standard-slot-history/v1', errors: [], slots: [{
+    common: s.common, uid: 'chat', server: 'default', workspace: 'w', checkout: '/repo/lane', tab: 'w:t',
+    standardSlot: 'chat', panes: [{ pane: 'w:p', paneSlot: 'primary' }] }] }; }],
+  ['HOLD', s => { s.retirementHold = 'canonical HOLD'; }],
+];
+for (const [name, change] of claimProtections) test(`a terminal stored claim still keeps on ${name}, including at the close edge`, () => {
+  const s = terminalClaimSnapshot(true), plan = planRetirement(s); change(s);
+  assert.equal(plan.close.length, 1); assert.equal(planRetirement(s).close.length, 0);
+  const result = executeRetirement(plan, { observe: () => s, close: () => assert.fail('claim protection must keep') });
+  assert.equal(result[0].action, name === 'HOLD' ? 'held' : 'skip-close');
+});
+
+test('a terminal record claim never restores the pristine-tab exception in an open dirty lane', () => {
+  const s = openLaneSnapshot();
+  s.record.runs.push({ id: 'R-2', item: 'ENG-1', workspace: '/repo/lane', started: { seq: 3 },
+    report: { seq: 4, outcome: 'done' }, meta: { pane: 'w:p', terminal_id: 'terminal' } });
+  assert.equal(targetDecision(planRetirement(s)).decision, 'keep');
+});
+
 for (const receipted of [true, false]) {
   const kind = receipted ? 'recorded initial' : 'legacy inert';
   test(`${kind} shell closes after stable plan and execution observations, recording the rule and identities`, () => {
@@ -58,7 +110,7 @@ for (const receipted of [true, false]) {
     ['unknown record', s => { s.shellEvidence.recordRead = false; }, /were not read/],
     ['unknown references', s => { s.shellEvidence.referencesRead = false; }, /were not read/],
     ['pending reference', s => s.references.push({ kind: 'pending job', pane: 'w:p' }), /pending job reference/],
-    ['recorded occupant claim', s => { s.record.runs[0].meta.pane = 'w:p'; }, /occupant claim/],
+    ['unreported occupant claim', s => { s.record.runs[0].meta.pane = 'w:p'; s.record.runs[0].report = null; }, /occupant claim/],
     ['agent seen during window', s => s.shellClaims.push('w:p'), /occupant claim/],
     ['native pane claim', s => { s.panes[0].agent_session = { value: 'old-session' }; }, /occupant claim/],
     ['focus', s => { s.tabs[0].focused = true; }, /focus/],
@@ -134,6 +186,25 @@ function initialFixture(t) {
     h: args => args[1] === 'get' ? { pane: state.panes[0] } : { process_info: state.info }, ...extra });
   return { ...f, state, save, record, receiptFile: initialShellFile(f.common, 'w:t') };
 }
+
+for (const disposition of ['reported', 'abandoned']) test(`CLI closes a landed lane after its ${disposition} recorded worker self-exits without an exit receipt`, t => {
+  const f = initialFixture(t), events = f.eventBytes.trim().split('\n').map(JSON.parse);
+  // Model record worker's stored identity update, followed by terminal evidence.
+  const launch = events[1].meta;
+  events[1].meta = { lane: 'topic' };
+  events.splice(2, 0, { type: 'run.updated', id: 'R-1', meta: { ...launch,
+    pane: 'w:initial', terminal_id: 'initial-terminal' } });
+  if (disposition === 'abandoned') events[3] = { type: 'run.abandoned', id: 'R-1', note: 'self-exited; lane already integrated' };
+  const bytes = events.map((e, i) => JSON.stringify({ ...e, seq: i + 1, at: '2026-01-01T00:00:00Z', by: 'test' }) + '\n').join('');
+  fs.writeFileSync(f.eventFile, bytes);
+  const snapshot = f.retirement().observe(f.lane);
+  assert.equal(snapshot.record.workerReceipts['R-1'].pane, 'w:initial');
+  assert.deepEqual(snapshot.agents, []); assert.deepEqual(snapshot.exits, []);
+  const r = f.close(false); assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+  assert.ok(f.read().actions.some(a => a[0] === 'tab' && a[1] === 'close'));
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), bytes);
+});
 
 for (const claimed of [false, true]) test(`housekeeping during the dispatch receipt-to-claim window cannot close the locked initial shell (claimed: ${claimed})`, t => {
   const f = initialFixture(t); isolatedEnv(t, f);

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 export const TEST_SLOT_PATH = process.platform === 'darwin' ? '/private/tmp/bch-cloak-test-slot.lock' : '/tmp/bch-cloak-test-slot.lock';
 export const PATH_ENV = 'MONITOR_TEST_SLOT_PATH';
@@ -11,6 +12,34 @@ export const proverPaths = () => [
   '/private/tmp/bch-cloak-sp1-prover-exclusive-v1', path.join(os.homedir(), 'proof-scratch/.prover.lock'),
 ];
 const invalid = () => Object.assign(Error(`${LOCK_PATH_INVALID_CODE}: lock must be a regular, non-prover path; non-default compat must be in private temporary scratch`), { code: LOCK_PATH_INVALID_CODE });
+
+let nativeTemporaryRoot;
+function userTemporaryRoot() {
+  if (process.platform !== 'darwin') return null;
+  if (nativeTemporaryRoot !== undefined) return nativeTemporaryRoot;
+  nativeTemporaryRoot = null;
+  try {
+    // Exact validation can omit TMPDIR. Ask the OS for this uid's temporary
+    // root instead of inferring authority from the supplied lock pathname.
+    const directory = execFileSync('/usr/bin/getconf', ['DARWIN_USER_TEMP_DIR'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 1000, maxBuffer: 4096,
+    }).trim();
+    if (!path.isAbsolute(directory)) return null;
+    const root = fs.realpathSync(directory), stat = fs.statSync(root);
+    if (stat.isDirectory() && stat.uid === process.getuid() && !(stat.mode & 0o077)) nativeTemporaryRoot = root;
+  } catch { /* An unavailable OS source grants no additional scratch root. */ }
+  return nativeTemporaryRoot;
+}
+
+function privateScratch(parent, root, uid) {
+  if (!root || !parent.startsWith(root + path.sep)) return false;
+  // Every ancestor below tmp must also exclude replacement by another uid.
+  for (let dir = parent; dir !== root; dir = path.dirname(dir)) {
+    const stat = fs.statSync(dir);
+    if (!stat.isDirectory() || stat.uid !== uid || (stat.mode & 0o022)) return false;
+  }
+  return true;
+}
 
 export function validateSlotPath(file, { compat = false, provers = proverPaths(), tmpdir = os.tmpdir(), uid = process.getuid() } = {}) {
   if (typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0') || file.endsWith('/')) throw invalid();
@@ -26,13 +55,8 @@ export function validateSlotPath(file, { compat = false, provers = proverPaths()
       if (stat && reserved && stat.dev === reserved.dev && stat.ino === reserved.ino) throw invalid();
     }
     if (compat && file !== TEST_SLOT_PATH) {
-      const parent = fs.realpathSync(path.dirname(file)), root = fs.realpathSync(tmpdir), stat = fs.statSync(parent);
-      if (!parent.startsWith(root + path.sep) || stat.uid !== uid || (stat.mode & 0o022) !== 0) throw invalid();
-      // Every ancestor below tmp must also exclude replacement by another uid.
-      for (let dir = parent; dir !== root; dir = path.dirname(dir)) {
-        const ancestor = fs.statSync(dir);
-        if (ancestor.uid !== uid || (ancestor.mode & 0o022) !== 0) throw invalid();
-      }
+      const parent = fs.realpathSync(path.dirname(file)), root = fs.realpathSync(tmpdir);
+      if (!privateScratch(parent, root, uid) && !privateScratch(parent, userTemporaryRoot(), uid)) throw invalid();
     }
   } catch { throw invalid(); }
   return file;

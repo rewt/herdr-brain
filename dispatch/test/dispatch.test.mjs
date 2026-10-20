@@ -9,6 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ownerAlive } from '../../lib/process-owner.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { hookReviewDialog, codexProfile } from '../hook-review.mjs';
 import { runMetrics } from '../metrics.mjs';
@@ -29,7 +30,10 @@ fs.appendFileSync(path.join(root,'calls'), JSON.stringify({type,a,pane:process.e
 const fail = fs.existsSync(path.join(root,'fail')) ? fs.readFileSync(path.join(root,'fail'),'utf8') : '';
 const stateFile = path.join(root,'workers');
 let workers = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile)) : {};
-function save() { fs.writeFileSync(stateFile,JSON.stringify(workers)); }
+function save() {
+ const temporary=stateFile+'.'+process.pid+'.tmp';
+ fs.writeFileSync(temporary,JSON.stringify(workers));fs.renameSync(temporary,stateFile);
+}
 function result(r) { process.stdout.write(JSON.stringify(r)+'\\n'); }
 function git(args) { const r=spawnSync('git',args,{encoding:'utf8'}); if(r.status) throw new Error(r.stderr); return r.stdout.trim(); }
 const entry=()=>git(['worktree','list','--porcelain']).split('\\n\\n').find(x=>x.includes('branch refs/heads/lane/topic'))?.split('\\n')[0].slice(9);
@@ -336,6 +340,37 @@ test('concurrent dead-owner reclaim cannot remove the new project admission lock
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 2);
   assert.equal(fs.existsSync(directory), false);
   assert.deepEqual(fs.readdirSync(`${directory}.contenders`), []);
+});
+
+test('fake Herdr readers see complete worker state while a concurrent writer is paused mid-write', async t => {
+  const f = fixture(t), first = f.start(); assert.equal(first.status, 0, first.stderr);
+  const agent = JSON.parse(first.stdout).agent, state = path.join(f.root, 'workers');
+  const workers = JSON.parse(fs.readFileSync(state)); workers[agent].agent_status = 'idle';
+  fs.writeFileSync(state, JSON.stringify(workers));
+  const marker = path.join(f.root, 'publication-paused'), release = path.join(f.root, 'publication-release');
+  const preload = path.join(f.root, 'publication.mjs');
+  fs.writeFileSync(preload, `import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+const write=fs.writeFileSync;fs.writeFileSync=function(file,data,...args){
+ if(String(file).startsWith(${JSON.stringify(state)})){
+  write(file,String(data).slice(0,5),...args);write(${JSON.stringify(marker)},'paused');
+  const end=Date.now()+${loadTimeout(10000)};
+  while(!fs.existsSync(${JSON.stringify(release)})){if(Date.now()>end)throw Error('publication fixture timed out');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}
+ }return write.call(this,file,data,...args);
+};syncBuiltinESMExports();`);
+  const herdr = path.join(f.root, 'bin/herdr'), env = { ...process.env, FAKE_ROOT: f.root };
+  const writer = spawnChild(t, process.execPath, [herdr, 'agent', 'prompt', agent], {
+    cwd: f.repo, env: { ...env, NODE_OPTIONS: `${env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` },
+  });
+  const done = waitForExit(writer);
+  try {
+    await until(() => fs.existsSync(marker));
+    const reader = spawnSync(process.execPath, [herdr, 'agent', 'get', agent], { env, encoding: 'utf8' });
+    assert.equal(reader.status, 0, reader.stderr);
+    assert.equal(JSON.parse(reader.stdout).result.agent.agent_status, 'idle');
+    assert.equal(JSON.parse(fs.readFileSync(state))[agent].agent_status, 'idle');
+  } finally { fs.writeFileSync(release, 'go'); await done; }
+  const result = await done; assert.equal(result.code, 0, result.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(state))[agent].agent_status, 'working');
 });
 
 for (const [stage, cap] of [['open', 2], ['worker', 2], ['worker', 1]]) {

@@ -111,8 +111,12 @@ macOS (`/tmp/bch-cloak-test-slot.lock` elsewhere). Environment names remain
 `MONITOR_TEST_SLOT_PATH` and `MONITOR_TEST_SLOT_COMPAT_PATH`; `--lock-path` selects
 both. Readers may observe any configured location. A writer may override compat
 only inside an existing private scratch directory strictly under
-`realpath(os.tmpdir())`, owned by its uid, with no group/other write. Every ancestor
-below that temporary root must meet the same ownership/write condition.
+`realpath(os.tmpdir())`, owned by its uid, with no group/other write. On macOS,
+the OS-reported per-user temporary root (`getconf DARWIN_USER_TEMP_DIR`) is also
+accepted after verifying its ownership and private mode. This preserves private
+scratch when exact validation omits `TMPDIR`; pathname patterns grant no authority.
+Every ancestor below the selected temporary root must meet the same ownership/write
+condition. Failure to discover the OS root grants no additional location.
 
 Workspace, compat and explicit paths refuse symlinks, nonregular files, the
 basenames `apnt-gnark-r2-proof-<n>.lock`, `bch-cloak-sp1-prover-exclusive-v1`,

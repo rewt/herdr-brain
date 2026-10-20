@@ -599,14 +599,16 @@ test('BCH exact occupancy/v1 with UUID filename and null births is counted, kept
   readTestSlotOccupancy(lock, { prune: true, kill: gone }); assert.equal(fs.existsSync(file), false);
 });
 
-for (const state of ['live', 'expired']) test(`${state} owned proving reservation keeps lane and tab retirement read-only`, t => {
+for (const state of ['live', 'expired']) for (const target of ['matched', 'unrelated'])
+test(`${state} ${target} proving reservation scopes lane and tab retirement read-only`, t => {
   const f = referenceFixture(t), common = path.join(f.org, 'common'), lock = path.join(f.org, 'slot'), now = Date.now();
   const file = path.join(`${lock}.occupancy`, 'proving.json'), identity = processStartRecord(process.pid);
   fs.mkdirSync(`${lock}.occupancy`);
   const record = { schema: 'host-reservation/v1', class: 'proving', pid: process.pid, processStart: identity.start, processBirth: identity.birth,
     pgid: null, groupStart: null, groupBirth: null, acquiredAt: new Date(now - 60000).toISOString(),
     expectedEnd: new Date(now + 60000).toISOString(), expiresAt: new Date(now + (state === 'live' ? 60000 : -1000)).toISOString(),
-    project: common, label: 'proving /repo/lane', cwd: '/repo/lane', host: os.hostname(), reason: 'ENG-424 R-606' };
+    project: common, label: target === 'matched' ? 'proving /repo/lane' : 'other proving step',
+    cwd: target === 'matched' ? '/repo/lane' : '/another-project/lane', host: os.hostname(), reason: 'ENG-424 R-626' };
   const bytes = JSON.stringify(record) + '\n'; fs.writeFileSync(file, bytes);
   assert.equal(readProvingReservations(lock, { now })[0].state, state);
   const env = { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
@@ -614,8 +616,13 @@ for (const state of ['live', 'expired']) test(`${state} owned proving reservatio
   assert.deepEqual(observed.errors, []); assert.equal(observed.references.length, 1);
   assert.equal(observed.references[0].kind, 'test-slot occupant');
   const s = Object.assign(fixture(), observed);
-  assert.match(kept(s), /test-slot occupant reference/);
-  assert.match(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), /test-slot occupant reference/);
+  if (target === 'matched') {
+    assert.match(kept(s), /test-slot occupant reference/);
+    assert.match(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), /test-slot occupant reference/);
+  } else {
+    assert.equal(planRetirement(s).close.length, 1, 'an unrelated reservation cannot keep a finished tab');
+    assert.equal(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), null);
+  }
   assert.equal(fs.readFileSync(file, 'utf8'), bytes, 'retirement never prunes or rewrites the reservation');
 });
 

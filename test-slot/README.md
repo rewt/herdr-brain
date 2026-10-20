@@ -462,7 +462,8 @@ promotion re-checks do not read reservations. STOP still cancels launch waits.
 
 Workspace, compat and `--lock-path` reject prover names, known inode aliases,
 symlinks and nonregular files with `TEST_SLOT_LOCK_PATH_INVALID`/75 before writes.
-Non-default compat must be in owned temporary scratch with no group/other write;
+Non-default compat must be in owned temporary scratch with no group/other write
+(the configured temp root, or macOS's verified OS-reported per-user temp root);
 `--lock-path` changes compat too. Readers continue observing both configured
 occupancy directories and never prune during display. No default path or
 environment name changes. See [the full shared contract](../docs/contracts/HOST-RESERVATIONS.md)

@@ -68,6 +68,26 @@ test('compat permits private temporary scratch, refuses writable and out-of-scra
   assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'started\n');
 });
 
+test('macOS private scratch remains admitted through aliases when exact validation omits TMPDIR', { skip: process.platform !== 'darwin' }, t => {
+  const f = fixture(t), env = { ...f.env };
+  for (const key of ['TMPDIR', 'TMP', 'TEMP']) delete env[key];
+  // The physical path and /var alias name the same mkdtemp directory. The
+  // sanitized child sees /tmp from os.tmpdir(), not its parent's per-user root.
+  for (const lock of new Set([f.lock, path.join(os.tmpdir(), path.basename(f.root), 'slot')])) {
+    const command = [process.execPath, '-e', 'console.log("private scratch")'];
+    const result = spawnSync(process.execPath, [cli, 'run', 'exact scratch', '--lock-path', lock, '--', ...command], {
+      env, cwd: f.root, encoding: 'utf8', timeout: loadTimeout(15000),
+    });
+    assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'private scratch\n');
+  }
+  fs.chmodSync(f.root, 0o777);
+  const denied = spawnSync(process.execPath, [cli, 'run', 'unsafe scratch', '--lock-path', f.lock, '--', process.execPath, '-e', 'throw Error("started")'], {
+    env, cwd: f.root, encoding: 'utf8', timeout: loadTimeout(15000),
+  });
+  assert.equal(denied.status, 75, denied.stderr); assert.match(denied.stderr, /TEST_SLOT_LOCK_PATH_INVALID/);
+  assert.deepEqual(fs.readdirSync(f.root), ['slot.occupancy']);
+});
+
 test('an exclusive payload sees both locks and the reservation group before its first instruction', t => {
   const f = fixture(t), workspace = path.join(f.root, 'workspace');
   const body = `const fs=require('fs'),assert=require('assert/strict');

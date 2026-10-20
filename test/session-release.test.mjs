@@ -62,6 +62,42 @@ test('default policy releases a reviewer PASS through pane-release and S7 while 
   r.apply(r.plan()); assert.equal(releaseEvents(f).length, 1);
 });
 
+test('native detail lookup releases a recorded session while an unnamed operator keeps its own tab', t => {
+  const f = openFixture(t, { reviewer: true });
+  f.state.tabs.push({ tab_id: 'w:operator', workspace_id: 'w' });
+  f.state.panes.push({ pane_id: 'w:operator-pane', tab_id: 'w:operator', workspace_id: 'w' });
+  f.state.agents.push({ name: null, agent_status: 'idle', pane_id: 'w:operator-pane', tab_id: 'w:operator', workspace_id: 'w', cwd: f.lane });
+  f.state.unregisterOnExit = false; f.save();
+  let detailReads = 0;
+  const r = f.retirement({ command: (exe, args, options) => {
+    if (exe === f.job.herdr && args[0] === 'pane' && args[1] === 'process-info' && args.at(-1) === 'w:operator-pane')
+      return { status: 0, stdout: JSON.stringify({ result: { process_info: { shell_pid: 10,
+        foreground_processes: [{ pid: 10, name: 'zsh' }], process_tree_complete: true,
+        process_tree: [{ pid: 10, identity: 'operator-shell', state: 'S', command: '[zsh]' }] } } }) };
+    if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'get') {
+      assert.equal(args[2], 'worker', 'an unnamed operator is never a named native lookup target');
+      detailReads++;
+    }
+    const result = spawnSync(exe, args, options);
+    if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'list') {
+      const summary = JSON.parse(result.stdout);
+      for (const agent of summary.result.agents) delete agent.agent_session;
+      result.stdout = JSON.stringify(summary);
+    }
+    return result;
+  } });
+  const plan = r.plan();
+  assert.equal(plan.sessionReleases.length, 1);
+  assert.match(plan.keep.find(row => row.tab_id === 'w:operator').why, /unnamed operator occupant/);
+  const results = r.apply(plan);
+  assert.ok(results.some(row => row.action === 'closed' && row.tab_id === 'w:t'), JSON.stringify(results));
+  assert.ok(detailReads > 0);
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+  assert.deepEqual(f.read().tabs.map(tab => tab.tab_id), ['w:operator']);
+  assert.equal(f.read().agents[0].name, null);
+  assert.equal(fs.existsSync(f.lane), true);
+});
+
 test('a worker releases after its exact run lands even with an open child; PASS before landing keeps it', t => {
   const f = openFixture(t), r = f.retirement();
   assertKept(f);

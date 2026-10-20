@@ -601,7 +601,7 @@ for (const failVelocity of [false, true]) test(failVelocity
   const item = record(['add', 'Finished first lane', '--role', 'engineer']).split(/\s/)[0];
   const report = path.join(f.root, 'report.md');
   const run = record(['start', item, '--harness', 'codex', '--model', 'offline', '--effort', 'high', '--workspace', wt, '--report', report]).split(/\s/)[0];
-  record(['set', run, 'agent=worker', 'pane=w:p1', 'worker_workspace=w', 'terminal_id=terminal-first', 'lane=first']);
+  record(['set', run, 'agent=worker', 'pane=w:p1', 'worker_workspace=w', 'terminal_id=terminal-first', 'agent_session_id=session-first', 'lane=first']);
   fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Finished.\nheadline: Finished lane\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
   record(['ingest', report]);
   const calls = path.join(f.root, 'cleanup-calls');
@@ -623,6 +623,7 @@ if(a[0]==='tab'&&a[1]==='list')r={tabs:d.tabs};
 if(a[0]==='pane'&&a[1]==='list')r={panes:d.panes};
 if(a[0]==='pane'&&a[1]==='process-info')r={process_info:{shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}],process_tree_complete:true,process_tree:[{pid:1,identity:'shell',state:'S',command:'[zsh]'}]}};
 if(a[0]==='agent'&&a[1]==='list')r={agents:d.agents};
+if(a[0]==='agent'&&a[1]==='get'&&a[2]==='worker')r={agent:{...d.agents.find(agent=>agent.name==='worker'),agent_session:{value:'session-first'}}};
 console.log(JSON.stringify({result:r}));\n`);
   const failureMarker = path.join(f.root, 'velocity-failed');
   if (failVelocity) {
@@ -646,9 +647,16 @@ cp.spawnSync=function(cmd,args,options){
     assert.equal(JSON.parse(record(['show', run, '--json'])).notes.filter(n => n.text.startsWith('Promotion: report-to-main ')).length, 1);
   }
   // Results are durable before the deferred project-wide catch-up begins.
-  const actionText = await waitForFile(calls, text => text.endsWith('\n') && text.trim().split('\n').map(JSON.parse).some(a =>
-    ['pane', 'tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'), { timeoutMs: 30000 });
+  // Catch-up lists every workspace before applying its retirement plan. Its
+  // first observation of "other" does not prove the worker close has happened.
+  const actionText = await waitForFile(calls, text => {
+    if (!text.endsWith('\n')) return false;
+    const actions = text.trim().split('\n').map(JSON.parse);
+    return actions.some(a => a[0] === 'tab' && a[1] === 'close' && a[2] === 'w:worker') &&
+      actions.some(a => ['pane', 'tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other');
+  }, { timeoutMs: 30000 });
   const actions = actionText.trim().split('\n').map(JSON.parse);
+  assert.ok(actions.some(a => a[0] === 'agent' && a[1] === 'get' && a[2] === 'worker'), 'native session is read from agent detail');
   assert.deepEqual(actions.filter((a) => a[0] === 'tab' && a[1] === 'close'), [['tab', 'close', 'w:worker']]);
   assert.ok(!actions.some((a) => a[0] === 'worktree' || a[0] === 'workspace' && a[1] !== 'list'));
   assert.ok(actions.some((a) => ['pane','tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'), 'foreground hint catch-up observes the project');

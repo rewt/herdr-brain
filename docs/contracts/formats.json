@@ -156,6 +156,22 @@
       "notCovered": "Successful integrated train reconciliation needs a native-authorized scratch promotion; refused-train coverage is not completed-gate recovery coverage."
     },
     {
+      "id": "lane-scratch-sweep/v1",
+      "version": 1,
+      "writer": "lib/scratch-sweep.mjs",
+      "location": "<archive>/lane-sweeps/*.json or <common>/lane-archive/<topic>/*-sweep.json",
+      "rule": "additive",
+      "notCovered": "Diagnostic-only sweep manifests have no OLD runtime consumer. Offline lifecycle fixtures prove pre-removal persistence and fail-closed disposal."
+    },
+    {
+      "id": "herdr-scratch/v1",
+      "version": 1,
+      "writer": "external scratch creator",
+      "location": "<scratch>/.herdr-scratch.json",
+      "rule": "additive",
+      "notCovered": "Older releases do not sweep external scratch. New readers validate project common-directory identity and terminal run or exact topic ownership."
+    },
+    {
       "id": "lane-evidence/v2",
       "version": 2,
       "writer": "lib/lane-removal.mjs",

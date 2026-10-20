@@ -1,0 +1,198 @@
+import test from './helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fixture, hold } from './helpers/retire-fixture.mjs';
+import { sweepCommands } from './helpers/retire-sweep-fixture.mjs';
+import { prepareScratchSweep, SCRATCH_OWNER_FILE } from '../lib/scratch-sweep.mjs';
+import { readProcessFileReferences } from '../lib/lane-removal.mjs';
+import { discoverArchive } from '../lib/archive.mjs';
+
+function setup(t, options) {
+  const f = fixture(t, { occupied: false, ...options }), root = path.join(f.scratch, 'scratch');
+  fs.mkdirSync(root);
+  const runs = [{ id: 'R-1', workspace: f.lane, report: { artifacts: [] } }];
+  const evidence = { directory: path.join(f.common, 'lane-archive/topic/proof') };
+  fs.mkdirSync(evidence.directory, { recursive: true });
+  const warnings = [], log = [];
+  const prepare = extra => prepareScratchSweep({ common: f.common, canonical: f.repo, lane: f.lane, topic: 'topic',
+    tip: f.head, integrated: true, runs, topics: ['topic', 'topic-ds3'], evidence, env: f.env, roots: [root],
+    readOpenFiles: () => [], warn: message => warnings.push(message), log: row => log.push(row), ...extra });
+  const directory = (name, marker) => {
+    const file = path.join(root, name); fs.mkdirSync(file); fs.writeFileSync(path.join(file, 'payload'), 'abc');
+    if (marker) fs.writeFileSync(path.join(file, SCRATCH_OWNER_FILE), JSON.stringify({ schema: 'herdr-scratch/v1', common: f.common, ...marker }));
+    return file;
+  };
+  const read = sweep => JSON.parse(fs.readFileSync(sweep.manifest));
+  return { ...f, root, runs, evidence, prepare, directory, warnings, log, read };
+}
+
+test('run marker wins over topic names, manifest precedes removal, and only the closed run is removed', t => {
+  const f = setup(t), owned = f.directory('unrelated-name', { run: 'R-1' });
+  const active = f.directory('topic-active', { run: 'R-2' }), foreign = f.directory('topic-foreign', { run: 'R-1', common: f.scratch });
+  const unknown = f.directory('topic-unknown', { run: 'R-99' });
+  const other = f.directory('topic-ds3-review', { run: 'R-1' });
+  f.runs.push({ id: 'R-2', workspace: f.lane });
+  const sweep = f.prepare();
+  assert.equal(f.read(sweep).phase, 'planned'); assert.ok(fs.existsSync(owned));
+  // An active run prevents all disposal at execution, even for a reported predecessor.
+  sweep.execute(); assert.ok(fs.existsSync(owned));
+  f.runs.pop();
+  const second = f.prepare(); second.execute();
+  assert.equal(fs.existsSync(owned), false); assert.equal(fs.existsSync(other), false);
+  for (const file of [active, foreign, unknown]) assert.ok(fs.existsSync(file));
+  const entry = f.read(second).entries.find(e => e.path === owned);
+  assert.equal(entry.owner, 'R-1'); assert.equal(entry.matchedBy, 'run marker'); assert.equal(entry.disposition, 'removed');
+  assert.ok(entry.size > 3); assert.match(f.read(second).entries.find(e => e.path === foreign).reason, /another project/);
+});
+
+test('longest topic removes owned scratch and keeps the prefix sibling and an undelimited prefix', t => {
+  const f = setup(t), own = f.directory('topic-review'), named = f.directory('topic-review-r1');
+  const sibling = f.directory('topic-ds3-review'), prefix = f.directory('topical-review'), unknownRun = f.directory('topic-review-r12');
+  const sweep = f.prepare(); sweep.execute();
+  for (const file of [own, named]) assert.equal(fs.existsSync(file), false);
+  for (const file of [sibling, prefix, unknownRun]) assert.ok(fs.existsSync(file));
+  assert.equal(f.read(sweep).entries.find(e => e.path === own).size, 3);
+  assert.equal(f.read(sweep).entries.find(e => e.path === sibling).owner, 'topic-ds3');
+  assert.match(f.read(sweep).entries.find(e => e.path === sibling).reason, /longer lane topic/);
+  assert.equal(f.read(sweep).entries.some(e => e.path === prefix), false);
+});
+
+for (const late of [false, true]) test(`an open file ${late ? 'appearing after planning' : 'at planning'} keeps its scratch`, t => {
+  const f = setup(t), owned = f.directory('topic-review'); let observations = 0;
+  const sweep = f.prepare({ readOpenFiles: () => ++observations === 1 && late ? [] : [{ pid: 99, path: path.join(owned, 'payload') }] });
+  sweep.execute(); assert.ok(fs.existsSync(owned));
+  assert.match(f.read(sweep).entries[0].reason, /open process handles/);
+});
+
+for (const late of [false, true]) test(`HOLD ${late ? 'appearing after planning' : 'at planning'} keeps everything`, t => {
+  const f = setup(t), own = f.directory('topic-review'); let held = !late;
+  const sweep = f.prepare({ hold: () => held ? 'HOLD' : null }); held = true;
+  sweep.execute(); assert.ok(fs.existsSync(own)); assert.match(f.read(sweep).entries[0].reason, /HOLD/);
+});
+
+test('an unmerged lane keeps scratch with the real archive tag', t => {
+  const f = setup(t, { merged: false }), own = f.directory('topic-review');
+  const command = sweepCommands(f).command;
+  const proof = f.retirement({ scratchRoots: [f.root], command }).removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true });
+  assert.equal(fs.existsSync(f.lane), false); assert.ok(fs.existsSync(own));
+  assert.equal(f.git(['rev-parse', `refs/tags/${proof.archiveTag}`]), f.head);
+  assert.match(JSON.parse(fs.readFileSync(proof.scratchManifest)).entries[0].reason, /unmerged lane/);
+});
+
+for (const kind of ['declared', 'sibling', 'none', 'opt-out']) test(`manifest location follows the ${kind} archive declaration`, t => {
+  const f = setup(t); f.directory('topic-review');
+  const sibling = path.join(f.scratch, 'archive');
+  if (kind !== 'none') fs.mkdirSync(sibling);
+  const archive = kind === 'declared' ? path.join(f.scratch, 'durable') : sibling;
+  if (kind === 'declared' || kind === 'opt-out') fs.writeFileSync(path.join(f.repo, '.lane.json'),
+    JSON.stringify({ archive: { dirs: kind === 'opt-out' ? [] : ['../durable'] } }));
+  const sweep = f.prepare();
+  assert.ok(sweep.manifest.startsWith(kind === 'none' || kind === 'opt-out' ? path.dirname(f.evidence.directory) : archive));
+  assert.ok(fs.existsSync(sweep.manifest)); sweep.execute();
+  assert.equal(f.read(sweep).phase, 'complete');
+  if (kind === 'none' || kind === 'opt-out') assert.ok(f.warnings.some(warning => /No archive declared/.test(warning)));
+});
+
+for (const failure of ['inventory', 'marker', 'archive', 'changed', 'new-topic', 'record']) test(`${failure} observation failure keeps scratch`, t => {
+  const f = setup(t), own = f.directory('topic-review', failure === 'marker' ? { run: 'R-1' } : undefined);
+  if (failure === 'marker') fs.writeFileSync(path.join(own, SCRATCH_OWNER_FILE), '{');
+  if (failure === 'archive') fs.writeFileSync(path.join(f.repo, '.lane.json'), '{');
+  const sweep = f.prepare({
+    ...(failure === 'inventory' ? { readOpenFiles: () => { throw Error('unreadable process inventory'); } } : {}),
+    ...(failure === 'record' ? { readOwnership: () => { throw Error('record unavailable'); } } : {}),
+    ...(failure === 'new-topic' ? { readOwnership: () => ({ runs: f.runs, topics: ['topic', 'topic-review'] }) } : {}),
+  });
+  if (failure === 'changed') fs.appendFileSync(path.join(own, 'payload'), 'changed');
+  sweep.execute(); assert.ok(fs.existsSync(own));
+  assert.equal(f.read(sweep).entries.find(e => e.path === own).disposition, 'kept');
+});
+
+test('external report evidence warns without refusing lane removal and keeps the cited payload', t => {
+  const f = setup(t), own = f.directory('topic-review');
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ archive: { dirs: ['../durable'] } }));
+  f.runs[0].report.artifacts = [path.join(own, 'payload'), path.join(f.lane, 'seed'), path.join(f.scratch, 'durable/result')];
+  const sweep = f.prepare(); sweep.execute();
+  assert.ok(fs.existsSync(own)); assert.equal(f.warnings.filter(w => /cites evidence outside/.test(w)).length, 1);
+  assert.match(f.read(sweep).entries[0].reason, /report evidence/);
+});
+
+test('an archive write failure falls back to lane evidence and keeps scratch', t => {
+  const f = setup(t), own = f.directory('topic-review'), archive = path.join(f.scratch, 'durable');
+  fs.mkdirSync(archive); fs.writeFileSync(path.join(archive, 'lane-sweeps'), 'occupied');
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ archive: { dirs: ['../durable'] } }));
+  const sweep = f.prepare(); sweep.execute();
+  assert.ok(sweep.manifest.startsWith(path.dirname(f.evidence.directory))); assert.ok(fs.existsSync(own));
+  assert.ok(f.read(sweep).warnings.some(warning => warning.includes('Declared archive manifest unavailable')));
+});
+
+test('symlinks are not followed and protected live scratch is kept', t => {
+  const f = setup(t), target = path.join(f.scratch, 'target'); fs.mkdirSync(target);
+  fs.writeFileSync(path.join(target, 'unique'), 'keep');
+  fs.symlinkSync(target, path.join(f.root, 'topic-link'));
+  const live = f.directory('topic-live'); fs.writeFileSync(path.join(live, '.local-live'), '');
+  const own = f.directory('topic-review'); fs.symlinkSync(target, path.join(own, 'link'));
+  const sweep = f.prepare(); sweep.execute();
+  assert.equal(fs.readFileSync(path.join(target, 'unique'), 'utf8'), 'keep'); assert.ok(fs.existsSync(live));
+  assert.ok(fs.lstatSync(path.join(f.root, 'topic-link')).isSymbolicLink()); assert.equal(fs.existsSync(own), false);
+});
+
+for (const change of ['HOLD', 'marker', 'contents']) test(`a final ${change} change after the persisted removal intent keeps scratch`, t => {
+  const f = setup(t), own = f.directory('topic-review', { run: 'R-1' }); let calls = 0, held = false;
+  const sweep = f.prepare({ guard: () => {
+    if (++calls !== 3) return;
+    if (change === 'HOLD') held = true;
+    if (change === 'marker') fs.writeFileSync(path.join(own, SCRATCH_OWNER_FILE), '{}');
+    if (change === 'contents') fs.appendFileSync(path.join(own, 'payload'), 'new');
+  }, hold: () => held ? 'HOLD' : null });
+  sweep.execute(); assert.ok(fs.existsSync(own)); assert.equal(f.read(sweep).entries[0].disposition, 'kept');
+});
+
+test('guarded removal writes its manifest before Git removes the lane and warns on stderr', t => {
+  const f = setup(t), own = f.directory('topic-review', { run: 'R-1' });
+  fs.mkdirSync(path.join(f.scratch, 'archive'));
+  const events = fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse);
+  events.find(e => e.type === 'report.ingested').report.artifacts = [path.join(f.scratch, 'outside-evidence')];
+  fs.writeFileSync(f.eventFile, events.map(event => JSON.stringify(event) + '\n').join(''));
+  const stderr = [];
+  t.mock.method(process.stderr, 'write', message => { stderr.push(String(message)); return true; });
+  const command = sweepCommands(f).command; let manifest;
+  const retirement = f.retirement({ scratchRoots: [f.root], command: (exe, args, options) => {
+    if (exe === '/usr/sbin/lsof' && args.includes('-Fpfn0')) return { status: 0, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\n` };
+    if (exe === 'git' && args[2] === 'worktree' && args[3] === 'remove') {
+      assert.ok(fs.existsSync(manifest)); assert.ok(fs.existsSync(own));
+      assert.equal(JSON.parse(fs.readFileSync(manifest)).phase, 'planned');
+    }
+    return command(exe, args, options);
+  }, log: row => { if (row.action === 'scratch-manifest') manifest = row.manifest; } });
+  const proof = retirement.removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true });
+  assert.equal(fs.existsSync(f.lane), false); assert.equal(fs.existsSync(own), false);
+  assert.equal(proof.scratchManifest, manifest); assert.ok(manifest.startsWith(path.join(f.scratch, 'archive')));
+  assert.equal(JSON.parse(fs.readFileSync(manifest)).entries[0].disposition, 'removed');
+  assert.ok(stderr.some(message => message.includes('cites evidence outside the archive and lane')));
+  assert.ok(JSON.parse(fs.readFileSync(manifest)).warnings.some(message => message.includes('outside-evidence')));
+});
+
+test('the guarded closer honors the real HOLD file before sweeping', t => {
+  const f = setup(t), own = f.directory('topic-review'); hold(f);
+  assert.throws(() => f.retirement({ scratchRoots: [f.root] }).removeLane({ lane: f.lane, branch: 'lane/topic' }), /retirement held/);
+  assert.ok(fs.existsSync(own)); assert.ok(fs.existsSync(f.lane));
+});
+
+test('open file inventory includes ordinary descriptors and refuses incomplete observations', t => {
+  const f = setup(t), own = f.directory('topic-review');
+  const stdout = `p${process.pid}\0fcwd\0n${f.repo}\0\np99\0f7\0n${own}/payload\0\nf8\0nPIPE\0\nf9\0n${own}/unlinked\0\n`;
+  const refs = readProcessFileReferences({ platform: 'darwin', command: () => ({ status: 0, stderr: '', stdout }) });
+  assert.ok(refs.some(ref => ref.pid === 99 && ref.path === `${own}/payload`));
+  assert.ok(refs.some(ref => ref.pid === 99 && ref.path === `${own}/unlinked`), 'unlinked open paths still protect their directory');
+  for (const output of [stdout.replace(`fcwd\0n${f.repo}\0`, ''), stdout.slice(0, -1), 'p99\0n/bad\0\n'])
+    assert.throws(() => readProcessFileReferences({ platform: 'darwin', command: () => ({ status: 0, stderr: '', stdout: output }) }));
+  assert.throws(() => readProcessFileReferences({ platform: 'darwin', command: () => ({ status: 1, stderr: 'denied' }) }), /unavailable/);
+});
+
+test('the shared archive helper honors layer-relative paths and whole-value overrides', t => {
+  const f = setup(t), file = path.join(f.scratch, 'selected.json');
+  fs.writeFileSync(file, JSON.stringify({ archive: { dirs: ['saved'] } }));
+  const result = discoverArchive({ cwd: f.repo, project: { canonical: f.repo }, env: { ...f.env, LANE_CONFIG: file } });
+  assert.deepEqual(result.dirs, [path.join(f.scratch, 'saved')]);
+});

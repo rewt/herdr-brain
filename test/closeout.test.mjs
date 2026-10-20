@@ -271,6 +271,15 @@ for (const project of ['bch-cloak', 'herdr-brain']) test(`${project}: a landed e
   const f = setup(t, { terminal: true });
   fs.mkdirSync(path.join(f.lane, '.lane'));
   fs.writeFileSync(path.join(f.lane, '.lane/evidence'), 'unique report and scratch\n');
+  const scratch = path.join(f.scratch, 'owned-scratch'), payload = path.join(scratch, 'run-review');
+  fs.mkdirSync(payload, { recursive: true });
+  fs.writeFileSync(path.join(payload, '.herdr-scratch.json'), JSON.stringify({ schema: 'herdr-scratch/v1', common: f.common, run: 'R-1' }));
+  fs.writeFileSync(path.join(payload, 'result'), 'disposable');
+  f.options.scratchRoots = [scratch];
+  const nativeCommand = f.options.command;
+  f.options.command = (exe, args, options) => exe === '/usr/sbin/lsof' && args.includes('-Fpfn0')
+    ? { status: 0, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\n` }
+    : nativeCommand(exe, args, options);
   const landed = readCloseoutEntries(f.common).find(e => e.signal === 'landed');
   assert.equal(landed.source.type, 'promotion.reconciled');
   f.drain(); assertRemoved(f);
@@ -278,6 +287,9 @@ for (const project of ['bch-cloak', 'herdr-brain']) test(`${project}: a landed e
   const actions = effects(f).map(e => e.action);
   for (const action of ['exit-observed', 'closed', 'lane-preflight', 'worktree-removed', 'branch-removed', 'lane-removed']) assert.ok(actions.includes(action), action);
   const proof = effects(f).find(e => e.action === 'lane-preflight');
+  assert.equal(fs.existsSync(payload), false, 'the queue calls the guarded executor scratch sweep');
+  const sweep = JSON.parse(fs.readFileSync(proof.scratchManifest));
+  assert.equal(sweep.entries.find(e => e.path === payload).disposition, 'removed');
   assert.equal(fs.readFileSync(path.join(proof.evidence.directory, 'files/.lane/evidence'), 'utf8'), 'unique report and scratch\n');
   const completion = events(f).find(e => e.type === 'closeout.effect' && e.outcome.action === 'lane-removed');
   const source = events(f).find(e => e.type === 'promotion.reconciled');

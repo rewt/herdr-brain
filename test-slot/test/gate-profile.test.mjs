@@ -58,6 +58,8 @@ test('a default profile fixture promotes despite pressured memory in the outer e
     else process.env.TEST_MEMORY_FILE = previous;
   }
   assert.notEqual(f.env.TEST_MEMORY_FILE, outer);
+  assert.ok(f.env.NODE_OPTIONS.includes(`--import=${JSON.stringify(new URL('../../test/helpers/memory-fixture.mjs', import.meta.url).href)}`),
+    'the healthy fixture sample is consumed through the memory preload');
   assert.deepEqual(JSON.parse(fs.readFileSync(f.env.TEST_MEMORY_FILE)), healthyMemory);
   const result = f.run();
   assert.equal(result.status, 0, result.stdout + result.stderr);

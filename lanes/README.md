@@ -290,6 +290,33 @@ when disposable output would otherwise be omitted.
 Ordinary untracked changes still fail the clean Git requirement. Close refuses
 `assume-unchanged` and `skip-worktree` index flags because they can hide unique
 local bytes from Git status.
+
+The guarded executor also inventories top-level scratch directories under the
+native temporary directory and `/private/tmp` (`/tmp` on other systems). Before
+lane removal it writes `lane-scratch-sweep/v1` into the first declared archive's
+`lane-sweeps/` directory. Archive resolution uses the shared `lib/archive.mjs`
+helper: layer-relative `.lane.json` `archive.dirs`, otherwise an existing sibling
+`archive/`; an explicit empty list opts out. Without an archive, the manifest sits
+beside the lane's preservation bundle under `GIT_COMMON_DIR/lane-archive/<topic>/`.
+
+Scratch creators can write `.herdr-scratch.json` containing
+`{"schema":"herdr-scratch/v1","common":"/absolute/git/common","run":"R-123"}`
+(or `topic` instead of `run`). The marker must bind this canonical Git identity;
+a run must belong to the closing lane and have reported or been abandoned.
+Invalid, active or foreign markers keep scratch and prevent name fallback.
+Unmarked scratch uses the longest complete lane topic at the start of its name,
+including known branch, archive-tag and record topics. A matching run-id token
+also has to belong to an ended run in that lane. An unmarked run id alone cannot
+prove project ownership. For example, closing `topic` keeps `topic-ds3-review`
+when `topic-ds3` is known, and never matches `topical-review`.
+
+After successful lane removal the same executor sweeps only verified owned
+scratch. Unmerged lanes keep it with their archive tag. HOLD, open process files
+or working directories, changed ownership/content, protected live entries and
+failed observations keep scratch with a reason in the manifest. Report artifacts
+outside both the archive and lane produce warnings in the manifest and on stderr;
+scratch containing cited evidence is retained without refusing lane close.
+
 After Git succeeds, matching session
 metadata is marked done, including when workspace cleanup remains pending. Close
 then reports the pending workspace and exits nonzero; metadata errors never

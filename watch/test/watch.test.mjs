@@ -37,6 +37,9 @@ if [ "$1 $2" = 'pane read' ]; then
   printf '%s\\n' '────────────────────' '❯ ' '────────────────────'
   exit 0
 fi
+if [ "$1 $2" = 'agent wait' ]; then
+  trap 'exit 0' TERM
+fi
 ${body}`;
   fs.writeFileSync(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
 }
@@ -407,7 +410,7 @@ test('a mismatched report is invalid even when org check passes', async (t) => {
   fs.writeFileSync(fixture.report, reportText('R-99', 'Stale report'));
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;
-  "agent wait") sleep 10 ;;
+  "agent wait") exec sleep 10 ;;
   "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-invalid-report*) "${fixture.writer}" ;; esac ;;
   *) exit 2 ;;
 esac`);
@@ -478,7 +481,7 @@ test('idle grace does not start before the worker has been seen working', async 
   const fixture = watcherFixture('R-20');
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"idle"}}}' ;;
-  "agent wait") sleep 10 ;;
+  "agent wait") exec sleep 10 ;;
   "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-no-report*) "${fixture.writer}" ;; esac ;;
   *) exit 2 ;;
 esac`);
@@ -589,7 +592,7 @@ test('a refused intermediate delivery stays first in the inbox and recovers befo
   fs.writeFileSync(state, 'blocked');
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
-  "agent wait") sleep 10 ;;
+  "agent wait") exec sleep 10 ;;
   "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*)
     if [ ! -f '${fixture.root}/refused' ]; then printf yes > '${fixture.root}/refused'; printf '%s\\n' '{"error":{"code":"agent_blocked"}}' >&2; exit 1; fi ;; esac ;;
   "notification show") printf '%s\\n' "$*" >> "${fixture.calls}"; "${fixture.writer}"; printf '%s' idle > '${state}' ;;

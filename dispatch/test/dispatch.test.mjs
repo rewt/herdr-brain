@@ -105,7 +105,7 @@ function rememberProcesses(root, org, realWatch, receipts) {
   for (const file of fs.existsSync(path.join(org, 'dispatch')) ? fs.readdirSync(path.join(org, 'dispatch')).filter(x => x.endsWith('.json') && !x.endsWith('.routes.json')) : []) {
     const job = JSON.parse(fs.readFileSync(path.join(org, 'dispatch', file)));
     if (job.watcher?.pid) receipts.remember(job.watcher.pid, realWatch ? [process.execPath, WATCH, job.run,
-      '--org', org, '--to', job.to, '--cwd', job.repo, '--log', path.join(org, 'dispatch', `${job.run}.watch.log`)].join(' ') : fakeCommand);
+      '--controller', 'brain', '--org', org, '--to', job.to, '--cwd', job.repo, '--log', path.join(org, 'dispatch', `${job.run}.watch.log`)].join(' ') : fakeCommand);
   }
 }
 test('awaited dispatch records the notification and plan step before launching and preserves retry flags', t => {
@@ -129,7 +129,7 @@ for (const source of ['fake watcher receipt', 'real watcher journal']) {
     const real = source === 'real watcher journal';
     if (real) fs.writeFileSync(path.join(dir, 'job.json'), JSON.stringify({ run: 'R-1', to: 'supervisor', repo: root, watcher: { pid: 101 } }));
     else fs.writeFileSync(path.join(root, 'pids'), '101\n');
-    const command = real ? [process.execPath, WATCH, 'R-1', '--org', org, '--to', 'supervisor', '--cwd', root,
+    const command = real ? [process.execPath, WATCH, 'R-1', '--controller', 'brain', '--org', org, '--to', 'supervisor', '--cwd', root,
       '--log', path.join(dir, 'R-1.watch.log')].join(' ') : [process.execPath, '-e', 'setTimeout(()=>{},10000)', '--', root].join(' ');
     const suite = { pid: 700, ppid: 1, pgid: 700, state: 'S', identity: 'suite birth', command: 'suite worker' };
     const signals = [], rows = new Map([[700, suite]]);

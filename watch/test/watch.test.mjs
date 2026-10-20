@@ -75,6 +75,78 @@ function startWatcher(t, args) {
   return spawnChild(t, process.execPath, args, { env: TEST_ENV });
 }
 
+for (const fallback of [false, true]) {
+  for (const change of ['reported', 'abandoned', 'claim moved', 'record removed', 'org removed', 'STOP']) {
+    test(`a blocking watcher exits on ${change}${fallback ? ' when filesystem watches are unavailable' : ''}`, async t => {
+      const f = watcherFixture('R-940');
+      t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+      if (!fallback && !await requireFileWatch(t, f.root)) return;
+      const record = path.join(f.root, '.org/events.jsonl');
+      const stop = path.join(f.root, '.lane/supervisor/STOP');
+      fs.mkdirSync(path.dirname(stop), { recursive: true });
+      // Unlike an agent-state transition, these changes cannot release this
+      // wait. The watcher must terminate the exact wait it started.
+      const waiting = path.join(f.root, 'waiting'), ended = path.join(f.root, 'wait-ended');
+      const untilText = async (file, pattern) => {
+        const deadline = Date.now() + loadTimeout(10_000);
+        while (!fs.existsSync(file) || !pattern.test(fs.readFileSync(file, 'utf8'))) {
+          assert.ok(Date.now() < deadline, `timed out waiting for ${file}`);
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+      };
+      fs.writeFileSync(f.herdr, `#!${process.execPath}
+import fs from 'node:fs';
+const a=process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
+if(a[0]==='agent'&&a[1]==='get') console.log('{"result":{"agent":{"agent_status":"working"}}}');
+else if(a[0]==='agent'&&a[1]==='wait') {
+  process.once('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(ended)},'terminated');process.exit(0);});
+  fs.writeFileSync(${JSON.stringify(waiting)},'waiting');setInterval(()=>{},1000);
+} else process.exit(2);
+`, { mode: 0o755 });
+      const preloads = [];
+      if (fallback) {
+        const preload = path.join(f.root, 'lost-watches.mjs');
+        // Exercise the production fallback without a thirty-second test wait.
+        fs.writeFileSync(preload, `import fs from 'node:fs';
+fs.watch=()=>{throw Error('fixture: fs.watch unavailable');};
+const interval=globalThis.setInterval;
+globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===30000?50:ms,...args);
+`);
+        preloads.push('--import', preload);
+      }
+      const child = startWatcher(t, [...preloads, ...f.args, '--cwd', f.root, '--start-grace', '0']);
+      await untilText(waiting, /waiting/);
+      // Idle fallback ticks only stat files; they never respawn Herdr or write
+      // an ownership receipt. This also proves the fallback timer is live.
+      if (fallback) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        assert.equal(fs.readFileSync(f.calls, 'utf8').trim().split('\n').length, 2);
+        assert.equal(fs.existsSync(path.join(f.root, '.org/watch/R-940.json')), false);
+      }
+      const events = fs.readFileSync(record, 'utf8').trim().split('\n').map(JSON.parse);
+      const append = event => fs.appendFileSync(record, JSON.stringify({ ...event, seq: 3,
+        at: new Date().toISOString(), by: 'fixture' }) + '\n');
+      if (change === 'reported') append({ type: 'report.ingested', run: 'R-940', report: { outcome: 'done' } });
+      if (change === 'abandoned') append({ type: 'run.abandoned', id: 'R-940' });
+      if (change === 'claim moved') append({ ...events[1], owner: { ...events[1].owner, controller: 'successor' } });
+      if (change === 'record removed') fs.unlinkSync(record);
+      if (change === 'org removed') fs.rmSync(path.dirname(record), { recursive: true });
+      if (change === 'STOP') fs.writeFileSync(stop, 'Operator stop\n');
+      const result = await waitForExit(child);
+      assert.equal(result.code, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, change === 'reported' ? /was reported; stopping/ : change === 'abandoned'
+        ? /was abandoned; stopping/ : change === 'STOP' ? /Supervisor STOP; stopping without delivery/
+          : /stopping without delivery/);
+      await untilText(ended, /terminated/);
+      const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse);
+      assert.deepEqual(calls.map(a => a.slice(0, 2)), [['agent', 'get'], ['agent', 'wait'],
+        ...(change === 'reported' ? [['agent', 'get']] : [])]);
+      assert.equal(fs.existsSync(path.join(f.root, '.org/watch/R-940.json')), false);
+    });
+  }
+}
+
 function retiringWatcherFixture(t, run) {
   const f = watcherFixture(run);
   t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));

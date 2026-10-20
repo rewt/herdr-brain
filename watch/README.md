@@ -7,10 +7,14 @@ report path. A valid report written while the worker is working, unknown, or
 blocked wakes the watcher but is not delivered early; a blocked worker gets a
 distinct intermediate notice and remains watched.
 
-It listens to two signals at once: Herdr's blocking `agent wait` for worker
-lifecycle changes and `fs.watch` for the report. A timer emits one distinct
-long-running notice; it is not a polling loop. It never writes `events.jsonl`
-or ingests a report.
+It listens to Herdr's blocking `agent wait`, the report and record files, and
+the canonical project's `.lane/supervisor/STOP`. A changed claim, abandoned run,
+removed record or STOP ends the watcher without another notice. An ingested
+report also ends the wait; a stopped worker's valid final report still delivers
+the existing final notice. A 30-second record stat and STOP check covers lost
+filesystem notifications without restarting Herdr's wait while nothing changes.
+A separate timer emits one distinct long-running notice. It never writes
+`events.jsonl` or ingests a report.
 
 It saves its terminal decision as run `process_end` metadata through
 `record set`, independently of report time. Initial idle/gone states wait for

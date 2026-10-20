@@ -20,7 +20,7 @@ import { acquireWatcherLock } from './lock.mjs';
 import { readReport } from '../lib/report.mjs';
 import { BRAIN_CONTROLLER, readOwnedRun, requireController, assertOwner, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { writeFileAtomic } from '../lib/store.mjs';
-import { findOrgDir } from '../lib/store.mjs';
+import { findOrgDir, LOG_FILE } from '../lib/store.mjs';
 import { observeProcessEnd } from '../lib/run-timing.mjs';
 import { inboxPath, promptSupervisor, readInbox } from '../supervisor/prompt-supervisor.mjs';
 import {
@@ -86,6 +86,7 @@ const retryAfterMs = numberOption('retry-after') * 1_000;
 const deliveryAttempts = numberOption('delivery-attempts', { min: 1 });
 const dry = opt['dry-run'];
 let ownership;
+const recordFile = path.join(opt.org, LOG_FILE);
 const watchReceipt = path.join(opt.org, 'watch', `${runId}.json`);
 function reserveWatch(intent, id) {
   fenceOwner(opt.org, runId, ownership, () => {
@@ -196,17 +197,21 @@ function fileStamp(file) {
   }
 }
 
-function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
+function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp, beforeRecordStamp, stopFile) {
   return new Promise((resolve) => {
     let settled = false;
     let watcher;
     let timer;
+    let controlTimer;
+    const controlWatchers = [];
     let child;
     const finish = (reason) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearInterval(controlTimer);
       watcher?.close();
+      for (const controlWatcher of controlWatchers) controlWatcher.close();
       if (child && child.exitCode === null) child.kill('SIGTERM');
       resolve(reason);
     };
@@ -226,6 +231,23 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
         });
       } catch { /* Herdr state still wakes us. */ }
     }
+    // Completion/transfer and STOP need not change the worker or its report.
+    // Keep one blocking Herdr wait, waking only on a changed record or STOP.
+    // Cheap stats cover lost watches, replacement and removed directories.
+    const checkControl = () => {
+      if (fileStamp(recordFile) !== beforeRecordStamp) finish('record');
+      else if (fs.existsSync(stopFile)) finish('stop');
+    };
+    for (const file of [recordFile, stopFile]) {
+      const directory = existingDirectory(file);
+      if (!directory) continue;
+      try {
+        const controlWatcher = fs.watch(directory, checkControl);
+        controlWatcher.on('error', () => { controlWatcher.close(); checkControl(); });
+        controlWatchers.push(controlWatcher);
+      } catch { /* The stat fallback remains live. */ }
+    }
+    controlTimer = setInterval(checkControl, 30_000);
     const args = ['agent', 'wait', agent, ...until.flatMap((state) => ['--until', state])];
     child = spawn(opt.herdr, args, { stdio: 'ignore' });
     child.once('error', () => finish('wait-failed'));
@@ -236,6 +258,7 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
     if (timeoutMs !== undefined) timer = setTimeout(() => finish('long'), Math.max(0, timeoutMs));
     // Close the gap between the caller's inspection and fs.watch becoming live.
     if (fileStamp(reportPath) !== beforeStamp) finish('report');
+    checkControl();
   });
 }
 
@@ -392,6 +415,9 @@ async function watch() {
   const item = current.item;
   const agent = opt.agent ?? current.meta?.agent;
   const reportPath = path.resolve(opt.report ?? current.report_path ?? '');
+  let canonical = opt.cwd;
+  try { canonical = gitProject(opt.cwd).canonical; } catch { /* Standalone record. */ }
+  const stopFile = path.join(canonical, '.lane/supervisor/STOP');
   if (!item) throw new Error(`${runId} has no item`);
   if (!agent) throw new Error(`${runId} has no worker agent; pass --agent`);
   if (!current.report_path && !opt.report) throw new Error(`${runId} has no report path; pass --report`);
@@ -436,9 +462,12 @@ async function watch() {
   }
 
   for (;;) {
+    const beforeRecordStamp = fileStamp(recordFile);
+    if (fs.existsSync(stopFile)) { log('Supervisor STOP; stopping without delivery'); return; }
+    let owned;
+    try { owned = assertOwner(readOwnedRun(opt.org, runId), ownership); } catch (error) { log(`${error.message}; stopping without delivery`); return; }
     current = readRun();
-    try { assertOwner(readOwnedRun(opt.org, runId), ownership); } catch (error) { log(`${error.message}; stopping without delivery`); return; }
-    if (current.abandoned) {
+    if (owned.abandoned || current.abandoned) {
       log(`${runId} was abandoned; stopping`);
       return;
     }
@@ -483,6 +512,12 @@ async function watch() {
       log(`validated by ${report.check}`);
       return;
     }
+    // Re-arming an already ingested final report still adopts/delivers its
+    // notice above. Otherwise record completion must release a blocked wait.
+    if (owned.report || current.report) {
+      log(`${runId} was reported; stopping`);
+      return;
+    }
     if (state === 'unavailable') {
       const message = unavailableNotice({ run: runId, item, agent, error: status.error });
       if (message !== lastUnavailableLog) log(message);
@@ -509,7 +544,7 @@ async function watch() {
         log(`waiting up to ${startGraceMs / 1_000}s for ${agent} to start before treating ${state ?? 'gone'} as terminal`);
         startupWaitingLogged = true;
       }
-      const signal = await waitForSignal(agent, ['working'], reportPath, startupGraceRemaining, beforeStamp);
+      const signal = await waitForSignal(agent, ['working'], reportPath, startupGraceRemaining, beforeStamp, beforeRecordStamp, stopFile);
       if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, startupGraceRemaining));
       continue;
     }
@@ -520,7 +555,7 @@ async function watch() {
       }
       const remaining = Math.max(0, idleGraceUntil - Date.now());
       if (remaining > 0) {
-        const signal = await waitForSignal(agent, ['working', 'blocked'], reportPath, remaining, beforeStamp);
+        const signal = await waitForSignal(agent, ['working', 'blocked'], reportPath, remaining, beforeStamp, beforeRecordStamp, stopFile);
         if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, remaining));
         continue;
       }
@@ -571,7 +606,7 @@ async function watch() {
     const untilLong = !longNotified && workerStillRunning
       ? Math.max(0, longNextAt - Date.now())
       : undefined;
-    const signal = await waitForSignal(agent, until, reportPath, untilLong, beforeStamp);
+    const signal = await waitForSignal(agent, until, reportPath, untilLong, beforeStamp, beforeRecordStamp, stopFile);
     if (signal === 'long') continue;
     if (signal === 'wait-failed') {
       log(`Herdr wait failed; rechecking after ${retryAfterMs / 1_000}s`);

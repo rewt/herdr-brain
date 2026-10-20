@@ -356,7 +356,8 @@ record has no Git queue. Terminal refused/timeout jobs are released immediately;
 members of a red batch still queued for bisection stay protected. Reconciliation
 markers release completed members even before the queue saves its next checkpoint.
 Older promoted results without reconciliation metadata release after the item
-was closed as done with that run current. That durable legacy completion remains
+was closed as done with that run current, after admission when its record sequence
+is known. That durable legacy completion remains
 effective after reopening or starting follow-up work; an explicit pending
 reconciliation still holds its member.
 

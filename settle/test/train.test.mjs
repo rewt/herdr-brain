@@ -6,6 +6,7 @@ import { fixture } from './fixture.mjs';
 import { enqueue, queueFor } from '../../promote/promote.mjs';
 import { verifyTrainResult } from '../../promote/train.mjs';
 import { gitProject } from '../../lib/project.mjs';
+import { loadEvents } from '../../lib/store.mjs';
 import { moveMainOnSave } from './auto-retry-fixture.mjs';
 
 const receipt = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`)));
@@ -110,17 +111,30 @@ test('queued integration records report-to-main time on the authorized run', t =
   assert.equal(verifyTrainResult({ ...promoted, source_head: '0'.repeat(40) }, { project, saved }), false);
 });
 
-test('batch rechecks current-run record readiness after its gate', t => {
+for (const change of ['start', 'note']) test(change === 'start'
+  ? 'batch rechecks current-run record readiness after its gate'
+  : 'batch refuses a member note accepted through audited mid-gate recovery', t => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
   const settled = result(f.settle(run)), queue = queueFor(f.repo);
-  const checker = path.join(f.root, 'supersede.cjs');
-  fs.writeFileSync(checker, `require('child_process').execFileSync(process.execPath,[${JSON.stringify(path.join(f.source, 'bin/org.mjs'))},'start',${JSON.stringify(f.show(run).item)},'--workspace',${JSON.stringify(f.workspace)}],{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});`);
+  const checker = path.join(f.root, 'change-record.cjs');
+  const mutation = change === 'start' ? ['start', f.show(run).item, '--workspace', f.workspace]
+    : ['note', f.show(run).item, 'Gate-time note through inspected recovery'];
+  // Deliberately change the captured record after the gate starts. Ordinary
+  // writes now refuse; inspected recovery must still hit the L-23 recheck.
+  fs.writeFileSync(checker, `const batch=JSON.parse(require('fs').readFileSync(${JSON.stringify(queue.file)})).current.id;
+require('child_process').execFileSync(process.execPath,${JSON.stringify([path.join(f.source, 'bin/org.mjs'), ...mutation])},{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)},ORG_GUARD_OVERRIDE:batch},stdio:'inherit'});`);
   enqueue(queue, ['topic'], { expectedHead: settled.head, run, org: f.org, to: 'test', validate: `${process.execPath} ${checker}`,
     herdr: path.join(f.root, 'bin/herdr'), laneCLI: path.join(f.source, 'lanes/lane.mjs'), attempts: 1, retry: 0 });
   const base = f.git(['rev-parse', 'main']);
   const drained = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
   assert.equal(drained.status, 0, drained.stderr);
-  assert.equal(queue.load().results[0].outcome, 'refused'); assert.match(queue.load().results[0].reason, /superseded/);
+  assert.equal(queue.load().results[0].outcome, 'refused');
+  assert.match(queue.load().results[0].reason, change === 'start' ? /superseded/ : /changed since batch preparation/);
+  const [audit] = loadEvents(f.org).events.filter(e => e.type === 'promotion.write-overridden');
+  assert.ok(audit); assert.equal(audit.command, change);
+  assert.deepEqual(audit.batches, [queue.load().results[0].batch]);
+  assert.deepEqual(audit.items, [f.show(run).item]);
+  assert.match(fs.readFileSync(queue.load().results[0].log, 'utf8'), /promotion write guard OVERRIDE/);
   assert.equal(f.git(['rev-parse', 'main']), base); assert.ok(fs.existsSync(f.workspace));
 });
 

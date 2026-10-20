@@ -209,6 +209,21 @@ test('historical promoted results without reconciliation release only after thei
   }
 });
 
+test('a close before admission does not release a reopened run during green reconciliation', t => {
+  const f = fixture(t);
+  f.queue.transaction(data => { data.pending = []; });
+  f.ok(['close', f.item, '--if-current-run', f.run]); f.ok(['reopen', f.item]);
+  const [job] = enqueue(f.queue, ['reopened-work'], { org: f.dir, run: f.run, expectedHead: f.head });
+  const b = f.batch('complete');
+  const train = JSON.parse(fs.readFileSync(b.receipt));
+  train.results[job.id] = { outcome: 'promoted', tip: f.head };
+  fs.writeFileSync(b.receipt, JSON.stringify(train));
+  f.refuse(['note', f.item, 'Still waiting for this promotion to reconcile']);
+  // Old queues have no admission boundary; retain their historical close rule.
+  f.queue.transaction(data => { delete data.current.jobs[0].admittedSeq; });
+  f.ok(['note', f.item, 'Historical queue compatibility']);
+});
+
 test('validated batch completion is exempt and its durable marker releases members before queue acknowledgement', t => {
   const f = fixture(t), b = f.batch('complete', { outcome: 'promoted', tip: f.head });
   const payload = { version: 1, batch: b.id, org: fs.realpathSync(f.dir), identity: f.queue.project.identity,

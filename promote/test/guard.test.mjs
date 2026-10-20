@@ -41,6 +41,10 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
     const target = path.join(repo, file); fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(source, file), target); fs.chmodSync(target, fs.statSync(path.join(source, file)).mode & 0o777);
   }
+  // Record mutations in this private project must not inherit the host's closer.
+  const laneConfig = JSON.parse(fs.readFileSync(path.join(repo, '.lane.json'), 'utf8'));
+  delete laneConfig.retirement?.closeout_queue;
+  put('.lane.json', JSON.stringify(laneConfig));
   put('board/render.mjs', renderer);
   put('docs/guide.md', 'Ordinary documentation outside the reviewed component.\n');
   put('test/board-view.test.mjs', "import assert from 'node:assert/strict';\nimport { render } from '../board/render.mjs';\nassert.ok(render({ memory: null, herdr: 'offline', slot: { state: 'free' }, rows: [] }).includes('Promotion board'));\nconsole.log('# tests 1');\n");
@@ -103,6 +107,12 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     fs.writeFileSync(path.join(root, 'release-anchor'), 'release');
     if (workerDone) await workerDone;
     await waitForInboxIdle(path.join(org, 'supervisor/inbox.log'));
+    for (const canonical of new Set([repo, project])) {
+      const closeout = path.join(canonical, '.git/closeout');
+      assert.equal(fs.existsSync(path.join(closeout, 'consumer.lock')), false, 'private fixture has no closeout owner');
+      // kickCloseout opens this log before spawning, even if the consumer exits.
+      assert.equal(fs.existsSync(path.join(closeout, 'worker.log')), false, 'record mutations never started a closeout consumer');
+    }
     fs.rmSync(root, { recursive: true, force: true });
   });
   return { root, repo, project, org, workspace, env, exec, ok, git, put, record, show, run, item, base, head, settings, configure,

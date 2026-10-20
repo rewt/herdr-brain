@@ -72,6 +72,15 @@ closer. It reads queue entries and their targeted record/native/Git references,
 processes them in source sequence/key order, and exits when no new revision is
 pending. A deferred target does not block a different eligible target.
 
+Closeout publication and consumption act only on the project's own record,
+resolved from its canonical checkout/fleet binding independently of `ORG_DIR`.
+A CLI write that explicitly selects another record does not bind or publish
+closeout work, start a closer, record queue diagnostics, or prune project entries.
+An empty matching set is a quiet no-op. Within the owning record, consumption
+ignores entries for other records, while a committed source binding still makes
+a changed record/project field a recorded refusal. Foreign entries are retained;
+their presence never supplies pruning or retirement authority.
+
 Each entry invokes the existing guarded retirement adapter on its named path.
 It re-observes identity, HOLD, focus, protected roles/slots, processes, references,
 run/chain disposition and Git facts before effects. A stale head, recreated

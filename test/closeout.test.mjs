@@ -10,12 +10,12 @@ import { fixture, hold, isolatedEnv } from './helpers/retire-fixture.mjs';
 import { sweepCommands } from './helpers/retire-sweep-fixture.mjs';
 import { setTimeout as pause } from 'node:timers/promises';
 import { loadTimeout } from '../lib/deadline.mjs';
-import { loadEvents, transact } from '../lib/store.mjs';
+import { initOrg, loadEvents, transact } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
-  closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout } from '../lib/closeout.mjs';
+  closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout, closeoutKey } from '../lib/closeout.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { drainCloseout } from '../lib/closeout-consumer.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
@@ -74,6 +74,55 @@ test('default off is inert, malformed policy keeps, and a lane copy cannot opt i
   assert.deepEqual(readCloseoutEntries(f.common), []);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":"yes"}}');
   assert.throws(() => closeoutPolicy(f.repo), /invalid/);
+});
+
+test('concurrent foreign-record CLI writers neither consume nor prune the project record queue', async t => {
+  const f = setup(t); f.report();
+  const foreign = path.join(f.scratch, 'foreign-record'); initOrg(foreign);
+  const [entry] = readCloseoutEntries(f.common);
+  transact(f.org, () => ({ add: [{ type: 'closeout.evaluated', key: entry.key, identity: f.common, run: entry.run,
+    item: entry.item, source: entry.source, revision: entry.source.seq, completed: true }] }));
+  const entries = path.join(f.common, 'closeout/entries');
+  fs.writeFileSync(path.join(entries, `${'f'.repeat(64)}.json`), '{"schema":"closeout-entry/v999"}\n');
+  const before = fs.readdirSync(entries).map(name => [name, fs.readFileSync(path.join(entries, name), 'utf8')]);
+  const recordBefore = fs.readFileSync(f.eventFile, 'utf8');
+  assert.deepEqual(f.drain({ org: foreign, onClaim: () => assert.fail('a foreign record cannot claim the project consumer') }), { evaluated: [] });
+  const results = await Promise.all(Array.from({ length: 12 }, (_, i) => child(process.execPath,
+    [cli, 'add', `Foreign ${i}`, '--role', 'engineer'], { cwd: i % 2 ? f.lane : f.repo, env: { ...f.env, ORG_DIR: foreign } })));
+  for (const result of results) { assert.equal(result.status, 0, result.stdout + result.stderr); assert.equal(result.stderr, ''); }
+  const written = loadEvents(foreign).events;
+  assert.equal(written.length, 12); assert.ok(written.every(e => e.type === 'item.added'));
+  assert.deepEqual(written.map(e => e.seq), Array.from({ length: 12 }, (_, i) => i + 1));
+  assert.equal(new Set(results.map(r => r.stdout.trim())).size, 12);
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), recordBefore);
+  assert.deepEqual(fs.readdirSync(entries).map(name => [name, fs.readFileSync(path.join(entries, name), 'utf8')]), before);
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false, 'foreign writes do not launch a closer');
+  assert.deepEqual(f.read().actions, []);
+});
+
+test('own-record publication and drain ignore foreign-bound entries in the same project queue', t => {
+  const f = setup(t); f.report();
+  const foreign = path.join(f.scratch, 'foreign-record'); initOrg(foreign);
+  const [entry] = readCloseoutEntries(f.common);
+  const other = { ...entry, org: foreign, run: 'R-99', signal: 'landed', key: closeoutKey(entry.cwd, 'R-99', 'landed') };
+  const file = path.join(f.common, 'closeout/entries', `${other.key}.json`), bytes = JSON.stringify(other) + '\n';
+  fs.writeFileSync(file, bytes);
+  f.append([{ type: 'item.added', id: 'ENG-2', title: 'Own record update', kind: 'work', role: 'engineer' }]);
+  f.drain();
+  assert.ok(evaluations(f).some(e => e.key === entry.key), 'the owning request is still evaluated');
+  assert.equal(events(f).some(e => e.key === other.key), false, 'foreign entry produces no invalid or evaluated event');
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes); assert.deepEqual(loadEvents(foreign).events, []);
+  assert.deepEqual(f.read().actions, []);
+});
+
+for (const field of ['org', 'project']) test(`the owning record still diagnoses a changed ${field} binding without changing the entry`, t => {
+  const f = setup(t); f.report();
+  const [entry] = readCloseoutEntries(f.common), file = path.join(f.common, 'closeout/entries', `${entry.key}.json`);
+  const changed = { ...entry, [field]: path.join(f.scratch, 'changed-binding') };
+  const bytes = JSON.stringify(changed) + '\n'; fs.writeFileSync(file, bytes);
+  f.drain();
+  assert.ok(events(f).some(e => e.type === 'closeout.invalid' && e.key === entry.key && /record\/project binding changed/.test(e.reason)));
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes); assert.deepEqual(f.read().actions, []);
 });
 
 test('default-off promotion contention remains pending and retries every cleanup row after release', t => {

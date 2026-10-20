@@ -292,22 +292,41 @@ test('supervisor binds head and run into the queue and retries confirmed refusal
   assert.equal(h.handle(promoted).result, 'recorded_promotion');
 });
 
-test('bound promotion rechecks queued runs and record changes during validation before integration', { timeout: 40000 }, (t) => {
-  for (const mode of ['queued-run', 'gate-blocker', 'gate-run']) {
+for (const mode of ['queued-run', 'gate-blocker', 'gate-run']) {
+  test(`bound promotion rechecks queued runs and record changes during validation before integration: ${mode}`, { timeout: 40000 }, (t) => {
     const f = fixture(t, { actor: `supervisor-promotion-${mode}-test` }), run = f.start(); f.commit('correct\n'); f.report(run);
     assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'promotable');
+    const item = f.show(run).item, cli = path.join(root, 'bin/org.mjs'), events = path.join(f.org, 'events.jsonl');
+    const args = mode === 'gate-blocker' ? ['ask', 'Block during validation?', '--parent', item, '--category', 'design', '--recommend', 'yes', '--why', 'Changed readiness', '--blocks', item, '--wait'] : ['start', item, '--workspace', f.workspace];
+    const h = promotionHarness(f, run);
     if (mode.startsWith('gate-')) {
       const gate = path.join(f.root, 'gate.mjs');
-      const args = mode === 'gate-run' ? ['start', f.show(run).item, '--workspace', f.workspace] : ['ask', 'Block during validation?', '--parent', f.show(run).item, '--category', 'design', '--recommend', 'yes', '--why', 'Changed readiness', '--blocks', f.show(run).item, '--wait'];
-      fs.writeFileSync(gate, `import {execFileSync} from 'node:child_process'; if(process.env.VALIDATION_PHASE!=='promotion')process.exit(0); execFileSync(process.execPath,${JSON.stringify([path.join(root, 'bin/org.mjs'), ...args])},{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});\n`);
+      fs.writeFileSync(gate, `import assert from 'node:assert/strict'; import fs from 'node:fs'; import {spawnSync} from 'node:child_process';
+if(process.env.VALIDATION_PHASE!=='promotion')process.exit(0);
+const batch=JSON.parse(fs.readFileSync(${JSON.stringify(h.queue.file)},'utf8')).current;
+assert.deepEqual(batch.jobs.map(job=>job.run),[${JSON.stringify(run)}]);
+const argv=${JSON.stringify([cli, ...args])}, events=${JSON.stringify(events)}, env={...process.env,ORG_DIR:${JSON.stringify(f.org)}};
+delete env.ORG_GUARD_OVERRIDE;
+const before=fs.readFileSync(events), denied=spawnSync(process.execPath,argv,{env,encoding:'utf8'});
+assert.equal(denied.status,3,denied.stderr); assert.match(denied.stderr,/promotion write guard REFUSED/);
+assert.ok(denied.stderr.includes(batch.id)); assert.deepEqual(fs.readFileSync(events),before);
+const recovered=spawnSync(process.execPath,argv,{env:{...env,ORG_GUARD_OVERRIDE:batch.id},encoding:'utf8'});
+assert.equal(recovered.status,0,recovered.stderr); assert.match(recovered.stderr,/promotion write guard OVERRIDE/);
+`);
       f.env.LANE_VALIDATE = `${process.execPath} ${gate}`;
     }
-    const h = promotionHarness(f, run); result(h.promote()); const base = f.git(['rev-parse', 'main']);
+    result(h.promote()); const queued = h.queue.load().pending[0], base = f.git(['rev-parse', 'main']);
     // Settlement also checks changed validation commands. Change the declared
     // test environment at dequeue so this witness runs during the queue gate,
     // rather than reusing the earlier harmless readiness execution.
     if (mode.startsWith('gate-')) f.env.VALIDATION_PHASE = 'promotion';
-    if (mode === 'queued-run') f.start();
+    if (mode === 'queued-run') {
+      const before = fs.readFileSync(events), denied = f.exec(process.execPath, [cli, ...args], f.repo, { ORG_DIR: f.org });
+      assert.equal(denied.status, 3, denied.stderr); assert.match(denied.stderr, /promotion write guard REFUSED/);
+      assert.ok(denied.stderr.includes(queued.id)); assert.deepEqual(fs.readFileSync(events), before);
+      const recovered = f.exec(process.execPath, [cli, ...args], f.repo, { ORG_DIR: f.org, ORG_GUARD_OVERRIDE: queued.id });
+      assert.equal(recovered.status, 0, recovered.stderr); assert.match(recovered.stderr, /promotion write guard OVERRIDE/);
+    }
     const refused = h.drain(); assert.equal(refused.outcome, 'refused');
     // A question under the item now refuses with its own reason before the general readiness check.
     assert.match(refused.reason, mode.endsWith('run') ? /superseded/ : /open operator question HUM-\d+/);
@@ -315,10 +334,16 @@ test('bound promotion rechecks queued runs and record changes during validation 
     const log = fs.readFileSync(refused.log, 'utf8');
     if (mode === 'queued-run') assert.doesNotMatch(log, /validating in/);
     else assert.match(log, /validating in/);
+    const audits = fs.readFileSync(events, 'utf8').trim().split('\n').map(JSON.parse).filter(event => event.type === 'promotion.write-overridden');
+    assert.equal(audits.length, 1);
+    const guardId = mode === 'queued-run' ? queued.id : h.queue.load().results[0].batch;
+    assert.ok(guardId); assert.deepEqual(audits[0].batches, [guardId]); assert.equal(audits[0].override, guardId);
+    assert.deepEqual(audits[0].items, [item]); assert.equal(audits[0].command, args[0]);
+    assert.equal(f.env.ORG_GUARD_OVERRIDE, undefined, 'recovery authority never enters the fixture environment');
     assert.equal(h.handle(h.queue.load().results[0]).result, 'judge_promotion');
     assert.equal(f.show(f.show(run).item).closed, null);
-  }
-});
+  });
+}
 
 test('late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards', { timeout: 25000 }, (t) => {
   const f = fixture(t, { actor: 'supervisor-late-report-test' }), run = f.start(); f.commit('correct\n'); f.report(run);

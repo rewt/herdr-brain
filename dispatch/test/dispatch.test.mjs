@@ -547,13 +547,14 @@ fs.renameSync=function(from,to) {
   assert.equal(promptCalls(f).length, 1);
 });
 
-test('dispatch journals both memory gates and mirrors allowlisted events into run metadata', t => {
+test('dispatch journals memory and final admission gates and mirrors allowlisted events into run metadata', t => {
   const f = fixture(t);
   const result = f.start(); assert.equal(result.status, 0, result.stderr);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
   const events = fs.readFileSync(`${f.jobs()[0]}.events.jsonl`, 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(events.map(e => [e.kind, e.outcome]), [
     ['memory_open', 'entry'], ['memory_open', 'granted'], ['memory_worker', 'entry'], ['memory_worker', 'granted'],
+    ['admission_lock', 'entry'], ['admission_lock', 'granted'],
   ]);
   const metadata = JSON.parse(f.show(job.run).meta.dispatch_waits);
   assert.deepEqual(metadata, events.map(e => ({ ...e, run: job.run })));
@@ -572,7 +573,7 @@ test('failed timing record sets leave lane open, launch and prompt delivery unch
   const stages = f => f.calls().filter(c => c.type === 'lane').map(c => c.a[0]);
   assert.deepEqual(stages(failed), stages(normal));
   const job = JSON.parse(fs.readFileSync(failed.jobs()[0]));
-  assert.equal(job.stage, 'complete'); assert.equal(job.timing_missing, 3);
+  assert.equal(job.stage, 'complete'); assert.equal(job.timing_missing, 5);
   assert.equal(failed.show(job.run).meta.dispatch_waits, undefined);
   const { summary } = runMetrics([failed.show(job.run)]);
   assert.equal(summary.dispatch_wait_s.missing, 1);
@@ -584,7 +585,7 @@ test('recovery skips timing record sets when metadata already equals the journal
   assert.equal(f.start().status, 1);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
   const sets = () => f.calls().filter(c => c.type === 'org' && c.a[0] === 'set' && c.a[2].startsWith('dispatch_waits=')).length;
-  const before = sets(); assert.equal(before, 3);
+  const before = sets(); assert.equal(before, 5);
   f.fail(''); const result = f.dispatch(['--retry', job.run]);
   assert.equal(result.status, 0, result.stderr); assert.equal(sets(), before);
 });

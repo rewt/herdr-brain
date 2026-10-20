@@ -123,6 +123,27 @@ test('known birth owners remain held when process evidence is denied or unavaila
   }
 });
 
+test('acquire sweeps only staging directories whose coordinator is provably gone', t => {
+  const common = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-staging-'));
+  t.after(() => fs.rmSync(common, { recursive: true, force: true }));
+  const owners = { gone: { pid: 101, identity: 'old' }, recycled: { pid: 102, identity: 'old' },
+    live: { pid: 103, identity: 'present' }, denied: { pid: 104, identity: 'old' },
+    unknown: { pid: 105, identity: 'old' }, invalid: { pid: null }, malformed: null, missing: null };
+  for (const [name, owner] of Object.entries(owners)) {
+    const directory = path.join(common, `.dispatch-session-cap-${name}`);
+    fs.mkdirSync(directory);
+    if (name !== 'missing') fs.writeFileSync(path.join(directory, 'owner.json'), owner ? JSON.stringify(owner) : '{');
+    fs.utimesSync(directory, 0, 0);
+  }
+  const release = acquireSessionCapLock(common, { waitMs: 0,
+    kill: pid => { if (pid === 101) throw error('ESRCH'); if (pid === 104) throw error('EPERM'); },
+    readProcess: pid => pid === 105 ? { ok: false } : row(pid, 'present'),
+  });
+  for (const name of Object.keys(owners)) assert.equal(fs.existsSync(path.join(common, `.dispatch-session-cap-${name}`)),
+    !['gone', 'recycled'].includes(name), name);
+  release();
+});
+
 test('legacy owner-less locks name inspection and manual recovery without guessing from age', t => {
   const common = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-ownerless-'));
   t.after(() => fs.rmSync(common, { recursive: true, force: true }));

@@ -52,7 +52,8 @@ test('memory entry is durable while blocked, grants and stopped retries have exa
   });
   assert.throws(() => wait('memory_worker', () => { clock = 8; throw Object.assign(Error('secret error'), { code: 'DISPATCH_STOPPED' }); }));
   clock = 10; wait('memory_worker', () => { clock = 17; });
-  assert.equal(syncs, 6);
+  wait('admission_lock', () => { clock = 19; });
+  assert.equal(syncs, 8);
   const current = { id: 'R-1', item: 'ENG-1', started: { at: at(5) }, meta: { lane: 'timing', dispatch_waits: timingMetadata(readTiming(f.journal), 'R-1') } };
   observeProcessEnd({ current, state: 'done', eligible: true, journal: f.journal, now: () => at(25),
     record: args => { current.meta.process_end = args[2].slice('process_end='.length); } });
@@ -60,7 +61,8 @@ test('memory entry is durable while blocked, grants and stopped retries have exa
   assert.equal(m.runs[0].waits.memory_open.seconds, 4);
   assert.equal(m.runs[0].waits.memory_worker.seconds, 10);
   assert.equal(m.runs[0].waits.memory_worker.stopped, 1);
-  assert.equal(m.runs[0].dispatch_wait_s, 14);
+  assert.equal(m.runs[0].waits.admission_lock.seconds, 2);
+  assert.equal(m.runs[0].dispatch_wait_s, 16);
   assert.equal(m.runs[0].process_end_after_run_start_s, 20);
   assert.equal(m.summary.dispatch_wait_s.missing, 0);
 });
@@ -82,6 +84,23 @@ test('unfinished memory entries survive restart and legacy runs are missing rath
   assert.equal(m.summary.process_end_missing, 2);
   assert.equal(m.runs[1].waits.memory_worker.pending, true);
   assert.match(renderRunMetrics(m), /memory_worker: median unavailable; total unavailable; 0 measured; 2 missing/);
+});
+
+test('admission lock exhaustion and STOP never fabricate granted wait samples', t => {
+  const f = fixture(t); let clock = 1;
+  for (const code of ['DISPATCH_SESSION_CAP_LOCKED', 'DISPATCH_STOPPED']) {
+    const error = Object.assign(Error('admission unavailable'), { code });
+    assert.throws(() => timedMemoryWait({ ...identity, journal: f.journal, kind: 'admission_lock',
+      now: () => at(clock), wait: () => { clock += 2; throw error; } }), value => value === error);
+  }
+  const run = { id: 'R-1', item: 'ENG-1', started: { at: at(1) },
+    meta: { lane: 'timing', dispatch_waits: timingMetadata(readTiming(f.journal), 'R-1') } };
+  const measured = runMetrics([run]);
+  assert.equal(measured.runs[0].waits.admission_lock.seconds, null);
+  assert.equal(measured.runs[0].waits.admission_lock.failed, 1);
+  assert.equal(measured.runs[0].waits.admission_lock.stopped, 1);
+  assert.equal(measured.summary.waits_s.admission_lock.missing, 1);
+  assert.match(measured.limitations.join('\n'), /60000 ms.*loadTimeout/);
 });
 
 test('timing persistence and journal failures preserve the wait result and original errors', t => {
@@ -147,7 +166,7 @@ test('malformed, mismatched, reversed and duplicate clocks do not fabricate wait
 });
 
 test('only measured immediate grants count as zero; legacy clocks remain missing', () => {
-  const events = ['memory_open', 'memory_worker'].flatMap(kind => [event(1, kind, 'entry'), event(1, kind, 'granted')]);
+  const events = ['memory_open', 'memory_worker', 'admission_lock'].flatMap(kind => [event(1, kind, 'entry'), event(1, kind, 'granted')]);
   const run = { id: 'R-1', item: 'ENG-1', started: { at: at(1) }, meta: { lane: 'timing', dispatch_waits: timingMetadata(events, 'R-1') } };
   const m = runMetrics([run, { ...run, id: 'R-2', meta: { lane: 'timing' } }]);
   assert.equal(m.runs[0].dispatch_wait_s, 0); assert.equal(m.runs[1].dispatch_wait_s, null);

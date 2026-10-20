@@ -40,6 +40,18 @@ export function acquireSessionCapLock(common, { waitMs = ADMISSION_WAIT_MS, allo
     throw Error('session admission owner birth identity unavailable; inspect the native process source and retry');
   }
   const owner = { pid: process.pid, identity: current.value.identity, token, at: new Date().toISOString() };
+  // A killed synchronous waiter cannot run its finally block. Only complete
+  // staging receipts with proven-dead owners are safe to remove; age, denied
+  // probes and missing/malformed receipts never establish that authority.
+  for (const entry of fs.readdirSync(common, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith('.dispatch-session-cap-')) continue;
+    check();
+    const sibling = path.join(common, entry.name);
+    let prior;
+    try { prior = JSON.parse(fs.readFileSync(path.join(sibling, 'owner.json'), 'utf8')); }
+    catch { continue; }
+    if (!sessionAlive(prior, { kill, readProcess })) fs.rmSync(sibling, { recursive: true, force: true });
+  }
   fs.mkdirSync(contenders, { recursive: true });
   const temporary = fs.mkdtempSync(path.join(common, '.dispatch-session-cap-'));
   let acquired = false;

@@ -3,6 +3,9 @@
     "closeout_queue": true
   },
   "settle": {
-    "review_round_cap": 1
+    "review_round_cap": 3
+  },
+  "dispatch": {
+    "max_sessions": 12
   }
 }

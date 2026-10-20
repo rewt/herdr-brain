@@ -24,8 +24,10 @@ freezes that request's route configuration for both `record start --route` and
 configuration retains its original sources and path resolution.
 The frozen snapshot contains routing fields only, including with an explicit
 `LANE_CONFIG`. Record briefs resolve archive directories from the run's workspace
-through the canonical project's configuration layers, preserving relative-path
-provenance without adding archive data to the routing snapshot or run metadata.
+through the canonical project's configuration layers unless `LANE_CONFIG` is set.
+In that case, only that file, resolved from the invoking directory, supplies the
+archive declaration. Relative archive paths resolve from the declaring file,
+without adding archive data to the routing snapshot or run metadata.
 
 `--awaited` records `meta.notify=supervisor` on the item before starting work.
 Optionally add `--awaited-step 'Cut RC-11'` to record the plan step it unblocks.

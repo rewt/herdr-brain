@@ -486,9 +486,9 @@ async function main() {
           throw error;
         }
       }
+      if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
       const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.${job.extra ? `\n\n${job.extra}` : ''}`;
       prepareSessionBinding(run);
-      if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
       job.stage = 'complete'; save();

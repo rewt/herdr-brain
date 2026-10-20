@@ -1038,6 +1038,60 @@ test('reuse rechecks newer open occupant holders immediately before prompting',a
   assert.equal(promptCalls(f).length,1,'the new dispatch never prompts its worker');
 });
 
+test('terminal-only reuse refused before prompting retries with a fresh session binding window',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dispatch-reuse-window-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const preload=path.join(root,'clock.cjs');
+  fs.writeFileSync(preload,`if([${JSON.stringify(DISPATCH)},${JSON.stringify(RECORD)}].includes(process.argv[1])) {
+ const fs=require('node:fs'),path=require('node:path'),now=Date.now;
+ const offset=path.join(process.env.FAKE_ROOT,'clock-offset');
+ Date.now=()=>now()+(fs.existsSync(offset)?Number(fs.readFileSync(offset,'utf8')):0);
+}`);
+  const f=fixture(t,{lateSession:'delayed',preload});f.fail('watch');
+  const initial=f.start();assert.equal(initial.status,1,initial.stderr);
+  const prior=f.show(JSON.parse(fs.readFileSync(f.jobs()[0])).run);
+  assert.ok(prior.meta.terminal_id);assert.equal(prior.meta.agent_session_id,undefined);
+  assert.equal(f.state().sessionBindings.get(prior.id),undefined);
+  f.fail('');f.rec(['abandon',prior.id]);
+  // Start the holder first but publish its terminal claim only after preflight.
+  // A newer worker receipt independently forbids late binding even if abandoned.
+  const other=f.rec(['add','Temporary holder','--role','engineer']).split(' ')[0];
+  const holder=f.rec(['start',other,'--workspace',prior.workspace]).match(/R-\d+/)[0];
+  const hook=pauseHook(f,`const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+ const result=rename.call(fs,from,to);
+ if(once && String(to).endsWith('.json')) {
+  const job=JSON.parse(read.call(fs,to,'utf8'));
+  if(job.reuse && job.stage==='prompt') {once=false;pause();}
+ }
+ return result;
+};`);
+  hook.NODE_OPTIONS+=` --require=${preload}`;
+  const pending=f.concurrent([f.item,'--lane','topic','--route','engineer','--brief',f.brief,'--reuse',prior.id],hook);
+  try {
+    await until(()=>fs.existsSync(hook.PAUSE_MARKER));
+    f.rec(['worker',holder,'--agent','temporary-holder','--pane','holder:pane',
+      '--worker-workspace',prior.meta.worker_workspace,'--cwd',prior.workspace,'--terminal-id',prior.meta.terminal_id]);
+  } finally {fs.writeFileSync(hook.PAUSE_RELEASE,'go');await pending.done;}
+  const refused=await pending.done;assert.equal(refused.status,1,refused.stderr);
+  const receipt=JSON.parse(refused.stdout);assert.equal(receipt.code,'REUSE_WORKER_BUSY');
+  const before=JSON.parse(fs.readFileSync(receipt.journal));
+  assert.equal(before.stage,'prompt');assert.equal(before.worker.agentSessionId,undefined);
+  assert.equal(before.sessionBinding,undefined,'a refused prompt does not start its observation window');
+  assert.equal(promptCalls(f).length,0);
+  const refusedAt=Date.now();
+  fs.writeFileSync(path.join(f.root,'clock-offset'),'61000');
+  f.rec(['abandon',holder]);
+  const retry=f.dispatch(['--retry',before.run]);assert.equal(retry.status,0,retry.stderr);
+  assert.equal(JSON.parse(retry.stdout).binding.status,'bound');
+  const after=JSON.parse(fs.readFileSync(receipt.journal)),state=f.state(),run=f.show(before.run);
+  assert.ok(Date.parse(after.sessionBinding.prompted_at)>=refusedAt+61000);
+  assert.equal(Date.parse(after.sessionBinding.deadline)-Date.parse(after.sessionBinding.prompted_at),60000);
+  assert.equal(state.sessionBindings.get(before.run).length,1);
+  assert.equal(run.meta.agent_session_id,undefined,'the launch receipt stays terminal-only');
+  assert.equal(effectiveWorkerIdentity(run,state).agent_session_id,'s-worker-1');
+  assert.equal(promptCalls(f).length,1,'only the successful retry delivers work');
+});
+
 test('reuse identity classification is local to the worker stage and preserves existing codes',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'dispatch-reuse-codes-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));

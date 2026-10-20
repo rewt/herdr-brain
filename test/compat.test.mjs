@@ -26,9 +26,11 @@ test('NEW real writers -> archived OLD own readers without an OLD formats list',
   assert.equal(fs.existsSync(path.join(old, 'docs/contracts/formats.json')), false);
   const result = checkCompatibility(old, source);
   assert.equal(result.counts.fail, 0, JSON.stringify(result.formats.filter(f => f.status === 'fail'), null, 2));
-  for (const id of ['record-events', 'promotion-queue', 'promotion-train/v1', 'lane-validation/v1', 'dispatch-journal', 'settle-journal', 'housekeeping-owner', '.herdr-release.json']) {
+  for (const id of ['record-events', 'closeout-entry/v1', 'promotion-queue', 'promotion-train/v1', 'lane-validation/v1', 'dispatch-journal', 'settle-journal', 'housekeeping-owner', '.herdr-release.json']) {
     assert.equal(result.formats.find(f => f.id === id).status, 'pass', id);
   }
+  assert.equal(result.formats.find(f => f.id === 'promotion-closeout-outbox').status, 'not-covered');
+  assert.match(result.formats.find(f => f.id === 'promotion-closeout-outbox').reason, /acknowledgement/);
   assert.ok(result.formats.filter(f => f.status === 'not-covered').every(f => f.reason));
   assert.equal(result.formats.length, Object.values(result.counts).reduce((a, b) => a + b));
 });

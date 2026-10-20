@@ -54,7 +54,15 @@ const probes = {
     async write() {
       git(['worktree', 'add', '-qb', 'lane/compat-topic', path.join(directory, 'lane')]);
       report(); record(['note', 'ENG-1', 'Compatibility note']);
-      save({}, [path.join(org, 'events.jsonl')], 'item, run, ingested report and note; status/show/snapshot, retirement status and supervisor brief');
+      const closeout = await load('lib/closeout.mjs');
+      writeInput(path.join(repo, '.lane.json'), { retirement: { closeout_queue: true } });
+      closeout.readyLane({ cwd: repo, org, topic: 'compat-topic', run: 'R-1', start: false });
+      (await load('lib/closeout-consumer.mjs')).drainCloseout({ cwd: repo, org });
+      const events = (await load('lib/store.mjs')).loadEvents(org).events;
+      assert.equal(events.find(e => e.type === 'lane.ready').closeout_targets.length, 1);
+      assert.equal(events.find(e => e.type === 'closeout.evaluated').completed, true);
+      assert.deepEqual(closeout.readCloseoutEntries(common), []);
+      save({}, [path.join(org, 'events.jsonl')], 'item/run/report/note plus real lane.ready source binding and closeout.evaluated completion after request pruning; OLD folds and views, no native session or lane retirement');
     },
     async read() {
       const status = JSON.parse(record(['status', '--json'])); assert.ok(JSON.stringify(status).includes('ENG-1'));
@@ -64,7 +72,33 @@ const probes = {
       assert.ok(JSON.parse(brief));
       const lanes = JSON.parse(cli('supervisor/retire.mjs', ['status', '--repo', repo, '--org', org, '--json']));
       assert.equal(lanes.schema, 'lanes-status/v1');
-      console.log('OLD status/show/snapshot, retirement status and supervisor brief read the NEW event log');
+      const events = (await load('lib/store.mjs')).loadEvents(org).events;
+      assert.equal(events.find(e => e.type === 'lane.ready').closeout_targets.length, 1);
+      assert.equal(events.find(e => e.type === 'closeout.evaluated').completed, true);
+      console.log('OLD status/show/snapshot, retirement status and supervisor brief read NEW source bindings and pruning receipts without changing the recorded report');
+    },
+  },
+  closeout: {
+    async write() {
+      const lane = path.join(directory, 'lane');
+      git(['worktree', 'add', '-qb', 'lane/compat-topic', lane]);
+      record(['start', 'ENG-1', '--workspace', lane]);
+      writeInput(path.join(repo, '.lane.json'), { retirement: { closeout_queue: true } });
+      const writer = await load('lib/closeout.mjs');
+      writer.readyLane({ cwd: repo, org, topic: 'compat-topic', run: 'R-1', start: false });
+      const [entry] = writer.readCloseoutEntries(common);
+      assert.ok(entry);
+      save({ key: entry.key, head: entry.head }, [path.join(common, 'closeout/entries', `${entry.key}.json`), path.join(org, 'events.jsonl')],
+        'real optional-ready publication and source binding; OLD queue reader only, no eligibility/effects, native occupants or ownership-transfer recovery');
+    },
+    async read() {
+      const [entry] = (await load('lib/closeout.mjs')).readCloseoutEntries(common);
+      assert.equal(entry.schema, 'closeout-entry/v1'); assert.equal(entry.key, state().key);
+      assert.equal(entry.head, state().head); assert.equal(entry.run, 'R-1');
+      assert.equal(entry.cwd, path.join(directory, 'lane')); assert.equal(entry.common, common);
+      assert.equal(entry.branch, 'lane/compat-topic'); assert.equal(entry.source.type, 'lane.ready');
+      assert.deepEqual(entry.panes, []);
+      console.log('OLD queue reader accepted the NEW record-bound ready entry; retirement execution is not covered');
     },
   },
   'record-config': {

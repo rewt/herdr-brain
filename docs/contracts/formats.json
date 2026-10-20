@@ -19,6 +19,14 @@
       "probe": "summary"
     },
     {
+      "id": "closeout-entry/v1",
+      "version": 1,
+      "writer": "lib/closeout.mjs",
+      "location": "<common>/closeout/entries/<key>.json",
+      "rule": "additive",
+      "probe": "closeout"
+    },
+    {
       "id": "exact-validation/v1",
       "version": 1,
       "writer": "lanes/validation.mjs; lanes/exact-validation.mjs",
@@ -102,7 +110,7 @@
       "id": "record-events",
       "version": "unversioned",
       "writer": "lib/store.mjs",
-      "location": "<record>/events.jsonl",
+      "location": "<record>/events.jsonl, including lane/review/closeout events and closeout_targets source bindings",
       "rule": "additive",
       "probe": "events"
     },
@@ -121,6 +129,14 @@
       "location": "<common>/promote/queue.json",
       "rule": "additive",
       "probe": "queue"
+    },
+    {
+      "id": "promotion-closeout-outbox",
+      "version": "unversioned",
+      "writer": "promote/promote.mjs",
+      "location": "<common>/promote/queue.json closeout_pending[]",
+      "rule": "additive",
+      "notCovered": "Completed-promotion notification production and OLD retry/acknowledgement recovery need a dedicated probe. The pending-queue probe does not exercise this embedded outbox; pre-closeout readers ignore it and cannot acknowledge its notifications."
     },
     {
       "id": "promotion-train/v1",
@@ -208,7 +224,7 @@
       "writer": "lib/retire-runtime.mjs",
       "location": "<record>/retirement/reviews/*.json",
       "rule": "additive",
-      "notCovered": "Needs an ingested review and matching callback session evidence; no live review is launched."
+      "notCovered": "Needs bound synthetic callback/terminal/process observations, including process/shell birth and followup_expected retention; empty retirement status and raw event folding do not establish old-reader reviewer-release behavior."
     },
     {
       "id": "retirement-exit/v1",

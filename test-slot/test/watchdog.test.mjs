@@ -67,7 +67,7 @@ test('config, recent healthy clocks and conservative default resolve independent
 for (const escaped of [false, true]) test(`wall timeout stops a forever-blocked grandchild${escaped ? ' in its own group' : ''}, releases slot and never retries under load`, { timeout: 20000 }, t => {
   const s = scratch(t), pids = path.join(s.root, 'pids');
   const preload = path.join(s.root, 'load.mjs'); fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");
-  s.env.NODE_OPTIONS = `--import=${preload}`;
+  s.env.NODE_OPTIONS = `${s.env.NODE_OPTIONS ?? ''} --import=${preload}`;
   const leaf = path.join(s.root, 'leaf.cjs'), parent = path.join(s.root, 'parent.cjs');
   fs.writeFileSync(leaf, `require('fs').appendFileSync(${JSON.stringify(pids)},process.pid+'\\n');process.on('SIGTERM',()=>{});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);`);
   fs.writeFileSync(parent, `require('fs').appendFileSync(${JSON.stringify(pids)},process.pid+'\\n');require('child_process').spawn(process.execPath,[${JSON.stringify(leaf)}],{detached:${escaped},stdio:'inherit'});process.on('SIGTERM',()=>{});setInterval(()=>{},1000);`);

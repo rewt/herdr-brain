@@ -1,3 +1,4 @@
+import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
@@ -158,7 +159,7 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = path.join(root, 'repo'), org = path.join(root, 'org'), bin = path.join(root, 'bin');
   fs.mkdirSync(repo);fs.mkdirSync(bin);
-  const env = { ...process.env, ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
+  const env = { ...healthyMemoryEnvironment(), ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
     MONITOR_SUPERVISOR_AGENT: noticeRecipient, HERDR_AGENT_NAME: 'chat-operator',
     TEST_LATE_SESSION: lateSession, TEST_NATIVE_PID: String(process.pid),
     HERDR_MONITOR_FLEET: path.join(root, 'fleet.json'), TEST_TIMING_FAILURE: timingFailure ? '1' : '',
@@ -198,7 +199,7 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
     return {child,done};
   };
   const state=()=>fold(fs.readFileSync(path.join(org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse));
-  return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git,state};
+  return {root,repo,org,env,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git,state};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
 
@@ -803,7 +804,7 @@ for (const stage of ['open', 'worker']) test(`dispatch ${stage} proving wait def
     const launches = f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length;
     const args = journal ? ['--retry', journal, '--fresh'] : [f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief];
     const pending = f.concurrent(args, { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
-      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` });
+      NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` });
     const result = await pending.done;
     assert.equal(result.status, 75, result.stderr);
     const reply = JSON.parse(result.stdout); assert.equal(reply.result, 'deferred'); assert.equal(reply.code, RESERVATION_WAIT_EXPIRED_CODE);
@@ -1262,7 +1263,7 @@ function pause() {
 }
 if(process.argv[1]===${JSON.stringify(DISPATCH)}) { ${body} }
 `);
-  return {NODE_OPTIONS:`--import=${hook}`,PAUSE_MARKER:path.join(f.root,'paused'),PAUSE_RELEASE:path.join(f.root,'release')};
+  return {NODE_OPTIONS:`${f.env.NODE_OPTIONS ?? ''} --import=${hook}`,PAUSE_MARKER:path.join(f.root,'paused'),PAUSE_RELEASE:path.join(f.root,'release')};
 }
 test('retry locks before reading its journal so another retry cannot replay stale progress',async t=>{
   const f=fixture(t);f.fail('watch');assert.equal(f.start().status,1);

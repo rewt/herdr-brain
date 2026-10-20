@@ -20,6 +20,7 @@ import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test, { currentTest } from '../../test/helpers/bounded-test.mjs';
+import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import { repositorySeed } from '../../test/helpers/git-seed.mjs';
 
 import { loadTimeout } from '../../lib/deadline.mjs';
@@ -145,7 +146,7 @@ function makeFixture(config = { main: "main", validate: "true" }, { repoParts = 
     configPath,
     bin,
     env: {
-      ...hermeticGitEnvironment(),
+      ...healthyMemoryEnvironment(hermeticGitEnvironment()),
       PATH: bin,
       LANE_CONFIG: configPath,
       LANE_WORKTREE_ROOT: worktrees,

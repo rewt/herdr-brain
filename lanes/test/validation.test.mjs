@@ -1,3 +1,4 @@
+import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -29,7 +30,7 @@ function fixture(t, declaration = {}) {
   const repo = path.join(root, 'repo'), workspace = path.join(root, 'worker'), log = path.join(root, 'checks');
   fs.mkdirSync(repo);
   const config = path.join(root, 'config.json'); fs.writeFileSync(config, '{}');
-  const env = { ...process.env, ORG_ACTOR: 'validation-tiers-test', LANE_CONFIG: config,
+  const env = { ...healthyMemoryEnvironment(), ORG_ACTOR: 'validation-tiers-test', LANE_CONFIG: config,
     LANE_WORKTREE_ROOT: path.join(root, 'worktrees'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     CHECK_LOG: log };
   delete env.LANE_VALIDATE;

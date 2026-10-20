@@ -540,7 +540,10 @@ describe('workspace configuration and timeout retry', () => {
       [LEGACY_TOKEN_ENV]: 'outer-token', [LEGACY_WAIT_ENV]: '7200',
       BCH_CLOAK_TEST_SLOT_PATH: '/outer/legacy', MONITOR_TEST_SLOT_FUTURE: 'outer-state' };
     const clean = testSlotEnvironment(inherited);
-    assert.deepEqual(clean, { PATH: ENV.PATH, LANG: 'C' });
+    const { TEST_MEMORY_FILE, NODE_OPTIONS, ...scrubbed } = clean;
+    assert.deepEqual(scrubbed, { PATH: ENV.PATH, LANG: 'C' });
+    assert.ok(fs.existsSync(TEST_MEMORY_FILE));
+    assert.match(NODE_OPTIONS, /memory-fixture\.mjs/);
     assert.equal(inherited[WAIT_ENV], '7200', 'scrubbing leaves the enclosing gate environment intact');
   });
 

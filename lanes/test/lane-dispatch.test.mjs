@@ -462,7 +462,7 @@ test("dispatch waits for shell readiness beyond five seconds", () => {
     fixture.env.FAKE_HERDR_ENV_DELAY = "6000";
     const preload = join(fixture.root, 'no-load.mjs');
     writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[0,0,0];");
-    fixture.env.NODE_OPTIONS = `--import=${preload}`;
+    fixture.env.NODE_OPTIONS = `${fixture.env.NODE_OPTIONS ?? ''} --import=${preload}`;
     const run = lane(fixture, ["dispatch", "slow-shell", "--json"]);
     assert.equal(run.status, 0, run.stderr);
     assert.equal(JSON.parse(run.stdout).pane, "w-lane:p1");

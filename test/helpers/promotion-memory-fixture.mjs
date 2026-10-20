@@ -1,9 +1,25 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { writeFileAtomic } from '../../lib/files.mjs';
 
 export const healthyMemory = { available: 8 * 1024 ** 3, swap_used: 0 };
 export const pressuredMemory = { ...healthyMemory, available: 128 * 1024 ** 2 };
+
+let directory, sequence = 0;
+// Each fixture owns its sample: neither the host nor a pressure injection in a
+// sibling fixture may decide whether its real lifecycle gate can start.
+export function healthyMemoryEnvironment(env = process.env) {
+  if (!directory) {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'healthy-memory-'));
+    process.once('exit', () => fs.rmSync(directory, { recursive: true, force: true }));
+  }
+  const file = path.join(directory, `${++sequence}.json`);
+  fs.writeFileSync(file, JSON.stringify(healthyMemory));
+  const preload = new URL('./memory-fixture.mjs', import.meta.url).href;
+  return { ...env, TEST_MEMORY_FILE: file,
+    NODE_OPTIONS: `${env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` };
+}
 
 // Native measurements are faked, but promotion's real locks and slot remain in
 // use. A one-shot preload injects pressure exactly after the chosen acquisition.

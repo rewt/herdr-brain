@@ -1,3 +1,4 @@
+import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,7 +26,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'promotion-green-guard-')));
   fixtureFleet(t, root);
   const repo = path.join(root, 'brain'); fs.mkdirSync(repo);
-  const env = { ...process.env, NODE_OPTIONS: `--import=${JSON.stringify(loader)}`,
+  const env = { ...healthyMemoryEnvironment({ ...process.env, NODE_OPTIONS: `--import=${JSON.stringify(loader)}` }),
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '0' };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];
   const exec = (command, args, cwd = repo) => spawnSync(command, args, { cwd, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });

@@ -1,3 +1,4 @@
+import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -14,7 +15,7 @@ const source = fileURLToPath(new URL('../../', import.meta.url));
 function fixture(t, { red = false, copied = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-train-'))), repo = path.join(root, 'repo');
   fs.mkdirSync(repo);
-  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
+  const env = { ...healthyMemoryEnvironment(), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];
   const exec = (command, args, cwd = repo) => spawnSync(command, args, { cwd, env, encoding: 'utf8', [commandAllowance]: 60000 });
   const git = (args, cwd = repo) => { const result = exec('git', args, cwd); assert.equal(result.status, 0, result.stderr); return result.stdout.trim(); };

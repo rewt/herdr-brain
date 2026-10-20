@@ -10,7 +10,7 @@ import { resolveGateProfile } from '../../promote/gate-profile.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { enqueue, queueFor } from '../../promote/promote.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
-import { promotionMemoryFixture, healthyMemory, pressuredMemory } from '../../test/helpers/promotion-memory-fixture.mjs';
+import { healthyMemoryEnvironment, promotionMemoryFixture, healthyMemory, pressuredMemory } from '../../test/helpers/promotion-memory-fixture.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 
 import { fixture } from './helpers/gate-profile.mjs';
@@ -44,6 +44,26 @@ async function waitForSlotWait(worker) {
   await until(() => stderr.includes('TEST_SLOT_WAIT:') || worker.exitCode !== null);
   assert.match(stderr, /TEST_SLOT_WAIT:/, 'the host adapter reaches the slot wait');
 }
+
+test('a default profile fixture promotes despite pressured memory in the outer environment', t => {
+  const outer = healthyMemoryEnvironment().TEST_MEMORY_FILE;
+  fs.writeFileSync(outer, JSON.stringify(pressuredMemory));
+  const previous = process.env.TEST_MEMORY_FILE;
+  let f;
+  try {
+    process.env.TEST_MEMORY_FILE = outer;
+    f = fixture(t);
+  } finally {
+    if (previous === undefined) delete process.env.TEST_MEMORY_FILE;
+    else process.env.TEST_MEMORY_FILE = previous;
+  }
+  assert.notEqual(f.env.TEST_MEMORY_FILE, outer);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.env.TEST_MEMORY_FILE)), healthyMemory);
+  const result = f.run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(f.receipt)).results.job.outcome, 'promoted');
+  assert.deepEqual(JSON.parse(fs.readFileSync(outer)), pressuredMemory);
+});
 
 test('project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration', t => {
   const f = fixture(t, { prepare: [{ run: 'exit 9', unless: '.nvmrc' }, { run: 'node prep.cjs' }] });
@@ -413,7 +433,7 @@ test('promotion host envelope derives from the declared inner history key', t =>
   for (let i = 0; i < 3; i++) recordHealthyGate({ common, tier: 'promotion', historyKey: key, file: historyFile(common, 'promotion', undefined, key, f.env), duration_s: 6000, longest_silence_s: 20 });
   const preload = path.join(f.root, 'observe.mjs'), evidence = path.join(f.root, 'envelope.json');
   fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host'))fs.writeFileSync(${JSON.stringify(evidence)},JSON.stringify(args));return run(cmd,args,opts);};syncBuiltinESMExports();`);
-  f.env.NODE_OPTIONS = `--import=${preload}`;
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
   const r = f.run(); assert.equal(r.status, 0, r.stderr + r.stdout);
   const train = JSON.parse(fs.readFileSync(f.receipt));
   assert.ok(train.attempts[0].gate, JSON.stringify(train) + r.stdout + r.stderr);
@@ -438,7 +458,7 @@ test('three-lane red bisection fits the host envelope and promotes both healthy 
   for (let i = 0; i < 3; i++) recordHealthyGate({ common, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 20 });
   const preload = path.join(f.root, 'observe.mjs'), evidence = path.join(f.root, 'envelope.json');
   fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host'))fs.writeFileSync(${JSON.stringify(evidence)},JSON.stringify(args));return run(cmd,args,opts);};syncBuiltinESMExports();`);
-  f.env.NODE_OPTIONS = `--import=${preload}`;
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
   const r = f.run({ compound: true }); assert.equal(r.status, 0, r.stderr + r.stdout);
   const train = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(train.attempts.length, 5);
@@ -464,7 +484,7 @@ test('two-lane host envelope timeout returns batch re-enqueue wording', t => {
   fs.writeFileSync(path.join(other, 'other'), 'other'); f.git(['add', '.'], other); f.git(['commit', '-qm', 'Other'], other);
   const preload = path.join(f.root, 'short-host.mjs');
   fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){args=[...args];args[args.indexOf('--timeout-seconds')+1]='.8';}return run(cmd,args,opts);};syncBuiltinESMExports();`);
-  f.env.NODE_OPTIONS = `--import=${preload}`;
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
   const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   const queue = queueFor(f.repo);
   enqueue(queue, ['profile', 'other'], { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null, to: 'offline', attempts: 1, retry: 0, herdr: fakeHerdr });

@@ -5,6 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { refuseBeforeTrain, waitForPromotionMemory } from '../memory-gate.mjs';
 import { publishProvingReservation, RESERVATION_WAIT_EXPIRED_CODE } from '../../test-slot/reservations.mjs';
+import '../../test/helpers/memory-fixture.mjs';
+import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
+
+test.beforeEach(t => {
+  const previous = process.env.TEST_MEMORY_FILE;
+  process.env.TEST_MEMORY_FILE = healthyMemoryEnvironment().TEST_MEMORY_FILE;
+  t.after(() => {
+    if (previous === undefined) delete process.env.TEST_MEMORY_FILE;
+    else process.env.TEST_MEMORY_FILE = previous;
+  });
+});
 
 test('the held promotion re-check never reads reservations and the unheld gate still honors STOP', t => {
   const lock = process.env.MONITOR_TEST_SLOT_COMPAT_PATH;

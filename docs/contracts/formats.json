@@ -227,6 +227,14 @@
       "notCovered": "Embedded hash-bound report-ingestion receipt needs OLD settlement decision/retry coverage beyond status display."
     },
     {
+      "id": "brain.review-scope/v1",
+      "version": 1,
+      "writer": "settle/review-range.mjs; settle/settle.mjs",
+      "location": "<record>/settle/R-n.json reviewScope; review_scope in settlement result and escalation handoff JSON",
+      "rule": "additive",
+      "notCovered": "Review-scope decisions and named-commit deferrals need an OLD settlement-consumer probe; status-only settlement coverage does not validate scope semantics."
+    },
+    {
       "id": "housekeeping-owner",
       "version": "unversioned",
       "writer": "housekeeping/housekeeping.mjs",

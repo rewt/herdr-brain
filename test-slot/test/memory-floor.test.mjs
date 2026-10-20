@@ -7,6 +7,13 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { waitForMemoryFloor } from '../memory-floor.mjs';
 
+import { resourceStanza } from '../resources.mjs';
+import { readProvingReservations, reservationState, waitForProvingHold } from '../reservations.mjs';
+import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
+import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
+import { waitForExit } from '../../test/helpers/child.mjs';
+
 test('an exhausted budget before sampling does not assert measured low memory', async () => {
   await assert.rejects(waitForMemoryFloor({ floor: 10, deadline: 10, now: () => 10,
     read: () => assert.fail('deadline exhausted before any sample'),
@@ -17,12 +24,6 @@ test('an exhausted budget before sampling does not assert measured low memory', 
     return true;
   });
 });
-import { resourceStanza } from '../resources.mjs';
-import { readProvingReservations, reservationState, waitForProvingHold } from '../reservations.mjs';
-import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
-import { loadTimeout } from '../../lib/deadline.mjs';
-import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
-import { waitForExit } from '../../test/helpers/child.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));

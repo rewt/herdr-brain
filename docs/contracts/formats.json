@@ -19,20 +19,44 @@
       "probe": "summary"
     },
     {
+      "id": "exact-validation/v1",
+      "version": 1,
+      "writer": "lanes/validation.mjs; lanes/exact-validation.mjs",
+      "location": "<common>/lane-validation/exact/<key>.json and exact identity embedded in the matching lane-validation receipt",
+      "rule": "additive",
+      "notCovered": "Exact-input identity matching, execution sidecar integrity and old-reader reuse/recovery need a dedicated probe; the legacy validation probe covers only ordinary receipts. Receipt envelope additions are allowed, but every identity field remains bound."
+    },
+    {
       "id": "occupancy/v1",
       "version": 1,
       "writer": "test-slot/occupancy.mjs",
-      "location": "<slot-lock>.occupancy/*.json",
+      "location": "<compat-lock>.occupancy/*.json",
       "rule": "additive",
       "probe": "occupancy"
+    },
+    {
+      "id": "host-reservation/v1",
+      "version": 1,
+      "writer": "test-slot/reservations.mjs",
+      "location": "<compat-lock>.occupancy/*.json",
+      "rule": "additive",
+      "notCovered": "Mixed-version proving holds, expiry, owner identity and exact-byte pruning need a dedicated old-reader recovery probe; shared occupancy coverage does not establish reservation admission behavior."
     },
     {
       "id": "herdr-release/v1",
       "version": 1,
       "writer": "herdr/releases.mjs",
-      "location": "<bundle>/.release-manifest.json and .release-commit",
+      "location": "<bundle>/.release-manifest.json, .release-commit and retained .release-acceptance.json",
       "rule": "additive",
       "probe": "release"
+    },
+    {
+      "id": "herdr-release-acceptance/v1",
+      "version": 1,
+      "writer": "herdr/releases.mjs",
+      "location": "<installation>/acceptance/<release-id>.json",
+      "rule": "additive",
+      "notCovered": "Legacy write-once installation attestation and its old-reader admission/recovery path need a dedicated probe; the release probe exercises manifest acceptance and a committed pin only."
     },
     {
       "id": ".herdr-release.json",

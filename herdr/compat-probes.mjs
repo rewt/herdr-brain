@@ -96,11 +96,20 @@ const probes = {
     async write() {
       const home = path.join(directory, 'installation'), bundle = path.join(home, 'releases/compat-release');
       (await load('lib/product-files.mjs')).copyProduct(root, bundle);
-      fs.writeFileSync(path.join(bundle, '.release-commit'), 'a'.repeat(40) + '\n');
-      cli('herdr/releases.mjs', ['manifest', bundle]);
+      const commit = 'a'.repeat(40), summary = path.join(directory, 'acceptance-summary.json');
+      fs.writeFileSync(path.join(bundle, '.release-commit'), commit + '\n');
+      // Synthetic fixture input, never a live acceptance run. The real manifest
+      // writer retains and binds it; the real pin writer enforces READY admission.
+      writeInput(summary, { ready: true, candidateCommit: commit, elapsedSeconds: 1,
+        counts: { PASS: 1, FAIL: 0, PENDING: 0, SKIP: 0 } });
+      cli('herdr/releases.mjs', ['manifest', bundle, summary]);
+      const acceptance = json(path.join(bundle, '.release-manifest.json')).acceptance;
+      assert.equal(acceptance.ready, true); assert.equal(acceptance.candidateCommit, commit);
+      assert.equal(acceptance.summarySha256, createHash('sha256').update(fs.readFileSync(path.join(bundle, '.release-acceptance.json'))).digest('hex'));
       cli('herdr/releases.mjs', ['pin', home, repo, 'compat-release']);
       git(['add', '.herdr-release.json']); git(['commit', '-qm', 'accept fixture pin']);
-      save({ bundle }, [path.join(bundle, '.release-manifest.json'), path.join(repo, '.herdr-release.json')], 'real manifest and non-null committed canonical pin');
+      save({ bundle }, [path.join(bundle, '.release-manifest.json'), path.join(bundle, '.release-acceptance.json'), path.join(repo, '.herdr-release.json')],
+        'real manifest writer with synthetic READY summary input and real non-null committed canonical pin; no live acceptance or legacy attestation coverage');
     },
     async read() {
       const reader = await load('lib/releases.mjs');

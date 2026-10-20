@@ -367,7 +367,10 @@ damage retains the project. No source is pruned or rewritten by observation.
 
 The optional generic source is `<ORG_DIR>/references/`, with one atomic JSON
 file per pending job. No writer is required. Writers publish complete files by
-atomic rename and remove their own files when the job ends. Its exact format is:
+atomic rename and remove their own files when the job ends.
+Only non-hidden `*.json` entries are read as references; other entries are ignored
+without deletion, and invalid or non-regular `*.json` entries still hold the project.
+Its exact format is:
 
 ```json
 {

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
-import { readLaneCwdReferences } from '../lib/lane-removal.mjs';
+import { measureLaneEvidence, readLaneCwdReferences } from '../lib/lane-removal.mjs';
 
 const cli = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
 function fixture(t, { merged = false } = {}) {
@@ -179,11 +179,30 @@ test('lane evidence reference scanning also skips stray non-JSON entries without
   const f = fixture(t), directory = path.join(f.org, 'references');
   fs.appendFileSync(path.join(f.common, 'info/exclude'), '\nnode_modules/\n');
   fs.mkdirSync(path.join(f.lane, 'node_modules')); fs.writeFileSync(path.join(f.lane, 'node_modules/generated'), 'disposable');
-  fs.mkdirSync(path.join(directory, '.claude'), { recursive: true }); fs.mkdirSync(path.join(directory, 'unexpected.json'));
+  fs.mkdirSync(path.join(directory, '.claude'), { recursive: true });
   for (const name of ['notes.txt', '.hidden.json']) fs.writeFileSync(path.join(directory, name), '{');
   const before = fs.readdirSync(directory).sort(), r = f.close();
   assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(fs.existsSync(f.lane), false);
   assert.deepEqual(fs.readdirSync(directory).sort(), before);
+});
+
+for (const kind of ['symlink', 'directory']) test(`a ${kind} JSON reference blocks both evidence scanning and CLI lane removal`, t => {
+  const f = fixture(t), directory = path.join(f.org, 'references'), file = path.join(directory, 'x.json');
+  fs.mkdirSync(directory);
+  fs.appendFileSync(path.join(f.common, 'info/exclude'), '\nnode_modules/\n');
+  fs.mkdirSync(path.join(f.lane, 'node_modules')); fs.writeFileSync(path.join(f.lane, 'node_modules/generated'), 'disposable');
+  const tracked = new Set(f.git(['ls-files', '-z'], f.lane).split('\0').filter(Boolean));
+  assert.equal(measureLaneEvidence({ lane: f.lane, tracked, env: f.env }).bytes, 0, 'the evidence scan reaches and accepts the empty reference directory');
+  if (kind === 'symlink') {
+    fs.writeFileSync(path.join(directory, '.target.json'), JSON.stringify({ schema: 'herdr-reference/v1',
+      owner: 'fixture', kind: 'pending job', job: 'job', state: 'pending', item: 'ENG-1', cwd: f.lane,
+      created_at: '2026-01-01T00:00:00Z', expires_at: '9999-01-01T00:00:00Z' }));
+    fs.symlinkSync('.target.json', file);
+  } else fs.mkdirSync(file);
+  assert.throws(() => measureLaneEvidence({ lane: f.lane, tracked, env: f.env }), /evidence\/reference claims unavailable; lane kept/);
+  const r = f.close(); f.kept(r); assert.match(r.stderr, /reference is not a regular JSON file; project kept/);
+  assert.equal(fs.lstatSync(file).isSymbolicLink(), kind === 'symlink');
+  assert.equal(fs.lstatSync(file).isDirectory(), kind === 'directory');
 });
 
 test('a Git index writer lock keeps the worktree, branch and lock intact', t => {

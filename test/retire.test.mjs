@@ -550,9 +550,24 @@ test('malformed, missing expiry, unknown schema, unreadable reference fail the w
 });
 test('declared references ignore directories, dotfiles and non-JSON files', t => {
   const f = referenceFixture(t);
-  fs.mkdirSync(f.file); assert.deepEqual(readDeclaredReferences(f.org, f.now).errors, []);
+  fs.mkdirSync(path.join(f.org, 'references/.claude'));
+  fs.writeFileSync(path.join(f.org, 'references/.claude/.cc-writes'), '');
   for (const name of ['notes.txt', '.hidden.json']) fs.writeFileSync(path.join(f.org, 'references', name), '{');
   assert.deepEqual(readDeclaredReferences(f.org, f.now).errors, []);
+  assert.deepEqual(readDeclaredReferences(f.org, f.now).references, []);
+  assert.ok(fs.existsSync(path.join(f.org, 'references/.claude/.cc-writes')));
+});
+for (const kind of ['symlink', 'directory']) test(`a ${kind} JSON reference holds the project without being followed or removed`, t => {
+  const f = referenceFixture(t);
+  if (kind === 'symlink') {
+    fs.writeFileSync(path.join(f.org, 'references/.target.json'), JSON.stringify(f.ref));
+    fs.symlinkSync('.target.json', f.file);
+  } else fs.mkdirSync(f.file);
+  const observed = readDeclaredReferences(f.org, f.now), s = fixture(); Object.assign(s, observed);
+  assert.deepEqual(observed.references, []);
+  assert.match(kept(s), /reference is not a regular JSON file; project kept/);
+  assert.equal(fs.lstatSync(f.file).isSymbolicLink(), kind === 'symlink');
+  assert.equal(fs.lstatSync(f.file).isDirectory(), kind === 'directory');
 });
 test('generic promote and trusted verify sources are read-only and include interrupted/reconcile holds', t => {
   const f = referenceFixture(t), common = path.join(f.org, 'common'), verifyStateDir = path.join(f.org, 'trusted');

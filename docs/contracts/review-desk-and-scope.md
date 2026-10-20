@@ -1,7 +1,8 @@
 # Review desk and scope contract
 
 Schema: `brain.review-scope/v1`. Owner: **supervisor-herdr**. **opus accepts BCH
-parity; Astra accepts this contract. State: proposed until Astra accepts it.**
+parity; Astra accepts this contract. State: accepted with the amendments in
+Astra's 2026-10-20 Step B/C ruling, sections 1–2.**
 Implementation evidence is the ENG-443 lane commit introducing this file (resolve
 with `git log --diff-filter=A -1 --format=%H -- docs/contracts/review-desk-and-scope.md`)
 and the reports for runs R-599 and R-603 (including the rebase correction). This document
@@ -123,12 +124,12 @@ does not authorize promotion, push, deletion or release.
 
 | R4 obligation | Evidence / state |
 | --- | --- |
-| Owner and acceptance | supervisor-herdr owns implementation and release tracking; opus accepts BCH parity; proposed until Astra accepts the contract. No acceptance is inferred from a passing fixture. |
-| Implementation and release identity | The introducing commit identified above plus the first release containing it. **On main:** pending promotion. **In a release:** pending first named release and build identity. **Activated for BCH:** pending owner activation/read-back of that release or pin. **Parity demonstrated:** pending opus acceptance of offline and live pilot evidence. These are four independent states. |
+| Owner and acceptance | supervisor-herdr owns implementation and release tracking; opus accepts BCH parity. Astra's 2026-10-20 Step B/C ruling accepts the contract with these amendments; implementation review and BCH parity acceptance remain separate. No acceptance is inferred from a passing fixture. |
+| Implementation and release identity | **On main:** `64fbd7cbc0d127d7af041161cd4a2fb2ae3ce84d` (scope implementation) and `aba75acbd123ffe8196cb2d4c7c99e78509533c9` (report-time scope across rebases), both ancestors of the chore base `2a040174`; worker evidence is R-599/R-603. **In a release:** requires a named release and build identity. **Activated for BCH:** requires owner activation/read-back of that release or pin. **Parity demonstrated:** requires opus acceptance of offline and live pilot evidence. The latter three states are not established by main ancestry or this contract ruling. |
 | R-2440 / ENG-1670 replay | `settle/test/review-scope.test.mjs` replicates two in-range artifact commits, quoted paths/tree/digest, multiline base and a historical foreign command; no deferral. A delivered outside claim is a true negative and launches no reviewer. This is an offline replica, not a claim that the original BCH lane was settled. |
 | R-2444 replay | The same file starts a continuation without lane metadata, supplies quoted in-range artifacts and reaches independent review. The original BCH `invalid-lane` cause is missing run-start lane metadata, separate from artifact parsing. |
-| Remaining pilot | After activation, one routine BCH lane through settle, with run/report, captured scope, review receipt, resolved release identity and outcome retained. Replays plus that pilot go to opus for parity and Astra for contract acceptance. Live pilot remains pending. |
-| Rollback | BCH keeps its scripts until retirement is accepted. The project supervisor can restore the previous Brain release using `bash herdr/release.sh rollback` or an accepted project pin; the BCH owner retains the script path during rollout. No rollback is executed by this lane. |
+| Remaining pilot | After activation, one routine BCH lane through settle, with run/report, captured scope, review receipt, resolved release identity and outcome retained. Replays plus that pilot go to opus for parity. Astra's amended contract acceptance does not establish pilot acceptance; live pilot remains pending. |
+| Rollback | BCH keeps its scripts until retirement is accepted. R3 rollback requires a committed project-local pin to a named compatible fallback, with compatibility evidence and owner read-back. Changing global `current` or using `unpin` is not equivalent. The BCH owner retains the script path during rollout. No rollback or project-pin change is executed by this lane. |
 | Retire list, after acceptance and drain | Installed `.lane/supervisor/{auto-review.sh,direct-review.sh,review-desk.sh,review-scope.py,review-receipt.mjs}` and the corresponding five `scripts/supervisor-bundle/files/` copies; also `scripts/auto-promote/review-receipt.mjs` and its test. Retire `lane-review-desk` and `lane-review-desk-2` through `-6` worktrees/branches only after their reviewers drain, using owner lifecycle safety. No separate review lanes are added. |
 | Evidence retention (R5) | Keep `auto-review-runs/` and `direct-review-runs/` as historical evidence after scripts and desks retire. Do not delete the receipts as cleanup. |
 

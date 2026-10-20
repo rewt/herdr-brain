@@ -147,7 +147,7 @@ test('resolved blocker links allow recovery of only the recorded correction run'
   const resumed = result(f.retry(old, options)); assert.equal(resumed.result, 'fix_round'); assert.equal(resumed.fix.run, dispatch.run);
   assert.equal(workerPrompts(f).length, 1); assert.equal(f.calls().filter((a) => a[1] === 'start').length, count);
 });
-test('correction creation cannot clear a newer outcome arriving inside the dispatch boundary', (t) => {
+test('correction creation cannot clear a newer outcome arriving before dispatch preflight', (t) => {
   const f = fixture(t), old = f.start(); f.commit('wrong\n'); f.report(old);
   const item = f.show(old).item, adapter = path.join(f.root, 'race-dispatch.mjs');
   fs.writeFileSync(adapter, `#!${process.execPath}
@@ -160,6 +160,7 @@ fs.writeFileSync(report, '---\\nrun: ' + run + '\\noutcome: needs_human\\nsummar
 record(['ingest', report]); record(['close', ${JSON.stringify(item)}]);
 fs.writeFileSync(${JSON.stringify(path.join(f.root, 'race-item.json'))}, record(['show', ${JSON.stringify(item)}, '--json']));
 const r = spawnSync(process.execPath, [${JSON.stringify(path.join(f.source, 'dispatch/dispatch.mjs'))}, ...process.argv.slice(2)], { env: process.env, encoding: 'utf8' });
+fs.writeFileSync(${JSON.stringify(path.join(f.root, 'race-dispatch-result.json'))}, r.stdout ?? '');
 process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1);
 `, { mode: 0o755 });
   const refused = f.settle(old, ['--dispatch-cli', adapter]); assert.equal(refused.status, 1);
@@ -168,7 +169,43 @@ process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); proc
   assert.deepEqual(after.outcome, before.outcome); assert.deepEqual(after.closed, before.closed);
   assert.deepEqual(after.runs, before.runs); assert.equal(after.status, before.status); assert.equal(workerPrompts(f).length, 0);
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'no correction worker was launched');
-  assert.equal(dispatchJob(f).fromRun, old);
+  const dispatch = JSON.parse(fs.readFileSync(path.join(f.root, 'race-dispatch-result.json'), 'utf8'));
+  assert.equal(dispatch.result, 'failed'); assert.equal(dispatch.code, 'FROM_RUN_SUPERSEDED');
+  assert.equal(fs.existsSync(path.join(f.org, 'dispatch')), false, 'preflight refuses before creating any correction journal');
+});
+test('conditional record start preserves a newer outcome arriving after dispatch origin checks', (t) => {
+  const f = fixture(t), old = f.start(); f.commit('wrong\n'); f.report(old);
+  const item = f.show(old).item, adapter = path.join(f.root, 'race-start.mjs');
+  fs.writeFileSync(adapter, `#!${process.execPath}
+import fs from 'node:fs'; import { spawnSync } from 'node:child_process';
+const cli = ${JSON.stringify(path.join(f.source, 'bin/org.mjs'))}, args = process.argv.slice(2);
+const record = (argv) => { const r = spawnSync(process.execPath, [cli, ...argv], { env: process.env, encoding: 'utf8' }); if (r.status !== 0) throw new Error(r.stderr); return r.stdout; };
+const guardedStart = args[0] === 'start' && args.includes('--if-current-run');
+if (guardedStart) {
+  fs.writeFileSync(${JSON.stringify(path.join(f.root, 'race-start-args.json'))}, JSON.stringify(args));
+  const run = record(['start', ${JSON.stringify(item)}, '--workspace', ${JSON.stringify(f.workspace)}]).match(/R-\\d+/)[0];
+  const report = JSON.parse(record(['show', run, '--json'])).report_path;
+  fs.writeFileSync(report, '---\\nrun: ' + run + '\\noutcome: needs_human\\nsummary: Newer run requires judgment.\\nblockers: ["Scope decision"]\\nproposals: []\\n---\\n');
+  record(['ingest', report]); record(['close', ${JSON.stringify(item)}]);
+  fs.writeFileSync(${JSON.stringify(path.join(f.root, 'race-item.json'))}, record(['show', ${JSON.stringify(item)}, '--json']));
+}
+const r = spawnSync(process.execPath, [cli, ...args], { env: process.env, encoding: 'utf8' });
+if (guardedStart) fs.writeFileSync(${JSON.stringify(path.join(f.root, 'race-start-result.json'))}, JSON.stringify({ status: r.status, stderr: r.stderr }));
+process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1);
+`, { mode: 0o755 });
+  const refused = f.settle(old, ['--org-cli', adapter]); assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /superseded/); assert.equal(JSON.parse(refused.stdout).result, 'escalate');
+  const before = JSON.parse(fs.readFileSync(path.join(f.root, 'race-item.json'), 'utf8')), after = f.show(item);
+  assert.deepEqual(after.outcome, before.outcome); assert.deepEqual(after.closed, before.closed);
+  assert.deepEqual(after.runs, before.runs); assert.equal(after.status, before.status); assert.equal(workerPrompts(f).length, 0);
+  assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'no correction worker was launched');
+  const args = JSON.parse(fs.readFileSync(path.join(f.root, 'race-start-args.json'), 'utf8'));
+  assert.equal(args[args.indexOf('--if-current-run') + 1], old);
+  const refusal = JSON.parse(fs.readFileSync(path.join(f.root, 'race-start-result.json'), 'utf8'));
+  assert.equal(refusal.status, 1, refusal.stderr); assert.match(refusal.stderr, /superseded/);
+  const dispatch = dispatchJob(f);
+  assert.equal(dispatch.fromRun, old); assert.equal(dispatch.stage, 'starting');
+  assert.equal(dispatch.startRefused, true); assert.equal(dispatch.run, null);
 });
 test('legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome', (t) => {
   const f = fixture(t), old = f.start(); f.commit('wrong\n'); f.report(old);

@@ -9,11 +9,11 @@ export async function waitForMemoryFloor({ floor, deadline, immediate = false, s
   read = readMemory, now = Date.now, sleep = (ms, signal) => pollSleep(ms, undefined, { signal }),
   confirm = () => {}, notify = line => process.stderr.write(`${line}\n`) } = {}) {
   if (!Number.isSafeInteger(floor) || floor < 0 || !Number.isFinite(deadline)) throw Error('invalid proving memory admission');
-  const low = () => refusal(MEMORY_CODE, `available memory below floor ${floor} bytes; admission deadline ${new Date(deadline).toISOString()} exhausted`);
+  const exhausted = () => refusal(MEMORY_CODE, `admission deadline ${new Date(deadline).toISOString()} exhausted before a qualifying memory sample; floor ${floor} bytes`);
   let previous;
   for (;;) {
     signal?.throwIfAborted();
-    if (!immediate && now() >= deadline) throw low();
+    if (!immediate && now() >= deadline) throw exhausted();
     confirm();
     let memory;
     try { memory = read(); } catch { /* An unreadable sample is unknown, never measured zero. */ }
@@ -28,7 +28,7 @@ export async function waitForMemoryFloor({ floor, deadline, immediate = false, s
     if (description !== previous) notify(`TEST_SLOT_MEMORY_WAIT: ${description}`);
     previous = description;
     const remaining = deadline - now();
-    if (immediate || remaining <= 0) throw low();
+    if (immediate || remaining <= 0) throw exhausted();
     await sleep(Math.min(1000, remaining), signal);
   }
 }

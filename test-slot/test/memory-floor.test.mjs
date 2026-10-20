@@ -6,6 +6,17 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { waitForMemoryFloor } from '../memory-floor.mjs';
+
+test('an exhausted budget before sampling does not assert measured low memory', async () => {
+  await assert.rejects(waitForMemoryFloor({ floor: 10, deadline: 10, now: () => 10,
+    read: () => assert.fail('deadline exhausted before any sample'),
+    sleep: () => assert.fail('exhausted admission must not wait') }), error => {
+    assert.equal(error.code, 'TEST_SLOT_MEMORY');
+    assert.match(error.message, /exhausted before a qualifying memory sample; floor 10 bytes/);
+    assert.doesNotMatch(error.message, /available memory below floor/);
+    return true;
+  });
+});
 import { resourceStanza } from '../resources.mjs';
 import { readProvingReservations, reservationState, waitForProvingHold } from '../reservations.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';

@@ -21,6 +21,7 @@ import { loadTimeout, admissionDeadline } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
+import { resolveArchive, validateArchive } from '../lib/archive.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
 import { hookLaunchArguments } from '../messages/hook-session.mjs';
 import { execFileSync, spawnSync } from "node:child_process";
@@ -243,6 +244,7 @@ function validateDispatch(config, label, file, { route = false } = {}) {
 
 function validateConfig(config, file) {
   if (!isRecord(config)) fail(`invalid lane config ${file}: top level must be an object`);
+  try { validateArchive(config, file); } catch (error) { fail(error.message); }
   if (config.validation !== undefined) {
     try { validateValidation(config.validation); } catch (error) { fail(`invalid lane config ${file}: ${error.message}`); }
   }
@@ -451,8 +453,10 @@ function routes(argv = []) {
 
 function config() {
   const validation = validationSettings();
+  const archive = resolveArchive({ canonical: REPO_ROOT, layers: CONFIG_LAYERS });
   const rows = [
     ["always_args", CONFIG.always_args ?? {}, CONFIG_SOURCES.get("always_args") ?? "default"],
+    ["archive directories", archive.dirs, archive.source],
     ["authority", CONFIG.authority ?? null, CONFIG_SOURCES.get("authority") ?? "default"],
     ["dispatch", CONFIG.dispatch ?? {}, CONFIG_SOURCES.get("dispatch") ?? "default"],
     ["main", MAIN, CONFIG_SOURCES.get("main") ?? "default"],

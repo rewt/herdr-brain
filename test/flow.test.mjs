@@ -36,6 +36,40 @@ function report(fields) {
   return `---\n${fields}\n---\nDetails.\n`;
 }
 
+for (const declared of [true, false]) test(`record start and regenerated brief show durable locations ${declared ? 'with an archive' : 'without an archive'}`, t => {
+  const { dir, ok } = setup(), root = path.dirname(dir), workspace = path.join(root, 'project');
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(workspace);
+  const git = args => {
+    const result = spawnSync('git', ['-C', workspace, ...args], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  git(['init', '-qb', 'main']);
+  git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'seed']);
+  if (declared) fs.writeFileSync(path.join(workspace, '.lane.json'), JSON.stringify({ archive: { dirs: ['docs/reports'] } }));
+  // Start outside the workspace and pass a routing-only snapshot, like dispatch.
+  // Neither the caller's config nor the frozen route config supplies the archive.
+  const route = path.join(root, 'routes.json');
+  fs.writeFileSync(route, JSON.stringify({ routes: { engineer: { kind: 'codex' } } }));
+  const env = { LANE_CONFIG: undefined, HERDR_MONITOR_FLEET: path.join(root, 'fleet') };
+  const id = ok(['add', 'Save durable results'], { env }).trim();
+  ok(['start', id, '--workspace', workspace, '--route', 'engineer', '--route-config', route], { env });
+  const file = path.join(dir, 'runs/R-1/brief.md'), first = fs.readFileSync(file, 'utf8');
+  const check = text => {
+    assert.match(text, /## Durable locations\n/);
+    assert.ok(text.indexOf('## Durable locations') < text.indexOf('## When you stop: write one report'));
+    if (declared) {
+      assert.ok(text.includes(path.join(workspace, 'docs/reports')));
+      assert.match(text, /Durable results go to the archive before the lane closes/);
+    } else assert.match(text, /## Durable locations\nNo archive directories resolved\.\n/);
+  };
+  check(first);
+  assert.equal(ok(['brief', 'R-1'], { env }), first);
+  fs.unlinkSync(file);
+  check(ok(['brief', 'R-1'], { env }));
+  assert.equal(fs.readFileSync(file, 'utf8'), first);
+});
+
 function outcomeEvents(entries) {
   return [{ type: 'item.added', id: 'ENG-1', title: 'Outcome ordering' }, ...entries]
     .map((entry, index) => ({ seq: index + 1, at: T0, by: 'test', ...entry }));

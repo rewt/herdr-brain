@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
-import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
+import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
@@ -310,7 +310,7 @@ async function main() {
       stage: 'open', run: null };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
     job.routeConfig = path.join(directory, `${token}.routes.json`);
-    atomic(job.routeConfig, config);
+    atomic(job.routeConfig, mergeRoutesConfig([config]));
     if (opt.awaited) record(['set', job.item, 'meta.notify=supervisor', ...(opt['awaited-step'] ? [`meta.notify_step=${opt['awaited-step']}`] : [])]);
     save();
     lockJob();

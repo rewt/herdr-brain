@@ -19,6 +19,9 @@ test('every registry format row and machine inventory entry agree in both direct
     if (marker) persisted.push(marker[1]);
   }
   const ids = catalog.formats.map(f => f.id);
+  const summary = catalog.formats.find(f => f.id === 'project-summary/v1');
+  assert.equal(summary.rule, 'additive');
+  assert.ok(summary.additiveFields.includes('archive.dirs'));
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(new Set(persisted).size, persisted.length);
   assert.deepEqual(ids.sort(), persisted.sort());

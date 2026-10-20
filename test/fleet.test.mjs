@@ -9,6 +9,7 @@ import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { projectFleet, readFleet } from '../lib/fleet.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { discoverArchive } from '../lib/archive.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const client = path.join(root, 'discovery/client.mjs');
@@ -269,13 +270,14 @@ for (const alias of [false, true]) test(`a neighbor with its own record cannot i
   const layer = path.join(path.dirname(owner), '.lane.json'), record = path.join(neighbor, '.org'); initOrg(record);
   const selectedLayer = alias ? path.join(f.scratch, 'owned-layer.json') : layer;
   fs.writeFileSync(selectedLayer, JSON.stringify({ worktree_root: 'private-worktrees', validate: 'private-validator',
-    always_args: { codex: ['-p', 'private-memory'] }, routes: { engineer: { model: 'private-route' } } }));
+    always_args: { codex: ['-p', 'private-memory'] }, archive: { dirs: ['private-archive'] }, routes: { engineer: { model: 'private-route' } } }));
   if (alias) fs.symlinkSync(selectedLayer, layer);
   f.join(owner, ['--layer', layer]);
   const before = fs.readFileSync(path.join(record, 'events.jsonl'));
   assert.equal(findOrgDir({ cwd: neighbor, env: f.env }), record);
   assert.equal(projectFleet(neighbor, f.env).legacy, null);
   const routes = loadDiscoveredRoutes({ cwd: neighbor, env: f.env }); assert.deepEqual(routes.files, []); assert.equal(routes.suggested, true);
+  assert.deepEqual(discoverArchive({ cwd: neighbor, env: f.env }).dirs, []);
   const config = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd: neighbor, env: f.env, encoding: 'utf8' });
   assert.equal(config.status, 0, config.stderr); assert.doesNotMatch(config.stdout, /private-route|private-memory|private-validator|private-worktrees/u);
   // Entry also joins independently, without adopting the parent's settings or worktrees.
@@ -286,6 +288,7 @@ for (const alias of [false, true]) test(`a neighbor with its own record cannot i
   f.join(neighbor, ['--record', record, '--layer', layer]);
   assert.deepEqual(loadDiscoveredRoutes({ cwd: neighbor, env: f.env }).files, [selectedLayer]);
   assert.equal(loadDiscoveredRoutes({ cwd: neighbor, env: f.env }).config.routes.engineer.model, 'private-route');
+  assert.deepEqual(discoverArchive({ cwd: neighbor, env: f.env }).dirs, [path.join(path.dirname(selectedLayer), 'private-archive')]);
   assert.equal(findOrgDir({ cwd: neighbor, env: f.env }), record); assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), before);
 });
 
@@ -364,7 +367,7 @@ test('explicit ORG_DIR isolates unrelated settings without launching Git on reco
 
 test('a bound project and its linked checkout isolate unrelated malformed settings', t => {
   const f = fixture(t), cwd = f.repo('app'), layer = path.join(f.scratch, 'app-routes.json');
-  fs.writeFileSync(layer, JSON.stringify({ routes: { engineer: { kind: 'codex', model: 'project-model' } } }));
+  fs.writeFileSync(layer, JSON.stringify({ archive: { dirs: ['project-archive'] }, routes: { engineer: { kind: 'codex', model: 'project-model' } } }));
   const own = f.join(cwd, ['--layer', layer]).project;
   f.join(f.repo('other'));
   const lane = path.join(f.scratch, 'linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/test', lane]);
@@ -376,6 +379,7 @@ test('a bound project and its linked checkout isolate unrelated malformed settin
     assert.equal(findOrgDir({ cwd: entered, env: f.env }), own.record);
     assert.deepEqual(projectFleet(entered, f.env).project, { ...own, name: 'app' });
     assert.deepEqual(loadDiscoveredRoutes({ cwd: entered, env: f.env }).files, [layer]);
+    assert.deepEqual(discoverArchive({ cwd: entered, env: f.env }).dirs, [path.join(f.scratch, 'project-archive')]);
     const cli = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd: entered, env: f.env, encoding: 'utf8' });
     assert.equal(cli.status, 0, cli.stderr);
   }

@@ -108,12 +108,14 @@ test('template and section check are advisory and need no record; missing sectio
   const f = fixture(t), absent = path.join(f.root, 'never-initialized');
   const template = f.ok(['handoffs', 'template'], { env: { ORG_DIR: absent } });
   assert.deepEqual(missingHandoffSections(template), []);
+  assert.match(template, /## Durable locations\n\nName the archive directories/);
+  assert.match(template, /## First steps\n\nList the first concrete actions/);
   fs.writeFileSync(f.file, '# A draft\n\n## First steps\nInspect.\n');
   const check = f.json(['handoffs', 'check', '--file', f.file, '--json'], { env: { ORG_DIR: absent } });
-  assert.equal(check.missing_sections.length, 4); assert.equal(fs.existsSync(absent), false);
+  assert.equal(check.missing_sections.length, 5); assert.equal(fs.existsSync(absent), false);
   assert.match(f.ok(['handoffs', 'write', ...f.scope, '--file', f.file]), /Missing handoff sections \(advisory\)/);
-  assert.equal(f.latest().missing_sections.length, 4);
-  assert.equal(missingHandoffSections('```md\n' + template + '\n```').length, 5);
+  assert.equal(f.latest().missing_sections.length, 5);
+  assert.equal(missingHandoffSections('```md\n' + template + '\n```').length, 6);
   assert.equal(missingHandoffSections(template.toUpperCase().replaceAll('\n', '\r\n')).length, 0);
 });
 

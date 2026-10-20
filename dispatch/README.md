@@ -22,6 +22,10 @@ Route values come from `lanes/routes.mjs`, never copied by the caller. Dispatch
 freezes that request's route configuration for both `record start --route` and
 `lane dispatch --route`; retries keep it even if project config changes. Lifecycle
 configuration retains its original sources and path resolution.
+The frozen snapshot contains routing fields only, including with an explicit
+`LANE_CONFIG`. Record briefs resolve archive directories from the run's workspace
+through the canonical project's configuration layers, preserving relative-path
+provenance without adding archive data to the routing snapshot or run metadata.
 
 `--awaited` records `meta.notify=supervisor` on the item before starting work.
 Optionally add `--awaited-step 'Cut RC-11'` to record the plan step it unblocks.

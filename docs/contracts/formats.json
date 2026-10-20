@@ -16,6 +16,7 @@
       "writer": "lib/project-summary.mjs",
       "location": "<record>/published/summary.{json,md}",
       "rule": "additive",
+      "additiveFields": ["archive.dirs"],
       "probe": "summary"
     },
     {

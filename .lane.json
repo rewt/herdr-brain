@@ -1,4 +1,7 @@
 {
+  "archive": {
+    "dirs": ["docs/reports", "docs/archive", "../.org/evidence", "../.org/proposals"]
+  },
   "retirement": {
     "closeout_queue": true
   },

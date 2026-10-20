@@ -13,6 +13,15 @@ The JSON schema is `project-summary/v1`. Its explicit field allowlist is:
   with no filesystem path. Projects sharing a record cannot overwrite another
   project's published summary; use one owning record per publisher.
 - `generated_at`, `stale_after_seconds`: observation time and refresh allowance.
+- `archive.dirs`: resolved absolute archive directory paths, or an empty list
+  when none resolves. This additive field is an explicit exception to the
+  no-path rule: archive paths bypass editorial redaction. The canonical project's
+  `.lane.json` `archive.dirs` replaces the parent layer's whole declaration;
+  each path resolves relative to its declaring layer file. Without a declaration,
+  `<dirname(canonical checkout)>/archive` is used only if it is a directory.
+  Declared directories need not exist yet; `dirs: []` suppresses the default.
+  The Markdown rendering names these archive directories too. Older readers
+  ignore the field. These locations convey no access or cleanup authority.
 - `status.counts`: counts of the existing derived item statuses.
 - `today`: local calendar date and UTC bounds (the same day definition as
   `record today`), landings and decisions, with item/run ids, times and one-line
@@ -47,7 +56,8 @@ configuration, and release-status link metadata. No adapter scripts or logs are
 executed or read to publish the summary. Source errors become fixed exception
 names; their raw messages are excluded. Note bodies, question answers, report
 bodies, prompts, transcripts, arbitrary metadata, file contents and source paths
-are excluded. Editorial titles, report headlines and explicit decision summaries
+(except the explicit `archive.dirs` allowlist) are excluded. Editorial titles,
+report headlines and explicit decision summaries
 are flattened and bounded; common credential markers and paths/URLs are redacted
 as additional protection. These editorial fields should always be plain summaries.
 

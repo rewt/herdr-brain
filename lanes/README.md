@@ -21,6 +21,7 @@ is unchanged. See [fleet mapping and adoption](../discovery/README.md#fleet).
 {
   "main": "main",
   "worktree_root": "../.worktrees",
+  "archive": { "dirs": ["docs/reports", "../archive"] },
   "validate": "npm test",
   "registry": ".lane/sessions.json",
   "prepare": [{ "unless": "node_modules", "run": "npm ci" }],
@@ -37,6 +38,17 @@ is unchanged. See [fleet mapping and adoption](../discovery/README.md#fleet).
 validation command, and `LANE_WORKTREE_ROOT` overrides the final per-repository
 worktree directory. Relative configuration paths resolve from the file that defines
 them; relative environment paths resolve from the invoking directory.
+
+`archive.dirs` names the project's archive directories for durable results. The
+repository layer replaces the parent declaration as a whole, and each directory
+resolves relative to the layer file that declares it. Declared paths may be
+created later. With no declaration, the default is `archive/` beside the canonical
+checkout, only when that directory exists; otherwise no archive resolves.
+An explicit empty list suppresses that default. `lane config` shows the resolved
+`archive directories` and their source. Record briefs and project summaries name
+the same locations; durable results go to the archive before the lane closes.
+This declaration is separate from Git archive tags and `archival_retirement`;
+it adds no sweep or delete behavior.
 
 The configured registry and its `.d` sidecar must be repository-local, untracked,
 gitignored, free of symlink escapes, and writable. It contains display metadata for

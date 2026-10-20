@@ -14,6 +14,7 @@ import { readRetirementStatus } from '../lib/retire-runtime.mjs';
 import { brainSource, brainSourceSync } from '../board/brain.mjs';
 import { brainFixture } from './helpers/board-fixture.mjs';
 import { BIN } from './helpers.mjs';
+import { publishedSummaryStatus as olderSummaryStatus, renderProjectSummary as olderSummaryRender } from './fixtures/project-summary-pre-archive.mjs';
 
 const NOW = '2026-10-17T18:00:00.000Z', EARLIER = '2026-10-17T16:00:00.000Z';
 const SECRET = 'PLANTED-PRIVATE-CONTENT', FOREIGN = '/outside/another-project/private';
@@ -84,7 +85,8 @@ function fixture(t, name = 'project') {
 test('publication allowlist excludes injected private fields and bodies, while useful facts survive', () => {
   const input = inputs(), doc = projectSummary(input), bytes = JSON.stringify(doc) + renderProjectSummary(doc);
   assert.doesNotMatch(bytes, new RegExp(`${SECRET}|${FOREIGN}|opaque-provider|secret|report_path|brief_path`));
-  assert.deepEqual(Object.keys(doc), ['schema', 'project', 'generated_at', 'stale_after_seconds', 'status', 'today', 'lanes', 'releases', 'exceptions']);
+  assert.deepEqual(Object.keys(doc), ['schema', 'project', 'generated_at', 'stale_after_seconds', 'archive', 'status', 'today', 'lanes', 'releases', 'exceptions']);
+  assert.deepEqual(doc.archive, { dirs: [] });
   assert.equal(doc.status.counts.done, 2); assert.equal(doc.status.counts.active, 1);
   assert.deepEqual(doc.today.landings, [{ item: 'ENG-1', run: 'R-1', at: EARLIER, summary: 'The summary is available' }]);
   assert.equal(doc.today.decisions.length, 3);
@@ -106,6 +108,28 @@ test('allowed editorial strings redact paths and common credentials; raw note te
   assert.doesNotMatch(bytes, /outside|example\.invalid|do-not-publish|PLANTED/);
   assert.ok(doc.today.decisions.some(r => r.summary === 'Read [path] then [path]'));
   assert.equal(doc.today.landings[0].summary, '[redacted]');
+});
+
+test('the publisher resolves archive directories and preserves their paths as the explicit allowlist exception', t => {
+  const f = fixture(t), file = path.join(f.repo, '.lane.json');
+  assert.deepEqual(f.publish().archive, { dirs: [] });
+  assert.match(fs.readFileSync(path.join(f.org, 'published/summary.md'), 'utf8'), /Archive directories: none resolved/);
+  fs.mkdirSync(path.join(f.root, 'archive'));
+  assert.deepEqual(f.publish().archive, { dirs: [path.join(f.root, 'archive')] });
+  fs.writeFileSync(file, JSON.stringify({ archive: { dirs: ['docs/reports', '../evidence'], future_field: SECRET } }));
+  const doc = f.publish(), expected = [path.join(f.repo, 'docs/reports'), path.join(f.root, 'evidence')];
+  assert.deepEqual(doc.archive, { dirs: expected });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.org, 'published/summary.json'))).archive, { dirs: expected });
+  const markdown = fs.readFileSync(path.join(f.org, 'published/summary.md'), 'utf8');
+  for (const dir of expected) assert.ok(markdown.includes(dir));
+  assert.doesNotMatch(JSON.stringify(doc) + markdown, /PLANTED/);
+  const { archive, ...beforeArchive } = doc;
+  assert.equal(olderSummaryStatus(f.org, { now: NOW, project: f.project }).status, 'fresh');
+  assert.equal(olderSummaryRender(doc), olderSummaryRender(beforeArchive), 'frozen older readers ignore the additive field');
+  assert.doesNotThrow(() => renderProjectSummary(beforeArchive), 'current rendering accepts older publications');
+  fs.writeFileSync(file, JSON.stringify({ archive: { dirs: [] } }));
+  assert.deepEqual(f.publish().archive, { dirs: [] });
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), f.eventBytes);
 });
 
 test('identical inputs give byte-identical JSON and Markdown, including after publication', t => {

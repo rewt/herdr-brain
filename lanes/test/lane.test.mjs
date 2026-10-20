@@ -800,6 +800,54 @@ test("config attributes always_args to the file that supplied it", () => {
   }
 });
 
+test("archive directories follow declaring-layer paths, replacement and canonical sibling discovery", () => {
+  const fixture = makeFixture(undefined, { repoParts: ["home", "projects", "repo"] });
+  try {
+    const parent = dirname(fixture.repo), parentConfig = join(parent, '.lane.json');
+    const repoConfig = join(fixture.repo, '.lane.json');
+    const env = discoveredEnv(fixture, { HOME: join(fixture.root, 'home') });
+    const read = (cwd = fixture.repo, overrides = env) => {
+      const result = lane(fixture, ['config'], { cwd, env: overrides });
+      assert.equal(result.status, 0, result.stderr);
+      return configRows(result.stdout).get('archive directories');
+    };
+    assert.deepEqual(read(), { value: [], source: 'default' });
+    const sibling = join(parent, 'archive');
+    writeFileSync(sibling, 'a file is not an archive directory');
+    assert.deepEqual(read(), { value: [], source: 'default' });
+    rmSync(sibling); mkdirSync(sibling);
+    assert.deepEqual(read(), { value: [sibling], source: 'default' });
+    writeFileSync(parentConfig, JSON.stringify({ archive: { dirs: ['parent-notes', '../evidence'] } }));
+    assert.deepEqual(read(), { value: [join(parent, 'parent-notes'), join(dirname(parent), 'evidence')], source: parentConfig });
+    writeFileSync(repoConfig, JSON.stringify({ archive: { dirs: ['docs/reports'] } }));
+    assert.deepEqual(read(), { value: [join(fixture.repo, 'docs/reports')], source: repoConfig });
+    const linked = join(fixture.root, 'linked');
+    git(fixture.repo, ['worktree', 'add', '-b', 'lane/archive-locations', linked]);
+    writeFileSync(join(linked, '.lane.json'), JSON.stringify({ archive: { dirs: ['lane-only'] } }));
+    assert.deepEqual(read(linked), read(), 'lane config always uses canonical project declarations');
+    writeFileSync(repoConfig, JSON.stringify({ archive: { dirs: [] } }));
+    assert.deepEqual(read(), { value: [], source: repoConfig });
+    const explicit = join(fixture.root, 'explicit.json');
+    writeFileSync(explicit, JSON.stringify({ archive: { dirs: ['explicit-notes'] } }));
+    assert.deepEqual(read(linked, { ...env, LANE_CONFIG: explicit }), { value: [join(fixture.root, 'explicit-notes')], source: explicit });
+    rmSync(repoConfig); rmSync(parentConfig);
+    assert.deepEqual(read(linked), { value: [sibling], source: 'default' }, 'default is beside canonical checkout, not beside lane');
+    assert.equal(existsSync(join(parent, 'parent-notes')), false, 'discovery never creates declared directories');
+  } finally { fixture.cleanup(); }
+});
+
+test("archive declarations reject malformed directory lists", () => {
+  const fixture = makeFixture();
+  try {
+    for (const archive of [null, [], {}, { dirs: 'docs' }, { dirs: [null] }, { dirs: [''] }, { dirs: ['line\nbreak'] }]) {
+      writeConfig(fixture, { archive });
+      const result = lane(fixture, ['config']);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /archive.dirs must be an array of nonempty directory paths/);
+    }
+  } finally { fixture.cleanup(); }
+});
+
 test("config layers the nearest parent and canonical repository with attributed replacement semantics", () => {
   const fixture = makeFixture(undefined, { repoParts: ["home", "projects", "team", "repo"] });
   try {

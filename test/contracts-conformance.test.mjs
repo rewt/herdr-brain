@@ -147,12 +147,15 @@ const contracts = [
   ['project-summary/v1', ['lib/project-summary.mjs'], async (f, root) => {
     const writer = await load(root, 'lib/project-summary.mjs');
     const project = { identity: path.join(f.root, '.git'), canonical: path.join(f.root, 'project') };
+    const archive = [path.join(f.root, 'durable-evidence')];
     const doc = writer.projectSummary({ project, state: fold([]), lanes: { counts: {}, rows: [] }, now: at,
+      archive,
       releases: { current: 'fixture', pinned: 'fixture' } });
     const org = path.join(f.root, 'record'); fs.mkdirSync(org);
     writer.writeProjectSummary(org, doc);
     const file = path.join(org, 'published/summary.json'), written = json(file);
     assert.equal(written.schema, 'project-summary/v1');
+    if (root === source) assert.deepEqual(written.archive, { dirs: archive });
     assert.equal(publishedSummaryStatus(org, { now: at, project }).status, 'fresh');
     assert.match(renderProjectSummary(written), /fixture/);
     const markdown = renderProjectSummary(written);

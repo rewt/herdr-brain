@@ -251,7 +251,7 @@ for (const [failAt, phase] of [[1, 'intent'], [2, 'outcome'], [3, 'completion']]
     } });
     const proof = retirement.removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true });
     assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
-    assert.deepEqual(proof.pending, []); assert.deepEqual(f.read().workspaces, []);
+    assert.deepEqual(proof.pending, []); assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).workspaces, []);
     assert.ok(f.herdrCalls().some(args => args[0] === 'workspace' && args[1] === 'close'));
     assert.equal(fs.existsSync(own), failAt === 1, 'unlink requires a durably written intent');
     assert.ok(stderr.some(message => /Sweep manifest.*update failed.*injected archive write failure/.test(message)));

@@ -339,7 +339,11 @@ The record CLI guards item-changing writes while a run is pending in this
 project's queue, being prepared or gated, or integrated with reconciliation
 pending. It reads only the owning Git common directory's queue and
 `promotion-train/v1` receipts, including from linked worktrees and explicit
-fleet record paths. Item/run notes and edits, dependency changes, new children,
+fleet record paths. Protection is queue-backed: it does not scan arbitrary legacy
+scratch `prepared.json` manifests. Before retiring a legacy guarded caller, drain,
+reconcile or explicitly dispose its remaining prepared batches through that
+existing guarded path (the default), or bind them through a supported equivalent
+queue protection. Item/run notes and edits, dependency changes, new children,
 questions, launch receipts, abandonment, handoffs and pane-release notes are
 checked under the record lock before their events are appended. Blockers and
 review children that contribute to completion are protected with their member.
@@ -361,10 +365,15 @@ is known. That durable legacy completion remains
 effective after reopening or starting follow-up work; an explicit pending
 reconciliation still holds its member.
 
-For inspected recovery, set `ORG_GUARD_OVERRIDE` to the exact batch ID (or the
+For a named supervisor recovery disposition only, set `ORG_GUARD_OVERRIDE` for
+one command, retaining the reason and evidence, to the exact batch ID (or the
 job ID while it is pending outside a batch). If a transaction touches multiple
 promotions, supply their comma-separated batch/job IDs. The supplied set must
-equal the full set of affected promotions; missing or extra IDs refuse. Each
+equal the full set of affected promotions; missing or extra IDs refuse. The
+override is local to that command: never export it to workers or use it for an
+automatic retry. It cannot waive current-run, candidate, review, hold, readiness
+or finish checks. A plain-note refresh remains the supported record-only refresh;
+other deltas retain their applicable refusals and original evidence. Each
 successful override prints a warning to stderr and appends a
 `promotion.write-overridden` audit event in the same transaction, with the
 command, member IDs, batch/job IDs and Git identity. Unknown/unreadable membership

@@ -39,6 +39,9 @@ const USAGE = `record: durable organizational state for agent R&D (no daemon, no
 
 Setup
   record init [dir]                       create a record (default ./.org)
+  record config [--json]                  effective policy, provenance and repo-copy drift
+  record config set KEY VALUE [--scope identity] [--who-asked REF]
+  record config history [--scope identity] owning record's configuration history
 
 Work
   record add <title> [--goal] [--role R] [--capability C] [--parent ID]
@@ -1022,6 +1025,7 @@ const COMMANDS = {
   'pane-release': lazy('../lib/retire-command.mjs', 'releaseCommand'),
   'session-bind': lazy('../dispatch/session-bind-command.mjs', 'sessionBindCommand'),
   desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
+  config: lazy('../lib/config-command.mjs', 'configCommand'),
   routes: lazy('../lanes/routes-command.mjs', 'routesCommand'),
   housekeeping: lazy('../housekeeping/command.mjs', 'housekeepingCommand'),
   summary: lazy('../lib/project-summary.mjs', 'summaryCommand'),

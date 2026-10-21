@@ -4,7 +4,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { gitProject } from '../lib/project.mjs';
-import { policyLocation } from '../lib/config-home.mjs';
+import { policyLocation, homeProject } from '../lib/config-home.mjs';
+import { readPolicyFile, validateLane } from '../lib/config-policy.mjs';
+import { writeAuditedConfig } from '../lib/config-audit.mjs';
+import { withConfigLock } from '../lib/config-command.mjs';
 import { UserError } from '../lib/store.mjs';
 import { renderRoutes } from '../lib/render.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, validateRoutesConfig } from './routes.mjs';
@@ -33,6 +36,18 @@ function safeTarget(target) {
 export function editProjectConfig(mutate, { cwd = process.cwd(), expect, adoptRoutes = true } = {}) {
   const before = routesSnapshot(cwd);
   if (!before.editable) throw new UserError('config edits require a Git project');
+  const binding = homeProject(cwd);
+  if (binding) return withConfigLock(binding, 'project', () => {
+    const current = routesSnapshot(cwd);
+    if (expect && current.revision !== expect) throw new UserError('routes changed since you opened the editor; refresh and review again');
+    const selected = policyLocation(cwd, 'lane');
+    const next = fs.existsSync(selected.file) ? readPolicyFile(selected.file, 'lane', { cwd }) : {};
+    mutate(next, current);
+    validateLane(next, current.target);
+    mergeRoutesConfig([current.config, next]);
+    writeAuditedConfig({ file: current.target, value: next, kind: 'lane', binding, cwd, validate: value => validateLane(value, current.target) });
+    return routesSnapshot(cwd);
+  });
   const lock = `${before.target}.lock`;
   try { fs.mkdirSync(lock); }
   catch (error) { if (error.code === 'EEXIST') throw new UserError(`route config is locked: ${lock}`); throw error; }

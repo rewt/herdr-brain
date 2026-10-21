@@ -1,12 +1,15 @@
 // Read module bookkeeping and validate tracked overrides. Never start a timer,
-// signal a process, mutate a pane, or write record events from this command.
+// signal a process or mutate a pane. Adopted config reads may append audit events.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { ownerAlive, readOwnerProcess } from '../lib/process-owner.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { policyLocation } from '../lib/config-home.mjs';
+import { policyLocation, homeProject } from '../lib/config-home.mjs';
+import { readProjectPolicy } from '../lib/config-policy.mjs';
+import { writeAuditedConfig } from '../lib/config-audit.mjs';
+import { withConfigLock } from '../lib/config-command.mjs';
 import { findOrgDir, UserError } from '../lib/store.mjs';
 import { renderHousekeeping } from '../lib/render.mjs';
 import { DEFAULTS, FIELDS, validateConfig, parseOverride } from './config.mjs';
@@ -50,7 +53,7 @@ export function housekeepingSnapshot({ cwd = process.cwd(), org, env = process.e
   const bytes = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
   const revision = crypto.createHash('sha256').update(JSON.stringify([project.identity, target, bytes])).digest('hex');
   let overrides = {}, configError = null;
-  try { overrides = validateConfig(bytes === null ? {} : JSON.parse(bytes)); }
+  try { overrides = readProjectPolicy(cwd, 'housekeeping', env).config; }
   catch (error) { configError = error.message; }
   const config = configError ? null : { ...DEFAULTS, ...overrides };
   const record = org || findOrgDir({ cwd, env }) || findOrgDir({ cwd: project.canonical, env });
@@ -88,6 +91,15 @@ export function setHousekeeping(patch, { cwd = process.cwd(), org, env = process
   if (unset.some(key => Object.hasOwn(patch, key))) throw Error('cannot set and unset the same override');
   const before = housekeepingSnapshot({ cwd, org, env });
   if (!before.editable) throw Error(before.configError ?? 'refresh and inspect the schedule identity before editing');
+  const binding = homeProject(cwd, env);
+  if (binding) return withConfigLock(binding, 'project', () => {
+    const current = housekeepingSnapshot({ cwd, org, env });
+    if (!current.editable || expect !== undefined && current.revision !== expect) throw Error('housekeeping changed since inspection; refresh and review again');
+    const next = { ...current.overrides, ...patch };
+    for (const key of unset) delete next[key];
+    writeAuditedConfig({ file: current.target, value: next, kind: 'housekeeping', binding, cwd, env, validate: validateConfig });
+    return housekeepingSnapshot({ cwd, org, env });
+  });
   const lock = `${before.target}.lock`;
   try { fs.mkdirSync(lock); } catch (error) { if (error.code === 'EEXIST') throw Error('housekeeping config is locked'); throw error; }
   let temporary;

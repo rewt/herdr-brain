@@ -265,6 +265,10 @@ before tagging. Live native workers always pass the guarded exit path, including
 its fresh readiness and empty-composer checks, even without helper processes.
 Terminal-bound exit receipts recheck the ordinary worker identity, completion,
 unchanged shell and current exact-head archive before permitting tab close.
+Preflight allows cwd holders only from these eligible workers' complete process
+trees, including their shells, after a fresh process birth-identity match. Unknown
+or unrelated cwd holders still refuse before tagging. After pane release, every
+removal observation requires a complete fresh cwd scan with no worker exemption.
 If a later check (including typed input at the native exit edge)
 or removal fails, the verified tag may remain as harmless recovery for that exact
 tip, and a matching-tip retry can reuse it.
@@ -281,7 +285,7 @@ manifest records file hashes and symlink targets. Tracked content remains preser
 by the verified integrated tip or exact archive tag, without a duplicate payload copy.
 The copy and unchanged source
 are verified against that manifest before removal; any failure keeps the lane.
-Planner KEEP and process-cwd refusals run before tagging or copying. A size-only
+Planner KEEP and unrelated process-cwd refusals run before tagging or copying. A size-only
 inventory also runs first: the default evidence budget is 256 MiB of copied bytes. Optional
 `LANE_EVIDENCE_MAX_BYTES` overrides it with a nonnegative integer byte count for
 the attempt. Content over that budget keeps the lane, copies nothing, and reports

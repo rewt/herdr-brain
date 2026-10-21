@@ -13,6 +13,9 @@ import { copyProduct } from '../lib/product-files.mjs';
 import { requestRetirement, consumeRetirement } from '../lib/retire-trigger.mjs';
 import { retirementDeadline, retirementLock } from '../lib/retire-lock.mjs';
 import { stopFixtureInbox } from './helpers/inbox.mjs';
+import { spawnChild, spawnScenarioChild, waitForExit } from './helpers/child.mjs';
+import { lookupProcess, registerProcess, killProcess } from './helpers/processes.mjs';
+import { readLaneCwdReferences } from '../lib/lane-removal.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
 import { recordStandardSlot, slotReceiptFile } from '../sessions/receipts.mjs';
 import { classifyRetirement } from '../lib/retire-status.mjs';
@@ -38,6 +41,72 @@ function nativeExit(f, kind = 'codex') {
       { pid: 3, ppid: 2, identity: 'helper', state: 'S', command: '[codex-code-mode-host]' },
       { pid: 4, ppid: 3, identity: 'repl', state: 'S', command: '[node]' }] };
   f.save();
+}
+
+// Offline native topology with real lane cwd holders and kernel birth identities.
+// A renamed sh stands in for Codex; only the fake transport handles /quit.
+async function laneCwdWorker(t, f, { unregister = true, leaveShell = false } = {}) {
+  nativeExit(f);
+  const native = path.join(f.scratch, 'codex'), nativeReady = path.join(f.scratch, 'native-pid'), helperReady = path.join(f.scratch, 'helper-pid');
+  fs.copyFileSync('/bin/sh', native); fs.chmodSync(native, 0o755);
+  const shell = spawnScenarioChild(t, '/bin/sh', ['-c',
+    '"$1" -c \'sleep 120 & printf "%s" "$!" > "$1"; wait\' native "$2" & printf "%s" "$!" > "$3"; wait; read ignored',
+    'shell', native, helperReady, nativeReady], { cwd: f.lane, env: f.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  const owners = [];
+  t.after(async () => {
+    for (const owner of owners.toReversed()) assert.equal(killProcess(owner).ok, true);
+    shell.kill(); await waitForExit(shell);
+  });
+  const deadline = Date.now() + 10000;
+  while (![nativeReady, helperReady].every(file => fs.existsSync(file) && fs.readFileSync(file, 'utf8'))) {
+    assert.ok(Date.now() < deadline, 'real worker processes became ready');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  const pids = [shell.pid, Number(fs.readFileSync(nativeReady, 'utf8')), Number(fs.readFileSync(helperReady, 'utf8'))];
+  const tree = pids.map(pid => {
+    const observed = lookupProcess(pid, { identityOnly: true });
+    assert.equal(observed.ok, true, observed.error); assert.ok(observed.value);
+    owners.push(registerProcess(pid));
+    return observed.value;
+  });
+  assert.equal(tree[1].command, '[codex]');
+  assert.equal(tree[1].ppid, shell.pid); assert.equal(tree[2].ppid, tree[1].pid);
+  f.state.info = { shell_pid: shell.pid, foreground_processes: [{ name: 'codex', pid: tree[1].pid, identity: tree[1].identity }],
+    process_tree_complete: true, process_tree: tree };
+  Object.assign(f.state.panes[0], { terminal_id: 'term', foreground_cwd: f.lane });
+  f.state.agents[0].agent_status = 'done'; f.state.unregisterOnExit = unregister; f.save();
+  const herdr = path.join(f.scratch, 'cwd-herdr.mjs');
+  fs.writeFileSync(herdr, `#!${process.execPath}
+import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { killProcess, lookupProcess } from ${JSON.stringify(path.join(root, 'test/helpers/processes.mjs'))};
+const args = process.argv.slice(2), result = spawnSync(${JSON.stringify(f.job.herdr)}, args, { encoding: 'utf8', env: process.env });
+function stop(owner) {
+  const sent = killProcess(owner, 'SIGTERM');
+  if (!sent.ok || sent.reason === 'changed') throw Error('real cwd fixture identity changed; no signal sent');
+  const deadline = Date.now() + 3000;
+  for (;;) {
+    const current = lookupProcess(owner.pid, { identityOnly: true });
+    if (!current.ok) throw Error(current.error);
+    if (!current.value || current.value.identity !== owner.identity || /^[ZX]/.test(current.value.state)) return;
+    if (Date.now() >= deadline) throw Error('real cwd fixture did not stop');
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  }
+}
+if (result.status === 0 && args[0] === 'agent' && args[1] === 'prompt') {
+  for (const owner of ${JSON.stringify(owners.slice(1).toReversed())}) stop(owner);
+  const state = JSON.parse(fs.readFileSync(${JSON.stringify(f.file)}, 'utf8'));
+  state.info = { shell_pid: ${shell.pid}, foreground_processes: [{ pid: ${shell.pid}, name: 'sh' }],
+    process_tree_complete: true, process_tree: [${JSON.stringify(tree[0])}] };
+  fs.writeFileSync(${JSON.stringify(f.file)}, JSON.stringify(state));
+}
+if (result.status === 0 && args[0] === 'tab' && args[1] === 'close' && ${!leaveShell}) stop(${JSON.stringify(owners[0])});
+process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? ''); process.exit(result.status ?? 1);
+`, { mode: 0o755 });
+  f.env.HERDR_RETIRE_HERDR = herdr;
+  const refs = readLaneCwdReferences(f.lane);
+  for (const pid of pids) assert.ok(refs.some(ref => Number(ref.job) === pid), `actual lane cwd holder ${pid}`);
+  return { pids, tree, herdr };
 }
 
 for (const kind of ['occupants', 'exits', 'initial-shells']) test(`retirement ignores non-JSON entries and directories in ${kind} without deleting them`, t => {
@@ -484,6 +553,78 @@ for (const { terminal, helpers, unregister } of [
   }
   assert.ok(index('shell-close-requested') < index('worktree-removed'));
   assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});
+
+for (const unregister of [false, true]) test(`unmerged lane close releases a real worker tree and its lane-cwd shell in one call (unregister=${unregister})`, async t => {
+  const f = fixture(t, { merged: false }), worker = await laneCwdWorker(t, f, { unregister });
+  const main = f.git(['rev-parse', 'main']), closed = f.close(false);
+  assert.equal(closed.status, 0, closed.stdout + closed.stderr);
+  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head); assert.equal(f.git(['rev-parse', 'main']), main);
+  assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
+  assert.equal(readLaneCwdReferences(f.lane).some(ref => worker.pids.includes(Number(ref.job))), false);
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});
+
+test('unmerged lane close keeps an unrelated actual cwd holder beside an eligible worker', async t => {
+  const f = fixture(t, { merged: false }); await laneCwdWorker(t, f);
+  const unrelated = spawnChild(t, '/bin/sleep', ['120'], { cwd: f.lane, env: f.env });
+  try {
+    assert.ok(readLaneCwdReferences(f.lane).some(ref => Number(ref.job) === unrelated.pid));
+    const closed = f.close(false);
+    assert.notEqual(closed.status, 0); assert.match(closed.stdout + closed.stderr, /process cwd reference/);
+    assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
+    assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []); assertNoRemoval(f);
+  } finally { unrelated.kill(); await waitForExit(unrelated); }
+});
+
+for (const index of [0, 1]) test(`unmerged lane close keeps a real cwd holder whose ${index ? 'native' : 'shell'} birth identity changed`, async t => {
+  const f = fixture(t, { merged: false }); await laneCwdWorker(t, f);
+  f.state.info.process_tree[index].identity += ':stale';
+  if (index) f.state.info.foreground_processes[0].identity = f.state.info.process_tree[index].identity;
+  f.save();
+  const closed = f.close(false);
+  assert.notEqual(closed.status, 0); assert.match(closed.stdout + closed.stderr, /process cwd reference/);
+  assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
+  assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []); assertNoRemoval(f);
+});
+
+test('unmerged lane close keeps an actual worker cwd holder when its fresh identity is unreadable', async t => {
+  const f = fixture(t, { merged: false }), worker = await laneCwdWorker(t, f);
+  const retirement = f.retirement({ herdr: worker.herdr, readOwner: () => { throw Error('injected unreadable worker identity'); } });
+  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic' }), /process cwd reference/);
+  assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
+  assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []); assertNoRemoval(f);
+});
+
+test('unmerged lane close keeps the worktree if its released worker shell still holds the lane cwd', async t => {
+  const f = fixture(t, { merged: false }); await laneCwdWorker(t, f, { leaveShell: true }); f.traceGit();
+  const closed = f.close(false);
+  assert.notEqual(closed.status, 0); assert.match(closed.stdout + closed.stderr, /process cwd reference/);
+  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+  assert.equal(fs.existsSync(f.lane), true); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+  assert.deepEqual(f.gitCalls().filter(args => args.includes('worktree') && args.includes('remove')), []);
+});
+
+test('unmerged lane close requires a complete cwd scan after releasing a real worker', async t => {
+  const f = fixture(t, { merged: false }), worker = await laneCwdWorker(t, f); f.traceGit();
+  const readdir = fs.readdirSync;
+  const unavailable = () => { throw Error('injected post-release cwd source unavailable'); };
+  const released = () => f.read().tabs.length === 0;
+  const retirement = f.retirement({ herdr: worker.herdr, command: (exe, args, options) => {
+    if (exe === '/usr/sbin/lsof' && released()) unavailable();
+    return spawnSync(exe, args, options);
+  } });
+  fs.readdirSync = (directory, ...args) => {
+    if (directory === '/proc' && released()) unavailable();
+    return readdir(directory, ...args);
+  };
+  try { assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic' }), /post-release cwd source unavailable/); }
+  finally { fs.readdirSync = readdir; }
+  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head); assert.equal(fs.existsSync(f.lane), true);
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+  assert.deepEqual(f.gitCalls().filter(args => args.includes('worktree') && args.includes('remove')), []);
 });
 
 for (const status of ['idle', 'done']) for (const guard of ['typed', 'not-ready'])

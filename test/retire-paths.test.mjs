@@ -52,16 +52,19 @@ async function laneCwdWorker(t, f, { unregister = true, leaveShell = false } = {
   const nativeCode = `process.title = 'codex';
     const child = require('node:child_process').spawn('/bin/sleep', ['120'], { stdio: 'ignore' });
     require('node:fs').writeFileSync(process.argv[1], String(child.pid)); setInterval(() => {}, 1000);`;
-  const shell = spawnScenarioChild(t, '/bin/sh', ['-c',
+  const owners = [];
+  let shell;
+  // Finish owned-tree cleanup before spawnScenarioChild's after-hook audits the
+  // shell, including awaiting its exit event after a synchronous CLI close.
+  t.after(async () => {
+    for (const owner of owners.toReversed()) assert.equal(killProcess(owner).ok, true);
+    if (shell) { shell.kill(); await waitForExit(shell); }
+  });
+  shell = spawnScenarioChild(t, '/bin/sh', ['-c',
     '"$1" -e "$2" "$3" & printf "%s" "$!" > "$4"; wait; read ignored',
     'shell', process.execPath, nativeCode, helperReady, nativeReady], { cwd: f.lane, env: f.env, stdio: ['pipe', 'pipe', 'pipe'] });
   let stderr = '';
   shell.stderr.on('data', chunk => { stderr += chunk; });
-  const owners = [];
-  t.after(async () => {
-    for (const owner of owners.toReversed()) assert.equal(killProcess(owner).ok, true);
-    shell.kill(); await waitForExit(shell);
-  });
   const deadline = Date.now() + 10000;
   while (![nativeReady, helperReady].every(file => fs.existsSync(file) && fs.readFileSync(file, 'utf8'))) {
     assert.equal(shell.exitCode, null, `real worker shell exited: ${stderr}`);

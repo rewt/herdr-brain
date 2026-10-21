@@ -230,21 +230,26 @@ test('a summary publication failure never blocks guarded cleanup or interruption
 });
 
 for (const failure of ['enqueue', 'corrupt notice state']) test(`notice failure never stalls cleanup or resume: ${failure}`, t => {
-  const f = fixture(t, { reported: false }), finishedLane = path.join(f.root, 'finished');
+  const f = fixture(t, { reported: false }), finishedLane = path.join(f.root, 'finished'), idleLane = path.join(f.root, 'idle');
   f.git(['worktree', 'add', '-b', 'lane/finished', finishedLane]);
+  f.git(['worktree', 'add', '-b', 'lane/idle', idleLane]);
+  f.git(['commit', '--allow-empty', '-m', 'unlanded idle work'], idleLane);
   f.tabs[0].workspace_id = 'w'; f.panes[0].workspace_id = 'w';
   f.ws.push({ workspace_id: 'finished', worktree: { checkout_path: finishedLane,
     repo_root: f.repo, repo_key: f.common, is_linked_worktree: true } });
+  f.ws.push({ workspace_id: 'idle', worktree: { checkout_path: idleLane,
+    repo_root: f.repo, repo_key: f.common, is_linked_worktree: true } });
   for (const [name, run, item, seq] of [['finished', 'R-2', 'ENG-2', 5], ['old-idle', 'R-3', 'ENG-3', 8]]) {
-    const agent = { ...f.agent, name, workspace_id: 'finished', cwd: finishedLane,
+    const workspace = name === 'finished' ? 'finished' : 'idle', cwd = name === 'finished' ? finishedLane : idleLane;
+    const agent = { ...f.agent, name, workspace_id: workspace, cwd,
       pane_id: `finished:${name}:p`, tab_id: `finished:${name}:t`, terminal_id: `${name}-terminal` };
-    f.agents.push(agent); f.tabs.push({ tab_id: agent.tab_id, workspace_id: 'finished' });
-    f.panes.push({ pane_id: agent.pane_id, tab_id: agent.tab_id, workspace_id: 'finished' });
-    f.runs.push({ id: run, item, workspace: finishedLane, started: { seq }, report: { seq: seq + 1, outcome: 'done' },
-      meta: { agent: name, pane: agent.pane_id, worker_workspace: 'finished', terminal_id: agent.terminal_id, lane: 'finished' } });
+    f.agents.push(agent); f.tabs.push({ tab_id: agent.tab_id, workspace_id: workspace });
+    f.panes.push({ pane_id: agent.pane_id, tab_id: agent.tab_id, workspace_id: workspace });
+    f.runs.push({ id: run, item, workspace: cwd, started: { seq }, report: { seq: seq + 1, outcome: 'done' },
+      meta: { agent: name, pane: agent.pane_id, worker_workspace: workspace, terminal_id: agent.terminal_id, lane: workspace } });
     f.items.push({ id: item, role: 'engineer', closed: name === 'finished' ? { as: 'done', seq: seq + 2 } : null });
   }
-  f.runs.push({ id: 'R-4', item: 'ENG-3', workspace: finishedLane, started: { seq: 12 },
+  f.runs.push({ id: 'R-4', item: 'ENG-3', workspace: idleLane, started: { seq: 12 },
     report: { seq: 13, outcome: 'done' }, meta: { agent: 'successor', pane: 'other:p', terminal_id: 'other-terminal' } });
   const stateDir = path.join(f.root, 'notice-state');
   const command = (exe, args, options) => {

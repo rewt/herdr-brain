@@ -371,7 +371,7 @@ for (const race of ['lane tip', 'main tip', 'policy', 'archive tag', 'record obl
       if (race === 'evidence') fs.writeFileSync(path.join(row.evidence.directory, 'files/.lane/report.md'), 'corrupt preservation');
     } });
     assert.equal(changed, true);
-    kept(f, result, race === 'occupant' ? /occupied lane/ : /changed|snapshot|not contained|policy is off|durability|open run|reference|mismatch/,
+    kept(f, result, race === 'occupant' ? /occupied lane/ : /changed|snapshot|not contained|policy is off|durability|open (?:recorded )?run|reference|mismatch/,
       { tag: true, moved: race === 'lane tip' });
     assert.deepEqual(fs.readFileSync(path.join(f.lane, '.lane/report.md')), bytes);
     assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);

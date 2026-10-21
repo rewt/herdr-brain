@@ -36,7 +36,7 @@ async function waitForChange(_files, predicate, { timeoutMs = 60000 } = {}) {
 }
 function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
   const f = occupied ? exitFixture(t) : fixture(t, { occupied, merged });
-  if (occupied && !merged) f.git(['update-ref', 'refs/heads/main', f.git(['rev-parse', `${f.head}^`])]);
+  if (occupied && !merged) f.git(['reset', '--hard', `${f.head}^`]);
   isolatedEnv(t, f);
   fs.symlinkSync(f.org, path.join(f.repo, '.org'));
   fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n.org\n.lane/\n');

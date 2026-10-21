@@ -79,6 +79,10 @@ function fixture(t) {
   fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ scripts: { test: `${process.execPath} --test check.mjs` } }));
   fs.writeFileSync(path.join(repo, 'check.mjs'), "import assert from 'node:assert/strict'; assert.equal(2 + 2, 4);\n");
   fs.writeFileSync(path.join(repo, 'shared'), 'base\n'); git(['add', '.']); git(['commit', '-qm', 'base']);
+  // Most cases exercise the foreground cleanup owner. The unconfigured case
+  // below removes this explicit opt-out; record-backed defaults live in closeout.test.
+  fs.appendFileSync(path.join(repo, '.git/info/exclude'), '\n.lane.json\n');
+  fs.writeFileSync(path.join(repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   const herdr = path.join(root, 'herdr');
   const notices = path.join(root, 'notices.jsonl');
   fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';\nconst args = process.argv.slice(2);\n${quietFake}\nif (args[0] === 'agent' && args[1] === 'prompt') {\nfs.appendFileSync(${JSON.stringify(notices)}, JSON.stringify(args) + '\\n');\nif (fs.existsSync(${JSON.stringify(path.join(root, 'delivery-fail'))})) process.exit(1);\n}\nprocess.stdout.write(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
@@ -306,7 +310,8 @@ test('queued promotion waits before validation under low-memory pressure and pro
   const batch = f.queue.load().current;
   assert.equal(batch.jobs[0].id, launched.jobs[0].id);
   const log = path.join(f.queue.directory, 'batches', batch.id, 'train.log');
-  await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('waiting; memory pressure'));
+  try { await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('waiting; memory pressure')); }
+  catch (error) { throw new Error(`${error.message}\n${fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : 'train log missing'}\n${JSON.stringify(f.queue.load())}`, { cause: error }); }
   assert.match(fs.readFileSync(log, 'utf8'), /available memory 128 MiB/);
   assert.doesNotMatch(fs.readFileSync(log, 'utf8'), /validating in/);
   assert.equal(f.git(['rev-parse', 'main']), before); assert.ok(fs.existsSync(workspace));
@@ -320,7 +325,8 @@ test('queued promotion waits before validation under low-memory pressure and pro
 });
 
 test('unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate', async (t) => {
-  const f = fixture(t); const first = f.lane('first'), second = f.lane('second');
+  const f = fixture(t); fs.unlinkSync(path.join(f.repo, '.lane.json'));
+  const first = f.lane('first'), second = f.lane('second');
   const launched = f.launch(['first', 'second']); assert.ok(launched.worker.ready);
   await f.waitForWorkers();
   assert.equal(f.results().length, 2);

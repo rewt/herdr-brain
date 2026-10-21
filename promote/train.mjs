@@ -41,7 +41,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       if (job.gate_mode !== 'declared-gates/v1' || job.validate || job.laneConfig) throw declaredRefusal('incompatible queued job requires explicit disposition');
       if ((job.requiredTests ?? []).some(row => typeof row !== 'string' && (!row?.definition || !row.scope || !row.toolchain))) throw declaredRefusal('typed requirement lost its admission binding');
       executionIdentity({ canonical, identity }, { bound: job.execution_identity ?? null });
-      if (admission && !recovered.has(job.id)) sameDeclaration(job.declared, readDeclared(canonical));
+      if (admission && !recovered.has(job.id) && !plan.results?.[job.id]) sameDeclaration(job.declared, readDeclared(canonical));
     }
     for (const attempt of plan.attempts ?? []) executionIdentity({ canonical, identity }, { bound: attempt.execution_identity ?? null });
   };

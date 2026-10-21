@@ -11,7 +11,25 @@ const git = (cwd, args, deadline) => {
   return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: Math.max(1, Math.min(20000, deadline === undefined ? Infinity : deadline - Date.now())), maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
 };
 const control = name => /(?:^|\/)(?:package\.json|[^/]*lock[^/]*|[^/]*\.lock|pyproject\.toml|requirements[^/]*\.txt|[^/]*config(?:\.[^/]+)?|\.[^/]*rc(?:\.[^/]+)?|\.nvmrc|\.npmrc|\.yarnrc(?:\.yml)?)$/.test(name);
+export function assertPythonFileLaunch(words) {
+  for (let at = 0; at < words.length; at++) {
+    if (!/^python[\d.]*$/.test(path.posix.basename(words[at]))) continue;
+    for (let index = at + 1; index < words.length; index++) {
+      const option = words[index];
+      if (!option.startsWith('-') || option === '-' || option === '--') break;
+      // Include attached arguments and combined interpreter flags (-Im, -Ic).
+      // -W/-X consume their value, which is not another interpreter option.
+      if (/^-[bBdEiIOPqRsSuvx]*[mc]/.test(option)) throw Object.assign(
+        refuse('Python module and inline launches are unsupported; declare a Python driver file'), { code: 'DECLARED_PYTHON_FILE_REQUIRED' });
+      if (['-W', '-X', '--check-hash-based-pycs'].includes(option)) index++;
+    }
+  }
+}
 export function policyBinding(repo, base, declaration, invocations = [], deadline) {
+  const words = text => text.match(/[\w@./+-]+/g) ?? [];
+  for (const runner of Object.values(declaration.runners)) assertPythonFileLaunch(runner.command);
+  for (const step of invocations) assertPythonFileLaunch([...declaration.runners[step.runner].command, ...(step.args ?? [])]);
+  for (const command of [declaration.promotion, ...(declaration.gate?.prepare ?? []).map(step => step.run)]) assertPythonFileLaunch(words(command));
   const entries = git(repo, ['ls-tree', '-rz', base], deadline).split('\0').filter(Boolean).map(entry => {
     const at = entry.indexOf('\t'); return [entry.slice(at + 1), entry.slice(0, at)];
   });
@@ -48,7 +66,10 @@ export function policyBinding(repo, base, declaration, invocations = [], deadlin
     }
     inspected.add(name);
     if (path.posix.basename(name) === 'package.json') {
-      for (const script of Object.values(JSON.parse(text).scripts ?? {})) addWords(script, path.posix.dirname(name));
+      for (const script of Object.values(JSON.parse(text).scripts ?? {})) {
+        assertPythonFileLaunch(words(script));
+        addWords(script, path.posix.dirname(name));
+      }
     } else {
       for (const match of text.matchAll(/['"]([^'"\n]+\.(?:[cm]?js|[cm]?ts|py|sh|json|ya?ml))['"]/g)) addWords(match[1], path.posix.dirname(name));
     }

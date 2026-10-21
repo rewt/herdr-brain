@@ -11,6 +11,7 @@ import { recheckDeclaredGate } from '../declared-gates.mjs';
 import { executeDeclared } from '../declared-runner.mjs';
 import { exactIdentity, explainMiss } from '../../lanes/exact-validation.mjs';
 import { resolveGateProfile } from '../gate-profile.mjs';
+import { runtimeIdentity } from '../declared-runtime.mjs';
 
 const empty = () => ({ schema: 'promotion-tests/v2', files: [], steps: [] });
 const typed = { runner: 'tool', args: ['whole.test.ts', '--maxWorkers=1', '--testTimeout=60000'] };
@@ -145,6 +146,34 @@ test('Python helper imports and their transitive modules are bound before driver
   assert.deepEqual(f.lines(), []);
 });
 
+for (const [surface, args] of [
+  ['runner', ['-m', 'gate_driver']], ['selection', ['-m', 'gate_driver']],
+  ['selection', ['-mgate_driver']], ['selection', ['-Im', 'gate_driver']],
+  ['runner', ['-c', "raise Exception('inline must not run')"]],
+  ['selection', ['-c', "raise Exception('inline must not run')"]],
+  ['selection', ["-Icraise Exception('inline must not run')"]],
+  ['promotion', ['-m', 'gate_driver']], ['preparation', ['-m', 'gate_driver']],
+  ['planner', ['-m', 'gate_driver']], ['planner preparation', ['-m', 'gate_driver']],
+]) test(`Python ${surface} ${args[0]} refuses even with only a helper edit`, t => {
+  const value = declaration(); value.runners.python = { command: ['python3'], cwd: '.' };
+  if (surface === 'runner') value.runners.python.command.push(...args);
+  if (surface === 'promotion') value.promotion = 'python3 ' + args.join(' ');
+  if (surface === 'preparation') value.gate.prepare = [{ run: 'python3 ' + args.join(' ') }];
+  if (surface === 'planner') value.promotion_tests.command = ['python3', ...args];
+  if (surface === 'planner preparation') value.promotion_tests.prepare = [{ run: 'python3 ' + args.join(' ') }];
+  const f = declaredFixture(t, { declared: value }), evidence = { commands: [] };
+  f.write('gate_driver.py', "import gate_support\ngate_support.run()\n");
+  f.write('gate_support.py', "import os\ndef run():\n    open(os.environ['CHECK_LOG'],'a').write('module ran\\n')\n");
+  f.commit(); f.git(['rebase', 'main'], f.workspace);
+  const options = { required: surface === 'selection' ? [{ runner: 'python', args }] : [], evidence };
+  const refused = error => error.code === 'DECLARED_PYTHON_FILE_REQUIRED' && /declare a Python driver file/.test(error.message);
+  assert.throws(() => f.plan(options), refused, 'the launch form itself must refuse on the unchanged base');
+  f.write('gate_support.py', 'def run():\n    pass\n', f.workspace); f.commit(f.workspace);
+  assert.throws(() => f.plan(options), refused, 'a helper-only change cannot turn the unsupported launch green');
+  assert.deepEqual(f.lines(), []);
+  assert.equal(evidence.commands.some(row => row.command?.includes('python3')), false);
+});
+
 test('an undeclared generated Python helper refuses before the baseline', t => {
   const value = declaration(); value.runners.python = { command: ['python3'], cwd: '.' };
   value.gate.prepare = [{ run: 'node make.mjs' }];
@@ -221,6 +250,55 @@ test('replacing a mandatory-only runtime at the same path invalidates recheck an
   assert.equal(explainMiss(exactIdentity({ ...options, additional: { declared_gate: second.spec } }),
     exactIdentity({ ...options, additional: { declared_gate: first.spec } })), 'declared');
   assert.deepEqual(f.lines(), []);
+});
+
+test('a subdirectory runner binds the PATH tool actually spawned and replacement invalidates reuse', t => {
+  const value = declaration(); value.runners.tool = { command: ['gate-tool'], cwd: 'nested' };
+  const f = declaredFixture(t, { declared: value }), bin = path.join(f.root, 'bin');
+  f.write('nested/.keep', ''); f.commit(); f.git(['rebase', 'main'], f.workspace);
+  const local = path.join(f.workspace, 'nested/node_modules/.bin/gate-tool'), actual = path.join(bin, 'gate-tool');
+  fs.mkdirSync(path.dirname(local), { recursive: true }); fs.mkdirSync(bin);
+  const script = label => `#!${process.execPath}\nrequire('fs').appendFileSync(process.env.CHECK_LOG,${JSON.stringify(label + '\n')});\n`;
+  fs.writeFileSync(local, script('local tool must not run'), { mode: 0o755 });
+  fs.writeFileSync(actual, script('PATH tool one'), { mode: 0o755 });
+  f.env.PATH = bin + path.delimiter + f.env.PATH;
+  const first = f.plan({ required: [{ runner: 'tool', args: [] }] });
+  assert.equal(first.evidence.runtime.tool[0].executable, fs.realpathSync(actual));
+  assert.equal(first.spec.runtime.tool[0].executable_sha256, createHash('sha256').update(fs.readFileSync(actual)).digest('hex'));
+  assert.equal(executeDeclared(first.spec, { cwd: f.workspace, env: { ...first.env, MONITOR_VALIDATION_DEADLINE: String(first.deadline) } }), 0);
+  assert.deepEqual(f.lines(), ['baseline', 'PATH tool one']);
+  fs.writeFileSync(actual, script('PATH tool two'), { mode: 0o755 });
+  assert.throws(() => recheckDeclaredGate({ repo: f.repo, cwd: f.workspace, owner: first.spec.declaration,
+    spec: first.spec, env: first.env, deadline: first.deadline }), /runtime changed/);
+  const second = f.plan({ required: first.plan.required });
+  assert.notDeepEqual(first.spec.runtime.tool, second.spec.runtime.tool);
+  const options = { cwd: f.workspace, common: f.queue().project.identity, base: f.base(), commands: ['same command'],
+    declaration: { schema: 'validation-receipts/v1', exclude: [], environment: ['PATH'] }, env: f.env };
+  assert.equal(explainMiss(exactIdentity({ ...options, additional: { declared_gate: second.spec } }),
+    exactIdentity({ ...options, additional: { declared_gate: first.spec } })), 'declared');
+  assert.equal(executeDeclared(second.spec, { cwd: f.workspace, env: { ...second.env, MONITOR_VALIDATION_DEADLINE: String(second.deadline) } }), 0);
+  assert.deepEqual(f.lines(), ['baseline', 'PATH tool one', 'baseline', 'PATH tool two']);
+});
+
+test('runtime lookup follows relative and empty PATH entries and slash-containing commands from the runner cwd', t => {
+  const f = declaredFixture(t), cwd = path.join(f.root, 'runner'), bin = path.join(cwd, 'relative-bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const physical = path.join(cwd, 'physical/bin'); fs.mkdirSync(physical, { recursive: true });
+  fs.mkdirSync(path.join(cwd, 'physical/deep')); fs.symlinkSync('physical/deep', path.join(cwd, 'linked'));
+  for (const at of [cwd, bin, physical]) fs.writeFileSync(path.join(at, 'gate-tool'), `#!/bin/sh\nprintf '%s\\n' '${path.join(at, 'gate-tool')}'\n`, { mode: 0o755 });
+  for (const [command, PATH, expected, runnerCwd = cwd] of [
+    [['gate-tool'], 'relative-bin', path.join(bin, 'gate-tool')],
+    [['gate-tool'], '', path.join(cwd, 'gate-tool')],
+    [['./gate-tool'], bin, path.join(cwd, 'gate-tool')],
+    [['gate-tool'], 'linked/../bin', path.join(physical, 'gate-tool')],
+    [['./linked/../bin/gate-tool'], bin, path.join(physical, 'gate-tool')],
+    [['gate-tool'], '../bin', path.join(physical, 'gate-tool'), path.join(cwd, 'linked')],
+  ]) {
+    const env = { ...f.env, PATH }, facts = runtimeIdentity(command, { cwd: runnerCwd, env, deadline: Date.now() + 5000 });
+    assert.equal(facts[0].executable, expected);
+    assert.equal(f.good(f.run(command[0], command.slice(1), runnerCwd, env)), expected);
+  }
+  assert.throws(() => runtimeIdentity(['gate-tool'], { cwd, env: { ...f.env, PATH: '/absent-runtime-bin' }, deadline: Date.now() + 5000 }), /unavailable/);
 });
 
 for (const promotion of ['node baseline.mjs && python3 gate.py', 'node baseline.mjs\npython3 gate.py', 'env python3 gate.py', 'pnpm run smoke']) test(`unresolved mandatory runtime provenance refuses (${promotion})`, t => {

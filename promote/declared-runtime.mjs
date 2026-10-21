@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { hash, refuse } from './declaration.mjs';
+import { assertPythonFileLaunch } from './declared-policy.mjs';
 
 function outsideLanes(file, forbiddenRoots) {
   for (const root of forbiddenRoots) {
@@ -43,11 +44,16 @@ export const remaining = deadline => {
   return Math.max(1, Math.floor(ms));
 };
 function executable(name, cwd, env) {
-  const choices = name.includes('/') ? [path.resolve(cwd, name)] : [path.join(cwd, 'node_modules/.bin', name), ...(env.PATH ?? '').split(path.delimiter).filter(path.isAbsolute).map(dir => path.join(dir, name))];
-  for (const file of choices) try { fs.accessSync(file, fs.constants.X_OK); if (fs.statSync(file).isFile()) return fs.realpathSync(file); } catch {}
+  // Like spawn: slash-containing names bypass PATH; relative and empty PATH
+  // entries are relative to the child's cwd. No implicit local bin directory.
+  // Let the filesystem resolve symlinks before '..', as exec does.
+  const fromCwd = file => path.isAbsolute(file) ? file : `${cwd}${path.sep}${file}`;
+  const choices = name.includes('/') ? [fromCwd(name)] : (env.PATH ?? '/usr/bin:/bin').split(path.delimiter).map(dir => fromCwd(dir ? `${dir}${path.sep}${name}` : name));
+  for (const file of choices) try { fs.accessSync(file, fs.constants.X_OK); if (fs.statSync(file).isFile()) return fs.realpathSync.native(file); } catch {}
   throw refuse(`runtime executable is unavailable: ${name}`);
 }
 export function runtimeIdentity(command, { cwd, env, deadline, roots = [], forbiddenRoots = [] }) {
+  assertPythonFileLaunch(command);
   const names = [command[0]];
   const exec = command.indexOf('exec');
   if (exec >= 0 && command[exec + 1] && !command[exec + 1].startsWith('-')) names.push(command[exec + 1]);
@@ -55,6 +61,7 @@ export function runtimeIdentity(command, { cwd, env, deadline, roots = [], forbi
     remaining(deadline);
     if (depth > 4) throw refuse('runtime interpreter chain exceeds four launchers');
     const file = outsideLanes(executable(name, cwd, env), forbiddenRoots), bytes = fs.readFileSync(file);
+    if (depth === 0) assertPythonFileLaunch([file, ...command.slice(command.indexOf(name) + 1)]);
     const digest = createHash('sha256').update(bytes).digest('hex');
     const normalized = roots.reduce((value, [root, label]) => value.startsWith(root + path.sep) ? label + value.slice(root.length) : value, file);
     const shebang = bytes.subarray(0, 512).toString('utf8').match(/^#!([^\n]+)/)?.[1].trim();
@@ -73,6 +80,7 @@ export function runtimeIdentity(command, { cwd, env, deadline, roots = [], forbi
         if (at === path.dirname(at)) break;
       }
       const words = shebang.split(/\s+/), binary = words[0] === '/usr/bin/env' ? words.slice(1).find(word => !word.startsWith('-') && !word.includes('=')) : words[0];
+      assertPythonFileLaunch(words);
       if (!binary) throw refuse('unresolved runtime interpreter');
       interpreter = identify(binary, depth + 1).binding;
     } else if (file === fs.realpathSync(process.execPath)) version = process.version;

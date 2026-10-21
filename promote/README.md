@@ -42,6 +42,10 @@ Planner PATH directories and executable targets are resolved before preparation
 and invocation; a target inside any linked lane or candidate refuses. Python
 drivers bind every canonical Python source as a conservative import closure;
 new or generated local modules, import symlinks and dynamic loaders refuse.
+Python module (`-m`) and inline (`-c`) launches refuse with
+`DECLARED_PYTHON_FILE_REQUIRED`; declare a driver file instead. Executable
+discovery follows the supplied PATH and runner cwd, including relative and empty
+PATH entries, with no additional cwd-local `node_modules/.bin` search.
 The mandatory command also binds its shell, executable bytes and interpreter
 chain. It currently accepts literal simple commands; shell expansion, compound
 commands and indirect package-manager recipes refuse when their runtime chain
@@ -67,6 +71,8 @@ Verified integrated checkpoints recover under their captured declaration before
 current admission or host checks. Recovery verifies the original job, literal
 gate, log, replayed tree and containment on the captured integration branch;
 it retains the execution-identity fences and repeats no project commands.
+Final refused members retain their results during mixed-batch recovery; current
+declaration admission applies only to members that still need execution.
 
 Settle's observational planning also enters the owner's host admission, retains
 its canonical planner/runtime provenance under `promote/planning/`, and runs no

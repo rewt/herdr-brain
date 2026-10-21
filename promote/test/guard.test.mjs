@@ -12,12 +12,15 @@ import { GREEN_CONTRACTS } from '../../supervisor/green-pass.mjs';
 import { renderer } from '../../supervisor/test/green-fixture.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
-import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 
 // Containment is installed already; green checks require absent loader inputs.
 delete process.env.NODE_OPTIONS;
+// Node's runner forwards name selection in execArgv. Remove only that runner
+// flag before pinning the private Brain launcher used by the native children.
+process.execArgv = process.execArgv.filter(arg => !arg.startsWith('--test-name-pattern='));
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const loader = fileURLToPath(new URL('./helpers/green-loader.mjs', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -127,7 +130,11 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
   t.after(async () => {
     fs.writeFileSync(path.join(root, 'release-anchor'), 'release');
     if (workerDone) await workerDone;
-    await waitForInboxIdle(path.join(org, 'supervisor/inbox.log'));
+    // Worker completion hands notices to a durable owner. Delivery is outside
+    // these guard assertions; stop that fixture owner after all senders exit.
+    await stopFixtureInbox(path.join(org, 'supervisor/inbox.log'), {
+      script: path.join(repo, 'supervisor/prompt-supervisor.mjs'),
+    });
     for (const canonical of new Set([repo, project])) {
       const closeout = path.join(canonical, '.git/closeout');
       assert.equal(fs.existsSync(path.join(closeout, 'consumer.lock')), false, 'private fixture has no closeout owner');

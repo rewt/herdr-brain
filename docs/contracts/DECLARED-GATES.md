@@ -1,8 +1,8 @@
 # Project-declared promotion gates
 
-Status: **contract proposal for ARCH-38, stage 1; implementation and activation
-await the supervisor's authority review on `review-sol-max`.** This document
-changes no executable, project configuration, permission or active gate.
+Status: **binding contract for ARCH-38, approved 2026-10-21 on `review-sol-max`;
+review `lr-aa342e2099490484937ea7ba9c7baa53` (`af96a9a-r1`), PASS.** Approval
+covers the contract; implementation and activation require their own evidence.
 
 The agreed [2026-10-21 plan, sections 2.5 and 3.2](/Users/rewt/development/rewt/.org/proposals/PLAN-20261021.md)
 requires a project's train, gates and sessions to run as that project's identity.

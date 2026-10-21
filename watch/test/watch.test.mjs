@@ -23,7 +23,6 @@ import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { createRunEventTail } from '../record-tail.mjs';
-import { seedSpawnRun } from './record-fixture.mjs';
 
 const TEST_ENV = { ...process.env, BRAIN_SHADOW_ROOT: process.env.BRAIN_SHADOW_ROOT || path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'), ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
@@ -390,7 +389,7 @@ test('spawn resolves the cwd workspace when it is run outside a Herdr pane', t =
   const cwd = path.join(root, 'checkout');
   const herdr = path.join(root, 'herdr');
   fs.mkdirSync(cwd);
-  seedSpawnRun(path.join(root, '.org'), cwd, TEST_ENV);
+  seedOwnedRun(path.join(root, '.org'), 'R-6');
   executable(herdr, `case "$1 $2" in
   "workspace list") printf '%s\\n' '{"result":{"workspaces":[{"workspace_id":"w-canonical","worktree":{"checkout_path":"${cwd}"}}]}}' ;;
   *) exit 2 ;;

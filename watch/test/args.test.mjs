@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 import test from '../../test/helpers/bounded-test.mjs';
 import { seedOwnedRun } from '../../test/helpers/run-claim.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
-import { seedSpawnRun } from './record-fixture.mjs';
 
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
 async function exited(pid, ms = 10000) {
@@ -26,7 +25,7 @@ for (const scenario of ['supplied', 'repeated', 'discovered']) {
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const cwd = path.join(root, 'checkout'), org = path.join(root, '.org');
     fs.mkdirSync(cwd);
-    seedSpawnRun(org, cwd);
+    seedOwnedRun(org, 'R-6');
     const bindings = scenario === 'supplied'
       ? ['--org', './.org', '--to', 'named-supervisor', '--cwd', './checkout']
       : scenario === 'repeated'

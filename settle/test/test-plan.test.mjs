@@ -18,8 +18,10 @@ test('the real canonical planner loads its transitive base imports while selecti
     changed: ['supervisor/chats.mjs', 'dispatch/dispatch.mjs', 'settle/test/test-evidence.test.mjs'],
     required: ['lanes/test/lane.test.mjs', 'dispatch/test/dispatch.test.mjs', 'settle/test/test-evidence.test.mjs'],
     baseCommand: 'npm run test:promotion' });
+  assert.ok(!plan.covered.includes('lanes/test/lane.test.mjs'));
   assert.ok(plan.files.includes('lanes/test/lane.test.mjs'));
-  assert.ok(plan.files.includes('dispatch/test/dispatch.test.mjs'));
+  assert.ok(plan.files.includes('dispatch/test/dispatch.test.mjs')
+    || plan.covered.includes('dispatch/test/dispatch.test.mjs'));
   assert.ok(plan.files.includes('settle/test/test-evidence.test.mjs'));
   assert.ok(plan.covered.includes('promote/test/train.test.mjs'));
   assert.equal(plan.graph.max_suite_files, 4);

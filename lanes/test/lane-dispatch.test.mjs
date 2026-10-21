@@ -34,6 +34,7 @@ import {
   runRegistryChild,
   expectUnsafeDispatchRefusal,
   makeReviewFixture,
+  accelerateAgentReadWaits,
   privateReviewDelivery,
 } from "./lane-fixture.mjs";
 
@@ -622,6 +623,93 @@ test("dispatch persists immutable occupant evidence as display-only optional met
   } finally {
     fixture.cleanup();
   }
+});
+
+for (const [stage, phase, at] of [['ready', 'before', 1], ['cwd', 'before', 2], ['delivery', 'after', 1]]) {
+  test(`dispatch retries one inconsistent list/get pair during ${stage}`, async () => {
+    const fixture = makeFixture();
+    const topic = `dispatch-race-${stage}`;
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, topic);
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}`, initiallyOpened: true });
+      fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+      fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({ phase, at, count: 1, change: { terminal_id: 'racing-terminal' } });
+      const run = lane(fixture, ['dispatch', topic, '--json', 'Deliver once']);
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(JSON.parse(run.stdout).terminalId, 'fixture-terminal-1');
+      assert.equal(fake.state().identityRaceReads, 1);
+      assert.ok(fake.state().detailReads[phase] > at, 'the inconsistent pair was re-read');
+      assert.equal(fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, 1);
+      assert.equal(fake.calls().some(args => args[1] === 'close'), false);
+      const { loadRegistry } = await registryApi();
+      assert.equal(loadRegistry(fixture.repo).sessions.length, 1);
+    } finally { fixture.cleanup(); }
+  });
+}
+
+for (const [stage, at] of [['ready', 1], ['cwd', 2]]) {
+  test(`dispatch diagnoses a persistent list/get identity race during ${stage} through failedTab`, async () => {
+    const fixture = makeFixture();
+    const topic = `dispatch-persistent-${stage}`;
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, topic);
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}`, initiallyOpened: true });
+      fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+      fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({ phase: 'before', at, count: 'always', change: { pane_id: 'other-pane' } });
+      accelerateAgentReadWaits(fixture);
+      const run = lane(fixture, ['dispatch', topic, 'Never deliver']);
+      assert.equal(run.status, 1, run.stderr);
+      assert.match(run.stderr, /^lane: native agent detail identity changed for .+; tab closed, brief NOT sent\n$/u);
+      assert.ok(fake.state().identityRaceReads > 1, 'persistent disagreement was retried to the readiness deadline');
+      assert.deepEqual(fake.calls().filter(args => args[0] === 'tab' && args[1] === 'close'), [['tab', 'close', 'w-lane:t2']]);
+      assert.equal(fake.calls().some(args => args[1] === 'prompt'), false);
+      const { loadRegistry } = await registryApi();
+      assert.deepEqual(loadRegistry(fixture.repo).sessions, []);
+    } finally { fixture.cleanup(); }
+  });
+}
+
+for (const [key, value] of Object.entries({ name: 'replacement', pane_id: 'other-pane',
+  workspace_id: 'other-workspace', cwd: '/other-cwd', terminal_id: 'other-terminal' })) {
+  test(`dispatch cannot recover a list/get race by accepting a replacement ${key}`, () => {
+    const fixture = makeFixture();
+    const topic = `dispatch-replace-${key.replaceAll('_', '-')}`;
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, topic);
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}`, initiallyOpened: true });
+      fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+      fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({ phase: 'before', at: 1, count: 1, change: { [key]: value }, replace: true });
+      accelerateAgentReadWaits(fixture);
+      const run = lane(fixture, ['dispatch', topic, 'Never deliver']);
+      assert.equal(run.status, 1, run.stderr);
+      assert.match(run.stderr, /native agent detail identity changed.+tab closed, brief NOT sent/u);
+      assert.equal(fake.state().identityRaceReads, 1);
+      assert.ok(fake.calls().filter(args => args[0] === 'agent' && args[1] === 'list').length > 2);
+      assert.equal(fake.calls().some(args => args[1] === 'prompt'), false);
+    } finally { fixture.cleanup(); }
+  });
+}
+
+test('dispatch cannot recover an identity race from summaries with unavailable detail', () => {
+  const fixture = makeFixture();
+  const topic = 'dispatch-race-no-detail';
+  try {
+    ignoreLaneState(fixture);
+    const path = openLane(fixture, topic);
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}`, initiallyOpened: true });
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({ phase: 'before', at: 1, count: 1,
+      change: { terminal_id: 'racing-terminal' }, unavailableAfterRace: true });
+    accelerateAgentReadWaits(fixture);
+    const run = lane(fixture, ['dispatch', topic, 'Never deliver']);
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /native agent detail identity changed.+tab closed, brief NOT sent/u);
+    assert.ok(fake.state().detailReads.before > 1);
+    assert.equal(fake.calls().some(args => args[1] === 'prompt'), false);
+  } finally { fixture.cleanup(); }
 });
 
 test("dispatch does not write a claim when the prompted occupant is replaced", async () => {

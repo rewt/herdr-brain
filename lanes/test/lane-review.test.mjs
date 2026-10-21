@@ -13,6 +13,8 @@ import {
   git,
   lane,
   makeReviewFixture,
+  accelerateAgentReadWaits,
+  registryApi,
   reviewPayloadFixture,
   HISTORICAL_REVIEW_ABSOLUTE_PATH_PATTERN,
   HISTORICAL_REVIEW_AMBIGUOUS_PATH_PATTERN,
@@ -21,6 +23,57 @@ import {
 // Assert fixture targets here so one-hop planning sees both indirect CLI dependencies.
 assert.equal(LANE, resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs")));
 assert.equal(HERDR_CLIENT, resolve(HERE, "..", "board", "herdr-client.mjs"));
+
+for (const [stage, phase, at] of [['ready', 'before', 1], ['cwd', 'before', 2],
+  ['delivery', 'after', 1], ['session-poll', 'after', 2]]) {
+  test(`review proceeds after one inconsistent list/get pair during ${stage}`, async () => {
+    const topic = `review-race-${stage}`, review = makeReviewFixture(topic, { verdict: 'PASS' });
+    const { fixture, fake } = review;
+    try {
+      fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+      fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = '3';
+      fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({ phase, at, count: 1, change: { terminal_id: 'racing-terminal' } });
+      const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '12']);
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(run.stdout, 'PASS\n');
+      assert.doesNotMatch(run.stderr, /identity changed|Herdr command error|unexpected failure/u);
+      assert.equal(fake.state().identityRaceReads, 1);
+      assert.ok(fake.state().detailReads[phase] > at);
+      assert.equal(fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, 1);
+      assert.equal(fake.calls().some(args => args[1] === 'close'), false);
+      const { loadRegistry } = await registryApi();
+      const [record] = loadRegistry(fixture.repo).sessions;
+      assert.equal(record.agent_session_id, 'fixture-session-1');
+      assert.equal(record.terminal_id, 'fixture-terminal-1');
+      const head = git(review.path, ['rev-parse', 'HEAD']);
+      assert.match(readFileSync(join(review.path, 'docs', 'reviews', topic, `${head.slice(0, 7)}-r1.md`), 'utf8'), /^\*\*PASS\*\*/u);
+    } finally { fixture.cleanup(); }
+  });
+
+  test(`review names a persistent list/get identity race during ${stage}`, async () => {
+    const topic = `review-persistent-${stage}`, review = makeReviewFixture(topic, { verdict: 'PASS' });
+    const { fixture, fake } = review;
+    try {
+      fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+      fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = '3';
+      fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({ phase, at, count: 'always', change: { pane_id: 'other-pane' } });
+      accelerateAgentReadWaits(fixture);
+      const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '12']);
+      assert.equal(run.status, 2, run.stderr);
+      assert.match(run.stderr, /lane review: .*native agent detail identity changed/u);
+      assert.doesNotMatch(run.stderr, /Herdr command error|unexpected failure|^\s+at /mu);
+      assert.equal(run.stdout, '');
+      assert.ok(fake.state().identityRaceReads > 1, 'the existing deadline permits repeated observations');
+      const delivered = phase === 'after';
+      assert.equal(fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, delivered ? 1 : 0);
+      assert.equal(fake.calls().some(args => args[0] === 'tab' && args[1] === 'close'), !delivered);
+      assert.match(run.stderr, delivered ? /partial success: the brief was already sent.*do not replay dispatch/u : /tab closed, brief NOT sent/u);
+      const { loadRegistry } = await registryApi();
+      assert.deepEqual(loadRegistry(fixture.repo).sessions, []);
+      assert.equal(existsSync(join(review.path, 'docs', 'reviews', topic)), false);
+    } finally { fixture.cleanup(); }
+  });
+}
 
 test('review follow-up declaration requires a run and rejects duplicate or valued boolean flags', () => {
   const review = makeReviewFixture('review-followup-option');

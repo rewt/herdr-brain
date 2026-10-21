@@ -915,19 +915,50 @@ function newAgentName(topic, reserved = new Set()) {
   fail(`cannot produce a unique Herdr agent name for ${topic}`);
 }
 
-function agentRecord(agentName, deadline) {
+class NativeAgentIdentityChanged extends Error {
+  constructor(agentName, agent) {
+    super(`native agent detail identity changed for ${agentName}`);
+    this.agent = agent;
+  }
+}
+
+function sameAgentIdentity(agent, detail) {
+  return ["name", "pane_id", "workspace_id"].every(key => agent[key] && detail[key] === agent[key]) &&
+    samePath(detail.cwd, agent.cwd) && (!agent.terminal_id || detail.terminal_id === agent.terminal_id) &&
+    (!agent.agent || detail.agent === agent.agent) &&
+    (!agent.agent_session?.value || detail.agent_session?.value === agent.agent_session.value);
+}
+
+function agentRecord(agentName, deadline, requireDetail = false) {
   const listed = herdrJson(["agent", "list"], { deadline });
   const agent = listed?.agents?.find((a) => a.name === agentName);
-  if (!agent || agent.agent_session?.value) return agent;
+  if (!agent || (agent.agent_session?.value && !requireDetail)) return agent;
   // The list is a summary; Codex's native session can appear only in detail.
   const detail = herdrJson(["agent", "get", agentName], { deadline })?.agent;
-  if (!detail) return agent;
-  if (["name", "pane_id", "workspace_id"].some(key => !agent[key] || detail[key] !== agent[key]) ||
-      !samePath(detail.cwd, agent.cwd) || (agent.terminal_id && detail.terminal_id !== agent.terminal_id) ||
-      (agent.agent && detail.agent !== agent.agent)) {
-    throw new Error(`native agent detail identity changed for ${agentName}`);
-  }
+  if (!detail) return requireDetail ? undefined : agent;
+  if (!sameAgentIdentity(agent, detail)) throw new NativeAgentIdentityChanged(agentName, agent);
   return { ...agent, ...detail };
+}
+
+function retryAgentRecord(agentName, deadline, expected) {
+  let changed;
+  for (;;) {
+    if (changed && (deadline === undefined || Date.now() >= deadline)) throw changed;
+    try {
+      const record = agentRecord(agentName, deadline, changed !== undefined);
+      if (!changed) return record;
+      // A recovered read must still name the original occupant, including any
+      // terminal/session already verified by this caller. An unavailable read
+      // cannot erase the disagreement or authorize a summary-only fallback.
+      if (record && sameAgentIdentity(changed.agent, record) &&
+          (!expected || sameAgentIdentity(expected, record)) && Date.now() < deadline) return record;
+    } catch (error) {
+      if (!(error instanceof NativeAgentIdentityChanged)) throw error;
+      changed ??= error;
+    }
+    if (deadline === undefined || Date.now() >= deadline) throw changed;
+    sleepMs(Math.min(250, deadline - Date.now()));
+  }
 }
 
 function agentOnPane(pane, deadline) {
@@ -943,10 +974,16 @@ function sleepMs(ms) {
 // that instant; started during shell init the agent lands in the wrong
 // directory and runs its brief there. Refuse to prompt unless herdr reports
 // the agent's cwd as the lane worktree.
-function verifyAgentCwd(agentName, path, deadline) {
-  const record = agentRecord(agentName, deadline);
-  if (record === undefined) return { ok: false, cwd: undefined, record: undefined };
-  return { ok: samePath(record.cwd, path), cwd: record.cwd, record };
+function verifyAgentCwd(agentName, path, deadline, expected) {
+  try {
+    const record = retryAgentRecord(agentName, deadline, expected);
+    if (record === undefined) return { ok: false, cwd: undefined, record: undefined };
+    if (expected && !sameAgentIdentity(expected, record)) throw new NativeAgentIdentityChanged(agentName, expected);
+    return { ok: samePath(record.cwd, path), cwd: record.cwd, record };
+  } catch (error) {
+    if (!(error instanceof NativeAgentIdentityChanged)) throw error;
+    return { ok: false, reason: error.message };
+  }
 }
 
 // Preflight the final trees of `branch` and `against` with merge-tree (no
@@ -1354,18 +1391,31 @@ function dispatch(topic, promptText, options = {}) {
   }
   // codex asks to trust a directory it has not seen; accept the preselected
   // "Yes, continue" — the directory is this repository's own worktree.
-  for (let attempt = 0; attempt < readyAttempts && (options.deadline === undefined || Date.now() < options.deadline); attempt += 1) {
+  const readyDeadline = Math.min(options.deadline ?? Infinity, Date.now() + readyAttempts * 1000);
+  let readyRecord;
+  for (let attempt = 0; attempt < readyAttempts && Date.now() < readyDeadline; attempt += 1) {
     const visible = spawnSync("herdr", ["agent", "read", agentName, "--source", "visible"], { encoding: "utf8" }).stdout ?? "";
-    const status = agentRecord(agentName, options.deadline)?.agent_status;
+    try {
+      readyRecord = retryAgentRecord(agentName, readyDeadline);
+    } catch (error) {
+      if (!(error instanceof NativeAgentIdentityChanged)) throw error;
+      fail(`${error.message}; ${failedTab()}, brief NOT sent`);
+    }
+    const status = readyRecord?.agent_status;
     if (visible.includes("Do you trust the contents of this directory")) {
       spawnSync("herdr", ["agent", "send-keys", agentName, "Enter"], { encoding: "utf8" });
     } else if (status === "idle" || status === "done" || status === "working") {
       break;
     }
-    sleepMs(Math.min(1000, Math.max(1, (options.deadline ?? (Date.now() + 1000)) - Date.now())));
+    sleepMs(Math.min(1000, Math.max(1, readyDeadline - Date.now())));
   }
-  const cwdCheck = verifyAgentCwd(agentName, path, options.deadline);
+  const cwdCheck = verifyAgentCwd(agentName, path, readyDeadline, readyRecord);
+  if (cwdCheck.ok && (cwdCheck.record.pane_id !== pane || cwdCheck.record.workspace_id !== workspaceId)) {
+    cwdCheck.ok = false;
+    cwdCheck.reason = `native agent detail identity changed for ${agentName}`;
+  }
   if (!cwdCheck.ok) {
+    if (cwdCheck.reason) fail(`${cwdCheck.reason}; ${failedTab()}, brief NOT sent`);
     fail(`agent '${agentName}' is running in '${cwdCheck.cwd}', not the lane worktree ${path}; ${failedTab()}, brief NOT sent`);
   }
   // The native registry now names this agent in the verified lane pane. The
@@ -1444,7 +1494,7 @@ function dispatch(topic, promptText, options = {}) {
     const beforeTerminalId = cwdCheck.record?.terminal_id;
     const hasTerminal = typeof beforeTerminalId === "string" && beforeTerminalId !== "";
     const observe = (deadline, allowUnavailable = false) => {
-      const live = agentRecord(agentName, deadline);
+      const live = retryAgentRecord(agentName, deadline, cwdCheck.record);
       if (live === undefined && allowUnavailable) return undefined;
       if (live === undefined || live.name !== agentName || live.pane_id !== pane ||
           live.workspace_id !== workspaceId || !samePath(live.cwd, path) ||
@@ -1457,12 +1507,16 @@ function dispatch(topic, promptText, options = {}) {
       }
       return live;
     };
-    let liveAfterDelivery = observe(options.deadline);
+    // The first post-delivery read shares the existing observation allowance;
+    // a list/get race must not spend the whole review wait or restart its clock.
+    const started = performance.now();
+    const deadline = deferredReviewReceipt && hasTerminal
+      ? Math.min(options.deadline - REVIEW_SETTLE_MS - 1000, Date.now() + 10000)
+      : readyDeadline;
+    let liveAfterDelivery = observe(deadline);
     if (deferredReviewReceipt && hasTerminal) {
       // Share the saved delivery deadline, leaving time for the review's settled
       // file read. A session that never appears must not consume the review wait.
-      const deadline = Math.min(options.deadline - REVIEW_SETTLE_MS - 1000, Date.now() + 10000);
-      const started = performance.now();
       while (!liveAfterDelivery.agent_session?.value && Date.now() < deadline && performance.now() - started < 10000) {
         sleepMs(Math.max(0, Math.min(250, deadline - Date.now(), 10000 - (performance.now() - started))));
         if (Date.now() >= deadline || performance.now() - started >= 10000) break;
@@ -2814,7 +2868,7 @@ switch (command) {
     const [agentName, expectedPath] = [topic, rest[0]];
     if (agentName === undefined || expectedPath === undefined) fail("usage: lane.mjs verify-agent <agent-name> <worktree-path>");
     const check = verifyAgentCwd(agentName, resolve(expectedPath));
-    process.stdout.write(`${check.ok ? "ok" : "MISMATCH"}: agent ${agentName} cwd=${check.cwd} expected=${resolve(expectedPath)}\n`);
+    process.stdout.write(`${check.ok ? "ok" : "MISMATCH"}: agent ${agentName} cwd=${check.cwd} expected=${resolve(expectedPath)}${check.reason ? `; ${check.reason}` : ""}\n`);
     process.exit(check.ok ? 0 : 1);
   }
   case "prepare": {

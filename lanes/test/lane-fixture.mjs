@@ -312,6 +312,7 @@ const nativeAgent = () => ({
     agent_session: { agent: "codex", kind: "id", source: "herdr:codex", value: state.agentSession || "fixture-session-1" },
     } : {}),
     ...(state.prompted && state.sessionReads >= 2 ? JSON.parse(process.env.FAKE_HERDR_CHANGE_SESSION_OBSERVATION || '{}') : {}),
+    ...(state.agentReplacement || {}),
 });
 if (args[0] === "workspace" && args[1] === "list") {
   stallObservation('workspace');
@@ -506,8 +507,21 @@ if (args[0] === "workspace" && args[1] === "list") {
   if (process.env.FAKE_HERDR_SESSION_DETAIL_ONLY === '1') delete agent.agent_session;
   result("cli:agent:list", { type: "agent_list", agents: state.agent ? [agent] : [] });
 } else if (args[0] === "agent" && args[1] === "get") {
-  if (state.prompted) { state.sessionReads = (state.sessionReads || 0) + 1; save(); }
-  result("cli:agent:get", { agent: state.agent === args[2] ? nativeAgent() : undefined });
+  if (state.prompted) state.sessionReads = (state.sessionReads || 0) + 1;
+  const phase = state.prompted ? 'after' : 'before';
+  state.detailReads ||= { before: 0, after: 0 };
+  const read = ++state.detailReads[phase];
+  const race = JSON.parse(process.env.FAKE_HERDR_DETAIL_RACE || 'null');
+  let agent = state.agent === args[2] ? nativeAgent() : undefined;
+  if (agent && race?.phase === phase && read >= race.at) {
+    if (race.count === 'always' || read < race.at + race.count) {
+      agent = { ...agent, ...race.change };
+      state.identityRaceReads = (state.identityRaceReads || 0) + 1;
+      if (race.replace) state.agentReplacement = race.change;
+    } else if (race.unavailableAfterRace) agent = undefined;
+  }
+  save();
+  result("cli:agent:get", { agent });
 } else if (args[0] === "agent" && args[1] === "read") {
   process.stdout.write("");
 } else if (args[0] === "agent" && args[1] === "focus") {
@@ -806,6 +820,19 @@ function makeReviewFixture(topic, options = {}) {
   return { fixture, path, brief, fake };
 }
 
+function accelerateAgentReadWaits(fixture) {
+  const clock = join(fixture.root, 'agent-read-clock.mjs');
+  // Advance only the lane CLI's synchronous waits. Fake Herdr remains a real
+  // subprocess, and review file settling still uses real asynchronous timers.
+  writeFileSync(clock, `if (process.argv[1] === ${JSON.stringify(LANE)}) {
+    const now = Date.now;
+    let elapsed = 0;
+    Date.now = () => now() + elapsed;
+    Atomics.wait = (_view, _index, _value, ms) => { elapsed += ms * 10; return 'timed-out'; };
+  }\n`);
+  fixture.env.NODE_OPTIONS = `${fixture.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(clock)}`;
+}
+
 function reviewPayloadFixture(path) {
   const record = readFileSync(path, "utf8");
   const section = (name, next) => {
@@ -884,6 +911,7 @@ export {
   runRegistryChild,
   expectUnsafeDispatchRefusal,
   makeReviewFixture,
+  accelerateAgentReadWaits,
   reviewPayloadFixture,
   privateReviewDelivery,
   HISTORICAL_REVIEW_ABSOLUTE_PATH_PATTERN,

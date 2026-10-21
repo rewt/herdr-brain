@@ -11,11 +11,12 @@ import { loadAwareCommand } from './commands.mjs';
 import { waitUntil } from './load.mjs';
 import { scratchFixtureCommand, scratchProductHomes, enterScratchHomes } from './environment.mjs';
 
-// ENG-512: the native/concurrent-suite phase envelope is 1.044 s train,
-// 0.347 s record closeout, 7.999 s guarded cleanup and 0.496 s delivery.
-// Add a 150 ms observation cadence and 50% I/O margin, rounded up to 16 s.
-// Cleanup includes the host scratch scan (ENG-511); waitUntil still applies
-// the shared load factor once, independently of heavy-load classification.
+// ENG-512: cross-run phase maxima plus polling originally totaled 10.036 s;
+// 50% I/O margin rounded that envelope up to a 16 s base. R-700 observed an
+// actual 12.217 s queue completion (10.230 s cleanup, 7.601 s scratch scan).
+// Updated phase maxima plus polling total 12.326 s, leaving 29.8% base margin.
+// These are base comparisons: waitUntil applies the shared load factor once.
+// See docs/evidence/BCD-CASE17-20261021/R-700.md; cleanup belongs to ENG-511.
 export function waitForPromotionQueue(queue, until = waitUntil) {
   return until(() => queue().results.length === 1, 'finite queue completed', 16_000);
 }

@@ -503,8 +503,18 @@ if (args[0] === "workspace" && args[1] === "list") {
   save();
   result("cli:agent:start", { type: "agent_start", name: state.agent, pane_id: state.agentPane });
 } else if (args[0] === "agent" && args[1] === "list") {
-  const agent = nativeAgent();
+  let agent = nativeAgent();
   if (process.env.FAKE_HERDR_SESSION_DETAIL_ONLY === '1') delete agent.agent_session;
+  const phase = state.prompted ? 'after' : 'before';
+  const read = (state.detailReads?.[phase] || 0) + 1;
+  const race = JSON.parse(process.env.FAKE_HERDR_DETAIL_RACE || 'null');
+  if (state.agent && race?.side === 'list' && race.phase === phase && read >= race.at &&
+      (race.count === 'always' || read < race.at + race.count)) {
+    agent = { ...agent, ...race.change };
+    state.identityRaceReads = (state.identityRaceReads || 0) + 1;
+    if (race.replace) state.pendingAgentReplacement = race.change;
+    save();
+  }
   result("cli:agent:list", { type: "agent_list", agents: state.agent ? [agent] : [] });
 } else if (args[0] === "agent" && args[1] === "get") {
   if (state.prompted) state.sessionReads = (state.sessionReads || 0) + 1;
@@ -513,17 +523,29 @@ if (args[0] === "workspace" && args[1] === "list") {
   const read = ++state.detailReads[phase];
   const race = JSON.parse(process.env.FAKE_HERDR_DETAIL_RACE || 'null');
   let agent = state.agent === args[2] ? nativeAgent() : undefined;
-  if (agent && race?.phase === phase && read >= race.at) {
+  if (agent && race?.side !== 'list' && race?.phase === phase && read >= race.at) {
     if (race.count === 'always' || read < race.at + race.count) {
       agent = { ...agent, ...race.change };
       state.identityRaceReads = (state.identityRaceReads || 0) + 1;
       if (race.replace) state.agentReplacement = race.change;
     } else if (race.unavailableAfterRace) agent = undefined;
   }
+  if (state.pendingAgentReplacement) {
+    state.agentReplacement = state.pendingAgentReplacement;
+    delete state.pendingAgentReplacement;
+  }
   save();
   result("cli:agent:get", { agent });
 } else if (args[0] === "agent" && args[1] === "read") {
-  process.stdout.write("");
+  state.readinessReads = (state.readinessReads || 0) + 1;
+  if (state.readinessReads === 2 && process.env.FAKE_HERDR_READY_REPLACEMENT) {
+    state.agentReplacement = JSON.parse(process.env.FAKE_HERDR_READY_REPLACEMENT);
+  }
+  save();
+  process.stdout.write(state.readinessReads <= Number(process.env.FAKE_HERDR_TRUST_READS || 0)
+    ? "Do you trust the contents of this directory" : "");
+} else if (args[0] === "agent" && args[1] === "send-keys") {
+  result("cli:agent:send-keys", { name: args[2] });
 } else if (args[0] === "agent" && args[1] === "focus") {
   state.focusSocket = process.env.HERDR_SOCKET_PATH;
   save();
@@ -833,6 +855,26 @@ function accelerateAgentReadWaits(fixture) {
   fixture.env.NODE_OPTIONS = `${fixture.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(clock)}`;
 }
 
+function advanceDeliveryClock(fixture, milliseconds) {
+  const clock = join(fixture.root, 'delivery-clock.mjs');
+  // Simulate prompt delivery spending the readiness allowance without a 30 s wait.
+  writeFileSync(clock, `import childProcess from 'node:child_process';
+    import { syncBuiltinESMExports } from 'node:module';
+    if (process.argv[1] === ${JSON.stringify(LANE)}) {
+      const now = Date.now;
+      let elapsed = 0;
+      Date.now = () => now() + elapsed;
+      const run = childProcess.execFileSync;
+      childProcess.execFileSync = function(file, args, options) {
+        const result = run.call(this, file, args, options);
+        if (file === 'herdr' && args[0] === 'agent' && args[1] === 'prompt') elapsed += ${milliseconds};
+        return result;
+      };
+      syncBuiltinESMExports();
+    }\n`);
+  fixture.env.NODE_OPTIONS = `${fixture.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(clock)}`;
+}
+
 function reviewPayloadFixture(path) {
   const record = readFileSync(path, "utf8");
   const section = (name, next) => {
@@ -912,6 +954,7 @@ export {
   expectUnsafeDispatchRefusal,
   makeReviewFixture,
   accelerateAgentReadWaits,
+  advanceDeliveryClock,
   reviewPayloadFixture,
   privateReviewDelivery,
   HISTORICAL_REVIEW_ABSOLUTE_PATH_PATTERN,

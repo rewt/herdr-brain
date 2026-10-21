@@ -14,6 +14,7 @@ import {
   lane,
   makeReviewFixture,
   accelerateAgentReadWaits,
+  advanceDeliveryClock,
   registryApi,
   reviewPayloadFixture,
   HISTORICAL_REVIEW_ABSOLUTE_PATH_PATTERN,
@@ -74,6 +75,101 @@ for (const [stage, phase, at] of [['ready', 'before', 1], ['cwd', 'before', 2],
     } finally { fixture.cleanup(); }
   });
 }
+
+for (const [stage, phase, at, trust = false] of [
+  ['ready-poll', 'before', 2, true], ['cwd', 'before', 2],
+  ['delivery', 'after', 1], ['session-poll', 'after', 2],
+]) test(`review recovers a transient list-side disagreement during ${stage}`, async () => {
+  const topic = `review-list-race-${stage}`, review = makeReviewFixture(topic, { verdict: 'PASS' });
+  const { fixture, fake } = review;
+  try {
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = '3';
+    fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({
+      phase, at, side: 'list', count: 1, change: { terminal_id: 'racing-terminal' },
+    });
+    if (trust) fixture.env.FAKE_HERDR_TRUST_READS = '1';
+    const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '12']);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout, 'PASS\n');
+    assert.equal(fake.state().identityRaceReads, 1);
+    assert.ok(fake.state().detailReads[phase] > at);
+    assert.equal(fake.calls().filter(args => args[1] === 'prompt').length, 1);
+    assert.equal(fake.calls().some(args => args[1] === 'close'), false);
+    const { loadRegistry } = await registryApi();
+    const [record] = loadRegistry(fixture.repo).sessions;
+    assert.equal(record.agent_session_id, 'fixture-session-1');
+    assert.equal(record.terminal_id, 'fixture-terminal-1');
+    const head = git(review.path, ['rev-parse', 'HEAD']);
+    assert.match(readFileSync(join(review.path, 'docs', 'reviews', topic, `${head.slice(0, 7)}-r1.md`), 'utf8'), /^\*\*PASS\*\*/u);
+  } finally { fixture.cleanup(); }
+});
+
+for (const race of [false, true]) test(`review pins its first readiness occupant across ${race ? 'a list/get race' : 'consistent polls'}`, async () => {
+  const topic = `review-ready-replaced-${race}`, review = makeReviewFixture(topic, { verdict: 'PASS' });
+  const { fixture, fake } = review;
+  try {
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = '0';
+    fixture.env.FAKE_HERDR_TRUST_READS = '1';
+    const change = { terminal_id: 'replacement-terminal' };
+    if (race) fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({
+      phase: 'before', at: 2, side: 'list', count: 1, change, replace: true,
+    });
+    else fixture.env.FAKE_HERDR_READY_REPLACEMENT = JSON.stringify(change);
+    accelerateAgentReadWaits(fixture);
+    const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '45']);
+    assert.equal(run.status, 2, run.stderr);
+    assert.match(run.stderr, /lane review: native agent detail identity changed for .+; tab closed, brief NOT sent/u);
+    assert.doesNotMatch(run.stderr, /Herdr command error|unexpected failure|^\s+at /mu);
+    assert.ok(fake.state().readinessReads >= 2);
+    assert.equal(fake.state().agentReplacement.terminal_id, 'replacement-terminal');
+    assert.equal(fake.state().identityRaceReads ?? 0, race ? 1 : 0);
+    if (race) assert.ok(fake.state().detailReads.before >= 3, 'a consistent replacement pair was observed after the race');
+    assert.equal(fake.calls().filter(args => args[1] === 'send-keys').length, 1);
+    assert.equal(fake.calls().some(args => args[1] === 'prompt'), false);
+    assert.deepEqual(fake.calls().filter(args => args[1] === 'close'), [['tab', 'close', 'w-lane:t2']]);
+    const { loadRegistry } = await registryApi();
+    assert.deepEqual(loadRegistry(fixture.repo).sessions, []);
+  } finally { fixture.cleanup(); }
+});
+
+test('review records a fresh session with the minimum timeout before waiting for evidence', async () => {
+  // No verdict is supplied: the timeout must occur in the evidence wait after a
+  // healthy delivery and metadata write, even though the session-poll bound expired.
+  const topic = 'review-minimum-delivery', review = makeReviewFixture(topic);
+  const { fixture, fake } = review;
+  try {
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = '0';
+    const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '3']);
+    assert.equal(run.status, 2, run.stderr);
+    assert.match(run.stderr, /lane review: review timed out; reviewer agent/u);
+    assert.doesNotMatch(run.stderr, /partial success|metadata could not be written|Herdr command error/u);
+    assert.equal(fake.calls().filter(args => args[1] === 'prompt').length, 1);
+    assert.equal(fake.state().detailReads.after, 1);
+    const { loadRegistry } = await registryApi();
+    const [record] = loadRegistry(fixture.repo).sessions;
+    assert.equal(record.agent_session_id, 'fixture-session-1');
+    assert.equal(record.terminal_id, 'fixture-terminal-1');
+  } finally { fixture.cleanup(); }
+});
+
+test('review with an existing session succeeds after delivery spends the readiness allowance', async () => {
+  const topic = 'review-slow-delivery', review = makeReviewFixture(topic, { verdict: 'PASS' });
+  const { fixture, fake } = review;
+  try {
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    advanceDeliveryClock(fixture, 31_000);
+    const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '60']);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout, 'PASS\n');
+    assert.equal(fake.state().detailReads.after, 1);
+    assert.equal(fake.calls().filter(args => args[1] === 'prompt').length, 1);
+    const { loadRegistry } = await registryApi();
+    assert.equal(loadRegistry(fixture.repo).sessions[0].agent_session_id, 'fixture-session-1');
+  } finally { fixture.cleanup(); }
+});
 
 test('review follow-up declaration requires a run and rejects duplicate or valued boolean flags', () => {
   const review = makeReviewFixture('review-followup-option');

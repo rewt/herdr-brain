@@ -940,24 +940,22 @@ function agentRecord(agentName, deadline, requireDetail = false) {
   return { ...agent, ...detail };
 }
 
-function retryAgentRecord(agentName, deadline, expected) {
+function retryAgentRecord(agentName, deadline, expected, retryDeadline = deadline) {
   let changed;
   for (;;) {
-    if (changed && (deadline === undefined || Date.now() >= deadline)) throw changed;
+    if (changed && (retryDeadline === undefined || Date.now() >= retryDeadline)) throw changed;
     try {
-      const record = agentRecord(agentName, deadline, changed !== undefined);
+      const record = agentRecord(agentName, changed ? retryDeadline : deadline, changed !== undefined);
       if (!changed) return record;
-      // A recovered read must still name the original occupant, including any
-      // terminal/session already verified by this caller. An unavailable read
-      // cannot erase the disagreement or authorize a summary-only fallback.
-      if (record && sameAgentIdentity(changed.agent, record) &&
-          (!expected || sameAgentIdentity(expected, record)) && Date.now() < deadline) return record;
+      // Prefer the caller's verified occupant over the racing list row. An
+      // unavailable read cannot authorize a summary-only fallback.
+      if (record && sameAgentIdentity(expected ?? changed.agent, record) && Date.now() < retryDeadline) return record;
     } catch (error) {
       if (!(error instanceof NativeAgentIdentityChanged)) throw error;
       changed ??= error;
     }
-    if (deadline === undefined || Date.now() >= deadline) throw changed;
-    sleepMs(Math.min(250, deadline - Date.now()));
+    if (retryDeadline === undefined || Date.now() >= retryDeadline) throw changed;
+    sleepMs(Math.min(250, retryDeadline - Date.now()));
   }
 }
 
@@ -1395,13 +1393,19 @@ function dispatch(topic, promptText, options = {}) {
   let readyRecord;
   for (let attempt = 0; attempt < readyAttempts && Date.now() < readyDeadline; attempt += 1) {
     const visible = spawnSync("herdr", ["agent", "read", agentName, "--source", "visible"], { encoding: "utf8" }).stdout ?? "";
+    let observed;
     try {
-      readyRecord = retryAgentRecord(agentName, readyDeadline);
+      observed = retryAgentRecord(agentName, readyDeadline, readyRecord);
+      if (readyRecord && observed && !sameAgentIdentity(readyRecord, observed)) {
+        throw new NativeAgentIdentityChanged(agentName, readyRecord);
+      }
+      // Trust prompts can require several polls; keep the first verified occupant.
+      readyRecord ??= observed;
     } catch (error) {
       if (!(error instanceof NativeAgentIdentityChanged)) throw error;
       fail(`${error.message}; ${failedTab()}, brief NOT sent`);
     }
-    const status = readyRecord?.agent_status;
+    const status = observed?.agent_status;
     if (visible.includes("Do you trust the contents of this directory")) {
       spawnSync("herdr", ["agent", "send-keys", agentName, "Enter"], { encoding: "utf8" });
     } else if (status === "idle" || status === "done" || status === "working") {
@@ -1493,8 +1497,8 @@ function dispatch(topic, promptText, options = {}) {
     const beforeSessionId = cwdCheck.record?.agent_session?.value;
     const beforeTerminalId = cwdCheck.record?.terminal_id;
     const hasTerminal = typeof beforeTerminalId === "string" && beforeTerminalId !== "";
-    const observe = (deadline, allowUnavailable = false) => {
-      const live = retryAgentRecord(agentName, deadline, cwdCheck.record);
+    const observe = (deadline, allowUnavailable = false, retryDeadline = deadline) => {
+      const live = retryAgentRecord(agentName, deadline, cwdCheck.record, retryDeadline);
       if (live === undefined && allowUnavailable) return undefined;
       if (live === undefined || live.name !== agentName || live.pane_id !== pane ||
           live.workspace_id !== workspaceId || !samePath(live.cwd, path) ||
@@ -1507,13 +1511,13 @@ function dispatch(topic, promptText, options = {}) {
       }
       return live;
     };
-    // The first post-delivery read shares the existing observation allowance;
-    // a list/get race must not spend the whole review wait or restart its clock.
+    // Preserve the delivery allowance for the first native read. Only recovery
+    // and later session polls share the remaining readiness/observation bound.
     const started = performance.now();
     const deadline = deferredReviewReceipt && hasTerminal
       ? Math.min(options.deadline - REVIEW_SETTLE_MS - 1000, Date.now() + 10000)
       : readyDeadline;
-    let liveAfterDelivery = observe(deadline);
+    let liveAfterDelivery = observe(options.deadline, false, deadline);
     if (deferredReviewReceipt && hasTerminal) {
       // Share the saved delivery deadline, leaving time for the review's settled
       // file read. A session that never appears must not consume the review wait.

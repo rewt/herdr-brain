@@ -35,6 +35,7 @@ import {
   expectUnsafeDispatchRefusal,
   makeReviewFixture,
   accelerateAgentReadWaits,
+  advanceDeliveryClock,
   privateReviewDelivery,
 } from "./lane-fixture.mjs";
 
@@ -625,7 +626,10 @@ test("dispatch persists immutable occupant evidence as display-only optional met
   }
 });
 
-for (const [stage, phase, at] of [['ready', 'before', 1], ['cwd', 'before', 2], ['delivery', 'after', 1]]) {
+for (const [stage, phase, at, side = 'detail', trust = false] of [
+  ['ready', 'before', 1], ['cwd', 'before', 2], ['delivery', 'after', 1],
+  ['ready-poll', 'before', 2, 'list', true], ['cwd-list', 'before', 2, 'list'], ['delivery-list', 'after', 1, 'list'],
+]) {
   test(`dispatch retries one inconsistent list/get pair during ${stage}`, async () => {
     const fixture = makeFixture();
     const topic = `dispatch-race-${stage}`;
@@ -634,7 +638,8 @@ for (const [stage, phase, at] of [['ready', 'before', 1], ['cwd', 'before', 2], 
       const path = openLane(fixture, topic);
       const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}`, initiallyOpened: true });
       fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
-      fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({ phase, at, count: 1, change: { terminal_id: 'racing-terminal' } });
+      fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({ phase, at, side, count: 1, change: { terminal_id: 'racing-terminal' } });
+      if (trust) fixture.env.FAKE_HERDR_TRUST_READS = '1';
       const run = lane(fixture, ['dispatch', topic, '--json', 'Deliver once']);
       assert.equal(run.status, 0, run.stderr);
       assert.equal(JSON.parse(run.stdout).terminalId, 'fixture-terminal-1');
@@ -647,6 +652,53 @@ for (const [stage, phase, at] of [['ready', 'before', 1], ['cwd', 'before', 2], 
     } finally { fixture.cleanup(); }
   });
 }
+
+for (const race of [false, true]) test(`dispatch pins its first readiness occupant across ${race ? 'a list/get race' : 'consistent polls'}`, async () => {
+  const fixture = makeFixture(), topic = `dispatch-ready-replaced-${race}`;
+  try {
+    ignoreLaneState(fixture);
+    const path = openLane(fixture, topic);
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}`, initiallyOpened: true });
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    fixture.env.FAKE_HERDR_TRUST_READS = '1';
+    const change = { terminal_id: 'replacement-terminal' };
+    if (race) fixture.env.FAKE_HERDR_DETAIL_RACE = JSON.stringify({
+      phase: 'before', at: 2, side: 'list', count: 1, change, replace: true,
+    });
+    else fixture.env.FAKE_HERDR_READY_REPLACEMENT = JSON.stringify(change);
+    accelerateAgentReadWaits(fixture);
+    const run = lane(fixture, ['dispatch', topic, 'Never deliver']);
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /^lane: native agent detail identity changed for .+; tab closed, brief NOT sent\n$/u);
+    assert.ok(fake.state().readinessReads >= 2);
+    assert.equal(fake.state().agentReplacement.terminal_id, 'replacement-terminal');
+    assert.equal(fake.state().identityRaceReads ?? 0, race ? 1 : 0);
+    if (race) assert.ok(fake.state().detailReads.before >= 3, 'a consistent replacement pair was observed after the race');
+    assert.equal(fake.calls().filter(args => args[1] === 'send-keys').length, 1);
+    assert.equal(fake.calls().some(args => args[1] === 'prompt'), false);
+    assert.deepEqual(fake.calls().filter(args => args[1] === 'close'), [['tab', 'close', 'w-lane:t2']]);
+    const { loadRegistry } = await registryApi();
+    assert.deepEqual(loadRegistry(fixture.repo).sessions, []);
+  } finally { fixture.cleanup(); }
+});
+
+test('dispatch records a healthy occupant after delivery spends the readiness allowance', async () => {
+  const fixture = makeFixture(), topic = 'dispatch-slow-delivery';
+  try {
+    ignoreLaneState(fixture);
+    const path = openLane(fixture, topic);
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}`, initiallyOpened: true });
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    advanceDeliveryClock(fixture, 31_000);
+    const run = lane(fixture, ['dispatch', topic, '--json', 'Deliver once']);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(JSON.parse(run.stdout).terminalId, 'fixture-terminal-1');
+    assert.equal(fake.state().detailReads.after, 1);
+    assert.equal(fake.calls().filter(args => args[1] === 'prompt').length, 1);
+    const { loadRegistry } = await registryApi();
+    assert.equal(loadRegistry(fixture.repo).sessions[0].agent_session_id, 'fixture-session-1');
+  } finally { fixture.cleanup(); }
+});
 
 for (const [stage, at] of [['ready', 1], ['cwd', 2]]) {
   test(`dispatch diagnoses a persistent list/get identity race during ${stage} through failedTab`, async () => {

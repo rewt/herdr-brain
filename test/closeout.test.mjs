@@ -79,6 +79,19 @@ test('default off is inert, malformed policy keeps, and a lane copy cannot opt i
   assert.throws(() => closeoutPolicy(f.repo), /invalid/);
 });
 
+test('a hand-edited unknown desk route holds direct closeout policy and its consumer', t => {
+  const f = setup(t, { occupied: false });
+  const file = path.join(f.repo, '.lane.json');
+  const config = { retirement: { closeout_queue: true }, routes: { reviewer: { kind: 'codex' } }, settle: { review_route: 'reviewer' } };
+  fs.writeFileSync(file, JSON.stringify(config));
+  assert.equal(closeoutPolicy(f.repo), true);
+  config.settle.review_route = 'unknown-hand-edit'; fs.writeFileSync(file, JSON.stringify(config));
+  assert.throws(() => closeoutPolicy(f.repo), /unknown route: unknown-hand-edit.*held/);
+  assert.throws(() => f.drain(), /unknown route: unknown-hand-edit.*held/);
+  assert.equal(fs.existsSync(f.lane), true);
+  assert.deepEqual(effects(f), []);
+});
+
 test('source binding uses the supplied fleet environment through publication', t => {
   const f = setup(t, { occupied: false }), env = { ...f.env, HERDR_MONITOR_FLEET: path.join(f.scratch, 'binding-fleet.json') };
   fs.unlinkSync(path.join(f.repo, '.org'));

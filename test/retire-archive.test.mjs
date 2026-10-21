@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { fixture, hold } from './helpers/retire-fixture.mjs';
+import { fixture, hold, isolatedEnv } from './helpers/retire-fixture.mjs';
 import { sweepCommands } from './helpers/retire-sweep-fixture.mjs';
 import { integratedLaneDecision } from '../lib/retire.mjs';
 import { readRetirementStatus, readRetirementWorktrees } from '../lib/retire-runtime.mjs';
+import { readArchivalRetirementPolicy } from '../lib/retire-archive.mjs';
 
 const archivalProbe = ({ exe, args }) => exe === 'git' && (args.includes('cherry') || args.includes('rev-list') ||
   args.includes('--is-shallow-repository') || args.includes('refs/replace') || args.includes('info/grafts') ||
@@ -227,6 +228,19 @@ for (const config of ['malformed', 'wrong type']) test(`archival policy ${config
   const f = landed(t);
   if (config === 'malformed') fs.writeFileSync(path.join(f.repo, '.lane.json'), '{');
   else policy(f, 'true');
+  kept(f, sweep(f), /archival retirement policy is unavailable/);
+});
+
+test('a hand-edited unknown desk route holds direct archival policy and the sweep', t => {
+  const f = landed(t); isolatedEnv(t, f);
+  const file = path.join(f.repo, '.lane.json');
+  const config = { retirement: { archival_retirement: true }, routes: { reviewer: { kind: 'codex' } }, settle: { review_route: 'reviewer' } };
+  fs.writeFileSync(file, JSON.stringify(config));
+  assert.equal(readArchivalRetirementPolicy(f.repo).archivalRetirementPolicy, true);
+  config.settle.review_route = 'unknown-hand-edit'; fs.writeFileSync(file, JSON.stringify(config));
+  const held = readArchivalRetirementPolicy(f.repo);
+  assert.equal(held.archivalRetirementPolicy, false);
+  assert.match(held.archivalRetirementPolicyError, /unknown route: unknown-hand-edit.*held/);
   kept(f, sweep(f), /archival retirement policy is unavailable/);
 });
 

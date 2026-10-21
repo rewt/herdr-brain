@@ -249,7 +249,7 @@ export function selectRoute(config, taskClass, pool) {
 }
 
 export function readRoutesConfig(file) {
-  return validateRoutesConfig(readPolicyFile(file, 'routing'));
+  return validateLane(readPolicyFile(file, 'routing'), file, { references: true });
 }
 
 function within(path, boundary) {
@@ -320,16 +320,20 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   }
   const files = [...new Set([...(binding ? laneLayers : []), ...layers].map(l => l.file))];
   if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };
-  const routes = mergeRoutesConfig(layers.map(l => l.config));
-  const full = binding ? { ...Object.assign({}, ...laneLayers.map(l => l.config)), ...mergeRoutesConfig(laneLayers.map(l => l.config)) } : routes;
+  // Keep desk settings alongside the routes they reference. Validate only
+  // after standalone routing has replaced the inherited route declaration.
+  const full = Object.assign({}, ...laneLayers.map(l => l.config));
+  if (laneLayers.some(l => Object.hasOwn(l.config, 'routes'))) full.routes = Object.assign({}, ...laneLayers.map(l => l.config.routes));
   const config = binding?.sources.routing ? standaloneRouting(full, layers[0].config) : full;
   if (binding?.defaults.launch) config.launch = [...binding.defaults.launch];
   else if (binding) delete config.launch;
   // Lifecycle/entry preferences alone do not declare operator model routes.
   // Keep the same suggested preset as a project with no routing setup.
   if (!["dispatch", "routes", "selection_policy"].some((key) => Object.hasOwn(config, key))) {
-    return { config: { ...config, ...mergeRoutesConfig([ROUTE_PRESET, config]) }, files, layers, suggested: true };
+    const suggested = { ...config, ...mergeRoutesConfig([ROUTE_PRESET, config]) };
+    validateLane(suggested, files.join(', '), { references: true });
+    return { config: binding ? suggested : mergeRoutesConfig([suggested]), files, layers, suggested: true };
   }
-  if (binding) validateLane(config, binding.file, { references: true });
-  return { config, files, layers, ...(binding ? { root: repository, binding: binding.file } : {}) };
+  validateLane(config, files.join(', '), { references: true });
+  return { config: binding ? config : mergeRoutesConfig([config]), files, layers, ...(binding ? { root: repository, binding: binding.file } : {}) };
 }

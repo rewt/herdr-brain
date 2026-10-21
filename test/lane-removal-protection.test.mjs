@@ -81,6 +81,20 @@ function assertKept(f, o, relative) {
   assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
 }
 
+test('a hand-edited unknown desk route holds evidence measurement and preservation', t => {
+  const f = setup(t), o = options(f), file = path.join(f.repo, '.lane.json');
+  const config = { routes: { reviewer: { kind: 'codex' } }, settle: { review_route: 'reviewer' } };
+  fs.writeFileSync(file, JSON.stringify(config));
+  assert.ok(measureLaneEvidence(o).bytes > 0);
+  config.settle.review_route = 'unknown-hand-edit'; fs.writeFileSync(file, JSON.stringify(config));
+  withoutPayloadOrArchive(f, () => {
+    assert.throws(() => measureLaneEvidence(o), /protected path configuration unavailable; lane kept/);
+    assert.throws(() => preserveLaneEvidence(o), /protected path configuration unavailable; lane kept/);
+  });
+  assert.equal(fs.existsSync(f.lane), true);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+});
+
 for (const directory of disposable) for (const depth of [1, 3]) {
   test(`all 20 protected globs and built-in live state keep under ${directory} at depth ${depth}`, t => {
     const f = setup(t), o = options(f);

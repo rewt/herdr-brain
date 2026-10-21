@@ -23,7 +23,7 @@ import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/
 import { projectFleet } from '../lib/fleet.mjs';
 import { literalLaunch } from '../lib/owner-launch.mjs';
 import { homeProject, policyLocation } from '../lib/config-home.mjs';
-import { homePolicyLayers, configBase, readPolicyFile, readProjectPolicy } from '../lib/config-policy.mjs';
+import { homePolicyLayers, configBase, readPolicyFile, readProjectPolicy, validateLane } from '../lib/config-policy.mjs';
 import { resolveArchive, validateArchive } from '../lib/archive.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
 import { hookLaunchArguments } from '../messages/hook-session.mjs';
@@ -353,9 +353,9 @@ if (HOME_PROJECT?.sources.routing) {
 if (HOME_PROJECT?.defaults.launch) CONFIG.launch = [...HOME_PROJECT.defaults.launch];
 if (HOME_PROJECT && !['dispatch', 'routes', 'selection_policy'].some(key => Object.hasOwn(CONFIG, key))) Object.assign(CONFIG, structuredClone(ROUTE_PRESET));
 try {
-  validateRoutesConfig(CONFIG);
+  validateLane(CONFIG, CONFIG_LAYERS.map(layer => layer.file).join(', '), { references: true });
 } catch (error) {
-  fail(`invalid merged lane config: ${error.message}`);
+  fail(`invalid merged lane config: ${error.message}; this project is held`);
 }
 const MAIN = CONFIG.main ?? "main";
 const LANE_PREFIX = "lane/";

@@ -1101,6 +1101,27 @@ test("linked invocations use canonical repository config for explanation, check,
   }
 });
 
+test('a hand-edited unknown desk route holds discovered and explicit lane commands before mutation', () => {
+  const fixture = makeFixture();
+  try {
+    const parent = join(fixture.root, '.lane.json'), selected = join(fixture.repo, '.lane.json');
+    writeFileSync(parent, JSON.stringify({ routes: { reviewer: { kind: 'codex' } } }));
+    const config = { settle: { review_route: 'reviewer' } };
+    writeFileSync(selected, JSON.stringify(config));
+    const env = discoveredEnv(fixture);
+    const valid = lane(fixture, ['config'], { env }); assert.equal(valid.status, 0, valid.stderr);
+    config.settle.review_route = 'unknown-hand-edit'; writeFileSync(selected, JSON.stringify(config));
+    writeConfig(fixture, config);
+    for (const selectedEnv of [env, fixture.env]) {
+      const refused = lane(fixture, ['open', 'held-route'], { env: selectedEnv });
+      assert.equal(refused.status, 1, refused.stdout);
+      assert.match(refused.stderr, /unknown route: unknown-hand-edit.*held/);
+      assert.ok(!refExists(fixture.repo, 'refs/heads/lane/held-route'));
+      assert.ok(!existsSync(lanePath(fixture, 'held-route')));
+    }
+  } finally { fixture.cleanup(); }
+});
+
 test("bare repositories with only linked worktrees allow reads and refuse mutations clearly", () => {
   const fixture = makeFixture();
   try {

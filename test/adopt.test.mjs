@@ -22,6 +22,19 @@ async function command(argv, options) {
   return JSON.parse(output.join(''));
 }
 
+test('identity metadata names refuse before policy, audit, staging, scope or link publication', async t => {
+  const f = configFixture(t), events = f.events();
+  const observer = { observe() { assert.fail('reserved name reached native observation'); } };
+  for (const name of ['identity.json', 'Identity.JSON']) for (const inspectOnly of [true, false]) {
+    await assert.rejects(adopt({ ...f.options, name, inspectOnly, observer }), /reserved config-home project name.*identity metadata/);
+    assert.deepEqual(f.events(), events);
+    assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false, 'no identity policy, audit baseline or project staging directory');
+    for (const file of ['.brain', '.git/config-home', '.git/sessions/standard-slots.json', '.git/sessions/controller-journal.json'])
+      assert.equal(fs.existsSync(path.join(f.cwd, file)), false, file);
+    assert.equal(f.git('status', '--short'), '');
+  }
+});
+
 for (const compatible of [false, true]) test(`adoption checks and records the frozen project pin when its READY bundle is ${compatible ? 'compatible' : 'incompatible'}`, async t => {
   const f = configFixture(t), pinned = f.release('pinned', { compatible });
   assert.equal(releaseAcceptance(checkRelease(f.installationHome, 'pinned'), f.installationHome).ready, true);

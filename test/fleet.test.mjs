@@ -7,9 +7,10 @@ import { spawnSync, execFileSync } from 'node:child_process';
 import { findOrgDir, initOrg, loadEvents } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { projectFleet, readFleet } from '../lib/fleet.mjs';
+import { projectFleet, readFleet, checkFleetRecord } from '../lib/fleet.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { discoverArchive } from '../lib/archive.mjs';
+import { configFixture } from './helpers/config-home-fixture.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const client = path.join(root, 'discovery/client.mjs');
@@ -33,6 +34,32 @@ function fixture(t) {
   const read = () => JSON.parse(fs.readFileSync(path.join(fleetHome, 'fleet.json'), 'utf8'));
   return { scratch, fleetHome, consoleFile, env, git, repo, run, join, read, keep: entry => entries.push(entry) };
 }
+
+test('a generated home key cannot replace an unrelated legacy fleet mapping', async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), name = `${binding.identity}/${binding.project}`;
+  const other = path.join(f.scratch, 'legacy'); fs.mkdirSync(other);
+  execFileSync('git', ['init', '-qb', 'main', other], { env: f.env });
+  const legacy = { identity: path.join(other, '.git'), checkout: other, record: path.join(other, '.org'), worktrees: path.join(f.scratch, 'legacy-lanes'), layers: [] };
+  initOrg(legacy.record);
+  const file = path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'); fs.mkdirSync(path.dirname(file));
+  const fleet = { version: 1, session_limit: 6, projects: { [name]: legacy } };
+  fs.writeFileSync(file, JSON.stringify(fleet));
+  const files = [file, binding.file, binding.identityFile], bytes = files.map(file => fs.readFileSync(file));
+  for (const read of [() => readFleet(f.env), () => projectFleet(f.cwd, f.env), () => checkFleetRecord(binding.record, f.env)]) {
+    assert.throws(read, error => {
+      assert.match(error.message, /fleet key collision/);
+      for (const fact of [name, file, legacy.identity, binding.common]) assert.ok(error.message.includes(fact), error.message);
+      return true;
+    });
+    assert.deepEqual(files.map(file => fs.readFileSync(file)), bytes, 'both durable mappings survive the refused union');
+  }
+  fs.writeFileSync(file, JSON.stringify({ ...fleet, projects: { legacy } }));
+  const discovered = readFleet(f.env).projects;
+  assert.deepEqual(discovered.legacy, legacy);
+  assert.equal(discovered[name].identity, binding.common);
+  assert.equal(Object.keys(discovered).length, 2);
+});
 
 
 test('concurrent joins publish one complete fleet with both projects', async t => {

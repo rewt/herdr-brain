@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeProject, policyLocation, readConfigJSON, contentDigest } from '../lib/config-home.mjs';
 import { readProjectPolicy, readPolicyFile, configBase } from '../lib/config-policy.mjs';
@@ -28,6 +29,9 @@ import { readControllerJournal } from '../sessions/runtime.mjs';
 import { readStandardSlots } from '../sessions/receipts.mjs';
 import { plan } from '../sessions/plan.mjs';
 import { pendingConfigWrite } from '../lib/config-audit.mjs';
+import { readArchivalRetirementPolicy } from '../lib/retire-archive.mjs';
+import { closeoutPolicy } from '../lib/closeout.mjs';
+import { measureLaneEvidence } from '../lib/lane-removal.mjs';
 
 async function commandWarnings(run) {
   const output = [], stderr = process.stderr.write, stdout = process.stdout.write;
@@ -84,6 +88,62 @@ test('invalid home policy is refused without fallback and malformed/duplicate/sy
   assert.throws(() => readProjectPolicy(f.cwd, 'lane'), /held/);
 });
 
+for (const standalone of [false, true]) test(`hand-edited ${standalone ? 'standalone-routing' : 'layered'} references hold direct policy readers and the lane CLI`, async t => {
+  const f = configFixture(t, { routing: standalone }); await f.adopt();
+  const binding = f.binding(), file = policyLocation(f.cwd, 'lane').file;
+  const linked = path.join(f.scratch, 'linked'); f.git('worktree', 'add', '-qb', 'lane/held', linked);
+  const config = readConfigJSON(file);
+  config.retirement = { archival_retirement: true, closeout_queue: true, protected_paths: [] };
+  // The route lives in another selected document, so per-file reference
+  // validation would incorrectly reject this positive control.
+  config.settle = { review_route: 'engineer' };
+  if (standalone) {
+    const routing = policyLocation(f.cwd, 'routing').file, selected = readConfigJSON(routing);
+    selected.routes['standalone-only'] = { kind: 'codex' };
+    fs.writeFileSync(routing, JSON.stringify(selected));
+    config.settle.fix_route = 'standalone-only';
+  }
+  fs.writeFileSync(file, JSON.stringify(config));
+  const options = { common: binding.common, lane: linked, topic: 'held', tip: f.git('rev-parse', 'HEAD'), tracked: new Set(f.git('ls-files', '-z').split('\0').filter(Boolean)), env: { ...f.env, LANE_CONFIG: '/ignored-caller-policy' } };
+  const cli = () => spawnSync(process.execPath, [fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url)), 'config'], { cwd: linked, env: options.env, encoding: 'utf8' });
+  assert.equal(readProjectPolicy(linked, 'lane', options.env).config.settle.review_route, 'engineer');
+  assert.equal(closeoutPolicy(f.cwd), true);
+  assert.equal(readArchivalRetirementPolicy(f.cwd).archivalRetirementPolicy, true);
+  assert.equal(measureLaneEvidence(options).bytes, 0);
+  let run = cli(); assert.equal(run.status, 0, run.stderr);
+  const valid = fs.readFileSync(file);
+  const held = route => {
+    assert.throws(() => readProjectPolicy(linked, 'lane', options.env), error => /held/.test(error.message) && error.message.includes(route));
+    assert.throws(() => closeoutPolicy(f.cwd), error => /invalid/.test(error.message) && error.message.includes(route));
+    const archival = readArchivalRetirementPolicy(f.cwd);
+    assert.equal(archival.archivalRetirementPolicy, false);
+    assert.ok(archival.archivalRetirementPolicyError.includes(route), archival.archivalRetirementPolicyError);
+    assert.throws(() => measureLaneEvidence(options), /protected path configuration unavailable; lane kept/);
+    run = cli(); assert.notEqual(run.status, 0, run.stdout);
+    assert.ok(run.stderr.includes(route), run.stderr); assert.match(run.stderr, /held/);
+    assert.equal(fs.existsSync(linked), true);
+    assert.equal(fs.existsSync(path.join(binding.common, 'lane-archive')), false);
+  };
+  config.settle.review_route = 'unknown-hand-edit'; fs.writeFileSync(file, JSON.stringify(config));
+  held('unknown-hand-edit');
+  fs.writeFileSync(file, valid);
+  if (standalone) {
+    // A route removed from the standalone declaration cannot be resurrected
+    // from identity defaults, even though they still declare engineer.
+    const routing = policyLocation(f.cwd, 'routing').file, selected = readConfigJSON(routing);
+    selected.selection_policy = { by_task_class: { review: 'retained' } };
+    selected.routes = { retained: { kind: 'codex' } };
+    fs.writeFileSync(routing, JSON.stringify(selected));
+    held('engineer');
+  } else {
+    const identity = readConfigJSON(binding.identityFile);
+    identity.settle = { review_route: 'unknown-identity-edit' };
+    fs.writeFileSync(binding.identityFile, JSON.stringify(identity));
+    delete config.settle; fs.writeFileSync(file, JSON.stringify(config));
+    held('unknown-identity-edit');
+  }
+});
+
 test('whole home files do not resurrect removed repo keys; provenance/history include command, hand edit, identity record and recovery', async t => {
   const f = configFixture(t); await f.adopt();
   const file = policyLocation(f.cwd, 'lane').file;
@@ -109,6 +169,7 @@ test('whole home files do not resurrect removed repo keys; provenance/history in
   assert.equal(view.values.find(v => v.key === 'launch').scope, 'identity');
   setConfig('retirement.closeout_queue', 'true', { cwd: f.cwd, scope: 'identity' });
   assert.ok(!configSnapshot({ cwd: f.cwd }).values.some(v => v.key === 'retirement.closeout_queue'));
+  assert.equal(closeoutPolicy(f.cwd), false, 'reference validation does not inherit retirement activation');
 });
 
 for (const mode of ['legacy', 'home', 'standalone']) test(`config set validates complete ${mode} policy references before any intent, replacement or audit`, async t => {

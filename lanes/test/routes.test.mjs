@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from "node:path";
 import test from '../../test/helpers/bounded-test.mjs';
 import { fileURLToPath } from "node:url";
@@ -29,6 +30,16 @@ test("the bch-cloak route table loads without losing project fields", () => {
   assert.deepEqual(Object.keys(loaded), [
     "schema", "authority", "dispatch", "always_args", "routes", "selection_policy",
   ]);
+});
+
+test('an explicitly selected routing file validates its desk references after hand edits', t => {
+  const root = mkdtempSync(resolve(tmpdir(), 'route-reference-')), file = resolve(root, 'routing.json');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const config = { routes: { reviewer: { kind: 'codex' } }, settle: { review_route: 'reviewer' } };
+  writeFileSync(file, JSON.stringify(config));
+  assert.equal(readRoutesConfig(file).settle.review_route, 'reviewer');
+  config.settle.review_route = 'unknown-hand-edit'; writeFileSync(file, JSON.stringify(config));
+  assert.throws(() => readRoutesConfig(file), /unknown route: unknown-hand-edit/);
 });
 
 test("one resolution supplies launch plumbing and opaque run metadata", () => {

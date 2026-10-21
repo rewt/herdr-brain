@@ -36,6 +36,7 @@ build() {
   mkdir "$dir.partial" || die "$dir.partial already exists; inspect the unfinished build"
   git -C "$REPO" archive "refs/tags/$tag" | tar -x -C "$dir.partial"
   git -C "$REPO" rev-parse "refs/tags/$tag^{commit}" > "$dir.partial/.release-commit"
+  node "$TOOLS" freeze-validation "$REPO" "$tag" "$dir.partial/.release-validation.json"
   for file in bin/org.mjs lanes/lane.mjs contrib/settle-watch.mjs lib/cli-help.mjs verify/verify.mjs verify/execute.mjs verify/expectations.mjs; do
     [ -f "$dir.partial/$file" ] || die "release is missing $file"
   done
@@ -48,8 +49,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { validateValidation } from './lanes/validation.mjs';
 import { runGateSync } from './test-slot/run.mjs';
-const declared = fs.existsSync('.lane.validation.json')
-  ? validateValidation(JSON.parse(fs.readFileSync('.lane.validation.json', 'utf8'))) : {};
+const frozen = JSON.parse(fs.readFileSync('.release-validation.json', 'utf8'));
+if (frozen.schema !== 'release-validation-admission/v1') throw Error('invalid frozen release validation admission');
+const declared = validateValidation(frozen.declaration);
 const timeoutSeconds = typeof declared.timeout_seconds === 'object'
   ? declared.timeout_seconds.release : declared.timeout_seconds;
 const idleTimeoutSeconds = typeof declared.idle_timeout_seconds === 'object'

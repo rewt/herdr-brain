@@ -286,8 +286,9 @@ and record/chain evidence when proven, decision and reason, pending generation,
 and at most one proposed start or lifecycle action. Reset eligibility/vetoes,
 recovery evidence and journal operation state are included when available. Invalid manifests exit 1; holds and
 unenrolled workspaces are inspectable decisions. There is no `--apply` option.
-Planning creates no lease, directory, journal, status, record event or Herdr
-mutation. The status cache is not read at all.
+Planning creates no controller lease, journal, status or Herdr mutation.
+Owning reads may append config-audit events after adoption. The status cache is
+not read at all.
 
 | Evidence | Decision / effect |
 | --- | --- |

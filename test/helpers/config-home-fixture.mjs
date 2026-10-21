@@ -12,7 +12,7 @@ import { homeProject } from '../../lib/config-home.mjs';
 const product = fileURLToPath(new URL('../../', import.meta.url));
 export function configFixture(t, { custom = false, routing = false } = {}) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'config-home-'))), home = path.join(scratch, 'home');
-  const ownerRoot = custom ? path.join(home, 'development/alex') : home, cwd = path.join(ownerRoot, 'project');
+  const ownerRoot = custom ? path.join(home, 'development/alex') : path.join(home, 'development'), cwd = path.join(ownerRoot, 'project');
   fs.mkdirSync(cwd, { recursive: true });
   if (custom) fs.writeFileSync(path.join(ownerRoot, '.identity-root'), 'fixture\n');
   const keys = ['HOME', 'HERDR_MONITOR_FLEET', 'ORG_DIR', 'ORG_ACTOR', 'HERDR_AGENT_NAME', 'HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', 'LANE_CONFIG'];
@@ -51,7 +51,8 @@ export function configFixture(t, { custom = false, routing = false } = {}) {
   function question(scope, field = 'adoption_authorization', actor = 'human') {
     const id = `HUM-${++n}`;
     transact(env.ORG_DIR, () => ({ add: [{ type: 'item.added', id, title: 'Authorize this exact fixture scope?', role: 'human', meta: { category: 'security', [field]: JSON.stringify(scope) } }] }), { actor: 'fixture-supervisor' });
-    execFileSync(process.execPath, [path.join(product, 'bin/org.mjs'), 'answer', id, 'yes'], { cwd, env: { ...env, ORG_ACTOR: actor }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const recordCLI = fs.existsSync(path.join(cwd, '.brain')) ? path.join(bundle, 'bin/org.mjs') : path.join(product, 'bin/org.mjs');
+    execFileSync(process.execPath, [recordCLI, 'answer', id, 'yes'], { cwd, env: { ...env, ORG_ACTOR: actor }, stdio: ['ignore', 'pipe', 'pipe'] });
     const event = loadEvents(env.ORG_DIR).events.find(e => e.id === id && e.kind === 'answer');
     return { id, seq: event.seq };
   }

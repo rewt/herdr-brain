@@ -11,7 +11,7 @@ import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs
 import { resolveResource } from '../test-slot/resources.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
 import { policyLocation, present } from '../lib/config-home.mjs';
-import { readPolicyFile } from '../lib/config-policy.mjs';
+import { readPolicyFile, homePolicyDigest } from '../lib/config-policy.mjs';
 import { exactIdentity, exactDigest, restrictEnvironment, excludedDelta, explainMiss } from './exact-validation.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
@@ -127,6 +127,8 @@ function unchanged(cwd, before, label) {
 
 export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, exact }) {
   const admittedRelease = bundleRelease();
+  const policyEnv = env, policyDigest = homePolicyDigest(cwd, policyEnv);
+  if (policyDigest) environment = digest({ environment, config_home_inputs: policyDigest });
   env = exact ? restrictEnvironment(env, exact.declaration) : validationEnvironment(env);
   const before = captured(cwd, label);
   const identity = exact ? exactIdentity({ cwd, common, base: exact.base, commands: [command], prepare, environment, env,
@@ -208,7 +210,9 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     if (usesSlot) {
       try { execution = JSON.parse(readPlainFile(executionReceipt)); } catch { /* A refusal has no command clocks. */ }
     }
+    if (homePolicyDigest(cwd, policyEnv) !== policyDigest) throw Error('home policy changed during validation; witness refused');
     const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, node_version: process.version, tap_totals: tapTotals(output), release: admittedRelease, environment_fingerprint: fingerprint,
+      ...(policyDigest ? { config_home_inputs: policyDigest } : {}),
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
       duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
       execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits,

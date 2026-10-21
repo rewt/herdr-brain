@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { loadEvents } from '../lib/store.mjs';
 import { sourceReach, executionClosure } from './green-reach.mjs';
+import { homeProject, POLICY_FILES } from '../lib/config-home.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const fail = (code, reason, extra = {}) => ({ eligible: false, code, reason, ...extra });
@@ -130,6 +131,12 @@ export function executableDescriptor(name) {
 export const BCH_ENTRIES = ['bin/org.mjs', 'promote/promote.mjs', 'dispatch/record-worker.mjs',
   'supervisor/reconcile.mjs', 'contrib/settle-watch.mjs', 'lib/store.mjs', 'lib/state.mjs',
   'lib/report.mjs', 'lib/roles.mjs', 'lanes/validation.mjs'];
+function homeInputs(bindings) {
+  return Object.values(bindings).filter(b => b?.repo).flatMap(b => {
+    const project = homeProject(b.repo);
+    return project ? [project.file, project.identityFile, ...Object.values(POLICY_FILES).map(([name]) => path.join(project.directory, name))] : [];
+  });
+}
 export function buildManifest(tree, { bindings, activation, externalInputs = [], consumerEvidenceBinding }) {
   const boundary = {}, authority = promotionAuthority(tree);
   for (const file of [...tree.files.keys()].filter(boundaryInput).sort()) {
@@ -149,7 +156,7 @@ export function buildManifest(tree, { bindings, activation, externalInputs = [],
     ...(consumerEvidenceBinding ? { consumerEvidenceBinding } : {}),
     contracts: ['supervisor/GREEN-CONTRACTS.md'],
     environment: loaderEnvironment(), node: { path: fs.realpathSync(process.execPath), sha256: hash(fs.readFileSync(process.execPath)), version: 'v20.19.4', execArgv: process.execArgv },
-    git: executableDescriptor('git'), externalInputs: externalInputs.map(externalDescriptor),
+    git: executableDescriptor('git'), externalInputs: [...new Set([...externalInputs, ...homeInputs(bindings)])].map(externalDescriptor),
     components: [{ project: 'brain', path: 'board/render.mjs', profile: 'board-default-width/v1',
       shape_sha256: componentShape(tree.read('board/render.mjs'), 'board-default-width/v1').sha256,
       effects: 'presentation width only; no change to live(), imports, calls, loaders, configuration or project targeting',
@@ -168,6 +175,7 @@ export function checkDeployment(manifest, trusted) {
         hash(fs.readFileSync(process.execPath)) !== manifest.node.sha256 || JSON.stringify(process.execArgv) !== JSON.stringify(manifest.node.execArgv)) throw Error('Node launcher drift');
     if (JSON.stringify(executableDescriptor('git')) !== JSON.stringify(manifest.git)) throw Error('Git launcher drift');
     checkEnvironment(manifest.environment);
+    if (homeInputs(manifest.bindings).some(file => !manifest.externalInputs.some(d => d.path === file))) throw Error('new home configuration is outside the reviewed authority inputs');
     for (const descriptor of manifest.externalInputs) {
       if (JSON.stringify(externalDescriptor(descriptor.path)) !== JSON.stringify(descriptor)) throw Error(`external configuration drift: ${descriptor.path}`);
     }

@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeProject, policyLocation, readConfigJSON, contentDigest } from '../lib/config-home.mjs';
 import { readProjectPolicy, readPolicyFile, configBase } from '../lib/config-policy.mjs';
@@ -105,7 +104,7 @@ for (const standalone of [false, true]) test(`hand-edited ${standalone ? 'standa
   }
   fs.writeFileSync(file, JSON.stringify(config));
   const options = { common: binding.common, lane: linked, topic: 'held', tip: f.git('rev-parse', 'HEAD'), tracked: new Set(f.git('ls-files', '-z').split('\0').filter(Boolean)), env: { ...f.env, LANE_CONFIG: '/ignored-caller-policy' } };
-  const cli = () => spawnSync(process.execPath, [fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url)), 'config'], { cwd: linked, env: options.env, encoding: 'utf8' });
+  const cli = () => spawnSync(process.execPath, [path.join(f.bundle, 'lanes/lane.mjs'), 'config'], { cwd: linked, env: options.env, encoding: 'utf8' });
   assert.equal(readProjectPolicy(linked, 'lane', options.env).config.settle.review_route, 'engineer');
   assert.equal(closeoutPolicy(f.cwd), true);
   assert.equal(readArchivalRetirementPolicy(f.cwd).archivalRetirementPolicy, true);

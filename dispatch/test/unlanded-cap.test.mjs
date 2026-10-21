@@ -125,6 +125,26 @@ test('uncertain starts reserve distinct items and exception runs until their ori
   assert.equal(landed.exceptions.length, 1, 'the stale first journal cannot recreate a reported exception');
 });
 
+test('a journal reference releases its reservation only for the original project, item, attempt and exception facts', () => {
+  for (const [label, item, override] of [
+    ['other item', 'ENG-3', {}],
+    ['other attempt', 'ENG-2', { dispatch_attempt: 'other' }],
+    ['other project', 'ENG-2', { dispatch_project: '/other/.git' }],
+    ['other exception', 'ENG-2', { dispatch_unlanded_exception: 'fix' }],
+  ]) {
+    const r = record(); r.item(2); r.item(3);
+    const journal = '/record/dispatch/start.json', token = 'wanted';
+    const pending = { journal, token, common, item: 'ENG-2', stage: 'starting', unlandedCap: { admission: { kind: 'unblocks' } } };
+    const meta = { dispatch_journal: journal, dispatch_attempt: token, dispatch_unlanded_exception: 'unblocks' };
+    r.start(1, item, { ...meta, ...override });
+    r.add({ type: 'run.updated', id: 'R-1', meta }); // Display edits cannot manufacture the missing original match.
+    assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 1, label);
+    r.start(2, 'ENG-2', meta);
+    assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 0,
+      `${label}: a matching original start replaces the reservation`);
+  }
+});
+
 test('recovery between the journal and event snapshots cannot hide both an uncertain start and its committed run', t => {
   const org = fs.mkdtempSync(path.join(os.tmpdir(), 'unlanded-snapshot-'));
   t.after(() => fs.rmSync(org, { recursive: true, force: true }));

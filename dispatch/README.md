@@ -125,8 +125,10 @@ the session cap's `<git-common-dir>/dispatch-session-cap/` admission lock. Befor
 spawning `record start`, dispatch saves `starting` and its item/exception admission
 in the request journal. This pending start reserves capacity even if its
 coordinator dies and a surviving child can still append after the lock is
-reclaimed. A matching original `run.started` replaces the journal reservation
-exactly once. Admission snapshots journals before record events so concurrent
+reclaimed. An original `run.started` with the same project, item, journal,
+attempt token and exception kind replaces the journal reservation exactly once;
+a stray journal reference or later display edit cannot release it. Admission
+snapshots journals before record events so concurrent
 start recovery cannot hide both forms of the reservation. An unmatched uncertain
 start remains occupied until reconciled; coordinator death or age never clears
 it. A definitive record refusal releases it. Refusals identify pending starts

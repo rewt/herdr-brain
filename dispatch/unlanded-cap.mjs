@@ -15,8 +15,7 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
   common = canonical(common);
   const state = fold(events), starts = new Map(), projects = new Map(), workspaces = new Map();
   const recorded = new Map(events.filter(e => e.type === 'run.started').map(e => [e.id, e]));
-  const promotions = [], landedProjects = new Map(), recordedJournals = new Set();
-  for (const event of recorded.values()) if (event.meta?.dispatch_journal) recordedJournals.add(event.meta.dispatch_journal);
+  const promotions = [], landedProjects = new Map();
   for (const event of events) {
     if (event.type !== 'promotion.reconciled' || !event.identity) continue;
     for (const head of event.heads ?? []) {
@@ -66,8 +65,13 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
   // record writer. The coordinator's death cannot release this reservation:
   // its child can still append. A matching start replaces it exactly once;
   // only a definitive record refusal makes an unmatched start safe to retry.
+  const matchesStart = j => {
+    const kind = j.unlandedCap?.admission?.kind;
+    return [...starts.values()].some(s => s.run.item === j.item && s.meta.dispatch_journal === j.journal &&
+      s.meta.dispatch_attempt === j.token && s.meta.dispatch_unlanded_exception === (kind === 'regular' ? undefined : kind));
+  };
   const reservations = journals.filter(j => j.stage === 'starting' && !j.startRefused && j.common &&
-    canonical(j.common) === common && !recordedJournals.has(j.journal));
+    canonical(j.common) === common && !matchesStart(j));
   for (const j of reservations) {
     let item = items.find(i => i.item === j.item);
     if (!item) {
@@ -75,7 +79,7 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
       items.push(item);
     }
     (item.pending ??= []).push(j.journal);
-    const kind = j.unlandedCap?.admission.kind;
+    const kind = j.unlandedCap?.admission?.kind;
     if (['fix', 'unblocks'].includes(kind)) exceptions.push({ run: null, item: j.item, kind, journal: j.journal });
   }
   return { state, starts, items, exceptions, reservations };

@@ -14,6 +14,7 @@ import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { validateSlotPath } from '../../test-slot/paths.mjs';
+import { watchPromotionLock } from '../../test/helpers/promotion-lock.mjs';
 
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { drain, retryCleanup } from '../promote.mjs';
@@ -544,14 +545,16 @@ test('a drain owner this caller may not signal still counts as running', async (
   fs.rmSync(lock, { recursive: true });
 });
 
-test('two concurrent enqueue commands share one drain; direct promote is excluded during its gate', async (t) => {
+test('two concurrent enqueue commands share one drain; direct promote refuses if its lock wait expires during the gate', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second');
   const marker = path.join(f.root, 'gate');
   const command = `${process.execPath} -e 'require("fs").writeFileSync(${JSON.stringify(marker)}, "ready"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1800)'`;
   f.launch(['first', '--validate', command]);
   await waitForFile(marker, () => true, { timeoutMs: 30000 });
+  const waiting = watchPromotionLock(f.root, f.env, path.join(f.repo, '.git/lane-promote.lock'), { expire: true });
   const direct = spawnSync(process.execPath, [LANE, 'promote', 'second'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.notEqual(direct.status, 0); assert.match(direct.stderr, /lane-promote.lock/);
+  assert.ok(fs.existsSync(waiting));
   f.launch(['second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.deepEqual(f.results().map((r) => r.topic), ['first', 'second']);
   assert.ok(f.results().every((r) => r.outcome === 'promoted'));
@@ -765,6 +768,9 @@ test('crash during batch cleanup resumes without repeating the gate or trusting 
 
 test('direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane', async (t) => {
   const f = fixture(t); const wt = f.lane('first'); const blocked = blockCleanup(f);
+  // Both cleanup and a hand-invoked close still refuse a holder that outlasts
+  // their bounded wait; advance only the lock comparison in those children.
+  const waiting = watchPromotionLock(f.root, f.env, path.join(f.repo, '.git/lane-promote.lock'), { expire: true });
   const request = f.launch(['first', '--org', blocked.org]);
   const ready = path.join(f.root, 'direct-gate-pid'); const release = path.join(f.root, 'direct-gate-release');
   const script = path.join(f.root, 'direct-gate.mjs');
@@ -799,6 +805,7 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
   // All close callers must respect a live gate, even outside queue orchestration.
   const close = spawnSync(process.execPath, [LANE, 'close', 'first', '--git-only'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.notEqual(close.status, 0); assert.match(close.stderr, /lane-promote.lock/);
+  assert.ok(fs.existsSync(waiting));
   fs.writeFileSync(release, 'release'); assert.equal((await exited).code, 0, output);
   await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')));
   f.onCleanup(async () => {});

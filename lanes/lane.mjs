@@ -34,7 +34,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { acquireLock } from "./promotion-lock.mjs";
+import { acquireLock, PROMOTION_LOCK_WAIT_MS } from "./promotion-lock.mjs";
 import { withPromotionGuard } from '../promote/guard.mjs';
 import { runTrain } from '../promote/train.mjs';
 import { resolveGateProfile, HOST_ENV } from '../promote/gate-profile.mjs';
@@ -2524,7 +2524,7 @@ function check(args) {
 
 function withPromotionLock(operation) {
   let release;
-  try { release = acquireLock(join(REPO_IDENTITY, "lane-promote.lock")); }
+  try { release = acquireLock(join(REPO_IDENTITY, "lane-promote.lock"), { waitMs: PROMOTION_LOCK_WAIT_MS }); }
   catch (error) { fail(error.message); }
   // fail() exits; the exit handler releases ordinary refusals too. Signals leave
   // the lock behind because a validation or lifecycle child may still be alive.

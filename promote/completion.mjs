@@ -9,7 +9,7 @@ import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { fold } from '../lib/state.mjs';
 import { completionFingerprint, completionEvents, digest, stable } from '../lib/completion.mjs';
-import { acquireLock } from '../lanes/promotion-lock.mjs';
+import { acquireLock, PROMOTION_LOCK_WAIT_MS } from '../lanes/promotion-lock.mjs';
 import { verifyTrainResult } from './evidence.mjs';
 import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
 
@@ -109,7 +109,7 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
           train.results[job.id]?.outcome !== member[0].result.outcome || !['promoted', 'refused', 'timeout'].includes(member[0].result.outcome)) throw Error('batch member or run binding changed');
       return { job, binding, result: member[0].result };
     }).filter(Boolean);
-    const release = acquireLock(path.join(project.identity, 'lane-promote.lock'));
+    const release = acquireLock(path.join(project.identity, 'lane-promote.lock'), { waitMs: PROMOTION_LOCK_WAIT_MS });
     try {
       if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw Error('supervisor STOP prevents completion');
       if (git(project.canonical, ['status', '--porcelain'])) throw Error('canonical checkout is dirty');

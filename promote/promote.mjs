@@ -12,7 +12,7 @@ import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
 import { guardPromotionJob, readOwnedRun, requireController, ownerBinding, sameOwner, brainOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { bundleRelease, forwardRelease, operationFile } from '../lib/releases.mjs';
-import { acquireLock } from '../lanes/promotion-lock.mjs';
+import { acquireLock, PROMOTION_LOCK_WAIT_MS } from '../lanes/promotion-lock.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { consumeRetirement } from '../lib/retire-trigger.mjs';
 import { retirementHold } from '../lib/retire-hold.mjs';
@@ -478,7 +478,7 @@ function finishBatchJob(job, result, queue) {
   if (result.replacement_pending && result.reconciliation?.state === 'complete') {
     let release;
     try {
-      release = acquireLock(path.join(queue.project.identity, 'lane-promote.lock'));
+      release = acquireLock(path.join(queue.project.identity, 'lane-promote.lock'), { waitMs: PROMOTION_LOCK_WAIT_MS });
       if (!verifyTrainResult({ ...result, id: job.id }, { project: queue.project, saved: { head: job.expectedHead, run: job.run, org: job.org, lane: job.topic } })) throw Error('lane replacement lacks original integrated proof');
       if (git(result.workspace, ['rev-parse', 'HEAD']) !== result.tip) invoke(process.execPath, [fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url)), JSON.stringify({
         workspace: result.workspace, repo: queue.project.canonical, common: queue.project.identity,

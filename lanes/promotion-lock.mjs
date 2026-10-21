@@ -5,6 +5,10 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// Promotion callers outlast a short closeout pass; acquireLock scales this once.
+// Other locks and deadline-bound retirement keep their explicit/immediate waits.
+export const PROMOTION_LOCK_WAIT_MS = 120_000;
+
 export function acquireLock(directory, { waitMs = 0 } = {}) {
   fs.mkdirSync(path.dirname(directory), { recursive: true });
   const deadline = Date.now() + loadTimeout(waitMs);

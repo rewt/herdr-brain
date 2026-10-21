@@ -18,6 +18,7 @@ import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { runTrain } from '../train.mjs';
 import { resolveValidation } from '../../lanes/validation.mjs';
+import { watchPromotionLock } from '../../test/helpers/promotion-lock.mjs';
 
 import { fixture, source, manualRecovery } from './completion-fixture.mjs';
 
@@ -119,7 +120,7 @@ console.log('# tests 1');`);
   assert.ok(f.queue.load().results.every(result => result.reconciliation.state === 'complete'));
 });
 
-test('integrated record refusal retains every lane and resumes records without another gate', t => {
+test('integrated record refusal retains every lane and resumes records after a closeout holder without another gate', async t => {
   const f = fixture(t); const first = f.lane('first'), second = f.lane('second');
   fs.writeFileSync(f.fault, 'refuse'); f.drain();
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
@@ -127,7 +128,24 @@ test('integrated record refusal retains every lane and resumes records without a
   assert.ok(f.queue.load().results.every(r => r.reconciliation.state === 'pending'));
   const receipt = f.queue.load().results[0].receipt, log = fs.readFileSync(f.queue.load().results[0].log, 'utf8');
   const proof = JSON.parse(fs.readFileSync(receipt));
-  fs.unlinkSync(f.fault); f.drain(); assert.equal(f.gates(), 1);
+  fs.unlinkSync(f.fault);
+  const lock = path.join(f.queue.project.identity, 'lane-promote.lock'), release = acquireLock(lock);
+  const owner = fs.readFileSync(path.join(lock, 'owner.json'), 'utf8');
+  const waiting = watchPromotionLock(f.root, f.env, lock);
+  const child = spawnScenarioChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+  const done = waitForExit(child);
+  try {
+    const until = Date.now() + loadTimeout(10000);
+    while (!fs.existsSync(waiting)) {
+      assert.ok(Date.now() < until, 'completion reached the held lifecycle lock');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.equal(child.exitCode, null);
+    assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner);
+    assert.equal(f.gates(), 1);
+  } finally { release(); await done; }
+  const reply = await done; assert.equal(reply.code, 0, reply.stderr);
+  assert.equal(f.gates(), 1);
   assert.equal(fs.readFileSync(f.queue.load().results[0].log, 'utf8'), log);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, proof.attempts);
   for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }

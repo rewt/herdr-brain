@@ -564,6 +564,28 @@ for (const { terminal, helpers, unregister } of [
   assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
 });
 
+for (const change of ['tab', 'native birth', 'shell birth']) test(`unmerged lane close keeps a preflight worker whose ${change} is replaced before release`, t => {
+  const f = fixture(t, { merged: false }); nativeExit(f);
+  f.state.panes[0].terminal_id = 'term'; f.save();
+  let changed = false;
+  const retirement = f.retirement({ log: row => {
+    if (row.action !== 'lane-preflight') return;
+    changed = true;
+    if (change === 'tab') {
+      f.state.tabs[0].tab_id = 'w:late';
+      f.state.panes[0].tab_id = 'w:late';
+      f.state.agents[0].tab_id = 'w:late';
+    } else f.state.info.process_tree[change === 'native birth' ? 1 : 0].identity += ':replacement';
+    f.save();
+  } });
+  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic' }), /occupied lane/);
+  assert.equal(changed, true);
+  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+  assert.equal(fs.existsSync(f.lane), true); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  assert.deepEqual(f.read().actions, []); assertNoRemoval(f);
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});
+
 for (const unregister of [false, true]) test(`unmerged lane close releases a real worker tree and its lane-cwd shell in one call (unregister=${unregister})`, async t => {
   const f = fixture(t, { merged: false }), worker = await laneCwdWorker(t, f, { unregister });
   const main = f.git(['rev-parse', 'main']), closed = f.close(false);

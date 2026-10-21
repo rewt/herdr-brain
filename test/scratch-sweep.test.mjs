@@ -504,9 +504,10 @@ test('the default scratch inventory passes candidate trees through to the native
   f.directory('unrelated');
   const sweep = f.prepare({ readOpenFiles: undefined, command: native.command }); sweep.execute();
   const calls = native.calls.filter(call => call.exe === '/usr/sbin/lsof');
-  assert.equal(calls.length, process.platform === 'darwin' ? 2 : 0);
-  for (const call of calls) {
-    assert.deepEqual(call.args, ['-n', '-P', '-Fpfn0', '+L1', '+D', owned, '--', process.cwd()]);
+  assert.equal(calls.length, process.platform === 'darwin' ? 4 : 0);
+  for (let i = 0; i < calls.length; i += 2) {
+    assert.deepEqual(calls[i].args, ['-n', '-P', '-Fpfn0', '+L1', '+D', owned, '--', process.cwd()]);
+    assert.deepEqual(calls[i + 1].args, ['-n', '-P', '-a', '-u', String(process.getuid()), '-Fpfn0']);
   }
 });
 
@@ -514,17 +515,73 @@ test('bounded macOS inventory selects trees and unlinked files with a caller cwd
   const f = setup(t), owned = f.directory('arbitrary', { run: 'R-1' }), second = f.directory('topic-review');
   const stdout = `p${process.pid}\0fcwd\0n${f.repo}\0\np99\0f7\0n${owned}/nested/payload\0\nf8\0n${owned}/unlinked\0\n`;
   const calls = [], env = { TEST: 'bounded' };
-  const command = (exe, args, options) => { calls.push({ exe, args, options }); return { status: 1, stderr: '', stdout }; };
+  const command = (exe, args, options) => {
+    calls.push({ exe, args, options });
+    return args.includes('+D') ? { status: 1, stderr: '', stdout }
+      : { status: 0, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\np98\0f9\0nPIPE\0\nf10\0n/elsewhere\0\nf11\0n(revoked)\0\n` };
+  };
   const refs = readProcessFileReferences({ platform: 'darwin', env, directories: [owned, second, owned], command });
   assert.deepEqual(calls[0].args, ['-n', '-P', '-Fpfn0', '+L1', '+D', owned, '+D', second, '--', process.cwd()]);
-  assert.equal(calls[0].exe, '/usr/sbin/lsof'); assert.equal(calls[0].options.env, env);
-  assert.ok(calls[0].options.timeout >= 10000);
+  assert.deepEqual(calls[1].args, ['-n', '-P', '-a', '-u', String(process.getuid()), '-Fpfn0']);
+  for (const call of calls) {
+    assert.equal(call.exe, '/usr/sbin/lsof'); assert.equal(call.options.env, env);
+    assert.ok(call.options.timeout >= 10000);
+  }
   assert.ok(refs.some(ref => ref.path === `${owned}/nested/payload`));
   assert.ok(refs.some(ref => ref.path === `${owned}/unlinked`));
+  assert.equal(refs.some(ref => ref.path === '/elsewhere'), false, 'unrelated completeness paths are not returned');
   assert.deepEqual(readProcessFileReferences({ platform: 'darwin', directories: [], command }), []);
-  assert.equal(calls.length, 1, 'no candidate means no process inventory');
+  assert.equal(calls.length, 2, 'no candidate means no process inventory');
   for (const directories of [null, 'relative', ['relative'], [owned + '\0']])
     assert.throws(() => readProcessFileReferences({ platform: 'darwin', directories, command }), /invalid/);
+});
+
+for (const stage of ['planning', 'execution'])
+  for (const failure of ['cwd', 'descriptor', 'fileport', 'mapping', 'thread', 'timeout', 'signal', 'stderr', 'exit', 'anchor', 'truncated'])
+    test(`an unfiltered macOS ${failure} failure hidden by selection keeps scratch at ${stage}`, t => {
+      const f = setup(t), owned = f.directory('arbitrary', { run: 'R-1' });
+      const anchor = `p${process.pid}\0fcwd\0n${f.repo}\0\n`, calls = [];
+      let observations = 0;
+      const command = (exe, args) => {
+        assert.equal(exe, '/usr/sbin/lsof'); calls.push(args);
+        // Native path/link-count selection discards the unreadable process:
+        // only the valid caller remains, with empty stderr and status 1.
+        if (args.includes('+D')) return { status: 1, stderr: '', stdout: anchor };
+        assert.deepEqual(args, ['-n', '-P', '-a', '-u', String(process.getuid()), '-Fpfn0']);
+        const result = { status: 0, stderr: '', stdout: anchor };
+        if (++observations === 1 && stage === 'execution') return result;
+        if (failure === 'cwd') result.stdout += 'p99\0fcwd\0ncwd|rtd info error: Permission denied\0\n';
+        if (failure === 'descriptor') result.stdout += 'p99\0ferr\0nFD info error: Permission denied\0\n';
+        if (failure === 'fileport') result.stdout += 'p99\0ferr\0nFILEPORT info error: Permission denied\0\n';
+        if (failure === 'mapping') result.stdout += 'p99\0ftxt\0nregion info error: Permission denied\0\n';
+        if (failure === 'thread') result.stdout += 'p99\0ftwd\0nthread info error: Permission denied\0\n';
+        if (failure === 'timeout') { result.status = null; result.error = Object.assign(Error('timed out'), { code: 'ETIMEDOUT' }); }
+        if (failure === 'signal') result.signal = 'SIGKILL';
+        if (failure === 'stderr') result.stderr = 'partial observation';
+        if (failure === 'exit') result.status = 1;
+        if (failure === 'anchor') result.stdout = 'p99\0fcwd\0n/elsewhere\0\n';
+        if (failure === 'truncated') result.stdout = anchor.slice(0, -2);
+        return result;
+      };
+      const sweep = f.prepare({ readOpenFiles: directories => readProcessFileReferences({ platform: 'darwin', directories, command }) });
+      sweep.execute();
+      assert.equal(observations, stage === 'planning' ? 1 : 2, 'every planning/final check needs its own completeness observation');
+      assert.equal(calls.length, observations * 2);
+      assert.ok(fs.existsSync(owned)); assert.equal(fs.readFileSync(path.join(owned, 'payload'), 'utf8'), 'abc');
+      assert.match(f.read(sweep).entries[0].reason, /(?:observation failed|scratch kept)/);
+    });
+
+test('a candidate handle seen only by the unfiltered observation still keeps scratch', t => {
+  const f = setup(t), owned = f.directory('topic-review'), calls = [];
+  const sweep = f.prepare({ readOpenFiles: directories => readProcessFileReferences({ platform: 'darwin', directories,
+    command: (exe, args) => {
+      calls.push(args);
+      const anchor = `p${process.pid}\0fcwd\0n${f.repo}\0\n`;
+      return args.includes('+D') ? { status: 1, stderr: '', stdout: anchor }
+        : { status: 0, stderr: '', stdout: anchor + `p99\0f7\0n${owned}/payload\0\n` };
+    } }) });
+  sweep.execute(); assert.equal(calls.length, 2); assert.ok(fs.existsSync(owned));
+  assert.equal(f.read(sweep).kept_summary.by_reason['directory has open process handles'], 1);
 });
 
 test('symlink inodes retain the full numeric macOS inventory, including directly opened links', t => {
@@ -563,11 +620,15 @@ for (const failure of ['timeout', 'signal', 'stderr', 'exit', 'anchor', 'truncat
   });
 
 test('a timed-out bounded final inventory keeps scratch after a successful planning observation', t => {
-  const f = setup(t), owned = f.directory('topic-review'); let calls = 0;
+  const f = setup(t), owned = f.directory('topic-review'); let calls = 0, observations = 0;
   const sweep = f.prepare({ readOpenFiles: directories => readProcessFileReferences({ platform: 'darwin', directories,
-    command: () => ++calls === 1 ? { status: 1, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\n` }
-      : { status: null, error: Error('timed out') } }) });
-  sweep.execute(); assert.equal(calls, 2); assert.ok(fs.existsSync(owned));
+    command: (exe, args) => {
+      calls++;
+      if (!args.includes('+D')) return { status: 0, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\n` };
+      return ++observations === 1 ? { status: 1, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\n` }
+        : { status: null, error: Error('timed out') };
+    } }) });
+  sweep.execute(); assert.equal(calls, 3); assert.equal(observations, 2); assert.ok(fs.existsSync(owned));
   assert.match(f.read(sweep).entries[0].reason, /scratch kept: open file source unavailable.*timed out/);
 });
 

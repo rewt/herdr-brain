@@ -73,6 +73,21 @@ test('an open unintegrated untagged lane remains held even if its labels say sup
   assert.match(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), /chain is still open/);
 });
 
+test('a canonical-checkout callback retains its open chain despite main ancestry', () => {
+  const s = fixture(), run = s.record.runs.get('R-1'), pane = s.panes[0], shell = pane.process_info.process_tree[0];
+  run.workspace = '/repo'; s.workspaces[0].worktree.checkout_path = '/repo';
+  s.workspaces[0].worktree.is_linked_worktree = false;
+  Object.assign(s.git[0], { path: '/repo', lane: null }); s.agents = [];
+  pane.shellOnly = true; pane.foreground_cwd = '/repo';
+  pane.process_info.process_tree = [shell];
+  pane.process_info.foreground_processes = [{ pid: shell.pid, name: 'zsh' }];
+  s.callbacks = [{ kind: 'settle', common: s.common, cwd: '/repo', workspace: 'w', tab: 'w:t', pane: 'w:p',
+    run: run.id, shell, process: { pid: 10, identity: 'agent', command: '[native]' }, process_gone: true }];
+  assert.equal(planRetirement(s).close.length, 1, 'a terminal callback keeps its existing retirement path');
+  s.record.items.get('ENG-1').closed = null;
+  assert.match(kept(s), /chain is still open/);
+});
+
 function lateBound(s) {
   const r = s.record.runs.get('R-1');
   delete r.meta.agent_session_id;

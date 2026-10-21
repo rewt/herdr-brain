@@ -257,6 +257,13 @@ time.
 is first preserved as `archive/lane/<topic>` and freshly resolved to the exact tip.
 A different existing tag target refuses an unmerged close; a matching tag permits
 retry. An integrated lane leaves any older archive tag untouched.
+For an unmerged lane, close preflights occupant eligibility with the prospective
+exact-tip archive, writes and verifies the tag, then rechecks and releases only
+recorded finished workers through the shared retirement executor. It can finish
+in one call while a finished worker tab is still open. Preflight refusals happen
+before tagging. If a later check (including typed input at the native exit edge)
+or removal fails, the verified tag may remain as harmless recovery for that exact
+tip, and a matching-tip retry can reuse it.
 The automatic sweep keeps non-ancestor lanes unless the project's reviewed
 activation enables `retirement.archival_retirement` in the canonical `.lane.json`
 (default `false`). This separate eligibility case requires complete historical

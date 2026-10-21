@@ -1,5 +1,6 @@
 import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
+import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
 import { createProcessTracker } from '../../test/helpers/processes.mjs';
@@ -174,8 +175,8 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
     try { rememberProcesses(root, org, realWatch, receipts); }
     finally { receipts.cleanup(); fs.rmSync(root,{recursive:true,force:true}); }
   });
-  const exec=(cmd,args,cwd=repo,overrides={})=>{
-    const result=spawnSync(cmd,args,{cwd,env:{...env,...overrides},encoding:'utf8'});
+  const exec=(cmd,args,cwd=repo,overrides={},options={})=>{
+    const result=spawnSync(cmd,args,{cwd,env:{...env,...overrides},encoding:'utf8',...options});
     rememberProcesses(root, org, realWatch, receipts);
     return result;
   };
@@ -188,8 +189,8 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
   rec(['init']);const item=rec(['add','Do the work','--role','engineer']).split('\n')[0].match(/ENG-\d+/)[0];
   const brief=path.join(root,'brief with spaces.md');fs.writeFileSync(brief,'# Do the work');
   const common=['--org',org,'--repo',repo, ...(timingRecord?['--org-cli',path.join(bin,'org')]:[]),'--lane-cli',path.join(bin,'lane'), ...(realWatch?[]:['--watch-cli',path.join(bin,'watch')])];
-  const dispatch=(args=[])=>exec(process.execPath,[DISPATCH,...common,...args]);
-  const start=(extra=[])=>dispatch([item,'--lane','topic','--route','engineer','--brief',brief,...extra]);
+  const dispatch=(args=[],options={})=>exec(process.execPath,[DISPATCH,...common,...args],repo,{},options);
+  const start=(extra=[],options={})=>dispatch([item,'--lane','topic','--route','engineer','--brief',brief,...extra],options);
   const calls=()=>fs.existsSync(path.join(root,'calls'))?fs.readFileSync(path.join(root,'calls'),'utf8').trim().split('\n').map(x=>JSON.parse(x)):[];
   const jobs=()=>fs.readdirSync(path.join(org,'dispatch')).filter(x=>x.endsWith('.json')&&!x.endsWith('.routes.json')).map(x=>path.join(org,'dispatch',x));
   const fail=(stage)=>fs.writeFileSync(path.join(root,'fail'),stage);
@@ -1364,7 +1365,9 @@ if(process.argv[1]===${JSON.stringify(WATCH)}&&!process.argv.includes('--detach'
 Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,11000);
 return original.call(this,command,args,options);};require('node:module').syncBuiltinESMExports();`);
   const f = fixture(t, { realWatch: true, preload });
-  const result = f.start();
+  // Only the child sees load 24. Reserve time for its delayed configuration
+  // reads and dispatch overhead even on a quiet host, within the 60 s test.
+  const result = f.start([], { [commandAllowance]: loadTimeout(45_000) });
   assert.equal(result.status, 0, result.stderr + result.stdout);
   const receipt = JSON.parse(result.stdout);
   assert.ok(receipt.watcher.pid > 0);

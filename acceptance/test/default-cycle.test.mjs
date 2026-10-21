@@ -83,6 +83,11 @@ async function offlineNative(root, repo) {
 test('real default-cycle dispatch admits owned fleet paths, refuses foreign roots and completes open work before retirement', async t => {
   const root = fs.realpathSync(fs.mkdtempSync('/tmp/ac-')), roots = [root], cleanup = [];
   const receipts = createReceiptTracker({ suitePid: Number(process.env.HERDR_TEST_SUITE_PID) || process.pid });
+  // Reconstruct the expected command from the durable dispatch job, including
+  // its claimed controller, for both the normal stop and failed-case teardown.
+  const rememberWatcher = job => receipts.remember(job.watcher.pid, [process.execPath, path.join(source, 'watch/watch.mjs'), job.run,
+    '--controller', job.ownership.owner.controller, '--org', job.org, '--to', job.to,
+    '--cwd', job.repo, '--log', job.watcher.log].join(' '));
   let supervisor;
   const repo = path.join(root, 'default-cycle'), org = path.join(repo, '.org');
   t.after(async () => {
@@ -93,8 +98,7 @@ test('real default-cycle dispatch admits owned fleet paths, refuses foreign root
     for (const name of fs.existsSync(journals) ? fs.readdirSync(journals) : []) {
       if (!name.endsWith('.json') || name.endsWith('.routes.json')) continue;
       const job = JSON.parse(fs.readFileSync(path.join(journals, name)));
-      if (job.watcher?.pid) receipts.remember(job.watcher.pid, [process.execPath, path.join(source, 'watch/watch.mjs'), job.run,
-        '--org', org, '--to', job.to, '--cwd', repo, '--log', job.watcher.log].join(' '));
+      if (job.watcher?.pid) rememberWatcher(job);
     }
     receipts.cleanup();
     for (const directory of roots.reverse()) fs.rmSync(directory, { recursive: true, force: true });
@@ -165,8 +169,7 @@ test('real default-cycle dispatch admits owned fleet paths, refuses foreign root
 
   // Stop receipt-owned producers before changing the fake pane's cwd for the
   // foreign-root probes; their lifecycle reads are allowed native UI calls.
-  assert.ok(receipts.remember(saved.job.watcher.pid, [process.execPath, path.join(source, 'watch/watch.mjs'), saved.job.run,
-    '--org', org, '--to', 'offline-supervisor', '--cwd', repo, '--log', saved.job.watcher.log].join(' ')));
+  assert.ok(rememberWatcher(JSON.parse(fs.readFileSync(saved.job.journal))));
   supervisor.kill('SIGTERM');
   assert.equal((await waitForExit(supervisor)).code, 0);
   receipts.cleanup();

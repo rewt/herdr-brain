@@ -220,6 +220,181 @@ function occupiedRun(f, { project = f.git(['rev-parse', '--path-format=absolute'
   return run;
 }
 
+function unlandedSetting(f, cap) {
+  const file = path.join(f.repo, '.lane.json'), config = JSON.parse(fs.readFileSync(file));
+  config.dispatch = { ...config.dispatch, max_unlanded: cap };
+  fs.writeFileSync(file, JSON.stringify(config));
+}
+function pendingItem(f, { item = f.rec(['add', 'Pending landing', '--role', 'engineer']), meta = [] } = {}) {
+  const project = f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  const run = f.rec(['start', item, '--workspace', f.repo, '--meta', `dispatch_project=${project}`, ...meta.flatMap(m => ['--meta', m])]).match(/^(R-\d+) started/m)[1];
+  return { item, run };
+}
+
+test('default unlanded cap admits the eighth item, then refuses a new item before lane/run or awaited writes', t => {
+  const f = fixture(t);
+  const pending = Array.from({ length: 7 }, () => pendingItem(f));
+  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
+  const receipt = JSON.parse(admitted.stdout), job = JSON.parse(fs.readFileSync(receipt.journal));
+  assert.equal(job.unlandedCap.cap, 8); assert.equal(job.unlandedCap.count, 7);
+  const next = f.rec(['add', 'Ninth item', '--role', 'engineer']);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl')), calls = f.calls().length;
+  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--awaited']);
+  assert.equal(refused.status, 1);
+  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  assert.match(refused.stderr, /unlanded count 8, cap 8/);
+  for (const id of [...pending.map(p => p.item), f.item]) assert.ok(JSON.parse(refused.stdout).reason.includes(id));
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+  assert.equal(f.calls().slice(calls).some(c => c.type === 'lane'), false);
+  assert.equal(f.jobs().length, 1);
+});
+
+for (const disposition of ['dropped', 'landed']) test(`${disposition} items release unlanded capacity while closed without landing still counts`, t => {
+  const f = fixture(t); unlandedSetting(f, 1);
+  const prior = pendingItem(f);
+  f.rec(['close', prior.item]);
+  const refused = f.start(); assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  if (disposition === 'dropped') f.rec(['close', prior.item, '--dropped']);
+  else {
+    // Fixture a recorded train landing; this test never runs a promotion gate.
+    const file = path.join(f.org, 'events.jsonl'), state = f.state();
+    fs.appendFileSync(file, JSON.stringify({ type: 'promotion.reconciled', seq: state.eventCount + 1,
+      at: new Date().toISOString(), by: 'dispatch-test-agent', identity: f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']),
+      items: [prior.item], runs: [prior.run], heads: [{ item: prior.item, run: prior.run, head: 'a'.repeat(40) }] }) + '\n');
+  }
+  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(JSON.parse(admitted.stdout).journal)).unlandedCap.count, 0);
+});
+
+test('a from-run fix dispatches over the unlanded cap and records its admission without changing the session cap', t => {
+  const f = fixture(t); unlandedSetting(f, 1);
+  const prior = pendingItem(f, { item: f.item });
+  f.rec(['claim', prior.run, '--controller', 'brain']);
+  const result = f.start(['--from-run', prior.run]); assert.equal(result.status, 0, result.stderr);
+  const receipt = JSON.parse(result.stdout), run = f.show(receipt.run), job = JSON.parse(fs.readFileSync(receipt.journal));
+  assert.equal(run.meta.dispatch_unlanded_exception, 'fix');
+  assert.equal(run.meta.dispatch_from_run, prior.run);
+  assert.equal(job.unlandedCap.admission.kind, 'fix');
+  assert.equal(job.unlandedCap.count, 1); assert.equal(job.sessionCap.cap, 7);
+  assert.equal(f.dispatch(['--retry', receipt.run]).status, 0, 'prompt recovery consumes no exception slot');
+  assert.equal(f.show(f.item).runs.length, 2);
+});
+
+test('landing follow-ups record their dependency and share three active slots; a fourth refuses until one finishes', t => {
+  const f = fixture(t); unlandedSetting(f, 1);
+  const landing = pendingItem(f), receipts = [];
+  for (let n = 0; n < 3; n++) {
+    const item = n === 0 ? f.item : f.rec(['add', 'Landing follow-up', '--role', 'engineer']);
+    const result = f.dispatch([item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--unblocks', landing.item]);
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(result.stdout), run = f.show(receipt.run); receipts.push(receipt);
+    assert.equal(run.meta.dispatch_unlanded_exception, 'unblocks');
+    assert.equal(run.meta.dispatch_unblocks, landing.item);
+    assert.ok(f.state().links.some(l => l.blocker === item && l.blocked === landing.item));
+    assert.equal(JSON.parse(fs.readFileSync(receipt.journal)).unblocks, landing.item);
+  }
+  const next = f.rec(['add', 'Fourth landing follow-up', '--role', 'engineer']);
+  const args = [next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--unblocks', landing.item];
+  const refused = f.dispatch(args); assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  assert.match(refused.stderr, /unlanded count 4, cap 1/);
+  assert.match(refused.stderr, /All 3 active fix\/follow-up slots are occupied/);
+  assert.deepEqual(f.show(next).runs, []);
+  assert.equal(f.state().links.some(l => l.blocker === next), false);
+  // A fix uses the same exception pool, not a separate allowance.
+  const fix = f.start(['--from-run', receipts[0].run]);
+  assert.equal(JSON.parse(fix.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  f.rec(['abandon', receipts[0].run]);
+  const admitted = f.dispatch(args); assert.equal(admitted.status, 0, admitted.stderr);
+  const job = JSON.parse(fs.readFileSync(JSON.parse(admitted.stdout).journal));
+  assert.equal(job.unlandedCap.count, 4, 'abandoning a run does not drop its item');
+  assert.equal(job.unlandedCap.exceptions.count, 2);
+  const changed = f.dispatch(['--retry', receipts[1].run, '--unblocks', next]);
+  assert.match(changed.stderr, /--retry uses the saved request/);
+});
+
+test('unblocks validates a pending landing before side effects and invalid configured caps fail on reuse too', t => {
+  const f = fixture(t), neverDispatched = f.rec(['add', 'No pending landing', '--role', 'engineer']);
+  for (const target of [neverDispatched, f.item, 'ENG-999']) {
+    const events = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+    const result = f.start(['--unblocks', target, '--awaited']);
+    assert.equal(JSON.parse(result.stdout).code, 'DISPATCH_UNBLOCKS_INVALID');
+    assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+    assert.equal(f.calls().some(c => c.type === 'lane'), false);
+  }
+  const first = f.start(); assert.equal(first.status, 0, first.stderr);
+  const prior = JSON.parse(first.stdout); f.rec(['abandon', prior.run]);
+  unlandedSetting(f, 0);
+  const result = f.start(['--reuse', prior.run]);
+  assert.match(result.stderr, /dispatch.max_unlanded must be a positive integer/);
+});
+
+test('reuse bypasses only session admission and needs an explicit continuation at the unlanded cap', t => {
+  const f = fixture(t); unlandedSetting(f, 1); capSetting(f, 1);
+  const first = f.start(); assert.equal(first.status, 0, first.stderr);
+  const prior = JSON.parse(first.stdout); f.rec(['abandon', prior.run]);
+  const file = path.join(f.root, 'workers'), workers = JSON.parse(fs.readFileSync(file));
+  workers[prior.agent].agent_status = 'idle'; fs.writeFileSync(file, JSON.stringify(workers));
+  const next = f.rec(['add', 'Unrelated item', '--role', 'engineer']);
+  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--reuse', prior.run]);
+  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  const reused = f.start(['--from-run', prior.run, '--reuse', prior.run]); assert.equal(reused.status, 0, reused.stderr);
+  assert.equal(JSON.parse(reused.stdout).agent, prior.agent);
+  assert.equal(f.show(JSON.parse(reused.stdout).run).meta.dispatch_unlanded_exception, 'fix');
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+});
+
+test('unlanded admission retries current config before starting a run and preserves an already recorded reservation', t => {
+  const f = fixture(t); f.fail('prepare');
+  assert.equal(f.start().status, 1); const journal = f.jobs()[0];
+  const landing = pendingItem(f); unlandedSetting(f, 1); f.fail('');
+  const retry = f.dispatch(['--retry', journal]); assert.equal(JSON.parse(retry.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  assert.deepEqual(f.show(f.item).runs, []);
+  f.rec(['close', landing.item, '--dropped']); f.fail('dispatch');
+  assert.equal(f.dispatch(['--retry', journal]).status, 1);
+  const reserved = JSON.parse(fs.readFileSync(journal)); assert.ok(reserved.run);
+  f.fail(''); const resumed = f.dispatch(['--retry', reserved.run, '--fresh']);
+  assert.equal(resumed.status, 0, resumed.stderr);
+  assert.equal(JSON.parse(resumed.stdout).run, reserved.run);
+  assert.equal(f.show(f.item).runs.length, 1, 'recovery reuses its durable reservation');
+});
+
+for (const exceptional of [false, true]) test(`concurrent unlanded ${exceptional ? 'exception' : 'item'} admissions grant only the last available slot`, async t => {
+  const f = fixture(t); unlandedSetting(f, 1);
+  let target;
+  if (exceptional) {
+    target = pendingItem(f).item;
+    for (let n = 0; n < 2; n++) pendingItem(f, { meta: ['dispatch_unlanded_exception=unblocks'] });
+  }
+  const other = f.rec(['add', 'Concurrent item', '--role', 'engineer']);
+  const hook = admissionHook(f, `const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+ const result=rename.call(this,from,to);
+ if(once && String(to).endsWith('/dispatch-session-cap')) {once=false;pause();}
+ return result;
+};`);
+  const args = item => [item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, ...(target ? ['--unblocks', target] : [])];
+  const first = f.concurrent(args(f.item), hook); let second;
+  try {
+    await until(() => fs.existsSync(hook.PAUSE_MARKER));
+    second = f.concurrent(args(other), hook);
+    await until(() => admissionAttempts(hook) === 2);
+    assert.equal(second.child.exitCode, null);
+  } finally {
+    fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); await Promise.all([first.done, second?.done]);
+  }
+  const admitted = await first.done, refused = await second.done;
+  assert.equal(admitted.status, 0, admitted.stderr);
+  assert.equal(refused.status, 1, refused.stderr);
+  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  assert.equal(f.show(f.item).runs.length, 1); assert.deepEqual(f.show(other).runs, []);
+  assert.equal(promptCalls(f).length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+});
+
+test('dispatch help documents the unlanded limit, explicit exceptions and stable refusal', t => {
+  const result = fixture(t).dispatch(['--help']); assert.equal(result.status, 0, result.stderr);
+  for (const text of ['dispatch.max_unlanded defaults to 8', '--from-run', '--unblocks', '3 active exception runs', 'DISPATCH_UNLANDED_CAP']) assert.ok(result.stdout.includes(text));
+});
+
 test('session cap refuses before lane/run creation, lists occupants and admits after an ESRCH exit', t => {
   const f = fixture(t); capSetting(f, 2);
   const dead = spawnSync(process.execPath, ['-e', '']).pid;
@@ -971,6 +1146,7 @@ test('a real detached watcher acknowledges initialization and sheds supervisor p
 
 test('lost record start result is visible and recovered without starting a second run',t=>{
   const f=fixture(t),adapter=path.join(f.root,'record-adapter');
+  unlandedSetting(f,1);
   fs.writeFileSync(adapter,`#!/usr/bin/env node
 import {spawnSync} from 'node:child_process';
 const a=process.argv.slice(2),r=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...a],{encoding:'utf8',env:process.env});

@@ -22,9 +22,10 @@ import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/wor
 import { lookupProcess } from '../lib/processes.mjs';
 import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
+import { checkUnlandedCap } from './unlanded-cap.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
-const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL", allowPositionals: true, options: {
+const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nUnlanded items: dispatch.max_unlanded defaults to 8 (current project config layers). At the cap, only --from-run R-n fix rounds and --unblocks ITEM landing follow-ups proceed, at most 3 active exception runs combined. --unblocks records that this item blocks the named unlanded landing. DISPATCH_UNLANDED_CAP names the count, cap and items to land or drop first. The independent session cap still applies to new workers.", allowPositionals: true, options: {
   controller: { type: 'string', default: BRAIN_CONTROLLER },
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
@@ -33,7 +34,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   reuse: { type: 'string' }, retry: { type: 'string' }, status: { type: 'string' },
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
   'accept-delivered': { type: 'boolean' }, 'recover-run': { type: 'string' },
-  'from-run': { type: 'string' },
+  'from-run': { type: 'string' }, unblocks: { type: 'string' },
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'watch-cli': { type: 'string' },
 }});
 const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [process.execPath, local(fallback)];
@@ -83,7 +84,8 @@ const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
 const refusal = (code, message) => Object.assign(new Error(message), { code });
 const dispatchCodes = new Set(['REUSE_RUN_OPEN', 'REUSE_MISMATCH', 'REUSE_IDENTITY_UNKNOWN', 'REUSE_WORKER_BUSY',
-  'FROM_RUN_OTHER_ITEM', 'FROM_RUN_SUPERSEDED', 'DISPATCH_FAILED', 'DISPATCH_STOPPED', 'DISPATCH_HOOK_REVIEW']);
+  'FROM_RUN_OTHER_ITEM', 'FROM_RUN_SUPERSEDED', 'DISPATCH_FAILED', 'DISPATCH_STOPPED', 'DISPATCH_HOOK_REVIEW',
+  'DISPATCH_UNLANDED_CAP', 'DISPATCH_UNBLOCKS_INVALID']);
 function checkOrigin(runId, item, current = true) {
   const origin = json(record(['show', runId, '--json']));
   if (!/^R-\d+$/.test(runId) || origin.item !== item.id) throw refusal('FROM_RUN_OTHER_ITEM', '--from-run must name a run on the dispatched item');
@@ -188,6 +190,10 @@ function admission(repo, org, common) {
   if (job) job.sessionCap = evidence;
   return evidence;
 }
+function unlandedAdmission(request, { requireLink = false } = {}) {
+  const { config } = loadDiscoveredRoutes({ cwd: request.repo });
+  return checkUnlandedCap({ config, org: request.org, common: request.common, request, requireLink });
+}
 function prepareSessionBinding(run) {
   const binding = job.sessionBinding;
   if (job.worker.agentSessionId || run.meta.dispatch_attempt !== job.token ||
@@ -266,7 +272,7 @@ async function main() {
     return;
   }
   if (opt.retry) {
-    if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra', 'awaited', 'awaited-step'].some((key) => opt[key] !== undefined)) {
+    if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra', 'awaited', 'awaited-step', 'unblocks'].some((key) => opt[key] !== undefined)) {
       throw new Error('--retry uses the saved request; do not supply new work flags');
     }
     journal = locate(opt.retry);
@@ -331,6 +337,7 @@ async function main() {
     const declaredFields = { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null };
     if (opt.reuse) checkReuse(json(record(['show', opt.reuse, '--json'])), { lane: opt.lane, route: opt.route, declared: declaredFields });
     const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir'], repo));
+    unlandedAdmission({ repo, org, common, item: item.id, fromRun: opt['from-run'], unblocks: opt.unblocks });
     if (!opt.reuse) admission(repo, org, common);
     const token = randomUUID();
     const directory = path.join(org, 'dispatch');
@@ -338,7 +345,7 @@ async function main() {
     journal = path.join(directory, `${token}.json`);
     job = { token, repo, org, common, predecessor, release: bundleRelease(), item: positionals[0], lane: opt.lane, route: opt.route,
       brief, report: opt.report ?? null, to: opt.to,
-      base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null,
+      base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields,
       stage: 'open', run: null };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
@@ -366,6 +373,7 @@ async function main() {
     job.run = run.id; claimAdmission(); job.stage = 'worker'; save();
   }
   if (job.stage === 'open') {
+    unlandedAdmission(job);
     if (job.fromRun) checkOrigin(job.fromRun, json(record(['show', job.item, '--json'])));
     if (job.reuse) checkReuse(json(record(['show', job.reuse, '--json'])), job);
     memoryGate('memory_open', 'dispatch', checkStop);
@@ -394,12 +402,24 @@ async function main() {
   if (job.stage === 'start') {
     if (job.fromRun) checkOrigin(job.fromRun, json(record(['show', job.item, '--json'])));
     if (job.reuse) checkReuse(json(record(['show', job.reuse, '--json'])), job);
+    // The run is the durable item/exception reservation, even if launch fails.
+    // Reuse shares this admission too. Never hold the project lock over memory
+    // waits; session launch takes the same lock again for its independent cap.
+    releaseAdmission = acquireSessionCapLock(common, { check: checkStop });
+    job.unlandedCap = unlandedAdmission(job);
+    if (job.unblocks) {
+      record(['block', job.unblocks, '--by', job.item]);
+      job.unlandedCap = unlandedAdmission(job, { requireLink: true });
+    }
     delete job.startRefused;
     job.stage = 'starting'; save();
     let output;
     try { output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
       '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`,
+      ...(job.fromRun ? ['--meta', `dispatch_from_run=${job.fromRun}`] : []),
+      ...(job.unblocks ? ['--meta', `dispatch_unblocks=${job.unblocks}`] : []),
+      ...(job.unlandedCap.admission.kind !== 'regular' ? ['--meta', `dispatch_unlanded_exception=${job.unlandedCap.admission.kind}`] : []),
       ...(job.fromRun ? ['--if-current-run', job.fromRun] : []),
       ...(job.reuse ? ['--meta', `continuation_of=${job.reuse}`, '--meta', 'same_session=true'] : []),
       ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
@@ -411,6 +431,7 @@ async function main() {
     if (!job.run) throw new Error('record start returned no run id; inspect record before retry');
     claimAdmission();
     job.stage = 'worker'; save();
+    releaseAdmission(); releaseAdmission = undefined;
     note(`run started; request ${journal}`);
   }
   claimAdmission();

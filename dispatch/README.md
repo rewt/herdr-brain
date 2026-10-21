@@ -75,8 +75,61 @@ when the error has no code. A working occupant or newer open-run holder uses
 `DISPATCH_FAILED`; existing dispatch-owned codes are preserved. Inspect a late
 failure's journal to recover its started run.
 
-Dispatch caps new sessions per Git common-directory project at **7**, matching
-BCH's `MAX_SESSIONS` default and leaving room for the normal 4–6 concurrent lanes.
+Dispatch also caps **unlanded items at 8** per canonical Git common-directory
+project. Set `dispatch.max_unlanded` to a positive integer beside
+`dispatch.max_sessions` in the existing dispatch configuration. Both use
+`loadDiscoveredRoutes` and its current project configuration layers (including
+the config home when supplied by that loader); there is no separate cap config
+path. The usual `.lane.json` fallback layers and explicit `LANE_CONFIG` apply.
+For example, `"dispatch": { "max_sessions": 7, "max_unlanded": 8 }` sets both.
+
+The unlanded count is derived from record events, once per item with a
+`run.started` in this project, including manual record starts. A matching
+`promotion.reconciled` item/run/head tuple covers that attempt and earlier
+attempts; a later run on the item makes it unlanded again. An explicit current
+`item.closed` as `dropped` also releases the item; reopening a dropped item
+restores its unlanded count. A done report, abandoned run or ordinary closure as
+done **does not release it** without a recorded landing. Parked and kept lanes
+still count. Items with no run and another project's runs are excluded from the
+count; promotion exclusions do not establish a landing. Original start metadata supplies project
+identity; legacy runs resolve their workspace through Git. Unavailable legacy
+workspace evidence conservatively counts, so deleted worktrees cannot silently
+free capacity. No worktree census or display session registry supplies authority.
+
+At or above the cap, only these explicit exceptions dispatch:
+
+- Fix rounds using `--from-run R-previous`, including settle's correction runs
+  on the same item/lane. Existing origin and current-run guards still apply.
+- Landing follow-ups using `--unblocks ITEM`, naming another unlanded item in
+  this project. Dispatch records `record block ITEM --by NEW-ITEM` before run
+  creation and records `dispatch_unblocks=ITEM` on the new run. An existing
+  dependency alone, a shared lane or `--reuse` alone grants no exception.
+
+These share **3 active exception runs**, including reused workers. Admission at
+the cap records `dispatch_unlanded_exception=fix|unblocks` in the original
+`run.started` metadata, an admission fact rather than stored status. A report
+or explicit abandonment ends that exception's occupancy; it does not itself
+land the item. Normal admissions below the cap consume no exception slot.
+`DISPATCH_UNLANDED_CAP` refuses ordinary work at the cap or a fourth active
+exception. Its message names the current count, cap and unlanded item IDs,
+and tells the caller to finish a listed landing or explicitly drop that work;
+when exception slots are full it also names the active runs to finish first.
+An invalid target uses `DISPATCH_UNBLOCKS_INVALID`.
+
+Early unlanded checks precede lane, run and awaited-item writes. After the open
+memory wait and preparation, the authoritative recount and record start share
+the session cap's `<git-common-dir>/dispatch-session-cap/` admission lock. The
+recorded run durably reserves the item and any exception slot before release,
+so concurrent dispatches cannot take the same final slot. Failed/uncertain
+launches keep that reservation. A retry without a recorded run checks the
+current cap again; recovery of a recorded run consumes no new reservation.
+`--unblocks` is saved with the request and cannot be changed on retry. The record
+core remains advisory and never refuses a manual start for these caps. BCH's
+settle-watch and reconcile do not participate in this policy.
+
+The independent session cap limits new sessions per Git common-directory project
+to **7**, matching BCH's `MAX_SESSIONS` default and leaving room for the normal
+4–6 concurrent lanes.
 Set `dispatch.max_sessions` to a positive integer in the existing `.lane.json`
 dispatch settings. The usual parent/repository layers and explicit `LANE_CONFIG`
 apply; like other dispatch fields, a later `dispatch` object replaces that object.
@@ -107,7 +160,7 @@ It never authorizes closing or abandoning anything; cleanup requires the
 existing lifecycle authority. Reuse and prompt/watch recovery that create no
 new session remain admissible without consuming another session.
 
-Early admissions are lock-free advisory counts. After both memory gates and
+Early session admissions are lock-free advisory counts. After both memory gates and
 lane/record preparation, the final recount and durable worker launch are
 serialized under `<git-common-dir>/dispatch-session-cap/`, so simultaneous
 dispatches cannot both take the last slot. Waiting for memory never holds this
@@ -126,7 +179,8 @@ inspect surviving dispatch processes before manually removing that lock director
 and retrying. Age alone cannot establish safe ownership, so it never clears this
 legacy case automatically. Live `--reuse`
 continuations and retries that only record a worker, arm watch or deliver the
-saved prompt do not add a session and bypass admission. An explicit `--fresh`
+saved prompt do not add a session and bypass session admission. New reused runs
+still require the unlanded admission described above. An explicit `--fresh`
 launch still checks capacity, including an uncertain earlier launch.
 
 Settle adds `--from-run R-previous` to bind a correction to its originating run.

@@ -107,8 +107,8 @@ else {console.error('unexpected fixture command '+a.join(' '));process.exit(1);}
     if (row.action === 'scratch-manifest') assertFixtureScratch(row.manifest, options.env ?? env, options.scratchRoots);
     options.log?.(row);
   } });
-  const close = (gitOnly = true) => {
-    const result = spawnSync(process.execPath, [laneCLI, 'close', 'topic', ...(gitOnly ? ['--git-only'] : []), ...(merged ? ['--expected-tip',head] : [])], { cwd: repo, env, encoding: 'utf8' });
+  const close = (gitOnly = true, options = {}) => {
+    const result = spawnSync(process.execPath, [laneCLI, 'close', 'topic', ...(gitOnly ? ['--git-only'] : []), ...(merged ? ['--expected-tip',head] : [])], { cwd: repo, env, encoding: 'utf8', ...options });
     assertCloseScratch(result, env);
     return result;
   };

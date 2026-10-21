@@ -1,4 +1,5 @@
 import test from './helpers/bounded-test.mjs';
+import { commandAllowance } from './helpers/command-allowance.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +9,7 @@ import { prepareScratchSweep, SCRATCH_OWNER_FILE } from '../lib/scratch-sweep.mj
 import { readProcessFileReferences } from '../lib/lane-removal.mjs';
 import { discoverArchive } from '../lib/archive.mjs';
 import { assertFixtureScratch } from './helpers/scratch-fixture.mjs';
+import { loadTimeout } from '../lib/deadline.mjs';
 
 function setup(t, options) {
   const f = fixture(t, { occupied: false, ...options }), root = path.join(f.scratch, 'scratch');
@@ -36,7 +38,9 @@ for (const transport of ['runtime', 'CLI']) test(`the ${transport} retirement fi
   if (transport === 'runtime') manifest = f.retirement({ command: sweepCommands(f).command })
     .removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true }).scratchManifest;
   else {
-    const result = f.close(); assert.equal(result.status, 0, result.stdout + result.stderr);
+    // The real close includes both cwd and open-file inventories for scratch.
+    const result = f.close(true, { [commandAllowance]: loadTimeout(45_000) });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
     manifest = result.stdout.split('\n').filter(line => line.startsWith('{')).map(JSON.parse)
       .find(row => row.action === 'scratch-manifest').manifest;
   }

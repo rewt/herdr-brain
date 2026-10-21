@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { ownerAlive, ownerIdentity, readOwnerProcess } from '../lib/process-owner.mjs';
 
 export function acquireWatcherLock({ org, run, directory = path.join(fs.realpathSync(org), 'watch/locks'), pid = process.pid, readProcess = readOwnerProcess }) {
@@ -17,11 +17,18 @@ export function acquireWatcherLock({ org, run, directory = path.join(fs.realpath
     if (fs.readFileSync(lock, 'utf8') !== prior) throw new Error(`watcher lock changed for ${run}; inspect`);
     fs.unlinkSync(lock);
   }
-  try { fs.writeFileSync(lock, owner, { flag: 'wx' }); }
+  const temp = `${lock}.${randomUUID()}.tmp`;
+  try {
+    // Publish only complete JSON. A hard link is atomic and never replaces an
+    // existing owner, unlike rename; the staging file shares the lock's device.
+    fs.writeFileSync(temp, owner, { flag: 'wx' });
+    fs.linkSync(temp, lock);
+  }
   catch (error) {
     if (error.code === 'EEXIST') throw new Error(`another watcher already owns ${run}`);
     throw error;
   }
+  finally { fs.rmSync(temp, { force: true }); }
   return () => {
     try { if (fs.readFileSync(lock, 'utf8') === owner) fs.unlinkSync(lock); }
     catch { /* Already released. */ }

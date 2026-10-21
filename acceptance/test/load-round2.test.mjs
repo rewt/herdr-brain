@@ -9,7 +9,7 @@ import { createLoadMonitor, waitUntil, LoadTimeout } from '../load.mjs';
 import { commandFailure, classifyFailure, requireSuccessfulChecks } from '../limits.mjs';
 import { cases, runCase } from '../cases.mjs';
 import { settleCase } from '../settle.mjs';
-import { supervisorCase } from '../supervisor.mjs';
+import { supervisorCase, waitForPromotionQueue } from '../supervisor.mjs';
 import { loadAwareCommand } from '../commands.mjs';
 
 const candidate = path.resolve('.');
@@ -21,6 +21,49 @@ function monitor(t, heavy = true) {
   t.after(load.stop);
   return load;
 }
+
+function queueClock(t, { loadValue = 0, completeAt = Infinity, outcome = 'promoted' } = {}) {
+  let at = 0, reads = 0;
+  const load = createLoadMonitor({ cpus: 18, read: () => [loadValue, 0, 0], now: () => at });
+  t.after(load.stop);
+  // An injected queue read exposes command completion without launching a
+  // process; host load and real sleeps cannot control these witnesses.
+  const queue = () => { reads++; return { results: at >= completeAt ? [{ outcome }] : [] }; };
+  const until = (fn, label, ms) => waitUntil(fn, label, ms, {
+    load, now: () => at, sleep: async ms => { at += ms; },
+  });
+  return { wait: () => waitForPromotionQueue(queue, until), load,
+    now: () => at, reads: () => reads, setLoad: value => { loadValue = value; } };
+}
+
+test('supervisor queue allows measured compound cleanup beyond ten seconds at normal load', async t => {
+  const clock = queueClock(t, { completeAt: 12_000 });
+  await clock.wait();
+  assert.equal(clock.now(), 12_000);
+  assert.equal(clock.reads(), 81);
+});
+
+test('supervisor queue still times out finitely at normal load', async t => {
+  const clock = queueClock(t);
+  await assert.rejects(clock.wait(), error => {
+    assert.ok(error instanceof LoadTimeout);
+    assert.deepEqual(classifyFailure(error), { status: 'FAIL', origin: 'product', detail: 'timeout: finite queue completed' });
+    return true;
+  });
+  assert.equal(clock.now(), 16_050, '16 s allowance rounded to the existing 150 ms polling cadence');
+});
+
+test('supervisor queue scales once using current load and preserves a completed refusal for the case assertion', async t => {
+  const clock = queueClock(t, { loadValue: 24, completeAt: 70_050, outcome: 'refused' });
+  await clock.wait();
+  assert.equal(clock.now(), 70_050, 'the shared factor of six permits a completion beyond 16 s');
+  // This wait observes completion only; supervisorCase still asserts promoted.
+  const hung = queueClock(t, { loadValue: 24 });
+  const pending = hung.wait();
+  hung.setLoad(240);
+  await assert.rejects(pending, error => error instanceof LoadTimeout && error.load.heavy);
+  assert.equal(hung.now(), 96_000, 'load changes cannot extend the sampled 16 s x 6 allowance');
+});
 
 test('a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure', (t) => {
   const load = monitor(t), root = fs.mkdtempSync(path.join(os.tmpdir(), 'eng103-mixed-tap-'));

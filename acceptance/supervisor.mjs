@@ -11,6 +11,15 @@ import { loadAwareCommand } from './commands.mjs';
 import { waitUntil } from './load.mjs';
 import { scratchFixtureCommand, scratchProductHomes, enterScratchHomes } from './environment.mjs';
 
+// ENG-512: the native/concurrent-suite phase envelope is 1.044 s train,
+// 0.347 s record closeout, 7.999 s guarded cleanup and 0.496 s delivery.
+// Add a 150 ms observation cadence and 50% I/O margin, rounded up to 16 s.
+// Cleanup includes the host scratch scan (ENG-511); waitUntil still applies
+// the shared load factor once, independently of heavy-load classification.
+export function waitForPromotionQueue(queue, until = waitUntil) {
+  return until(() => queue().results.length === 1, 'finite queue completed', 16_000);
+}
+
 export async function supervisorCase(candidate, { load, execute = spawnSync,
   until = (fn, label, ms) => waitUntil(fn, label, ms, { load }) } = {}) {
   const cleanup = [], receipts = [];
@@ -69,7 +78,7 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     receipts.push(promoted);
     const queueFile = path.join(f.repo, '.git/promote/queue.json');
     const queue = () => JSON.parse(fs.readFileSync(queueFile, 'utf8'));
-    await until(() => queue().results.length === 1, 'finite queue completed', 10000);
+    await waitForPromotionQueue(queue, until);
     assert.equal(queue().results[0].outcome, 'promoted', JSON.stringify(queue().results));
     assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
     assert.ok(!fs.existsSync(f.workspace), 'promoted lane closed');

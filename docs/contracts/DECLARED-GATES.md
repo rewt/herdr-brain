@@ -4,6 +4,11 @@ Status: **binding contract for ARCH-38, approved 2026-10-21 on `review-sol-max`;
 review `lr-aa342e2099490484937ea7ba9c7baa53` (`af96a9a-r1`), PASS.** Approval
 covers the contract; implementation and activation require their own evidence.
 
+Execution-identity amendment: the supervisor's R-709 instruction on 2026-10-21
+aligns that section with agreed plan 2.5 and defers native launch provenance to
+plan 7. The remaining authority review covers this amendment and implementation;
+the original PASS above does not claim acceptance of the amendment.
+
 The agreed [2026-10-21 plan, sections 2.5 and 3.2](/Users/rewt/development/rewt/.org/proposals/PLAN-20261021.md)
 requires a project's train, gates and sessions to run as that project's identity.
 The [BCH feasibility report](/Users/rewt/development/bastian/archive/BCD-C-PLANNER-20261021.md)
@@ -317,35 +322,36 @@ solely to produce a second receipt for identical proven inputs.
 
 ## Execution identity and authority
 
-The owning project's supervisor starts its train worker from that project's
-canonical checkout, inside its own identity's native harness context. Sessions
-launch from the project's directory with that identity's native configuration
-and any already-authorized identity launch prefix. Brain's read-across chat is
-not an execution host for another project's commands.
+**Hard boundary.** Each identity's operator-owned native sandbox is the root of
+trust. Brain does not verify native execution identity on a shared-UID host,
+and its checks do not stop a hostile process outside its sandbox. These checks
+stop mistakes, at the level agreed in plan 2.5; a project needing a hard wall
+gets its own identity.
 
-Before executing any declared preparation, planner, runner or session launch,
-admission resolves the canonical Git common directory to the owning identity
-and verifies the supervisor/worker's existing launch authorization. Bind every
-enqueue to its actual enqueuing identity and project, and compare them again
-when dequeuing, resuming and integrating. Refuse a foreign, missing, ambiguous
-or changed identity before executing project code. Jobs cannot pick another
-identity through config, argv, queue JSON or a `launch` override. Identity names
-in an environment variable, session display metadata, record actor, directory
-basename or a shared OS UID are insufficient evidence. Reuse the native launch
-and project/session authorization binding; absent provenance is a hold, never
-an instruction to manufacture credentials.
+Enqueue, drain, dequeue, resume and integration proceed only when the caller's
+identity root equals the project's identity root. Both roots use the existing
+`messages/journal.mjs` `identityRootAt` detection, as in CONFIG-HOME's identity
+section: detect the caller from its cwd and the project from its canonical Git
+common directory. No marker means the standard default identity. The caller
+must also be in the project's canonical checkout or one of its linked worktrees,
+matched by Git common directory. Record both roots in the job and attempt and
+recheck at dequeue, resume and integration. A mismatch or ambiguous root refuses
+with a stable code before any side effect. `--repo` targeting another identity's
+project refuses; config, argv, environment and session display metadata grant
+no identity override.
 
-This protects against a confused deputy, rather than granting config files a
-new security power. The native sandbox remains the hard boundary, owned by the
-operator. A directory/marker/allow-list check is a routing safeguard, not an OS
-isolation claim. No identity switch, sandbox widening, inherited Brain access
-or credential forwarding is performed by a gate. A config author can arrange
-execution only with the owner's already-authorized access. Writing another
-project's config never invokes anything with more access than that project
-already has; a broader Brain launcher must refuse instead of becoming its
-executor. Cross-identity edits/requests retain the plan's owner-request or
-operator authority and no-relaying rules. Permission refusals go to the
-operator, never to another identity for execution.
+**Worker continuity.** The project's own supervisor launches its train from its
+own checkout. The detached worker is started only by that enqueue and binds to
+its job, project and identity root. A resume from a different identity root
+refuses. Brain performs no identity switch, sandbox widening or credential
+forwarding. Native execution provenance (per-identity launch authorization) is
+future work with the `brain` identity in plan 7, not a prerequisite of this release.
+
+**Config written by another identity never launches anything.** Brain's commands
+never enqueue or drain for a foreign identity root, so writing a project's config
+cannot run its gates with the writer's access. Cross-identity edits and requests
+retain the plan's owner-request, operator-authority and no-relaying rules.
+Permission refusals go to the operator, never to another identity for execution.
 
 ## Compatibility, rollback and release evidence
 

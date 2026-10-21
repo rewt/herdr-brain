@@ -21,11 +21,29 @@ import { runProjectGateSync } from './gate-profile.mjs';
 import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
 import { verifyTrainResult } from './evidence.mjs';
 import { probeNativeGate, nativeWorkerEvidence, liveNativeWorker } from './native-context.mjs';
+import { sameDeclaration, refuse as declaredRefusal } from './declaration.mjs';
+import { readDeclared } from '../lanes/validation.mjs';
+import { executionIdentity } from './execution-identity.mjs';
+import { bindRequirements } from './declared-selection.mjs';
+import { policyBinding } from './declared-policy.mjs';
+import { resolveGateProfile } from './gate-profile.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const LANE = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const singleLine = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
+const CAPABILITIES = { declaration: 'declared-gates/v1', selection: 'promotion-tests/v2', execution: 'declared-gate-execution/v1' };
+const capableWorkers = new Set();
+function requireDeclaredWorker(release, canonical) {
+  if (!release || release.root === bundleRelease().root) return;
+  const worker = operationFile('promote/promote.mjs', release);
+  if (capableWorkers.has(worker)) return;
+  const result = spawnSync(process.execPath, [worker, '--capabilities'], { cwd: canonical, encoding: 'utf8', timeout: 2000, maxBuffer: 65536 });
+  let capabilities;
+  try { capabilities = JSON.parse(result.stdout); } catch {}
+  if (result.error || result.status !== 0 || JSON.stringify(capabilities) !== JSON.stringify(CAPABILITIES)) throw declaredRefusal('bound release does not support the declaration, typed selection and execution receipt; keep this project held');
+  capableWorkers.add(worker);
+}
 
 export function queueJobs(data) {
   const members = current => current?.jobs ? current.jobs.map(job => {
@@ -38,11 +56,18 @@ export function queueJobs(data) {
   return [...new Map(rows.map(job => [job.id, job])).values()];
 }
 
-export function queueFor(cwd) {
+function hasDeclaredWork(project) {
+  const file = path.join(project.identity, 'promote/queue.json');
+  if (!fs.existsSync(file)) return false;
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return [...(data.pending ?? []), ...(data.current?.jobs ?? (data.current ? [data.current] : [])), ...(data.interrupted ?? []).flatMap(batch => batch.jobs ?? [batch])].some(job => job.gate_mode);
+}
+export function queueFor(cwd, { readOnly = false } = {}) {
   const project = gitProject(cwd);
+  if (!readOnly && (readDeclared(project.canonical) || hasDeclaredWork(project))) executionIdentity(project);
   const directory = path.join(project.identity, 'promote');
   const file = path.join(directory, 'queue.json');
-  fs.mkdirSync(directory, { recursive: true });
+  if (!readOnly) fs.mkdirSync(directory, { recursive: true });
   const load = () => {
     if (!fs.existsSync(file)) return { identity: project.identity, pending: [], current: null, results: [] };
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -133,13 +158,36 @@ function settings(project, opt) {
     laneConfig: process.env.LANE_CONFIG ? path.resolve(process.env.LANE_CONFIG) : null };
 }
 
+function checkDeclaredJobs(queue, jobs) {
+  const current = readDeclared(queue.project.canonical);
+  if (current) executionIdentity(queue.project);
+  for (const job of jobs) {
+    if (!current && !job.gate_mode) continue;
+    if (job.gate_mode !== 'declared-gates/v1' || job.validate || job.laneConfig) throw declaredRefusal('incompatible queued job; explicit disposition and re-enqueue required');
+    if ((job.requiredTests ?? []).some(row => typeof row !== 'string' && (!row?.definition || !row.scope || !row.toolchain))) throw declaredRefusal('typed requirement lost its admission binding');
+    executionIdentity(queue.project, { bound: job.execution_identity ?? null });
+    sameDeclaration(job.declared, current);
+    requireDeclaredWorker(job.release, queue.project.canonical);
+  }
+}
+
 export function enqueue(queue, topics, options) {
   options = { ...options, release: bundleRelease() };
-  if (options.requiredTests !== undefined && (!Array.isArray(options.requiredTests) || options.requiredTests.length > 512 || options.requiredTests.some(f => typeof f !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(f) || f.split('/').includes('..') || path.isAbsolute(f)))) throw Error('invalid required test files');
+  const declared = readDeclared(queue.project.canonical, { override: options.validate });
+  if (declared) {
+    const identity = executionIdentity(queue.project);
+    if (options.laneCLI && options.laneCLI !== LANE) throw declaredRefusal('declared jobs require the capable bundled lane CLI');
+    resolveGateProfile(queue.project.canonical); // validate the full profile before queue writes
+    const base = git(queue.project.canonical, ['rev-parse', 'HEAD']);
+    const requiredTests = bindRequirements(options.requiredTests ?? [], declared.value,
+      row => policyBinding(queue.project.canonical, base, declared.value, [row]));
+    options = { ...options, laneCLI: LANE, validate: null, laneConfig: null, gate_mode: declared.schema, declared, execution_identity: identity, requiredTests };
+  } else if (options.requiredTests !== undefined && (!Array.isArray(options.requiredTests) || options.requiredTests.length > 512 || options.requiredTests.some(f => typeof f !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(f) || f.split('/').includes('..') || path.isAbsolute(f)))) throw Error('invalid required test files');
   if (options.expectedHead !== undefined && (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.expectedHead) || topics.length !== 1)) throw new Error('expected head requires one lane and a full commit hash');
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
   if (options.superseded !== undefined && (!Array.isArray(options.superseded) || (options.superseded.length && !options.run) || new Set(options.superseded).size !== options.superseded.length || options.superseded.some(id => !/^R-\d+$/.test(id)))) throw Error('invalid explicit superseded runs');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
+  const heads = new Map(declared ? topics.map(topic => [topic, options.expectedHead ?? git(queue.project.canonical, ['rev-parse', '--verify', `refs/heads/lane/${topic}`])]) : []);
   const admit = () => queue.transaction((data) => {
     if (options.existingWorker && !liveNativeWorker(queue.project.identity)) throw settingsRefusal('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
     return topics.map((topic) => {
@@ -153,12 +201,13 @@ export function enqueue(queue, topics, options) {
       }
       const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && ['refused', 'timeout'].includes(job.result?.outcome)));
       if (existing) {
-        if (JSON.stringify(existing.superseded ?? []) !== JSON.stringify(options.superseded ?? []) || JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
+        if (JSON.stringify(existing.superseded ?? []) !== JSON.stringify(options.superseded ?? []) || JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== (heads.get(topic) ?? options.expectedHead) || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
         return { id: existing.id, topic, duplicate: true };
       }
       const record = options.run ? loadEvents(options.org) : null;
       if (record?.tornTail) throw Error('incomplete record event; nothing queued');
       const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options,
+        ...(declared ? { expectedHead: heads.get(topic) } : {}),
         ...(record ? { admittedSeq: record.events.at(-1)?.seq ?? 0 } : {}) };
       data.pending.push(job);
       return { id: job.id, topic, duplicate: false };
@@ -234,6 +283,7 @@ function performBatch(batch, queue, settings) {
   // The train checks ownership inside per-member capture. Checking all jobs
   // here would turn one invalid binding into an interruption of every sibling.
   const first = batch.jobs[0], cwd = queue.project.canonical;
+  checkDeclaredJobs(queue, batch.jobs);
   const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
   const directory = path.join(queue.directory, 'batches', batch.id);
@@ -531,6 +581,7 @@ async function deliver(job, result, queue) {
 }
 
 export async function drain(queue, { attempted = new Set() } = {}) {
+  checkDeclaredJobs(queue, queueJobs(queue.load()).filter(job => !job.finished));
   let release;
   let handedOff = false;
   const rememberCompletion = (data, job, result) => {
@@ -562,7 +613,8 @@ export async function drain(queue, { attempted = new Set() } = {}) {
   if (!release) { process.send?.({ ready: true, already_running: true }); return; }
   const ownerFile = path.join(queue.directory, 'worker.lock', 'owner.json');
   const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
-  writeFileAtomic(ownerFile, JSON.stringify({ ...owner, project: queue.project.identity, release: bundleRelease() }) + '\n');
+  writeFileAtomic(ownerFile, JSON.stringify({ ...owner, project: queue.project.identity, release: bundleRelease(),
+    ...(readDeclared(queue.project.canonical) ? { execution_identity: executionIdentity(queue.project) } : {}) }) + '\n');
   let acknowledged = false;
   try {
     for (;;) {
@@ -576,6 +628,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
       }
       const entry = queue.transaction((data) => {
         const candidate = data.current ?? (data.interrupted ?? []).find(batch => !batch.native_refusal && !attempted.has(batch.id)) ?? data.pending[0];
+        if (candidate) checkDeclaredJobs(queue, candidate.jobs ?? [candidate]);
         const admitted = candidate?.release ?? candidate?.jobs?.[0]?.release;
         // Transfer before dequeuing: persisting a new job as "promoting"
         // would make the receiving worker classify its first attempt as a crash.
@@ -617,9 +670,12 @@ export async function drain(queue, { attempted = new Set() } = {}) {
           // Snapshot whatever is available now. No accumulation timer/window.
           // Different command/config inputs retain their independent gates.
           // Older jobs still carry "workflow": false; the retired engine flag is ignored.
-          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, Boolean(job.run)]);
+          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, Boolean(job.run), job.declared?.source.digest ?? null]);
           const jobs = [next];
-          while (jobs.length < policy.maxBatch && data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
+          while (jobs.length < policy.maxBatch && data.pending.length && key(data.pending[0]) === key(next)) {
+            checkDeclaredJobs(queue, [data.pending[0]]);
+            jobs.push(data.pending.shift());
+          }
           const job = { id: randomUUID(), phase: 'batching', jobs };
           data.current = job;
           return { job, newlyDequeued: true };
@@ -738,6 +794,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
 }
 
 async function start(queue) {
+  checkDeclaredJobs(queue, queueJobs(queue.load()).filter(job => !job.finished));
   const output = fs.openSync(path.join(queue.directory, 'worker.log'), 'a');
   const env = { ...process.env };
   for (const key of ['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID', 'LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR']) delete env[key];
@@ -774,9 +831,13 @@ async function main() {
     'superseded-runs': { type: 'string' }, 'required-tests': { type: 'string' }, 'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
     'existing-worker': { type: 'boolean' }, resume: { type: 'boolean' }, drain: { type: 'boolean' }, status: { type: 'boolean' },
     'cleanup-job': { type: 'string' },
+    capabilities: { type: 'boolean' },
     'attempted-batches': { type: 'string' },
   } });
+  if (opt.capabilities) { process.stdout.write(JSON.stringify(CAPABILITIES) + '\n'); return; }
   if (opt['existing-worker'] && (opt.resume || opt.drain)) throw Error('--existing-worker is enqueue-only; it never starts or resumes a worker');
+  const target = gitProject(opt.repo);
+  if (!opt.status && (readDeclared(target.canonical) || hasDeclaredWork(target))) executionIdentity(target);
   // --drain/--cleanup-job are continuations of recorded operations, not new
   // admissions. Their immutable path chooses the bundle even after a re-pin.
   if (!opt.drain && !opt['cleanup-job']) {
@@ -786,7 +847,7 @@ async function main() {
     const forwarded = bound ? continueOwnerRelease('promote/promote.mjs', bound) : forwardRelease('promote/promote.mjs', opt.repo);
     if (forwarded !== null) { process.exitCode = forwarded; return; }
   }
-  const queue = queueFor(opt.repo);
+  const queue = queueFor(opt.repo, { readOnly: opt.status });
   if (opt['cleanup-job']) {
     const saved = queue.load().results.findLast(row => row.id === opt['cleanup-job']);
     if (!saved || saved.release?.root !== bundleRelease().root || saved.cleanup?.state !== 'pending' || saved.reconciliation?.state === 'pending') throw Error('cleanup continuation does not match this bundle and pending receipt');
@@ -803,6 +864,7 @@ async function main() {
   }
   if (opt.resume) {
     if (positionals.length) throw Error('--resume takes no lane topics');
+    checkDeclaredJobs(queue, queueJobs(queue.load()).filter(job => !job.finished));
     // Only an explicit native resume may release a capability refusal. Ordinary
     // drains leave it intact while processing unrelated requests.
     if (queue.load().interrupted?.some(batch => batch.native_refusal)) {

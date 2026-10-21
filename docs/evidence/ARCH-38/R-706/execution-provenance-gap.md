@@ -1,5 +1,11 @@
 # Execution provenance missing from the declared-gates contract
 
+Historical R-706 diagnosis. The supervisor explicitly amended the identity
+section in R-709 to the plan-2.5 routing safeguard, with native provenance
+deferred to plan 7. The one-off diagnostic fixture was removed; implementation
+witnesses now live in `promote/test/execution-identity.test.mjs`. The observations
+and command below describe the R-706 source revision, not the amended behavior.
+
 R-706 stopped implementation under the ask's instruction: if the approved
 contract is wrong or incomplete, stop and report the gap. The contract's
 authority review remains PASS; this finding does not amend its requirements.

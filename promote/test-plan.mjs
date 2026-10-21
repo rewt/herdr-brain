@@ -33,6 +33,7 @@ export function changedPaths(cwd, base, head) {
   return r.stdout.split('\0').filter(Boolean);
 }
 export function plannedCommand(command, plan) {
+  if (plan?.schema === 'promotion-tests/v2' && !plan.command) throw Error('typed selection requires its complete declared executor command');
   if (!plan?.command) return command;
   return `export MONITOR_PROMOTION_TEST_FILES=${quote(JSON.stringify(plan.files))}; ( ${command} ) && ${plan.command}`;
 }

@@ -42,10 +42,12 @@ import { waitForPromotionMemory, refuseBeforeTrain } from '../promote/memory-gat
 import { ROUTE_PRESET } from './preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
-import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment } from './validation.mjs';
+import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment, readDeclared } from './validation.mjs';
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, requireExactPlan, selectionUnknown } from './exact-validation.mjs';
 import { changedPaths, plannedCommand } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
+import { executionIdentity } from '../promote/execution-identity.mjs';
+import { gitProject } from '../lib/project.mjs';
 
 import {
   loadRegistry,
@@ -2521,6 +2523,8 @@ function check(args) {
   const required = [...new Set(requiredTests ?? [])].sort();
   if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by bash herdr/release.sh build TAG');
   const settings = validationSettings();
+  if (settings.declared && (exactGate || tier === 'promotion') && override === undefined)
+    fail('declared promotion runs through the promotion queue, including planning and preparation; use --cmd for a local development check');
 
   let command = override ?? settings.tiers[tier].command;
   requireClean(REPO, "current worktree");
@@ -2528,7 +2532,7 @@ function check(args) {
   const branch = git(["branch", "--show-current"]);
   if (branch === "") fail("current checkout is detached; check requires a branch");
 
-  let exact, env = validationEnvironment(), prepare = CONFIG.prepare ?? [], environment = settings.environment, profile;
+  let exact, env = validationEnvironment(), prepare = settings.declared ? [] : CONFIG.prepare ?? [], environment = settings.environment, profile;
   if (exactGate) {
     try {
       if (override !== undefined || tier !== 'fast') throw Error('--gate cannot be combined with --cmd or --tier');
@@ -2599,6 +2603,11 @@ function withPromotionLock(operation) {
 
 function promote(topic, options = {}) {
   const root = repositoryRoot({ requiredBy: "promote" });
+  if (readDeclared(root)) {
+    try { executionIdentity(gitProject(root)); }
+    catch (error) { fail(error.message); }
+    fail('declared promotion requires the promotion queue so the owner declaration and required set are bound before execution');
+  }
   try { waitForPromotionMemory(root); }
   catch (error) {
     if (error.code === RESERVATION_WAIT_EXPIRED_CODE) { deferReservation(error); return; }
@@ -2889,6 +2898,7 @@ switch (command) {
     if (!topic || rest.length) fail('usage: lane promote-batch RECEIPT');
     const root = repositoryRoot({ requiredBy: 'promote' });
     try {
+      if (readDeclared(root)) executionIdentity(gitProject(root));
       const profile = resolveGateProfile(root);
       if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
       const refuse = error => {

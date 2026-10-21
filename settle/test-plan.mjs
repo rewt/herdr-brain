@@ -4,18 +4,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { promotionTestPlan } from '../promote/test-plan.mjs';
+import { planDeclaredGate } from '../promote/declared-gates.mjs';
+import { readDeclared } from '../lanes/validation.mjs';
+import { executionIdentity } from '../promote/execution-identity.mjs';
+import { gitProject } from '../lib/project.mjs';
 
 const MAX_BYTES = 64 * 1024 * 1024;
-function git(repo, args, input) {
-  const r = spawnSync('git', ['-C', repo, ...args], { input, maxBuffer: MAX_BYTES, timeout: 20000 });
+function git(repo, args, input, deadline) {
+  if (deadline !== undefined && Date.now() >= deadline) throw Error('canonical snapshot attempt deadline exceeded');
+  const r = spawnSync('git', ['-C', repo, ...args], { input, maxBuffer: MAX_BYTES, timeout: Math.max(1, Math.min(20000, deadline === undefined ? Infinity : deadline - Date.now())) });
   if (r.error || r.status !== 0) throw Error(r.stderr?.toString().trim() || r.error?.message || 'cannot materialize canonical test planner');
   return r.stdout;
 }
-export function withCanonicalSnapshot({ repo, base }, inspect) {
+export function withCanonicalSnapshot({ repo, base, deadline }, inspect) {
   if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(base)) throw Error('test planner requires a captured canonical base commit');
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'settle-test-plan-'));
   try {
-    const entries = git(repo, ['ls-tree', '-rz', base]).toString('utf8').split('\0').filter(Boolean);
+    const entries = git(repo, ['ls-tree', '-rz', base], undefined, deadline).toString('utf8').split('\0').filter(Boolean);
     if (entries.length > 10000) throw Error('canonical test planner snapshot exceeds 10000 paths');
     // Copy regular blobs only. Symlinks/submodules cannot import code outside
     // this private snapshot; all relative imports come from the same commit.
@@ -26,9 +31,10 @@ export function withCanonicalSnapshot({ repo, base }, inspect) {
       if (path.isAbsolute(name) || name.split('/').includes('..')) throw Error('invalid canonical planner snapshot path');
       return [{ mode, oid, name }];
     });
-    const blobs = git(repo, ['cat-file', '--batch'], files.map(file => file.oid + '\n').join(''));
+    const blobs = git(repo, ['cat-file', '--batch'], files.map(file => file.oid + '\n').join(''), deadline);
     let offset = 0;
     for (const file of files) {
+      if (deadline !== undefined && Date.now() >= deadline) throw Error('canonical snapshot attempt deadline exceeded');
       const end = blobs.indexOf(10, offset);
       const header = blobs.subarray(offset, end).toString('ascii').split(' ');
       const size = Number(header[2]);
@@ -44,5 +50,13 @@ export function withCanonicalSnapshot({ repo, base }, inspect) {
 }
 export function canonicalTestPlan({ repo, base, ...options }) {
   if (!options.planner) return null;
+  if (typeof options.planner === 'object') {
+    const owner = readDeclared(repo, { base, env: options.env });
+    if (!owner) throw Error('command planner requires declared-gates/v1');
+    const project = gitProject(repo);
+    const identity = executionIdentity(project);
+    const candidate = git(options.cwd, ['rev-parse', 'HEAD']).toString('utf8').trim();
+    return planDeclaredGate({ ...options, repo, base, candidate, owner, common: project.identity, identity, selectionOnly: true }).plan;
+  }
   return withCanonicalSnapshot({ repo, base }, plannerRoot => promotionTestPlan({ ...options, plannerRoot }));
 }

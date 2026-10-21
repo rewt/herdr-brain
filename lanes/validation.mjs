@@ -13,6 +13,7 @@ import { bundleRelease } from '../lib/releases.mjs';
 import { exactIdentity, exactDigest, restrictEnvironment, excludedDelta, explainMiss } from './exact-validation.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
+import { validateDeclared, readCommitted, DECLARED_SCHEMA, SELECTION_SCHEMA, hash, refuse, object } from '../promote/declaration.mjs';
 
 export const VALIDATION_TIERS = ['fast', 'promotion', 'release'];
 export const VALIDATION_FILE = '.lane.validation.json';
@@ -35,6 +36,7 @@ export function tapTotals(output) {
 
 export function validateValidation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
+  if (value.schema !== undefined) return validateDeclared(value);
   for (const [key, command] of Object.entries(value)) {
     if (['host_suites', 'tier_suites'].includes(key)) continue;
     if (['timeout_seconds', 'idle_timeout_seconds'].includes(key)) {
@@ -51,9 +53,50 @@ export function validateValidation(value) {
   return value;
 }
 
+// Owner-source resolution stays in the validation loader. Other gate modules
+// consume this snapshot rather than resolving a second authority. Config-home
+// storage can supply the same value/source surface without changing executors.
+export function readDeclared(root, { base = 'HEAD', config, promotion, env = process.env, override } = {}) {
+  const file = path.join(root, VALIDATION_FILE);
+  if (!fs.existsSync(path.join(root, '.git'))) {
+    const local = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    if (local?.schema === undefined) return null;
+    throw refuse('declared authority requires the canonical project loader');
+  }
+  let value;
+  try { value = readCommitted(root, VALIDATION_FILE, base); }
+  catch (error) {
+    const head = (() => { try { return git(root, ['symbolic-ref', '--quiet', base]); } catch { return null; } })();
+    if (head && !fs.existsSync(file) && !git(root, ['for-each-ref', '--format=%(refname)', head])) return null;
+    throw error;
+  }
+  if (value?.schema === undefined) return null;
+  validateDeclared(value);
+  const revision = git(root, ['rev-parse', '--verify', base]);
+  promotion ??= readCommitted(root, '.promote.json', base) ?? {};
+  config ??= readCommitted(root, '.lane.json', base) ?? {};
+  if (!object(promotion) || !object(config)) throw refuse('owner promotion and lane settings must be objects');
+  if (['validate', 'gate'].some(key => Object.hasOwn(promotion, key))) throw refuse('.promote.json validate/gate competes with the declaration');
+  if (['validate', 'validation', 'prepare'].some(key => Object.hasOwn(config, key))) throw refuse('.lane.json validation/validate/prepare competes with the declaration');
+  if (env.LANE_VALIDATE !== undefined || override !== undefined && override !== null) throw refuse('validation overrides cannot replace declared promotion');
+  return { schema: DECLARED_SCHEMA, selection_schema: SELECTION_SCHEMA, value, source: { file, revision, digest: hash(value) } };
+}
+
 // Always use the canonical project's declarations, never a worker's override.
 // A separate tracked file works even when .lane.json is shared machine config.
 export function resolveValidation({ root, config = {}, source = 'lane config', sources = {}, env = process.env } = {}) {
+  const owner = readDeclared(root, { env });
+  if (owner) {
+    const value = owner.value;
+    const tiers = Object.fromEntries(VALIDATION_TIERS.map(tier => [tier, {
+      command: value[tier] ?? value.promotion,
+      timeoutSeconds: typeof value.timeout_seconds === 'object' ? value.timeout_seconds[tier] : value.timeout_seconds,
+      idleTimeoutSeconds: typeof value.idle_timeout_seconds === 'object' ? value.idle_timeout_seconds[tier] : value.idle_timeout_seconds,
+      source: owner.source.file,
+    }]));
+    return { tiers, declared: owner, promotion_tests: value.promotion_tests, environment: value.environment ?? '',
+      environment_source: owner.source.file, file: owner.source.file };
+  }
   let declared = config.validation === undefined ? {} : validateValidation(config.validation);
   const file = path.join(root, VALIDATION_FILE);
   const declarationSources = Object.fromEntries(Object.keys(declared).map(key => [key, sources.validation ?? source]));
@@ -123,7 +166,7 @@ function unchanged(cwd, before, label) {
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
 }
 
-export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, exact }) {
+export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, exact, declaredGate }) {
   const admittedRelease = bundleRelease();
   env = exact ? restrictEnvironment(env, exact.declaration) : validationEnvironment(env);
   const before = captured(cwd, label);
@@ -207,6 +250,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
       try { execution = JSON.parse(readPlainFile(executionReceipt)); } catch { /* A refusal has no command clocks. */ }
     }
     const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, node_version: process.version, tap_totals: tapTotals(output), release: admittedRelease, environment_fingerprint: fingerprint,
+      ...(declaredGate ? { declared_gate: declaredGate } : {}),
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
       duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
       execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits,

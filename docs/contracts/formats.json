@@ -549,6 +549,30 @@
       "notCovered": "Embedded focused test selection is not present in the refused train; needs OLD planned-attempt recovery coverage."
     },
     {
+      "id": "promotion-tests/v2",
+      "version": 2,
+      "writer": "promote/declared-selection.mjs; promote/train.mjs",
+      "location": "<common>/promote/batches/*/train.json attempts[].test_plan",
+      "rule": "closed",
+      "notCovered": "Old readers refuse declared-gates/v1; typed recovery is covered by the declared-gates offline witnesses, not the legacy compatibility probe."
+    },
+    {
+      "id": "declared-gate-execution/v1",
+      "version": 1,
+      "writer": "promote/declared-gates.mjs; lanes/validation.mjs",
+      "location": "Embedded attempt declared_spec and gate declared_gate, including exact identities",
+      "rule": "closed",
+      "notCovered": "Old workers cannot consume typed execution; capability negotiation and declaration refusal hold adoption instead of downgrading coverage."
+    },
+    {
+      "id": "declared-gate-attempt/v1",
+      "version": 1,
+      "writer": "promote/declared-gates.mjs; promote/train.mjs",
+      "location": "<common>/promote/batches/*/train.json attempts[].declared_execution",
+      "rule": "additive",
+      "notCovered": "Diagnostic command outcomes are not a green receipt and have no OLD integration consumer."
+    },
+    {
       "id": "promotion-selector-shadow/v1",
       "version": 1,
       "writer": "promote/selector.mjs",

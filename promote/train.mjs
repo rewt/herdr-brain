@@ -9,7 +9,7 @@ import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { captureCompletionMember, accountUncapturedMember, recordFor } from './completion.mjs';
-import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
+import { validateTree, validationEnvironment, readDeclared } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
@@ -20,6 +20,11 @@ import { changedPaths, plannedCommand } from './test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
 import { shadowSelection, completeShadow } from './selector.mjs';
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, exactIdentity, explainMiss, requireExactPlan, selectionUnknown } from '../lanes/exact-validation.mjs';
+import { executionIdentity } from './execution-identity.mjs';
+import { sameDeclaration, hash, refuse as declaredRefusal } from './declaration.mjs';
+import { unionRequirements } from './declared-selection.mjs';
+import { planDeclaredGate, recheckDeclaredGate, executedCommands } from './declared-gates.mjs';
+import { remaining } from './declared-runtime.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
@@ -27,6 +32,18 @@ export { verifyTrainResult } from './evidence.mjs';
 export async function runTrain({ file, canonical, identity, main, prepare, validation }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
+  const declared = validation.declared;
+  const checkIdentity = () => {
+    if (!declared && !plan.jobs.some(job => job.gate_mode)) return;
+    for (const job of plan.jobs) {
+      if (job.gate_mode !== 'declared-gates/v1' || job.validate || job.laneConfig) throw declaredRefusal('incompatible queued job requires explicit disposition');
+      if ((job.requiredTests ?? []).some(row => typeof row !== 'string' && (!row?.definition || !row.scope || !row.toolchain))) throw declaredRefusal('typed requirement lost its admission binding');
+      executionIdentity({ canonical, identity }, { bound: job.execution_identity ?? null });
+      sameDeclaration(job.declared, readDeclared(canonical));
+    }
+    for (const attempt of plan.attempts ?? []) executionIdentity({ canonical, identity }, { bound: attempt.execution_identity ?? null });
+  };
+  checkIdentity(); // no receipt, worktree, lock or project code before this fence
   const save = () => writeFileAtomic(file, JSON.stringify(plan, null, 2) + '\n', 0o600);
   const profile = resolveGateProfile(canonical);
   if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
@@ -166,7 +183,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       const base = git(['rev-parse', main]);
       const branch = `promote-train/${randomUUID()}`;
       const scratch = path.join(path.dirname(file), `scratch-${plan.attempts.length}`);
-      attempt = { ids: jobs.map(j => j.id), jobs, base, branch, scratch, tips: {}, phase: 'preparing' };
+      attempt = { ids: jobs.map(j => j.id), jobs, base, branch, scratch, tips: {}, phase: 'preparing',
+        ...(declared ? { gate_mode: declared.schema, execution_identity: executionIdentity({ canonical, identity }) } : {}) };
       plan.attempts.push(attempt); save();
       git(['worktree', 'add', '-b', branch, scratch, base]);
       phase('rebasing');
@@ -220,8 +238,47 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch changed');
     return attempt;
   };
+  const validateDeclaredAttempt = attempt => {
+    checkIdentity();
+    plan.native_context = probeNativeGate(); save();
+    if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
+    const owner = attempt.jobs[0].declared;
+    const receiptDeclaration = readReceiptDeclaration({ repo: canonical, base: attempt.base });
+    const gateEnv = receiptDeclaration ? restrictEnvironment(env, receiptDeclaration) : env;
+    const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))].sort();
+    const required = unionRequirements(attempt.jobs);
+    if (attempt.declared_execution) (attempt.declared_execution_history ??= []).push(attempt.declared_execution);
+    attempt.declared_execution = { commands: [] };
+    attempt.prepare = { started_at: new Date().toISOString() }; phase('preparing');
+    const execution = planDeclaredGate({ repo: canonical, common: identity, base: attempt.base, cwd: attempt.scratch, candidate: attempt.tip,
+      identity: attempt.execution_identity, owner, required, changed, env: gateEnv, profile,
+      evidence: attempt.declared_execution, onUpdate: save });
+    clean(attempt.scratch);
+    if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw declaredRefusal('candidate moved during preparation');
+    if (git(['rev-parse', main]) !== attempt.base) throw declaredRefusal('canonical base moved during planning');
+    checkIdentity();
+    attempt.test_plan = execution.plan; attempt.declared_spec = execution.spec;
+    attempt.prepare.finished_at = new Date().toISOString();
+    attempt.phase = 'prepared';
+    if (attempt.gate) (attempt.gate_history ??= []).push(attempt.gate);
+    attempt.gate = { command: execution.command, started_at: new Date().toISOString() }; phase('validating');
+    const exact = receiptDeclaration ? { base: attempt.base, declaration: receiptDeclaration, additional: { declared_gate: execution.spec } } : undefined;
+    const executionEnv = { ...execution.env, MONITOR_VALIDATION_DEADLINE: String(execution.deadline) };
+    attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command: execution.command,
+      prepare: owner.value.gate?.prepare ?? [], environment: `${validation.environment}\ndeclared:${hash(execution.spec)}`,
+      env: executionEnv, exact, declaredGate: execution.spec, timeoutSeconds: remaining(execution.deadline) / 1000,
+      idleTimeoutSeconds: execution.limits.idle_seconds, label: 'declared train scratch', onStart: gate => { attempt.gate = gate; save(); } });
+    attempt.declared_execution.executed = executedCommands(attempt.gate);
+    // Execution-local clocks are not evidence-reuse inputs. They still cap all
+    // preparation, planning and commands in this single attempt.
+    if (attempt.gate.exit_code === 0) recheckDeclaredGate({ repo: canonical, cwd: attempt.scratch, owner, spec: execution.spec,
+      env: executionEnv, deadline: execution.deadline });
+    attempt.declared_execution.finished_at = new Date().toISOString(); save();
+  };
   const validateAttempt = attempt => {
     try {
+      if (declared) validateDeclaredAttempt(attempt);
+      else {
       plan.native_context = probeNativeGate(); save();
       if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
       const declaration = readReceiptDeclaration({ repo: canonical, base: attempt.base });
@@ -286,6 +343,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       if (exact && attempt.gate.reused) attempt.receipt_bridge = { outcome: 'reused', field: null,
         receipt: path.join(identity, 'lane-validation/exact', `${attempt.gate.key}.json`) };
       attempt.selector_shadow = completeShadow(attempt.selector_shadow, attempt.gate, [attempt.scratch, canonical]);
+      }
     } catch (error) {
       if (attempt.prepare && !attempt.prepare.finished_at) attempt.prepare.finished_at = new Date().toISOString();
       // A dirty execution is measurable, but never a completed green proof.
@@ -298,7 +356,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         attempt.gate.error = error.message;
       }
       attempt.phase = 'invalid'; attempt.error = error.message; plan.groups.shift();
-      for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), batch: plan.id });
+      if (attempt.declared_execution) Object.assign(attempt.declared_execution, { finished_at: new Date().toISOString(), error: error.message, code: error.code ?? null });
+      for (const job of attempt.jobs) result(job, { outcome: error.code === 'DECLARED_GATE_TIMEOUT' ? 'timeout' : 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), batch: plan.id });
       saveSlotGrant(attempt); save(); return false;
     }
     saveSlotGrant(attempt);
@@ -333,6 +392,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     }
   }
   const integrateAttempt = attempt => {
+    checkIdentity();
     if (attempt.phase !== 'validated' || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) throw new Error('train integration requires exact-commit green evidence');
     if (!canonicalReady()) return false;
     if (profile) checkCompetingProcesses(profile);
@@ -347,6 +407,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (invalid) { attempt.phase = 'invalid'; save(); return false; }
     clean(attempt.scratch);
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip) throw new Error('validated train tip changed');
+    if (declared) recheckDeclaredGate({ repo: canonical, cwd: attempt.scratch, owner: attempt.jobs[0].declared, spec: attempt.declared_spec,
+      env: profile?.env ?? env, deadline: Date.now() + 20000 });
     phase('fast-forwarding');
     try { withPromotionGuards(guards(attempt.jobs), () => git(['merge', '--ff-only', attempt.tip])); }
     catch (error) {

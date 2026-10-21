@@ -1,5 +1,67 @@
 # Promote
 
+Projects may opt in to [declared gates](../docs/contracts/DECLARED-GATES.md) with
+`schema: "declared-gates/v1"` in their owner `.lane.validation.json`. The
+validation loader returns one captured value/source snapshot to every adapter.
+The declaration owns commands, preparation, runners and host gate settings;
+`.promote.json` keeps transport and batching policy. Remove competing `validate`,
+`validation`, `prepare` and old `gate` declarations before adoption. Environment,
+enqueue and saved-job command overrides refuse. No project is adopted by this
+implementation.
+
+The project's own supervisor enqueues from its canonical checkout or a linked
+worktree under the same identity root. Jobs retain both roots, the declaration,
+the exact source head and bound requirements. Drain, resume and integration
+recheck these bindings before effects. Markers use `identityRootAt`; no marker
+means the default identity. Stable refusals are `PROMOTION_IDENTITY_MISMATCH`,
+`PROMOTION_IDENTITY_AMBIGUOUS`, `PROMOTION_PROJECT_MISMATCH` and
+`PROMOTION_IDENTITY_BINDING_CHANGED`. These checks stop mistakes. Native sandboxes
+remain the hard boundary; Brain does not authenticate native execution identity
+on a shared-UID host. Native launch provenance is future plan-7 work.
+
+Declared planners run as literal argv in a private, prepared canonical-base
+snapshot, with closed JSON on stdin. Their source, imports and runtime never
+come from the lane. Output is `promotion-tests/v2`: whole-file `files` plus
+ordered `{runner,args,reason}` steps. `--required-tests` accepts legacy file
+strings and typed `{runner,args}` requirements; admission captures each typed
+runner definition, toolchain and canonical scope. Batch unions, retries and
+bisected subsets retain them. A pattern, changed recipe or renamed invocation
+cannot silently replace bound evidence. The mandatory promotion command always
+runs first, followed by selected steps and remaining files.
+
+Canonical command sources and their literal policy closure, manifests, locks
+and runner configuration are pinned. Candidate edits to those execution inputs
+refuse; planner edits remain inspection data. Dynamic source loaders that cannot
+separate orchestration from candidate inputs refuse. Preparation checks source
+bytes and symlink containment, and hashes installed dependencies. Runtime facts
+include executable paths, versions and bytes; locked dependency versions and
+bytes participate in receipt identity. Loader/search overrides are scrubbed
+from the planner environment.
+
+One finite attempt deadline covers planner preparation, its 20-second/1-MiB
+planning subprocess, candidate preparation and all selected execution. Everything
+inherits the host admission and foreground group. The final command carries the
+complete serialized selection as one quoted argv value. Receipts retain source,
+selection, runtime, limits and command outcomes, including failures. Exact reuse
+adds these bindings to the existing core identity without adding exclusions.
+Old workers must support the internal `--capabilities` protocol or remain held;
+old file-only receipts never cover typed steps. Rollback requires disposition
+of outstanding jobs and explicit restoration of a sufficient legacy declaration.
+
+Direct `lane promote` and local promotion-tier shortcuts refuse in declared
+mode: enqueue the complete gate. `lane check --cmd COMMAND` remains available
+for development evidence. It does not certify an incomplete declared promotion.
+
+Offline acceptance uses scratch projects and optional real tool fixtures. To
+exercise pnpm, TypeScript and Vitest without a download, freeze an existing
+fixture tool installation with `promote/test/helpers/runtime-artifact.mjs` and
+set `HERDR_DECLARED_FIXTURE_ARTIFACT` to its tar. The fixture verifies the tar's
+canonical SHA-256 before each independent planner/candidate preparation. Missing
+fixture input is an explicit skip; Python and Node use available native tools.
+Brain's bundle and package manifest gain no npm dependencies.
+
+The remainder describes the unchanged legacy mode.
+
 The supervisor or settle enqueues lanes with one command from any checkout of
 any project. No project configuration, record initialization, service installation
 or model call is needed:

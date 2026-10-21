@@ -25,6 +25,19 @@ const source = fileURLToPath(new URL('../../', import.meta.url));
 const loader = fileURLToPath(new URL('./helpers/green-loader.mjs', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
+// A native snapshot can race a short-lived transport. Retry only refused
+// inspections; the shared helper still confirms ownership before every signal.
+async function stopOwnedInbox(file, options) {
+  const deadline = Date.now() + loadTimeout(5000);
+  for (;;) {
+    try { return await stopFixtureInbox(file, options); }
+    catch (error) {
+      if (!/^Cannot confirm fixture inbox (children|owner|shutdown):/.test(error.message) || Date.now() >= deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+  }
+}
+
 // Release sources are git archives, plus generated release/test state. Keep the
 // full archive universe: productFiles() omits root config and test/helpers/ that
 // the reviewed boundary includes.
@@ -132,7 +145,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     if (workerDone) await workerDone;
     // Worker completion hands notices to a durable owner. Delivery is outside
     // these guard assertions; stop that fixture owner after all senders exit.
-    await stopFixtureInbox(path.join(org, 'supervisor/inbox.log'), {
+    await stopOwnedInbox(path.join(org, 'supervisor/inbox.log'), {
       script: path.join(repo, 'supervisor/prompt-supervisor.mjs'),
     });
     for (const canonical of new Set([repo, project])) {

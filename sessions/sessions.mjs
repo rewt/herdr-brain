@@ -9,22 +9,24 @@ import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { canonicalProject, safeProjectPath } from './project.mjs';
 import { parseManifest, validateManifest, validateSet } from './manifest.mjs';
+import { homeProject, configGitEnv } from '../lib/config-home.mjs';
 
 const templates = fileURLToPath(new URL('./templates/', import.meta.url));
-function read({ file, committed }, project) {
+function read({ file, committed }, project, env = process.env) {
   if (committed) {
     if (!['100644', '100755'].includes(committed.mode)) throw Error('committed manifest must be a regular file');
-    return parseManifest(execFileSync('git', ['-C', project.root, 'show', `${committed.head}:${committed.relative}`], { encoding: 'utf8', maxBuffer: 1024 * 1024 + 1 }));
+    return parseManifest(execFileSync('git', ['-C', project.root, 'show', `${committed.head}:${committed.relative}`], { ...(homeProject(project.root, env) ? { env: configGitEnv(env) } : {}), encoding: 'utf8', maxBuffer: 1024 * 1024 + 1 }));
   }
   const stat = fs.statSync(file);
   if (!stat.isFile() || stat.size > 1024 * 1024) throw Error('manifest must be a regular file of at most 1 MiB');
   return parseManifest(fs.readFileSync(file, 'utf8'));
 }
 
-export function discoverManifests(project, workspace = 'home', diagnostics = []) {
+export function discoverManifests(project, workspace = 'home', diagnostics = [], env = process.env) {
   const names = ['chat.md', 'supervisor.md', 'logs-viewer.md', workspace === 'home' ? 'logs-triage.md' : 'triage-status.md'];
   const files = new Map(names.map(name => [name, { file: path.join(templates, name), template: true }]));
-  const git = args => execFileSync('git', ['-C', project.root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const options = { ...(homeProject(project.root, env) ? { env: configGitEnv(env) } : {}), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] };
+  const git = args => execFileSync('git', ['-C', project.root, ...args], options);
   // Freeze canonical HEAD once. Neither working-tree nor index bytes are
   // desired configuration, even if a discovered file is edited or removed.
   let head;
@@ -43,7 +45,7 @@ export function discoverManifests(project, workspace = 'home', diagnostics = [])
   // top-level Workspace can opt its exact resource paths into discovery.
   for (const input of [...files.values()].filter(input => !input.template)) {
     try {
-      const manifest = read(input, project);
+      const manifest = read(input, project, env);
       if (manifest.kind !== 'Workspace') continue;
       validateManifest(manifest, { project });
       for (const reference of manifest.spec.sessions) {
@@ -68,14 +70,14 @@ export function discoverManifests(project, workspace = 'home', diagnostics = [])
 }
 
 export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', env = process.env } = {}) {
-  const project = canonicalProject(cwd);
+  const project = canonicalProject(cwd, env);
   const routes = loadDiscoveredRoutes({ cwd: project.root, env });
   const entries = [], workspaces = [], diagnostics = [];
-  const inputs = files.length ? files.map(file => ({ file: path.resolve(file), template: false })) : discoverManifests(project, workspace, diagnostics);
+  const inputs = files.length ? files.map(file => ({ file: path.resolve(file), template: false })) : discoverManifests(project, workspace, diagnostics, env);
   const parsed = [];
   for (const input of inputs) {
     try {
-      const manifest = read(input, project);
+      const manifest = read(input, project, env);
       if (input.template) {
         manifest.spec.workspaceRef = workspace;
         manifest.metadata.uid = `default-${manifest.spec.role}-${createHash('sha256').update(JSON.stringify([project.common, workspace])).digest('hex').slice(0, 16)}`;
@@ -98,7 +100,7 @@ export function inspect({ files = [], cwd = process.cwd(), workspace = 'home', e
           // Discovery uses ONLY blobs in the same frozen canonical HEAD.
           // A same-named bundled default or uncommitted file cannot satisfy it.
           const resource = input.committed ? parsed.find(p => p.input.file === file && p.input.committed?.head === input.committed.head)
-            : { input: { file, template: false }, manifest: read({ file }, project) };
+            : { input: { file, template: false }, manifest: read({ file }, project, env) };
           if (!resource) throw Error(`Workspace reference is not a committed resource: ${reference}`);
           if (!['Session', 'LogViewer'].includes(resource.manifest.kind)) throw Error(`Workspace reference must be Session or LogViewer: ${reference}`);
           if (resource.manifest.spec?.workspaceRef !== manifest.spec.workspaceRef) throw Error(`Workspace reference disagrees with workspaceRef: ${reference}`);

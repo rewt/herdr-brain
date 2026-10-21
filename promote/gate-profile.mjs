@@ -8,7 +8,7 @@ import { validationEnvironment } from '../lanes/validation.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
-import { policyLocation } from '../lib/config-home.mjs';
+import { policyLocation, configGitEnv } from '../lib/config-home.mjs';
 import { readPolicyFile, validatePromote } from '../lib/config-policy.mjs';
 import { parseUniqueJson } from '../sessions/json.mjs';
 
@@ -21,8 +21,8 @@ const object = value => value && typeof value === 'object' && !Array.isArray(val
 
 // Only the canonical checkout's committed files configure the host: an edited or untracked
 // working copy must never reach a child process before the train's clean-tree refusal.
-function committedFile(canonical, relative) {
-  const git = args => spawnSync('git', ['-C', canonical, ...args], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+function committedFile(canonical, relative, env = process.env) {
+  const git = args => spawnSync('git', ['-C', canonical, ...args], { env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
   const checked = result => {
     if (result.error || result.status !== 0) throw new Error(`cannot read committed ${relative}: ${result.stderr || result.error?.message || `exit ${result.status}`}`);
     return result.stdout;
@@ -50,7 +50,7 @@ export function resolveGateProfile(canonical, environment = process.env, { setti
   if (settings === undefined) {
     if (selected.home) gate = readPolicyFile(file, 'promote', { cwd: canonical, env: environment }).gate;
     else {
-      const declared = committedFile(canonical, '.promote.json');
+      const declared = committedFile(canonical, '.promote.json', selected.binding ? configGitEnv(environment) : process.env);
       gate = declared === undefined ? undefined : validatePromote(parseUniqueJson(declared)).gate;
     }
   }
@@ -85,7 +85,7 @@ export function resolveGateProfile(canonical, environment = process.env, { setti
   if (gate.node_version_file !== undefined) {
     const relative = gate.node_version_file;
     if (typeof relative !== 'string' || !relative || path.isAbsolute(relative) || relative.split(/[\\/]/).includes('..')) throw new Error('gate.node_version_file must be a project-relative file');
-    const pinned = committedFile(canonical, relative);
+    const pinned = committedFile(canonical, relative, selected.binding ? configGitEnv(env) : process.env);
     if (pinned === undefined) throw new Error('gate.node_version_file must be committed');
     const pin = pinned.trim().replace(/^v/, '');
     if (!/^\d+\.\d+\.\d+$/.test(pin)) throw new Error('gate Node pin must be an exact version');

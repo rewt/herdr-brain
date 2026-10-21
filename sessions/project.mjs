@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { gitProject } from '../lib/project.mjs';
+import { homeProject } from '../lib/config-home.mjs';
 
 // Resolve ownership through Git, including separate git dirs and linked lanes.
 // No repository basename, remote, workspace label, or session sidecar is used.
-export function canonicalProject(cwd = process.cwd()) {
-  const project = gitProject(cwd);
+export function canonicalProject(cwd = process.cwd(), env = process.env) {
+  const project = homeProject(cwd, env)?.git ?? gitProject(cwd);
   return { root: project.canonical, common: project.identity };
 }
 

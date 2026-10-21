@@ -14,7 +14,8 @@ import { loadDiscoveredRoutes, mergeRoutesConfig, validateRoutesConfig } from '.
 
 export function routesSnapshot(cwd = process.cwd()) {
   let project;
-  try { project = gitProject(cwd); } catch { /* Plain folders can inspect defaults. */ }
+  const home = homeProject(cwd);
+  try { project = home?.git ?? gitProject(cwd); } catch { /* Plain folders can inspect defaults. */ }
   // Console edits are project overrides. LANE_CONFIG is a launch-time override,
   // so never use an inherited environment variable to choose a write target.
   const root = project?.canonical ?? fs.realpathSync(cwd);

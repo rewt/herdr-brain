@@ -11,6 +11,7 @@ import { authorize, ACTIONS } from '../sessions/authorization.mjs';
 import { plan } from '../sessions/plan.mjs';
 import { plan as setupPlan } from '../setup/setup.mjs';
 import { digest } from '../lib/digest.mjs';
+import { initOrg } from '../lib/store.mjs';
 
 test('native owner authorization yields KEEP without synthetic launch evidence, and a second adoption changes no bytes/events', async t => {
   const f = configFixture(t); await f.adopt();
@@ -70,6 +71,12 @@ test('linked invocation, tracked links and prepared committed-policy edits canno
 test('an explicitly selected missing routing source refuses scope capture', async t => {
   const f = configFixture(t, { routing: true }); fs.unlinkSync(path.join(f.cwd, 'routing.json'));
   await assert.rejects(f.capture(), /explicitly selected routing source is missing/);
+});
+
+test('an ambient foreign record cannot replace the existing owning record in adoption scope', async t => {
+  const f = configFixture(t), foreign = path.join(f.scratch, 'foreign-record'); initOrg(foreign);
+  await assert.rejects(adopt({ ...f.options, env: { ...f.env, ORG_DIR: foreign }, inspectOnly: true, expiresAt: new Date(Date.now() + 3600000).toISOString() }), /ORG_DIR differs from the existing owning record/);
+  assert.equal(fs.existsSync(path.join(f.cwd, '.brain')), false);
 });
 
 test('completed adoption rejects a replacement scope and cannot hide a pending controller intent', async t => {

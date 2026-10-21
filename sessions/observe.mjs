@@ -13,6 +13,7 @@ import { retirementHold } from '../lib/retire-hold.mjs';
 import { canonicalProject } from './project.mjs';
 import { parseUniqueJson } from './json.mjs';
 import { present } from './runtime.mjs';
+import { homeProject } from '../lib/config-home.mjs';
 
 export const nativeId = a => a?.agent_session?.value ?? a?.agent_session_id;
 export const agentBinding = (a, server, tab) => ({ server, workspace: a.workspace_id, tab: a.tab_id ?? tab,
@@ -42,6 +43,11 @@ export function createHerdrObserver({ socketPath = herdrSocketPath(), client = n
 }
 
 export function readSessionFacts({ project, env = process.env, items } = {}) {
+  const binding = homeProject(project.root, env);
+  if (binding) {
+    if (binding.common !== project.common) throw Error('adopted session project common directory disagrees');
+    env = { ...env, ORG_DIR: binding.record };
+  }
   const errors = [], dispatches = {}, reports = {}, watches = {};
   const attempt = (label, fn) => { try { return fn(); } catch (error) { errors.push(`${label}: ${error.message}`); return null; } };
   const org = attempt('record discovery', () => findOrgDir({ cwd: project.root, env }));

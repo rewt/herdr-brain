@@ -4,7 +4,7 @@ import { ownerAlive, ownerIdentity } from '../lib/process-owner.mjs';
 import { bundleRelease, forwardRelease } from '../lib/releases.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
-import { policyLocation } from '../lib/config-home.mjs';
+import { policyLocation, homeProject, configGitEnv } from '../lib/config-home.mjs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -88,7 +88,7 @@ export function resumeKey(run, agent) {
 function scheduledRetirement({ cwd, common, dryRun, log }) {
   let release;
   try {
-    const project = gitProject(cwd);
+    const project = homeProject(cwd)?.git ?? gitProject(cwd);
     const transferred = () => {
       if (!closeoutPolicy(project.canonical)) return false;
       release?.(); release = null;
@@ -237,15 +237,16 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
 
 export function discoverProject(directory, orgOverride, env = process.env) {
   const cwd = canonicalPath(directory);
-  const r = spawnSync('git', ['-C', cwd, 'worktree', 'list', '--porcelain'], { encoding: 'utf8' });
+  const binding = homeProject(cwd, env), options = { encoding: 'utf8', ...(binding ? { env: configGitEnv(env) } : {}) };
+  const r = spawnSync('git', ['-C', cwd, 'worktree', 'list', '--porcelain'], options);
   if (r.status !== 0) return null;
   const first = r.stdout.split('\n').find((line) => line.startsWith('worktree '));
   if (!first) throw new Error('no canonical Git checkout');
   const checkout = canonicalPath(first.slice(9));
-  const org = orgOverride ? path.resolve(orgOverride) : findOrgDir({ cwd, env }) ?? findOrgDir({ cwd: checkout, env });
-  const branch = spawnSync('git', ['-C', checkout, 'symbolic-ref', '--short', 'HEAD'], { encoding: 'utf8' });
+  const org = binding?.record ?? (orgOverride ? path.resolve(orgOverride) : findOrgDir({ cwd, env }) ?? findOrgDir({ cwd: checkout, env }));
+  const branch = spawnSync('git', ['-C', checkout, 'symbolic-ref', '--short', 'HEAD'], options);
   if (branch.status !== 0) throw new Error('canonical checkout is detached; supply an attached project checkout');
-  const identity = spawnSync('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+  const identity = spawnSync('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'], options);
   if (identity.status !== 0) throw new Error('cannot establish repository identity');
   const common = fs.realpathSync(identity.stdout.trim());
   return { cwd: checkout, org, main: branch.stdout.trim(), common };
@@ -260,6 +261,8 @@ async function main() {
   } });
   const forwarded = forwardRelease('housekeeping/housekeeping.mjs', opt.cwd);
   if (forwarded !== null) { process.exitCode = forwarded; return; }
+  const binding = homeProject(opt.cwd);
+  if (binding) for (const key of Object.keys(process.env)) if (key.startsWith('GIT_')) delete process.env[key];
   if ([opt.once, opt.loop, opt.start].filter(Boolean).length !== 1) throw new Error('usage: housekeeping.mjs (--start|--once|--loop) [--cwd PROJECT] [--org DIR] [--config FILE] [--dry-run] [--state-dir DIR]');
   if (opt.resume && !opt.start) throw new Error('--resume requires --start');
   const project = discoverProject(opt.cwd, opt.org);
@@ -273,7 +276,7 @@ async function main() {
       throw new Error('run live housekeeping from the canonical project checkout; lane workers use --once --dry-run');
     }
   }
-  const cwd = project.cwd, configFile = path.resolve(opt.config ?? policyLocation(cwd, 'housekeeping').file);
+  const cwd = project.cwd, configFile = path.resolve(binding ? policyLocation(cwd, 'housekeeping').file : opt.config ?? policyLocation(cwd, 'housekeeping').file);
   // Keep a project with no ignore/config setup clean. Bookkeeping lives beside
   // the discovered record, separated by canonical repository identity.
   const key = createHash('sha256').update(project.common).digest('hex');

@@ -9,7 +9,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { policyLocation, present } from '../lib/config-home.mjs';
+import { policyLocation, present, homeProject } from '../lib/config-home.mjs';
 import { readPolicyFile, validatePromote } from '../lib/config-policy.mjs';
 import { parseUniqueJson } from '../sessions/json.mjs';
 import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
@@ -42,7 +42,8 @@ export function queueJobs(data) {
 }
 
 export function queueFor(cwd) {
-  const project = gitProject(cwd);
+  const binding = homeProject(cwd), project = binding?.git ?? gitProject(cwd);
+  if (binding) for (const key of Object.keys(process.env)) if (key.startsWith('GIT_')) delete process.env[key];
   const directory = path.join(project.identity, 'promote');
   const file = path.join(directory, 'queue.json');
   fs.mkdirSync(directory, { recursive: true });

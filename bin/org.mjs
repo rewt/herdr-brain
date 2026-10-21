@@ -42,6 +42,8 @@ Setup
   record config [--json]                  effective policy, provenance and repo-copy drift
   record config set KEY VALUE [--scope identity] [--who-asked REF]
   record config history [--scope identity] owning record's configuration history
+  record adopt PROJECT --inspect --expires DATE
+  record adopt PROJECT --scope FILE --decision ID:SEQ
 
 Work
   record add <title> [--goal] [--role R] [--capability C] [--parent ID]

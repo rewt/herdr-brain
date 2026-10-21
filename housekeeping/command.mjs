@@ -48,7 +48,7 @@ function actionTail(file, warnings) {
 }
 
 export function housekeepingSnapshot({ cwd = process.cwd(), org, env = process.env, readProcess = readOwnerProcess } = {}) {
-  const project = gitProject(cwd), target = policyLocation(project.canonical, 'housekeeping', env, { write: true }).file;
+  const binding = homeProject(cwd, env), project = binding?.git ?? gitProject(cwd), target = policyLocation(project.canonical, 'housekeeping', env, { write: true }).file;
   safeTarget(target);
   const bytes = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
   const revision = crypto.createHash('sha256').update(JSON.stringify([project.identity, target, bytes])).digest('hex');
@@ -56,7 +56,7 @@ export function housekeepingSnapshot({ cwd = process.cwd(), org, env = process.e
   try { overrides = readProjectPolicy(cwd, 'housekeeping', env).config; }
   catch (error) { configError = error.message; }
   const config = configError ? null : { ...DEFAULTS, ...overrides };
-  const record = org || findOrgDir({ cwd, env }) || findOrgDir({ cwd: project.canonical, env });
+  const record = binding?.record ?? (org || findOrgDir({ cwd, env }) || findOrgDir({ cwd: project.canonical, env }));
   const key = crypto.createHash('sha256').update(project.identity).digest('hex');
   const stateDir = record ? path.join(fs.realpathSync(record), 'housekeeping', key) : null;
   const warnings = [], actions = stateDir ? actionTail(path.join(stateDir, 'actions.jsonl'), warnings) : [];

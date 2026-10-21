@@ -303,6 +303,16 @@ const workspace = (id, label, path, linked, repoKey = process.env.FAKE_HERDR_REP
     repo_name: process.env.FAKE_HERDR_REPO_NAME, repo_root: process.env.FAKE_HERDR_REPO_ROOT,
   },
 });
+const nativeAgent = () => ({
+    agent_status: "idle", cwd: process.env.FAKE_HERDR_AGENT_CWD || process.env.FAKE_HERDR_LANE_PATH, name: state.agent,
+    pane_id: state.agentPane || "w-lane:p2", workspace_id: "w-lane", terminal_id: "fixture-terminal-1",
+    ...(process.env.FAKE_RETIREMENT_OWNER ? { agent: JSON.parse(process.env.FAKE_RETIREMENT_OWNER).command.replace(/^\\[|\\]$/g, ''), tab_id: "w-lane:t2" } : {}),
+    ...(!process.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS || (state.prompted &&
+      (state.sessionReads || 0) >= Number(process.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS)) ? {
+    agent_session: { agent: "codex", kind: "id", source: "herdr:codex", value: state.agentSession || "fixture-session-1" },
+    } : {}),
+    ...(state.prompted && state.sessionReads >= 2 ? JSON.parse(process.env.FAKE_HERDR_CHANGE_SESSION_OBSERVATION || '{}') : {}),
+});
 if (args[0] === "workspace" && args[1] === "list") {
   stallObservation('workspace');
   state.workspaceLists = (state.workspaceLists || 0) + 1;
@@ -492,12 +502,12 @@ if (args[0] === "workspace" && args[1] === "list") {
   save();
   result("cli:agent:start", { type: "agent_start", name: state.agent, pane_id: state.agentPane });
 } else if (args[0] === "agent" && args[1] === "list") {
-  result("cli:agent:list", { type: "agent_list", agents: state.agent ? [{
-    agent_status: "idle", cwd: process.env.FAKE_HERDR_AGENT_CWD || process.env.FAKE_HERDR_LANE_PATH, name: state.agent,
-    pane_id: state.agentPane || "w-lane:p2", workspace_id: "w-lane", terminal_id: "fixture-terminal-1",
-    ...(process.env.FAKE_RETIREMENT_OWNER ? { agent: JSON.parse(process.env.FAKE_RETIREMENT_OWNER).command.replace(/^\\[|\\]$/g, ''), tab_id: "w-lane:t2" } : {}),
-    agent_session: { agent: "codex", kind: "id", source: "herdr:codex", value: state.agentSession || "fixture-session-1" },
-  }] : [] });
+  const agent = nativeAgent();
+  if (process.env.FAKE_HERDR_SESSION_DETAIL_ONLY === '1') delete agent.agent_session;
+  result("cli:agent:list", { type: "agent_list", agents: state.agent ? [agent] : [] });
+} else if (args[0] === "agent" && args[1] === "get") {
+  if (state.prompted) { state.sessionReads = (state.sessionReads || 0) + 1; save(); }
+  result("cli:agent:get", { agent: state.agent === args[2] ? nativeAgent() : undefined });
 } else if (args[0] === "agent" && args[1] === "read") {
   process.stdout.write("");
 } else if (args[0] === "agent" && args[1] === "focus") {
@@ -523,6 +533,7 @@ if (args[0] === "workspace" && args[1] === "list") {
     save();
   }
   if (process.env.FAKE_HERDR_PROMPT_FAIL === "1") process.exit(4);
+  state.prompted = true; save();
   if (process.env.FAKE_HERDR_REPLACE_AFTER_PROMPT === "1") {
     state.agentSession = "replacement-session";
     save();

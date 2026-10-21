@@ -31,6 +31,7 @@ import {
 } from "node:fs";
 import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { acquireLock } from "./promotion-lock.mjs";
@@ -916,7 +917,17 @@ function newAgentName(topic, reserved = new Set()) {
 
 function agentRecord(agentName, deadline) {
   const listed = herdrJson(["agent", "list"], { deadline });
-  return listed?.agents?.find((a) => a.name === agentName);
+  const agent = listed?.agents?.find((a) => a.name === agentName);
+  if (!agent || agent.agent_session?.value) return agent;
+  // The list is a summary; Codex's native session can appear only in detail.
+  const detail = herdrJson(["agent", "get", agentName], { deadline })?.agent;
+  if (!detail) return agent;
+  if (["name", "pane_id", "workspace_id"].some(key => !agent[key] || detail[key] !== agent[key]) ||
+      !samePath(detail.cwd, agent.cwd) || (agent.terminal_id && detail.terminal_id !== agent.terminal_id) ||
+      (agent.agent && detail.agent !== agent.agent)) {
+    throw new Error(`native agent detail identity changed for ${agentName}`);
+  }
+  return { ...agent, ...detail };
 }
 
 function agentOnPane(pane, deadline) {
@@ -1361,9 +1372,11 @@ function dispatch(topic, promptText, options = {}) {
   // receipt, when claimed, and ordinary occupant guards protect it after lock release.
   unlockInitial();
   let reviewReceipt;
-  if (IS_REVIEW_COMMAND) {
+  const deferredReviewReceipt = IS_REVIEW_COMMAND && !cwdCheck.record?.agent_session?.value;
+  const recordReviewLaunch = () => {
     // Reviewers have no worker run of their own. Bind their native occupant to
-    // the run under review before delivery, independently of display metadata.
+    // the run under review, independently of display metadata. Fresh sessions
+    // can only supply this identity after their first prompt.
     try {
       reviewReceipt = createRetirement({ cwd: REPO_ROOT, main: MAIN,
         deadline: Math.min(options.deadline ?? Infinity, Date.now() + 10000) }).recordCallback({
@@ -1372,7 +1385,8 @@ function dispatch(topic, promptText, options = {}) {
     } catch (error) {
       process.stderr.write(`lane review: warning: launch identity could not be recorded (${error.message}); tab retained\n`);
     }
-  }
+  };
+  if (IS_REVIEW_COMMAND && !deferredReviewReceipt) recordReviewLaunch();
   if (promptText !== undefined && promptText.trim() !== "") {
     if (resolved.kind === "codex") {
       const screen = spawnSync("herdr", ["pane", "read", pane, "--source", "visible", "--format", "text"], {
@@ -1426,27 +1440,51 @@ function dispatch(topic, promptText, options = {}) {
     created_at: new Date().toISOString(),
   };
   try {
-    const liveAfterDelivery = agentRecord(agentName, options.deadline);
-    if (liveAfterDelivery === undefined || liveAfterDelivery.pane_id !== pane ||
-        liveAfterDelivery.workspace_id !== workspaceId || !samePath(liveAfterDelivery.cwd, path)) {
-      throw new Error("the delivered agent no longer occupies its verified lane pane");
-    }
     const beforeSessionId = cwdCheck.record?.agent_session?.value;
-    const afterSessionId = liveAfterDelivery.agent_session?.value;
     const beforeTerminalId = cwdCheck.record?.terminal_id;
-    const afterTerminalId = liveAfterDelivery.terminal_id;
-    if ((typeof beforeSessionId === "string" && beforeSessionId !== afterSessionId) ||
-        (typeof beforeTerminalId === "string" && beforeTerminalId !== afterTerminalId)) {
-      throw new Error("the delivered agent's immutable occupant identity changed");
+    const hasTerminal = typeof beforeTerminalId === "string" && beforeTerminalId !== "";
+    const observe = (deadline, allowUnavailable = false) => {
+      const live = agentRecord(agentName, deadline);
+      if (live === undefined && allowUnavailable) return undefined;
+      if (live === undefined || live.name !== agentName || live.pane_id !== pane ||
+          live.workspace_id !== workspaceId || !samePath(live.cwd, path) ||
+          cwdCheck.record.pane_id !== pane || cwdCheck.record.workspace_id !== workspaceId) {
+        throw new Error("the delivered agent no longer occupies its verified lane pane");
+      }
+      if ((typeof beforeSessionId === "string" && beforeSessionId !== live.agent_session?.value) ||
+          (typeof beforeTerminalId === "string" && beforeTerminalId !== live.terminal_id)) {
+        throw new Error("the delivered agent's immutable occupant identity changed");
+      }
+      return live;
+    };
+    let liveAfterDelivery = observe(options.deadline);
+    if (deferredReviewReceipt && hasTerminal) {
+      // Share the saved delivery deadline, leaving time for the review's settled
+      // file read. A session that never appears must not consume the review wait.
+      const deadline = Math.min(options.deadline - REVIEW_SETTLE_MS - 1000, Date.now() + 10000);
+      const started = performance.now();
+      while (!liveAfterDelivery.agent_session?.value && Date.now() < deadline && performance.now() - started < 10000) {
+        sleepMs(Math.max(0, Math.min(250, deadline - Date.now(), 10000 - (performance.now() - started))));
+        if (Date.now() >= deadline || performance.now() - started >= 10000) break;
+        const seen = observe(Math.min(deadline, Date.now() + 10000 - (performance.now() - started)), true);
+        if (!seen) break;
+        if (Date.now() <= deadline && performance.now() - started < 10000) liveAfterDelivery = seen;
+      }
     }
-    if (typeof beforeSessionId === "string" && beforeSessionId !== "") {
-      record.agent_session_id = beforeSessionId;
+    const sessionId = beforeSessionId || (deferredReviewReceipt && hasTerminal
+      ? liveAfterDelivery.agent_session?.value : undefined);
+    if (typeof sessionId === "string" && sessionId !== "") {
+      record.agent_session_id = sessionId;
     }
-    if (typeof beforeTerminalId === "string" && beforeTerminalId !== "") {
+    if (hasTerminal) {
       record.terminal_id = beforeTerminalId;
     }
     registryPath = preflightRegistryAutomation();
     writeSessionRecord(registryPath, record);
+    if (deferredReviewReceipt) {
+      if (record.agent_session_id) recordReviewLaunch();
+      else process.stderr.write("lane review: warning: native session was not established within the delivery observation bound; tab retained\n");
+    }
   } catch (error) {
     const action = promptText !== undefined && promptText.trim() !== ""
       ? "the brief was already sent"

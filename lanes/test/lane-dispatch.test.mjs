@@ -1150,6 +1150,94 @@ test("review requires explicit source, round, route, and bounded unique flags wi
   }
 });
 
+for (const reads of ['0', '3']) test(`review binds a fresh Codex session after ${reads} observations and the planner releases it`, async () => {
+  const topic = `review-fresh-session-${reads}`, review = makeReviewFixture(topic, { verdict: 'PASS' });
+  const { fixture } = review;
+  try {
+    const org = join(fixture.root, 'record'); mkdirSync(org);
+    fixture.env.ORG_DIR = org;
+    // Keep the real PID/birth for callback liveness; the native tree is scripted.
+    fixture.env.FAKE_RETIREMENT_OWNER = JSON.stringify({ ...ownerProcess(process.pid), command: '[codex]', ppid: 123456789 });
+    fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = reads;
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    const events = [
+      { type: 'item.added', id: 'ENG-1', role: 'engineer', kind: 'work' },
+      { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: review.path, meta: {} },
+      { type: 'report.ingested', run: 'R-1', report: { outcome: 'done' } },
+    ].map((event, index) => ({ ...event, seq: index + 1, at: '2026-01-01T00:00:00Z', by: 'fixture' }));
+    writeFileSync(join(org, 'events.jsonl'), events.map(event => JSON.stringify(event) + '\n').join(''));
+    const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--run', 'R-1']);
+    assert.equal(run.status, 0, run.stderr); assert.equal(run.stdout, 'PASS\n');
+    assert.doesNotMatch(run.stderr, /warning:/);
+    assert.equal(review.fake.state().receiptBeforePrompt, false);
+    assert.ok(review.fake.state().sessionReads >= Math.max(1, Number(reads)));
+    assert.equal(review.fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, 1);
+    const { loadRegistry } = await registryApi();
+    const [launch] = loadRegistry(fixture.repo).sessions;
+    assert.equal(launch.harness, 'codex');
+    assert.equal(launch.agent_session_id, 'fixture-session-1');
+    assert.equal(launch.terminal_id, 'fixture-terminal-1');
+    git(review.path, ['add', 'docs/reviews']); git(review.path, ['commit', '-m', 'Record fixture review']);
+    const runtime = createRetirement({ cwd: fixture.repo, org, env: fixture.env, herdr: join(fixture.bin, 'herdr') });
+    const snapshot = runtime.observe(); // readReviewVerdicts reads the actual recorded verdict.
+    assert.equal(snapshot.reviewVerdicts.length, 1);
+    assert.equal(snapshot.reviewVerdicts[0].session, launch.agent_session_id);
+    assert.equal(snapshot.callbacks[0].agent_session_id, launch.agent_session_id);
+    const plan = planRetirement(snapshot);
+    assert.equal(plan.sessionReleases?.length, 1, JSON.stringify(plan));
+    assert.equal(plan.sessionReleases[0].release.session, launch.agent_session_id);
+    assert.equal(plan.sessionReleases[0].release.terminal, launch.terminal_id);
+    assert.equal(plan.sessionReleases[0].release.recipient, 'reviewer');
+    for (const mismatch of ['session', 'terminal']) {
+      const changed = structuredClone(snapshot);
+      if (mismatch === 'session') changed.agents[0].agent_session.value = 'replacement';
+      else changed.agents[0].terminal_id = 'replacement';
+      assert.equal(planRetirement(changed).sessionReleases?.length ?? 0, 0, mismatch);
+    }
+  } finally { fixture.cleanup(); }
+});
+
+test('review without a native session warns once and preserves the successful verdict', async () => {
+  const topic = 'review-no-native-session', review = makeReviewFixture(topic, { verdict: 'PASS' });
+  const { fixture } = review;
+  try {
+    fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = 'never';
+    fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+    const started = Date.now();
+    const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '8']);
+    assert.equal(run.status, 0, run.stderr); assert.equal(run.stdout, 'PASS\n');
+    assert.equal((run.stderr.match(/lane review: warning:/g) ?? []).length, 1);
+    assert.match(run.stderr, /native session was not established.*tab retained/);
+    assert.ok(Date.now() - started < 10000, 'session observation shares the review deadline');
+    assert.ok(review.fake.state().sessionReads > 1, 'the missing session was polled');
+    const { loadRegistry } = await registryApi();
+    const [launch] = loadRegistry(fixture.repo).sessions;
+    assert.equal(launch.agent_session_id, undefined);
+    assert.equal(launch.terminal_id, 'fixture-terminal-1');
+    assert.equal(review.fake.calls().some(args => args[1] === 'close'), false);
+  } finally { fixture.cleanup(); }
+});
+
+for (const [key, value] of Object.entries({ name: 'replacement', pane_id: 'w-lane:other',
+  workspace_id: 'other-workspace', cwd: '/other-cwd', terminal_id: 'other-terminal' })) {
+  test(`review refuses a changed ${key} while observing a fresh session`, async () => {
+    const topic = `review-session-${key}`, review = makeReviewFixture(topic, { verdict: 'PASS' });
+    const { fixture } = review;
+    try {
+      fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = '2';
+      fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
+      fixture.env.FAKE_HERDR_CHANGE_SESSION_OBSERVATION = JSON.stringify({ [key]: value });
+      const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief]);
+      assert.equal(run.status, 2, run.stderr);
+      assert.match(run.stderr, /native agent detail identity changed/);
+      const { loadRegistry } = await registryApi();
+      assert.deepEqual(loadRegistry(fixture.repo).sessions, []);
+      assert.equal(review.fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, 1);
+      assert.equal(review.fake.calls().some(args => args[1] === 'close'), false);
+    } finally { fixture.cleanup(); }
+  });
+}
+
 test("review records one native launch identity before delivery and the planner recognises it", () => {
   const review = makeReviewFixture('review-occupant', { verdict: 'PASS' });
   const { fixture } = review;

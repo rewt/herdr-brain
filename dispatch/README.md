@@ -91,10 +91,13 @@ attempts; a later run on the item makes it unlanded again. An explicit current
 restores its unlanded count. A done report, abandoned run or ordinary closure as
 done **does not release it** without a recorded landing. Parked and kept lanes
 still count. Items with no run and another project's runs are excluded from the
-count; promotion exclusions do not establish a landing. Original start metadata supplies project
-identity; legacy runs resolve their workspace through Git. Unavailable legacy
-workspace evidence conservatively counts, so deleted worktrees cannot silently
-free capacity. No worktree census or display session registry supplies authority.
+count; promotion exclusions do not establish a landing. Original start metadata
+supplies project identity. A matching promotion item/run/head receipt identifies
+a legacy run's project before consulting its workspace through Git, so a removed
+foreign workspace cannot consume this project's cap or qualify as a landing to
+unblock. Without recorded project or matching promotion evidence, unavailable
+legacy workspace evidence conservatively counts. No worktree census or display
+session registry supplies authority.
 
 At or above the cap, only these explicit exceptions dispatch:
 
@@ -118,11 +121,19 @@ An invalid target uses `DISPATCH_UNBLOCKS_INVALID`.
 
 Early unlanded checks precede lane, run and awaited-item writes. After the open
 memory wait and preparation, the authoritative recount and record start share
-the session cap's `<git-common-dir>/dispatch-session-cap/` admission lock. The
-recorded run durably reserves the item and any exception slot before release,
-so concurrent dispatches cannot take the same final slot. Failed/uncertain
-launches keep that reservation. A retry without a recorded run checks the
-current cap again; recovery of a recorded run consumes no new reservation.
+the session cap's `<git-common-dir>/dispatch-session-cap/` admission lock. Before
+spawning `record start`, dispatch saves `starting` and its item/exception admission
+in the request journal. This pending start reserves capacity even if its
+coordinator dies and a surviving child can still append after the lock is
+reclaimed. A matching original `run.started` replaces the journal reservation
+exactly once. Admission snapshots journals before record events so concurrent
+start recovery cannot hide both forms of the reservation. An unmatched uncertain
+start remains occupied until reconciled; coordinator death or age never clears
+it. A definitive record refusal releases it. Refusals identify pending starts
+and their saved requests for inspection/retry; pending starts without a run do
+not qualify as `--unblocks` targets. Failed/uncertain launches keep their recorded
+run reservation. A retry after a definitive start refusal checks the current cap
+again; recovery of a recorded run consumes no new reservation.
 `--unblocks` is saved with the request and cannot be changed on retry. The record
 core remains advisory and never refuses a manual start for these caps. BCH's
 settle-watch and reconcile do not participate in this policy.

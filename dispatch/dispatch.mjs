@@ -402,7 +402,8 @@ async function main() {
   if (job.stage === 'start') {
     if (job.fromRun) checkOrigin(job.fromRun, json(record(['show', job.item, '--json'])));
     if (job.reuse) checkReuse(json(record(['show', job.reuse, '--json'])), job);
-    // The run is the durable item/exception reservation, even if launch fails.
+    // Save the pending start's item/exception reservation before spawning its
+    // writer; it survives coordinator death until a recorded start replaces it.
     // Reuse shares this admission too. Never hold the project lock over memory
     // waits; session launch takes the same lock again for its independent cap.
     releaseAdmission = acquireSessionCapLock(common, { check: checkStop });

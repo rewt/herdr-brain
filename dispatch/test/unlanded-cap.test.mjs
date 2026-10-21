@@ -77,6 +77,84 @@ test('canonical Git identity scopes record-only and dispatched runs, including s
   assert.deepEqual(lookups, ['legacy', 'foreign', 'gone'], 'resolve each legacy workspace once per count');
 });
 
+test('matching promotion evidence identifies removed legacy workspaces before an unknown or reused Git path', () => {
+  const r = record(), foreign = '/other/.git';
+  for (let n = 1; n <= 7; n++) r.item(n);
+  for (let n = 1; n <= 6; n++) r.start(n, undefined, {}, { meta: {}, workspace: '/removed/lane' });
+  r.land(1, { identity: foreign });
+  r.land(2, { identity: foreign, items: [] });
+  r.land(3, { identity: foreign, runs: ['R-unknown'] });
+  r.land(4, { identity: foreign, heads: [{ item: 'ENG-7', run: 'R-4' }] });
+  r.land(5);
+  r.start(7); r.land(7, { identity: foreign }); // Original dispatch project wins a conflicting receipt.
+  const missing = () => { throw Error('workspace removed'); };
+  const evidence = countUnlanded({ events: r.events, common, projectIdentity: missing });
+  assert.deepEqual(evidence.items.map(i => i.item), ['ENG-2', 'ENG-3', 'ENG-4', 'ENG-6', 'ENG-7']);
+  assert.equal(evidence.starts.has('R-1'), false, 'a proven foreign landing cannot qualify as an unblocks target');
+  assert.throws(() => check(r, { item: 'ENG-new', unblocks: 'ENG-1' }, {}, { projectIdentity: missing }),
+    e => e.code === 'DISPATCH_UNBLOCKS_INVALID');
+  assert.deepEqual(countUnlanded({ events: r.events, common: foreign, projectIdentity: missing }).items.map(i => i.item),
+    ['ENG-2', 'ENG-3', 'ENG-4', 'ENG-6']);
+  assert.equal(countUnlanded({ events: r.events, common, projectIdentity: () => common }).starts.has('R-1'), false,
+    'a replacement checkout at the old path cannot override a recorded foreign landing');
+});
+
+test('uncertain starts reserve distinct items and exception runs until their original record start replaces them', () => {
+  const r = record(); r.item(1); r.start(1); r.item(2);
+  const journal = (name, fields = {}) => ({ journal: `/record/dispatch/${name}.json`, common, item: 'ENG-2',
+    stage: 'starting', unlandedCap: { admission: { kind: 'unblocks' } }, ...fields });
+  const first = journal('first'), second = journal('second');
+  const journals = [first, second, journal('foreign', { common: '/other/.git' }),
+    journal('refused', { startRefused: true }), journal('not-started', { stage: 'start' })];
+  const evidence = countUnlanded({ events: r.events, common, journals });
+  assert.deepEqual(evidence.items.map(i => i.item), ['ENG-1', 'ENG-2']);
+  assert.deepEqual(evidence.items[1].pending, [first.journal, second.journal]);
+  assert.equal(evidence.exceptions.length, 2, 'same-item attempts reserve separate exception slots');
+  assert.throws(() => check(r, { item: 'ENG-new' }, { dispatch: { max_unlanded: 2 } }, { journals }),
+    e => e.code === 'DISPATCH_UNLANDED_CAP' && /Pending record starts/.test(e.message));
+  assert.throws(() => check(r, { item: 'ENG-new', unblocks: 'ENG-2' }, {}, { journals }),
+    e => e.code === 'DISPATCH_UNBLOCKS_INVALID', 'an unmatched start is not yet a landing to unblock');
+  r.start(2, undefined, { dispatch_journal: first.journal, dispatch_unlanded_exception: 'unblocks' });
+  const recorded = countUnlanded({ events: r.events, common, journals });
+  assert.equal(recorded.items.length, 2); assert.equal(recorded.exceptions.length, 2);
+  assert.deepEqual(recorded.reservations.map(j => j.journal), [second.journal], 'a stale journal must not double count its committed start');
+  r.add({ type: 'report.ingested', run: 'R-2', report: { outcome: 'done' } });
+  r.land(2);
+  const landed = countUnlanded({ events: r.events, common, journals });
+  assert.equal(landed.items.length, 2, 'the other uncertain start still reserves the landed item');
+  assert.equal(landed.exceptions.length, 1, 'the stale first journal cannot recreate a reported exception');
+});
+
+test('recovery between the journal and event snapshots cannot hide both an uncertain start and its committed run', t => {
+  const org = fs.mkdtempSync(path.join(os.tmpdir(), 'unlanded-snapshot-'));
+  t.after(() => fs.rmSync(org, { recursive: true, force: true }));
+  const r = record(); r.item(1);
+  const log = path.join(org, 'events.jsonl'), journal = path.join(org, 'dispatch/start.json');
+  fs.mkdirSync(path.dirname(journal));
+  const job = { common, item: 'ENG-1', stage: 'starting', unlandedCap: { admission: { kind: 'regular' } } };
+  fs.writeFileSync(journal, JSON.stringify(job));
+  fs.writeFileSync(log, r.events.map(e => JSON.stringify(e)).join('\n') + '\n');
+  const read = fs.readFileSync;
+  let recovered = false;
+  fs.readFileSync = function(file, ...args) {
+    const value = read.call(this, file, ...args);
+    if (file === log && !recovered) {
+      recovered = true;
+      r.start(1, undefined, { dispatch_journal: journal });
+      fs.writeFileSync(log, r.events.map(e => JSON.stringify(e)).join('\n') + '\n');
+      fs.writeFileSync(journal, JSON.stringify({ ...job, stage: 'worker', run: 'R-1' }));
+    }
+    return value; // Return the event snapshot from just before the writer commits.
+  };
+  try {
+    assert.throws(() => checkUnlandedCap({ org, common, config: { dispatch: { max_unlanded: 1 } }, request: { item: 'ENG-new' } }),
+      e => e.code === 'DISPATCH_UNLANDED_CAP');
+  } finally { fs.readFileSync = read; }
+  assert.equal(recovered, true);
+  const after = checkUnlandedCap({ org, common, config: { dispatch: { max_unlanded: 2 } }, request: { item: 'ENG-new' } });
+  assert.equal(after.count, 1); assert.deepEqual(after.pending_starts, []);
+});
+
 test('default eight admits below the cap and refuses at it with count, list and a next action', () => {
   const r = record(); assert.equal(DEFAULT_UNLANDED_CAP, 8);
   for (let n = 1; n <= 7; n++) { r.item(n); r.start(n); }

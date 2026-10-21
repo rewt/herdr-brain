@@ -390,6 +390,81 @@ for (const exceptional of [false, true]) test(`concurrent unlanded ${exceptional
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
 });
 
+for (const exceptional of [false, true]) test(`a killed coordinator cannot release the last unlanded ${exceptional ? 'exception' : 'item'} slot while its record start child survives`, async t => {
+  const f = fixture(t); unlandedSetting(f, 1);
+  let target;
+  if (exceptional) {
+    target = pendingItem(f).item;
+    for (let n = 0; n < 2; n++) pendingItem(f, { meta: ['dispatch_unlanded_exception=unblocks'] });
+  }
+  const other = f.rec(['add', 'Contending item', '--role', 'engineer']);
+  const ready = path.join(f.root, 'writer-ready'), release = path.join(f.root, 'writer-release'), finished = path.join(f.root, 'writer-finished');
+  const adapter = path.join(f.root, 'record-adapter');
+  fs.writeFileSync(adapter, `#!/usr/bin/env node
+import fs from 'node:fs';
+import {spawnSync} from 'node:child_process';
+const args=process.argv.slice(2);
+if(args[0]==='start') {
+ fs.writeFileSync(${JSON.stringify(ready)},JSON.stringify({pid:process.pid,parent:process.ppid}));
+ const deadline=Date.now()+${loadTimeout(30000)};
+ while(!fs.existsSync(${JSON.stringify(release)})) {
+  if(Date.now()>deadline) throw Error('record writer barrier timed out');
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+ }
+}
+const result=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...args],{encoding:'utf8',env:process.env});
+if(args[0]==='start') {fs.writeFileSync(${JSON.stringify(finished)},JSON.stringify({status:result.status,stderr:result.stderr}));}
+else {process.stdout.write(result.stdout);process.stderr.write(result.stderr);}
+process.exit(result.status??1);
+`, { mode: 0o755 });
+  const hook = admissionHook(f, `const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+ const result=rename.call(this,from,to);
+ if(once && String(to).endsWith('/dispatch-session-cap')) {once=false;pause();}
+ return result;
+};`);
+  const args = item => [item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, ...(target ? ['--unblocks', target] : [])];
+  const first = f.concurrent([...args(f.item), '--org-cli', adapter], hook);
+  let second, journal;
+  try {
+    await until(() => fs.existsSync(hook.PAUSE_MARKER));
+    second = f.concurrent(args(other), hook);
+    await until(() => admissionAttempts(hook) === 2); // Both passed their early counts.
+    fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
+    await until(() => fs.existsSync(ready));
+    const writer = JSON.parse(fs.readFileSync(ready));
+    assert.equal(writer.parent, first.child.pid);
+    journal = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === f.item);
+    const pending = JSON.parse(fs.readFileSync(journal));
+    assert.equal(pending.stage, 'starting'); assert.equal(pending.run, null);
+    assert.equal(pending.unlandedCap.admission.kind, exceptional ? 'unblocks' : 'regular');
+    assert.equal(first.child.kill('SIGKILL'), true);
+    assert.equal((await first.done).signal, 'SIGKILL');
+    assert.equal(lookupProcess(writer.pid).value?.pid, writer.pid, 'the orphan writer must remain able to append');
+    const refused = await second.done;
+    assert.equal(refused.status, 1, refused.stderr);
+    assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+    assert.match(refused.stderr, /Pending record starts/);
+    if (exceptional) assert.match(refused.stderr, /All 3 active fix\/follow-up slots/);
+    else assert.match(refused.stderr, /unlanded count 1, cap 1/);
+    assert.deepEqual(f.show(f.item).runs, []); assert.deepEqual(f.show(other).runs, []);
+    assert.equal(promptCalls(f).length, 0);
+  } finally {
+    fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); fs.writeFileSync(release, 'go');
+    await Promise.all([first.done, second?.done]);
+    if (fs.existsSync(ready)) await until(() => fs.existsSync(finished));
+  }
+  const written = JSON.parse(fs.readFileSync(finished)); assert.equal(written.status, 0, written.stderr);
+  assert.equal(f.show(f.item).runs.length, 1, 'the surviving child commits after the contender is refused');
+  const recovered = f.dispatch(['--retry', journal]); assert.equal(recovered.status, 0, recovered.stderr);
+  assert.equal(f.show(f.item).runs.length, 1, 'recovery adopts the one committed run');
+  const run = JSON.parse(recovered.stdout).run;
+  if (exceptional) f.rec(['abandon', run]);
+  else f.rec(['close', f.item, '--dropped']);
+  const contender = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === other);
+  const admitted = f.dispatch(['--retry', contender]); assert.equal(admitted.status, 0, admitted.stderr);
+  assert.equal(f.show(other).runs.length, 1, 'resolved starts do not leave a second reservation behind');
+});
+
 test('dispatch help documents the unlanded limit, explicit exceptions and stable refusal', t => {
   const result = fixture(t).dispatch(['--help']); assert.equal(result.status, 0, result.stderr);
   for (const text of ['dispatch.max_unlanded defaults to 8', '--from-run', '--unblocks', '3 active exception runs', 'DISPATCH_UNLANDED_CAP']) assert.ok(result.stdout.includes(text));

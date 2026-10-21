@@ -685,6 +685,13 @@ test('batch exceptions deliver interrupted notices, preserve the receipt and con
   assert.ok(f.messages().at(-1)[3].includes(`notice-id=promote:${interrupted.id}:complete`));
 });
 
+function diagnoseTrain(t, f) {
+  const saved = f.queue.load();
+  t.diagnostic(`promotion queue at failure:\n${JSON.stringify(saved, null, 2)}`);
+  const files = new Set(saved.results.flatMap(result => [result.receipt, result.log]).filter(Boolean));
+  for (const file of files) t.diagnostic(`${path.basename(file)} at failure:\n${fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '(missing)'}`);
+}
+
 test('a train waits for a short closeout holder and completes without an interrupted batch', async t => {
   const f = fixture(t), workspace = f.lane('first'); f.add('first');
   const lock = path.join(f.repo, '.git/lane-promote.lock'), release = acquireLock(lock);
@@ -693,24 +700,26 @@ test('a train waits for a short closeout holder and completes without an interru
   const child = spawnScenarioChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
   const done = waitForExit(child);
   try {
-    await until(() => fs.existsSync(waiting));
-    // A fake closeout pass keeps its real lock for three seconds after the
-    // train reaches acquisition, longer than immediate refusal could survive.
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    assert.equal(child.exitCode, null);
-    assert.equal(f.runs(), 0);
-    assert.equal(f.queue.load().results.length, 0);
-    assert.equal(f.queue.load().interrupted?.length ?? 0, 0);
-    assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner);
-    assert.ok(fs.existsSync(workspace));
-  } finally { release(); await done; }
-  const result = await done; assert.equal(result.code, 0, result.stderr);
-  const saved = f.queue.load();
-  assert.deepEqual(saved.results.map(r => r.outcome), ['promoted']);
-  assert.equal(saved.interrupted?.length ?? 0, 0); assert.equal(saved.current, null);
-  assert.equal(f.runs(), 1); assert.equal(fs.existsSync(workspace), false);
-  assert.equal(fs.readFileSync(path.join(f.repo, 'first'), 'utf8'), 'first');
-  assert.ok(f.messages().every(message => !message[3].includes('outcome=interrupted')));
+    try {
+      await until(() => fs.existsSync(waiting));
+      // A fake closeout pass keeps its real lock for three seconds after the
+      // train reaches acquisition, longer than immediate refusal could survive.
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      assert.equal(child.exitCode, null);
+      assert.equal(f.runs(), 0);
+      assert.equal(f.queue.load().results.length, 0);
+      assert.equal(f.queue.load().interrupted?.length ?? 0, 0);
+      assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner);
+      assert.ok(fs.existsSync(workspace));
+    } finally { release(); await done; }
+    const result = await done; assert.equal(result.code, 0, result.stderr);
+    const saved = f.queue.load();
+    assert.deepEqual(saved.results.map(r => r.outcome), ['promoted']);
+    assert.equal(saved.interrupted?.length ?? 0, 0); assert.equal(saved.current, null);
+    assert.equal(f.runs(), 1); assert.equal(fs.existsSync(workspace), false);
+    assert.equal(fs.readFileSync(path.join(f.repo, 'first'), 'utf8'), 'first');
+    assert.ok(f.messages().every(message => !message[3].includes('outcome=interrupted')));
+  } catch (error) { diagnoseTrain(t, f); throw error; }
 });
 
 test('a holder past the promotion wait bound keeps the refusal and interrupted recovery', t => {
@@ -720,17 +729,19 @@ test('a holder past the promotion wait bound keeps the refusal and interrupted r
   const owner = fs.readFileSync(path.join(lock, 'owner.json'), 'utf8');
   const waiting = watchPromotionLock(f.root, f.env, lock, { expire: true });
   try {
+    try {
+      const r = f.drain(); assert.equal(r.status, 0, r.stderr);
+      assert.equal(f.queue.load().results[0].outcome, 'interrupted'); assert.equal(f.queue.load().results[0].delivered, true);
+      assert.ok(fs.existsSync(waiting), 'the real train acquisition waited before its deadline expired');
+      assert.ok(fs.readFileSync(f.queue.load().results[0].log, 'utf8').includes(`lane: locked: ${lock}; inspect owner.json and surviving processes before removing a stale lock`));
+      assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner);
+      assert.equal(f.git(['rev-parse', 'main']), base); assert.equal(f.runs(), 0);
+      assert.equal(f.drain().status, 0); assert.equal(f.queue.load().interrupted.length, 1);
+      assert.equal(f.queue.load().results.at(-1).delivery_id, f.queue.load().results[0].delivery_id);
+    } finally { release(); }
     const r = f.drain(); assert.equal(r.status, 0, r.stderr);
-    assert.equal(f.queue.load().results[0].outcome, 'interrupted'); assert.equal(f.queue.load().results[0].delivered, true);
-    assert.ok(fs.existsSync(waiting), 'the real train acquisition waited before its deadline expired');
-    assert.ok(fs.readFileSync(f.queue.load().results[0].log, 'utf8').includes(`lane: locked: ${lock}; inspect owner.json and surviving processes before removing a stale lock`));
-    assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), owner);
-    assert.equal(f.git(['rev-parse', 'main']), base); assert.equal(f.runs(), 0);
-    assert.equal(f.drain().status, 0); assert.equal(f.queue.load().interrupted.length, 1);
-    assert.equal(f.queue.load().results.at(-1).delivery_id, f.queue.load().results[0].delivery_id);
-  } finally { release(); }
-  const r = f.drain(); assert.equal(r.status, 0, r.stderr);
-  assert.equal(f.queue.load().results.at(-1).outcome, 'promoted'); assert.equal(f.runs(), 1);
+    assert.equal(f.queue.load().results.at(-1).outcome, 'promoted'); assert.equal(f.runs(), 1);
+  } catch (error) { diagnoseTrain(t, f); throw error; }
 });
 
 // Observe the receipt from a separate process at real Git boundaries. The

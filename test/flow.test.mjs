@@ -76,7 +76,7 @@ for (const declared of [true, false]) test(`record start and regenerated brief s
 });
 
 for (const [name, config, reason] of [
-  ['malformed JSON', '{\n  "archive":', /cannot read route config/],
+  ['malformed JSON', '{\n  "archive":', /invalid lane config/],
   ['invalid archive directories', '{"archive":{"dirs":42}}', /archive\.dirs must be an array/],
   ['invalid routing fields', '{"routes":{"engineer":{"kind":42}}}', /routes\.engineer\.kind/],
 ]) test(`archive lookup with ${name} cannot block record start or brief regeneration`, t => {

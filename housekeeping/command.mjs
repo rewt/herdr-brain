@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { ownerAlive, readOwnerProcess } from '../lib/process-owner.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { policyLocation } from '../lib/config-home.mjs';
 import { findOrgDir, UserError } from '../lib/store.mjs';
 import { renderHousekeeping } from '../lib/render.mjs';
 import { DEFAULTS, FIELDS, validateConfig, parseOverride } from './config.mjs';
@@ -44,7 +45,7 @@ function actionTail(file, warnings) {
 }
 
 export function housekeepingSnapshot({ cwd = process.cwd(), org, env = process.env, readProcess = readOwnerProcess } = {}) {
-  const project = gitProject(cwd), target = path.join(project.canonical, '.housekeeping.json');
+  const project = gitProject(cwd), target = policyLocation(project.canonical, 'housekeeping', env, { write: true }).file;
   safeTarget(target);
   const bytes = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
   const revision = crypto.createHash('sha256').update(JSON.stringify([project.identity, target, bytes])).digest('hex');

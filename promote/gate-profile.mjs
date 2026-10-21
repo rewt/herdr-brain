@@ -8,6 +8,9 @@ import { validationEnvironment } from '../lanes/validation.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
+import { policyLocation } from '../lib/config-home.mjs';
+import { readPolicyFile, validatePromote } from '../lib/config-policy.mjs';
+import { parseUniqueJson } from '../sessions/json.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
 
@@ -41,11 +44,15 @@ function committedFile(canonical, relative) {
 // `settings` is a committed .promote.json the caller already read (the queue's per-batch snapshot),
 // so one batch never reads the declaration twice.
 export function resolveGateProfile(canonical, environment = process.env, { settings } = {}) {
-  const file = path.join(canonical, '.promote.json');
+  const selected = policyLocation(canonical, 'promote', environment);
+  const file = selected.file;
   let gate = settings?.gate;
   if (settings === undefined) {
-    const declared = committedFile(canonical, '.promote.json');
-    gate = declared === undefined ? undefined : JSON.parse(declared).gate;
+    if (selected.home) gate = readPolicyFile(file, 'promote').gate;
+    else {
+      const declared = committedFile(canonical, '.promote.json');
+      gate = declared === undefined ? undefined : validatePromote(parseUniqueJson(declared)).gate;
+    }
   }
   if (gate === undefined) return null;
   if (!object(gate)) throw new Error('promote gate must be an object');

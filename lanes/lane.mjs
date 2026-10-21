@@ -21,6 +21,8 @@ import { loadTimeout, admissionDeadline } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
+import { homeProject, policyLocation } from '../lib/config-home.mjs';
+import { homePolicyLayers, configBase, readPolicyFile } from '../lib/config-policy.mjs';
 import { resolveArchive, validateArchive } from '../lib/archive.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
 import { hookLaunchArguments } from '../messages/hook-session.mjs';
@@ -316,20 +318,16 @@ function nearestParentConfig(repository) {
   return undefined;
 }
 
-const EXPLICIT_CONFIG = process.env.LANE_CONFIG !== undefined;
-const REPOSITORY_CONFIG_FILE = join(REPO_ROOT, ".lane.json");
+const HOME_PROJECT = homeProject(REPO_ROOT);
+const EXPLICIT_CONFIG = process.env.LANE_CONFIG !== undefined && !HOME_PROJECT;
+const REPOSITORY_CONFIG_FILE = policyLocation(REPO_ROOT, 'lane').file;
 const PARENT_CONFIG_FILE = EXPLICIT_CONFIG ? undefined : FLEET.fleet ? (FLEET.project ?? FLEET.legacy)?.layers[0] : nearestParentConfig(REPO_ROOT);
 const CONFIG_LAYERS = (() => {
   if (EXPLICIT_CONFIG) {
     const file = resolve(CALLER_CWD, process.env.LANE_CONFIG);
     return [{ file, config: readConfig(file, { required: true }) }];
   }
-  const layers = [];
-  for (const file of FLEET.fleet ? (FLEET.project ?? FLEET.legacy)?.layers ?? [] : [PARENT_CONFIG_FILE].filter(Boolean))
-    layers.push({ file, config: readConfig(file, { required: true }) });
-  const repository = readConfig(REPOSITORY_CONFIG_FILE);
-  if (repository !== undefined) layers.push({ file: REPOSITORY_CONFIG_FILE, config: repository });
-  return layers;
+  return homePolicyLayers(REPO_ROOT, FLEET.fleet ? (FLEET.project ?? FLEET.legacy)?.layers ?? [] : [PARENT_CONFIG_FILE]);
 })();
 const { config: CONFIG, sources: CONFIG_SOURCES, routeSources: ROUTE_SOURCES } = (() => {
   const config = CONFIG_LAYERS.length ? {} : structuredClone(ROUTE_PRESET);
@@ -366,7 +364,7 @@ const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE }
   // committing its settings. Existing lanes keep their registered paths.
   if (Object.hasOwn(CONFIG, "worktree_root")) {
     const source = CONFIG_SOURCES.get("worktree_root");
-    const base = resolve(dirname(source), CONFIG.worktree_root);
+    const base = resolve(configBase(source, REPO_ROOT), CONFIG.worktree_root);
     return { path: join(base, REPO_NAME), base, source };
   }
   if (FLEET.project && !EXPLICIT_CONFIG) return { path: FLEET.project.worktrees, base: FLEET.project.worktrees, source: FLEET.fleet.file };

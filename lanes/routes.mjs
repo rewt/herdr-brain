@@ -4,6 +4,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ROUTE_PRESET } from './preset.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
+import { homeProject, policyLocation, present } from '../lib/config-home.mjs';
+import { homePolicyLayers, readPolicyFile } from '../lib/config-policy.mjs';
 
 // Native lifecycle commands belong to launch plumbing, never record policy.
 const launchData = Object.freeze({
@@ -234,13 +236,7 @@ export function selectRoute(config, taskClass, pool) {
 }
 
 export function readRoutesConfig(file) {
-  let parsed;
-  try {
-    parsed = JSON.parse(readFileSync(file, "utf8"));
-  } catch (error) {
-    throw new Error(`cannot read route config ${file}: ${error.message}`);
-  }
-  return validateRoutesConfig(parsed);
+  return readPolicyFile(file, 'routing');
 }
 
 function within(path, boundary) {
@@ -283,7 +279,8 @@ function canonicalCheckout(cwd) {
 // selects one layer, which is useful for projects that keep routing.json apart.
 export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, file = env.LANE_CONFIG } = {}) {
   const boundary = projectFleet(cwd, env);
-  if (file !== undefined) {
+  const binding = homeProject(cwd, env);
+  if (file !== undefined && !binding) {
     const absolute = resolve(cwd, file);
     return { config: readRoutesConfig(absolute), files: [absolute] };
   }
@@ -298,13 +295,22 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
     return { config: readRoutesConfig(nearest), files: [nearest] };
   }
   const parents = boundary.fleet ? (boundary.project ?? boundary.legacy)?.layers ?? [] : [nearestParentConfig(repository)];
-  const files = [...parents, join(repository, ".lane.json")].filter((candidate) => candidate && existsSync(candidate));
+  let layers = homePolicyLayers(repository, parents, env);
+  const laneLayers = layers;
+  // A separately declared routing file replaces one logical route declaration;
+  // it never inherits routes that its original explicit selection did not have.
+  if (binding?.sources.routing) {
+    const routing = policyLocation(repository, 'routing', env, { binding });
+    if (routing.file && present(routing.file)) layers = [{ ...routing, config: readPolicyFile(routing.file, 'routing') }];
+  }
+  const files = [...new Set([...(binding ? laneLayers : []), ...layers].map(l => l.file))];
   if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };
-  const config = mergeRoutesConfig(files.map(readRoutesConfig));
+  const routes = mergeRoutesConfig(layers.map(l => l.config));
+  const config = binding ? { ...Object.assign({}, ...laneLayers.map(l => l.config)), ...routes } : routes;
   // Lifecycle/entry preferences alone do not declare operator model routes.
   // Keep the same suggested preset as a project with no routing setup.
   if (!["dispatch", "routes", "selection_policy"].some((key) => Object.hasOwn(config, key))) {
     return { config: mergeRoutesConfig([ROUTE_PRESET, config]), files, suggested: true };
   }
-  return { config, files };
+  return { config, files, layers, ...(binding ? { root: repository, binding: binding.file } : {}) };
 }

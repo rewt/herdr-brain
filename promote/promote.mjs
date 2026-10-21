@@ -9,6 +9,9 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { policyLocation, present } from '../lib/config-home.mjs';
+import { readPolicyFile, validatePromote } from '../lib/config-policy.mjs';
+import { parseUniqueJson } from '../sessions/json.mjs';
 import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
 import { guardPromotionJob, readOwnedRun, requireController, ownerBinding, sameOwner, brainOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { bundleRelease, forwardRelease, operationFile } from '../lib/releases.mjs';
@@ -73,6 +76,8 @@ function settingsRefusal(code, reason) {
   return Object.assign(new Error(`${code}: ${singleLine(reason)}`), { code });
 }
 function promotionSettings(project) {
+  const selected = policyLocation(project.canonical, 'promote');
+  if (selected.home) return readPolicyFile(selected.file, 'promote');
   // Only the canonical committed declaration can change queue policy. Lane
   // copies and untracked/edited host files cannot override the batch limit.
   // Bound the whole snapshot below the worker's startup acknowledgement wait.
@@ -97,7 +102,7 @@ function promotionSettings(project) {
   const commit = checked(head);
   const tracked = checked(read(['ls-tree', '--name-only', commit, '--', '.promote.json']));
   let config;
-  try { config = tracked ? JSON.parse(checked(read(['show', `${commit}:.promote.json`]))) : {}; }
+  try { config = tracked ? parseUniqueJson(checked(read(['show', `${commit}:.promote.json`]))) : {}; validatePromote(config); }
   catch (error) {
     if (error.code === 'PROMOTION_SETTINGS_GIT_FAILED') throw error;
     throw settingsRefusal('PROMOTION_SETTINGS_INVALID', `invalid committed .promote.json: ${error.message}`);

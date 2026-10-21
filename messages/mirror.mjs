@@ -6,6 +6,8 @@ import { promisify } from 'node:util';
 import { digest, MAX_BODY_BYTES } from './schema.mjs';
 import { noticeEvidence } from './classify.mjs';
 import { ShadowJournal, privateDirectory, identityRootAt } from './journal.mjs';
+import { homeProject, projectIdentity } from '../lib/config-home.mjs';
+import { gitProject } from '../lib/project.mjs';
 
 const execute = promisify(execFile);
 const pending = new Set(), partitions = new Map();
@@ -26,9 +28,17 @@ async function commonDirectory(cwd) {
   return fs.realpath(stdout.trim());
 }
 export async function identityAt(commonDir, env = process.env) {
+  const checkout = path.dirname(commonDir);
+  let project;
+  try { project = gitProject(checkout, { env }); } catch { /* Legacy explicit shadow partitions need no live checkout. */ }
+  if (project) {
+    const home = homeProject(project.canonical, env);
+    if (home) return home.identity;
+  }
   if (env.BRAIN_IDENTITY) return env.BRAIN_IDENTITY;
   const root = identityRootAt(commonDir);
   if (root) return path.basename(root);
+  if (project) return projectIdentity(project, env).name;
   throw Error('shadow identity is unenrolled; set BRAIN_IDENTITY or use an identity-root checkout');
 }
 const role = (identity, projectRef, name, key) => ({ identity, projectRef, role: { name, bindingRef: `legacy-shadow:${digest(key)}` } });

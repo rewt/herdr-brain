@@ -10,6 +10,8 @@ import { acquireLock } from './promotion-lock.mjs';
 import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 import { resolveResource } from '../test-slot/resources.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
+import { policyLocation, present } from '../lib/config-home.mjs';
+import { readPolicyFile } from '../lib/config-policy.mjs';
 import { exactIdentity, exactDigest, restrictEnvironment, excludedDelta, explainMiss } from './exact-validation.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
@@ -55,10 +57,10 @@ export function validateValidation(value) {
 // A separate tracked file works even when .lane.json is shared machine config.
 export function resolveValidation({ root, config = {}, source = 'lane config', sources = {}, env = process.env } = {}) {
   let declared = config.validation === undefined ? {} : validateValidation(config.validation);
-  const file = path.join(root, VALIDATION_FILE);
+  const file = policyLocation(root, 'validation', env).file;
   const declarationSources = Object.fromEntries(Object.keys(declared).map(key => [key, sources.validation ?? source]));
-  if (fs.existsSync(file)) {
-    const tracked = validateValidation(JSON.parse(fs.readFileSync(file, 'utf8')));
+  if (present(file)) {
+    const tracked = readPolicyFile(file, 'validation');
     declared = { ...declared, ...tracked };
     for (const key of Object.keys(tracked)) declarationSources[key] = file;
   }

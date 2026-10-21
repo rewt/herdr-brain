@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { gitProject } from '../lib/project.mjs';
+import { policyLocation } from '../lib/config-home.mjs';
 import { UserError } from '../lib/store.mjs';
 import { renderRoutes } from '../lib/render.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, validateRoutesConfig } from './routes.mjs';
@@ -15,10 +16,10 @@ export function routesSnapshot(cwd = process.cwd()) {
   // so never use an inherited environment variable to choose a write target.
   const root = project?.canonical ?? fs.realpathSync(cwd);
   const loaded = loadDiscoveredRoutes({ cwd: root, env: {} });
-  const target = path.join(root, '.lane.json');
+  const target = policyLocation(root, 'lane', {}, { write: true }).file;
   const bytes = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
   const revision = crypto.createHash('sha256').update(JSON.stringify([loaded, loaded.files.map(file => fs.readFileSync(file, 'utf8')), target, bytes])).digest('hex');
-  return { ...loaded, target, editable: Boolean(project), revision };
+  return { ...loaded, root, target, editable: Boolean(project), revision };
 }
 
 function safeTarget(target) {

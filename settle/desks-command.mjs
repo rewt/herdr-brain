@@ -18,7 +18,7 @@ export function desksSnapshot(cwd = process.cwd()) {
   const lifecycle = Object.assign({}, ...routes.files.map(file => JSON.parse(fs.readFileSync(file, 'utf8'))));
   const sources = {};
   for (const file of routes.files) for (const key of Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')))) sources[key] = file;
-  const validation = resolveValidation({ root: path.dirname(routes.target), config: lifecycle, sources, env: {} });
+  const validation = resolveValidation({ root: routes.root, config: lifecycle, sources, env: {} });
   return { ...routes, settings, source, defaults: DESK_DEFAULTS, validation };
 }
 export function setProjectDesks(patch, unset = [], options = {}) {

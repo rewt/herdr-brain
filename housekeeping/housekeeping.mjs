@@ -4,6 +4,7 @@ import { ownerAlive, ownerIdentity } from '../lib/process-owner.mjs';
 import { bundleRelease, forwardRelease } from '../lib/releases.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
+import { policyLocation } from '../lib/config-home.mjs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -272,7 +273,7 @@ async function main() {
       throw new Error('run live housekeeping from the canonical project checkout; lane workers use --once --dry-run');
     }
   }
-  const cwd = project.cwd, configFile = path.resolve(opt.config ?? path.join(cwd, '.housekeeping.json'));
+  const cwd = project.cwd, configFile = path.resolve(opt.config ?? policyLocation(cwd, 'housekeeping').file);
   // Keep a project with no ignore/config setup clean. Bookkeeping lives beside
   // the discovered record, separated by canonical repository identity.
   const key = createHash('sha256').update(project.common).digest('hex');

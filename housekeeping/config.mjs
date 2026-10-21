@@ -1,4 +1,7 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { policyLocation, present } from '../lib/config-home.mjs';
+import { readPolicyFile } from '../lib/config-policy.mjs';
 
 export const DEFAULTS = Object.freeze({ enabled: true, resume: true, tick_seconds: 60, cleanup_seconds: 600, release_sessions: true });
 export const FIELDS = Object.keys(DEFAULTS);
@@ -15,7 +18,8 @@ export function validateConfig(config) {
 }
 
 export function readConfig(file) {
-  const config = validateConfig(file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {});
+  if (file && path.basename(file) === '.housekeeping.json') file = policyLocation(path.dirname(file), 'housekeeping').file;
+  const config = file && present(file) ? readPolicyFile(file, 'housekeeping') : {};
   // Preserve the scheduler's public projection; absent resume means enabled.
   return { enabled: true, tick_seconds: 60, cleanup_seconds: 600, ...config };
 }

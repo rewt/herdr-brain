@@ -22,7 +22,7 @@ import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/wor
 import { lookupProcess } from '../lib/processes.mjs';
 import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
-import { checkUnlandedCap } from './unlanded-cap.mjs';
+import { checkUnlandedCap, matchesDispatchStart } from './unlanded-cap.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nUnlanded items: dispatch.max_unlanded defaults to 8 (current project config layers). At the cap, only --from-run R-n fix rounds and --unblocks ITEM landing follow-ups proceed, at most 3 active exception runs combined. --unblocks records that this item blocks the named unlanded landing. DISPATCH_UNLANDED_CAP names the count, cap and items to land or drop first. The independent session cap still applies to new workers.", allowPositionals: true, options: {
@@ -193,6 +193,9 @@ function admission(repo, org, common) {
 function unlandedAdmission(request, { requireLink = false } = {}) {
   const { config } = loadDiscoveredRoutes({ cwd: request.repo });
   return checkUnlandedCap({ config, org: request.org, common: request.common, request, requireLink });
+}
+function requestStarts() {
+  return loadEvents(job.org).events.filter(event => event.type === 'run.started' && matchesDispatchStart(event, { ...job, journal }));
 }
 function prepareSessionBinding(run) {
   const binding = job.sessionBinding;
@@ -368,9 +371,8 @@ async function main() {
     }
   };
   if (opt['recover-run']) {
-    const run = json(record(['show', opt['recover-run'], '--json']));
-    if (job.run || run.item !== job.item || run.meta?.dispatch_journal !== journal) throw new Error('recovery run does not belong to this request');
-    job.run = run.id; claimAdmission(); job.stage = 'worker'; save();
+    if (job.run || !requestStarts().some(start => start.id === opt['recover-run'])) throw new Error('recovery run does not belong to this request');
+    job.run = opt['recover-run']; claimAdmission(); job.stage = 'worker'; save();
   }
   if (job.stage === 'open') {
     unlandedAdmission(job);
@@ -388,9 +390,7 @@ async function main() {
     job.stage = 'start'; save();
   }
   if (job.stage === 'starting') {
-    const item = json(record(['show', job.item, '--json']));
-    const matches = item.runs.map((id) => json(record(['show', id, '--json'])))
-      .filter((run) => run.meta?.dispatch_journal === journal);
+    const matches = requestStarts();
     if (matches.length === 1) {
       job.run = matches[0].id; claimAdmission(); job.stage = 'worker'; save();
     } else if (matches.length === 0 && job.startRefused) {

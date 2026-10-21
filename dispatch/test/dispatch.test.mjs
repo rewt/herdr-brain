@@ -390,7 +390,7 @@ for (const exceptional of [false, true]) test(`concurrent unlanded ${exceptional
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
 });
 
-for (const exceptional of [false, true]) test(`a killed coordinator cannot release the last unlanded ${exceptional ? 'exception' : 'item'} slot while its record start child survives`, async t => {
+for (const exceptional of [false, true]) for (const displayOnly of [false, true]) test(`a killed coordinator cannot release the last unlanded ${exceptional ? 'exception' : 'item'} slot while its record start child survives${displayOnly ? ', even after retry with a display-only journal match' : ''}`, async t => {
   const f = fixture(t); unlandedSetting(f, 1);
   let target;
   if (exceptional) {
@@ -424,7 +424,7 @@ process.exit(result.status??1);
 };`);
   const args = item => [item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, ...(target ? ['--unblocks', target] : [])];
   const first = f.concurrent([...args(f.item), '--org-cli', adapter], hook);
-  let second, journal;
+  let second, journal, decoy;
   try {
     await until(() => fs.existsSync(hook.PAUSE_MARKER));
     second = f.concurrent(args(other), hook);
@@ -448,16 +448,47 @@ process.exit(result.status??1);
     else assert.match(refused.stderr, /unlanded count 1, cap 1/);
     assert.deepEqual(f.show(f.item).runs, []); assert.deepEqual(f.show(other).runs, []);
     assert.equal(promptCalls(f).length, 0);
+    if (displayOnly) {
+      // A reported ordinary run can acquire every matching display field later.
+      // Landing it makes the item reservation the only remaining item capacity.
+      decoy = pendingItem(f, { item: f.item }).run;
+      const report = path.join(f.root, 'decoy-report.md');
+      fs.writeFileSync(report, `---\nrun: ${decoy}\noutcome: done\nsummary: Ordinary run finished\n---\n`);
+      f.rec(['ingest', report]);
+      f.rec(['set', decoy, `dispatch_journal=${journal}`, `dispatch_attempt=${pending.token}`,
+        ...(exceptional ? ['dispatch_unlanded_exception=unblocks'] : [])]);
+      const state = f.state();
+      fs.appendFileSync(path.join(f.org, 'events.jsonl'), JSON.stringify({ type: 'promotion.reconciled', seq: state.eventCount + 1,
+        at: new Date().toISOString(), by: 'dispatch-test-agent', identity: pending.common,
+        items: [f.item], runs: [decoy], heads: [{ item: f.item, run: decoy, head: 'a'.repeat(40) }] }) + '\n');
+      for (const recovery of [[], ['--recover-run', decoy]]) {
+        const retry = f.dispatch(['--retry', journal, ...recovery]);
+        assert.equal(retry.status, 1, retry.stderr);
+        assert.match(retry.stderr, recovery.length ? /recovery run does not belong/ : /record start outcome is unknown/);
+        const held = JSON.parse(fs.readFileSync(journal));
+        assert.equal(held.stage, 'starting'); assert.equal(held.run, null);
+      }
+      const contender = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === other);
+      const stillRefused = f.dispatch(['--retry', contender]);
+      assert.equal(stillRefused.status, 1, stillRefused.stderr);
+      assert.equal(JSON.parse(stillRefused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+      assert.match(stillRefused.stderr, /Pending record starts/);
+      if (exceptional) assert.match(stillRefused.stderr, /All 3 active fix\/follow-up slots/);
+      else assert.match(stillRefused.stderr, /unlanded count 1, cap 1/);
+      assert.deepEqual(f.show(other).runs, []); assert.equal(promptCalls(f).length, 0);
+      assert.equal(lookupProcess(writer.pid).value?.pid, writer.pid, 'retry cannot free capacity while the original writer can append');
+    }
   } finally {
     fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); fs.writeFileSync(release, 'go');
     await Promise.all([first.done, second?.done]);
     if (fs.existsSync(ready)) await until(() => fs.existsSync(finished));
   }
   const written = JSON.parse(fs.readFileSync(finished)); assert.equal(written.status, 0, written.stderr);
-  assert.equal(f.show(f.item).runs.length, 1, 'the surviving child commits after the contender is refused');
+  assert.equal(f.show(f.item).runs.length, displayOnly ? 2 : 1, 'the surviving child commits after the contender is refused');
   const recovered = f.dispatch(['--retry', journal]); assert.equal(recovered.status, 0, recovered.stderr);
-  assert.equal(f.show(f.item).runs.length, 1, 'recovery adopts the one committed run');
+  assert.equal(f.show(f.item).runs.length, displayOnly ? 2 : 1, 'recovery adopts the matching original start without another run');
   const run = JSON.parse(recovered.stdout).run;
+  assert.notEqual(run, decoy, 'the display-only match cannot replace the original dispatch start');
   if (exceptional) f.rec(['abandon', run]);
   else f.rec(['close', f.item, '--dropped']);
   const contender = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === other);
@@ -1594,7 +1625,8 @@ process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.sta
   let r=f.dispatch(['--retry',journal]);assert.equal(r.status,1);assert.match(r.stderr,/--recover-run/);
   assert.deepEqual(f.show(f.item).runs,[]);
   for(let i=0;i<2;i++)f.rec(['start',f.item,'--route',job.route,'--route-config',job.routeConfig,
-    '--workspace',job.workspace,'--meta',`lane=${job.lane}`,'--meta',`dispatch_journal=${journal}`]);
+    '--workspace',job.workspace,'--meta',`lane=${job.lane}`,'--meta',`dispatch_journal=${journal}`,
+    '--meta',`dispatch_project=${job.common}`,'--meta',`dispatch_attempt=${job.token}`]);
   r=f.dispatch(['--retry',journal]);assert.equal(r.status,1);assert.match(r.stderr,/multiple matches/);
   assert.equal(promptCalls(f).length,0);assert.equal(f.show(f.item).runs.length,2);
   // Also cover a committed run whose brief was never materialized.

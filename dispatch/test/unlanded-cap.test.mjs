@@ -101,7 +101,7 @@ test('matching promotion evidence identifies removed legacy workspaces before an
 
 test('uncertain starts reserve distinct items and exception runs until their original record start replaces them', () => {
   const r = record(); r.item(1); r.start(1); r.item(2);
-  const journal = (name, fields = {}) => ({ journal: `/record/dispatch/${name}.json`, common, item: 'ENG-2',
+  const journal = (name, fields = {}) => ({ journal: `/record/dispatch/${name}.json`, token: name, common, item: 'ENG-2',
     stage: 'starting', unlandedCap: { admission: { kind: 'unblocks' } }, ...fields });
   const first = journal('first'), second = journal('second');
   const journals = [first, second, journal('foreign', { common: '/other/.git' }),
@@ -114,7 +114,7 @@ test('uncertain starts reserve distinct items and exception runs until their ori
     e => e.code === 'DISPATCH_UNLANDED_CAP' && /Pending record starts/.test(e.message));
   assert.throws(() => check(r, { item: 'ENG-new', unblocks: 'ENG-2' }, {}, { journals }),
     e => e.code === 'DISPATCH_UNBLOCKS_INVALID', 'an unmatched start is not yet a landing to unblock');
-  r.start(2, undefined, { dispatch_journal: first.journal, dispatch_unlanded_exception: 'unblocks' });
+  r.start(2, undefined, { dispatch_journal: first.journal, dispatch_attempt: first.token, dispatch_unlanded_exception: 'unblocks' });
   const recorded = countUnlanded({ events: r.events, common, journals });
   assert.equal(recorded.items.length, 2); assert.equal(recorded.exceptions.length, 2);
   assert.deepEqual(recorded.reservations.map(j => j.journal), [second.journal], 'a stale journal must not double count its committed start');
@@ -128,20 +128,29 @@ test('uncertain starts reserve distinct items and exception runs until their ori
 test('a journal reference releases its reservation only for the original project, item, attempt and exception facts', () => {
   for (const [label, item, override] of [
     ['other item', 'ENG-3', {}],
+    ['other journal', 'ENG-2', { dispatch_journal: '/record/dispatch/other.json' }],
     ['other attempt', 'ENG-2', { dispatch_attempt: 'other' }],
+    ['missing attempt', 'ENG-2', { dispatch_attempt: undefined }],
     ['other project', 'ENG-2', { dispatch_project: '/other/.git' }],
+    ['missing project', 'ENG-2', { dispatch_project: undefined }],
     ['other exception', 'ENG-2', { dispatch_unlanded_exception: 'fix' }],
+    ['missing exception', 'ENG-2', { dispatch_unlanded_exception: undefined }],
+    ['display-only match', 'ENG-2', { dispatch_journal: undefined, dispatch_attempt: undefined, dispatch_unlanded_exception: undefined }],
   ]) {
     const r = record(); r.item(2); r.item(3);
     const journal = '/record/dispatch/start.json', token = 'wanted';
     const pending = { journal, token, common, item: 'ENG-2', stage: 'starting', unlandedCap: { admission: { kind: 'unblocks' } } };
-    const meta = { dispatch_journal: journal, dispatch_attempt: token, dispatch_unlanded_exception: 'unblocks' };
+    const meta = { dispatch_project: common, dispatch_journal: journal, dispatch_attempt: token, dispatch_unlanded_exception: 'unblocks' };
     r.start(1, item, { ...meta, ...override });
     r.add({ type: 'run.updated', id: 'R-1', meta }); // Display edits cannot manufacture the missing original match.
     assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 1, label);
     r.start(2, 'ENG-2', meta);
     assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 0,
       `${label}: a matching original start replaces the reservation`);
+    r.add({ type: 'run.updated', id: 'R-2', meta: { dispatch_project: '/other/.git', dispatch_journal: 'display-only',
+      dispatch_attempt: 'display-only', dispatch_unlanded_exception: 'fix' } });
+    assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 0,
+      `${label}: later display edits cannot invalidate a matching original start`);
   }
 });
 
@@ -151,7 +160,7 @@ test('recovery between the journal and event snapshots cannot hide both an uncer
   const r = record(); r.item(1);
   const log = path.join(org, 'events.jsonl'), journal = path.join(org, 'dispatch/start.json');
   fs.mkdirSync(path.dirname(journal));
-  const job = { common, item: 'ENG-1', stage: 'starting', unlandedCap: { admission: { kind: 'regular' } } };
+  const job = { token: 'snapshot', common, item: 'ENG-1', stage: 'starting', unlandedCap: { admission: { kind: 'regular' } } };
   fs.writeFileSync(journal, JSON.stringify(job));
   fs.writeFileSync(log, r.events.map(e => JSON.stringify(e)).join('\n') + '\n');
   const read = fs.readFileSync;
@@ -160,7 +169,7 @@ test('recovery between the journal and event snapshots cannot hide both an uncer
     const value = read.call(this, file, ...args);
     if (file === log && !recovered) {
       recovered = true;
-      r.start(1, undefined, { dispatch_journal: journal });
+      r.start(1, undefined, { dispatch_journal: journal, dispatch_attempt: job.token });
       fs.writeFileSync(log, r.events.map(e => JSON.stringify(e)).join('\n') + '\n');
       fs.writeFileSync(journal, JSON.stringify({ ...job, stage: 'worker', run: 'R-1' }));
     }

@@ -127,7 +127,9 @@ in the request journal. This pending start reserves capacity even if its
 coordinator dies and a surviving child can still append after the lock is
 reclaimed. An original `run.started` with the same project, item, journal,
 attempt token and exception kind replaces the journal reservation exactly once;
-a stray journal reference or later display edit cannot release it. Admission
+a stray journal reference or later display edit cannot release it. Automatic
+retry and explicit `--recover-run` use those same original start facts before
+advancing the journal; unmatched starts stay reserved. Admission
 snapshots journals before record events so concurrent
 start recovery cannot hide both forms of the reservation. An unmatched uncertain
 start remains occupied until reconciled; coordinator death or age never clears

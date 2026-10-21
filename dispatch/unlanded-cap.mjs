@@ -11,6 +11,15 @@ export const UNLANDED_EXCEPTION_CAP = 3;
 const canonical = file => { try { return fs.realpathSync(file); } catch { return path.resolve(file); } };
 const refusal = (code, message) => Object.assign(Error(message), { code });
 
+// Callers supply original run.started facts, never folded display metadata.
+// Recovery and reservation replacement must agree before a journal can advance.
+export function matchesDispatchStart(start, job) {
+  const meta = start.meta ?? {}, kind = job.unlandedCap?.admission?.kind;
+  return Boolean(meta.dispatch_project) && Boolean(job.token) && canonical(meta.dispatch_project) === canonical(job.common) &&
+    start.item === job.item && meta.dispatch_journal === job.journal && meta.dispatch_attempt === job.token &&
+    meta.dispatch_unlanded_exception === (kind === 'regular' ? undefined : kind);
+}
+
 export function countUnlanded({ events, common, journals = [], projectIdentity = cwd => gitProject(cwd).identity }) {
   common = canonical(common);
   const state = fold(events), starts = new Map(), projects = new Map(), workspaces = new Map();
@@ -65,11 +74,7 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
   // record writer. The coordinator's death cannot release this reservation:
   // its child can still append. A matching start replaces it exactly once;
   // only a definitive record refusal makes an unmatched start safe to retry.
-  const matchesStart = j => {
-    const kind = j.unlandedCap?.admission?.kind;
-    return [...starts.values()].some(s => s.run.item === j.item && s.meta.dispatch_journal === j.journal &&
-      s.meta.dispatch_attempt === j.token && s.meta.dispatch_unlanded_exception === (kind === 'regular' ? undefined : kind));
-  };
+  const matchesStart = j => [...starts.values()].some(s => matchesDispatchStart({ item: s.run.item, meta: s.meta }, j));
   const reservations = journals.filter(j => j.stage === 'starting' && !j.startRefused && j.common &&
     canonical(j.common) === common && !matchesStart(j));
   for (const j of reservations) {

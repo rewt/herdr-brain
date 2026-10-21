@@ -5,6 +5,9 @@ import path from 'node:path';
 import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 import { fixture } from './fixture.mjs';
 import { DESK_DEFAULTS } from '../config.mjs';
+import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
+import { policyLocation, readConfigJSON } from '../../lib/config-home.mjs';
+import { spawnSync } from 'node:child_process';
 
 const result = (r) => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
@@ -52,6 +55,44 @@ test('a project with an explicit zero review cap keeps unlimited semantics', t =
   const run = f.start(); f.commit('correct\n'); f.report(run);
   assert.equal(result(f.settle(run)).review_policy.cap, 0);
   assert.equal(receipt(f, run).reviewPolicy.source, 'project');
+});
+
+for (const standalone of [false, true]) test(`settle intake accepts a ${standalone ? 'standalone-only' : 'home identity'} desk route and holds unknown hand edits`, async t => {
+  const f = configFixture(t, { routing: standalone }); await f.adopt();
+  const lane = policyLocation(f.cwd, 'lane').file;
+  const routeFile = standalone ? policyLocation(f.cwd, 'routing').file : f.binding().identityFile;
+  const route = standalone ? 'standalone-only' : 'identity-reviewer';
+  const routes = readConfigJSON(routeFile);
+  routes.routes[route] = { kind: 'codex', model: 'selected-desk-model' };
+  if (!standalone) routes.settle = { review_route: 'review', timeout: 17, reuse: true };
+  fs.writeFileSync(routeFile, JSON.stringify(routes));
+  const config = readConfigJSON(lane);
+  config.settle = { review_route: route, fix_route: 'engineer', timeout: 12 };
+  fs.writeFileSync(lane, JSON.stringify(config));
+  const workspace = path.join(f.scratch, 'linked'); f.git('worktree', 'add', '-qb', 'lane/intake', workspace);
+  const exec = (file, args) => spawnSync(process.execPath, [path.join(f.bundle, file), ...args], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
+  const record = args => { const r = exec('bin/org.mjs', args); assert.equal(r.status, 0, r.stderr || r.stdout); return r.stdout.trim(); };
+  const start = () => {
+    const item = record(['add', 'Exercise desk intake', '--role', 'engineer']).split(' ')[0];
+    const run = record(['start', item, '--workspace', workspace, '--meta', 'lane=intake']).match(/R-\d+/)[0];
+    record(['claim', run, '--controller', 'brain']);
+    const report = JSON.parse(record(['show', run, '--json'])).report_path;
+    // Stop after intake, before independent review or any native launch.
+    fs.writeFileSync(report, `---\nrun: ${run}\noutcome: blocked\nsummary: Intake witness.\nblockers: ["Fixture stops before review"]\nproposals: []\n---\n`);
+    return run;
+  };
+  const org = f.env.ORG_DIR, run = start();
+  const settled = result(exec('settle/settle.mjs', [run, '--repo', f.cwd, '--org', org]));
+  assert.equal(settled.result, 'escalate'); assert.match(settled.reason, /Worker reported blocked/);
+  const job = receipt({ org }, run);
+  assert.equal(job.reviewRoute, route); assert.equal(job.fixRoute, 'engineer'); assert.equal(job.main, 'main');
+  assert.equal(job.timeout, 12); assert.equal(job.reuse, false, 'project desk object replaces identity defaults');
+  assert.equal(readConfigJSON(job.routeConfig).routes[route].model, 'selected-desk-model');
+  const next = start();
+  config.settle.review_route = 'unknown-hand-edit'; fs.writeFileSync(lane, JSON.stringify(config));
+  const refused = exec('settle/settle.mjs', [next, '--repo', f.cwd, '--org', org, '--review-route', 'review']);
+  assert.notEqual(refused.status, 0); assert.match(refused.stderr, /unknown route: unknown-hand-edit/);
+  assert.equal(fs.existsSync(path.join(org, 'settle', `${next}.json`)), false);
 });
 
 test('relative LANE_CONFIG uses the intake file for canonical review without running validation', (t) => {

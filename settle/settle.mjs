@@ -15,7 +15,7 @@ import { readReport } from '../lib/report.mjs';
 import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { itemStatus, laterRuns, releases } from '../lib/state.mjs';
 import { snapshotState, waitingOutcome } from './record-state.mjs';
-import { loadDiscoveredRoutes, mergeRoutesConfig, readRoutesConfig, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
+import { loadDiscoveredRoutes, mergeRoutesConfig, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../lanes/review-evidence.mjs';
 import { DESK_DEFAULTS, validateDeskSettings } from './config.mjs';
 import { acquire } from './lock.mjs';
@@ -666,11 +666,10 @@ function main() {
     if (!opt.retry && !resumedRefusal) throw new Error('settle is incomplete; inspect --status, then use --retry');
   } else {
     if (opt.retry) throw new Error('no settle receipt to retry');
-    const { config, files } = loadDiscoveredRoutes({ cwd: repo, env: { LANE_CONFIG: laneConfig ?? undefined } });
+    const { config, layers } = loadDiscoveredRoutes({ cwd: repo, env: { LANE_CONFIG: laneConfig ?? undefined } });
     // Route discovery merges routing fields only. Lifecycle/settle fields use
-    // lane's whole-value, parent-then-repository precedence.
-    for (const file of files) {
-      const layer = readRoutesConfig(file);
+    // lane's whole-value precedence from the same validated policy snapshot.
+    for (const { config: layer } of layers) {
       for (const key of ['main', 'settle']) if (Object.hasOwn(layer, key)) config[key] = layer[key];
     }
     if (config.main !== undefined && (typeof config.main !== 'string' || !config.main.trim())) throw new Error('main must be a nonempty string');

@@ -295,7 +295,8 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   const binding = homeProject(cwd, env);
   if (file !== undefined && !binding) {
     const absolute = resolve(cwd, file);
-    return { config: readRoutesConfig(absolute), files: [absolute] };
+    const config = readRoutesConfig(absolute);
+    return { config, files: [absolute], layers: [{ file: absolute, base: dirname(absolute), config }] };
   }
   let repository;
   try {
@@ -304,8 +305,9 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
     const directory = realpathSync(cwd);
     const local = join(directory, ".lane.json");
     const nearest = existsSync(local) ? local : boundary.fleet ? undefined : nearestParentConfig(directory);
-    if (!nearest) return { config: structuredClone(ROUTE_PRESET), files: [], suggested: true };
-    return { config: readRoutesConfig(nearest), files: [nearest] };
+    if (!nearest) return { config: structuredClone(ROUTE_PRESET), files: [], layers: [], suggested: true };
+    const config = readRoutesConfig(nearest);
+    return { config, files: [nearest], layers: [{ file: nearest, base: dirname(nearest), config }] };
   }
   const parents = boundary.fleet ? (boundary.project ?? boundary.legacy)?.layers ?? [] : [nearestParentConfig(repository)];
   let layers;
@@ -316,15 +318,17 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   // it never inherits routes that its original explicit selection did not have.
   if (binding?.sources.routing) {
     const routing = policyLocation(repository, 'routing', env, { binding });
-    if (routing.file && present(routing.file)) layers = [{ ...routing, config: readPolicyFile(routing.file, 'routing', { cwd: repository, env }) }];
+    if (routing.file && present(routing.file)) layers = [...laneLayers, { ...routing, config: readPolicyFile(routing.file, 'routing', { cwd: repository, env }) }];
   }
-  const files = [...new Set([...(binding ? laneLayers : []), ...layers].map(l => l.file))];
-  if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };
+  // Full-policy consumers reuse these parsed layers after the combined
+  // reference check; a single layer need not declare every route it names.
+  const files = [...new Set(layers.map(l => l.file))];
+  if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, layers, suggested: true };
   // Keep desk settings alongside the routes they reference. Validate only
   // after standalone routing has replaced the inherited route declaration.
   const full = Object.assign({}, ...laneLayers.map(l => l.config));
   if (laneLayers.some(l => Object.hasOwn(l.config, 'routes'))) full.routes = Object.assign({}, ...laneLayers.map(l => l.config.routes));
-  const config = binding?.sources.routing ? standaloneRouting(full, layers[0].config) : full;
+  const config = binding?.sources.routing ? standaloneRouting(full, layers.at(-1).config) : full;
   if (binding?.defaults.launch) config.launch = [...binding.defaults.launch];
   else if (binding) delete config.launch;
   // Lifecycle/entry preferences alone do not declare operator model routes.

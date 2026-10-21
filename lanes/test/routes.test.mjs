@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import test from '../../test/helpers/bounded-test.mjs';
 import { fileURLToPath } from "node:url";
 
-import { exitCommandFor, readRoutesConfig, resolveLaunchRoute, resolveRoute, selectRoute, validateRoutesConfig } from "../routes.mjs";
+import { exitCommandFor, loadDiscoveredRoutes, readRoutesConfig, resolveLaunchRoute, resolveRoute, selectRoute, validateRoutesConfig } from "../routes.mjs";
 import { ROUTE_PRESET } from "../preset.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -38,8 +38,11 @@ test('an explicitly selected routing file validates its desk references after ha
   const config = { routes: { reviewer: { kind: 'codex' } }, settle: { review_route: 'reviewer' } };
   writeFileSync(file, JSON.stringify(config));
   assert.equal(readRoutesConfig(file).settle.review_route, 'reviewer');
+  const loaded = loadDiscoveredRoutes({ cwd: root, file });
+  assert.deepEqual(loaded.layers, [{ file, base: root, config }]);
   config.settle.review_route = 'unknown-hand-edit'; writeFileSync(file, JSON.stringify(config));
   assert.throws(() => readRoutesConfig(file), /unknown route: unknown-hand-edit/);
+  assert.throws(() => loadDiscoveredRoutes({ cwd: root, file }), /unknown route: unknown-hand-edit/);
 });
 
 test("one resolution supplies launch plumbing and opaque run metadata", () => {

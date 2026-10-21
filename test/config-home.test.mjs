@@ -106,6 +106,11 @@ for (const standalone of [false, true]) test(`hand-edited ${standalone ? 'standa
   const options = { common: binding.common, lane: linked, topic: 'held', tip: f.git('rev-parse', 'HEAD'), tracked: new Set(f.git('ls-files', '-z').split('\0').filter(Boolean)), env: { ...f.env, LANE_CONFIG: '/ignored-caller-policy' } };
   const cli = () => spawnSync(process.execPath, [path.join(f.bundle, 'lanes/lane.mjs'), 'config'], { cwd: linked, env: options.env, encoding: 'utf8' });
   assert.equal(readProjectPolicy(linked, 'lane', options.env).config.settle.review_route, 'engineer');
+  assert.deepEqual(discoverArchive({ cwd: linked, env: options.env }), { dirs: [path.join(f.cwd, 'archive')], source: file });
+  const loaded = loadDiscoveredRoutes({ cwd: linked, env: options.env });
+  assert.deepEqual(loaded.layers.map(layer => layer.file), [binding.identityFile, file,
+    ...(standalone ? [policyLocation(f.cwd, 'routing').file] : [])]);
+  assert.equal(loaded.layers[1].config.settle.fix_route, standalone ? 'standalone-only' : undefined);
   assert.equal(closeoutPolicy(f.cwd), true);
   assert.equal(readArchivalRetirementPolicy(f.cwd).archivalRetirementPolicy, true);
   assert.equal(measureLaneEvidence(options).bytes, 0);
@@ -114,6 +119,7 @@ for (const standalone of [false, true]) test(`hand-edited ${standalone ? 'standa
   const held = route => {
     assert.throws(() => readProjectPolicy(linked, 'lane', options.env), error => /held/.test(error.message) && error.message.includes(route));
     assert.throws(() => closeoutPolicy(f.cwd), error => /invalid/.test(error.message) && error.message.includes(route));
+    assert.throws(() => discoverArchive({ cwd: linked, env: options.env }), error => error.message.includes(route));
     const archival = readArchivalRetirementPolicy(f.cwd);
     assert.equal(archival.archivalRetirementPolicy, false);
     assert.ok(archival.archivalRetirementPolicyError.includes(route), archival.archivalRetirementPolicyError);

@@ -442,6 +442,135 @@ test('open file inventory includes ordinary descriptors and refuses incomplete o
   assert.throws(() => readProcessFileReferences({ platform: 'darwin', command: () => ({ status: 1, stderr: 'denied' }) }), /unavailable/);
 });
 
+test('directory entries bound the root scan while arbitrary-name ownership markers remain discoverable', t => {
+  const f = setup(t), owned = f.directory('arbitrary', { run: 'R-1' });
+  const foreign = Array.from({ length: 16 }, (_, i) => f.directory(`foreign-${i}`));
+  const file = path.join(f.root, 'topic-file'), link = path.join(f.root, 'topic-link');
+  fs.writeFileSync(file, 'keep'); fs.symlinkSync(owned, link);
+  const alias = path.join(f.scratch, 'root-alias'); fs.symlinkSync(f.root, alias);
+  const readdir = fs.readdirSync, lstat = fs.lstatSync, scanned = [], markerReads = [], topLevelStats = [];
+  t.mock.method(fs, 'readdirSync', (directory, options) => {
+    if (directory === f.root) { scanned.push(directory); assert.deepEqual(options, { withFileTypes: true }); }
+    return readdir(directory, options);
+  });
+  t.mock.method(fs, 'lstatSync', (file, ...args) => {
+    if (path.basename(file) === SCRATCH_OWNER_FILE) markerReads.push(path.dirname(file));
+    if (path.dirname(file) === f.root) topLevelStats.push(file);
+    return lstat(file, ...args);
+  });
+  const sweep = f.prepare({ roots: [f.root, alias] });
+  assert.deepEqual(scanned, [f.root], 'root aliases are scanned once');
+  assert.deepEqual(new Set(markerReads), new Set([owned, ...foreign]), 'every directory is checked for a marker');
+  assert.deepEqual(topLevelStats, [owned], 'only owned scratch is statted for its content proof');
+  sweep.execute();
+  assert.equal(fs.existsSync(owned), false); assert.equal(fs.readFileSync(file, 'utf8'), 'keep');
+  assert.ok(fs.lstatSync(link).isSymbolicLink()); assert.ok(foreign.every(directory => fs.existsSync(directory)));
+});
+
+for (const stage of ['planning', 'execution']) test(`a directory replaced by a symlink at ${stage} is kept`, t => {
+  const f = setup(t), owned = f.directory('arbitrary', { run: 'R-1' }), target = path.join(f.scratch, 'target');
+  const replace = () => { fs.renameSync(owned, target); fs.symlinkSync(target, owned); };
+  if (stage === 'planning') {
+    const readdir = fs.readdirSync;
+    t.mock.method(fs, 'readdirSync', (directory, options) => {
+      const children = readdir(directory, options);
+      if (directory === f.root) replace();
+      return children;
+    });
+  }
+  const sweep = f.prepare();
+  if (stage === 'execution') replace();
+  sweep.execute();
+  assert.ok(fs.lstatSync(owned).isSymbolicLink()); assert.equal(fs.readFileSync(path.join(target, 'payload'), 'utf8'), 'abc');
+  assert.match(f.read(sweep).entries[0].reason, /scratch root is not a directory/);
+});
+
+test('planning inventories only final candidates and execution rechecks each candidate separately', t => {
+  const f = setup(t), owned = f.directory('topic-review'), marked = f.directory('arbitrary', { run: 'R-1' });
+  f.directory('topic-ds3-review'); f.directory('topic-foreign', { common: f.scratch, topic: 'topic' });
+  const cited = f.directory('topic-evidence'), live = f.directory('topic-live');
+  f.runs[0].report.artifacts = [path.join(cited, 'payload')]; fs.writeFileSync(path.join(live, '.local-live'), '');
+  const calls = [];
+  const sweep = f.prepare({ readOpenFiles: directories => { calls.push(directories); return []; } });
+  assert.equal(calls.length, 1); assert.deepEqual(new Set(calls[0]), new Set([owned, marked]));
+  sweep.execute();
+  assert.deepEqual(calls.slice(1), [[marked], [owned]], 'each final check gets only its own tree');
+  assert.equal(fs.existsSync(owned), false); assert.equal(fs.existsSync(marked), false);
+  assert.ok(fs.existsSync(cited)); assert.ok(fs.existsSync(live));
+});
+
+test('the default scratch inventory passes candidate trees through to the native command', t => {
+  const f = setup(t), owned = f.directory('topic-review'), native = sweepCommands(f);
+  f.directory('unrelated');
+  const sweep = f.prepare({ readOpenFiles: undefined, command: native.command }); sweep.execute();
+  const calls = native.calls.filter(call => call.exe === '/usr/sbin/lsof');
+  assert.equal(calls.length, process.platform === 'darwin' ? 2 : 0);
+  for (const call of calls) {
+    assert.deepEqual(call.args, ['-n', '-P', '-Fpfn0', '+L1', '+D', owned, '--', process.cwd()]);
+  }
+});
+
+test('bounded macOS inventory selects trees and unlinked files with a caller cwd anchor', t => {
+  const f = setup(t), owned = f.directory('arbitrary', { run: 'R-1' }), second = f.directory('topic-review');
+  const stdout = `p${process.pid}\0fcwd\0n${f.repo}\0\np99\0f7\0n${owned}/nested/payload\0\nf8\0n${owned}/unlinked\0\n`;
+  const calls = [], env = { TEST: 'bounded' };
+  const command = (exe, args, options) => { calls.push({ exe, args, options }); return { status: 1, stderr: '', stdout }; };
+  const refs = readProcessFileReferences({ platform: 'darwin', env, directories: [owned, second, owned], command });
+  assert.deepEqual(calls[0].args, ['-n', '-P', '-Fpfn0', '+L1', '+D', owned, '+D', second, '--', process.cwd()]);
+  assert.equal(calls[0].exe, '/usr/sbin/lsof'); assert.equal(calls[0].options.env, env);
+  assert.ok(calls[0].options.timeout >= 10000);
+  assert.ok(refs.some(ref => ref.path === `${owned}/nested/payload`));
+  assert.ok(refs.some(ref => ref.path === `${owned}/unlinked`));
+  assert.deepEqual(readProcessFileReferences({ platform: 'darwin', directories: [], command }), []);
+  assert.equal(calls.length, 1, 'no candidate means no process inventory');
+  for (const directories of [null, 'relative', ['relative'], [owned + '\0']])
+    assert.throws(() => readProcessFileReferences({ platform: 'darwin', directories, command }), /invalid/);
+});
+
+test('symlink inodes retain the full numeric macOS inventory, including directly opened links', t => {
+  const f = setup(t), owned = f.directory('topic-review'), nested = path.join(owned, 'nested');
+  fs.mkdirSync(nested); const link = path.join(nested, 'link'); fs.symlinkSync(path.join(owned, 'payload'), link);
+  const calls = [];
+  const sweep = f.prepare({ readOpenFiles: directories => readProcessFileReferences({ platform: 'darwin', directories,
+    command: (exe, args) => { calls.push(args); return { status: 0, stderr: '',
+      stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\np99\0f7\0n${link}\0\n` }; } }) });
+  sweep.execute(); assert.ok(fs.existsSync(owned)); assert.ok(fs.lstatSync(link).isSymbolicLink());
+  assert.deepEqual(calls, [['-n', '-P', '-a', '-u', String(process.getuid()), '-Fpfn0']]);
+  assert.equal(f.read(sweep).kept_summary.by_reason['directory has open process handles'], 1);
+  assert.throws(() => readProcessFileReferences({ platform: 'darwin', directories: [owned],
+    command: () => ({ status: 1, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\n` }) }), /unavailable/);
+});
+
+for (const failure of ['timeout', 'signal', 'stderr', 'exit', 'anchor', 'truncated', 'identity', 'dangling-fd', 'dangling-process', 'unknown-field', 'error-fd', 'nonpath'])
+  test(`bounded macOS ${failure} observation keeps scratch`, t => {
+    const f = setup(t), owned = f.directory('topic-review');
+    const stdout = `p${process.pid}\0fcwd\0n${f.repo}\0\n`;
+    const result = { status: 1, stderr: '', stdout };
+    if (failure === 'timeout') result.error = Object.assign(Error('timed out'), { code: 'ETIMEDOUT' });
+    if (failure === 'signal') result.signal = 'SIGKILL';
+    if (failure === 'stderr') result.stderr = 'partial observation';
+    if (failure === 'exit') result.status = 2;
+    if (failure === 'anchor') result.stdout = 'p99\0f7\0n/elsewhere\0\n';
+    if (failure === 'truncated') result.stdout = stdout.slice(0, -2);
+    if (failure === 'identity') result.stdout += 'p99\0n/elsewhere\0\n';
+    if (failure === 'dangling-fd') result.stdout += 'p99\0f7\0\n';
+    if (failure === 'dangling-process') result.stdout += 'p99\0\n';
+    if (failure === 'unknown-field') result.stdout += 'incomplete\0\n';
+    if (failure === 'error-fd') result.stdout += 'p99\0ferr\0n/private/unavailable\0\n';
+    if (failure === 'nonpath') result.stdout += 'p99\0f7\0n(revoked)\0\n';
+    const sweep = f.prepare({ readOpenFiles: directories => readProcessFileReferences({ platform: 'darwin', directories, command: () => result }) });
+    sweep.execute(); assert.ok(fs.existsSync(owned)); assert.match(f.read(sweep).entries[0].reason, /observation failed/);
+  });
+
+test('a timed-out bounded final inventory keeps scratch after a successful planning observation', t => {
+  const f = setup(t), owned = f.directory('topic-review'); let calls = 0;
+  const sweep = f.prepare({ readOpenFiles: directories => readProcessFileReferences({ platform: 'darwin', directories,
+    command: () => ++calls === 1 ? { status: 1, stderr: '', stdout: `p${process.pid}\0fcwd\0n${f.repo}\0\n` }
+      : { status: null, error: Error('timed out') } }) });
+  sweep.execute(); assert.equal(calls, 2); assert.ok(fs.existsSync(owned));
+  assert.match(f.read(sweep).entries[0].reason, /scratch kept: open file source unavailable.*timed out/);
+});
+
 test('the shared archive helper honors layer-relative paths and whole-value overrides', t => {
   const f = setup(t), file = path.join(f.scratch, 'selected.json');
   fs.writeFileSync(file, JSON.stringify({ archive: { dirs: ['saved'] } }));

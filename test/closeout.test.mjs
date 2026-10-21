@@ -17,7 +17,8 @@ import { joinFleet } from '../lib/fleet.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
-  closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout, closeoutKey } from '../lib/closeout.mjs';
+  closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout, closeoutKey,
+  recoverLane } from '../lib/closeout.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { drainCloseout } from '../lib/closeout-consumer.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
@@ -629,6 +630,97 @@ test('named manual recovery records a fresh bound request for a legacy lane with
   await waitForChange([f.eventFile], () => effects(f).some(e => e.action === 'lane-removed') && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), { timeoutMs: 60000 });
   assertRemoved(f);
   assert.equal(events(f).find(e => e.type === 'lane.recovery-requested').closeout_targets[0].signal, 'landed');
+});
+
+function manualContentFixture(t, kind) {
+  const f = setup(t, { occupied: false, merged: kind === 'integrated' });
+  fs.unlinkSync(path.join(f.repo, '.lane.json'));
+  const original = events(f); original[0].parent = 'G-1';
+  fs.writeFileSync(f.eventFile, original.map(e => JSON.stringify(e) + '\n').join(''));
+  f.append([{ type: 'item.added', id: 'G-1', kind: 'goal' }]); f.report();
+  if (kind === 'archival-retirement') {
+    fs.writeFileSync(path.join(f.repo, 'main-only'), 'independent main work');
+    f.git(['add', 'main-only']); f.git(['commit', '-qm', 'diverge main']);
+    f.git(['cherry-pick', f.head]);
+    assert.match(f.git(['cherry', 'main', f.head]), /^- /);
+    assert.notEqual(f.git(['rev-parse', 'main']), f.head);
+  }
+  if (kind === 'archive-tagged') {
+    f.git(['tag', 'archive/lane/topic', f.head]);
+    f.append([{ type: 'run.abandoned', id: 'R-1', note: 'Explicitly superseded attempt' }]);
+  }
+  return f;
+}
+
+function manualSweep(f) {
+  // The CLI and its detached consumer use the same deterministic native cwd/
+  // file inventory as the in-process adapter fixtures. Git and Herdr stay real
+  // disposable fixtures; no host process inventory is needed for these cases.
+  const preload = path.join(f.scratch, 'native-inventory.cjs');
+  fs.writeFileSync(preload, `const cp = require('node:child_process'), run = cp.spawnSync;
+cp.spawnSync = (exe, args, options) => {
+  if (exe === '/usr/sbin/lsof') return { status: 0, stderr: '', stdout:
+    'p' + process.pid + '\\0' + (args.includes('-Fpfn0') ? 'fcwd\\0' : '') + 'n' + ${JSON.stringify(f.repo)} + '\\0\\n' };
+  return run(exe, args, options);
+};
+require('node:module').syncBuiltinESMExports();\n`);
+  return spawnSync(process.execPath, [retirementCLI, 'sweep', '--lane', f.lane, '--repo', f.repo, '--org', f.org], {
+    cwd: f.repo, env: { ...f.env, NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}` }, encoding: 'utf8' });
+}
+
+for (const kind of ['integrated', 'archival-retirement', 'archive-tagged']) test(`default-policy sweep CLI releases a ${kind} legacy lane with an open item and parent`, async t => {
+  const f = manualContentFixture(t, kind);
+  assert.equal(readCloseoutEntries(f.common).some(e => ['landed', 'parked'].includes(e.signal)), false);
+  fs.mkdirSync(path.join(f.lane, '.lane'));
+  fs.writeFileSync(path.join(f.lane, '.lane/report.md'), 'durable legacy evidence\n');
+  const result = manualSweep(f);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const source = events(f).find(e => e.type === 'lane.recovery-requested');
+  assert.equal(source.content.kind, kind); assert.equal(source.content.head, f.head);
+  assert.deepEqual(source.closeout_targets[0].content, source.content);
+  await waitForChange([f.eventFile], () => evaluations(f).some(e => e.source.seq === source.seq) &&
+    !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
+  assert.equal(evaluations(f).findLast(e => e.source.seq === source.seq).completed, true, JSON.stringify(evaluations(f)));
+  assertRemoved(f);
+  const state = fold(events(f));
+  assert.equal(state.items.get('ENG-1').closed, null); assert.equal(state.items.get('G-1').closed, null);
+  const proof = effects(f).find(e => e.action === 'lane-preflight');
+  assert.equal(fs.readFileSync(path.join(proof.evidence.directory, 'files/.lane/report.md'), 'utf8'), 'durable legacy evidence\n');
+  if (kind !== 'integrated') {
+    assert.equal(proof.integrated, false);
+    assert.equal(f.git(['rev-parse', 'archive/lane/topic^{commit}']), f.head);
+  }
+  if (kind === 'archival-retirement') {
+    assert.equal(proof.eligibility, kind); assert.equal(proof.archival.matchedPatchCount, 1);
+    assert.equal(proof.mainTip, source.content.mainTip);
+  }
+});
+
+for (const changed of ['patch history', 'patch policy', 'archive removed', 'archive moved']) test(`the closeout consumer rechecks named recovery after ${changed} changes`, t => {
+  const kind = changed.startsWith('patch') ? 'archival-retirement' : 'archive-tagged';
+  const f = manualContentFixture(t, kind);
+  const source = recoverLane({ cwd: f.repo, org: f.org, lane: f.lane, env: f.env, start: false });
+  assert.equal(source.content.kind, kind);
+  assert.deepEqual(readCloseoutEntries(f.common).find(e => e.signal === 'landed').content, source.content);
+  if (changed === 'patch history') f.git(['reset', '--hard', 'HEAD^']);
+  if (changed === 'patch policy') fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"archival_retirement":false}}');
+  if (changed === 'archive removed') f.git(['tag', '-d', 'archive/lane/topic']);
+  if (changed === 'archive moved') f.git(['tag', '-f', 'archive/lane/topic', 'main']);
+  f.drain();
+  const evaluated = evaluations(f).find(e => e.source.seq === source.seq);
+  assert.equal(evaluated.completed, false); assert.match(evaluated.reason, /not integrated|does not match/);
+  assert.equal(fs.existsSync(f.lane), true); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  assert.deepEqual(f.read().actions, []);
+  assert.equal(effects(f).some(e => ['archive-created', 'lane-preflight', 'lane-removed'].includes(e.action)), false);
+  if (!changed.startsWith('archive moved')) assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
+});
+
+test('default-policy sweep CLI keeps unintegrated untagged work with an open item', t => {
+  const f = manualContentFixture(t, 'unintegrated'), result = manualSweep(f);
+  assert.equal(result.status, 1); assert.match(result.stderr, /not integrated or exactly archived/);
+  assert.equal(events(f).some(e => e.type === 'lane.recovery-requested'), false);
+  assert.equal(fs.existsSync(f.lane), true); assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
+  assert.deepEqual(f.read().actions, []);
 });
 
 function child(exe, args, options) {

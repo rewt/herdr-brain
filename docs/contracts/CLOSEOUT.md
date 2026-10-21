@@ -173,6 +173,13 @@ for legacy lanes. With the policy enabled it records a newly bound recovery
 request (or retries an existing removal request); with the policy off it uses
 the same guarded executor directly. It never discovers targets by workspace
 scan. A stale bound head needs new exact-run evidence, not a target rewrite.
+Named recovery recognizes ancestry, complete stable patch matches and an
+existing exact-tip archive while the item remains open. Its source and target
+retain the observed proof kind, lane head and integration branch/tip. The
+consumer observes the content again; a saved patch match or archive observation
+cannot authorize removal after the underlying proof disappears. Patch-based
+removal binds the fresh main tip and repeats the history/policy checks in the
+guarded adapter, then creates and verifies the exact archive before removal.
 
 Supervisor inbox notification from `review.verdict` is a separate follow-up:
 the existing notice wire formats and delivery paths remain unchanged here.

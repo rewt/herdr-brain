@@ -56,6 +56,10 @@ are excluded from class counts. These are display facts, never cleanup authority
 
 ## Validation evidence
 
+| Proposed identifier / version | Owner and declaration | Intended readers | Contract and implementation status | Compatibility |
+| --- | --- | --- | --- | --- |
+| `declared-gates/v1`; selection `promotion-tests/v2` (**proposal, not persisted**) | Owning project's `.lane.validation.json`; one gate authority, independent of config-home location. | Owner-identity train, settle and validation adapters after implementation. | [Project-declared gates](DECLARED-GATES.md), ARCH-38 stage 1; supervisor authority review on `review-sol-max` precedes implementation. No writer, reader or activation is added by this row. | Schema-gated mixed-runner commands; legacy `.test.mjs` planner/command bytes unchanged. Conflicting overrides and unsupported versions refuse; old file-only evidence cannot certify typed steps. Native owner identity remains the execution boundary. |
+
 This section describes the ENG-419 implementation based on source revision
 `ad97e531073dd31e4e6cc885773415a4b55e5b40`. It uses symbol names for the new
 implementation; existing line numbers elsewhere in this registry still refer to

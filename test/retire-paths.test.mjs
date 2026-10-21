@@ -749,7 +749,9 @@ for (const guard of ['working', 'session', 'HOLD', 'archive-tag']) test(`unmerge
     if (guard === 'archive-tag') f.git(['tag', '-d', 'archive/lane/topic']);
     f.save();
   } });
-  const reasons = { working: /occupant worker is working/, session: /recorded launch identity/,
+  // Preflight eligibility now binds the exact recorded session. A replacement
+  // is an occupant, like a late arrival, before archived-worker release planning.
+  const reasons = { working: /occupant worker is working/, session: /occupied lane/,
     HOLD: /retirement held/, 'archive-tag': /not clean and integrated or archived/ };
   assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic' }), reasons[guard]);
   assert.equal(archived, true); assert.equal(fs.existsSync(f.lane), true);

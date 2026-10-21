@@ -1221,7 +1221,7 @@ test('review without a native session warns once and preserves the successful ve
 for (const [key, value] of Object.entries({ name: 'replacement', pane_id: 'w-lane:other',
   workspace_id: 'other-workspace', cwd: '/other-cwd', terminal_id: 'other-terminal' })) {
   test(`review refuses a changed ${key} while observing a fresh session`, async () => {
-    const topic = `review-session-${key}`, review = makeReviewFixture(topic, { verdict: 'PASS' });
+    const topic = `review-session-${key.replaceAll('_', '-')}`, review = makeReviewFixture(topic, { verdict: 'PASS' });
     const { fixture } = review;
     try {
       fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = '2';

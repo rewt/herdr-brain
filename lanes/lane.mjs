@@ -1466,7 +1466,7 @@ function dispatch(topic, promptText, options = {}) {
       while (!liveAfterDelivery.agent_session?.value && Date.now() < deadline && performance.now() - started < 10000) {
         sleepMs(Math.max(0, Math.min(250, deadline - Date.now(), 10000 - (performance.now() - started))));
         if (Date.now() >= deadline || performance.now() - started >= 10000) break;
-        const seen = observe(Math.min(deadline, Date.now() + 10000 - (performance.now() - started)), true);
+        const seen = observe(Math.floor(Math.min(deadline, Date.now() + 10000 - (performance.now() - started))), true);
         if (!seen) break;
         if (Date.now() <= deadline && performance.now() - started < 10000) liveAfterDelivery = seen;
       }

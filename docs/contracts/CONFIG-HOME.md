@@ -1,9 +1,8 @@
 # Config home and adoption
 
-**Contract for authority review; not implemented or activated.** ENG-514, stage 1.
-The supervisor obtains the independent `review-sol-max` authority review before
-implementation continues in this lane. This document authorizes no enrollment,
-native action, sandbox edit or release.
+**Status: authority review PASS, 2026-10-21, `lr-71a3c141321ab342b6d4fa5c3ff9c03f`.**
+ENG-514 implementation follows this reviewed contract. This document authorizes
+no live enrollment, native action, sandbox edit or release.
 
 The governing design is [PLAN-20261021, sections 2 and 3.1](/Users/rewt/development/rewt/.org/proposals/PLAN-20261021.md),
 agreed with the operator on 2026-10-21. The reader inventory below was checked

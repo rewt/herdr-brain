@@ -61,6 +61,10 @@ for (const [custom, name] of [[false, 'p'], ['p', 'project'], ['p', 'fleet.json'
   const f = configFixture(t, { custom });
   // Legacy installation entries without binding metadata remain ignorable.
   if (!custom) fs.mkdirSync(path.join(f.home, '.herdr-monitor/p/legacy-install'), { recursive: true });
+  fs.mkdirSync(path.join(f.home, '.herdr-monitor'), { recursive: true });
+  const legacyFleet = path.join(f.scratch, 'legacy-fleet.json');
+  fs.writeFileSync(legacyFleet, '{"version":1,"session_limit":6,"projects":{}}');
+  fs.symlinkSync(legacyFleet, path.join(f.home, '.herdr-monitor/fleet.json'));
   await f.adopt({ name });
   assert.equal(f.binding().project, name);
   assert.equal(fs.realpathSync(path.join(f.cwd, '.brain')), f.binding().directory);

@@ -1,19 +1,24 @@
 # Event-driven lane closeout
 
-The canonical project's `.lane.json` can opt into one event queue:
+Every project's train landings use the event queue by default. The canonical
+project's `.lane.json` can explicitly opt out:
 
 ```json
-{ "retirement": { "closeout_queue": true } }
+{ "retirement": { "closeout_queue": false } }
 ```
 
-The default is off. Brain declares the opt-in in its own configuration. Each
-other project, including BCH, adopts it in its owning checkout at its release
-re-pin. A lane's copy of this file cannot enable retirement for its project.
-This change does not install or activate a release in another project.
+Absent files, absent `retirement`, and an absent `closeout_queue` all enable it;
+`false` retains foreground cleanup. Existing `true` declarations still work.
+Projects that never configured it now bind and publish their own record's
+ready, review, parked and train-landing signals when they use this release.
+A lane copy cannot change the canonical project's policy. Git-only trains
+without a recorded run have no queue target and retain guarded foreground
+cleanup. Manual Git landings emit no train event: use the named recovery or
+guarded sweep below. No release is installed or activated by this change.
 
 Activation transfers retirement ownership. Updated housekeeping and promotion
 cleanup acquire the same project retirement claim as the closer; under that
-claim, opted-in housekeeping skips both its every-tick tidy and integrated-lane
+claim, queue-owned housekeeping skips both its every-tick tidy and integrated-lane
 sweep, and promotion delegates cleanup to the queue. Other housekeeping work
 continues. Before activation, the supervisor stops any older housekeeping
 runtime and inspects any surviving children, then restarts it from the adopted
@@ -88,6 +93,25 @@ worktree, reused pane/session, dirty checkout or unknown fact keeps the target.
 Ready/reviewer requests can release only their bound panes. Workspace and Git
 removal require a separate landed/parked request and the executor's independent
 proofs. Parking alone never overrides an open run, reference or protected path.
+A clean lane's open item, parent, review or correction chain is no longer a
+hold when its tip is contained in main, its non-merge patches all have complete,
+stable `git cherry` matches, or `archive/lane/<topic>` resolves to that exact tip.
+Patch matches describe historical integration, including matches followed by a
+revert; they never claim current behavior or ancestry. Patch-based release is
+enabled by default; canonical `retirement.archival_retirement: false` retains
+the historical explicit opt-out. Patch release creates and verifies the exact
+archive before removal. Existing archive tags authorize recoverable release
+independently of that patch-scan setting; mismatched tags never do.
+
+Here a **superseded attempt** means a run with an explicit record abandonment
+and an exact-tip archive for its lane. Completion's explicit `superseded` run
+list produces that abandonment. A newer run, a title, pane label or report word
+alone never proves supersession or authorizes archiving an open unlanded lane.
+An archive also preserves explicitly rejected/parked work; its content can
+release without closing the item's long-lived parent. Untagged, unlanded work
+retains the existing chain checks. Local open runs, unknown run bindings, warm
+review follow-ups, native identities, agent exit then shell close, live panes,
+processes/references, HOLD, protected paths, evidence and scratch guards remain.
 A worker's signal also binds older ended sessions in that same lane. Distinct
 predecessors are evaluated before their retained successors; reused panes bind
 only their latest recorded native occupant. This allows an exact supersession

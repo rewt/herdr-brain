@@ -1,6 +1,6 @@
 // Foreground policy and single-action journal executor. No scheduling or model calls.
 import { randomUUID, createHash } from 'node:crypto';
-import { matchingRun } from '../lib/retire.mjs';
+import { matchingRun, laneContentReleased } from '../lib/retire.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { agentBinding, sameBinding } from './observe.mjs';
@@ -133,7 +133,9 @@ function worker(entry, input, slots) {
   const pending = changedRoute || (!frozen && entry.manifest.metadata.generation > 1) ||
     (frozen && (frozen.specDigest !== specDigest(entry) || frozen.generation !== entry.manifest.metadata.generation));
   const chain = chainEvidence(facts, run);
-  const chainReason = chain.openItems.length ? `review, correction or integration chain is still open: ${chain.openItems.join(', ')}`
+  const git = facts.git?.find(g => g.path === run.workspace && g.common === input.inspection.project.common);
+  const chainReason = laneContentReleased(git) ? 'lane content is integrated or archive-tagged; eligible for existing safe-retirement checks'
+    : chain.openItems.length ? `review, correction or integration chain is still open: ${chain.openItems.join(', ')}`
     : 'recorded disposition; retain until existing safe-retirement checks';
   const report = run.report || facts.reports[run.id]?.present;
   const phase = report && quiet(a) ? 'ParkedAwaitingReview' : 'Running';

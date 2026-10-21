@@ -341,6 +341,9 @@ function cleanupRevision(job, queue) {
 export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
   const delegated = () => ({ ...result, cleanup: { state: 'complete', owner: 'closeout-queue' },
     reason: 'green fast-forward; closeout delegated to the event queue' });
+  // Git-only trains have no run/source to bind in the record queue. Keep their
+  // existing guarded foreground cleanup rather than delegating to no request.
+  const queueOwnsJob = () => closeoutPolicy(queue.project.canonical) && Boolean(job.run && job.org);
   let ownership;
   const warnings = [];
   let held;
@@ -352,9 +355,9 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
   };
   const diagnostics = (result.warnings ?? []).filter(w => w.startsWith('velocity record:'));
   try {
-    if (closeoutPolicy(queue.project.canonical)) return delegated();
+    if (queueOwnsJob()) return delegated();
     ownership = claimRetirementOwner(queue.project.identity, { waitMs: 1000 });
-    if (closeoutPolicy(queue.project.canonical)) return delegated();
+    if (queueOwnsJob()) return delegated();
     checkHold();
     if (job.run) {
       const env = { ...process.env, ORG_DIR: job.org };

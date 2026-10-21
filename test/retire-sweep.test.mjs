@@ -21,9 +21,27 @@ const kept = (f, result, pattern) => {
   assert.equal(result.calls.some(row => row.args.includes('remove')), false);
 };
 
-for (const record of ['terminal chain', 'established no chain']) test(`sweep removes an integrated registered lane with ${record}, preserving evidence under the lifecycle lock`, t => {
+test('an exact archive releases a superseded run under an open item and parent', t => {
+  const f = fixture(t, { occupied: false, merged: false });
+  f.git(['tag', 'archive/lane/topic', f.head]);
+  const events = f.eventBytes.trim().split('\n').map(JSON.parse).filter(e => e.type !== 'item.closed');
+  events[0].parent = 'G-1';
+  events.push({ type: 'item.added', id: 'G-1', kind: 'goal' },
+    { type: 'run.abandoned', id: 'R-1', note: 'Explicitly superseded attempt' });
+  fs.writeFileSync(f.eventFile, events.map((e, i) => JSON.stringify({ ...e, seq: i + 1 }) + '\n').join(''));
+  const before = fs.readFileSync(f.eventFile), result = sweep(f);
+  assert.equal(result.results[0].action, 'lane-removed', JSON.stringify(result.results));
+  assert.equal(result.results[0].eligibility, 'archive-tagged');
+  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+  assert.deepEqual(fs.readFileSync(f.eventFile), before);
+});
+
+for (const record of ['terminal chain', 'open item', 'open review', 'established no chain']) test(`sweep removes an integrated registered lane with ${record}, preserving evidence under the lifecycle lock`, t => {
   const f = fixture(t, { occupied: false });
   if (record === 'established no chain') fs.writeFileSync(f.eventFile, '');
+  if (record === 'open item') fs.writeFileSync(f.eventFile, f.eventBytes.trim().split('\n').map(JSON.parse)
+    .filter(e => e.type !== 'item.closed').map(e => JSON.stringify(e) + '\n').join(''));
+  if (record === 'open review') fs.appendFileSync(f.eventFile, JSON.stringify({ type: 'item.added', id: 'REV-1', parent: 'ENG-1', role: 'reviewer', seq: 5 }) + '\n');
   const bytes = fs.readFileSync(f.eventFile);
   f.git(['config', 'core.excludesFile', path.join(f.scratch, 'excludes')]);
   fs.writeFileSync(path.join(f.scratch, 'excludes'), '.lane/\n');
@@ -46,14 +64,14 @@ for (const record of ['terminal chain', 'established no chain']) test(`sweep rem
   assert.deepEqual(sweep(f).results, [], 'one removal, with nothing replayed on the next pass');
 });
 
-for (const guard of ['dirty', 'unintegrated', 'archived unintegrated', 'job reference', 'process reference', 'occupied', 'HOLD', 'open review', 'open correction', 'bad references', 'missing record', 'unreadable record', 'wrong record', 'ambiguous record', 'lifecycle lock']) {
+for (const guard of ['dirty', 'unintegrated', 'job reference', 'process reference', 'occupied', 'HOLD', 'bad references', 'missing record', 'unreadable record', 'wrong record', 'ambiguous record', 'lifecycle lock']) {
   test(`integrated sweep keeps ${guard} with its reason`, async t => {
     const f = fixture(t, { occupied: guard === 'occupied', merged: !guard.includes('unintegrated') });
     let pattern, options = {};
     if (guard === 'dirty') { fs.writeFileSync(path.join(f.lane, 'seed'), 'dirty'); pattern = /not clean/; }
     if (guard.includes('unintegrated')) {
       if (guard.startsWith('archived')) f.git(['tag', 'archive/lane/topic', f.head]);
-      pattern = /not integrated/;
+      pattern = /not integrated|unmatched changes/;
     }
     if (guard === 'job reference') {
       fs.writeFileSync(path.join(f.org, 'references/job.json'), JSON.stringify({ schema: 'herdr-reference/v1', state: 'running',
@@ -64,15 +82,6 @@ for (const guard of ['dirty', 'unintegrated', 'archived unintegrated', 'job refe
     if (guard === 'process reference') { options.cwdReference = true; pattern = /process cwd reference/; }
     if (guard === 'occupied') { f.state.agents = []; f.save(); pattern = /occupied lane/; }
     if (guard === 'HOLD') { hold(f); pattern = new RegExp(heldReason.replaceAll('.', '\\.')); }
-    if (guard === 'open review') {
-      fs.appendFileSync(f.eventFile, JSON.stringify({ type: 'item.added', id: 'REV-1', parent: 'ENG-1', role: 'reviewer', seq: 5 }) + '\n');
-      pattern = /no terminal PASS/;
-    }
-    if (guard === 'open correction') {
-      const events = fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.type !== 'item.closed');
-      events.at(-1).report.outcome = 'blocked';
-      fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join('')); pattern = /chain is still open/;
-    }
     if (guard === 'bad references') { fs.writeFileSync(path.join(f.org, 'references/bad.json'), '{}'); pattern = /invalid herdr-reference/; }
     if (guard === 'missing record') { fs.unlinkSync(f.eventFile); pattern = /^retirement record is missing or unreadable; lane kept$/; }
     if (guard === 'unreadable record') { fs.rmSync(f.eventFile); fs.mkdirSync(f.eventFile); pattern = /missing or unreadable/; }
@@ -169,7 +178,7 @@ test('a finite sweep stops when its foreground deadline is reached', t => {
   assert.equal(fs.existsSync(f.lane), true);
 });
 
-for (const record of ['none', 'terminal', 'open']) test(`a lane reset to its opening base keeps unless its recorded chain is terminal: ${record}`, t => {
+for (const record of ['none', 'terminal', 'open']) test(`a lane reset to its opening base keeps only unclaimed dispatch preparation: ${record}`, t => {
   const f = fixture(t, { occupied: false }), base = f.git(['rev-parse', `${f.head}^`]);
   f.git(['reset', '--hard', base], f.lane);
   if (record === 'none') fs.writeFileSync(f.eventFile, '');
@@ -178,11 +187,11 @@ for (const record of ['none', 'terminal', 'open']) test(`a lane reset to its ope
   const tree = readRetirementWorktrees(f.common, { main: 'main', env: f.env, sweep: true })[0];
   assert.equal(tree.baseTip, base); assert.equal(tree.hasOwnCommits, false);
   const result = sweep(f);
-  if (record === 'terminal') {
+  if (record !== 'none') {
     assert.equal(result.results[0].action, 'lane-removed'); assert.equal(fs.existsSync(f.lane), false);
   } else {
     assert.equal(result.results[0].action, 'keep'); assert.equal(fs.existsSync(f.lane), true);
-    assert.match(result.results[0].why, record === 'none' ? /no commits of its own/ : /chain is still open/);
+    assert.match(result.results[0].why, /no commits of its own/);
     assert.equal(result.calls.some(row => row.args.includes('remove')), false);
   }
 });

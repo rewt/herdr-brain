@@ -12,6 +12,9 @@ export function installRuntime(root) {
   return fs.realpathSync(path.join(root, 'housekeeping/housekeeping.mjs'));
 }
 export function configureCliFixture(f) {
+  // These tests cover the foreground housekeeping owner, explicitly retained
+  // by projects opting out of the default event queue.
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   if (!fs.existsSync(path.join(f.root, 'events.jsonl'))) fs.writeFileSync(path.join(f.root, 'events.jsonl'), '');
   f.config = path.join(f.root, 'config.json'); f.state = path.join(f.root, 'state');
   fs.writeFileSync(f.config, JSON.stringify({ enabled: true, tick_seconds: 1, cleanup_seconds: 2 }));

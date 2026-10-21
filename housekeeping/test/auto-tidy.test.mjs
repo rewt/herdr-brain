@@ -86,6 +86,11 @@ else if (a[0] === 'tab' && a[1] === 'close') {
   return f;
 }
 
+function unlanded(f) {
+  const r = spawnSync('git', ['-C', f.lane, 'commit', '--allow-empty', '-m', 'unlanded worker change'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+}
+
 test('terminal integrated worker tabs close while working, blocked, unnamed and operator tabs stay', t => {
   const f = fixture(t);
   f.add('finished-round-2', 'lane-topic-worker-2');
@@ -157,6 +162,7 @@ test('conflicting agent tab/workspace and duplicate pane topology cannot authori
 
 test('housekeeping --once preserves waiting reports, blocking items and missing item evidence', t => {
   const f = fixture(t), original = structuredClone(f.stateData);
+  unlanded(f);
   for (const variant of ['blocked-report', 'needs-human-report', 'blocked-item', 'needs-human-item',
     'open-blocker', 'missing-blocker', 'declined-blocker', 'missing-item', 'incomplete-items']) {
     Object.assign(f.stateData, structuredClone(original));
@@ -179,9 +185,11 @@ test('housekeeping --once preserves waiting reports, blocking items and missing 
     assert.deepEqual(f.read().actions, [], variant);
     if (variant === 'incomplete-items') assert.match(r.stdout, /tidy-failed/);
   }
-  // A resolved blocker allows the completed worker to close before promotion.
+  // Landing and a resolved blocker allow the completed worker to close.
   Object.assign(f.stateData, structuredClone(original)); delete f.stateData.incompleteItems;
   f.stateData.items[0].blocked_by = ['HUM-1']; f.stateData.items.push({ id: 'HUM-1', closed: { as: 'done' }, status: 'done' });
+  const landed = spawnSync('git', ['-C', f.repo, 'merge', '--ff-only', 'lane/topic'], { encoding: 'utf8' });
+  assert.equal(landed.status, 0, landed.stderr);
   f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, [['tab', 'close', 'finished']]);
 });
 
@@ -374,6 +382,7 @@ test('replacement reviewers at the final observation keep their tabs without wor
 
 test('review evidence cannot override a recorded worker waiting on a blocker', t => {
   const f = fixture(t), registry = path.join(f.repo, '.lane/sessions.json.d'), reviews = path.join(f.repo, 'docs/reviews/topic');
+  unlanded(f);
   fs.mkdirSync(registry, { recursive: true }); fs.mkdirSync(reviews, { recursive: true });
   fs.writeFileSync(path.join(registry, 'worker.json'), JSON.stringify(f.reviewSession('lane-topic-worker')));
   fs.writeFileSync(path.join(reviews, 'verdict.md'), '**PASS**\n');

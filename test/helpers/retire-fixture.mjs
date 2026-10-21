@@ -51,6 +51,10 @@ export function fixture(t, { merged = true, occupied = true } = {}) {
   git(['worktree', 'add', '-b', 'lane/topic', lane]); fs.writeFileSync(path.join(lane, 'seed'), 'changed'); git(['commit', '-am', 'work'], lane);
   const head = git(['rev-parse', 'HEAD'], lane); if (merged) git(['merge', '--ff-only', head]);
   const common = fs.realpathSync(path.join(repo, '.git'));
+  // These fixtures exercise the legacy foreground cleanup owner. Closeout
+  // tests explicitly enable the queue or remove this opt-out to test defaults.
+  fs.appendFileSync(path.join(common, 'info/exclude'), '\n.lane.json\n');
+  fs.writeFileSync(path.join(repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   const state = { workspaces: [{ workspace_id: 'w', worktree: { checkout_path: lane, repo_key: common, repo_root: repo, is_linked_worktree: true } }],
     tabs: occupied ? [{ tab_id: 'w:t', workspace_id: 'w' }] : [], panes: occupied ? [{ pane_id: 'w:p', tab_id: 'w:t', workspace_id: 'w' }] : [],
     agents: occupied ? [{ name: 'worker', agent: 'native', agent_status: 'done', pane_id: 'w:p', tab_id: 'w:t', workspace_id: 'w',

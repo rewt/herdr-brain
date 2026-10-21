@@ -21,7 +21,8 @@ import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyL
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { drainCloseout } from '../lib/closeout-consumer.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
-import { finishCleanup, retryCleanup, drain as drainPromotions, queueFor } from '../promote/promote.mjs';
+import { enqueue, finishCleanup, retryCleanup, drain as drainPromotions, queueFor } from '../promote/promote.mjs';
+import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { retirementStatus, renderRetirementStatus } from '../lib/retire-status.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -33,9 +34,9 @@ async function waitForChange(_files, predicate, { timeoutMs = 60000 } = {}) {
   const deadline = Date.now() + loadTimeout(timeoutMs);
   while (!predicate()) { if (Date.now() >= deadline) throw Error('bounded fixture observation timed out'); await pause(25); }
 }
-function setup(t, { occupied = true, merged = true, terminal = false } = {}) {
+function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
   const f = occupied ? exitFixture(t) : fixture(t, { occupied, merged });
-  if (occupied && !merged) throw Error('use the Git-only fixture for an unintegrated target');
+  if (occupied && !merged) f.git(['update-ref', 'refs/heads/main', f.git(['rev-parse', `${f.head}^`])]);
   isolatedEnv(t, f);
   fs.symlinkSync(f.org, path.join(f.repo, '.org'));
   fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n.org\n.lane/\n');
@@ -53,10 +54,10 @@ function setup(t, { occupied = true, merged = true, terminal = false } = {}) {
   f.options = options;
   f.drain = extra => drainCloseout({ cwd: f.repo, org: f.org, env: f.env, retirementOptions: options, ...extra });
   f.report = () => f.append([{ type: 'report.ingested', run: 'R-1', report: { outcome: 'done', summary: 'Complete' }, sha256: 'fixture' }]);
-  f.land = () => f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done' }, {
+  f.land = () => { f.git(['merge', '--ff-only', f.head]); return f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done' }, {
     type: 'promotion.reconciled', identity: f.common, batch: 'fixture', tip: f.head,
     heads: [{ run: 'R-1', item: 'ENG-1', head: f.head }], runs: ['R-1'], items: ['ENG-1'],
-  }]);
+  }]); };
   if (terminal) { f.report(); f.land(); }
   return f;
 }
@@ -69,8 +70,13 @@ function assertRemoved(f) {
   assert.ok(effects(f).some(e => e.action === 'lane-removed'));
 }
 
-test('default off is inert, malformed policy keeps, and a lane copy cannot opt in its project', t => {
+test('default on, explicit opt-out, malformed policy and canonical ownership', t => {
   const f = fixture(t, { occupied: false });
+  fs.unlinkSync(path.join(f.repo, '.lane.json'));
+  assert.equal(closeoutPolicy(f.repo), true);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
+  assert.equal(closeoutPolicy(f.repo), true);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   assert.equal(closeoutPolicy(f.repo), false);
   fs.writeFileSync(path.join(f.lane, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   assert.deepEqual(publishCloseoutEvents({ cwd: f.lane, org: f.org, added: events(f) }), []);
@@ -155,7 +161,7 @@ for (const field of ['org', 'project']) test(`the owning record still diagnoses 
   assert.equal(fs.readFileSync(file, 'utf8'), bytes); assert.deepEqual(f.read().actions, []);
 });
 
-test('default-off promotion contention remains pending and retries every cleanup row after release', t => {
+test('explicit opt-out promotion contention remains pending and retries every cleanup row after release', t => {
   const f = exitFixture(t); isolatedEnv(t, f);
   const queue = f.queue(), release = retirementLock(retirementOwnerLock(f.common));
   let released = false;
@@ -577,8 +583,10 @@ test('a report on disk is inert; the actual ingest CLI carries the same optional
   assert.equal(events(f).filter(e => e.type === 'report.ingested').length, 1);
 });
 
-test('record complete-batch alone produces a landed entry and closes without supervisor, manual release or sweep', async t => {
-  const f = setup(t); f.report();
+test('train completion with no project config produces a landed entry and closes without manual release or sweep', async t => {
+  const f = setup(t, { merged: true });
+  fs.unlinkSync(path.join(f.repo, '.lane.json'));
+  assert.equal(closeoutPolicy(f.repo), true); f.report();
   const gate = path.join(f.scratch, 'gate.log'); fs.writeFileSync(gate, 'offline accepted gate\n');
   const plan = { version: 1, org: f.org, batch: 'bch-eng-1661', identity: f.common, base: f.head, tip: f.head,
     prepared_seq: events(f).at(-1).seq,
@@ -594,8 +602,27 @@ test('record complete-batch alone produces a landed entry and closes without sup
   assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
 });
 
+test('the native train lands and delegates closeout with no project config', async t => {
+  const f = setup(t, { occupied: false });
+  fs.unlinkSync(path.join(f.repo, '.lane.json')); f.report();
+  const queue = queueFor(f.repo);
+  t.after(() => stopFixtureInbox(path.join(f.org, 'supervisor/inbox.log'), {
+    script: fileURLToPath(new URL('../supervisor/prompt-supervisor.mjs', import.meta.url)) }));
+  enqueue(queue, ['topic'], { org: f.org, run: 'R-1', expectedHead: f.head,
+    validate: 'true', laneCLI: lanes, herdr: f.job.herdr, to: 'fixture-supervisor', attempts: 1, retry: 0 });
+  await drainPromotions(queue);
+  const result = queue.load().results[0];
+  assert.equal(result.outcome, 'promoted', JSON.stringify(result));
+  assert.equal(result.cleanup.owner, 'closeout-queue');
+  await waitForChange([f.eventFile], () => effects(f).some(e => e.action === 'lane-removed') && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
+  assertRemoved(f);
+  const landed = events(f).find(e => e.type === 'promotion.reconciled');
+  assert.equal(landed.closeout_targets[0].signal, 'landed');
+  assert.equal(fs.existsSync(path.join(f.repo, '.lane.json')), false);
+});
+
 test('named manual recovery records a fresh bound request for a legacy lane without a landed queue entry', async t => {
-  const f = setup(t); f.report(); f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done' }]);
+  const f = setup(t, { merged: true }); f.report(); f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done' }]);
   assert.equal(readCloseoutEntries(f.common).some(e => e.signal === 'landed'), false);
   const result = spawnSync(process.execPath, [retirementCLI, 'sweep', '--lane', f.lane, '--repo', f.repo, '--org', f.org], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);

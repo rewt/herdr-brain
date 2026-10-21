@@ -87,7 +87,7 @@ test('an old duplicate trigger consumed after tab reuse cannot close its new occ
 
 for (const mode of ['report on disk', 'ingest', 'sync', 'wrong identity', 'stale release']) {
   test(`housekeeping preserves pending or mismatched work: ${mode}`, t => {
-    const f = fixture(t), r = runner(t, f);
+    const f = fixture(t, { merged: false }), r = runner(t, f);
     let events = loadEvents(f.org).events;
     if (mode === 'wrong identity') { f.state.agents[0].terminal_id = 'replacement'; f.save(); }
     else {
@@ -132,13 +132,14 @@ test('terminal age follows the event transition, advances with the clock, and ne
   assert.equal(fs.existsSync(path.join(f.org, 'retirement')), false);
   const events = [...snapshot.events, { type: 'item.reopened', id: 'ENG-1', seq: 5, at: now }];
   const open = { ...snapshot, events, record: fold(events) };
-  assert.equal(retirementStatus(open, { generatedAt: now }).rows[0].terminalAgeMs, null);
+  assert.equal(retirementStatus(open, { generatedAt: now }).rows[0].terminalAgeMs, 3600000, 'reopening the item does not reactivate landed content');
   events.push({ type: 'item.closed', id: 'ENG-1', as: 'done', seq: 6, at: now });
-  assert.equal(retirementStatus({ ...snapshot, events, record: fold(events) }, { generatedAt: now }).rows[0].terminalAgeMs, 0);
+  assert.equal(retirementStatus({ ...snapshot, events, record: fold(events) }, { generatedAt: now }).rows[0].terminalAgeMs, 3600000);
 });
 
 test('final report ingestion, a review PASS, reconciliation close and exact pane release determine age', t => {
   const f = fixture(t), s = f.retirement().observe(), base = s.events.slice(0, 2);
+  s.git[0].integrated = false;
   const at = '2026-01-01T01:00:00Z', now = '2026-01-01T02:00:00Z';
   const check = (events, extra = {}) => {
     const status = retirementStatus({ ...s, ...extra, events, record: fold(events) }, { generatedAt: now });
@@ -160,6 +161,7 @@ test('final report ingestion, a review PASS, reconciliation close and exact pane
 
 test('idle notice is coalesced, durable across restarts, resets on occupant change and never edits events', t => {
   const f = fixture(t), snapshot = f.retirement().observe(), events = snapshot.events.filter(e => e.type !== 'item.closed');
+  snapshot.git[0].integrated = false;
   events.push({ ...events[1], id: 'R-2', seq: 4, at: '2026-01-01T00:01:00Z', meta: {
     ...events[1].meta, agent: 'successor', pane: 'next:p', agent_session_id: 'next-session' } });
   snapshot.record = fold(events); snapshot.events = events;

@@ -12,6 +12,7 @@ import { inspect } from '../sessions/sessions.mjs';
 import { readStandardSlots, recordStandardSlot, slotReceiptFile } from '../sessions/receipts.mjs';
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { copyProduct, productFiles } from '../lib/product-files.mjs';
+import { readSessionFacts } from '../sessions/observe.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fixture = name => parseManifest(fs.readFileSync(path.join(root, `test/fixtures/sessions/${name}.md`), 'utf8'));
@@ -26,6 +27,34 @@ function repo(t) {
   fs.writeFileSync(path.join(main, '.lane.json'), '{}'); git('add', '.'); git('commit', '-qm', 'init'); git('worktree', 'add', '-b', 'lane/topic', lane);
   return { scratch, main, lane, git, project: canonicalProject(lane), env: { ...process.env, HERDR_MONITOR_FLEET: path.join(scratch, 'no-fleet'), LANE_CONFIG: undefined } };
 }
+
+test('session facts observe ancestry, patch landings and exact archive tags for the recorded lane', t => {
+  const f = repo(t), org = path.join(f.scratch, 'record'); fs.mkdirSync(org);
+  const env = { ...f.env, ORG_DIR: org };
+  const events = [{ type: 'item.added', id: 'ENG-1', role: 'engineer' },
+    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: f.lane },
+    { type: 'report.ingested', run: 'R-1', report: { outcome: 'done' } }]
+    .map((e, i) => ({ ...e, seq: i + 1 }));
+  fs.writeFileSync(path.join(org, 'events.jsonl'), events.map(e => JSON.stringify(e) + '\n').join(''));
+  const read = () => {
+    const facts = readSessionFacts({ project: f.project, env, items: ['ENG-1'] });
+    assert.deepEqual(facts.errors, []); assert.equal(facts.git.length, 1);
+    assert.equal(facts.git[0].path, f.lane); assert.equal(facts.git[0].common, f.project.common);
+    return facts.git[0];
+  };
+  assert.equal(read().integrated, true);
+  fs.writeFileSync(path.join(f.lane, 'work'), 'lane change');
+  execFileSync('git', ['-C', f.lane, 'add', '.']);
+  execFileSync('git', ['-C', f.lane, 'commit', '-qm', 'work']);
+  const tip = execFileSync('git', ['-C', f.lane, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  assert.equal(read().integrated, false); assert.equal(read().patchIntegrated, false);
+  f.git('tag', 'archive/lane/topic', tip); assert.equal(read().archived, true);
+  f.git('tag', '-d', 'archive/lane/topic');
+  f.git('commit', '--allow-empty', '-qm', 'main diverges'); f.git('cherry-pick', tip);
+  assert.equal(read().integrated, false); assert.equal(read().patchIntegrated, true);
+  fs.writeFileSync(path.join(f.lane, 'work'), 'unfinished local change');
+  assert.equal(read().clean, false); assert.equal(read().patchIntegrated, false);
+});
 function modify(m, key, value, remove = false) {
   const parts = key.split('.'), last = parts.pop(); let target = m;
   for (const part of parts) target = target[part];

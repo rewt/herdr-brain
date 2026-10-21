@@ -20,6 +20,7 @@ function writeEvents(f, events) {
 }
 function openFixture(t, { reviewer = false, landed = false, verdict = 'PASS' } = {}) {
   const f = exitFixture(t), events = loadEvents(f.org).events.filter(e => e.type !== 'item.closed');
+  if (!landed) f.git(['update-ref', 'refs/heads/main', f.git(['rev-parse', `${f.head}^`])]);
   if (reviewer) { events[0].role = 'reviewer'; events[2].report.extra = { verdict }; }
   else events.push(
     { type: 'item.added', id: 'ENG-2', role: 'engineer', kind: 'work', parent: 'ENG-1' },
@@ -105,15 +106,19 @@ test('a worker releases after its exact run lands even with an open child; PASS 
   events.push({ type: 'promotion.reconciled', identity: f.common, batch: 'batch', tip: f.head,
     heads: [{ run: 'R-1', item: 'ENG-1', head: f.head }], runs: ['R-1'], items: ['ENG-1'] });
   writeEvents(f, events);
-  assert.equal(r.plan().sessionReleases.length, 1);
+  f.git(['merge', '--ff-only', f.head]);
+  assert.equal(r.plan().sessionReleases?.length ?? 0, 0);
+  assert.equal(r.plan().close.length, 1, 'landed content uses ordinary retirement');
   const result = r.apply(r.plan());
   assert.ok(result.some(row => row.action === 'closed'), JSON.stringify(result));
   assert.equal(fold(loadEvents(f.org).events).items.get('ENG-2').closed, null);
   assert.match(f.git(['branch', '--list', 'lane/topic']), /lane\/topic/);
 });
 
-test('NEEDS-WORK keeps the worker pending a bound successor or landed PASS', t => {
-  assertKept(openFixture(t, { landed: true, verdict: 'NEEDS-WORK' }));
+test('NEEDS-WORK keeps unlanded work, while a verified landing releases its content', t => {
+  assertKept(openFixture(t, { verdict: 'NEEDS-WORK' }));
+  const f = openFixture(t, { landed: true, verdict: 'NEEDS-WORK' });
+  assert.equal(f.retirement().plan().close.length, 1);
 });
 
 for (const verdict of ['NEEDS-WORK', 'FAIL']) test(`a recorded ${verdict} review run releases its idle reviewer`, t => {
@@ -202,6 +207,7 @@ for (const abandoned of [false, true]) test(`a ${abandoned ? 'record-superseded 
 test('another run or another repository integration receipt cannot release this worker', t => {
   for (const field of ['run', 'identity']) {
     const f = openFixture(t, { landed: true }), events = loadEvents(f.org).events, landed = events.at(-1);
+    f.git(['update-ref', 'refs/heads/main', f.git(['rev-parse', `${f.head}^`])]);
     if (field === 'run') { landed.runs = ['R-999']; landed.heads[0].run = 'R-999'; }
     else landed.identity = '/foreign/.git';
     writeEvents(f, events); assertKept(f);
@@ -246,11 +252,11 @@ test('HOLD and live references refuse automatic release before it records any di
   assert.match(assertKept(f), /named callback reference job/);
 });
 
-test('policy off keeps both kinds of eligible session; invalid overrides fail closed', t => {
+test('policy off keeps an unlanded eligible reviewer; invalid overrides fail closed', t => {
   assert.equal(parseOverride('release_sessions', 'false'), false);
   assert.throws(() => parseOverride('release_sessions', 'yes'), /true\|false/);
-  for (const reviewer of [true, false]) {
-    const f = openFixture(t, { reviewer, landed: !reviewer });
+  for (const reviewer of [true]) {
+    const f = openFixture(t, { reviewer });
     fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), JSON.stringify({ release_sessions: false }));
     assert.match(assertKept(f), /policy is off/);
     fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), JSON.stringify({ release_sessions: 'false' }));
@@ -258,9 +264,8 @@ test('policy off keeps both kinds of eligible session; invalid overrides fail cl
   }
 });
 
-for (const enabled of [false, true]) test(`a closed landed chain uses ordinary retirement with per-run policy ${enabled ? 'on' : 'off'}`, t => {
+for (const enabled of [false, true]) test(`an open landed chain uses ordinary retirement with per-run policy ${enabled ? 'on' : 'off'}`, t => {
   const f = openFixture(t, { landed: true }), events = loadEvents(f.org).events;
-  for (const id of ['ENG-2', 'REV-1', 'ENG-1']) events.push({ type: 'item.closed', id, as: 'done' });
   writeEvents(f, events);
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), JSON.stringify({ release_sessions: enabled }));
   const eventBytes = fs.readFileSync(f.eventFile), r = f.retirement(), plan = r.plan();

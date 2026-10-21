@@ -118,17 +118,30 @@ test('a process outside Herdr with a cwd below the lane prevents removal', async
   child.kill(); await waitForExit(child);
 });
 
-test('a parked design chain requires explicit record disposition despite an archived tip', t => {
+test('an exact archive releases a parked design lane while its item and parent stay open', t => {
   const f = fixture(t); f.evidence(); f.git(['tag', 'archive/lane/topic', f.head]);
   const events = [
-    { type: 'item.added', id: 'DES-1', role: 'architect', title: 'Intentionally parked design' },
+    { type: 'item.added', id: 'G-1', kind: 'goal', title: 'Long-lived parent' },
+    { type: 'item.added', id: 'DES-1', role: 'architect', parent: 'G-1', title: 'Intentionally parked design' },
     { type: 'run.started', id: 'R-1', item: 'DES-1', workspace: f.lane },
     { type: 'report.ingested', run: 'R-1', report: { outcome: 'done', summary: 'Design complete; parked for later.' } },
   ].map((e, i) => ({ ...e, seq: i + 1, at: '2000-01-01T00:00:00Z', by: 'test' }));
   const record = path.join(f.org, 'events.jsonl'), bytes = events.map(e => JSON.stringify(e) + '\n').join(''); fs.writeFileSync(record, bytes);
-  const r = f.close(); f.kept(r); assert.match(r.stderr, /chain is still open/); assert.equal(fs.readFileSync(record, 'utf8'), bytes);
-  fs.appendFileSync(record, JSON.stringify({ type: 'item.closed', id: 'DES-1', as: 'dropped', seq: 4, at: '2026-01-01T00:00:00Z', by: 'test' }) + '\n');
   const done = f.close(); assert.equal(done.status, 0, done.stdout + done.stderr);
+  assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+  assert.equal(fs.readFileSync(record, 'utf8'), bytes);
+});
+
+test('an open unintegrated untagged item cannot acquire release authority from a prospective archive', t => {
+  const f = fixture(t);
+  const events = [{ type: 'item.added', id: 'ENG-1', role: 'engineer' },
+    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: f.lane },
+    { type: 'report.ingested', run: 'R-1', report: { outcome: 'done' } }]
+    .map((e, i) => ({ ...e, seq: i + 1, at: '2026-01-01T00:00:00Z', by: 'test' }));
+  fs.writeFileSync(path.join(f.org, 'events.jsonl'), events.map(e => JSON.stringify(e) + '\n').join(''));
+  const result = f.close(); f.kept(result); assert.match(result.stderr, /chain is still open/);
+  assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
 });
 
 test('cwd source failures and incomplete observations refuse instead of claiming vacancy', () => {

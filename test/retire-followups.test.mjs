@@ -76,7 +76,7 @@ test('status CLI and table list each follow-up once, with its title, owner role 
   assert.deepEqual(f.read().actions, [], 'status and plan are read-only');
 });
 
-test('all provenance, lane-binding and dependency negatives keep both the tab and the worktree', t => {
+test('landed content ignores child dispositions while local live runs and unknown bindings still keep', t => {
   const f = fixture(t); record(f);
   const baseline = f.retirement().observe();
   const cases = [
@@ -106,9 +106,10 @@ test('all provenance, lane-binding and dependency negatives keep both the tab an
   for (const [name, mutate] of cases) {
     const s = structuredClone(baseline); mutate(s);
     const plan = planRetirement(s);
-    assert.equal(plan.close.length, 0, name); assert.equal(plan.keep.length, 1, name);
-    assert.ok(laneRemovalReason(vacant(s), f.lane), name);
-    assert.equal(planRetirement(vacant(s)).laneKeep.length, 1, name);
+    const hold = ['own run in a checkout subdirectory', 'own run with unknown checkout', 'unintegrated tip', 'missing integration observation'].includes(name);
+    assert.equal(plan.close.length, hold ? 0 : 1, name); assert.equal(plan.keep.length, hold ? 1 : 0, name);
+    assert.equal(Boolean(laneRemovalReason(vacant(s), f.lane)), hold, name);
+    assert.equal(planRetirement(vacant(s)).laneKeep.length, hold ? 1 : 0, name);
     assert.deepEqual(followUps(plan), [], name);
   }
 });
@@ -123,12 +124,12 @@ test('a proposal dispatched in its own lane does not reclaim the integrated sour
   assert.equal(followUps(planRetirement(s)).length, 1);
 });
 
-test('ordinary source children and live references remain holds even when the proposal itself qualifies', t => {
+test('open source children release with landed content; live references remain holds', t => {
   const f = fixture(t); record(f);
   const s = f.retirement().observe();
   s.record.items.push({ id: 'ENG-3', parent: 'ENG-1', role: 'engineer' });
-  assert.match(planRetirement(s).keep[0].why, /ENG-3 has no recorded disposition/);
-  assert.match(laneRemovalReason(vacant(s), f.lane), /ENG-3 has no recorded disposition/);
+  assert.equal(planRetirement(s).close.length, 1);
+  assert.equal(laneRemovalReason(vacant(s), f.lane), null);
   s.record.items.pop(); s.references.push({ kind: 'callback', item: 'ENG-2' });
   assert.match(planRetirement(s).keep[0].why, /callback reference/);
   assert.match(laneRemovalReason(vacant(s), f.lane), /callback reference/);
@@ -164,8 +165,9 @@ test('a separately dispatched follow-up owns its reviewer, corrections and exclu
   ];
   for (const [name, mutate] of cases) {
     const fresh = structuredClone(s); mutate(fresh);
-    assert.equal(planRetirement(fresh).close.length, 0, name);
-    assert.ok(laneRemovalReason(vacant(fresh), f.lane), name);
+    const hold = name.includes('run in source') || name.includes('unknown run binding');
+    assert.equal(planRetirement(fresh).close.length, hold ? 0 : 1, name);
+    assert.equal(Boolean(laneRemovalReason(vacant(fresh), f.lane)), hold, name);
   }
   for (const mutate of [
     fresh => { fresh.record.runs.push({ id: 'R-3', item: 'REV-1', started: { seq: 12 }, workspace: f.lane }); },
@@ -188,8 +190,8 @@ test('dependencies between exempt follow-ups do not retain the source, but a ret
   assert.equal(laneRemovalReason(vacant(s), f.lane), null);
   assert.deepEqual(followUps(planRetirement(s)).map(d => d.item), ['ENG-2', 'ENG-3']);
   s.record.runs.push({ id: 'R-2', item: 'ENG-2', started: { seq: 6 }, workspace: f.lane, report: { seq: 8, outcome: 'done' } });
-  assert.equal(planRetirement(s).close.length, 0);
-  assert.ok(laneRemovalReason(vacant(s), f.lane));
+  assert.equal(planRetirement(s).close.length, 1);
+  assert.equal(laneRemovalReason(vacant(s), f.lane), null);
   assert.deepEqual(followUps(planRetirement(s)), [], 'retained source work depends on the second follow-up subtree');
 });
 

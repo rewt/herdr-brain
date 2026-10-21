@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
-import { chainFor, planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
+import { chainFor, terminalReason, planRetirement, executeRetirement, laneRemovalReason } from '../lib/retire.mjs';
 import { readDeclaredReferences, readLiveReferences } from '../supervisor/retire.mjs';
 import { retirementDeadline } from '../lib/retire-lock.mjs';
 import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
@@ -39,6 +39,40 @@ function fixture() {
 }
 const kept = s => { const p = planRetirement(s); assert.equal(p.close.length, 0); assert.equal(p.keep.length, 1); return p.keep[0].why; };
 
+for (const proof of ['ancestry', 'patches', 'archive']) test(`${proof} releases a reported lane under an open item and parent without closing either`, () => {
+  const s = fixture(), before = structuredClone(s.record);
+  s.record.items.get('ENG-1').closed = null;
+  s.record.items.get('ENG-1').parent = 'G-1';
+  s.record.items.set('G-1', { id: 'G-1', role: 'goal' });
+  s.git[0].integrated = proof === 'ancestry';
+  s.git[0].patchIntegrated = proof === 'patches';
+  s.git[0].archived = proof === 'archive';
+  const record = structuredClone(s.record);
+  const plan = planRetirement(s);
+  assert.equal(plan.close.length, 1);
+  assert.match(laneRemovalReason(s, '/repo/lane'), /occupied lane/);
+  assert.equal(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), null);
+  s.retirementHold = RETIREMENT_HOLD_REASON;
+  assert.equal(kept(s), RETIREMENT_HOLD_REASON);
+  delete s.retirementHold;
+  s.references.push({ kind: 'live review', run: 'R-1' });
+  assert.match(kept(s), /live review reference/);
+  s.references = [];
+  s.record.runs.set('R-2', { id: 'R-2', item: 'ENG-1', workspace: '/repo/lane', started: { seq: 5 }, meta: {} });
+  assert.match(kept(s), /open run/);
+  s.record.runs.delete('R-2');
+  assert.deepEqual(s.record, record);
+  assert.deepEqual(s.record.runs, before.runs);
+});
+
+test('an open unintegrated untagged lane remains held even if its labels say superseded', () => {
+  const s = fixture(); s.git[0].integrated = false;
+  s.record.items.get('ENG-1').closed = null;
+  s.record.items.get('ENG-1').title = 'superseded'; s.tabs[0].label = 'landed';
+  assert.match(kept(s), /chain is still open/);
+  assert.match(laneRemovalReason({ ...s, panes: [], tabs: [], agents: [] }, '/repo/lane'), /chain is still open/);
+});
+
 function lateBound(s) {
   const r = s.record.runs.get('R-1');
   delete r.meta.agent_session_id;
@@ -67,7 +101,7 @@ test('a finished late-bound worker has the same retirement classification as a n
   assert.equal(retirementStatus(reviewer).rows[0].class, 'TERMINAL');
   // Binding supplies identity alone; every pre-existing keep still applies.
   for (const change of [s => { s.record.runs.get('R-1').report = null; },
-    s => { s.record.items.get('ENG-1').closed = null; }, s => { s.git[0].clean = false; },
+    s => { s.record.items.get('ENG-1').closed = null; s.git[0].integrated = false; }, s => { s.git[0].clean = false; },
     s => { s.retirementHold = 'retirement held'; }, s => { s.agents[0].agent_status = 'working'; }]) {
     const s = fixture(); lateBound(s); change(s); assert.equal(planRetirement(s).close.length, 0);
   }
@@ -75,6 +109,7 @@ test('a finished late-bound worker has the same retirement classification as a n
 
 test('a late-bound older round status recommends pane-release with its effective native session', () => {
   const s = fixture(), r = lateBound(s);
+  s.git[0].integrated = false;
   s.record.items.get('ENG-1').closed = null;
   s.record.runs.set('R-2', { ...r, id: 'R-2', started: { seq: 6 },
     meta: { ...r.meta, agent: 'next', pane: 'w:q', terminal_id: 'next-terminal', agent_session_id: 'next-session' },
@@ -194,9 +229,9 @@ for (const variant of ['report-file-only', 'report-before-review', 'blocked', 'n
   'focused', 'lab', 'persistent', 'operator', 'missing-process']) test(`keeps ${variant}`, () => {
   const s = fixture(), r = s.record.runs.get('R-1'), a = s.agents[0];
   if (variant === 'report-file-only') { r.report = null; r.report_path = '/exists/report.md'; }
-  if (variant === 'report-before-review') s.record.items.get('ENG-1').closed = null;
-  if (variant === 'blocked') { r.report.outcome = 'blocked'; s.record.items.get('ENG-1').closed = null; }
-  if (variant === 'needs-human') { r.report.outcome = 'needs_human'; s.record.items.get('ENG-1').closed = null; }
+  if (variant === 'report-before-review') { s.record.items.get('ENG-1').closed = null; s.git[0].integrated = false; }
+  if (variant === 'blocked') { r.report.outcome = 'blocked'; s.record.items.get('ENG-1').closed = null; s.git[0].integrated = false; }
+  if (variant === 'needs-human') { r.report.outcome = 'needs_human'; s.record.items.get('ENG-1').closed = null; s.git[0].integrated = false; }
   if (['working', 'unknown'].includes(variant)) a.agent_status = variant;
   if (variant === 'wrong-common') s.git[0].common = '/another/.git';
   if (variant === 'wrong-head') s.git[0].integrated = false;
@@ -223,6 +258,7 @@ for (const as of ['dropped', 'done']) for (const outcome of ['blocked', 'needs_h
     const vacant = () => ({ ...s, tabs: [], panes: [], agents: [] });
     assert.equal(laneRemovalReason(vacant(), '/repo/lane'), null);
     item.closed = null;
+    s.git[0].integrated = false;
     assert.match(kept(s), /R-1 awaits correction or disposition/);
     assert.match(laneRemovalReason(vacant(), '/repo/lane'), /chain is still open/);
   });
@@ -246,12 +282,13 @@ for (const transport of ['blocked_by', 'links']) test(`closed ${transport} block
   assert.match(kept(s), /callback reference/);
   s.references = [];
   s.record.runs.set('R-2', { id: 'R-2', item: blocker.id, started: { seq: 5 } });
-  assert.match(kept(s), /open run on ENG-2/);
+  assert.match(terminalReason(chainFor(s.record, run)), /open run on ENG-2/);
   s.record.runs.delete('R-2');
   blocker.meta = { answer: 'no' };
-  assert.match(kept(s), /declined blocker ENG-2/);
+  assert.match(terminalReason(chainFor(s.record, run)), /declined blocker ENG-2/);
   delete blocker.meta;
   blocker.closed = null;
+  s.git[0].integrated = false;
   assert.deepEqual([...chainFor(s.record, run).ids].sort(), ['ENG-1', 'ENG-2', 'ENG-3', 'HUM-1']);
   assert.match(kept(s), /ENG-2 has no recorded disposition/);
   assert.match(laneRemovalReason(vacant(), '/repo/lane'), /ENG-2 has no recorded disposition/);
@@ -259,6 +296,7 @@ for (const transport of ['blocked_by', 'links']) test(`closed ${transport} block
 
 test('a closed blocker reached later through the root subtree still expands; reviewer roots climb to the engineer', () => {
   const s = fixture(), run = s.record.runs.get('R-1');
+  s.git[0].integrated = false;
   const root = s.record.items.get(run.item);
   root.blocked_by = ['ENG-2'];
   s.record.items.set('ENG-2', { id: 'ENG-2', role: 'engineer', parent: 'ENG-3', closed: { as: 'done' } });
@@ -276,6 +314,7 @@ test('a closed blocker reached later through the root subtree still expands; rev
 
 test('a closed engineer does not discharge an open correction with a blocked report', () => {
   const s = fixture();
+  s.git[0].integrated = false;
   s.record.items.set('ENG-2', { id: 'ENG-2', role: 'engineer', parent: 'ENG-1' });
   s.record.runs.set('R-2', { id: 'R-2', item: 'ENG-2', started: { seq: 5 }, report: { seq: 6, outcome: 'blocked' } });
   assert.match(kept(s), /ENG-2 awaits correction or disposition/);
@@ -284,11 +323,12 @@ test('a closed engineer does not discharge an open correction with a blocked rep
 
 test('pending review and NEEDS-WORK preserve the engineer across a fix gap', () => {
   const s = fixture(); s.record.items.set('REV-1', { id: 'REV-1', kind: 'work', role: 'reviewer', parent: 'ENG-1' });
-  assert.match(kept(s), /review/);
+  const reason = () => terminalReason(chainFor(s.record, s.record.runs.get('R-1')));
+  assert.match(reason(), /review/);
   s.record.runs.set('R-2', { id: 'R-2', item: 'REV-1', started: { seq: 5 }, report: { seq: 6, outcome: 'done', extra: { verdict: 'NEEDS-WORK' } } });
-  assert.match(kept(s), /PASS/);
+  assert.match(reason(), /PASS/);
   s.record.runs.get('R-2').report.extra.verdict = 'PASS'; assert.equal(planRetirement(s).close.length, 1);
-  s.record.items.set('HUM-1', { id: 'HUM-1', role: 'human', parent: 'REV-1' }); assert.match(kept(s), /disposition/);
+  s.record.items.set('HUM-1', { id: 'HUM-1', role: 'human', parent: 'REV-1' }); assert.match(reason(), /disposition/);
 });
 
 test('same native session new run keeps even after a rename and with immutable older report', () => {
@@ -307,8 +347,10 @@ test('confirmed successor never releases a warm open chain; disposition still ne
   s.handoffs.push({ from: 'R-1', to: 'R-2', seq: 11, confirmed: true });
   assert.equal(planRetirement(s).close.length, 0, 'delayed ingestion keeps even with a successor');
   old.report = { seq: 12, outcome: 'done' }; newer.report = { seq: 13, outcome: 'done' };
+  s.git[0].integrated = false;
   assert.equal(planRetirement(s).close.length, 0, 'unreviewed chain keeps even with a successor');
   s.record.items.get('ENG-1').closed = { seq: 14, as: 'done' };
+  s.git[0].integrated = true;
   assert.deepEqual(planRetirement(s).close.map(t => t.tab_id), ['w:t']);
   s.agents.pop(); assert.equal(planRetirement(s).close.length, 0);
 });

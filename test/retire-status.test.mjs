@@ -37,8 +37,8 @@ test('all six classes are reached through real planner fixture snapshots', () =>
   const cases = [
     ['TERMINAL', () => {}],
     ['ACTIVE', s => { s.agents[0].agent_status = 'working'; }],
-    ['WAITING', s => { item(s).closed = null; }],
-    ['IDLE-NONTERMINAL', s => { item(s).closed = null; s.record.runs.set('R-2', { ...run(s), id: 'R-2', started: { seq: 8 }, meta: { ...run(s).meta, agent: 'new-worker', pane: 'new:p', agent_session_id: 'new-session' } }); }],
+    ['WAITING', s => { item(s).closed = null; s.git[0].integrated = false; }],
+    ['IDLE-NONTERMINAL', s => { item(s).closed = null; s.git[0].integrated = false; s.record.runs.set('R-2', { ...run(s), id: 'R-2', started: { seq: 8 }, meta: { ...run(s).meta, agent: 'new-worker', pane: 'new:p', agent_session_id: 'new-session' } }); }],
     ['UNKNOWN', s => { run(s).meta.terminal_id = 'replacement'; }],
     ['PROTECTED', s => { s.tabs[0].focused = true; }],
   ];
@@ -117,7 +117,7 @@ const reasonCases = [
   ['callback has another, working or unknown occupant', 'UNKNOWN'],
   ['self-retiring watcher has an agent occupant', 'UNKNOWN'],
   ['callback shell or process identity changed, or another process remains', 'UNKNOWN'],
-  ['callback checkout is not clean and integrated', 'UNKNOWN'],
+  ['callback checkout is not clean and integrated or archived', 'UNKNOWN'],
   ['callback report is not ingested', 'ACTIVE'],
   ['watcher has no recorded run', 'UNKNOWN'],
   ['open run uses callback checkout', 'ACTIVE'],
@@ -126,7 +126,7 @@ const reasonCases = [
   ['agent exit occupant identity changed', 'UNKNOWN'],
   ['agent exit shell identity changed or another process remains', 'UNKNOWN'],
   ['agent exit recorded launch identity changed', 'UNKNOWN'],
-  ['agent exit checkout is not clean and integrated', 'UNKNOWN'],
+  ['agent exit checkout is not clean and integrated or archived', 'UNKNOWN'],
   ['ambiguous agent exit receipts', 'UNKNOWN'],
   ['inert shell is not the sole pane of its tab', 'UNKNOWN'],
   ['inert shell process or terminal observation is incomplete', 'UNKNOWN'],
@@ -137,7 +137,7 @@ const reasonCases = [
   ['inert shell has a later occupant claim', 'UNKNOWN'],
   ['inert shell has a live or unknown claim holder', 'UNKNOWN'],
   ['inert shell record or references were not read', 'UNKNOWN'],
-  ['inert shell checkout is not clean and integrated', 'UNKNOWN'],
+  ['inert shell checkout is not clean and integrated or archived', 'UNKNOWN'],
   ['ambiguous initial shell receipts', 'UNKNOWN'],
   ['inert shell has no terminal chain and lane history is fresh or unknown', 'UNKNOWN'],
   ['operator focus or this tab', 'PROTECTED'],
@@ -188,12 +188,13 @@ test('every planner reason expression is enumerated and mapped; source drift fai
     '${exited.run}: recorded agent exit; unchanged terminal and shell identity',
     'recorded ${callback.kind} callback complete; unchanged process and shell identity',
     "record release for ${released.map(r => r.run).join(', ')}; exact session and ${released.some(r => r.head !== git.head) ? 'reverified landed head' : 'head'}",
-    "${agents.map(a => matchingRun(a, snapshot.record)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
+    "${agents.map(a => matchingRun(a, snapshot.record)?.id).join(', ')}: ingested report; lane content released or terminal chain, or confirmed retained successor",
     'lane removal preconditions verified',
     'integrated lane eligible; preservation verified on apply',
     'archival lane eligible; exact archive and preservation verified on apply',
+    'archive-tagged lane eligible; preservation verified on apply',
   ];
-  const releases = [...policy.matchAll(/why: reason \?\? (?:\(inert \? initial \? ('[^']*') : ('[^']*') : needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|\(candidate\.eligibility === 'archival-retirement' \?\s*('[^']*') : ('[^']*')\)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
+  const releases = [...policy.matchAll(/why: reason \?\? (?:\(inert \? initial \? ('[^']*') : ('[^']*') : needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|\(candidate\.eligibility === 'archival-retirement' \?\s*('[^']*') : candidate\.eligibility === 'archive-tagged' \?\s*('[^']*') : ('[^']*')\)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());
   for (const why of [
     ...releases,
@@ -235,6 +236,7 @@ test('an exited worker shell is TERMINAL while changed exit evidence is UNKNOWN 
 
 test('latest worker and reviewer name the next actor; older idle contexts are release candidates', () => {
   const s = fixture(); item(s).closed = null;
+  s.git[0].integrated = false;
   s.record.items.set('REV-1', { id: 'REV-1', parent: 'ENG-1', role: 'reviewer', closed: null });
   assert.match(tab(s).nextAction, /reviewer REV-1/);
   s.record.runs.set('R-2', { id: 'R-2', item: 'REV-1', started: { seq: 6 }, meta: { agent: 'review-owner' }, report: { seq: 7, outcome: 'done', extra: { verdict: 'FAIL' } } });
@@ -388,8 +390,8 @@ for (const progress of ['dirty', 'unintegrated']) for (const problem of ['missin
     }
     const status = await readRetirementStatus({ cwd: f.repo, org: f.org, herdr: f.herdr, env: f.env });
     const row = status.rows.find(row => row.type === 'worktree' && row.worktree === f.empty);
-    assert.equal(row.class, null); assert.match(row.reason, progress === 'dirty' ? /lane worktree is not clean/ : /lane tip is not integrated in main/);
-    assert.match(row.nextAction, progress === 'dirty' ? /lane worktree is not clean/ : /lane tip is not integrated in main/);
+    assert.equal(row.class, null); assert.match(row.reason, progress === 'dirty' ? /lane worktree is not clean/ : /unmatched changes/);
+    assert.match(row.nextAction, progress === 'dirty' ? /lane worktree is not clean/ : /unmatched changes/);
     assert.ok(status.rows.some(row => row.type === 'diagnostic' && /missing or unreadable|invalid herdr-reference/.test(row.reason)));
   });
 }

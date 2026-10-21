@@ -104,7 +104,7 @@ for (const method of ['cherry-pick', 'rebase']) for (const record of ['terminal'
     assert.equal(retirement.observe().git[0].integrated, false);
     const status = await readRetirementStatus({ cwd: f.repo, org: f.org, env: f.env, herdr: f.job.herdr, ...commands });
     const row = status.rows.find(row => row.type === 'worktree' && row.worktree === f.lane);
-    assert.equal(row.integrated, false); assert.equal(row.class, null);
+    assert.equal(row.integrated, false); assert.equal(row.class, 'TERMINAL');
     assert.match(row.nextAction, /eligible for archival retirement/);
     boundedSummary(row.archival);
     const result = sweep(f), proof = result.results[0];
@@ -134,9 +134,9 @@ for (const method of ['cherry-pick', 'rebase']) for (const record of ['terminal'
   });
 }
 
-for (const setting of ['absent', false, 'lane copy', 'environment override']) test(`archival policy ${setting} keeps patch-equivalent lanes without creating tags or evidence`, t => {
+for (const setting of [false, 'lane copy', 'environment override']) test(`explicit archival opt-out keeps patch-equivalent lanes despite ${setting}`, t => {
   const f = landed(t, { enabled: false });
-  if (setting === false) policy(f, false);
+  policy(f, false);
   if (setting === 'lane copy') {
     fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n.lane.json\n');
     fs.writeFileSync(path.join(f.lane, '.lane.json'), JSON.stringify({ retirement: { archival_retirement: true } }));
@@ -150,6 +150,23 @@ for (const setting of ['absent', false, 'lane copy', 'environment override']) te
   assert.deepEqual(result.calls.filter(archivalProbe), []);
   assert.equal(result.calls.some(row => row.locked), false);
   assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
+});
+
+for (const method of ['cherry-pick', 'rebase']) test(`default ${method} patch proof releases an open item and parent, preserving the exact original tip`, async t => {
+  const f = landed(t, { method, enabled: false });
+  fs.unlinkSync(path.join(f.repo, '.lane.json'));
+  event(f, { type: 'item.reopened', id: 'ENG-1' });
+  event(f, { type: 'item.added', id: 'ENG-2', role: 'engineer', parent: 'ENG-1' });
+  event(f, { type: 'item.added', id: 'REV-1', role: 'reviewer', parent: 'ENG-1' });
+  const before = fs.readFileSync(f.eventFile), commands = sweepCommands(f);
+  const snapshot = f.retirement(commands).observe();
+  assert.equal(snapshot.git[0].integrated, false); assert.equal(snapshot.git[0].patchIntegrated, true);
+  const status = await readRetirementStatus({ cwd: f.repo, org: f.org, env: f.env, herdr: f.job.herdr, ...commands });
+  assert.equal(status.rows.find(row => row.type === 'worktree' && row.worktree === f.lane).class, 'TERMINAL');
+  const result = sweep(f);
+  assert.equal(result.results[0].action, 'lane-removed', JSON.stringify(result.results));
+  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+  assert.deepEqual(fs.readFileSync(f.eventFile), before);
 });
 
 for (const sweepMode of [false, true]) for (const [enabled, dirty] of [[false, false], [false, true], [true, true], [true, false]]) {
@@ -254,21 +271,11 @@ test('archival preview has no tag, preservation, lifecycle lock or mutation', t 
   assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
 });
 
-for (const obligation of ['reopened item', 'open follow-up', 'open run', 'pending review', 'occupied', 'job reference', 'process reference', 'HOLD', 'missing record', 'unreadable record', 'unknown no-chain history', 'untouched preparation']) {
+for (const obligation of ['open run', 'occupied', 'job reference', 'process reference', 'HOLD', 'missing record', 'unreadable record', 'unknown no-chain history', 'untouched preparation']) {
   test(`archival retirement keeps ${obligation}, including historical matches after a revert`, t => {
     const f = landed(t, { occupied: obligation === 'occupied' });
     let pattern, options = {};
-    if (obligation === 'reopened item') {
-      f.git(['revert', '--no-edit', f.mainTip]);
-      assert.match(f.git(['cherry', 'main', f.head]), /^- /);
-      event(f, { type: 'item.reopened', id: 'ENG-1' }); pattern = /chain is still open/;
-    }
-    if (obligation === 'open follow-up') {
-      event(f, { type: 'item.added', id: 'ENG-2', role: 'engineer', parent: 'ENG-1', from_run: 'R-1' });
-      pattern = /ENG-2 has no recorded disposition/;
-    }
     if (obligation === 'open run') { event(f, { type: 'run.started', id: 'R-2', item: 'ENG-1', workspace: f.lane }); pattern = /open recorded run/; }
-    if (obligation === 'pending review') { event(f, { type: 'item.added', id: 'REV-1', role: 'reviewer', parent: 'ENG-1' }); pattern = /no terminal PASS/; }
     if (obligation === 'occupied') pattern = /occupied lane/;
     if (obligation === 'job reference') {
       fs.writeFileSync(path.join(f.org, 'references/job.json'), JSON.stringify({ schema: 'herdr-reference/v1', state: 'running',
@@ -350,7 +357,7 @@ for (const race of ['lane tip', 'main tip', 'policy', 'archive tag', 'record obl
       if (race === 'main tip') { fs.writeFileSync(path.join(f.repo, 'main-only'), 'main moved'); f.git(['commit', '-am', 'main moves']); }
       if (race === 'policy') policy(f, false);
       if (race === 'archive tag') f.git(['tag', '-f', 'archive/lane/topic', 'main']);
-      if (race === 'record obligation') event(f, { type: 'item.reopened', id: 'ENG-1' });
+      if (race === 'record obligation') event(f, { type: 'run.started', id: 'R-2', item: 'ENG-1', workspace: f.lane });
       if (race === 'reference') fs.writeFileSync(path.join(f.org, 'references/late.json'), JSON.stringify({ schema: 'herdr-reference/v1', state: 'running',
         owner: 'test', kind: 'late job', job: 'active', item: 'ENG-1', cwd: f.lane,
         created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 600000).toISOString() }));
@@ -364,7 +371,7 @@ for (const race of ['lane tip', 'main tip', 'policy', 'archive tag', 'record obl
       if (race === 'evidence') fs.writeFileSync(path.join(row.evidence.directory, 'files/.lane/report.md'), 'corrupt preservation');
     } });
     assert.equal(changed, true);
-    kept(f, result, race === 'occupant' ? /occupied lane/ : /changed|snapshot|not contained|policy is off|durability|chain is still open|reference|mismatch/,
+    kept(f, result, race === 'occupant' ? /occupied lane/ : /changed|snapshot|not contained|policy is off|durability|open run|reference|mismatch/,
       { tag: true, moved: race === 'lane tip' });
     assert.deepEqual(fs.readFileSync(path.join(f.lane, '.lane/report.md')), bytes);
     assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);

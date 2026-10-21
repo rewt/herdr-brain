@@ -401,6 +401,20 @@ test('report, repeated failed/delayed review, dispatch reuse, new report, then p
   assert.equal(f.calls.length, 0);
 });
 
+for (const proof of ['integrated', 'patchIntegrated', 'archived']) test(`work-item chain reason recognizes ${proof} without granting controller retirement authority`, async t => {
+  const f = fixture(t), { addRun } = withWorker(f), run = addRun('R-1', 1);
+  f.facts.git = [{ path: run.workspace, common: f.project.common, clean: true, [proof]: true }];
+  let d = decision(await f.run());
+  assert.match(d.observed.chainReason, /eligible for existing safe-retirement checks/);
+  assert.equal(d.action, null); assert.equal(f.calls.length, 0);
+  assert.deepEqual(d.observed.chain.openItems, ['ENG-232', 'REV-1']);
+  for (const delta of [{ clean: false }, { error: 'Git unavailable' }, { common: '/foreign/.git' }]) {
+    const saved = f.facts.git[0]; f.facts.git[0] = { ...saved, ...delta };
+    d = decision(await f.run()); assert.match(d.observed.chainReason, /chain is still open/);
+    f.facts.git[0] = saved;
+  }
+});
+
 test('report file parks before ingestion; malformed report retains; reuse replacing terminal or report holds', async t => {
   const f = fixture(t), { a, addRun } = withWorker(f); addRun('R-1', 1, null, false);
   f.facts.reports['R-1'] = { present: true, valid: false };

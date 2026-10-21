@@ -29,6 +29,7 @@ function fixture(t, { promoted = true, reported = true } = {}) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const repo = path.join(root, 'project'), lane = path.join(root, 'lane');
   fs.mkdirSync(repo);
+  fs.writeFileSync(path.join(repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   fs.writeFileSync(path.join(root, 'events.jsonl'), '');
   const git = (args, cwd = repo) => {
     const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: TEST_ENV });
@@ -272,7 +273,7 @@ for (const failure of ['enqueue', 'corrupt notice state']) test(`notice failure 
 });
 
 test('the housekeeping CLI record reader loads confirmed handoffs and reserves the successor', t => {
-  const f = fixture(t, { reported: false });
+  const f = fixture(t, { reported: false, promoted: false });
   const newer = { ...f.run, id: 'R-2', started: { seq: 2 }, meta: { ...f.run.meta,
     agent: 'successor', pane: 'w:q', terminal_id: 'term-b' } };
   f.runs.push(newer); f.agents.push({ ...f.agent, name: 'successor', pane_id: 'w:q', tab_id: 'w:u', terminal_id: 'term-b' });
@@ -293,6 +294,7 @@ test('the housekeeping CLI record reader loads confirmed handoffs and reserves t
   assert.deepEqual(f.actions, []);
 
   f.items[0].closed = { as: 'done', seq: 6 };
+  f.git(['merge', '--ff-only', 'lane/topic']);
   plan = f.runner().tick({ resume: false });
   assert.deepEqual(plan.close.map(t => t.tab_id), ['w:t']);
   assert.match(plan.keep.find(t => t.tab_id === 'w:u').why, /retained successor for handoff from R-1/);
@@ -313,7 +315,7 @@ test('a removed checkout with an archive stays unknown without an exact observed
 for (const variant of ['open', 'unpromoted', 'dirty', 'blocked', 'working', 'unknown', 'unnamed', 'unrecorded',
   'replaced', 'waiting', 'report-blocked', 'report-needs-human', 'new-open-run', 'declined', 'wrong-repo', 'mixed-pane', 'running-shell', 'session-done', 'review-file']) {
   test(`preserves ${variant} workers/tabs`, (t) => {
-    const f = fixture(t, { promoted: !['unpromoted', 'session-done', 'review-file'].includes(variant) });
+    const f = fixture(t, { promoted: !['unpromoted', 'session-done', 'review-file', 'waiting', 'declined', 'report-blocked', 'report-needs-human'].includes(variant) });
     if (variant === 'session-done') {
       fs.mkdirSync(path.join(f.repo, '.lane/sessions.json.d'), { recursive: true });
       fs.writeFileSync(path.join(f.repo, '.lane/sessions.json.d/display.done.json'), JSON.stringify({ name: f.agent.name, done: true }));

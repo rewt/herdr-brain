@@ -108,7 +108,7 @@ test('working native agent with helper descendants is ACTIVE, while a shell sibl
 });
 
 for (const guard of ['sibling', 'missing-parent', 'cycle', 'stopped', 'zombie', 'dead', 'incomplete', 'unknown-kind', 'reference', 'test-slot', 'HOLD', 'standard-slot', 'focus', 'open-chain']) test(`native exit retains ${guard} without sending input`, t => {
-  const f = fixture(t); nativeExit(f, guard === 'unknown-kind' ? 'unknown' : 'codex');
+  const f = fixture(t, { merged: guard !== 'open-chain' }); nativeExit(f, guard === 'unknown-kind' ? 'unknown' : 'codex');
   if (guard === 'sibling') f.state.info.process_tree[2].ppid = 1;
   if (guard === 'missing-parent') f.state.info.process_tree[2].ppid = 99;
   if (guard === 'cycle') f.state.info.process_tree[2].ppid = 4;
@@ -243,7 +243,7 @@ test('standard-slot runtime preserves an enclosing workspace after tabs disappea
   assertNoRemoval(f);
 });
 test('STOP during an unreviewed or needs-human chain retains the warm worker without launching anything', t => {
-  const f = fixture(t); fs.mkdirSync(path.join(f.repo, '.lane/supervisor'), { recursive: true }); fs.writeFileSync(path.join(f.repo, '.lane/supervisor/STOP'), 'stop dispatch');
+  const f = fixture(t, { merged: false }); fs.mkdirSync(path.join(f.repo, '.lane/supervisor'), { recursive: true }); fs.writeFileSync(path.join(f.repo, '.lane/supervisor/STOP'), 'stop dispatch');
   const events = loadEvents(f.org).events.filter(e => e.type !== 'item.closed');
   fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
   assert.match(f.retirement().plan().keep[0].why, /chain is still open/);
@@ -513,7 +513,7 @@ const recordRelease = (f, args = releaseArgs(f)) => spawnSync(process.execPath, 
 const writeEvents = (f, events) => fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
 
 test('native helper descendants on an open chain exit only after an exact record pane-release', t => {
-  const f = fixture(t); nativeExit(f);
+  const f = fixture(t, { merged: false }); nativeExit(f);
   writeEvents(f, loadEvents(f.org).events.filter(e => e.type !== 'item.closed'));
   const retirement = f.retirement();
   assert.match(retirement.plan().keep[0].why, /chain is still open/);
@@ -524,7 +524,7 @@ test('native helper descendants on an open chain exit only after an exact record
   assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
   assert.equal(fs.existsSync(f.lane), true);
   assert.equal(fold(loadEvents(f.org).events).items.get('ENG-1').closed, null);
-  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', expectedTip: f.head, gitOnly: true }), /chain is still open/);
+  assert.throws(() => retirement.removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true }), /chain is still open/);
 });
 
 test('record pane-release leaves the legacy release command unavailable', t => {
@@ -625,7 +625,7 @@ test('record pane-release closes only the fixture tab and preserves the open lan
 });
 
 test('record pane-release canonicalizes a symlinked lane cwd and keeps an unresolvable disposition', t => {
-  const f = fixture(t), alias = path.join(f.scratch, 'lane-alias');
+  const f = fixture(t, { merged: false }), alias = path.join(f.scratch, 'lane-alias');
   fs.symlinkSync(f.lane, alias, 'dir');
   const events = loadEvents(f.org).events.filter(e => e.type !== 'item.closed');
   events.find(e => e.type === 'run.started').workspace = alias; writeEvents(f, events);
@@ -660,7 +660,7 @@ test('installed distribution ships the adoption CLI and compatibility surfaces w
 });
 
 test('installed settle-watch flags keep an ingested worker while its chain is open', t => {
-  const f=fixture(t);const events=loadEvents(f.org).events.filter(e=>e.type!=='item.closed');
+  const f=fixture(t,{merged:false});const events=loadEvents(f.org).events.filter(e=>e.type!=='item.closed');
   fs.writeFileSync(f.eventFile,events.map(e=>JSON.stringify(e)+'\n').join(''));
   fs.writeFileSync(path.join(f.scratch,'org'),`#!/bin/sh\nexec '${process.execPath}' '${recordCLI}' "$@"\n`,{mode:0o755});
   const config=path.join(f.scratch,'lane.json'),checklist=path.join(f.scratch,'CHECKLIST.md');fs.writeFileSync(config,'{}');fs.writeFileSync(checklist,'fixture');
@@ -670,9 +670,10 @@ test('installed settle-watch flags keep an ingested worker while its chain is op
 });
 
 test('a disposition trigger gets a fresh foreground plan once, and the repeated hint is a no-op', t => {
-  const f=fixture(t), events=loadEvents(f.org).events.filter(e=>e.type!=='item.closed');
+  const f=fixture(t,{merged:false}), events=loadEvents(f.org).events.filter(e=>e.type!=='item.closed');
   fs.writeFileSync(f.eventFile,events.map(e=>JSON.stringify(e)+'\n').join(''));
   assert.equal(f.retirement().plan().close.length,0);
+  f.git(['merge','--ff-only',f.head]);
   const r=spawnSync(process.execPath,[recordCLI,'close','ENG-1'],{cwd:f.repo,env:f.env,encoding:'utf8'});
   assert.equal(r.status,0,r.stderr);
   const hint=JSON.parse(fs.readFileSync(path.join(f.org,'retirement/request.json')));

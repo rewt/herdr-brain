@@ -46,7 +46,6 @@ test('an exit receipt rechecks every ordinary guard and cannot close with a stal
     ['replacement occupant', s => { s.agents.push({ ...s.exits[0].occupant, tab_id: 'w:t', agent_status: 'idle', agent_session_id: 'replacement' }); }, /occupant identity/],
     ['changed record', s => { s.record.runs[0].meta.terminal_id = 'replacement'; }, /recorded launch identity/],
     ['unread record', s => { s.errors.push('record unavailable'); }, /record unavailable/],
-    ['open chain', s => { s.record.items[0].closed = null; }, /chain is still open/],
     ['new open run', s => { s.record.runs.push({ id: 'R-2', item: 'ENG-1', workspace: f.lane, started: { seq: 5 }, meta: {} }); }, /open run/],
     ['job reference', s => { s.references.push({ cwd: f.lane, kind: 'new job' }); }, /new job reference/],
     ['dirty Git', s => { s.git[0].clean = false; }, /not clean and integrated/],

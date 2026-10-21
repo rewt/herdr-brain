@@ -138,8 +138,8 @@ never stored status or permission to close.
 | --- | --- | --- |
 | Release | TERMINAL | Terminal; retire through the guarded executor |
 | Working/blocked occupant, un-ingested report or known live reference | ACTIVE | Names the worker, report, resource owner or job being awaited |
-| Open chain with this item's latest run or latest review | WAITING | Names the fix owner, reviewer, supervisor, or operator for an open human question |
-| Older idle/done run in an open chain | IDLE-NONTERMINAL | Release candidate; supervisor (authority review on review-sol-max) decision via `record pane-release` (ENG-369) |
+| Open chain on an unlanded, untagged lane with this item's latest run or latest review | WAITING | Names the fix owner, reviewer, supervisor, or operator for an open human question |
+| Older idle/done run in an open chain on an unlanded, untagged lane | IDLE-NONTERMINAL | Release candidate; supervisor (authority review on review-sol-max) decision via `record pane-release` (ENG-369) |
 | Unknown identity/process/topology, unreadable evidence, or an unmapped reason | UNKNOWN | Keep, with the concrete reason |
 | Standard slot, persistent/operator/lab workspace, or focus | PROTECTED | Keep |
 
@@ -326,6 +326,10 @@ do not. HOLD, focus and workspace protections still apply. The log retains the
 creation receipt, both target observations, surviving agent and outcome. This
 exception closes only the tab, with no workspace or lane-removal follow-up.
 Legacy shells without creation receipts retain the ordinary terminal-chain rules.
+Landed or exact-archive-tagged content satisfies the chain portion of those
+rules without closing any item. The [closeout contract](../docs/contracts/CLOSEOUT.md)
+defines the Git proofs and defaults; all native identity, process and reference
+guards still apply to the pane and to subsequent lane removal.
 
 Short-lived watcher and settle/executive/plan launches can write a mechanical
 `retirement-occupant/v1` receipt under `ORG/retirement/occupants/`. It binds the
@@ -335,7 +339,8 @@ terminal and native session. This receipt is independent of the display registry
 Lane review writes this receipt after verifying the reviewer; settle supplies the run under review.
 The shared planner can prune an unchanged shell after the recorded process exits
 and its callback completes. A watcher requires an ingested report; settle sessions
-also require a terminal chain, and other sessions require no open run in their cwd.
+also require a terminal chain or released lane content, and other sessions require
+no open run in their cwd.
 Live jobs, unknown occupants, background processes, changed shells, operator focus,
 and persistent/operator/lab workspace guards still keep. Recorded short-lived tabs
 in the canonical checkout can retire without treating the desk itself as a lane.

@@ -351,7 +351,7 @@ if (HOME_PROJECT?.sources.routing) {
   CONFIG_LAYERS.push({ file: routing.file, base: routing.base, config: routing.config });
 }
 if (HOME_PROJECT?.defaults.launch) CONFIG.launch = [...HOME_PROJECT.defaults.launch];
-if (!['dispatch', 'routes', 'selection_policy'].some(key => Object.hasOwn(CONFIG, key))) Object.assign(CONFIG, structuredClone(ROUTE_PRESET));
+if (!EXPLICIT_CONFIG && !['dispatch', 'routes', 'selection_policy'].some(key => Object.hasOwn(CONFIG, key))) Object.assign(CONFIG, structuredClone(ROUTE_PRESET));
 try {
   validateLane(CONFIG, CONFIG_LAYERS.map(layer => layer.file).join(', '), { references: true });
 } catch (error) {

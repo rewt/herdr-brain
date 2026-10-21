@@ -434,6 +434,7 @@ for (const stage of ['pruneSessionTabs', 'closeWorkerTab']) test(`retirement hol
 
 for (const merged of [true, false]) test(`lane close --git-only keeps the ${merged ? 'integrated' : 'unmerged'} worktree beneath even an eligible pane`, t => {
   const f = fixture(t, { merged });
+  if (!merged) nativeExit(f);
   const r = f.close(); assert.notEqual(r.status,0); assert.match(r.stderr,/occupied lane/);
   assert.equal(fs.existsSync(f.lane),true); assert.equal(f.git(['rev-parse','lane/topic']),f.head); assert.deepEqual(f.read().actions,[]);
   if (!merged) assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
@@ -450,8 +451,17 @@ test('an empty unmerged lane retains its recoverable archive and immutable recor
   assert.equal(f.git(['rev-parse','archive/lane/topic']),f.head); assert.equal(fs.readFileSync(f.eventFile,'utf8'),f.eventBytes);
 });
 
-test('unmerged lane close archives the exact head then releases its recorded finished native worker in one call', t => {
+for (const { terminal, helpers, unregister } of [
+  { terminal: false, helpers: true, unregister: false }, // Preserve the legacy pane observation witness.
+  { terminal: true, helpers: true, unregister: false },
+  { terminal: true, helpers: true, unregister: true },
+  { terminal: true, helpers: false, unregister: false },
+  { terminal: true, helpers: false, unregister: true },
+]) test(`unmerged lane close archives the exact head and releases its finished worker in one call (terminal=${terminal}, helpers=${helpers}, unregister=${unregister})`, t => {
   const f = fixture(t, { merged: false }); nativeExit(f);
+  if (terminal) f.state.panes[0].terminal_id = 'term';
+  if (!helpers) f.state.info.process_tree = f.state.info.process_tree.slice(0, 2);
+  f.state.unregisterOnExit = unregister;
   f.state.agents[0].agent_status = 'done'; f.save();
   assert.match(f.retirement().plan().keep[0].why, /not clean and integrated or archived/);
   assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
@@ -466,8 +476,54 @@ test('unmerged lane close archives the exact head then releases its recorded fin
   assert.equal(effects[index('archive-created')].tip, f.head);
   assert.ok(index('archive-created') < index('agent-exit-requested'));
   assert.ok(index('agent-exit-requested') < index('shell-close-requested'));
+  if (terminal) {
+    const observed = effects[index('exit-observed')];
+    assert.equal(observed.run, 'R-1'); assert.equal(observed.occupant.terminal_id, 'term');
+    assert.ok(index('agent-exit-requested') < index('exit-observed'));
+    assert.ok(index('exit-observed') < index('shell-close-requested'));
+  }
   assert.ok(index('shell-close-requested') < index('worktree-removed'));
   assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+});
+
+for (const status of ['idle', 'done']) for (const guard of ['typed', 'not-ready'])
+  test(`unmerged lane close keeps a ${status} worker without helpers when its composer is ${guard}`, t => {
+    const f = fixture(t, { merged: false }); nativeExit(f);
+    f.state.panes[0].terminal_id = 'term';
+    f.state.info.process_tree = f.state.info.process_tree.slice(0, 2);
+    f.state.agents[0].agent_status = status;
+    if (guard === 'typed') f.state.screen = fs.readFileSync(path.join(root, 'supervisor/test/fixtures/codex-typed.ansi'), 'utf8');
+    else f.state.agents[0].interactive_ready = false;
+    f.save();
+    const closed = f.close(false);
+    assert.notEqual(closed.status, 0, closed.stdout + closed.stderr);
+    assert.match(closed.stdout + closed.stderr, /composer is not ready/);
+    assert.equal(fs.existsSync(f.lane), true); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+    assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+    assert.deepEqual(f.read().actions, []); assertNoRemoval(f);
+    assert.equal(f.read().tabs.length, 1); assert.equal(f.read().agents[0].agent_status, status);
+    assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
+  });
+
+for (const change of ['deleted', 'moved']) test(`an unmerged worker exit receipt keeps its shell if the exact-head archive is ${change}`, t => {
+  const f = fixture(t, { merged: false }); nativeExit(f);
+  f.state.panes[0].terminal_id = 'term'; f.state.unregisterOnExit = true; f.save();
+  f.git(['tag', 'archive/lane/topic', f.head]);
+  let observed = false;
+  const retirement = f.retirement({ log: row => {
+    if (row.action !== 'exit-observed') return;
+    observed = true;
+    if (change === 'deleted') f.git(['tag', '-d', 'archive/lane/topic']);
+    else f.git(['tag', '-f', 'archive/lane/topic', 'main']);
+  } });
+  const result = retirement.apply(retirement.plan());
+  assert.equal(observed, true); assert.equal(result[0].action, 'skip-close');
+  assert.match(result[0].why, /agent exit checkout is not clean and integrated or archived/);
+  assert.match(retirement.plan().keep[0].why, /agent exit checkout is not clean and integrated or archived/);
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
+  assert.equal(fs.existsSync(f.lane), true); assert.equal(f.read().tabs.length, 1);
+  assert.equal(fs.readdirSync(path.join(f.org, 'retirement/exits')).length, 1);
+  assertNoRemoval(f); assert.equal(fs.readFileSync(f.eventFile, 'utf8'), f.eventBytes);
 });
 
 for (const guard of ['idle-unfinished', 'HOLD', 'dirty', 'operator', 'lab', 'persistent', 'unknown-launch', 'terminal', 'session', 'typed', 'STOP-open-chain'])
@@ -531,7 +587,7 @@ for (const guard of ['working', 'session', 'HOLD', 'archive-tag']) test(`unmerge
 });
 
 test('dropped blocked lane closes its tab and unmerged work only after a verified archive', t => {
-  const f = fixture(t, { merged: false });
+  const f = fixture(t, { merged: false }); nativeExit(f);
   const events = loadEvents(f.org).events;
   events.find(e => e.type === 'report.ingested').report.outcome = 'blocked';
   events.find(e => e.type === 'item.closed').as = 'dropped';
@@ -546,7 +602,7 @@ test('dropped blocked lane closes its tab and unmerged work only after a verifie
   const closed = f.close(false); assert.equal(closed.status, 0, closed.stdout + closed.stderr);
   assert.equal(fs.existsSync(f.lane), false);
   assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
-  assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
   assert.equal(fs.readFileSync(f.eventFile, 'utf8'), bytes);
 });
 

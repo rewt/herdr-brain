@@ -842,6 +842,39 @@ function bareShell(s) {
   info.foreground_processes = [{ pid: info.shell_pid, name: 'zsh' }];
 }
 
+for (const change of ['archive', 'dirty', 'terminal', 'shell', 'record-identity', 'unreported', 'open-chain', 'open-run', 'reference', 'working', 'session'])
+  test(`an archived worker exit receipt cannot authorize close after changed ${change}`, () => {
+    const s = nativeHelpers(fixture()), agent = s.agents[0];
+    Object.assign(s.git[0], { integrated: false, archived: true });
+    s.panes[0].terminal_id = agent.terminal_id;
+    s.exits = [{ schema: 'retirement-exit/v1', common: s.common, cwd: agent.cwd, workspace: agent.workspace_id,
+      tab: agent.tab_id, pane: agent.pane_id, run: 'R-1', occupant: {
+        name: agent.name, agent: agent.agent, pane_id: agent.pane_id, workspace_id: agent.workspace_id,
+        cwd: agent.cwd, terminal_id: agent.terminal_id, agent_session_id: agent.agent_session.value },
+      shell: { pid: 5, identity: 'shell', command: '[zsh]' } }];
+    bareShell(s); s.agents = [];
+    const plan = planRetirement(s); assert.equal(plan.close[0].decision, 'release');
+    const run = s.record.runs.get('R-1');
+    if (change === 'archive') s.git[0].archived = false;
+    if (change === 'dirty') s.git[0].clean = false;
+    if (change === 'terminal') s.panes[0].terminal_id = 'replacement';
+    if (change === 'shell') s.panes[0].process_info.process_tree[0].identity = 'replacement';
+    if (change === 'record-identity') run.meta.terminal_id = 'replacement';
+    if (change === 'unreported') run.report = null;
+    if (change === 'open-chain') s.record.items.get('ENG-1').closed = null;
+    if (change === 'open-run') s.record.runs.set('R-2', { id: 'R-2', item: 'ENG-1', workspace: agent.cwd, started: { seq: 5 }, meta: {} });
+    if (change === 'reference') s.references.push({ pane: agent.pane_id, kind: 'returning callback' });
+    if (change === 'working') s.agents = [{ ...agent, agent_status: 'working' }];
+    if (change === 'session') s.agents = [{ ...agent, agent_session: { value: 'replacement' } }];
+    const result = executeRetirement(plan, { observe: () => s, close: () => assert.fail('stale exit authority must keep the tab') });
+    assert.equal(result[0].action, 'skip-close'); assert.equal(result[0].decision, 'keep');
+    const reasons = { archive: /not clean and integrated or archived/, dirty: /not clean and integrated or archived/,
+      terminal: /terminal identity/, shell: /shell identity/, 'record-identity': /recorded launch identity/,
+      unreported: /report is not ingested/, 'open-chain': /chain is still open/, 'open-run': /open run/,
+      reference: /returning callback reference/, working: /occupant worker is working/, session: /occupant identity/ };
+    assert.match(result[0].why, reasons[change]);
+  });
+
 test('native exit wait is bounded and never escalates to a close or a process signal', () => {
   const s = nativeHelpers(fixture()), plan = planRetirement(s);
   assert.equal(plan.close[0].decision, 'exit');

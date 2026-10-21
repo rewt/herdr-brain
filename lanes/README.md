@@ -261,7 +261,11 @@ For an unmerged lane, close preflights occupant eligibility with the prospective
 exact-tip archive, writes and verifies the tag, then rechecks and releases only
 recorded finished workers through the shared retirement executor. It can finish
 in one call while a finished worker tab is still open. Preflight refusals happen
-before tagging. If a later check (including typed input at the native exit edge)
+before tagging. Live native workers always pass the guarded exit path, including
+its fresh readiness and empty-composer checks, even without helper processes.
+Terminal-bound exit receipts recheck the ordinary worker identity, completion,
+unchanged shell and current exact-head archive before permitting tab close.
+If a later check (including typed input at the native exit edge)
 or removal fails, the verified tag may remain as harmless recovery for that exact
 tip, and a matching-tip retry can reuse it.
 The automatic sweep keeps non-ancestor lanes unless the project's reviewed

@@ -588,7 +588,7 @@ and recommendations can change, so recheck the linked source when updating route
 
 | Model | Vendor positioning | Example route fit |
 | --- | --- | --- |
-| [`gpt-6-astra`](https://learn.chatgpt.com/docs/models) | OpenAI's most capable model for complex work across code, apps, and research, with stronger judgment | Only when explicitly named by project route configuration |
+| [`gpt-6-astra`](https://learn.chatgpt.com/docs/models) | OpenAI's most capable model for complex work across code, apps, and research, with stronger judgment | Only for graphical and UI/UX design through `research-astra-max` |
 | [`gpt-6.1-sol`](https://learn.chatgpt.com/docs/models) | Sol for complex coding, computer use, and research; replaced `gpt-5.6-sol` (archived) on 2026-10-01 | Engineering lanes |
 | [`gpt-5.6-terra`](https://learn.chatgpt.com/docs/models) | Balanced everyday work at lower cost | Mechanical or isolated changes |
 | [`gpt-5.6-luna`](https://learn.chatgpt.com/docs/models) | Fast and affordable for clear, repeatable tasks such as extraction and classification | Repeatable, well-specified work |

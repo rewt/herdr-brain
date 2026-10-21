@@ -63,7 +63,7 @@ be explicit and cannot override the native harness or higher-priority constraint
 | External disclosure, publication and deployment | New public posts, repositories or releases; private construction crossing its approved boundary; visibility, DNS or remote changes; deployment beyond standing authority. Preserve separate canonical publication stages and permissions. A private local build or activation within an existing supervisor release mandate is not automatically public publication. Specifically authorized test-network work stays bounded by its authorization. |
 | Trust anchors and frozen cryptographic or semantic material | Changing library crypto, a relation, frozen semantics or committed vectors to make a failure pass; modifying pinned proof trust anchors; bypassing signature verification. Preserve applicable stop-and-report rules and historical anchors. Ordinary dependency versions are not all trust anchors. An authorized source change does not silently authorize changing an acceptance-contract behavioral or source pin: identify what it protects. |
 | Privacy, custody and mission guarantees | Weakening a promised privacy or authority guarantee, making shielding optional, or changing the non-custodial model where prohibited by the mission. Such violations are not routine T2 residual-risk acceptances. Strengthening within the contract is T0 implementation or T2 design judgment according to scope, with appropriate review. |
-| Native permissions and actual harness/classifier refusals | Sandbox or permission-setting changes, or approval of a refused action. Stop that action, preserve the reason and take it to the operator; never relay it to another agent or disguise it as another command. Continue unaffected work and permitted alternatives that do not perform the refused action. A runtime test's EPERM or refusal is diagnostic evidence, not automatically a request to change harness authority. |
+| Native permissions and actual harness/classifier refusals | Sandbox or permission-setting changes, or approval of a refused action. Stop that action, preserve the reason and take it to the operator; never relay it to another agent or disguise it as another command. Continue unaffected work and permitted alternatives that do not perform the refused action. A runtime test's EPERM or refusal is diagnostic evidence, not automatically a request to change harness authority. For a model provider's cybersecurity-safeguard refusal only, see the appendices' standing fallback direction. |
 | Operator-owned sensitive state and destructive loss | New access or use of operator wallets, keys or sensitive accounts outside granted scope; irreversible deletion of unique work or evidence, destruction of recovery, or destructive shared-history changes outside an approved lifecycle. Never emit secrets; retain local sensitive-state protections. Verified recoverable lane retirement under the shared contract is T1. |
 | New product direction and external commitments | Starting or retiring user-visible capabilities outside the approved roadmap, material scope expansion, or external commitments. Preserving behavior during shared-code extraction is T0/T1. Keeping an existing feature pending a separate product decision is not itself new feature authority. Implementing an authorized retirement needs no new product decision per slice. |
 | Authority-policy changes and specifically reserved holds | Adopting or amending routing authority, changing the reserved list, expanding delegation, or lifting a hold expressly requiring a new operator answer. Technical interpretation within an existing delegation stays T2. Operator-authored preferences are not all permanently operator-only. |
@@ -165,11 +165,19 @@ denominator for automatic tier movement.
 
 ## Appendix: herdr-brain
 
+### Standing directions and containment
+
+- The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “if Codex triggers cybersecurity, move to Cloud; if Cloud triggers cybersecurity, move back to Codex. Let's implement that.” “Cloud” means Claude.
+  - This covers a model provider's cybersecurity safeguard refusing a dispatched task. Move the task to the other harness's equivalent route—Codex to Claude or Claude to Codex—and record the switch on the item: from, to, run and reason.
+  - Move the task unchanged. Never reword it to get past either safeguard.
+  - Do not loop. If the moved task is refused again on the other harness, stop and take it to the operator.
+  - This supersedes the operator-only handling in the reserved-effects row “Native permissions and actual harness/classifier refusals” for this case only. Native sandbox and permission-setting refusals remain operator-reserved as that row says.
+- The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “Ensure everything defaults to Sol, and Astra is used only for graphical situations and UI/UX design.”
 - The operator's 2026-10-20 standing direction: “Let's update routing for all dispatched engineering to use Sol 6.1 Max instead of Astra. And let's reserve Astra for more of the UX UI type of tasks or site layouts or organization and keep difficult engineering efforts on Soul 6.1 max fast”.
-- Routine engineering dispatches on `gpt-6.1-sol`.
+- Sol (`gpt-6.1-sol`) is the default for every Codex route.
 - Difficult engineering and escalations use `engineer-max` (`gpt-6.1-sol`, max).
-- Contract, authority and architecture reviews that previously used Astra use `review-sol-max` (a Codex `gpt-6.1-sol` reviewer at max).
-- Astra is reserved for UX/UI, site layouts and information organization through `research-astra-max` (`gpt-6-astra`).
+- Astra (`gpt-6-astra`, via `research-astra-max`) is for graphical and UI/UX design only.
+- Authority and ruling reviews use `review-sol-max`.
 - The operator's parent `.lane.json` layer defines these routes; this appendix names routes only and does not duplicate their settings.
 
 ## Appendix: bch-cloak
@@ -232,6 +240,13 @@ directions taking precedence where changed.
 
 ### Standing directions and containment
 
+- The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “if Codex triggers cybersecurity, move to Cloud; if Cloud triggers cybersecurity, move back to Codex. Let's implement that.” “Cloud” means Claude.
+  - This covers a model provider's cybersecurity safeguard refusing a dispatched task. Move the task to the other harness's equivalent route—Codex to Claude or Claude to Codex—and record the switch on the item: from, to, run and reason.
+  - Move the task unchanged. Never reword it to get past either safeguard.
+  - Do not loop. If the moved task is refused again on the other harness, stop and take it to the operator.
+  - This supersedes the operator-only handling in the reserved-effects row “Native permissions and actual harness/classifier refusals” for this case only. Native sandbox and permission-setting refusals remain operator-reserved as that row says.
+- The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “Ensure everything defaults to Sol, and Astra is used only for graphical situations and UI/UX design.”
+- Sol (`gpt-6.1-sol`) is the default for every Codex route; Astra (`gpt-6-astra`, via `research-astra-max`) is for graphical and UI/UX design only; authority and ruling reviews use `review-sol-max`.
 - Focused pre-merge package checks and direct-dependent typechecks remain the
   validation direction. No post-merge run for now: restarting specifically requires
   a new operator decision under bch seq 18209. This is no exemption from required

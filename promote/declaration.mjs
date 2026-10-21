@@ -48,7 +48,7 @@ export function validateDeclared(value) {
   if (gate.node_version_file !== undefined && !relative(gate.node_version_file)) throw refuse('invalid Node version file');
   if (gate.env !== undefined && (!object(gate.env) || Object.entries(gate.env).some(([name, value]) =>
     !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof value !== 'string' || value.includes('\0') ||
-    /^(?:MONITOR_PROMOTION_|MONITOR_TEST_SLOT_(?:PATH|COMPAT_PATH|TOKEN)|BCH_CLOAK_TEST_SLOT_TOKEN|HERDR_(?:PANE|TAB|WORKSPACE)_ID|NODE_OPTIONS$)/.test(name)))) throw refuse('invalid or host-owned gate environment');
+    /^(?:MONITOR_PROMOTION_|MONITOR_TEST_SLOT_(?:PATH|COMPAT_PATH|TOKEN)|BCH_CLOAK_TEST_SLOT_TOKEN|HERDR_(?:PANE|TAB|WORKSPACE)_ID|NODE_OPTIONS$|NODE_TEST_CONTEXT$)/.test(name)))) throw refuse('invalid or host-owned gate environment');
   if (gate.external_lock !== undefined && (typeof gate.external_lock !== 'string' || !path.isAbsolute(gate.external_lock) || gate.external_lock.includes('\0'))) throw refuse('invalid external lock');
   if (gate.wait_seconds !== undefined && (!Number.isSafeInteger(gate.wait_seconds) || gate.wait_seconds < 0 || gate.wait_seconds > 9999999)) throw refuse('invalid bounded host wait');
   if (gate.refuse_processes !== undefined) {

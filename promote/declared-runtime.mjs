@@ -6,7 +6,7 @@ import { hash, refuse } from './declaration.mjs';
 
 export function projectEnvironment(env, { candidate, snapshot } = {}) {
   const result = { ...env };
-  for (const key of Object.keys(result)) if (/^(?:NODE_OPTIONS|NODE_PATH|PYTHONPATH|PYTHONHOME|PYTHONSTARTUP|PYTHONUSERBASE|PYTHONPYCACHEPREFIX|BASH_ENV|ENV|BASH_FUNC_.*|SHELLOPTS|BASHOPTS|ZDOTDIR|TS_NODE.*|TSX_.*|LD_.*|DYLD_.*|INIT_CWD|npm_(?:lifecycle_.*|config_node_options)|NPM_CONFIG_NODE_OPTIONS|GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|CONFIG_COUNT|CONFIG_KEY_.*|CONFIG_VALUE_.*))$/.test(key)) delete result[key];
+  for (const key of Object.keys(result)) if (/^(?:NODE_OPTIONS|NODE_PATH|NODE_TEST_CONTEXT|PYTHONPATH|PYTHONHOME|PYTHONSTARTUP|PYTHONUSERBASE|PYTHONPYCACHEPREFIX|BASH_ENV|ENV|BASH_FUNC_.*|SHELLOPTS|BASHOPTS|ZDOTDIR|TS_NODE.*|TSX_.*|LD_.*|DYLD_.*|INIT_CWD|npm_(?:lifecycle_.*|config_node_options)|NPM_CONFIG_NODE_OPTIONS|GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|CONFIG_COUNT|CONFIG_KEY_.*|CONFIG_VALUE_.*))$/.test(key)) delete result[key];
   if (snapshot) {
     result.PATH = [path.join(snapshot, 'node_modules/.bin'), ...(result.PATH ?? '').split(path.delimiter).filter(part => {
       if (!path.isAbsolute(part)) return false;

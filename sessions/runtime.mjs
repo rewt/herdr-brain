@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { readPlainFile, plainDirectory, writeFileAtomic } from '../lib/files.mjs';
 import { parseUniqueJson } from './json.mjs';
 import { validLifecycleOperation, validStartOperation, validIncarnation, validIncarnationLinks } from './lifecycle-evidence.mjs';
+import { validAdoptOperation, verifyAdoptOperation } from './adoption-evidence.mjs';
 
 export const runtimePaths = common => ({ directory: path.join(common, 'sessions'),
   journal: path.join(common, 'sessions/controller-journal.json'),
@@ -22,7 +23,7 @@ export function readControllerJournal(common) {
   if (journal.schema !== 'session-controller-journal/v1' || journal.common !== common ||
       Object.keys(journal).some(k => !['schema', 'common', 'operations', 'bindings', 'incarnations'].includes(k)) ||
       !Array.isArray(journal.operations) || !Array.isArray(journal.bindings) ||
-      journal.operations.some(op => ['reset', 'recovery'].includes(op.kind) ? !validLifecycleOperation(op) :
+      journal.operations.some(op => op.kind === 'adopt-standard-slot' ? !validAdoptOperation(op) : ['reset', 'recovery'].includes(op.kind) ? !validLifecycleOperation(op) :
         !validStartOperation(op) || op.state === 'never-started' && op.disposition.request.common !== common) ||
       new Set(journal.operations.map(op => op.id)).size !== journal.operations.length ||
       journal.bindings.some(b => !b.uid || !b.specDigest || !b.binding || !Number.isSafeInteger(b.generation)) ||
@@ -33,6 +34,7 @@ export function readControllerJournal(common) {
         new Set(journal.incarnations.map(i => i.id)).size !== journal.incarnations.length)) ||
       !validIncarnationLinks(journal)) throw Error('invalid controller journal; hold');
   journal.incarnations ??= [];
+  for (const op of journal.operations.filter(op => op.kind === 'adopt-standard-slot' && op.state === 'acknowledged')) verifyAdoptOperation(op, common);
   return journal;
 }
 export function durableWrite(file, value) {

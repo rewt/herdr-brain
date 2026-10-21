@@ -19,7 +19,8 @@ export function routesSnapshot(cwd = process.cwd()) {
   // so never use an inherited environment variable to choose a write target.
   const root = project?.canonical ?? fs.realpathSync(cwd);
   const loaded = loadDiscoveredRoutes({ cwd: root, env: {} });
-  const target = policyLocation(root, 'lane', {}, { write: true }).file;
+  const binding = homeProject(root);
+  const target = policyLocation(root, binding?.sources.routing ? 'routing' : 'lane', {}, { write: true }).file;
   const bytes = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
   const revision = crypto.createHash('sha256').update(JSON.stringify([loaded, loaded.files.map(file => fs.readFileSync(file, 'utf8')), target, bytes])).digest('hex');
   return { ...loaded, root, target, editable: Boolean(project), revision };
@@ -40,12 +41,13 @@ export function editProjectConfig(mutate, { cwd = process.cwd(), expect, adoptRo
   if (binding) return withConfigLock(binding, 'project', () => {
     const current = routesSnapshot(cwd);
     if (expect && current.revision !== expect) throw new UserError('routes changed since you opened the editor; refresh and review again');
-    const selected = policyLocation(cwd, 'lane');
-    const next = fs.existsSync(selected.file) ? readPolicyFile(selected.file, 'lane', { cwd }) : {};
+    const kind = adoptRoutes && binding.sources.routing ? 'routing' : 'lane';
+    const selected = policyLocation(cwd, kind), target = policyLocation(cwd, kind, process.env, { write: true }).file;
+    const next = fs.existsSync(selected.file) ? readPolicyFile(selected.file, kind, { cwd }) : {};
     mutate(next, current);
     validateLane(next, current.target);
     mergeRoutesConfig([current.config, next]);
-    writeAuditedConfig({ file: current.target, value: next, kind: 'lane', binding, cwd, validate: value => validateLane(value, current.target) });
+    writeAuditedConfig({ file: target, value: next, kind, binding, cwd, validate: value => validateLane(value, target) });
     return routesSnapshot(cwd);
   });
   const lock = `${before.target}.lock`;

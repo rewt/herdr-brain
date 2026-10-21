@@ -3,7 +3,8 @@
 Stages 1–4 of ARCH-33: manifests, an offline inspector, KEEP-only receipts,
 foreground planning, and an explicitly authorized single-action apply path for
 starting adopted panes or creating never-adopted chat/supervisor positions.
-Node built-ins only. `inspect` and `plan` are read-only. `authorize` writes only a
+Node built-ins only. `inspect` and `plan` never mutate the controller or panes;
+owning config reads may append config-audit events after adoption. `authorize` writes only a
 scope receipt; `apply` can act only on an explicitly enrolled workspace with a
 valid receipt and fresh matching saved plan. There is no enrollment CLI, default
 apply workspace in this CLI, controller loop, background process, or record writer.

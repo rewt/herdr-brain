@@ -1026,6 +1026,7 @@ const COMMANDS = {
   'session-bind': lazy('../dispatch/session-bind-command.mjs', 'sessionBindCommand'),
   desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
   config: lazy('../lib/config-command.mjs', 'configCommand'),
+  adopt: lazy('../lib/adopt-command.mjs', 'adoptCommand'),
   routes: lazy('../lanes/routes-command.mjs', 'routesCommand'),
   housekeeping: lazy('../housekeeping/command.mjs', 'housekeepingCommand'),
   summary: lazy('../lib/project-summary.mjs', 'summaryCommand'),

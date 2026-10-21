@@ -12,6 +12,7 @@ import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { entryPolicy } from '../discovery/policy.mjs';
 import { fileURLToPath } from 'node:url';
 import { gitProject } from '../lib/project.mjs';
+import { literalLaunch } from '../lib/owner-launch.mjs';
 
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -74,8 +75,10 @@ function waitForShell(herdr, receipt, project, { now, sleep, startupMs, beforeIn
 }
 
 export function herdrCommand(env = process.env) {
-  return (args, { env: callerEnv = env, timeout = 10000 } = {}) => {
-    const reply = spawnSync(callerEnv.HERDR_BIN_PATH || 'herdr', args, { env: callerEnv, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024 });
+  return (args, { env: callerEnv = env, timeout = 10000, launch, cwd } = {}) => {
+    if (launch && !(args[0] === 'agent' && args[1] === 'start')) throw Error('identity launch prefix is restricted to owner launches');
+    const input = literalLaunch(callerEnv.HERDR_BIN_PATH || 'herdr', args, launch);
+    const reply = spawnSync(input.command, input.args, { cwd, env: callerEnv, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024 });
     if (reply.error || reply.status !== 0) throw new Error(`Herdr ${args.slice(0, 2).join(' ')}: ${(reply.stderr || reply.stdout || reply.error?.message || `exited ${reply.status}`).trim()}`);
     if (args[0] === 'pane' && args[1] === 'read' && args.includes('text')) return { text: reply.stdout };
     if (args[0] === 'pane' && args[1] === 'run' && !reply.stdout.trim()) return {};
@@ -195,7 +198,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       // its caller, so it needs both the chat environment and a longer deadline.
       writeInstructions(launch, instructionsFile, policy);
       herdr(['agent', 'start', chat, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs), '--', ...native],
-        { env: { ...env, ...Object.fromEntries(pairs) }, timeout: startupMs + 10000 });
+        { env: { ...env, ...Object.fromEntries(pairs) }, timeout: startupMs + 10000, launch: launch.launch, cwd: project.checkout });
     } catch (error) {
       throw new Error(`chat startup not detected; retained tab ${receipt.tab}, inspect before retrying: ${error.message}`, { cause: error });
     }
@@ -273,8 +276,8 @@ export function openStandardSession({ target, launch, name, instructions, resume
   beforeMutation(receipt);
   writeInstructions(launch, instructionsFile, instructions);
   herdr(['agent', 'start', name, '--kind', launch.kind, '--pane', receipt.pane, '--timeout', String(startupMs),
-    '--', ...native], { env: { ...env, ...pairs }, timeout: startupMs + 10000 });
-  return { ...receipt, name, checkout: target.checkout, kind: launch.kind };
+    '--', ...native], { env: { ...env, ...pairs }, timeout: startupMs + 10000, launch: launch.launch, cwd: target.checkout });
+  return { ...receipt, name, checkout: target.checkout, kind: launch.kind, ...(launch.launch ? { launch: launch.launch } : {}) };
 }
 
 // The existing log viewer renders once; retain that verified output in its

@@ -2,6 +2,7 @@
 import { matchingRun } from '../lib/retire.mjs';
 import { agentBinding } from './observe.mjs';
 import { equalBinding, validLaunchReceipt } from './lifecycle-evidence.mjs';
+import { validAdoptOperation } from './adoption-evidence.mjs';
 
 // Only the adapter can prove that it has not entered the native create call.
 export class CreateNotInvokedError extends Error {
@@ -16,6 +17,7 @@ export function unownedWorkspaceReason(observation, journal, facts, target) {
     .flatMap(op => [op.receipt, ...(observation.receipts ?? []).filter(r => r.operationId === op.id)]
       .filter(r => validLaunchReceipt(op, r)).map(r => r.binding));
   bindings.push(...(journal.incarnations ?? []).map(i => i.binding));
+  bindings.push(...journal.operations.filter(op => op.state === 'acknowledged' && validAdoptOperation(op)).map(op => op.binding));
   const unowned = observation.agents.filter(a => {
     const run = matchingRun(a, facts.record);
     return a.workspace_id === target.workspace && !bindings.some(b => equalBinding(b, agentBinding(a, observation.server, a.tab_id))) && (!run || run.abandoned);

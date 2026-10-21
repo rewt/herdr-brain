@@ -9,7 +9,7 @@ import { digest } from './lifecycle-evidence.mjs';
 import { observeLive } from './live-observe.mjs';
 import { emptyJournal, readControllerJournal, present, runtimePaths } from './runtime.mjs';
 
-// No mkdir, lease acquisition, status write, journal append or record mutation.
+// No controller/native mutation. Owning config reads may append config audit events.
 export function planInputs({ files = [], cwd = process.cwd(), workspace = 'home', env = process.env,
   observer, readFacts = readSessionFacts, evidence } = {}) {
   const inspection = inspect({ files, cwd, workspace, env }), { project } = inspection;

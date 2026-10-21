@@ -32,9 +32,7 @@ export function enrolledWorkspace(project, ref) {
   return { ref, server: slots[0].server, workspace: slots[0].workspace, checkout: slots[0].checkout,
     enrollmentDigest: digest(originals), slots };
 }
-function decisionEvidence(project, env, ref, workspace, actions) {
-  const org = findOrgDir({ cwd: project.root, env });
-  if (!org) throw Error('operator decision requires the project record');
+export function humanAnswerEvidence({ record: org, ref, field, validateScope }) {
   const record = fs.realpathSync(org), loaded = loadEvents(record);
   if (loaded.tornTail) throw Error('operator decision record has an incomplete tail');
   const index = loaded.events.findIndex(e => e.seq === ref.seq && e.id === ref.id);
@@ -54,10 +52,17 @@ function decisionEvidence(project, env, ref, workspace, actions) {
     throw Error('operator decision requires an attributed human record answer yes transaction on a human question');
   // Bind structured scope as it stood BEFORE the operator answered; a later
   // metadata edit cannot turn an unrelated answer into experiment permission.
-  const raw = before.meta.session_authorization;
-  if (typeof raw !== 'string' || current.meta.session_authorization !== raw)
-    throw Error('operator decision requires unchanged session_authorization scope recorded before the answer');
+  const raw = before.meta[field];
+  if (typeof raw !== 'string' || current.meta[field] !== raw)
+    throw Error(`operator decision requires unchanged ${field} scope recorded before the answer`);
   const scope = parseUniqueJson(raw);
+  validateScope(scope);
+  return { record, id: ref.id, seq: ref.seq, sha256: digest({ event, update, close, scope }) };
+}
+function decisionEvidence(project, env, ref, workspace, actions) {
+  const org = findOrgDir({ cwd: project.root, env });
+  if (!org) throw Error('operator decision requires the project record');
+  return humanAnswerEvidence({ record: org, ref, field: 'session_authorization', validateScope(scope) {
   const keys = ['schema', 'common', 'server', 'workspace', 'checkout', 'actions'];
   if (!scope || typeof scope !== 'object' || Array.isArray(scope) || Object.keys(scope).length !== keys.length ||
       Object.keys(scope).some(k => !keys.includes(k)) || scope.schema !== 'session-authorization-scope/v1' ||
@@ -65,7 +70,7 @@ function decisionEvidence(project, env, ref, workspace, actions) {
       !strings(scope.actions) || !scope.actions.length || scope.actions.some(a => !ACTIONS.includes(a)) ||
       !strings(actions) || !actions.length || actions.some(a => !scope.actions.includes(a)))
     throw Error('operator decision workspace or action scope mismatch');
-  return { record, id: ref.id, seq: ref.seq, sha256: digest({ event, update, close, scope }) };
+  } });
 }
 export function validateAuthorization(r) {
   const exact = (o, keys) => o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).every(k => keys.includes(k));

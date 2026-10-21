@@ -21,8 +21,9 @@ import { loadTimeout, admissionDeadline } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
+import { literalLaunch } from '../lib/owner-launch.mjs';
 import { homeProject, policyLocation } from '../lib/config-home.mjs';
-import { homePolicyLayers, configBase, readPolicyFile } from '../lib/config-policy.mjs';
+import { homePolicyLayers, configBase, readPolicyFile, readProjectPolicy } from '../lib/config-policy.mjs';
 import { resolveArchive, validateArchive } from '../lib/archive.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
 import { hookLaunchArguments } from '../messages/hook-session.mjs';
@@ -64,6 +65,7 @@ import {
   routeNames as configuredRouteNames,
   selectRoute,
   validateRoutesConfig,
+  standaloneRouting,
 } from "./routes.mjs";
 
 cliHelp(import.meta.url, 'Usage: lane open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|ready|close [TOPIC] [OPTIONS]');
@@ -72,6 +74,9 @@ if (forwardedRelease !== null) process.exit(forwardedRelease);
 
 const IS_REVIEW_COMMAND = process.argv[2] === "review";
 const CALLER_CWD = process.cwd();
+// An adopted project's native directory, never inherited Git selectors, owns
+// its policy and every subsequent Git child. Legacy invocations keep semantics.
+if (homeProject(CALLER_CWD)) for (const key of Object.keys(process.env)) if (key.startsWith('GIT_')) delete process.env[key];
 
 // Unix readers such as `head` routinely close a pipeline before the producer
 // is finished. Treat that as successful early consumption, not a crash.
@@ -346,6 +351,18 @@ const { config: CONFIG, sources: CONFIG_SOURCES, routeSources: ROUTE_SOURCES } =
   }
   return { config, sources, routeSources };
 })();
+if (HOME_PROJECT?.sources.routing) {
+  const routing = readProjectPolicy(REPO_ROOT, 'routing');
+  const selected = standaloneRouting(CONFIG, routing.config);
+  for (const key of Object.keys(CONFIG)) delete CONFIG[key];
+  Object.assign(CONFIG, selected);
+  for (const key of Object.keys(routing.config)) CONFIG_SOURCES.set(key, routing.file);
+  ROUTE_SOURCES.clear();
+  for (const name of Object.keys(routing.config.routes ?? {})) ROUTE_SOURCES.set(name, routing.file);
+  CONFIG_LAYERS.push({ file: routing.file, base: routing.base, config: routing.config });
+}
+if (HOME_PROJECT?.defaults.launch) CONFIG.launch = [...HOME_PROJECT.defaults.launch];
+if (HOME_PROJECT && !['dispatch', 'routes', 'selection_policy'].some(key => Object.hasOwn(CONFIG, key))) Object.assign(CONFIG, structuredClone(ROUTE_PRESET));
 try {
   validateRoutesConfig(CONFIG);
 } catch (error) {
@@ -354,7 +371,7 @@ try {
 const MAIN = CONFIG.main ?? "main";
 const LANE_PREFIX = "lane/";
 const REPO_NAME = basename(REPO_ROOT);
-const ROOT_IDENTITY = realpathSync(PARENT_CONFIG_FILE === undefined ? dirname(REPO_ROOT) : dirname(PARENT_CONFIG_FILE));
+const ROOT_IDENTITY = HOME_PROJECT?.owner.root ?? realpathSync(PARENT_CONFIG_FILE === undefined ? dirname(REPO_ROOT) : dirname(PARENT_CONFIG_FILE));
 const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE } = (() => {
   if (process.env.LANE_WORKTREE_ROOT !== undefined) {
     const path = resolve(CALLER_CWD, process.env.LANE_WORKTREE_ROOT);
@@ -364,7 +381,7 @@ const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE }
   // committing its settings. Existing lanes keep their registered paths.
   if (Object.hasOwn(CONFIG, "worktree_root")) {
     const source = CONFIG_SOURCES.get("worktree_root");
-    const base = resolve(configBase(source, REPO_ROOT), CONFIG.worktree_root);
+    const base = resolve(configBase(source, REPO_ROOT, process.env, 'worktree_root'), CONFIG.worktree_root);
     return { path: join(base, REPO_NAME), base, source };
   }
   if (FLEET.project && !EXPLICIT_CONFIG) return { path: FLEET.project.worktrees, base: FLEET.project.worktrees, source: FLEET.fleet.file };
@@ -1363,7 +1380,9 @@ function dispatch(topic, promptText, options = {}) {
     // reports as failed can still have launched the agent in the pane: use a
     // fresh name per attempt and adopt whatever is already running there.
     if (attempt > 0) agentName = newAgentName(topic, liveAgentNames);
-    const run = spawnSync("herdr", startArgsFor(agentName), {
+    const launchInput = literalLaunch('herdr', startArgsFor(agentName), resolved.launch);
+    const run = spawnSync(launchInput.command, launchInput.args, {
+      cwd: path,
       encoding: "utf8",
       env: process.env,
       ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),

@@ -203,6 +203,14 @@ export function planSessions(input) {
         const receipt = op?.receipt ?? (receipts.length === 1 ? receipts[0] : null);
         if (op?.state === 'withheld') decision = row(entry, 'Hold', 'Hold', `start withheld, delegate never invoked: ${op.reason}; explicit later operator disposition required`, {
           observed: { operationId: op.id, operationState: op.state, withheldReason: op.reason } });
+        else if (op?.kind === 'adopt-standard-slot') {
+          if (op.state !== 'acknowledged' || !a || claims.length || !matches(op.binding, binding) || pane.terminal_id !== binding.terminalId ||
+              !targetMatches(binding, target) || (!viewer && !['working', 'idle', 'done'].includes(a.agent_status ?? a.status)))
+            return row(entry, 'Hold', 'Hold', 'observed adoption is unresolved or its native binding changed; keep the existing pane');
+          decision = row(entry, 'Running', 'KEEP', 'owner-authorized observed adoption; protected standard slot; no prompt replay', {
+            observed: { binding, generation: op.generation, specDigest: op.specDigest, origin: 'observed-adoption', launchEvidence: 'unknown' },
+            ...(op.specDigest !== specDigest(entry) || op.generation !== entry.manifest.metadata.generation ? { pendingGeneration: entry.manifest.metadata.generation } : {}) });
+        }
         else if (a) {
           if (!op || !receipt || claims.length > 1 || (claims.length && (receipts.length !== 1 || !matches(claims[0].binding, receipt.binding))) || !matches(receipt.binding, binding) || pane.terminal_id !== binding.terminalId ||
               !targetMatches(binding, target) || (!viewer && !['working', 'idle', 'done'].includes(a.agent_status ?? a.status))) return row(entry, 'Hold', 'Hold', 'unknown or changed standard-slot occupant; never adopt or close');

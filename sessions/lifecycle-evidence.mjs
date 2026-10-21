@@ -78,6 +78,7 @@ export function validStartOperation(op) {
     (op.state !== 'withheld' || text(op.reason)) && (op.state !== 'acknowledged' || validLaunchReceipt(op, op.receipt));
 }
 export function validLaunchReceipt(op, receipt) {
+  if (!['start-standard-slot', 'create-standard-slot'].includes(op.kind)) return false;
   const keys = op.kind === 'create-standard-slot' ? ['server', 'workspace', 'checkout'] : bindingKeys.slice(0, 5);
   return receipt?.operationId === op.id && receipt.uid === op.uid && receipt.generation === op.generation && receipt.specDigest === op.specDigest &&
     validBinding(receipt.binding, op.spec.viewer ? 'LogViewer' : 'Session') && keys.every(k => receipt.binding[k] === op.target[k]);

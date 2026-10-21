@@ -5,7 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ROUTE_PRESET } from './preset.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
 import { homeProject, policyLocation, present } from '../lib/config-home.mjs';
-import { homePolicyLayers, readPolicyFile } from '../lib/config-policy.mjs';
+import { homePolicyLayers, readPolicyFile, validateLane } from '../lib/config-policy.mjs';
 
 // Native lifecycle commands belong to launch plumbing, never record policy.
 const launchData = Object.freeze({
@@ -74,6 +74,7 @@ export function validateRoutesConfig(config, options = {}) {
     throw new Error(`unsupported route schema: ${config.schema}`);
   }
   if (config.authority !== undefined) string(config.authority, "authority");
+  if (config.launch !== undefined && (!Array.isArray(config.launch) || !config.launch.length || config.launch.some(s => typeof s !== 'string' || !s || s.includes('\0')))) throw Error('launch must be nonempty literal argv words');
   if (config.dispatch !== undefined) routeShape(config.dispatch, "dispatch");
   if (config.dispatch?.max_sessions !== undefined &&
       (!Number.isSafeInteger(config.dispatch.max_sessions) || config.dispatch.max_sessions < 1)) {
@@ -92,12 +93,23 @@ export function mergeRoutesConfig(configs) {
   const merged = {};
   for (const config of configs) {
     validateRoutesConfig(config, { references: false });
-    for (const key of ["schema", "authority", "dispatch", "selection_policy"]) {
+    for (const key of ["schema", "authority", "dispatch", "selection_policy", "launch"]) {
       if (Object.hasOwn(config, key)) merged[key] = config[key];
     }
     if (Object.hasOwn(config, "routes")) merged.routes = { ...(merged.routes ?? {}), ...config.routes };
   }
   return validateRoutesConfig(merged);
+}
+export function standaloneRouting(config, selected) {
+  const next = { ...config, ...selected };
+  for (const key of ['schema', 'authority', 'routes', 'selection_policy']) {
+    if (!Object.hasOwn(selected, key)) delete next[key];
+  }
+  // Standalone route defaults do not inherit native launch fields. Admission
+  // settings remain available to full-config consumers without defining caps.
+  const launchFields = new Set(['kind', 'model', 'effort', 'env', 'args', 'use']);
+  next.dispatch = { ...Object.fromEntries(Object.entries(config.dispatch ?? {}).filter(([k]) => !launchFields.has(k))), ...selected.dispatch };
+  return next;
 }
 
 function codexConfigExpression(token, value) {
@@ -219,6 +231,7 @@ export function resolveLaunchRoute(config, options = {}) {
     : resolveRoute(config, { route: options.route }).args;
   resolved.effort ??= effortFromArgs(resolved.kind, inferenceArgs);
   resolved.exit = exitCommandFor(resolved.kind);
+  if (config.launch !== undefined) resolved.launch = [...config.launch];
   return resolved;
 }
 
@@ -236,7 +249,7 @@ export function selectRoute(config, taskClass, pool) {
 }
 
 export function readRoutesConfig(file) {
-  return readPolicyFile(file, 'routing');
+  return validateRoutesConfig(readPolicyFile(file, 'routing'));
 }
 
 function within(path, boundary) {
@@ -286,7 +299,7 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   }
   let repository;
   try {
-    repository = canonicalCheckout(cwd);
+    repository = binding?.checkout ?? canonicalCheckout(cwd);
   } catch {
     const directory = realpathSync(cwd);
     const local = join(directory, ".lane.json");
@@ -306,11 +319,15 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   const files = [...new Set([...(binding ? laneLayers : []), ...layers].map(l => l.file))];
   if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };
   const routes = mergeRoutesConfig(layers.map(l => l.config));
-  const config = binding ? { ...Object.assign({}, ...laneLayers.map(l => l.config)), ...routes } : routes;
+  const full = binding ? { ...Object.assign({}, ...laneLayers.map(l => l.config)), ...mergeRoutesConfig(laneLayers.map(l => l.config)) } : routes;
+  const config = binding?.sources.routing ? standaloneRouting(full, layers[0].config) : full;
+  if (binding?.defaults.launch) config.launch = [...binding.defaults.launch];
+  else if (binding) delete config.launch;
   // Lifecycle/entry preferences alone do not declare operator model routes.
   // Keep the same suggested preset as a project with no routing setup.
   if (!["dispatch", "routes", "selection_policy"].some((key) => Object.hasOwn(config, key))) {
-    return { config: mergeRoutesConfig([ROUTE_PRESET, config]), files, suggested: true };
+    return { config: { ...config, ...mergeRoutesConfig([ROUTE_PRESET, config]) }, files, layers, suggested: true };
   }
+  if (binding) validateLane(config, binding.file, { references: true });
   return { config, files, layers, ...(binding ? { root: repository, binding: binding.file } : {}) };
 }

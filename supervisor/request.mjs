@@ -6,6 +6,10 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { randomUUID } from 'node:crypto';
 import { bestEffort, mirrorDesk } from '../messages/mirror.mjs';
+import fs from 'node:fs';
+import { configHome, present, validateIdentity, markerRoot } from '../lib/config-home.mjs';
+import { readPolicyFile } from '../lib/config-policy.mjs';
+import { literalLaunch } from '../lib/owner-launch.mjs';
 
 export async function request(argv = process.argv.slice(2), {
   env = process.env, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), execute = spawnSync,
@@ -15,11 +19,20 @@ export async function request(argv = process.argv.slice(2), {
   const [identity, text] = positionals;
   if (positionals.length !== 2 || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(identity ?? '') || !text?.trim() || text.includes('\0'))
     throw Error('usage: request.mjs <identity> <text>; identity must be a single directory name');
-  const name = `desk-${identity}`, cwd = path.join(env.HOME || os.homedir(), 'development', identity);
+  const name = `desk-${identity}`, identityFile = path.join(configHome(env), identity, 'identity.json');
+  let cwd = path.join(env.HOME || os.homedir(), 'development', identity), launch;
+  if (present(identityFile)) {
+    const defaults = readPolicyFile(identityFile, 'identity', { env });
+    validateIdentity(defaults, identityFile, identity);
+    cwd = defaults.identity_root; launch = defaults.launch;
+    const marked = markerRoot(cwd);
+    if (marked ? marked !== cwd || path.basename(marked) !== identity : identity !== os.userInfo().username || fs.realpathSync(cwd) !== fs.realpathSync(env.HOME || os.homedir())) throw Error('desk identity root differs from verified owning identity');
+  }
   const startupMs = 30000;
   const call = (args, timeout = 10000) => {
-    const r = execute(env.HERDR_BIN_PATH || 'herdr', args, {
-      env, encoding: 'utf8', timeout, maxBuffer: 1024 * 1024,
+    const input = literalLaunch(env.HERDR_BIN_PATH || 'herdr', args, args[0] === 'agent' && args[1] === 'start' ? launch : undefined);
+    const r = execute(input.command, input.args, {
+      cwd, env, encoding: 'utf8', timeout, maxBuffer: 1024 * 1024,
     });
     if (r.error || r.status !== 0) throw Error(`herdr ${args.slice(0, 2).join(' ')}: ${r.stderr || r.error?.message || r.stdout}; inspect the retained desk before retrying`);
     const reply = JSON.parse(r.stdout);
@@ -37,7 +50,8 @@ export async function request(argv = process.argv.slice(2), {
     if (!workspace) throw Error('workspace creation returned no workspace id; inspect before retrying');
     const panes = call(['pane', 'list', '--workspace', workspace]).panes;
     if (!Array.isArray(panes) || panes.length !== 1 || !panes[0].pane_id) throw Error(`workspace ${workspace} has no unique initial pane; inspect before retrying`);
-    call(['agent', 'start', name, '--kind', 'codex', '--pane', panes[0].pane_id, '--timeout', String(startupMs)], startupMs + 10000);
+    const args = ['agent', 'start', name, '--kind', 'codex', '--pane', panes[0].pane_id, '--timeout', String(startupMs)];
+    call(args, startupMs + 10000);
   }
   const deadline = now() + startupMs;
   while (now() < deadline) {
@@ -51,7 +65,7 @@ export async function request(argv = process.argv.slice(2), {
   call(['agent', 'prompt', name, text]);
   bestEffort(() => mirror({ id: randomUUID(), at: new Date().toISOString(), message: text, to: name,
     target: { identity, cwd } }, { env, ...shadow }), shadow);
-  return { identity, desk: name, workspace: workspace ?? agent.workspace_id, pane: agent.pane_id };
+  return { identity, desk: name, workspace: workspace ?? agent.workspace_id, pane: agent.pane_id, ...(launch ? { launch } : {}) };
 }
 if (isMain(import.meta.url)) {
   try {

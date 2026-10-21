@@ -72,8 +72,8 @@ test('longest topic removes owned scratch and keeps the prefix sibling and an un
   for (const file of [sibling, prefix]) assert.ok(fs.existsSync(file));
   assert.equal(f.read(sweep).entries.find(e => e.path === own).size, 3);
   assert.equal(f.read(sweep).entries.find(e => e.path === round).matchedBy, 'longest topic');
-  assert.equal(f.read(sweep).entries.find(e => e.path === sibling).owner, 'topic-ds3');
-  assert.match(f.read(sweep).entries.find(e => e.path === sibling).reason, /longer lane topic/);
+  assert.equal(f.read(sweep).kept_summary.by_reason['longer lane topic owns scratch'], 1);
+  assert.deepEqual(f.read(sweep).kept_summary.sample_paths, [sibling]);
   assert.equal(f.read(sweep).entries.some(e => e.path === prefix), false);
 });
 
@@ -104,7 +104,8 @@ for (const late of [false, true]) test(`an open file ${late ? 'appearing after p
   const f = setup(t), owned = f.directory('topic-review'); let observations = 0;
   const sweep = f.prepare({ readOpenFiles: () => ++observations === 1 && late ? [] : [{ pid: 99, path: path.join(owned, 'payload') }] });
   sweep.execute(); assert.ok(fs.existsSync(owned));
-  assert.match(f.read(sweep).entries[0].reason, /open process handles/);
+  if (late) assert.match(f.read(sweep).entries[0].reason, /open process handles/);
+  else assert.equal(f.read(sweep).kept_summary.by_reason['directory has open process handles'], 1);
 });
 
 for (const late of [false, true]) test(`HOLD ${late ? 'appearing after planning' : 'at planning'} keeps everything`, t => {
@@ -119,7 +120,7 @@ test('an unmerged lane keeps scratch with the real archive tag', t => {
   const proof = f.retirement({ scratchRoots: [f.root], command }).removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true });
   assert.equal(fs.existsSync(f.lane), false); assert.ok(fs.existsSync(own));
   assert.equal(f.git(['rev-parse', `refs/tags/${proof.archiveTag}`]), f.head);
-  assert.match(JSON.parse(fs.readFileSync(proof.scratchManifest)).entries[0].reason, /unmerged lane/);
+  assert.equal(JSON.parse(fs.readFileSync(proof.scratchManifest)).kept_summary.by_reason['unmerged lane keeps scratch with its archive tag'], 1);
 });
 
 for (const kind of ['declared', 'sibling', 'none', 'opt-out']) test(`manifest location follows the ${kind} archive declaration`, t => {
@@ -134,6 +135,104 @@ for (const kind of ['declared', 'sibling', 'none', 'opt-out']) test(`manifest lo
   assert.ok(fs.existsSync(sweep.manifest)); sweep.execute();
   assert.equal(f.read(sweep).phase, 'complete');
   if (kind === 'none' || kind === 'opt-out') assert.ok(f.warnings.some(warning => /No archive declared/.test(warning)));
+});
+
+for (const destination of ['next external', 'Git fallback', 'first external', 'ignored canonical'])
+  test(`a guarded close keeps canonical Git clean with the ${destination} archive destination`, t => {
+    const f = setup(t), external = path.join(f.scratch, '.org/evidence');
+    const tracked = path.join(f.repo, 'docs/reports');
+    fs.mkdirSync(tracked, { recursive: true }); fs.writeFileSync(path.join(tracked, 'keep.md'), 'tracked report');
+    const dirs = destination === 'next external' ? ['docs/reports', '../.org/evidence'] :
+      destination === 'first external' ? ['../.org/evidence', 'docs/reports'] :
+      destination === 'ignored canonical' ? ['ignored-archive'] : ['docs/reports'];
+    fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ archive: { dirs } }));
+    if (destination === 'ignored canonical') fs.writeFileSync(path.join(f.repo, '.gitignore'), '/ignored-archive/\n');
+    // Reproduce Brain's local stopgap. Ignoring just lane-sweeps/ must not
+    // make docs/reports itself an eligible archive directory.
+    fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n/docs/reports/lane-sweeps/\n');
+    f.git(['add', '.']); f.git(['commit', '-qm', 'archive declaration']);
+    assert.equal(f.git(['status', '--porcelain']), '');
+    const own = f.directory('topic-review');
+    const proof = f.retirement({ scratchRoots: [f.root], command: sweepCommands(f).command })
+      .removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true });
+    const expected = destination === 'Git fallback' ? path.join(f.common, 'lane-archive/topic') :
+      destination === 'ignored canonical' ? path.join(f.repo, 'ignored-archive/lane-sweeps') : path.join(external, 'lane-sweeps');
+    assert.ok(proof.scratchManifest.startsWith(expected + path.sep), proof.scratchManifest);
+    assert.equal(JSON.parse(fs.readFileSync(proof.scratchManifest)).phase, 'complete');
+    assert.equal(fs.existsSync(f.lane), false); assert.equal(fs.existsSync(own), false);
+    assert.equal(fs.existsSync(path.join(tracked, 'lane-sweeps')), false);
+    assert.equal(f.git(['status', '--porcelain']), '', 'guarded close never dirties the canonical checkout');
+  });
+
+test('an archive inside another registered worktree is skipped even when reached through a symlink', t => {
+  const f = setup(t), other = path.join(f.scratch, 'other-lane'), link = path.join(f.scratch, 'archive-link');
+  f.git(['worktree', 'add', '-b', 'lane/other', other]);
+  fs.symlinkSync(other, link);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ archive: { dirs: [link, '../durable'] } }));
+  const sweep = f.prepare(); sweep.execute();
+  assert.equal(path.dirname(sweep.manifest), path.join(f.scratch, 'durable/lane-sweeps'));
+  assert.equal(f.git(['status', '--porcelain'], other), '');
+  assert.equal(fs.existsSync(path.join(other, 'lane-sweeps')), false);
+});
+
+test('an external archive with lane-sweeps redirected into a tracked checkout uses the Git fallback', t => {
+  const f = setup(t), archive = path.join(f.scratch, 'durable'); fs.mkdirSync(archive);
+  fs.symlinkSync(f.repo, path.join(archive, 'lane-sweeps'));
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ archive: { dirs: ['../durable'] } }));
+  const sweep = f.prepare(); sweep.execute();
+  assert.ok(sweep.manifest.startsWith(path.join(f.common, 'lane-archive/topic') + path.sep));
+  assert.deepEqual(fs.readdirSync(f.repo).filter(name => name.endsWith('.json')), ['.lane.json']);
+});
+
+test('an ignored archive inside the closing lane still falls back and keeps scratch', t => {
+  const f = setup(t), own = f.directory('topic-review');
+  fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n/ignored-archive/\n');
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ archive: { dirs: [path.join(f.lane, 'ignored-archive')] } }));
+  const sweep = f.prepare(); sweep.execute();
+  assert.ok(sweep.manifest.startsWith(path.join(f.common, 'lane-archive/topic') + path.sep));
+  assert.ok(fs.existsSync(own)); assert.equal(fs.existsSync(path.join(f.lane, 'ignored-archive')), false);
+  assert.match(f.read(sweep).warnings.join('\n'), /archive is inside closing lane/);
+});
+
+for (const failed of ['worktree', 'check-ignore']) test(`an unavailable archive ${failed} observation keeps scratch in the fallback`, t => {
+  const f = setup(t), own = f.directory('topic-review');
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ archive: { dirs: ['docs/reports', '../durable'] } }));
+  const command = sweepCommands(f).command;
+  const sweep = f.prepare({ command: (exe, args, options) => args.includes(failed)
+    ? { status: 128, stderr: 'injected Git observation failure', stdout: '' } : command(exe, args, options) });
+  sweep.execute(); assert.ok(fs.existsSync(own));
+  assert.ok(sweep.manifest.startsWith(path.join(f.common, 'lane-archive/topic') + path.sep));
+  assert.match(f.read(sweep).warnings.join('\n'), /archive .* unavailable/);
+});
+
+test('a guarded close over 3000 ordinary kept entries stays below 64 KiB with exact counts and full failure details', t => {
+  const f = setup(t), siblings = new Set();
+  f.git(['branch', 'lane/topic-ds3']);
+  for (let i = 0; i < 3000; i++) siblings.add(f.directory(`topic-ds3-review-${i}`));
+  const removed = f.directory('topic-review'), invalid = f.directory('topic-invalid'),
+    foreign = f.directory('topic-foreign', { run: 'R-1', common: f.scratch }), live = f.directory('topic-live');
+  fs.writeFileSync(path.join(invalid, SCRATCH_OWNER_FILE), '{'); fs.writeFileSync(path.join(live, '.local-live'), '');
+  const proof = f.retirement({ scratchRoots: [f.root], command: sweepCommands(f).command })
+    .removeLane({ lane: f.lane, branch: 'lane/topic', gitOnly: true });
+  const manifest = JSON.parse(fs.readFileSync(proof.scratchManifest));
+  assert.ok(fs.statSync(proof.scratchManifest).size < 64 * 1024);
+  assert.equal(manifest.schema, 'lane-scratch-sweep/v1'); assert.equal(manifest.phase, 'complete');
+  assert.deepEqual(manifest.counts, { total: 3004, kept: 3003, removed: 1 });
+  assert.equal(manifest.kept_summary.count, 3000);
+  assert.deepEqual(manifest.kept_summary.by_reason, { 'longer lane topic owns scratch': 3000 });
+  const sample = manifest.kept_summary.sample_paths;
+  assert.equal(sample.length, 16); assert.ok(sample.every(file => siblings.has(file)));
+  assert.ok(Buffer.byteLength(sample.map(file => JSON.stringify(file)).join('')) <= 4096);
+  assert.deepEqual(new Set(manifest.entries.map(entry => entry.path)), new Set([removed, invalid, foreign, live]));
+  for (const [file, reason] of [[invalid, /ownership observation failed/], [foreign, /another project/], [live, /protected live scratch/]]) {
+    const entry = manifest.entries.find(entry => entry.path === file);
+    assert.equal(entry.disposition, 'kept'); assert.match(entry.reason, reason);
+    for (const field of ['owner', 'matchedBy', 'size']) assert.ok(Object.hasOwn(entry, field));
+    assert.ok(fs.existsSync(file));
+  }
+  const entry = manifest.entries.find(entry => entry.path === removed);
+  assert.equal(entry.disposition, 'removed'); assert.equal(entry.size, 3); assert.equal(fs.existsSync(removed), false);
+  assert.ok([...siblings].every(file => fs.existsSync(file)));
 });
 
 for (const failure of ['inventory', 'marker', 'archive', 'changed', 'new-topic', 'record']) test(`${failure} observation failure keeps scratch`, t => {
@@ -156,7 +255,7 @@ test('external report evidence warns without refusing lane removal and keeps the
   f.runs[0].report.artifacts = [path.join(own, 'payload'), path.join(f.lane, 'seed'), path.join(f.scratch, 'durable/result')];
   const sweep = f.prepare(); sweep.execute();
   assert.ok(fs.existsSync(own)); assert.equal(f.warnings.filter(w => /cites evidence outside/.test(w)).length, 1);
-  assert.match(f.read(sweep).entries[0].reason, /report evidence/);
+  assert.equal(f.read(sweep).kept_summary.by_reason['scratch contains report evidence outside the archive'], 1);
 });
 
 test('an archive write failure falls back to lane evidence and keeps scratch', t => {
@@ -282,9 +381,13 @@ for (const integrated of [true, false]) test(`branch deletion failure recovers t
   const manifest = JSON.parse(fs.readFileSync(resumed.scratchManifest));
   assert.equal(manifest.phase, 'complete');
   assert.deepEqual(manifest.recovery, { manifest: proof.scratchManifest, evidence: proof.evidence });
-  const entry = manifest.entries.find(entry => entry.path === own);
-  assert.equal(entry.disposition, integrated ? 'removed' : 'kept');
-  assert.match(entry.reason, integrated ? /owned scratch removed/ : /unmerged lane/);
+  if (integrated) {
+    const entry = manifest.entries.find(entry => entry.path === own);
+    assert.equal(entry.disposition, 'removed'); assert.match(entry.reason, /owned scratch removed/);
+  } else {
+    assert.equal(manifest.kept_summary.by_reason['unmerged lane keeps scratch with its archive tag'], 1);
+    assert.deepEqual(manifest.kept_summary.sample_paths, [own]);
+  }
   const preparation = logs.findIndex(row => row.action === 'scratch-manifest' && row.manifest === resumed.scratchManifest);
   const removal = logs.findIndex(row => row.action === 'lane-removed' && row.reconciled);
   assert.ok(preparation < removal, 'recovery writes its manifest before removal completes');

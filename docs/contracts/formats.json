@@ -167,9 +167,10 @@
       "id": "lane-scratch-sweep/v1",
       "version": 1,
       "writer": "lib/scratch-sweep.mjs",
-      "location": "<archive>/lane-sweeps/*.json or <common>/lane-archive/<topic>/*-sweep.json",
+      "location": "<eligible-archive>/lane-sweeps/*.json or <common>/lane-archive/<topic>/*-sweep.json",
       "rule": "additive",
-      "notCovered": "Diagnostic-only sweep manifests have no OLD runtime consumer. Offline lifecycle fixtures prove pre-removal persistence and fail-closed disposal."
+      "additiveFields": ["counts", "kept_summary"],
+      "notCovered": "Diagnostic-only v1 manifests have no runtime entry consumer: retirement, recovery and closeout retain paths and recovery links. Older manifests keep all entries; current entries retain removals, pending intents, uncertainty and ownership failures in full, with ordinary keeps in kept_summary (exact counts by reason, at most 16 sample paths and 4096 serialized path bytes). counts includes detailed and summarized entries. Offline lifecycle fixtures prove clean Git destinations, bounded ordinary keeps, pre-removal persistence and fail-closed disposal."
     },
     {
       "id": "herdr-scratch/v1",

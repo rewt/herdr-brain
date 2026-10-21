@@ -293,11 +293,26 @@ local bytes from Git status.
 
 The guarded executor also inventories top-level scratch directories under the
 native temporary directory and `/private/tmp` (`/tmp` on other systems). Before
-lane removal it writes `lane-scratch-sweep/v1` into the first declared archive's
-`lane-sweeps/` directory. Archive resolution uses the shared `lib/archive.mjs`
+lane removal it writes `lane-scratch-sweep/v1` into the first eligible declared
+archive's `lane-sweeps/` directory. The archive directory and resolved destination
+must be outside the canonical checkout and every registered Git worktree, or
+ignored by Git in each containing worktree. An archive inside the closing lane
+is still refused. Archive resolution uses the shared `lib/archive.mjs`
 helper: layer-relative `.lane.json` `archive.dirs`, otherwise an existing sibling
-`archive/`; an explicit empty list opts out. Without an archive, the manifest sits
-beside the lane's preservation bundle under `GIT_COMMON_DIR/lane-archive/<topic>/`.
+`archive/`; an explicit empty list opts out. Without an eligible archive, the
+manifest sits beside the lane's preservation bundle under
+`GIT_COMMON_DIR/lane-archive/<topic>/`. An unavailable declared destination also
+falls back there and keeps scratch.
+The manifest retains full entries for removals, pending removal intents,
+uncertain observations and ownership failures. Ordinary kept entries are
+summarized in `kept_summary`: exact counts by reason (sibling topics share one
+reason), with at most 16 sample paths using at most 4,096 serialized path bytes.
+`counts` includes every observed entry, both detailed and summarized. Routine
+keeps therefore do not grow the manifest with the number of scratch directories;
+required removal and failure details remain uncapped. Older v1 manifests have
+the complete inventory in `entries` and omit the additive summaries. Retirement,
+recovery and the closeout queue retain the manifest path and recovery links;
+they do not consume the entry inventory.
 Refused or deferred closes finalize their manifests as `not-executed`, with the
 refusal reason, before discarding duplicate preservation evidence. Once that
 duplicate is discarded, its fallback manifest is removed too; a declared archive

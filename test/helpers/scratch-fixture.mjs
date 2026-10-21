@@ -10,8 +10,10 @@ export function scratchEnvironment(root) {
 
 export function assertFixtureScratch(manifest, env, roots = JSON.parse(env.HERDR_TEST_SCRATCH_ROOTS)) {
   const data = JSON.parse(fs.readFileSync(manifest));
-  for (const entry of data.entries) assert.ok(roots.some(root => path.dirname(entry.path) === fs.realpathSync(root)),
-    `fixture sweep escaped its private scratch roots: ${entry.path}`);
+  const paths = [...data.entries.map(entry => entry.path), ...(data.kept_summary?.sample_paths ?? [])];
+  for (const file of paths) assert.ok(roots.some(root => path.dirname(file) === fs.realpathSync(root)),
+    `fixture sweep escaped its private scratch roots: ${file}`);
+  if (data.kept_summary) assert.equal(data.counts.total, data.entries.length + data.kept_summary.count);
   return data;
 }
 

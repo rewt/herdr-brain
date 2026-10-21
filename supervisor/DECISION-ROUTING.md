@@ -168,13 +168,13 @@ denominator for automatic tier movement.
 ### Standing directions and containment
 
 - The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “if Codex triggers cybersecurity, move to Cloud; if Cloud triggers cybersecurity, move back to Codex. Let's implement that.” “Cloud” means Claude.
-  - This covers a model provider's cybersecurity safeguard refusing a dispatched task. Move the task to the other harness's equivalent route—Codex to Claude or Claude to Codex—and record the switch on the item: from, to, run and reason.
+  - This covers provider content filters only: a model provider's cybersecurity safeguard refusing a dispatched task. One switch per task: move it to the other harness's equivalent route—Codex to Claude or Claude to Codex—and record the switch on the item: from, to, run and reason.
   - Move the task unchanged. Never reword it to get past either safeguard.
   - Do not loop. If the moved task is refused again on the other harness, stop and take it to the operator.
   - This supersedes the operator-only handling in the reserved-effects row “Native permissions and actual harness/classifier refusals” for this case only. Native sandbox and permission-setting refusals remain operator-reserved as that row says.
 - The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “Ensure everything defaults to Sol, and Astra is used only for graphical situations and UI/UX design.”
 - The operator's 2026-10-20 standing direction: “Let's update routing for all dispatched engineering to use Sol 6.1 Max instead of Astra. And let's reserve Astra for more of the UX UI type of tasks or site layouts or organization and keep difficult engineering efforts on Soul 6.1 max fast”.
-- Sol (`gpt-6.1-sol`) is the default for every Codex route.
+- Sol (`gpt-6.1-sol`) is the default Codex model. The explicit `chore` and `monitor` routes keep their cheaper models for mechanical and read-only work (main chat, 2026-10-21 10:1x).
 - Difficult engineering and escalations use `engineer-max` (`gpt-6.1-sol`, max).
 - Astra (`gpt-6-astra`, via `research-astra-max`) is for graphical and UI/UX design only.
 - Authority and ruling reviews use `review-sol-max`.
@@ -241,12 +241,12 @@ directions taking precedence where changed.
 ### Standing directions and containment
 
 - The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “if Codex triggers cybersecurity, move to Cloud; if Cloud triggers cybersecurity, move back to Codex. Let's implement that.” “Cloud” means Claude.
-  - This covers a model provider's cybersecurity safeguard refusing a dispatched task. Move the task to the other harness's equivalent route—Codex to Claude or Claude to Codex—and record the switch on the item: from, to, run and reason.
+  - This covers provider content filters only: a model provider's cybersecurity safeguard refusing a dispatched task. One switch per task: move it to the other harness's equivalent route—Codex to Claude or Claude to Codex—and record the switch on the item: from, to, run and reason.
   - Move the task unchanged. Never reword it to get past either safeguard.
   - Do not loop. If the moved task is refused again on the other harness, stop and take it to the operator.
   - This supersedes the operator-only handling in the reserved-effects row “Native permissions and actual harness/classifier refusals” for this case only. Native sandbox and permission-setting refusals remain operator-reserved as that row says.
 - The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “Ensure everything defaults to Sol, and Astra is used only for graphical situations and UI/UX design.”
-- Sol (`gpt-6.1-sol`) is the default for every Codex route; Astra (`gpt-6-astra`, via `research-astra-max`) is for graphical and UI/UX design only; authority and ruling reviews use `review-sol-max`.
+- Sol (`gpt-6.1-sol`) is the default Codex model. The explicit `chore` and `monitor` routes keep their cheaper models for mechanical and read-only work (main chat, 2026-10-21 10:1x); Astra (`gpt-6-astra`, via `research-astra-max`) is for graphical and UI/UX design only; authority and ruling reviews use `review-sol-max`.
 - Focused pre-merge package checks and direct-dependent typechecks remain the
   validation direction. No post-merge run for now: restarting specifically requires
   a new operator decision under bch seq 18209. This is no exemption from required

@@ -7,6 +7,7 @@ import cp from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { fixtureFleet } from './helpers/offline-herdr.mjs';
+import { copyProduct } from '../lib/product-files.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 function fixture(t) {
@@ -23,8 +24,7 @@ function fixture(t) {
     return repo;
   };
   const bundle = path.join(project('runtime'), '.git/promote/batches/fixture/scratch-0');
-  fs.mkdirSync(path.join(bundle, 'lib'), { recursive: true });
-  for (const name of ['releases.mjs', 'project.mjs']) fs.copyFileSync(path.join(source, 'lib', name), path.join(bundle, 'lib', name));
+  copyProduct(source, bundle);
   fs.writeFileSync(path.join(bundle, 'package.json'), '{"type":"module"}');
   return { root, git, project, module: () => import(pathToFileURL(path.join(bundle, 'lib/releases.mjs'))), bundle };
 }

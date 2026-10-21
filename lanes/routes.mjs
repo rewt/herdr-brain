@@ -308,13 +308,15 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
     return { config: readRoutesConfig(nearest), files: [nearest] };
   }
   const parents = boundary.fleet ? (boundary.project ?? boundary.legacy)?.layers ?? [] : [nearestParentConfig(repository)];
-  let layers = homePolicyLayers(repository, parents, env);
+  let layers;
+  try { layers = homePolicyLayers(repository, parents, env); }
+  catch (error) { throw Object.assign(Error(`route config: ${error.message}`), { code: error.code }); }
   const laneLayers = layers;
   // A separately declared routing file replaces one logical route declaration;
   // it never inherits routes that its original explicit selection did not have.
   if (binding?.sources.routing) {
     const routing = policyLocation(repository, 'routing', env, { binding });
-    if (routing.file && present(routing.file)) layers = [{ ...routing, config: readPolicyFile(routing.file, 'routing') }];
+    if (routing.file && present(routing.file)) layers = [{ ...routing, config: readPolicyFile(routing.file, 'routing', { cwd: repository, env }) }];
   }
   const files = [...new Set([...(binding ? laneLayers : []), ...layers].map(l => l.file))];
   if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };

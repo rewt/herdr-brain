@@ -4,10 +4,9 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { readPlainFile, writeFileAtomic } from '../lib/files.mjs';
 import { hookHandoff } from '../messages/hook-pull.mjs';
+import { digest } from '../lib/digest.mjs';
+export { digest } from '../lib/digest.mjs';
 
-const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === 'object'
-  ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value;
-export const digest = value => createHash('sha256').update(JSON.stringify(stable(value)) ?? 'undefined').digest('hex');
 export const specDigest = entry => digest({ kind: entry.manifest.kind, spec: entry.resolvedSpec });
 export const text = value => typeof value === 'string' && Boolean(value.trim());
 export const strings = value => Array.isArray(value) && value.every(text) && new Set(value).size === value.length;

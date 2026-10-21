@@ -48,7 +48,7 @@ export function resolveGateProfile(canonical, environment = process.env, { setti
   const file = selected.file;
   let gate = settings?.gate;
   if (settings === undefined) {
-    if (selected.home) gate = readPolicyFile(file, 'promote').gate;
+    if (selected.home) gate = readPolicyFile(file, 'promote', { cwd: canonical, env: environment }).gate;
     else {
       const declared = committedFile(canonical, '.promote.json');
       gate = declared === undefined ? undefined : validatePromote(parseUniqueJson(declared)).gate;

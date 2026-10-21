@@ -13,6 +13,15 @@ import { discoverArchive } from '../lib/archive.mjs';
 import { literalLaunch } from '../lib/owner-launch.mjs';
 import { requireHomeRelease, projectPin } from '../lib/releases.mjs';
 import { freezeReleaseValidation } from '../herdr/validation-admission.mjs';
+import { adoptCommand } from '../lib/adopt-command.mjs';
+
+async function commandWarnings(run) {
+  const output = [], stderr = process.stderr.write, stdout = process.stdout.write;
+  process.stderr.write = text => { output.push(String(text)); return true; };
+  process.stdout.write = () => true;
+  try { await run(); } finally { process.stderr.write = stderr; process.stdout.write = stdout; }
+  return output;
+}
 
 for (const custom of [false, true]) test(`${custom ? 'custom' : 'default'} identity, unchanged source bytes and canonical linked-worktree policy`, async t => {
   const f = configFixture(t, { custom }); await f.adopt();
@@ -28,6 +37,8 @@ for (const custom of [false, true]) test(`${custom ? 'custom' : 'default'} ident
   assert.equal(configBase(b.identityFile, f.cwd, process.env, 'worktree_root'), f.ownerRoot);
   assert.match(fs.readFileSync(path.join(f.cwd, '.git/info/exclude'), 'utf8'), /keep-existing-entry\n\/.brain\n/u);
   assert.equal(f.git('status', '--short'), '');
+  const hostile = { ...f.env, GIT_DIR: '/missing-selector', GIT_COMMON_DIR: '/missing-selector', GIT_WORK_TREE: '/missing-selector', LANE_CONFIG: '/missing-policy' };
+  assert.equal(configSnapshot({ cwd: lane, env: hostile }).values.find(v => v.key === 'main').value, 'main');
 });
 
 test('file-by-file partial publication keeps each independent repo fallback and refuses loss of published policy', async t => {
@@ -73,6 +84,11 @@ test('whole home files do not resurrect removed repo keys; provenance/history in
   assert.match(fs.readFileSync(identityRecord, 'utf8'), /owner-launch/u);
   assert.ok(!f.events().some(e => e.new_value?.launch));
   assert.deepEqual(literalLaunch('herdr', ['agent', 'start'], f.binding().defaults.launch), { command: 'owner-launch', args: ['literal $(not-executed)', 'herdr', 'agent', 'start'] });
+  view = configSnapshot({ cwd: f.cwd });
+  assert.deepEqual(view.values.find(v => v.key === 'launch').value, ['owner-launch', 'literal $(not-executed)']);
+  assert.equal(view.values.find(v => v.key === 'launch').scope, 'identity');
+  setConfig('retirement.closeout_queue', 'true', { cwd: f.cwd, scope: 'identity' });
+  assert.ok(!configSnapshot({ cwd: f.cwd }).values.some(v => v.key === 'retirement.closeout_queue'));
 });
 
 test('config and adopt warn with both divergent paths; config set warns repo-reading scripts and retains repo bytes', async t => {
@@ -85,11 +101,34 @@ test('config and adopt warn with both divergent paths; config set warns repo-rea
   const adopted = await f.adopt(); assert.equal(adopted.unchanged, true);
   assert.ok(adopted.warnings.some(w => w.includes(repo) && w.includes(policyLocation(f.cwd, 'lane').file)));
   assert.equal(fs.readFileSync(repo, 'utf8'), before);
-  const output = []; const original = process.stderr.write;
-  process.stderr.write = text => { output.push(String(text)); return true; };
-  const stdout = process.stdout.write; process.stdout.write = () => true;
-  try { await configCommand([], { cwd: f.cwd }); } finally { process.stderr.write = original; process.stdout.write = stdout; }
+  const output = await commandWarnings(() => configCommand([], { cwd: f.cwd }));
   assert.ok(output.some(line => line.includes(repo) && line.includes(policyLocation(f.cwd, 'lane').file)));
+});
+
+test('adopt prints one-line divergence warnings naming the retained repo and selected home paths', async t => {
+  const f = configFixture(t); await f.adopt();
+  const repo = path.join(f.cwd, '.lane.json'), before = fs.readFileSync(repo, 'utf8');
+  setConfig('main', 'home-main', { cwd: f.cwd });
+  const output = await commandWarnings(() => adoptCommand(['.', '--scope', f.scope.scopeFile, '--decision', `${f.decision.id}:${f.decision.seq}`], f.options));
+  const warning = output.filter(line => line.includes(repo) && line.includes(policyLocation(f.cwd, 'lane').file));
+  assert.equal(warning.length, 1); assert.equal(warning[0].trim().split('\n').length, 1);
+  assert.equal(fs.readFileSync(repo, 'utf8'), before);
+});
+
+test('config set prints the repo-reading project-script warning and leaves its retained input unchanged', async t => {
+  const f = configFixture(t); await f.adopt();
+  const repo = path.join(f.cwd, '.lane.json'), before = fs.readFileSync(repo, 'utf8');
+  const output = await commandWarnings(() => configCommand(['set', 'main', 'home-main'], { cwd: f.cwd }));
+  assert.ok(output.some(line => /repo-reading project scripts will not see this change/u.test(line)));
+  assert.equal(fs.readFileSync(repo, 'utf8'), before);
+});
+
+test('an explicit legacy config inspection reports the actual selected values and override', t => {
+  const f = configFixture(t), file = path.join(f.scratch, 'inspection.json');
+  fs.writeFileSync(file, '{"main":"explicit-main"}');
+  const view = configSnapshot({ cwd: f.cwd, env: { ...f.env, LANE_CONFIG: file } });
+  assert.equal(view.values.find(v => v.key === 'main').value, 'explicit-main');
+  assert.deepEqual(view.invocation_override, { file, effective: true });
 });
 
 test('home pins precede Git absence prechecks; compatible release rollback and frozen release declarations retain canonical bases', async t => {
@@ -136,4 +175,8 @@ test('standalone routing keeps its route set and origin while full dispatch reta
   assert.equal(routes.config.dispatch.max_unlanded, 8);
   assert.equal(routes.config.dispatch.max_sessions, 4);
   assert.equal(configBase(selected, f.cwd), f.cwd);
+  const view = configSnapshot({ cwd: f.cwd });
+  assert.ok(view.values.filter(v => v.key.startsWith('routes.')).every(v => v.key.startsWith('routes.solo.')));
+  assert.equal(view.values.find(v => v.key === 'routes.solo.kind').source, selected);
+  assert.equal(view.values.find(v => v.key === 'dispatch.max_unlanded').source, policyLocation(f.cwd, 'lane').file);
 });

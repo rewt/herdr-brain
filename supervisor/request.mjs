@@ -32,7 +32,8 @@ export async function request(argv = process.argv.slice(2), {
   const call = (args, timeout = 10000) => {
     const input = literalLaunch(env.HERDR_BIN_PATH || 'herdr', args, args[0] === 'agent' && args[1] === 'start' ? launch : undefined);
     const r = execute(input.command, input.args, {
-      cwd, env, encoding: 'utf8', timeout, maxBuffer: 1024 * 1024,
+      ...(present(identityFile) && args[0] === 'agent' && args[1] === 'start' ? { cwd } : {}),
+      env, encoding: 'utf8', timeout, maxBuffer: 1024 * 1024,
     });
     if (r.error || r.status !== 0) throw Error(`herdr ${args.slice(0, 2).join(' ')}: ${r.stderr || r.error?.message || r.stdout}; inspect the retained desk before retrying`);
     const reply = JSON.parse(r.stdout);

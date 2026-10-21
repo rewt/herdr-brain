@@ -36,6 +36,7 @@ export function adoptionScope({ inspection, observation: o, record, identity, se
       const paneId = selection.panes?.[paneSlot] ?? (panes.length === 1 ? panes[0].pane_id : undefined);
       const pane = panes.find(p => p.pane_id === paneId);
       if (!pane) fail(`missing pane binding for ${paneSlot}`);
+      if (pane.foreground_cwd !== project.root) fail('pane checkout differs from the canonical project');
       const live = o.agents.filter(a => a.pane_id === paneId);
       const viewer = e.manifest.kind === 'LogViewer';
       const binding = viewer ? (o.viewers ?? []).find(v => v.binding.pane === paneId)?.binding : live.length === 1 && agentBinding(live[0], o.server, tab.tab_id);
@@ -52,7 +53,7 @@ export function adoptionScope({ inspection, observation: o, record, identity, se
   if (new Set(selected.map(s => s.slot.workspace)).size !== 1) fail('all selections must belong to one home workspace');
   const supervisor = selected.flatMap(s => s.members).find(m => inspection.entries.find(e => e.manifest.metadata.uid === m.uid)?.manifest.spec.role === 'supervisor');
   if (!supervisor || !sameBinding(caller, supervisor.binding)) fail('invocation must be the same project supervisor in the selected workspace');
-  if (!requester?.trim() || !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= now()) fail('requester and bounded future authorization expiry required');
+  if (typeof requester !== 'string' || !requester.trim() || typeof expiresAt !== 'string' || !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= now()) fail('requester and bounded future authorization expiry required');
   return { schema: 'config-home-adoption-scope/v1', purpose: 'adopt existing workspace and supervisor', common: project.common,
     checkout: project.root, record, identity, requester, expiresAt, slots: selected, caller };
 }

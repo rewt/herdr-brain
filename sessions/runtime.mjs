@@ -2,10 +2,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readPlainFile, plainDirectory, writeFileAtomic } from '../lib/files.mjs';
+import { readPlainFile, plainDirectory } from '../lib/files.mjs';
 import { parseUniqueJson } from './json.mjs';
 import { validLifecycleOperation, validStartOperation, validIncarnation, validIncarnationLinks } from './lifecycle-evidence.mjs';
 import { validAdoptOperation, verifyAdoptOperation } from './adoption-evidence.mjs';
+import { durableWrite } from '../lib/durable-json.mjs';
+export { durableWrite } from '../lib/durable-json.mjs';
 
 export const runtimePaths = common => ({ directory: path.join(common, 'sessions'),
   journal: path.join(common, 'sessions/controller-journal.json'),
@@ -36,13 +38,6 @@ export function readControllerJournal(common) {
   journal.incarnations ??= [];
   for (const op of journal.operations.filter(op => op.kind === 'adopt-standard-slot' && op.state === 'acknowledged')) verifyAdoptOperation(op, common);
   return journal;
-}
-export function durableWrite(file, value) {
-  writeFileAtomic(file, JSON.stringify(value, null, 2) + '\n', 0o600);
-  for (const target of [file, path.dirname(file)]) {
-    const fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  }
 }
 // No timeout or automatic stale-owner recovery in stage 3. An abandoned lease
 // requires inspection; neither another PID nor a cache can authorize a launch.

@@ -10,6 +10,7 @@ import { validLaunchReceipt } from '../sessions/lifecycle-evidence.mjs';
 import { authorize, ACTIONS } from '../sessions/authorization.mjs';
 import { plan } from '../sessions/plan.mjs';
 import { plan as setupPlan } from '../setup/setup.mjs';
+import { digest } from '../lib/digest.mjs';
 
 test('native owner authorization yields KEEP without synthetic launch evidence, and a second adoption changes no bytes/events', async t => {
   const f = configFixture(t); await f.adopt();
@@ -44,12 +45,13 @@ for (const boundary of ['afterPublish', 'afterIntent', 'afterKeep']) test(`adopt
   assert.equal(f.events().filter(e => e.type === 'config.adopted').length, 1);
 });
 
-for (const negative of ['foreign-common', 'linked-workspace', 'extra-pane', 'changed-session', 'agent-answer', 'STOP']) test(`native enrollment refuses ${negative}`, async t => {
+for (const negative of ['foreign-common', 'linked-workspace', 'extra-pane', 'changed-session', 'pane-checkout', 'agent-answer', 'STOP']) test(`native enrollment refuses ${negative}`, async t => {
   const f = configFixture(t); f.scope = await f.capture(); f.decision = f.question(f.scope.scope, 'adoption_authorization', negative === 'agent-answer' ? 'agent' : 'human');
   if (negative === 'foreign-common') f.observation.workspaces[0].worktree.repo_key = path.join(f.scratch, 'foreign/.git');
   if (negative === 'linked-workspace') f.observation.workspaces[0].worktree.is_linked_worktree = true;
   if (negative === 'extra-pane') f.observation.panes.push({ ...f.observation.panes[0], pane_id: 'extra', terminal_id: 'extra-terminal' });
   if (negative === 'changed-session') f.observation.agents[0].agent_session.value = 'changed';
+  if (negative === 'pane-checkout') f.observation.panes[0].foreground_cwd = f.scratch;
   if (negative === 'STOP') fs.writeFileSync(path.join(f.env.ORG_DIR, 'STOP'), 'stop');
   await assert.rejects(f.adopt(), /held|scope|human|STOP/);
   assert.equal(fs.existsSync(path.join(f.cwd, '.git/sessions/standard-slots.json')), false);
@@ -63,4 +65,23 @@ test('linked invocation, tracked links and prepared committed-policy edits canno
   f.git('checkout', '--', '.promote.json');
   fs.writeFileSync(path.join(f.cwd, '.brain'), 'tracked'); f.git('add', '.brain'); f.git('commit', '-qm', 'tracked conflict');
   await assert.rejects(f.capture(), /tracked|conflicting/);
+});
+
+test('an explicitly selected missing routing source refuses scope capture', async t => {
+  const f = configFixture(t, { routing: true }); fs.unlinkSync(path.join(f.cwd, 'routing.json'));
+  await assert.rejects(f.capture(), /explicitly selected routing source is missing/);
+});
+
+test('completed adoption rejects a replacement scope and cannot hide a pending controller intent', async t => {
+  const f = configFixture(t); await f.adopt();
+  const scope = { ...f.scope.scope, requester: 'a different later request' };
+  const scopeFile = path.join(f.cwd, '.git/config-home/scopes', `${digest(scope)}.json`);
+  fs.writeFileSync(scopeFile, JSON.stringify(scope));
+  await assert.rejects(f.adopt({ scopeFile, decision: f.question(scope) }), /scope differs from the original binding/);
+  const common = path.join(f.cwd, '.git'), journal = readControllerJournal(common), file = path.join(common, 'sessions/controller-journal.json');
+  journal.operations.push({ ...journal.operations[0], id: 'pending-other', uid: 'pending-other', state: 'intent' });
+  fs.writeFileSync(file, JSON.stringify(journal)); const before = fs.readFileSync(file, 'utf8');
+  await assert.rejects(f.adopt(), /pending controller operation/);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert.equal(f.events().filter(e => e.type === 'config.adopted').length, 1);
 });

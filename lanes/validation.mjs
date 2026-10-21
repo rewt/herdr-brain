@@ -14,9 +14,9 @@ import { policyLocation, present } from '../lib/config-home.mjs';
 import { readPolicyFile, homePolicyDigest } from '../lib/config-policy.mjs';
 import { exactIdentity, exactDigest, restrictEnvironment, excludedDelta, explainMiss } from './exact-validation.mjs';
 
-import { limitSeconds } from '../test-slot/limits.mjs';
+import { VALIDATION_TIERS, validateValidation } from '../lib/validation-declaration.mjs';
+export { VALIDATION_TIERS, validateValidation } from '../lib/validation-declaration.mjs';
 
-export const VALIDATION_TIERS = ['fast', 'promotion', 'release'];
 export const VALIDATION_FILE = '.lane.validation.json';
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -35,24 +35,6 @@ export function tapTotals(output) {
   return suites.length ? suites : null;
 }
 
-export function validateValidation(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
-  for (const [key, command] of Object.entries(value)) {
-    if (['host_suites', 'tier_suites'].includes(key)) continue;
-    if (['timeout_seconds', 'idle_timeout_seconds'].includes(key)) {
-      const values = typeof command === 'object' && command !== null && !Array.isArray(command) ? Object.entries(command) : [[null, command]];
-      for (const [tier, seconds] of values) {
-        if (tier !== null && !VALIDATION_TIERS.includes(tier)) throw Error(`unknown watchdog tier: ${tier}`);
-        limitSeconds(seconds, `validation.${key}`, { idle: key === 'idle_timeout_seconds' });
-      }
-      continue;
-    }
-    if (![...VALIDATION_TIERS, 'environment', 'promotion_tests'].includes(key)) throw new Error(`unknown validation field: ${key}`);
-    if (typeof command !== 'string' || !command.trim()) throw new Error(`validation.${key} must be a nonempty string`);
-  }
-  return value;
-}
-
 // Always use the canonical project's declarations, never a worker's override.
 // A separate tracked file works even when .lane.json is shared machine config.
 export function resolveValidation({ root, config = {}, source = 'lane config', sources = {}, env = process.env } = {}) {
@@ -60,7 +42,7 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
   const file = policyLocation(root, 'validation', env).file;
   const declarationSources = Object.fromEntries(Object.keys(declared).map(key => [key, sources.validation ?? source]));
   if (present(file)) {
-    const tracked = readPolicyFile(file, 'validation');
+    const tracked = readPolicyFile(file, 'validation', { cwd: root, env });
     declared = { ...declared, ...tracked };
     for (const key of Object.keys(tracked)) declarationSources[key] = file;
   }

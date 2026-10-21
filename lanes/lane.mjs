@@ -287,18 +287,7 @@ function validateConfig(config, file) {
 
 function readConfig(file, { required = false } = {}) {
   if (!required && !existsSync(file)) return undefined;
-  let text;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch (error) {
-    fail(`cannot read lane config ${file}: ${error.message}`);
-  }
-  let config;
-  try {
-    config = JSON.parse(text);
-  } catch (error) {
-    fail(`invalid lane config ${file}: ${error.message}`);
-  }
+  const config = readPolicyFile(file, 'lane');
   validateConfig(config, file);
   return config;
 }

@@ -78,7 +78,7 @@ function settingsRefusal(code, reason) {
 }
 function promotionSettings(project) {
   const selected = policyLocation(project.canonical, 'promote', process.env, { canonical: project.canonical });
-  if (selected.home) return readPolicyFile(selected.file, 'promote', { cwd: project.canonical });
+  if (selected.home) return readPolicyFile(selected.file, 'promote');
   // Only the canonical committed declaration can change queue policy. Lane
   // copies and untracked/edited host files cannot override the batch limit.
   // Bound the whole snapshot below the worker's startup acknowledgement wait.

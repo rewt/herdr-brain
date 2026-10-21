@@ -46,6 +46,39 @@ function withGitSelectors(run) {
   try { return run(); } finally { for (const key of keys) if (before[key] === undefined) delete process.env[key]; else process.env[key] = before[key]; }
 }
 
+test('unadopted canonical, linked and nested lookups need no Git probes; a damaged canonical link still holds', t => {
+  const f = configFixture(t), lane = path.join(f.scratch, 'linked');
+  f.git('worktree', 'add', '-qb', 'lane/absence', lane);
+  const nested = path.join(lane, 'nested'); fs.mkdirSync(nested);
+  const script = `
+    import assert from 'node:assert/strict';
+    import cp from 'node:child_process';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { homeProject } from ${JSON.stringify(new URL('../lib/config-home.mjs', import.meta.url).href)};
+    let probes = 0;
+    for (const name of ['execFileSync', 'spawnSync']) {
+      const original = cp[name];
+      cp[name] = function (...args) { if (args[0] === 'git') probes++; return original.apply(this, args); };
+    }
+    syncBuiltinESMExports();
+    for (const cwd of ${JSON.stringify([f.cwd, lane, nested])}) assert.equal(homeProject(cwd), null);
+    assert.equal(probes, 0, 'absence discovery must not add subprocess cost to legacy commands');
+  `;
+  execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd: f.cwd, env: f.env });
+  fs.symlinkSync(path.join(f.scratch, 'missing-binding'), path.join(f.cwd, '.brain'));
+  for (const cwd of [f.cwd, lane, nested]) assert.throws(() => homeProject(cwd, f.env), /unrelated or damaged home link/);
+});
+
+test('absence discovery observes a new adoption and a missing link without retaining cached authority', async t => {
+  const f = configFixture(t);
+  assert.equal(homeProject(f.cwd, f.env), null);
+  await f.adopt();
+  const binding = homeProject(f.cwd, f.env);
+  assert.equal(binding.checkout, f.cwd);
+  fs.unlinkSync(path.join(f.cwd, '.brain'));
+  assert.equal(homeProject(f.cwd, f.env).directory, binding.directory);
+});
+
 for (const custom of [false, true]) test(`${custom ? 'custom' : 'default'} identity, unchanged source bytes and canonical linked-worktree policy`, async t => {
   const f = configFixture(t, { custom }); await f.adopt();
   const b = f.binding();

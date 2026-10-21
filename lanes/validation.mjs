@@ -39,7 +39,7 @@ export function tapTotals(output) {
 // A separate tracked file works even when .lane.json is shared machine config.
 export function resolveValidation({ root, config = {}, source = 'lane config', sources = {}, env = process.env } = {}) {
   let declared = config.validation === undefined ? {} : validateValidation(config.validation);
-  const file = policyLocation(root, 'validation', env).file;
+  const file = policyLocation(root, 'validation', env, { canonical: root }).file;
   const declarationSources = Object.fromEntries(Object.keys(declared).map(key => [key, sources.validation ?? source]));
   if (present(file)) {
     const tracked = readPolicyFile(file, 'validation', { cwd: root, env });

@@ -314,14 +314,14 @@ function nearestParentConfig(repository) {
 
 const HOME_PROJECT = homeProject(REPO_ROOT);
 const EXPLICIT_CONFIG = process.env.LANE_CONFIG !== undefined && !HOME_PROJECT;
-const REPOSITORY_CONFIG_FILE = policyLocation(REPO_ROOT, 'lane').file;
+const REPOSITORY_CONFIG_FILE = policyLocation(REPO_ROOT, 'lane', process.env, { binding: HOME_PROJECT, canonical: REPO_ROOT }).file;
 const PARENT_CONFIG_FILE = EXPLICIT_CONFIG ? undefined : FLEET.fleet ? (FLEET.project ?? FLEET.legacy)?.layers[0] : nearestParentConfig(REPO_ROOT);
 const CONFIG_LAYERS = (() => {
   if (EXPLICIT_CONFIG) {
     const file = resolve(CALLER_CWD, process.env.LANE_CONFIG);
     return [{ file, config: readConfig(file, { required: true }) }];
   }
-  return homePolicyLayers(REPO_ROOT, FLEET.fleet ? (FLEET.project ?? FLEET.legacy)?.layers ?? [] : [PARENT_CONFIG_FILE]);
+  return homePolicyLayers(REPO_ROOT, FLEET.fleet ? (FLEET.project ?? FLEET.legacy)?.layers ?? [] : [PARENT_CONFIG_FILE], process.env, { canonical: REPO_ROOT });
 })();
 const { config: CONFIG, sources: CONFIG_SOURCES, routeSources: ROUTE_SOURCES } = (() => {
   const config = CONFIG_LAYERS.length ? {} : structuredClone(ROUTE_PRESET);

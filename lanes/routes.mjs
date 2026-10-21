@@ -290,7 +290,7 @@ function canonicalCheckout(cwd) {
 
 // Finds the same parent/repository .lane.json layers as lane. An explicit file
 // selects one layer, which is useful for projects that keep routing.json apart.
-export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, file = env.LANE_CONFIG, laneSnapshot } = {}) {
+export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, file = env.LANE_CONFIG, laneSnapshot, canonical } = {}) {
   const boundary = projectFleet(cwd, env);
   const binding = homeProject(cwd, env);
   if (file !== undefined && !binding) {
@@ -300,7 +300,7 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   }
   let repository;
   try {
-    repository = binding?.checkout ?? canonicalCheckout(cwd);
+    repository = binding?.checkout ?? canonical ?? boundary.git?.canonical ?? canonicalCheckout(cwd);
   } catch {
     const directory = realpathSync(cwd);
     const local = join(directory, ".lane.json");
@@ -311,7 +311,7 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   }
   const parents = boundary.fleet ? (boundary.project ?? boundary.legacy)?.layers ?? [] : [nearestParentConfig(repository)];
   let layers;
-  try { layers = homePolicyLayers(repository, parents, env, { laneSnapshot }); }
+  try { layers = homePolicyLayers(repository, parents, env, { laneSnapshot, canonical: repository }); }
   catch (error) { throw Object.assign(Error(`route config: ${error.message}`), { code: error.code }); }
   const laneLayers = layers;
   // A separately declared routing file replaces one logical route declaration;

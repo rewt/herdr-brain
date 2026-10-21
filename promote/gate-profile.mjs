@@ -44,14 +44,14 @@ function committedFile(canonical, relative, env = process.env) {
 // `settings` is a committed .promote.json the caller already read (the queue's per-batch snapshot),
 // so one batch never reads the declaration twice.
 export function resolveGateProfile(canonical, environment = process.env, { settings } = {}) {
-  const selected = policyLocation(canonical, 'promote', environment);
+  const selected = policyLocation(canonical, 'promote', environment, { canonical });
   const file = selected.file;
   let gate = settings?.gate;
   if (settings === undefined) {
     if (selected.home) gate = readPolicyFile(file, 'promote', { cwd: canonical, env: environment }).gate;
     else {
       const declared = committedFile(canonical, '.promote.json', selected.binding ? configGitEnv(environment) : process.env);
-      gate = declared === undefined ? undefined : validatePromote(parseUniqueJson(declared)).gate;
+      gate = declared === undefined ? undefined : (selected.binding ? validatePromote(parseUniqueJson(declared)) : JSON.parse(declared)).gate;
     }
   }
   if (gate === undefined) return null;

@@ -77,8 +77,8 @@ function settingsRefusal(code, reason) {
   return Object.assign(new Error(`${code}: ${singleLine(reason)}`), { code });
 }
 function promotionSettings(project) {
-  const selected = policyLocation(project.canonical, 'promote');
-  if (selected.home) return readPolicyFile(selected.file, 'promote');
+  const selected = policyLocation(project.canonical, 'promote', process.env, { canonical: project.canonical });
+  if (selected.home) return readPolicyFile(selected.file, 'promote', { cwd: project.canonical });
   // Only the canonical committed declaration can change queue policy. Lane
   // copies and untracked/edited host files cannot override the batch limit.
   // Bound the whole snapshot below the worker's startup acknowledgement wait.
@@ -103,7 +103,12 @@ function promotionSettings(project) {
   const commit = checked(head);
   const tracked = checked(read(['ls-tree', '--name-only', commit, '--', '.promote.json']));
   let config;
-  try { config = tracked ? parseUniqueJson(checked(read(['show', `${commit}:.promote.json`]))) : {}; validatePromote(config); }
+  try {
+    const declaration = tracked ? checked(read(['show', `${commit}:.promote.json`])) : '{}';
+    // Adoption opts into the shared strict reader. Legacy projects retain
+    // their committed-at-HEAD parser and refusal messages byte for byte.
+    config = selected.binding ? validatePromote(parseUniqueJson(declaration)) : JSON.parse(declaration);
+  }
   catch (error) {
     if (error.code === 'PROMOTION_SETTINGS_GIT_FAILED') throw error;
     throw settingsRefusal('PROMOTION_SETTINGS_INVALID', `invalid committed .promote.json: ${error.message}`);

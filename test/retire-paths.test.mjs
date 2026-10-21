@@ -44,14 +44,19 @@ function nativeExit(f, kind = 'codex') {
 }
 
 // Offline native topology with real lane cwd holders and kernel birth identities.
-// A renamed sh stands in for Codex; only the fake transport handles /quit.
+// A named Node stand-in uses the installed executables; only the fake transport
+// handles /quit. Copying a signed system shell is not portable on macOS.
 async function laneCwdWorker(t, f, { unregister = true, leaveShell = false } = {}) {
   nativeExit(f);
-  const native = path.join(f.scratch, 'codex'), nativeReady = path.join(f.scratch, 'native-pid'), helperReady = path.join(f.scratch, 'helper-pid');
-  fs.copyFileSync('/bin/sh', native); fs.chmodSync(native, 0o755);
+  const nativeReady = path.join(f.scratch, 'native-pid'), helperReady = path.join(f.scratch, 'helper-pid');
+  const nativeCode = `process.title = 'codex';
+    const child = require('node:child_process').spawn('/bin/sleep', ['120'], { stdio: 'ignore' });
+    require('node:fs').writeFileSync(process.argv[1], String(child.pid)); setInterval(() => {}, 1000);`;
   const shell = spawnScenarioChild(t, '/bin/sh', ['-c',
-    '"$1" -c \'sleep 120 & printf "%s" "$!" > "$1"; wait\' native "$2" & printf "%s" "$!" > "$3"; wait; read ignored',
-    'shell', native, helperReady, nativeReady], { cwd: f.lane, env: f.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    '"$1" -e "$2" "$3" & printf "%s" "$!" > "$4"; wait; read ignored',
+    'shell', process.execPath, nativeCode, helperReady, nativeReady], { cwd: f.lane, env: f.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  let stderr = '';
+  shell.stderr.on('data', chunk => { stderr += chunk; });
   const owners = [];
   t.after(async () => {
     for (const owner of owners.toReversed()) assert.equal(killProcess(owner).ok, true);
@@ -59,7 +64,8 @@ async function laneCwdWorker(t, f, { unregister = true, leaveShell = false } = {
   });
   const deadline = Date.now() + 10000;
   while (![nativeReady, helperReady].every(file => fs.existsSync(file) && fs.readFileSync(file, 'utf8'))) {
-    assert.ok(Date.now() < deadline, 'real worker processes became ready');
+    assert.equal(shell.exitCode, null, `real worker shell exited: ${stderr}`);
+    assert.ok(Date.now() < deadline, `real worker processes became ready: ${stderr}`);
     await new Promise(resolve => setTimeout(resolve, 20));
   }
   const pids = [shell.pid, Number(fs.readFileSync(nativeReady, 'utf8')), Number(fs.readFileSync(helperReady, 'utf8'))];
@@ -69,9 +75,9 @@ async function laneCwdWorker(t, f, { unregister = true, leaveShell = false } = {
     owners.push(registerProcess(pid));
     return observed.value;
   });
-  assert.equal(tree[1].command, '[codex]');
+  assert.match(tree[1].command, /^\[(?:node|codex)\]$/);
   assert.equal(tree[1].ppid, shell.pid); assert.equal(tree[2].ppid, tree[1].pid);
-  f.state.info = { shell_pid: shell.pid, foreground_processes: [{ name: 'codex', pid: tree[1].pid, identity: tree[1].identity }],
+  f.state.info = { shell_pid: shell.pid, foreground_processes: [{ name: tree[1].command.slice(1, -1), argv0: 'codex', pid: tree[1].pid, identity: tree[1].identity }],
     process_tree_complete: true, process_tree: tree };
   Object.assign(f.state.panes[0], { terminal_id: 'term', foreground_cwd: f.lane });
   f.state.agents[0].agent_status = 'done'; f.state.unregisterOnExit = unregister; f.save();

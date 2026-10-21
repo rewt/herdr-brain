@@ -223,10 +223,20 @@ test('replacing a mandatory-only runtime at the same path invalidates recheck an
   assert.deepEqual(f.lines(), []);
 });
 
-for (const promotion of ['node baseline.mjs && python3 gate.py', 'env python3 gate.py', 'pnpm run smoke']) test(`unresolved mandatory runtime provenance refuses (${promotion})`, t => {
+for (const promotion of ['node baseline.mjs && python3 gate.py', 'node baseline.mjs\npython3 gate.py', 'env python3 gate.py', 'pnpm run smoke']) test(`unresolved mandatory runtime provenance refuses (${promotion})`, t => {
   const value = declaration(); value.promotion = promotion; delete value.promotion_tests; value.runners = {};
   const f = declaredFixture(t, { declared: value });
   assert.throws(() => f.plan(), /unresolved.*runtime provenance/);
+  assert.deepEqual(f.lines(), []);
+});
+
+test('a renamed indirect mandatory launcher refuses after resolving its executable target', t => {
+  const value = declaration(); delete value.promotion_tests; value.runners = {};
+  const f = declaredFixture(t, { declared: value }), alias = path.join(f.root, 'opaque-launcher');
+  fs.symlinkSync('/usr/bin/env', alias);
+  value.promotion = `${alias} python3 gate.py`;
+  f.write('.lane.validation.json', JSON.stringify(value)); f.commit(); f.git(['rebase', 'main'], f.workspace);
+  assert.throws(() => f.plan(), /delegates unresolved runtime provenance/);
   assert.deepEqual(f.lines(), []);
 });
 

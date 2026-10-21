@@ -90,6 +90,7 @@ export function runtimeBinding(facts) { return hash(facts.map(({ binding }) => b
 // Shell strings with expansion, compound commands or indirect launchers cannot
 // supply a complete runtime chain here. Refuse them before running the gate.
 export function promotionRuntime(command, options) {
+  if (/[\r\n]/.test(command)) throw refuse('mandatory command has unresolved shell runtime provenance');
   const words = [];
   let word = '', quote = null, active = false;
   for (const char of command.trim()) {
@@ -102,9 +103,12 @@ export function promotionRuntime(command, options) {
   if (quote || !active && !words.length) throw refuse('mandatory command has unresolved shell runtime provenance');
   if (active) words.push(word);
   const name = path.basename(words[0]);
-  if (words[0].includes('=') || /^(?:(?:ba|da|z|k)?sh|env|exec|command|source|\.|npm|npx|pnpm|pnpx|yarn|corepack|uv|poetry|pipenv)(?:\.[cm]?js)?$/.test(name) ||
+  const indirect = /^(?:(?:ba|da|z|k)?sh|env|exec|command|source|\.|npm|npx|pnpm|pnpx|yarn|corepack|uv|poetry|pipenv|time|nice|nohup|timeout|xargs)(?:\.[cm]?js)?$/;
+  if (words[0].includes('=') || indirect.test(name) ||
       /^(?:node|bun)$/.test(name) && words.includes('--run')) throw refuse('mandatory command delegates unresolved runtime provenance');
-  return [...runtimeIdentity(['/bin/sh'], options), ...runtimeIdentity(words, options)];
+  const runtime = runtimeIdentity(words, options);
+  if (indirect.test(path.basename(runtime[0].executable)) || indirect.test(runtime[0].binding.version.split('@')[0])) throw refuse('mandatory command delegates unresolved runtime provenance');
+  return [...runtimeIdentity(['/bin/sh'], options), ...runtime];
 }
 
 // Locked preparation identifies the artifact; hash the installed bytes too so

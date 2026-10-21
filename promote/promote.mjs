@@ -19,7 +19,7 @@ import { retirementHold } from '../lib/retire-hold.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { runProjectGateSync } from './gate-profile.mjs';
 import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
-import { verifyTrainResult } from './evidence.mjs';
+import { verifyTrainResult, integratedTrainJobs } from './evidence.mjs';
 import { probeNativeGate, nativeWorkerEvidence, liveNativeWorker } from './native-context.mjs';
 import { sameDeclaration, snapshotDeclaration, refuse as declaredRefusal } from './declaration.mjs';
 import { readDeclared } from '../lanes/validation.mjs';
@@ -27,6 +27,7 @@ import { executionIdentity } from './execution-identity.mjs';
 import { bindRequirements } from './declared-selection.mjs';
 import { policyBinding } from './declared-policy.mjs';
 import { resolveGateProfile } from './gate-profile.mjs';
+import { runTrain } from './train.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const LANE = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
@@ -64,7 +65,7 @@ function hasDeclaredWork(project) {
 }
 export function queueFor(cwd, { readOnly = false } = {}) {
   const project = gitProject(cwd);
-  if (!readOnly && (readDeclared(project.canonical) || hasDeclaredWork(project))) executionIdentity(project);
+  if (!readOnly && (hasDeclaredWork(project) || readDeclared(project.canonical))) executionIdentity(project);
   const directory = path.join(project.identity, 'promote');
   const file = path.join(directory, 'queue.json');
   if (!readOnly) fs.mkdirSync(directory, { recursive: true });
@@ -158,15 +159,29 @@ function settings(project, opt) {
     laneConfig: process.env.LANE_CONFIG ? path.resolve(process.env.LANE_CONFIG) : null };
 }
 
-function checkDeclaredJobs(queue, jobs) {
-  const current = readDeclared(queue.project.canonical);
+function checkDeclaredJobs(queue, jobs, { recoveryFirst = true } = {}) {
+  const recovered = new Set();
+  const data = queue.load();
+  for (const batch of [data.current, ...(data.interrupted ?? [])]) {
+    if (!batch?.jobs) continue;
+    const members = jobs.filter(job => batch.jobs.some(member => member.id === job.id));
+    if (!members.length) continue;
+    const file = path.join(queue.directory, 'batches', batch.id, 'train.json');
+    const integrated = integratedTrainJobs({ file, project: queue.project, jobs: members });
+    // A mixed interrupted batch must recover its integrated members before
+    // checking admission for the remaining members. performBatch does that
+    // final admission check before entering any host or project command.
+    for (const id of recoveryFirst && integrated.size ? members.map(job => job.id) : integrated) recovered.add(id);
+  }
+  const deferAdmission = recoveryFirst && recovered.size > 0;
+  const current = !deferAdmission && jobs.some(job => !recovered.has(job.id)) ? readDeclared(queue.project.canonical) : null;
   if (current) executionIdentity(queue.project);
   for (const job of jobs) {
     if (!current && !job.gate_mode) continue;
     if (job.gate_mode !== 'declared-gates/v1' || job.validate || job.laneConfig) throw declaredRefusal('incompatible queued job; explicit disposition and re-enqueue required');
     if ((job.requiredTests ?? []).some(row => typeof row !== 'string' && (!row?.definition || !row.scope || !row.toolchain))) throw declaredRefusal('typed requirement lost its admission binding');
     executionIdentity(queue.project, { bound: job.execution_identity ?? null });
-    sameDeclaration(job.declared, current);
+    if (!deferAdmission && !recovered.has(job.id)) sameDeclaration(job.declared, current);
     requireDeclaredWorker(job.release, queue.project.canonical);
   }
 }
@@ -280,11 +295,10 @@ function perform(job, queue) {
   }
 }
 
-function performBatch(batch, queue, settings) {
+async function performBatch(batch, queue, settings) {
   // The train checks ownership inside per-member capture. Checking all jobs
   // here would turn one invalid binding into an interruption of every sibling.
   const first = batch.jobs[0], cwd = queue.project.canonical;
-  checkDeclaredJobs(queue, batch.jobs);
   const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
   const directory = path.join(queue.directory, 'batches', batch.id);
@@ -294,9 +308,16 @@ function performBatch(batch, queue, settings) {
     identity: queue.project.identity, jobs: batch.jobs, phase: 'pending', started_at: new Date().toISOString() }, null, 2) + '\n');
   // A completed train only needs record recovery. Do not re-enter its host
   // admission, preparation, validation or integration command.
-  const retained = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  let retained = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  if (retained.phase !== 'complete' && integratedTrainJobs({ file: receipt, project: queue.project, jobs: batch.jobs }).size) {
+    await runTrain({ file: receipt, canonical: cwd, identity: queue.project.identity,
+      main: retained.integration_branch ?? retained.completion?.branch, prepare: [],
+      validation: { declared: batch.jobs[0].declared }, recoveryOnly: true });
+    retained = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  }
   if (retained.phase === 'complete') return batch.jobs.map(job => ({ job, result: { ...retained.results[job.id], log, receipt,
     ...(retained.host_receipt ? { host_receipt: retained.host_receipt } : {}) } }));
+  checkDeclaredJobs(queue, batch.jobs.filter(job => !retained.results?.[job.id]), { recoveryFirst: false });
   const refuseNative = native => {
     const retained = JSON.parse(fs.readFileSync(receipt, 'utf8'));
     retained.native_context = native; retained.results ??= {};
@@ -615,7 +636,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
   const ownerFile = path.join(queue.directory, 'worker.lock', 'owner.json');
   const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
   writeFileAtomic(ownerFile, JSON.stringify({ ...owner, project: queue.project.identity, release: bundleRelease(),
-    ...(readDeclared(queue.project.canonical) ? { execution_identity: executionIdentity(queue.project) } : {}) }) + '\n');
+    ...(hasDeclaredWork(queue.project) || readDeclared(queue.project.canonical) ? { execution_identity: executionIdentity(queue.project) } : {}) }) + '\n');
   let acknowledged = false;
   try {
     for (;;) {
@@ -722,7 +743,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
         if (batch.phase === 'batching') {
           try {
             // A new batch reuses the settings snapshot it was formed from; a resumed one reads HEAD.
-            const results = performBatch(batch, queue, newlyDequeued ? policy?.settings : undefined);
+            const results = await performBatch(batch, queue, newlyDequeued ? policy?.settings : undefined);
             const completion = reconcileBatchCompletion({ project: queue.project, jobs: batch.jobs, results });
             batch = { ...batch, phase: 'batch-delivering', results: completion.results, deliveredCount: 0 };
             if (completion.pending) batch.error = completion.reason;
@@ -838,7 +859,7 @@ async function main() {
   if (opt.capabilities) { process.stdout.write(JSON.stringify(CAPABILITIES) + '\n'); return; }
   if (opt['existing-worker'] && (opt.resume || opt.drain)) throw Error('--existing-worker is enqueue-only; it never starts or resumes a worker');
   const target = gitProject(opt.repo);
-  if (!opt.status && (readDeclared(target.canonical) || hasDeclaredWork(target))) executionIdentity(target);
+  if (!opt.status && (hasDeclaredWork(target) || readDeclared(target.canonical))) executionIdentity(target);
   // --drain/--cleanup-job are continuations of recorded operations, not new
   // admissions. Their immutable path chooses the bundle even after a re-pin.
   if (!opt.drain && !opt['cleanup-job']) {

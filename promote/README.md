@@ -38,6 +38,15 @@ include executable paths, versions and bytes; locked dependency versions and
 bytes participate in receipt identity. Loader/search overrides are scrubbed
 from the planner environment.
 
+Planner PATH directories and executable targets are resolved before preparation
+and invocation; a target inside any linked lane or candidate refuses. Python
+drivers bind every canonical Python source as a conservative import closure;
+new or generated local modules, import symlinks and dynamic loaders refuse.
+The mandatory command also binds its shell, executable bytes and interpreter
+chain. It currently accepts literal simple commands; shell expansion, compound
+commands and indirect package-manager recipes refuse when their runtime chain
+cannot be resolved. The same restriction applies to planner preparation.
+
 Environment values stay in memory: job snapshots and the literal executor input
 retain their digests and re-read only a matching owner declaration. Script
 versions come from locked package metadata or content revisions and their
@@ -54,6 +63,10 @@ adds these bindings to the existing core identity without adding exclusions.
 Old workers must support the internal `--capabilities` protocol or remain held;
 old file-only receipts never cover typed steps. Rollback requires disposition
 of outstanding jobs and explicit restoration of a sufficient legacy declaration.
+Verified integrated checkpoints recover under their captured declaration before
+current admission or host checks. Recovery verifies the original job, literal
+gate, log, replayed tree and containment on the captured integration branch;
+it retains the execution-identity fences and repeats no project commands.
 
 Settle's observational planning also enters the owner's host admission, retains
 its canonical planner/runtime provenance under `promote/planning/`, and runs no

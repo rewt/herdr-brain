@@ -3,16 +3,20 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readPlainFile } from '../lib/files.mjs';
+import { hash, sameDeclaration } from './declaration.mjs';
 
 export function verifyTrainResult(result, { project, saved }) {
+  return verifyResult(result, { project, saved });
+}
+function verifyResult(result, { project, saved, plan, phases = ['integrated', 'complete'] }) {
   try {
     if (result.source_head !== saved.head || typeof result.receipt !== 'string' ||
         path.relative(path.join(project.identity, 'promote/batches'), result.receipt).startsWith('..')) return false;
-    const plan = JSON.parse(readPlainFile(result.receipt));
+    plan ??= JSON.parse(readPlainFile(result.receipt));
     const job = plan.jobs.find(j => j.id === result.id);
     if (plan.schema !== 'promotion-train/v1' || plan.identity !== project.identity || plan.id !== result.batch ||
         job?.expectedHead !== saved.head || job.run !== saved.run || job.org !== saved.org || job.topic !== saved.lane) return false;
-    const attempt = plan.attempts.find(a => ['integrated', 'complete'].includes(a.phase) && a.tips[result.id] === result.tip);
+    const attempt = plan.attempts.find(a => phases.includes(a.phase) && a.tips[result.id] === result.tip);
     const captured = attempt?.jobs.find(j => j.id === result.id);
     // The request binds the union of component checks and deferred review
     // evidence. Older requests stored only the latter.
@@ -34,4 +38,40 @@ export function verifyTrainResult(result, { project, saved }) {
     return expected === git(['rev-parse', `${result.tip}^{tree}`]) && git(['merge-base', onto, result.tip]) === onto &&
       git(['rev-list', '--merges', `${onto}..${result.tip}`]) === '';
   } catch { return false; }
+}
+
+// A declaration mismatch cannot undo an already integrated effect. Prove the
+// original admission, literal gate, reviewed diff and containment before using
+// its captured declaration for bookkeeping, including a lost FF response.
+export function integratedTrainJobs({ file, project, jobs }) {
+  const recovered = new Set();
+  if (!jobs.some(job => job.gate_mode === 'declared-gates/v1')) return recovered;
+  let plan;
+  try { plan = JSON.parse(readPlainFile(file)); } catch { return recovered; }
+  const branch = plan.integration_branch ?? plan.completion?.branch;
+  const current = spawnSync('git', ['-C', project.canonical, 'symbolic-ref', '--short', 'HEAD'], { encoding: 'utf8' });
+  if (!branch || current.error || current.status !== 0 || current.stdout.trim() !== branch) return recovered;
+  const admission = job => hash(['id', 'topic', 'expectedHead', 'run', 'org', 'gate_mode', 'declared', 'execution_identity', 'requiredTests', 'release'].map(key => job[key]));
+  for (const job of jobs) {
+    if (job.gate_mode !== 'declared-gates/v1') continue;
+    const original = plan.jobs?.find(row => row.id === job.id);
+    if (!original || admission(original) !== admission(job)) continue;
+    for (const attempt of plan.attempts ?? []) {
+      if (!['validated', 'integrated', 'complete'].includes(attempt.phase)) continue;
+      const captured = attempt.jobs?.find(row => row.id === job.id), spec = attempt.declared_spec;
+      if (!captured || admission(captured) !== admission(original) || !spec || spec.base !== attempt.base || spec.candidate !== attempt.tip ||
+          spec.common !== project.identity || hash(spec.identity) !== hash(attempt.execution_identity) ||
+          hash(attempt.execution_identity) !== hash(job.execution_identity) || hash(spec) !== hash(attempt.gate?.declared_gate)) continue;
+      try {
+        sameDeclaration(job.declared, spec.declaration);
+        const contained = spawnSync('git', ['-C', project.canonical, 'merge-base', '--is-ancestor', attempt.tip, 'HEAD'], { encoding: 'utf8' });
+        if (contained.error || contained.status !== 0) continue;
+        if (verifyResult({ id: job.id, source_head: captured.sourceHead, tip: attempt.tips[job.id], receipt: file, batch: plan.id }, {
+          project, saved: { head: job.expectedHead, run: job.run, org: job.org, lane: job.topic, requiredTests: job.requiredTests },
+          plan, phases: ['validated', 'integrated', 'complete'],
+        })) recovered.add(job.id);
+      } catch { /* Incomplete or changed evidence remains subject to admission. */ }
+    }
+  }
+  return recovered;
 }

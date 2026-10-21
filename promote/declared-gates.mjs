@@ -12,7 +12,7 @@ import { hash, refuse, MAX_PLAN_BYTES, SELECTION_SCHEMA, sameDeclaration, snapsh
 import { readDeclared } from '../lanes/validation.mjs';
 import { bindRequirements, validateSelection } from './declared-selection.mjs';
 import { policyBinding, assertCandidatePolicy, assertRunnerPolicy, within } from './declared-policy.mjs';
-import { projectEnvironment, remaining, runtimeIdentity, dependencyIdentity } from './declared-runtime.mjs';
+import { projectEnvironment, remaining, runtimeIdentity, promotionRuntime, dependencyIdentity } from './declared-runtime.mjs';
 
 const executor = fileURLToPath(new URL('./declared-runner.mjs', import.meta.url));
 const plannerDriver = fileURLToPath(new URL('./declared-planner.mjs', import.meta.url));
@@ -86,13 +86,21 @@ export function planDeclaredGate({ repo, base, cwd, candidate, owner, required =
   required = bindRequirements(required, value, bindingFor);
   let plan;
   if (value.promotion_tests) plan = withCanonicalSnapshot({ repo, base, deadline }, snapshot => {
-    const sources = sourceInventory(snapshot), plannerEnv = projectEnvironment(env, { candidate: cwd, snapshot });
+    const forbiddenRoots = [cwd, ...git(repo, ['worktree', 'list', '--porcelain']).split('\n').filter(line => line.startsWith('worktree ')).map(line => line.slice(9))
+      .filter(root => fs.realpathSync(root) !== fs.realpathSync(repo))];
+    const plannerOptions = { candidate: cwd, snapshot, forbiddenRoots };
+    const sources = sourceInventory(snapshot);
+    let plannerEnv = projectEnvironment(env, plannerOptions);
     evidence.planner_source = { base, digest: hash(sources), paths: sources.length };
+    evidence.planner_preparation_runtime = (value.promotion_tests.prepare ?? []).map(step => promotionRuntime(step.run, {
+      cwd: snapshot, env: plannerEnv, deadline, roots: [[snapshot, '$planner']], forbiddenRoots,
+    }));
     prepareSteps(value.promotion_tests.prepare, { cwd: snapshot, env: plannerEnv, common, deadline,
       idleTimeoutSeconds: limits.idle_seconds, record });
     unchangedSnapshot(snapshot, sources);
     snapshotLinks(snapshot, deadline);
-    const runtime = runtimeIdentity(value.promotion_tests.command, { cwd: snapshot, env: plannerEnv, deadline, roots: [[snapshot, '$planner']] });
+    plannerEnv = projectEnvironment(env, plannerOptions);
+    const runtime = runtimeIdentity(value.promotion_tests.command, { cwd: snapshot, env: plannerEnv, deadline, roots: [[snapshot, '$planner']], forbiddenRoots });
     evidence.planner_runtime = runtime;
     evidence.planner_dependencies = dependencyIdentity(snapshot, deadline);
     const input = { schema: 'promotion-selection-input/v1', base, candidate, candidate_root: fs.realpathSync(cwd),
@@ -128,11 +136,13 @@ export function planDeclaredGate({ repo, base, cwd, candidate, owner, required =
   const runtime = Object.fromEntries(Object.entries(value.runners).map(([name, runner]) => [name,
     runtimeIdentity(runner.command, { cwd: within(cwd, runner.cwd), env: candidateEnv, deadline, roots: [[cwd, '$candidate']] })]));
   evidence.runtime = runtime;
+  evidence.promotion_runtime = promotionRuntime(value.promotion, { cwd, env: candidateEnv, deadline, roots: [[cwd, '$candidate']] });
   evidence.dependencies = dependencyIdentity(cwd, deadline);
   const spec = { schema: 'declared-gate-execution/v1', base, candidate, common, identity, declaration: snapshotDeclaration(owner), selection: plan,
     policy, runtime: Object.fromEntries(Object.entries(runtime).map(([id, facts]) => [id, facts.map(fact => fact.binding)])),
-    dependencies: evidence.dependencies,
-    planner: { source: evidence.planner_source ?? null, runtime: (evidence.planner_runtime ?? []).map(fact => fact.binding), dependencies: evidence.planner_dependencies ?? null } };
+    promotion_runtime: evidence.promotion_runtime.map(fact => fact.binding), dependencies: evidence.dependencies,
+    planner: { source: evidence.planner_source ?? null, runtime: (evidence.planner_runtime ?? []).map(fact => fact.binding),
+      preparation_runtime: (evidence.planner_preparation_runtime ?? []).map(facts => facts.map(fact => fact.binding)), dependencies: evidence.planner_dependencies ?? null } };
   const serialized = JSON.stringify(spec);
   if (Buffer.byteLength(serialized) > MAX_PLAN_BYTES) throw refuse('complete execution selection exceeds 1 MiB');
   const command = `${quote(process.execPath)} ${quote(executor)} ${quote(serialized)}`;
@@ -163,6 +173,8 @@ export function recheckDeclaredGate({ repo, cwd, owner, spec, env, deadline }) {
   assertCandidatePolicy(repo, spec.candidate, spec.policy, deadline);
   assertRunnerPolicy(cwd, owner.value, spec.selection.steps, spec.policy);
   if (hash(dependencyIdentity(cwd, deadline)) !== hash(spec.dependencies)) throw refuse('locked runtime dependencies changed during the attempt');
+  const promotion = promotionRuntime(owner.value.promotion, { cwd, env, deadline, roots: [[cwd, '$candidate']] });
+  if (!Array.isArray(spec.promotion_runtime) || hash(promotion.map(fact => fact.binding)) !== hash(spec.promotion_runtime)) throw refuse('mandatory command runtime changed or unresolved during the attempt');
   for (const [name, bindings] of Object.entries(spec.runtime)) {
     const runner = owner.value.runners[name];
     const facts = runtimeIdentity(runner.command, { cwd: within(cwd, runner.cwd), env, deadline, roots: [[cwd, '$candidate']] });

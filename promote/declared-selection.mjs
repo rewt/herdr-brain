@@ -61,6 +61,7 @@ export function validateSelection(plan, { declaration, required = [] }) {
   const selected = new Set(plan.files.map(obligationKey));
   const executionKey = row => hash([declaration.runners[row.runner], row.args]);
   const selectedInvocations = new Set(plan.files.map(file => executionKey({ runner: 'node-test', args: [file] })));
+  const coveredInvocations = new Set((plan.covered ?? []).map(file => executionKey({ runner: 'node-test', args: [file] })));
   for (const step of plan.steps) {
     closed(step, ['runner', 'args', 'reason', 'estimated_ms', 'estimate', 'measured_at'], 'step');
     invocation(step, declaration.runners);
@@ -106,9 +107,9 @@ export function validateSelection(plan, { declaration, required = [] }) {
       key = obligationKey(row.file);
     } else { invocation(row, declaration.runners); key = obligationKey(row); }
     estimate(row);
-    const invocation = row.file === undefined ? executionKey(row) : Object.hasOwn(declaration.runners, 'node-test') ? executionKey({ runner: 'node-test', args: [row.file] }) : key;
-    if (!nonempty(row.reason) || row.destination !== 'release-candidate' || !row.estimated_ms || deferred.has(invocation) || selectedInvocations.has(invocation) || selected.has(key) || requiredKeys.has(key) || (plan.covered ?? []).some(file => obligationKey(file) === key)) throw refuse('invalid or overlapping deferred obligation');
-    deferred.add(invocation);
+    const deferredInvocation = row.file === undefined ? executionKey(row) : Object.hasOwn(declaration.runners, 'node-test') ? executionKey({ runner: 'node-test', args: [row.file] }) : key;
+    if (!nonempty(row.reason) || row.destination !== 'release-candidate' || !row.estimated_ms || deferred.has(deferredInvocation) || selectedInvocations.has(deferredInvocation) || coveredInvocations.has(deferredInvocation) || selected.has(key) || requiredKeys.has(key) || (plan.covered ?? []).some(file => obligationKey(file) === key)) throw refuse('invalid or overlapping deferred obligation');
+    deferred.add(deferredInvocation);
   }
   const budget = { time_ms: 300000, max_files: 10, unknown_file_ms: 60000, ...plan.budget };
   if (plan.budget !== undefined) closed(plan.budget, ['time_ms', 'max_files', 'unknown_file_ms', 'estimated_ms', 'required_over_budget'], 'budget');

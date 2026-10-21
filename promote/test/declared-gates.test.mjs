@@ -44,6 +44,22 @@ test('closed plans, hard bounds, optional budgets and deferred evidence are enfo
   assert.throws(() => bindRequirements(Array(513).fill('a.test.mjs'), value, {}), /512/);
 });
 
+test('typed optional deferral succeeds while selected, covered, duplicate and required overlaps refuse', () => {
+  const value = declaration(), bound = required();
+  const later = { runner: 'tool', args: ['optional.test.ts'], reason: 'release coverage', destination: 'release-candidate', estimated_ms: 100, estimate: 'measured' };
+  const plan = { ...empty(), steps: [{ ...typed, reason: 'required' }], deferred: [later] };
+  assert.deepEqual(validateSelection(plan, { declaration: value, required: bound }).deferred, [later]);
+  for (const invalid of [
+    { ...plan, steps: [...plan.steps, { runner: later.runner, args: later.args, reason: 'also selected' }] },
+    { ...plan, deferred: [later, later] },
+    { ...plan, deferred: [{ ...later, ...typed }] },
+    { ...plan, steps: [] },
+    { ...plan, covered: ['covered.test.mjs'], deferred: [{ ...later, runner: 'node-test', args: ['covered.test.mjs'] }] },
+  ]) assert.throws(() => validateSelection(invalid, { declaration: value, required: bound }), /overlap|omits|narrows/);
+  value.runners.alias = value.runners.tool;
+  assert.throws(() => validateSelection({ ...plan, deferred: [{ ...later, runner: 'alias', args: typed.args }] }, { declaration: value, required: bound }), /overlap/);
+});
+
 test('the base planner and imports ignore candidate edits and candidate loader paths', t => {
   const f = declaredFixture(t);
   const marker = path.join(f.root, 'lane-planner-ran');
@@ -55,6 +71,26 @@ test('the base planner and imports ignore candidate edits and candidate loader p
   assert.ok(execution.evidence.planner_source.paths > 0);
   assert.equal(execution.env.NODE_PATH, undefined);
   assert.ok(execution.command.endsWith("'"));
+});
+
+for (const kind of ['PATH directory', 'PATH executable', 'absolute planner', 'absolute preparation']) test(`a symlinked ${kind} into a lane refuses before project code`, t => {
+  const value = declaration();
+  if (kind.startsWith('PATH')) value.promotion_tests.prepare = [{ run: 'node baseline.mjs' }];
+  const f = declaredFixture(t, { declared: value });
+  const bin = path.join(f.root, 'external-bin'), laneBin = path.join(f.workspace, '.fixture/bin'), marker = path.join(f.root, 'lane-tool-ran');
+  fs.mkdirSync(bin); fs.mkdirSync(laneBin, { recursive: true });
+  const tool = path.join(laneBin, 'planner-tool'), link = path.join(bin, 'planner-tool');
+  fs.writeFileSync(tool, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(marker)},'bad');`, { mode: 0o755 });
+  fs.symlinkSync(tool, link);
+  if (kind === 'PATH directory') { const directory = path.join(f.root, 'linked-bin'); fs.symlinkSync(laneBin, directory); f.env.PATH = directory + path.delimiter + f.env.PATH; }
+  else if (kind === 'PATH executable') f.env.PATH = bin + path.delimiter + f.env.PATH;
+  else {
+    if (kind === 'absolute planner') value.promotion_tests.command = [link];
+    else value.promotion_tests.prepare = [{ run: link }];
+    f.write('.lane.validation.json', JSON.stringify(value)); f.commit(); f.git(['rebase', 'main'], f.workspace);
+  }
+  assert.throws(() => f.plan(), /planner tool resolves into a candidate or lane/);
+  assert.equal(fs.existsSync(marker), false); assert.deepEqual(f.lines(), []);
 });
 
 for (const file of ['package.json', 'runtime-lock.json', 'runner.mjs']) test(`canonical ${file} tampering refuses before the baseline`, t => {
@@ -90,6 +126,33 @@ test('an adapter with generated candidate orchestration refuses rather than reca
   f.write('make.mjs', "import fs from 'node:fs';fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/runner.mjs','process.exit(0)');");
   f.commit(); f.git(['rebase', 'main'], f.workspace);
   assert.throws(() => f.plan(), /uncaptured generated runner/);
+  assert.deepEqual(f.lines(), []);
+});
+
+test('Python helper imports and their transitive modules are bound before driver execution', t => {
+  const value = declaration(); value.runners.python = { command: ['python3'], cwd: '.' };
+  const f = declaredFixture(t, { declared: value });
+  f.write('scripts/driver.py', 'import driver_support\ndriver_support.run()\n');
+  f.write('scripts/driver_support.py', 'from controls import check\ndef run():\n    check()\n');
+  f.write('scripts/controls.py', 'def check():\n    assert True\n');
+  f.commit(); f.git(['rebase', 'main'], f.workspace);
+  const obligation = [{ runner: 'python', args: ['scripts/driver.py'] }];
+  const original = f.plan({ required: obligation });
+  assert.ok(original.spec.policy.files.some(([name]) => name === 'scripts/driver_support.py'));
+  assert.ok(original.spec.policy.files.some(([name]) => name === 'scripts/controls.py'));
+  f.write('scripts/controls.py', 'def check():\n    pass\n', f.workspace); f.commit(f.workspace);
+  assert.throws(() => f.plan({ required: original.plan.required }), /changed|canonical orchestration/);
+  assert.deepEqual(f.lines(), []);
+});
+
+test('an undeclared generated Python helper refuses before the baseline', t => {
+  const value = declaration(); value.runners.python = { command: ['python3'], cwd: '.' };
+  value.gate.prepare = [{ run: 'node make.mjs' }];
+  const f = declaredFixture(t, { declared: value });
+  f.write('driver.py', 'import driver_support\n');
+  f.write('make.mjs', "import fs from 'node:fs';fs.mkdirSync('.fixture',{recursive:true});fs.writeFileSync('.fixture/driver_support.py','pass');");
+  f.commit(); f.git(['rebase', 'main'], f.workspace);
+  assert.throws(() => f.plan({ required: [{ runner: 'python', args: ['driver.py'] }] }), /uncaptured generated Python import/);
   assert.deepEqual(f.lines(), []);
 });
 
@@ -135,6 +198,36 @@ test('selection/runtime changes miss exact evidence and an admitted owner change
   const bound = readDeclared(f.repo, { env: f.env });
   f.write('.lane.validation.json', JSON.stringify({ ...declaration(), promotion: 'true' })); f.commit();
   assert.throws(() => sameDeclaration(bound, readDeclared(f.repo, { env: f.env })), /re-enqueue/);
+});
+
+test('replacing a mandatory-only runtime at the same path invalidates recheck and exact reuse', t => {
+  const value = declaration(); value.promotion = 'python3 gate.py'; value.runners = {}; delete value.promotion_tests;
+  const f = declaredFixture(t, { declared: value }), bin = path.join(f.root, 'bin'); fs.mkdirSync(bin);
+  const python = path.join(bin, 'python3');
+  fs.writeFileSync(python, `#!${process.execPath}\n// runtime one\nprocess.exit(0);\n`, { mode: 0o755 });
+  f.env.PATH = bin + path.delimiter + f.env.PATH;
+  f.write('gate.py', 'pass\n'); f.commit(); f.git(['rebase', 'main'], f.workspace);
+  const first = f.plan();
+  assert.deepEqual(first.spec.runtime, {}); assert.ok(first.spec.promotion_runtime.length >= 2);
+  assert.doesNotThrow(() => recheckDeclaredGate({ repo: f.repo, cwd: f.workspace, owner: first.spec.declaration,
+    spec: first.spec, env: first.env, deadline: first.deadline }));
+  fs.writeFileSync(python, `#!${process.execPath}\n// runtime two at the identical path\nprocess.exit(0);\n`, { mode: 0o755 });
+  assert.throws(() => recheckDeclaredGate({ repo: f.repo, cwd: f.workspace, owner: first.spec.declaration,
+    spec: first.spec, env: first.env, deadline: first.deadline }), /mandatory command runtime changed/);
+  const second = f.plan();
+  assert.notDeepEqual(first.spec.promotion_runtime, second.spec.promotion_runtime);
+  const options = { cwd: f.workspace, common: f.queue().project.identity, base: f.base(), commands: ['same command'],
+    declaration: { schema: 'validation-receipts/v1', exclude: [], environment: ['PATH'] }, env: f.env };
+  assert.equal(explainMiss(exactIdentity({ ...options, additional: { declared_gate: second.spec } }),
+    exactIdentity({ ...options, additional: { declared_gate: first.spec } })), 'declared');
+  assert.deepEqual(f.lines(), []);
+});
+
+for (const promotion of ['node baseline.mjs && python3 gate.py', 'env python3 gate.py', 'pnpm run smoke']) test(`unresolved mandatory runtime provenance refuses (${promotion})`, t => {
+  const value = declaration(); value.promotion = promotion; delete value.promotion_tests; value.runners = {};
+  const f = declaredFixture(t, { declared: value });
+  assert.throws(() => f.plan(), /unresolved.*runtime provenance/);
+  assert.deepEqual(f.lines(), []);
 });
 
 test('real pnpm build, native Vitest TypeScript, TypeScript-importing planner, Python driver and node:test keep their context', { timeout: 60000 }, t => {

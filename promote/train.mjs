@@ -25,37 +25,35 @@ import { sameDeclaration, hash, refuse as declaredRefusal } from './declaration.
 import { unionRequirements } from './declared-selection.mjs';
 import { planDeclaredGate, recheckDeclaredGate, executedCommands } from './declared-gates.mjs';
 import { remaining } from './declared-runtime.mjs';
+import { integratedTrainJobs } from './evidence.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
 export { verifyTrainResult } from './evidence.mjs';
-export async function runTrain({ file, canonical, identity, main, prepare, validation }) {
+export async function runTrain({ file, canonical, identity, main, prepare, validation, recoveryOnly = false }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   const declared = validation.declared;
-  const checkIdentity = () => {
+  let recovered = new Set();
+  const checkIdentity = ({ admission = true } = {}) => {
     if (!declared && !plan.jobs.some(job => job.gate_mode)) return;
     for (const job of plan.jobs) {
       if (job.gate_mode !== 'declared-gates/v1' || job.validate || job.laneConfig) throw declaredRefusal('incompatible queued job requires explicit disposition');
       if ((job.requiredTests ?? []).some(row => typeof row !== 'string' && (!row?.definition || !row.scope || !row.toolchain))) throw declaredRefusal('typed requirement lost its admission binding');
       executionIdentity({ canonical, identity }, { bound: job.execution_identity ?? null });
-      sameDeclaration(job.declared, readDeclared(canonical));
+      if (admission && !recovered.has(job.id)) sameDeclaration(job.declared, readDeclared(canonical));
     }
     for (const attempt of plan.attempts ?? []) executionIdentity({ canonical, identity }, { bound: attempt.execution_identity ?? null });
   };
-  checkIdentity(); // no receipt, worktree, lock or project code before this fence
+  checkIdentity({ admission: false }); // no receipt, worktree, lock or project code before this fence
+  recovered = integratedTrainJobs({ file, project: { canonical, identity }, jobs: plan.jobs });
+  if (!plan.attempts?.length) plan.integration_branch ??= main;
   const save = () => writeFileAtomic(file, JSON.stringify(plan, null, 2) + '\n', 0o600);
-  const profile = resolveGateProfile(canonical);
-  if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
-  const env = profile?.env ?? validationEnvironment();
+  let profile;
+  let env = validationEnvironment();
   // Unconfigured trains also queue for the slot with a cap. Explicit host
   // settings, including immediate refusal, retain their existing precedence.
   env.MONITOR_TEST_SLOT_WAIT_SECONDS ??= env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS ?? '7200';
-  if (profile) {
-    prepare = [...prepare, ...profile.prepare];
-    validation = { ...validation, environment: `${validation.environment}\nprofile:${profile.fingerprint}` };
-    checkCompetingProcesses(profile);
-  }
   const run = (args, cwd = canonical, extra = {}) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env, maxBuffer: 32 * 1024 * 1024, ...extra });
   const git = (args, cwd, extra) => {
     const r = run(args, cwd, extra);
@@ -111,7 +109,6 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     ? { version: 1, git_only: true }
     : { version: 1, identity, canonical, branch: main, base: git(['rev-parse', main]), jobs: [], refused: [] };
   plan.started_at ??= new Date().toISOString();
-  plan.external_lock_required ??= Boolean(profile?.externalLock);
   plan.results ??= {}; plan.attempts ??= []; plan.groups ??= [plan.jobs.map(j => j.id)];
   // A caller can die while its slot child is running. Recover the durable
   // sidecar's original grant before replacing that attempt's gate on resume.
@@ -127,6 +124,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   // A persisted integrated checkpoint never gates or fast-forwards twice.
   const finishIntegrated = attempt => {
     if (!['integrated', 'complete'].includes(attempt.phase)) throw new Error('train bookkeeping requires an integrated checkpoint');
+    if (plan.integration_branch && plan.integration_branch !== main) throw new Error('captured integration branch changed; lane retained');
+    if (attempt.gate_mode && attempt.jobs.some(job => !integratedTrainJobs({ file, project: { canonical, identity }, jobs: [job] }).has(job.id)))
+      throw new Error('integrated declared checkpoint cannot be verified; lane retained');
     phase('closing');
     if (git(['merge-base', attempt.tip, main]) !== attempt.tip) throw new Error('integrated train tip is no longer on main');
     for (const job of attempt.jobs) {
@@ -162,6 +162,22 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     }
     if (attempt.phase === 'integrated') finishIntegrated(attempt);
   }
+  // Recovery used only captured evidence. Current policy governs any work
+  // still requiring preparation, validation or integration.
+  if (recoveryOnly && plan.jobs.some(job => !plan.results[job.id])) return;
+  checkIdentity();
+  if (plan.jobs.some(job => !plan.results[job.id])) {
+    profile = resolveGateProfile(canonical);
+    if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
+    env = profile?.env ?? env;
+    env.MONITOR_TEST_SLOT_WAIT_SECONDS ??= env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS ?? '7200';
+    if (profile) {
+      prepare = [...prepare, ...profile.prepare];
+      validation = { ...validation, environment: `${validation.environment}\nprofile:${profile.fingerprint}` };
+      checkCompetingProcesses(profile);
+    }
+  }
+  plan.external_lock_required ??= Boolean(profile?.externalLock);
   const prepareAttempt = ids => {
     phase('preparing');
     if (!canonicalReady()) return null;

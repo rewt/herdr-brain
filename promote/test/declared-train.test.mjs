@@ -2,11 +2,13 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { declaredFixture, product } from './helpers/declared-fixture.mjs';
+import { declaredFixture, declaration, product } from './helpers/declared-fixture.mjs';
 import { runProjectGateSync } from '../gate-profile.mjs';
 import { unionRequirements } from '../declared-selection.mjs';
 import { runTrain } from '../train.mjs';
 import { resolveValidation } from '../../lanes/validation.mjs';
+import { integratedTrainJobs } from '../evidence.mjs';
+import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 
 function train(f, t, options = {}) {
   f.add(options);
@@ -74,4 +76,63 @@ test('batch union and each bisected subset preserve every included member requir
   assert.deepEqual(unionRequirements([first]), first.requiredTests);
   assert.deepEqual(unionRequirements([second]), ['a.test.mjs', 'b.test.mjs']);
   assert.throws(() => unionRequirements([first, { requiredTests: [{ ...first.requiredTests[1], scope: 'changed' }] }]), /incompatible/);
+});
+
+for (const resume of ['queue', 'train']) test(`a declaration-changing fast-forward recovers through the ${resume} under its captured rule`, async t => {
+  const f = declaredFixture(t);
+  const next = declaration(); next.promotion = 'node future.mjs'; next.gate = { refuse_processes: ['.*'] };
+  f.write('.lane.validation.json', JSON.stringify(next), f.workspace);
+  f.write('future.mjs', "throw Error('new declaration must not execute during recovery');", f.workspace); f.commit(f.workspace);
+  const q = f.queue(), realGit = f.good(f.run('which', ['git'])), bin = path.join(f.root, 'bin'), marker = path.join(f.root, 'after-ff');
+  fs.mkdirSync(bin); f.env.PATH = bin + path.delimiter + f.env.PATH;
+  fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}
+const fs=require('fs'),cp=require('child_process'),args=process.argv.slice(2);
+const r=cp.spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});
+if(r.status===0&&args.includes('merge')&&args.includes('--ff-only')&&!fs.existsSync(${JSON.stringify(marker)})){
+ fs.writeFileSync(${JSON.stringify(marker)},'once');
+ const lock=${JSON.stringify(path.join(q.project.identity, 'lane-promote.lock'))};
+ if(JSON.parse(fs.readFileSync(lock+'/owner.json')).pid===process.ppid)fs.rmSync(lock,{recursive:true});
+ process.kill(process.ppid,'SIGKILL');
+}process.exit(r.status??1);`, { mode: 0o755 });
+  const herdr = path.join(f.root, 'herdr');
+  fs.writeFileSync(herdr, `#!${process.execPath}
+const a=process.argv.slice(2);
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fixture'}}}));
+else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
+else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
+  Object.assign(f.env, { SUPERVISOR_INPUT_WAIT_SECONDS: '2', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' });
+  const inbox = path.join(q.project.identity, 'supervisor/inbox.log');
+  try {
+    f.add({ to: 'fixture', herdr, attempts: 1, retry: 0 });
+    const first = f.cli(['--drain']); assert.equal(first.status, 0, first.stderr);
+    const interrupted = q.load().results[0];
+    if (interrupted.code?.startsWith('PROMOTE_NATIVE_') || interrupted.reason?.includes('PROMOTE_NATIVE_')) {
+      t.skip(`${interrupted.code ?? interrupted.reason}: L-27; rerun natively`); return;
+    }
+    assert.equal(interrupted.outcome, 'interrupted', JSON.stringify(interrupted));
+    assert.ok(fs.existsSync(marker));
+    const bytes = fs.readFileSync(interrupted.receipt, 'utf8'), saved = JSON.parse(bytes), attempt = saved.attempts[0];
+    assert.equal(attempt.phase, 'validated'); assert.equal(f.base(), attempt.tip); assert.deepEqual(f.lines(), ['baseline']);
+    assert.deepEqual([...integratedTrainJobs({ file: interrupted.receipt, project: q.project, jobs: saved.jobs })], [interrupted.id]);
+    const tampered = structuredClone(saved); tampered.attempts[0].gate.log_hash = '0'.repeat(64);
+    fs.writeFileSync(interrupted.receipt, JSON.stringify(tampered));
+    assert.equal(integratedTrainJobs({ file: interrupted.receipt, project: q.project, jobs: saved.jobs }).size, 0, 'green flags do not replace the log proof');
+    fs.writeFileSync(interrupted.receipt, bytes);
+    process.chdir(f.foreign);
+    await assert.rejects(runTrain({ file: interrupted.receipt, canonical: f.repo, identity: q.project.identity, main: 'main', prepare: [],
+      validation: { declared: saved.jobs[0].declared } }), /PROMOTION_IDENTITY_MISMATCH/);
+    const foreign = f.cli(['--drain', '--repo', f.repo], f.foreign);
+    assert.equal(foreign.status, 1); assert.match(foreign.stderr, /PROMOTION_IDENTITY_MISMATCH/);
+    assert.equal(fs.readFileSync(interrupted.receipt, 'utf8'), bytes);
+    process.chdir(f.repo);
+    if (resume === 'train') await runTrain({ file: interrupted.receipt, canonical: f.repo, identity: q.project.identity, main: 'main', prepare: [],
+      validation: resolveValidation({ root: f.repo, env: f.env }) });
+    const resumed = f.cli(['--drain']); assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(q.load().results.at(-1).outcome, 'promoted', JSON.stringify(q.load().results));
+    assert.equal(q.load().interrupted.length, 0); assert.deepEqual(f.lines(), ['baseline']);
+    const final = JSON.parse(fs.readFileSync(interrupted.receipt, 'utf8'));
+    assert.equal(final.phase, 'complete'); assert.equal(final.attempts[0].phase, 'complete');
+    assert.equal(f.base(), attempt.tip); assert.deepEqual(final.attempts[0].declared_spec, attempt.declared_spec);
+    assert.equal(final.attempts[0].gate.started_at, attempt.gate.started_at);
+  } finally { process.chdir(f.repo); await waitForInboxIdle(inbox); }
 });

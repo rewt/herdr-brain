@@ -4,17 +4,37 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { hash, refuse } from './declaration.mjs';
 
-export function projectEnvironment(env, { candidate, snapshot } = {}) {
+function outsideLanes(file, forbiddenRoots) {
+  for (const root of forbiddenRoots) {
+    const offset = path.relative(fs.realpathSync(root), file);
+    if (!offset || offset !== '..' && !offset.startsWith(`..${path.sep}`) && !path.isAbsolute(offset)) throw refuse(`planner tool resolves into a candidate or lane: ${file}`);
+  }
+  return file;
+}
+export function projectEnvironment(env, { candidate, snapshot, forbiddenRoots = candidate ? [candidate] : [] } = {}) {
   const result = { ...env };
   for (const key of Object.keys(result)) if (/^(?:NODE_OPTIONS|NODE_PATH|NODE_TEST_CONTEXT|PYTHONPATH|PYTHONHOME|PYTHONSTARTUP|PYTHONUSERBASE|PYTHONPYCACHEPREFIX|BASH_ENV|ENV|BASH_FUNC_.*|SHELLOPTS|BASHOPTS|ZDOTDIR|TS_NODE.*|TSX_.*|LD_.*|DYLD_.*|INIT_CWD|npm_(?:lifecycle_.*|config_node_options)|NPM_CONFIG_NODE_OPTIONS|GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|CONFIG_COUNT|CONFIG_KEY_.*|CONFIG_VALUE_.*))$/.test(key)) delete result[key];
   if (snapshot) {
-    result.PATH = [path.join(snapshot, 'node_modules/.bin'), ...(result.PATH ?? '').split(path.delimiter).filter(part => {
-      if (!path.isAbsolute(part)) return false;
-      const offset = candidate && path.relative(candidate, path.resolve(part));
-      return !candidate || offset === '..' || offset.startsWith(`..${path.sep}`) || path.isAbsolute(offset);
-    })].join(path.delimiter);
+    const directories = [];
+    for (const part of [path.join(snapshot, 'node_modules/.bin'), ...(result.PATH ?? '').split(path.delimiter)]) {
+      if (!path.isAbsolute(part)) continue;
+      let directory;
+      try { directory = fs.realpathSync(part); } catch (error) { if (error.code === 'ENOENT') { directories.push(part); continue; } throw error; }
+      outsideLanes(directory, forbiddenRoots);
+      // Preparation is a shell recipe, so validate every executable it can
+      // discover, including symlinks in otherwise external PATH directories.
+      for (const name of fs.readdirSync(directory)) {
+        const file = path.join(directory, name);
+        let target;
+        try { fs.accessSync(file, fs.constants.X_OK); if (fs.statSync(file).isFile()) target = fs.realpathSync(file); } catch { continue; }
+        if (target) outsideLanes(target, forbiddenRoots);
+      }
+      directories.push(directory);
+    }
+    result.PATH = [...new Set(directories)].join(path.delimiter);
     result.PYTHONNOUSERSITE = '1';
   }
+  result.PYTHONDONTWRITEBYTECODE = '1';
   return result;
 }
 export const remaining = deadline => {
@@ -27,14 +47,14 @@ function executable(name, cwd, env) {
   for (const file of choices) try { fs.accessSync(file, fs.constants.X_OK); if (fs.statSync(file).isFile()) return fs.realpathSync(file); } catch {}
   throw refuse(`runtime executable is unavailable: ${name}`);
 }
-export function runtimeIdentity(command, { cwd, env, deadline, roots = [] }) {
+export function runtimeIdentity(command, { cwd, env, deadline, roots = [], forbiddenRoots = [] }) {
   const names = [command[0]];
   const exec = command.indexOf('exec');
   if (exec >= 0 && command[exec + 1] && !command[exec + 1].startsWith('-')) names.push(command[exec + 1]);
   const identify = (name, depth = 0) => {
     remaining(deadline);
     if (depth > 4) throw refuse('runtime interpreter chain exceeds four launchers');
-    const file = executable(name, cwd, env), bytes = fs.readFileSync(file);
+    const file = outsideLanes(executable(name, cwd, env), forbiddenRoots), bytes = fs.readFileSync(file);
     const digest = createHash('sha256').update(bytes).digest('hex');
     const normalized = roots.reduce((value, [root, label]) => value.startsWith(root + path.sep) ? label + value.slice(root.length) : value, file);
     const shebang = bytes.subarray(0, 512).toString('utf8').match(/^#!([^\n]+)/)?.[1].trim();
@@ -66,6 +86,26 @@ export function runtimeIdentity(command, { cwd, env, deadline, roots = [] }) {
   return names.map(name => identify(name));
 }
 export function runtimeBinding(facts) { return hash(facts.map(({ binding }) => binding)); }
+
+// Shell strings with expansion, compound commands or indirect launchers cannot
+// supply a complete runtime chain here. Refuse them before running the gate.
+export function promotionRuntime(command, options) {
+  const words = [];
+  let word = '', quote = null, active = false;
+  for (const char of command.trim()) {
+    if (quote && char === quote) { quote = null; continue; }
+    if (char === "'" && quote !== '"' || char === '"' && quote !== "'") { quote = char; active = true; continue; }
+    if (!quote && /\s/.test(char)) { if (active) words.push(word); word = ''; active = false; continue; }
+    if (quote !== "'" && (quote === '"' ? /[$`\\]/ : /[^\w./:@%+=,-]/).test(char)) throw refuse('mandatory command has unresolved shell runtime provenance');
+    word += char; active = true;
+  }
+  if (quote || !active && !words.length) throw refuse('mandatory command has unresolved shell runtime provenance');
+  if (active) words.push(word);
+  const name = path.basename(words[0]);
+  if (words[0].includes('=') || /^(?:(?:ba|da|z|k)?sh|env|exec|command|source|\.|npm|npx|pnpm|pnpx|yarn|corepack|uv|poetry|pipenv)(?:\.[cm]?js)?$/.test(name) ||
+      /^(?:node|bun)$/.test(name) && words.includes('--run')) throw refuse('mandatory command delegates unresolved runtime provenance');
+  return [...runtimeIdentity(['/bin/sh'], options), ...runtimeIdentity(words, options)];
+}
 
 // Locked preparation identifies the artifact; hash the installed bytes too so
 // an in-place dependency edit cannot reuse green evidence with the same version.

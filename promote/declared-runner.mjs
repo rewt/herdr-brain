@@ -8,11 +8,11 @@ import { executionIdentity } from './execution-identity.mjs';
 import { closed, refuse, validateDeclared, MAX_PLAN_BYTES } from './declaration.mjs';
 import { validateSelection } from './declared-selection.mjs';
 import { within } from './declared-policy.mjs';
-import { remaining } from './declared-runtime.mjs';
+import { remaining, projectEnvironment } from './declared-runtime.mjs';
 import { recheckDeclaredGate } from './declared-gates.mjs';
 
 export function executeDeclared(spec, { cwd = process.cwd(), env = process.env, onCommand = () => {} } = {}) {
-  closed(spec, ['schema', 'base', 'candidate', 'common', 'identity', 'declaration', 'selection', 'policy', 'runtime', 'dependencies', 'planner'], 'literal execution selection');
+  closed(spec, ['schema', 'base', 'candidate', 'common', 'identity', 'declaration', 'selection', 'policy', 'runtime', 'promotion_runtime', 'dependencies', 'planner'], 'literal execution selection');
   if (spec?.schema !== 'declared-gate-execution/v1' || Buffer.byteLength(JSON.stringify(spec)) > MAX_PLAN_BYTES) throw refuse('invalid literal execution selection');
   const project = gitProject(cwd);
   if (project.identity !== spec.common) throw refuse('execution project changed');
@@ -24,6 +24,7 @@ export function executeDeclared(spec, { cwd = process.cwd(), env = process.env, 
   // and normalized budget are bound by the train's literal spec.
   const deadline = Number(env.MONITOR_VALIDATION_DEADLINE);
   if (!Number.isFinite(deadline)) throw refuse('missing finite attempt deadline');
+  env = projectEnvironment(env);
   recheckDeclaredGate({ repo: project.canonical, cwd, owner: spec.declaration, spec, env, deadline });
   const commands = [ { command: ['/bin/sh', '-c', value.promotion], cwd },
     ...selection.steps.map(step => ({ command: [...value.runners[step.runner].command, ...step.args], cwd: within(cwd, value.runners[step.runner].cwd) })),

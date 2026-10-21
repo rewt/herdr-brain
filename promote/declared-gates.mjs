@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { withCanonicalSnapshot } from '../settle/test-plan.mjs';
 import { runGateSync } from '../test-slot/run.mjs';
 import { resolveGateLimits } from '../test-slot/limits.mjs';
-import { hash, refuse, MAX_PLAN_BYTES, SELECTION_SCHEMA, sameDeclaration } from './declaration.mjs';
+import { hash, refuse, MAX_PLAN_BYTES, SELECTION_SCHEMA, sameDeclaration, snapshotDeclaration } from './declaration.mjs';
 import { readDeclared } from '../lanes/validation.mjs';
 import { bindRequirements, validateSelection } from './declared-selection.mjs';
 import { policyBinding, assertCandidatePolicy, assertRunnerPolicy, within } from './declared-policy.mjs';
@@ -70,7 +70,10 @@ export function declaredDeadline({ common, owner, env, profile }) {
 }
 export function planDeclaredGate({ repo, base, cwd, candidate, owner, required = [], changed, env = process.env, common, identity, profile,
   deadline, limits, evidence = { commands: [] }, onUpdate = () => {}, selectionOnly = false }) {
-  sameDeclaration(owner, readDeclared(repo, { env }));
+  const currentOwner = readDeclared(repo, { env });
+  sameDeclaration(owner, currentOwner);
+  if (currentOwner.source.revision !== base) throw refuse('canonical base changed before planning');
+  owner = currentOwner; // actual environment values stay in memory, never in the literal selection
   if (git(cwd, ['rev-parse', 'HEAD']) !== candidate || git(cwd, ['status', '--porcelain', '--untracked-files=all'])) throw refuse('candidate must be clean and at its captured commit');
   const branch = git(cwd, ['symbolic-ref', '--short', 'HEAD']);
   const value = owner.value;
@@ -126,7 +129,7 @@ export function planDeclaredGate({ repo, base, cwd, candidate, owner, required =
     runtimeIdentity(runner.command, { cwd: within(cwd, runner.cwd), env: candidateEnv, deadline, roots: [[cwd, '$candidate']] })]));
   evidence.runtime = runtime;
   evidence.dependencies = dependencyIdentity(cwd, deadline);
-  const spec = { schema: 'declared-gate-execution/v1', base, candidate, common, identity, declaration: owner, selection: plan,
+  const spec = { schema: 'declared-gate-execution/v1', base, candidate, common, identity, declaration: snapshotDeclaration(owner), selection: plan,
     policy, runtime: Object.fromEntries(Object.entries(runtime).map(([id, facts]) => [id, facts.map(fact => fact.binding)])),
     dependencies: evidence.dependencies,
     planner: { source: evidence.planner_source ?? null, runtime: (evidence.planner_runtime ?? []).map(fact => fact.binding), dependencies: evidence.planner_dependencies ?? null } };

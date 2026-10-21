@@ -31,10 +31,12 @@ export function executeDeclared(spec, { cwd = process.cwd(), env = process.env, 
   for (const row of commands) {
     const started_at = new Date().toISOString();
     process.stdout.write(`DECLARED_COMMAND ${JSON.stringify({ ...row, started_at })}\n`);
+    const allowance = remaining(deadline), started = Date.now();
     const result = spawnSync(row.command[0], row.command.slice(1), { cwd: row.cwd, env, stdio: 'inherit',
-      timeout: remaining(deadline), killSignal: 'SIGTERM' });
+      timeout: allowance, killSignal: 'SIGTERM' });
     const evidence = { ...row, started_at, finished_at: new Date().toISOString(), exit_code: result.status, signal: result.signal ?? null, error: result.error?.code ?? null };
     onCommand(evidence); process.stdout.write(`DECLARED_EXIT ${JSON.stringify(evidence)}\n`);
+    if (result.error?.code === 'ETIMEDOUT') process.stderr.write(`GATE_TIMEOUT: wall limit ${allowance / 1000}s exceeded; elapsed ${(Date.now() - started) / 1000}s\n`);
     if (result.error || result.status !== 0 || result.signal) return result.error?.code === 'ETIMEDOUT' ? 124 : result.status ?? 1;
   }
   recheckDeclaredGate({ repo: project.canonical, cwd, owner: spec.declaration, spec, env, deadline });

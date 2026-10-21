@@ -244,6 +244,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
     const owner = attempt.jobs[0].declared;
     const receiptDeclaration = readReceiptDeclaration({ repo: canonical, base: attempt.base });
+    if (receiptDeclaration && Object.keys(owner.value.gate?.env ?? {}).some(name => !receiptDeclaration.environment.includes(name)))
+      throw declaredRefusal('declared gate environment must be included in the exact-validation environment allowlist');
     const gateEnv = receiptDeclaration ? restrictEnvironment(env, receiptDeclaration) : env;
     const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))].sort();
     const required = unionRequirements(attempt.jobs);

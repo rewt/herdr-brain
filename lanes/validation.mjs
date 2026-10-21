@@ -64,10 +64,10 @@ export function readDeclared(root, { base = 'HEAD', config, promotion, env = pro
     throw refuse('declared authority requires the canonical project loader');
   }
   let value;
-  try { value = readCommitted(root, VALIDATION_FILE, base); }
+  try { value = readCommitted(root, VALIDATION_FILE, base, { schemaProbe: true }); }
   catch (error) {
     const head = (() => { try { return git(root, ['symbolic-ref', '--quiet', base]); } catch { return null; } })();
-    if (head && !fs.existsSync(file) && !git(root, ['for-each-ref', '--format=%(refname)', head])) return null;
+    if (head && !git(root, ['for-each-ref', '--format=%(refname)', head])) return null;
     throw error;
   }
   if (value?.schema === undefined) return null;
@@ -97,11 +97,13 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
     return { tiers, declared: owner, promotion_tests: value.promotion_tests, environment: value.environment ?? '',
       environment_source: owner.source.file, file: owner.source.file };
   }
+  if (config.validation?.schema !== undefined) throw refuse('declared schema requires the committed owner declaration, not inline validation');
   let declared = config.validation === undefined ? {} : validateValidation(config.validation);
   const file = path.join(root, VALIDATION_FILE);
   const declarationSources = Object.fromEntries(Object.keys(declared).map(key => [key, sources.validation ?? source]));
   if (fs.existsSync(file)) {
     const tracked = validateValidation(JSON.parse(fs.readFileSync(file, 'utf8')));
+    if (tracked.schema !== undefined) throw refuse('declared schema requires a committed owner declaration');
     declared = { ...declared, ...tracked };
     for (const key of Object.keys(tracked)) declarationSources[key] = file;
   }

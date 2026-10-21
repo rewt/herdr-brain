@@ -138,7 +138,7 @@ test('selection/runtime changes miss exact evidence and an admitted owner change
 });
 
 test('real pnpm build, native Vitest TypeScript, TypeScript-importing planner, Python driver and node:test keep their context', { timeout: 60000 }, t => {
-  const artifact = process.env.HERDR_DECLARED_FIXTURE_ARTIFACT;
+  const artifact = process.env.DECLARED_GATES_FIXTURE_ARTIFACT;
   if (!artifact) return t.skip('requires an explicit hash-locked offline runtime fixture artifact');
   const value = declaration();
   value.promotion_tests = { command: ['node', '.planner/planner.js'], prepare: [{ run: 'node prepare.mjs' }, { run: 'node compile.cjs' }] };
@@ -148,15 +148,16 @@ test('real pnpm build, native Vitest TypeScript, TypeScript-importing planner, P
     vitest: { command: ['./node_modules/.bin/pnpm', 'exec', 'vitest', 'run'], cwd: '.' },
     python: { command: ['python3'], cwd: '.' } };
   const f = declaredFixture(t, { declared: value });
-  f.env.HERDR_DECLARED_FIXTURE_ARTIFACT = artifact;
+  f.env.DECLARED_GATES_FIXTURE_ARTIFACT = artifact;
   Object.assign(f.env, { CI: '1', npm_config_offline: 'true', npm_config_update_notifier: 'false' });
   f.write('runtime-lock.json', JSON.stringify({ sha256: createHash('sha256').update(fs.readFileSync(artifact)).digest('hex') }));
   f.write('prepare.mjs', `import fs from 'node:fs';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';
-const bytes=fs.readFileSync(process.env.HERDR_DECLARED_FIXTURE_ARTIFACT);if(createHash('sha256').update(bytes).digest('hex')!==JSON.parse(fs.readFileSync('runtime-lock.json')).sha256)throw Error('unlocked artifact');execFileSync('tar',['-xf',process.env.HERDR_DECLARED_FIXTURE_ARTIFACT]);`);
+const bytes=fs.readFileSync(process.env.DECLARED_GATES_FIXTURE_ARTIFACT);if(createHash('sha256').update(bytes).digest('hex')!==JSON.parse(fs.readFileSync('runtime-lock.json')).sha256)throw Error('unlocked artifact');execFileSync('tar',['-xf',process.env.DECLARED_GATES_FIXTURE_ARTIFACT]);`);
   f.write('compile.cjs', `const fs=require('fs'),ts=require('typescript');fs.mkdirSync('.planner',{recursive:true});for(const name of ['planner','inventory'])fs.writeFileSync('.planner/'+name+'.js',ts.transpileModule(fs.readFileSync(name+'.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText);`);
   f.write('inventory.ts', "export const caps: string[] = ['--maxWorkers=1','--testTimeout=60000'];");
   f.write('planner.ts', `import fs from 'node:fs';import {caps} from './inventory';const input=JSON.parse(fs.readFileSync(0,'utf8'));if(process.cwd()===input.candidate_root)throw Error('candidate policy');console.log(JSON.stringify({schema:'promotion-tests/v2',files:['whole.test.mjs'],steps:[{runner:'pnpm',args:['run','fixture-build'],reason:'dependency build'},{runner:'vitest',args:['native.test.ts',...caps],reason:'whole native suite'},{runner:'python',args:['scripts/driver.py'],reason:'fixture and controls'}]}));`);
   f.write('package.json', JSON.stringify({ private: true, scripts: { 'fixture-build': 'node build.mjs' } }));
+  f.write('vitest.config.mjs', "export default {cacheDir:'.fixture/vite',test:{cache:false}};\n");
   f.write('build.mjs', "import fs from 'node:fs';fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/product.mjs','export const value='+JSON.stringify(fs.readFileSync('product.txt','utf8'))+';');fs.appendFileSync(process.env.CHECK_LOG,'build\\n');");
   f.write('native.test.ts', "import {test,expect} from 'vitest';import {value} from './dist/product.mjs';test('whole suite',()=>expect(value).toBe('candidate'));test('second control',()=>expect(value.length).toBe(9));");
   f.write('driver.test.ts', "import {test,expect} from 'vitest';import fs from 'node:fs';test('driver control',()=>expect(fs.readFileSync('.fixture/control','utf8')).toBe('ready'));");

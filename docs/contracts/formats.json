@@ -567,8 +567,8 @@
     {
       "id": "declared-gate-attempt/v1",
       "version": 1,
-      "writer": "promote/declared-gates.mjs; promote/train.mjs",
-      "location": "<common>/promote/batches/*/train.json attempts[].declared_execution",
+      "writer": "promote/declared-gates.mjs; promote/train.mjs; promote/declared-planning.mjs",
+      "location": "<common>/promote/batches/*/train.json attempts[].declared_execution and <common>/promote/planning/*/planning.json",
       "rule": "additive",
       "notCovered": "Diagnostic command outcomes are not a green receipt and have no OLD integration consumer."
     },

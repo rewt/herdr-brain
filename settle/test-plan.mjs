@@ -4,10 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { promotionTestPlan } from '../promote/test-plan.mjs';
-import { planDeclaredGate } from '../promote/declared-gates.mjs';
-import { readDeclared } from '../lanes/validation.mjs';
-import { executionIdentity } from '../promote/execution-identity.mjs';
-import { gitProject } from '../lib/project.mjs';
+import { admittedDeclaredTestPlan } from '../promote/declared-planning.mjs';
 
 const MAX_BYTES = 64 * 1024 * 1024;
 function git(repo, args, input, deadline) {
@@ -51,12 +48,8 @@ export function withCanonicalSnapshot({ repo, base, deadline }, inspect) {
 export function canonicalTestPlan({ repo, base, ...options }) {
   if (!options.planner) return null;
   if (typeof options.planner === 'object') {
-    const owner = readDeclared(repo, { base, env: options.env });
-    if (!owner) throw Error('command planner requires declared-gates/v1');
-    const project = gitProject(repo);
-    const identity = executionIdentity(project);
     const candidate = git(options.cwd, ['rev-parse', 'HEAD']).toString('utf8').trim();
-    return planDeclaredGate({ ...options, repo, base, candidate, owner, common: project.identity, identity, selectionOnly: true }).plan;
+    return admittedDeclaredTestPlan({ ...options, repo, base, candidate });
   }
   return withCanonicalSnapshot({ repo, base }, plannerRoot => promotionTestPlan({ ...options, plannerRoot }));
 }

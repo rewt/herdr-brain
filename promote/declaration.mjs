@@ -71,18 +71,37 @@ export function validateDeclared(value) {
   return value;
 }
 const git = (root, args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', timeout: 20000, maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-export function readCommitted(root, name, base = 'HEAD') {
+export function readCommitted(root, name, base = 'HEAD', { schemaProbe = false } = {}) {
   const head = git(root, ['rev-parse', '--verify', base]).trim();
   const entry = git(root, ['ls-tree', head, '--', name]).trim();
   if (!entry) return undefined;
-  if (!/^100644 blob /.test(entry)) throw refuse(`${name} must be a regular committed file`);
-  return JSON.parse(git(root, ['show', `${head}:${name}`]));
+  if (!/^100(?:644|755) blob /.test(entry)) {
+    if (schemaProbe) return undefined; // legacy symlink declarations retain their filesystem reader
+    throw refuse(`${name} must be a regular committed file`);
+  }
+  const text = git(root, ['show', `${head}:${name}`]);
+  try { return JSON.parse(text); }
+  catch (error) {
+    if (schemaProbe && !/"schema"\s*:/.test(text)) return undefined;
+    throw error;
+  }
+}
+export function snapshotDeclaration(owner) {
+  const snapshot = structuredClone(owner);
+  if (snapshot.environment_digests !== undefined || !snapshot.value.gate?.env) return snapshot;
+  snapshot.environment_digests = Object.fromEntries(Object.entries(snapshot.value.gate.env).map(([name, value]) => [name, hash(value)]));
+  snapshot.value.gate.env = Object.fromEntries(Object.entries(snapshot.environment_digests).map(([name, digest]) => [name, `sha256:${digest}`]));
+  return snapshot;
 }
 export function sameDeclaration(bound, current) {
   // A new canonical commit may retain the identical owner rule. Its admission
   // revision stays on the job; changing the value or authority needs re-admission.
   if (!bound || !current || bound.schema !== DECLARED_SCHEMA || bound.selection_schema !== SELECTION_SCHEMA ||
-      bound.source?.file !== current.source.file || bound.source?.digest !== current.source.digest ||
-      hash(bound.value) !== current.source.digest) throw refuse('owner declaration changed or missing; resolve the job and re-enqueue');
+      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(bound.source?.revision ?? '') ||
+      bound.source?.file !== current.source.file || bound.source?.digest !== current.source.digest)
+    throw refuse('owner declaration changed or missing; resolve the job and re-enqueue');
   validateDeclared(bound.value);
+  const expected = snapshotDeclaration(current);
+  expected.source.revision = bound.source.revision;
+  if (hash(snapshotDeclaration(bound)) !== hash(expected)) throw refuse('owner declaration changed or missing; resolve the job and re-enqueue');
 }

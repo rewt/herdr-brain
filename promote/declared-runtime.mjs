@@ -6,7 +6,7 @@ import { hash, refuse } from './declaration.mjs';
 
 export function projectEnvironment(env, { candidate, snapshot } = {}) {
   const result = { ...env };
-  for (const key of Object.keys(result)) if (/^(?:NODE_OPTIONS|NODE_PATH|PYTHONPATH|PYTHONHOME|TS_NODE.*|TSX_.*|LD_.*|DYLD_.*|INIT_CWD|npm_(?:lifecycle_.*|config_node_options)|NPM_CONFIG_NODE_OPTIONS|GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|CONFIG_COUNT|CONFIG_KEY_.*|CONFIG_VALUE_.*))$/.test(key)) delete result[key];
+  for (const key of Object.keys(result)) if (/^(?:NODE_OPTIONS|NODE_PATH|PYTHONPATH|PYTHONHOME|PYTHONSTARTUP|PYTHONUSERBASE|PYTHONPYCACHEPREFIX|BASH_ENV|ENV|BASH_FUNC_.*|SHELLOPTS|BASHOPTS|ZDOTDIR|TS_NODE.*|TSX_.*|LD_.*|DYLD_.*|INIT_CWD|npm_(?:lifecycle_.*|config_node_options)|NPM_CONFIG_NODE_OPTIONS|GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|CONFIG_COUNT|CONFIG_KEY_.*|CONFIG_VALUE_.*))$/.test(key)) delete result[key];
   if (snapshot) {
     result.PATH = [path.join(snapshot, 'node_modules/.bin'), ...(result.PATH ?? '').split(path.delimiter).filter(part => {
       if (!path.isAbsolute(part)) return false;
@@ -31,14 +31,39 @@ export function runtimeIdentity(command, { cwd, env, deadline, roots = [] }) {
   const names = [command[0]];
   const exec = command.indexOf('exec');
   if (exec >= 0 && command[exec + 1] && !command[exec + 1].startsWith('-')) names.push(command[exec + 1]);
-  return names.map(name => {
-    const file = executable(name, cwd, env);
-    const result = spawnSync(file, ['--version'], { cwd, env, encoding: 'utf8', timeout: Math.min(3000, remaining(deadline)), maxBuffer: 65536, killSignal: 'SIGKILL' });
-    if (result.error || result.status !== 0 || result.signal || !(result.stdout || result.stderr).trim()) throw refuse(`cannot identify runtime version: ${name}`);
-    const version = (result.stdout || result.stderr).trim();
+  const identify = (name, depth = 0) => {
+    remaining(deadline);
+    if (depth > 4) throw refuse('runtime interpreter chain exceeds four launchers');
+    const file = executable(name, cwd, env), bytes = fs.readFileSync(file);
+    const digest = createHash('sha256').update(bytes).digest('hex');
     const normalized = roots.reduce((value, [root, label]) => value.startsWith(root + path.sep) ? label + value.slice(root.length) : value, file);
-    return { name, executable: file, binding: { path: normalized, version, executable_sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') } };
-  });
+    const shebang = bytes.subarray(0, 512).toString('utf8').match(/^#!([^\n]+)/)?.[1].trim();
+    let version = `sha256:${digest}`, interpreter;
+    if (shebang) {
+      // A project driver may run tests even for --version. Never probe it.
+      // Package metadata and the exact bytes identify scripts; inspect the
+      // kernel's interpreter chain independently instead of executing them.
+      for (let at = path.dirname(file), n = 0; n < 8; at = path.dirname(at), n++) {
+        const metadata = path.join(at, 'package.json');
+        if (fs.existsSync(metadata)) {
+          const pkg = JSON.parse(fs.readFileSync(metadata, 'utf8'));
+          if (pkg.name && pkg.version) version = `${pkg.name}@${pkg.version}`;
+          break;
+        }
+        if (at === path.dirname(at)) break;
+      }
+      const words = shebang.split(/\s+/), binary = words[0] === '/usr/bin/env' ? words.slice(1).find(word => !word.startsWith('-') && !word.includes('=')) : words[0];
+      if (!binary) throw refuse('unresolved runtime interpreter');
+      interpreter = identify(binary, depth + 1).binding;
+    } else if (file === fs.realpathSync(process.execPath)) version = process.version;
+    else if (/^(?:node|python[0-9.]*(?:-config)?|bash|sh|zsh|ruby|perl|deno|bun)$/.test(path.basename(file))) {
+      const result = spawnSync(file, ['--version'], { cwd, env, encoding: 'utf8', timeout: Math.min(3000, remaining(deadline)), maxBuffer: 65536, killSignal: 'SIGKILL' });
+      if (result.error || result.status !== 0 || result.signal || !(result.stdout || result.stderr).trim()) throw refuse(`cannot identify runtime version: ${name}`);
+      version = (result.stdout || result.stderr).trim();
+    }
+    return { name, executable: file, binding: { path: normalized, version, executable_sha256: digest, ...(interpreter ? { interpreter } : {}) } };
+  };
+  return names.map(name => identify(name));
 }
 export function runtimeBinding(facts) { return hash(facts.map(({ binding }) => binding)); }
 

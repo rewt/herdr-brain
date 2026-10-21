@@ -21,7 +21,7 @@ import { runProjectGateSync } from './gate-profile.mjs';
 import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
 import { verifyTrainResult } from './evidence.mjs';
 import { probeNativeGate, nativeWorkerEvidence, liveNativeWorker } from './native-context.mjs';
-import { sameDeclaration, refuse as declaredRefusal } from './declaration.mjs';
+import { sameDeclaration, snapshotDeclaration, refuse as declaredRefusal } from './declaration.mjs';
 import { readDeclared } from '../lanes/validation.mjs';
 import { executionIdentity } from './execution-identity.mjs';
 import { bindRequirements } from './declared-selection.mjs';
@@ -181,7 +181,8 @@ export function enqueue(queue, topics, options) {
     const base = git(queue.project.canonical, ['rev-parse', 'HEAD']);
     const requiredTests = bindRequirements(options.requiredTests ?? [], declared.value,
       row => policyBinding(queue.project.canonical, base, declared.value, [row]));
-    options = { ...options, laneCLI: LANE, validate: null, laneConfig: null, gate_mode: declared.schema, declared, execution_identity: identity, requiredTests };
+    options = { ...options, laneCLI: LANE, validate: null, laneConfig: null, gate_mode: declared.schema,
+      declared: snapshotDeclaration(declared), execution_identity: identity, requiredTests };
   } else if (options.requiredTests !== undefined && (!Array.isArray(options.requiredTests) || options.requiredTests.length > 512 || options.requiredTests.some(f => typeof f !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(f) || f.split('/').includes('..') || path.isAbsolute(f)))) throw Error('invalid required test files');
   if (options.expectedHead !== undefined && (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.expectedHead) || topics.length !== 1)) throw new Error('expected head requires one lane and a full commit hash');
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');

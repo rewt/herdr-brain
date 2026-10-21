@@ -77,6 +77,7 @@ export function validateSelection(plan, { declaration, required = [] }) {
     for (const row of plan.selected) {
       closed(row, ['file', 'reason', 'estimated_ms', 'estimate', 'measured_at'], 'selected detail');
       if (!plan.files.includes(row.file) || details.has(row.file) || !nonempty(row.reason)) throw refuse('invalid selected details');
+      if (row.estimated_ms === undefined || row.estimate === undefined) throw refuse('selected file details retain the v1 estimate fields');
       estimate(row); details.set(row.file, row);
     }
     if (details.size !== plan.files.length) throw refuse('selected details must describe every file');

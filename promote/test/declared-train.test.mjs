@@ -10,8 +10,8 @@ import { resolveValidation } from '../../lanes/validation.mjs';
 
 function train(f, t, options = {}) {
   f.add(options);
-  const q = f.queue(), jobs = q.load().pending, file = path.join(f.root, 'batch/train.json');
-  fs.mkdirSync(path.dirname(file));
+  const q = f.queue(), jobs = q.load().pending, file = path.join(q.directory, 'batches/fixture/train.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ schema: 'promotion-train/v1', id: 'fixture-train', identity: q.project.identity, jobs, phase: 'pending' }));
   const result = runProjectGateSync({ canonical: f.repo, receipt: file,
     argv: [path.join(product, 'lanes/lane.mjs'), 'promote-batch', file], cwd: f.repo, env: f.env, encoding: 'utf8' });
@@ -29,7 +29,7 @@ test('one admitted train binds declaration, identities, typed selection, runtime
   const before = f.base(), result = train(f, t, { requiredTests: [{ runner: 'tool', args: ['whole.test.ts', '--maxWorkers=1'] }] });
   if (!result) return;
   const { receipt } = result, attempt = receipt.attempts[0];
-  assert.equal(receipt.phase, 'complete'); assert.equal(attempt.phase, 'complete');
+  assert.equal(receipt.phase, 'complete', JSON.stringify(receipt.results)); assert.equal(attempt.phase, 'complete', JSON.stringify(receipt.results));
   assert.equal(receipt.results[receipt.jobs[0].id].outcome, 'promoted');
   assert.notEqual(f.base(), before); assert.equal(f.base(), attempt.tip);
   assert.equal(attempt.execution_identity.caller_root, f.owner);

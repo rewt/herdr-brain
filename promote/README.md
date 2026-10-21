@@ -38,6 +38,13 @@ include executable paths, versions and bytes; locked dependency versions and
 bytes participate in receipt identity. Loader/search overrides are scrubbed
 from the planner environment.
 
+Environment values stay in memory: job snapshots and the literal executor input
+retain their digests and re-read only a matching owner declaration. Script
+versions come from locked package metadata or content revisions and their
+interpreter chain; identifying an opaque driver never runs it with a guessed
+`--version` flag. Keep generated caches outside the immutable installed runtime
+tree (the Vitest fixture directs them to an ignored project output directory).
+
 One finite attempt deadline covers planner preparation, its 20-second/1-MiB
 planning subprocess, candidate preparation and all selected execution. Everything
 inherits the host admission and foreground group. The final command carries the
@@ -48,6 +55,11 @@ Old workers must support the internal `--capabilities` protocol or remain held;
 old file-only receipts never cover typed steps. Rollback requires disposition
 of outstanding jobs and explicit restoration of a sufficient legacy declaration.
 
+Settle's observational planning also enters the owner's host admission, retains
+its canonical planner/runtime provenance under `promote/planning/`, and runs no
+candidate gate. Exact projects must include literal gate environment names in
+their existing exact-validation allowlist; a conflict refuses before preparation.
+
 Direct `lane promote` and local promotion-tier shortcuts refuse in declared
 mode: enqueue the complete gate. `lane check --cmd COMMAND` remains available
 for development evidence. It does not certify an incomplete declared promotion.
@@ -55,7 +67,7 @@ for development evidence. It does not certify an incomplete declared promotion.
 Offline acceptance uses scratch projects and optional real tool fixtures. To
 exercise pnpm, TypeScript and Vitest without a download, freeze an existing
 fixture tool installation with `promote/test/helpers/runtime-artifact.mjs` and
-set `HERDR_DECLARED_FIXTURE_ARTIFACT` to its tar. The fixture verifies the tar's
+set `DECLARED_GATES_FIXTURE_ARTIFACT` to its tar. The fixture verifies the tar's
 canonical SHA-256 before each independent planner/candidate preparation. Missing
 fixture input is an explicit skip; Python and Node use available native tools.
 Brain's bundle and package manifest gain no npm dependencies.

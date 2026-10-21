@@ -12,7 +12,7 @@ import { homeProject } from '../../lib/config-home.mjs';
 const product = fileURLToPath(new URL('../../', import.meta.url));
 export function configFixture(t, { custom = false, routing = false } = {}) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'config-home-'))), home = path.join(scratch, 'home');
-  const ownerRoot = custom ? path.join(home, 'development/alex') : path.join(home, 'development'), cwd = path.join(ownerRoot, 'project');
+  const ownerRoot = custom ? path.join(home, 'development', typeof custom === 'string' ? custom : 'alex') : path.join(home, 'development'), cwd = path.join(ownerRoot, 'project');
   fs.mkdirSync(cwd, { recursive: true });
   if (custom) fs.writeFileSync(path.join(ownerRoot, '.identity-root'), 'fixture\n');
   const keys = ['HOME', 'HERDR_MONITOR_FLEET', 'ORG_DIR', 'ORG_ACTOR', 'HERDR_AGENT_NAME', 'HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', 'LANE_CONFIG'];
@@ -33,12 +33,21 @@ export function configFixture(t, { custom = false, routing = false } = {}) {
   fs.writeFileSync(path.join(cwd, '.herdr-release.json'), '{"release":null}\n');
   if (routing) fs.writeFileSync(path.join(cwd, 'routing.json'), JSON.stringify(ROUTE_PRESET));
   git('add', '.'); git('commit', '-qm', 'fixture policy'); initOrg(env.ORG_DIR);
-  const installationHome = path.join(home, '.local/share/herdr-monitor'), bundle = path.join(installationHome, 'releases/compatible');
-  copyProduct(product, bundle);
-  fs.writeFileSync(path.join(bundle, '.release-commit'), '1'.repeat(40) + '\n');
-  const summary = path.join(bundle, '.release-acceptance.json');
-  fs.writeFileSync(summary, JSON.stringify({ ready: true, candidateCommit: '1'.repeat(40), elapsedSeconds: 1, counts: { PASS: 1, FAIL: 0, PENDING: 0, SKIP: 0 } }));
-  execFileSync(process.execPath, [path.join(product, 'herdr/releases.mjs'), 'manifest', bundle, summary], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const installationHome = path.join(home, '.local/share/herdr-monitor');
+  function release(id, { compatible = true, commit = '2'.repeat(40) } = {}) {
+    const root = path.join(installationHome, 'releases', id);
+    copyProduct(product, root);
+    fs.writeFileSync(path.join(root, '.release-commit'), commit + '\n');
+    const summary = path.join(root, '.release-acceptance.json');
+    fs.writeFileSync(summary, JSON.stringify({ ready: true, candidateCommit: commit, elapsedSeconds: 1, counts: { PASS: 1, FAIL: 0, PENDING: 0, SKIP: 0 } }));
+    execFileSync(process.execPath, [path.join(product, 'herdr/releases.mjs'), 'manifest', root, summary], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    if (!compatible) {
+      const file = path.join(root, '.release-manifest.json'), manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+      delete manifest.config_home; fs.writeFileSync(file, JSON.stringify(manifest));
+    }
+    return root;
+  }
+  const bundle = release('compatible', { commit: '1'.repeat(40) });
   fs.symlinkSync(bundle, path.join(installationHome, 'current'));
   const observation = { complete: true, server: path.join(scratch, 'native.sock'), errors: [], receipts: [],
     workspaces: [{ workspace_id: 'workspace', worktree: { repo_key: path.join(cwd, '.git'), repo_root: cwd, checkout_path: cwd, is_linked_worktree: false } }],
@@ -51,12 +60,14 @@ export function configFixture(t, { custom = false, routing = false } = {}) {
   function question(scope, field = 'adoption_authorization', actor = 'human') {
     const id = `HUM-${++n}`;
     transact(env.ORG_DIR, () => ({ add: [{ type: 'item.added', id, title: 'Authorize this exact fixture scope?', role: 'human', meta: { category: 'security', [field]: JSON.stringify(scope) } }] }), { actor: 'fixture-supervisor' });
-    const recordCLI = fs.existsSync(path.join(cwd, '.brain')) ? path.join(bundle, 'bin/org.mjs') : path.join(product, 'bin/org.mjs');
+    // Use the fixture's immutable bundle directly: project pins must never
+    // forward this offline answer into the operator's real installation.
+    const recordCLI = path.join(bundle, 'bin/org.mjs');
     execFileSync(process.execPath, [recordCLI, 'answer', id, 'yes'], { cwd, env: { ...env, ORG_ACTOR: actor }, stdio: ['ignore', 'pipe', 'pipe'] });
     const event = loadEvents(env.ORG_DIR).events.find(e => e.id === id && e.kind === 'answer');
     return { id, seq: event.seq };
   }
-  const f = { scratch, home, ownerRoot, cwd, env, git, installationHome, bundle, observation, observer, options, question,
+  const f = { scratch, home, ownerRoot, cwd, env, git, installationHome, bundle, release, observation, observer, options, question,
     events: () => loadEvents(env.ORG_DIR).events, binding: () => homeProject(cwd, env) };
   f.capture = () => adopt({ ...options, inspectOnly: true, expiresAt: new Date(Date.now() + 3600000).toISOString() });
   f.adopt = async extra => {

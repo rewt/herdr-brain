@@ -3,20 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFileSync } from 'node:child_process';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeProject, policyLocation, readConfigJSON, contentDigest } from '../lib/config-home.mjs';
-import { readProjectPolicy, configBase } from '../lib/config-policy.mjs';
+import { readProjectPolicy, readPolicyFile, configBase } from '../lib/config-policy.mjs';
 import { configSnapshot, setConfig, configCommand } from '../lib/config-command.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
 import { resolveValidation, validateTree } from '../lanes/validation.mjs';
 import { discoverArchive } from '../lib/archive.mjs';
 import { literalLaunch } from '../lib/owner-launch.mjs';
-import { requireHomeRelease, projectPin } from '../lib/releases.mjs';
+import { requireHomeRelease, projectPin, selectRelease } from '../lib/releases.mjs';
 import { freezeReleaseValidation } from '../herdr/validation-admission.mjs';
 import { adoptCommand } from '../lib/adopt-command.mjs';
 import { readFleet } from '../lib/fleet.mjs';
-import { initOrg } from '../lib/store.mjs';
+import { initOrg, findOrgDir } from '../lib/store.mjs';
 import { inspect } from '../sessions/sessions.mjs';
 import { readSessionFacts } from '../sessions/observe.mjs';
 import { routesSnapshot } from '../lanes/routes-command.mjs';
@@ -24,6 +24,10 @@ import { housekeepingSnapshot } from '../housekeeping/command.mjs';
 import { discoverProject } from '../housekeeping/housekeeping.mjs';
 import { queueFor } from '../promote/promote.mjs';
 import { resolveGateProfile } from '../promote/gate-profile.mjs';
+import { readControllerJournal } from '../sessions/runtime.mjs';
+import { readStandardSlots } from '../sessions/receipts.mjs';
+import { plan } from '../sessions/plan.mjs';
+import { pendingConfigWrite } from '../lib/config-audit.mjs';
 
 async function commandWarnings(run) {
   const output = [], stderr = process.stderr.write, stdout = process.stdout.write;
@@ -105,6 +109,80 @@ test('whole home files do not resurrect removed repo keys; provenance/history in
   assert.equal(view.values.find(v => v.key === 'launch').scope, 'identity');
   setConfig('retirement.closeout_queue', 'true', { cwd: f.cwd, scope: 'identity' });
   assert.ok(!configSnapshot({ cwd: f.cwd }).values.some(v => v.key === 'retirement.closeout_queue'));
+});
+
+for (const mode of ['legacy', 'home', 'standalone']) test(`config set validates complete ${mode} policy references before any intent, replacement or audit`, async t => {
+  const f = configFixture(t, { routing: mode === 'standalone' });
+  if (mode !== 'legacy') await f.adopt();
+  const binding = f.binding(), lane = policyLocation(f.cwd, 'lane').file;
+  const files = [path.join(f.env.ORG_DIR, 'events.jsonl'), lane,
+    ...(binding ? [binding.identityFile, path.join(path.dirname(binding.identityFile), '.org/events.jsonl')] : []),
+    ...(mode === 'standalone' ? [policyLocation(f.cwd, 'routing').file] : [])];
+  const bytes = () => files.map(file => fs.readFileSync(file, 'utf8'));
+  for (const key of ['settle.review_route', 'settle.fix_route']) {
+    const before = bytes();
+    assert.throws(() => setConfig(key, 'unknown', { cwd: f.cwd }), /unknown route: unknown/);
+    assert.deepEqual(bytes(), before);
+    if (binding) {
+      assert.throws(() => setConfig(key, 'unknown', { cwd: f.cwd, scope: 'identity' }), /unknown route: unknown/);
+      assert.deepEqual(bytes(), before);
+    }
+  }
+  // A desk can use an inherited route, but removing its selected standalone
+  // declaration must not resurrect the identity's routes or discard the desk.
+  setConfig('settle.review_route', 'engineer', { cwd: f.cwd });
+  if (mode === 'standalone') {
+    setConfig('routes.desk-only', '{"kind":"codex"}', { cwd: f.cwd });
+    setConfig('settle.review_route', 'desk-only', { cwd: f.cwd });
+    const before = bytes();
+    assert.throws(() => setConfig('routes.desk-only', undefined, { cwd: f.cwd, unset: true }), /unknown route: desk-only/);
+    assert.deepEqual(bytes(), before);
+    assert.throws(() => setConfig('routing.selection_policy.by_task_class.review', 'unknown', { cwd: f.cwd }), /unknown route unknown/);
+    assert.deepEqual(bytes(), before);
+  }
+  assert.equal(loadDiscoveredRoutes({ cwd: f.cwd }).config.routes.engineer.kind, 'codex');
+});
+
+test('a stale recovery cannot complete its captured intent twice when another reader recovers it and a later writer interleaves', async t => {
+  const f = configFixture(t); await f.adopt();
+  const file = policyLocation(f.cwd, 'lane').file;
+  assert.throws(() => setConfig('main', 'first', { cwd: f.cwd, who: 'first request', afterReplace() { throw Error('first interruption'); } }), /first interruption/);
+  const first = pendingConfigWrite(f.env.ORG_DIR, file)[0];
+  const mkdir = fs.mkdirSync; let interleaved = false;
+  fs.mkdirSync = function(directory, ...args) {
+    if (!interleaved && directory === path.join(f.env.ORG_DIR, 'lock')) {
+      interleaved = true; fs.mkdirSync = mkdir;
+      assert.equal(readProjectPolicy(f.cwd, 'lane').config.main, 'first');
+      assert.throws(() => setConfig('main', 'second', { cwd: f.cwd, who: 'second request', afterIntent() { throw Error('second interruption'); } }), /second interruption/);
+    }
+    return mkdir.call(this, directory, ...args);
+  };
+  try { assert.equal(readProjectPolicy(f.cwd, 'lane').config.main, 'first'); }
+  finally { fs.mkdirSync = mkdir; }
+  assert.equal(interleaved, true);
+  assert.equal(f.events().filter(e => e.type === 'config.changed' && e.operation === first.operation).length, 1);
+  const second = pendingConfigWrite(f.env.ORG_DIR, file)[0];
+  assert.notEqual(second.operation, first.operation);
+  setConfig('main', 'second', { cwd: f.cwd, who: 'retry must preserve original' });
+  assert.deepEqual(pendingConfigWrite(f.env.ORG_DIR, file), []);
+  const completions = f.events().filter(e => e.type === 'config.changed' && [first.operation, second.operation].includes(e.operation));
+  assert.deepEqual(completions.map(e => [e.new_value.main, e.who_asked]), [['first', 'first request'], ['second', 'second request']]);
+});
+
+test('partial-move pin fallback and the shared reader both refuse duplicate keys, invalid UTF-8 and open pin shapes', async t => {
+  const f = configFixture(t);
+  await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === 'lane') throw Error('partial move'); } }), /partial move/);
+  assert.equal(policyLocation(f.cwd, 'pin').home, false);
+  const file = path.join(f.cwd, '.herdr-release.json');
+  for (const [bytes, reason] of [
+    ['{"release":"first","release":"compatible"}', /duplicate JSON key "release"/],
+    [Buffer.concat([Buffer.from('{"release":"'), Buffer.from([0xc0]), Buffer.from('"}')]), /encoded data was not valid/],
+    ['{"release":null,"extra":true}', /pin requires exactly/],
+  ]) {
+    fs.writeFileSync(file, bytes); f.git('add', '.herdr-release.json'); f.git('commit', '-qm', 'invalid fallback pin witness');
+    assert.throws(() => readProjectPolicy(f.cwd, 'pin'), reason);
+    assert.throws(() => projectPin(f.cwd), reason);
+  }
 });
 
 test('config and adopt warn with both divergent paths; config set warns repo-reading scripts and retains repo bytes', async t => {
@@ -229,7 +307,7 @@ test('an external project record and its existing local link remain in place thr
   assert.equal(fs.realpathSync(alias), external); assert.deepEqual(f.events().slice(0, before.length), before);
 });
 
-test('home pins precede Git absence prechecks; compatible release rollback and frozen release declarations retain canonical bases', async t => {
+test('home pins precede Git absence prechecks; incompatible bundles refuse and frozen release declarations retain canonical bases', async t => {
   const f = configFixture(t); await f.adopt();
   assert.equal(projectPin(f.cwd).file, policyLocation(f.cwd, 'pin').file);
   assert.equal(requireHomeRelease(null, f.binding(), f.installationHome).id, 'compatible');
@@ -243,6 +321,64 @@ test('home pins precede Git absence prechecks; compatible release rollback and f
   assert.equal(frozen.source, policyLocation(f.cwd, 'validation').file);
   assert.equal(frozen.declaration.fast, 'node --version');
   assert.equal(readConfigJSON(path.join(f.cwd, '.herdr-release.json')).release, null);
+});
+
+test('owner-controlled rollback selects divergent retained repo policy and another compatible release while preserving audit and KEEP evidence', async t => {
+  const f = configFixture(t); await f.adopt();
+  setConfig('main', 'home-main', { cwd: f.cwd });
+  const binding = f.binding(), common = binding.common, record = binding.record;
+  const repo = path.join(f.cwd, '.lane.json'), home = policyLocation(f.cwd, 'lane').file;
+  assert.equal(readProjectPolicy(f.cwd, 'lane').config.main, 'home-main');
+  assert.equal(readPolicyFile(repo, 'lane', { cwd: f.cwd, env: f.env }).main, 'main');
+  assert.ok(configSnapshot({ cwd: f.cwd }).warnings.some(w => w.includes(repo) && w.includes(home)));
+
+  // These are the owner's explicit procedure steps in an isolated native
+  // fixture, not an automatic fallback or a new rollback command.
+  const stopped = path.join(record, 'STOP'); fs.writeFileSync(stopped, 'Owner stopped new admissions for rollback\n');
+  const facts = readSessionFacts({ project: inspect({ cwd: f.cwd, env: f.env }).project, env: f.env });
+  assert.equal(facts.stopped, true); assert.deepEqual(facts.errors, []);
+  assert.deepEqual(facts.dispatches, {}); assert.deepEqual(facts.references, []);
+  assert.ok(readControllerJournal(common).operations.every(op => op.state === 'acknowledged'));
+  const rollback = f.release('rollback-compatible');
+  assert.equal(requireHomeRelease('rollback-compatible', binding, f.installationHome).root, rollback);
+  fs.writeFileSync(path.join(f.cwd, '.herdr-release.json'), '{"release":"rollback-compatible"}\n');
+  f.git('add', '.herdr-release.json'); f.git('commit', '-qm', 'owner accepts retained policy rollback release');
+  assert.equal(selectRelease(f.cwd, f.installationHome).root, f.bundle, 'home policy still wins until explicitly disabled');
+
+  const disabled = path.join(path.dirname(binding.directory), '.rollback-project');
+  const scope = { common, record, binding: binding.file, preserved_home: disabled, selected_policy: repo,
+    home_main: 'home-main', repo_main: 'main', release: 'rollback-compatible', release_root: rollback };
+  const decision = f.question(scope, 'config_rollback');
+  const history = f.events(), identityHistory = fs.readFileSync(path.join(path.dirname(binding.identityFile), '.org/events.jsonl'), 'utf8');
+  const journal = readControllerJournal(common), op = journal.operations[0];
+  const evidence = [path.join(common, 'sessions/controller-journal.json'), path.join(common, 'sessions/standard-slots.json'),
+    op.evidence.file, binding.adoption.scope_file];
+  const before = evidence.map(file => fs.readFileSync(file, 'utf8'));
+  const homeFiles = [binding.file, ...Object.keys(binding.sources).filter(kind => binding.sources[kind].present).map(kind => policyLocation(f.cwd, kind).file)];
+  const homeBytes = homeFiles.map(file => fs.readFileSync(file, 'utf8'));
+
+  fs.unlinkSync(path.join(f.cwd, '.brain'));
+  assert.equal(readProjectPolicy(f.cwd, 'lane').config.main, 'home-main', 'a missing link alone does not roll back');
+  fs.renameSync(binding.directory, disabled);
+  assert.equal(homeProject(f.cwd, f.env), null);
+  assert.equal(findOrgDir({ cwd: f.cwd, env: f.env }), record);
+  assert.equal(readProjectPolicy(f.cwd, 'lane', f.env).config.main, 'main');
+  assert.equal(selectRelease(f.cwd, f.installationHome).root, rollback);
+  assert.equal(selectRelease(f.cwd, f.installationHome).selection, 'project');
+  assert.deepEqual(evidence.map(file => fs.readFileSync(file, 'utf8')), before);
+  assert.deepEqual(homeFiles.map(file => fs.readFileSync(path.join(disabled, path.relative(binding.directory, file)), 'utf8')), homeBytes);
+  assert.equal(fs.readFileSync(path.join(path.dirname(binding.identityFile), '.org/events.jsonl'), 'utf8'), identityHistory);
+  assert.deepEqual(f.events(), history);
+
+  const text = `Rollback authorized by ${decision.id}:${decision.seq}: selected retained repo ${repo} (main) instead of ${home} (home-main); selected ${rollback}; preserved home at ${disabled}, owning record, audit, enrollment and KEEP evidence.`;
+  execFileSync(process.execPath, [path.join(rollback, 'bin/org.mjs'), 'note', decision.id, text, '--decision'], { cwd: f.cwd, env: { ...f.env, ORG_ACTOR: 'human' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.deepEqual(f.events().slice(0, history.length), history);
+  assert.equal(f.events().at(-1).text, text); assert.equal(f.events().at(-1).decision, true);
+  fs.unlinkSync(stopped);
+  assert.equal(readStandardSlots(common).slots.length, 1);
+  const planned = await plan({ cwd: f.cwd, observer: f.observer, env: f.env });
+  assert.equal(planned.decisions.find(d => d.uid === op.uid).decision, 'KEEP');
+  assert.deepEqual(evidence.map(file => fs.readFileSync(file, 'utf8')), before);
 });
 
 test('a home authority-input change cannot inherit a source-only validation witness', async t => {

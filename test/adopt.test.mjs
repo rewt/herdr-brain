@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { configFixture } from './helpers/config-home-fixture.mjs';
-import { adopt } from '../lib/adopt-command.mjs';
+import { adopt, adoptCommand } from '../lib/adopt-command.mjs';
+import { readConfigJSON, policyLocation } from '../lib/config-home.mjs';
+import { releaseAcceptance, checkRelease } from '../lib/releases.mjs';
 import { readControllerJournal } from '../sessions/runtime.mjs';
 import { readStandardSlots } from '../sessions/receipts.mjs';
 import { validLaunchReceipt } from '../sessions/lifecycle-evidence.mjs';
@@ -12,6 +14,58 @@ import { plan } from '../sessions/plan.mjs';
 import { plan as setupPlan } from '../setup/setup.mjs';
 import { digest } from '../lib/digest.mjs';
 import { initOrg } from '../lib/store.mjs';
+
+async function command(argv, options) {
+  const stdout = process.stdout.write, output = [];
+  process.stdout.write = text => { output.push(String(text)); return true; };
+  try { await adoptCommand(argv, options); } finally { process.stdout.write = stdout; }
+  return JSON.parse(output.join(''));
+}
+
+for (const compatible of [false, true]) test(`adoption checks and records the frozen project pin when its READY bundle is ${compatible ? 'compatible' : 'incompatible'}`, async t => {
+  const f = configFixture(t), pinned = f.release('pinned', { compatible });
+  assert.equal(releaseAcceptance(checkRelease(f.installationHome, 'pinned'), f.installationHome).ready, true);
+  fs.writeFileSync(path.join(f.cwd, '.herdr-release.json'), '{"release":"pinned"}\n');
+  f.git('add', '.herdr-release.json'); f.git('commit', '-qm', 'accept project pin');
+  f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  const events = f.events();
+  if (!compatible) {
+    await assert.rejects(f.adopt(), /incompatible downgrade: pinned/);
+    assert.deepEqual(f.events(), events);
+    for (const file of ['.brain', '.git/sessions/standard-slots.json', '.git/sessions/controller-journal.json']) assert.equal(fs.existsSync(path.join(f.cwd, file)), false);
+    assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false);
+  } else {
+    await f.adopt();
+    assert.equal(f.binding().compatible_release.root, pinned);
+    assert.equal(f.binding().compatible_release.commit, '2'.repeat(40));
+    assert.equal(f.events().find(e => e.type === 'config.adopted').compatible_release.root, pinned);
+    assert.equal(readConfigJSON(policyLocation(f.cwd, 'pin').file).release, 'pinned');
+    assert.equal(fs.realpathSync(path.join(f.installationHome, 'current')), f.bundle);
+  }
+});
+
+test('the documented capture-then-execute commands retain saved standalone routing and refuse conflicting new arguments', async t => {
+  const f = configFixture(t, { routing: true });
+  const captured = await command(['.', '--inspect', '--routing', 'routing.json', '--expires', new Date(Date.now() + 3600000).toISOString()], f.options);
+  const decision = f.question(captured.scope), args = ['.', '--scope', captured.scopeFile, '--decision', `${decision.id}:${decision.seq}`];
+  const events = f.events();
+  await assert.rejects(command([...args, '--routing', '.lane.json'], f.options), /routing argument conflicts with the saved scope/);
+  assert.deepEqual(f.events(), events); assert.equal(fs.existsSync(path.join(f.cwd, '.brain')), false);
+  const adopted = await command(args, f.options);
+  assert.equal(adopted.adopted, true);
+  assert.equal(f.binding().sources.routing.path, path.join(f.cwd, 'routing.json'));
+  assert.equal(fs.readFileSync(policyLocation(f.cwd, 'routing').file, 'utf8'), fs.readFileSync(path.join(f.cwd, 'routing.json'), 'utf8'));
+});
+
+for (const [custom, name] of [[false, 'p'], ['p', 'project'], ['p', 'fleet.json']]) test(`binding metadata discovers accepted identity/project names ${custom || 'default'}/${name}`, async t => {
+  const f = configFixture(t, { custom });
+  // Legacy installation entries without binding metadata remain ignorable.
+  if (!custom) fs.mkdirSync(path.join(f.home, '.herdr-monitor/p/legacy-install'), { recursive: true });
+  await f.adopt({ name });
+  assert.equal(f.binding().project, name);
+  assert.equal(fs.realpathSync(path.join(f.cwd, '.brain')), f.binding().directory);
+  assert.equal(readStandardSlots(path.join(f.cwd, '.git')).slots.length, 1);
+});
 
 test('native owner authorization yields KEEP without synthetic launch evidence, and a second adoption changes no bytes/events', async t => {
   const f = configFixture(t); await f.adopt();

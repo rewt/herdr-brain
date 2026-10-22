@@ -78,7 +78,7 @@ test('status CLI and table list each follow-up once, with its title, owner role 
 
 test('landed content ignores child dispositions while local live runs and unknown bindings still keep', t => {
   const f = fixture(t); record(f);
-  const baseline = f.retirement().observe();
+  const baseline = { ...f.retirement().observe(), closeoutQueuePolicy: true };
   const cases = [
     ['direct link blocker', s => { s.record.links.push({ blocked: 'ENG-1', blocker: 'ENG-2' }); }],
     ['direct blocked_by blocker', s => { s.record.items[0].blocked_by = ['ENG-2']; }],
@@ -126,7 +126,7 @@ test('a proposal dispatched in its own lane does not reclaim the integrated sour
 
 test('open source children release with landed content; live references remain holds', t => {
   const f = fixture(t); record(f);
-  const s = f.retirement().observe();
+  const s = { ...f.retirement().observe(), closeoutQueuePolicy: true };
   s.record.items.push({ id: 'ENG-3', parent: 'ENG-1', role: 'engineer' });
   assert.equal(planRetirement(s).close.length, 1);
   assert.equal(laneRemovalReason(vacant(s), f.lane), null);
@@ -144,7 +144,7 @@ test('a separately dispatched follow-up owns its reviewer, corrections and exclu
     { type: 'item.added', id: 'ENG-4', parent: 'HUM-1', role: 'engineer' },
     { type: 'link.added', blocked: 'ENG-2', blocker: 'HUM-1' },
   ]);
-  const s = f.retirement().observe(), before = structuredClone(s);
+  const s = { ...f.retirement().observe(), closeoutQueuePolicy: true }, before = structuredClone(s);
   const plan = planRetirement(s);
   assert.equal(plan.close.length, 1); assert.equal(laneRemovalReason(vacant(s), f.lane), null);
   assert.deepEqual(followUps(plan).map(d => d.item), ['ENG-2']);
@@ -185,7 +185,7 @@ test('dependencies between exempt follow-ups do not retain the source, but a ret
     { type: 'item.added', id: 'REV-1', parent: 'ENG-3', role: 'reviewer' },
     { type: 'link.added', blocked: 'ENG-2', blocker: 'REV-1' },
   ]);
-  const s = f.retirement().observe();
+  const s = { ...f.retirement().observe(), closeoutQueuePolicy: true };
   assert.equal(planRetirement(s).close.length, 1);
   assert.equal(laneRemovalReason(vacant(s), f.lane), null);
   assert.deepEqual(followUps(planRetirement(s)).map(d => d.item), ['ENG-2', 'ENG-3']);

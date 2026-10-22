@@ -101,6 +101,7 @@ test('native detail lookup releases a recorded session while an unnamed operator
 
 test('a worker releases after its exact run lands even with an open child; PASS before landing keeps it', t => {
   const f = openFixture(t), r = f.retirement();
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   assertKept(f);
   const events = loadEvents(f.org).events;
   events.push({ type: 'promotion.reconciled', identity: f.common, batch: 'batch', tip: f.head,
@@ -118,6 +119,7 @@ test('a worker releases after its exact run lands even with an open child; PASS 
 test('NEEDS-WORK keeps unlanded work, while a verified landing releases its content', t => {
   assertKept(openFixture(t, { verdict: 'NEEDS-WORK' }));
   const f = openFixture(t, { landed: true, verdict: 'NEEDS-WORK' });
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   assert.equal(f.retirement().plan().close.length, 1);
 });
 
@@ -266,6 +268,7 @@ test('policy off keeps an unlanded eligible reviewer; invalid overrides fail clo
 
 for (const enabled of [false, true]) test(`an open landed chain uses ordinary retirement with per-run policy ${enabled ? 'on' : 'off'}`, t => {
   const f = openFixture(t, { landed: true }), events = loadEvents(f.org).events;
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   writeEvents(f, events);
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), JSON.stringify({ release_sessions: enabled }));
   const eventBytes = fs.readFileSync(f.eventFile), r = f.retirement(), plan = r.plan();

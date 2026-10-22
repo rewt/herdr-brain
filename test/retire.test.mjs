@@ -41,6 +41,7 @@ const kept = s => { const p = planRetirement(s); assert.equal(p.close.length, 0)
 
 for (const proof of ['ancestry', 'patches', 'archive']) test(`${proof} releases a reported lane under an open item and parent without closing either`, () => {
   const s = fixture(), before = structuredClone(s.record);
+  s.closeoutQueuePolicy = true;
   s.record.items.get('ENG-1').closed = null;
   s.record.items.get('ENG-1').parent = 'G-1';
   s.record.items.set('G-1', { id: 'G-1', role: 'goal' });
@@ -63,6 +64,25 @@ for (const proof of ['ancestry', 'patches', 'archive']) test(`${proof} releases 
   s.record.runs.delete('R-2');
   assert.deepEqual(s.record, record);
   assert.deepEqual(s.record.runs, before.runs);
+});
+
+for (const proof of ['ancestry', 'patches', 'archive']) test(`${proof} retains an open chain without explicit option A activation`, () => {
+  for (const policy of [undefined, false]) {
+    const s = fixture();
+    s.closeoutQueuePolicy = policy;
+    s.record.items.get('ENG-1').closed = null;
+    Object.assign(s.git[0], { integrated: proof === 'ancestry', patchIntegrated: proof === 'patches', archived: proof === 'archive' });
+    assert.equal(kept(s), 'review, correction or integration chain is still open');
+    assert.equal(retirementStatus(s).rows[0].class, 'WAITING');
+    assert.equal(laneRemovalReason({ ...s, tabs: [], panes: [], agents: [] }, '/repo/lane'), 'review, correction or integration chain is still open');
+    s.closeoutQueuePolicy = true;
+    const plan = planRetirement(s);
+    assert.equal(plan.close.length, 1);
+    s.closeoutQueuePolicy = policy;
+    const result = executeRetirement(plan, { observe: () => s, close: () => assert.fail('activation was revoked') });
+    assert.equal(result[0].action, 'skip-close');
+    assert.match(result[0].why, /chain is still open/);
+  }
 });
 
 test('an open unintegrated untagged lane remains held even if its labels say superseded', () => {

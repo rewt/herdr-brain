@@ -120,6 +120,8 @@ test('a process outside Herdr with a cwd below the lane prevents removal', async
 
 test('an exact archive releases a parked design lane while its item and parent stay open', t => {
   const f = fixture(t); f.evidence(); f.git(['tag', 'archive/lane/topic', f.head]);
+  fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n.lane.json\n');
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   const events = [
     { type: 'item.added', id: 'G-1', kind: 'goal', title: 'Long-lived parent' },
     { type: 'item.added', id: 'DES-1', role: 'architect', parent: 'G-1', title: 'Intentionally parked design' },

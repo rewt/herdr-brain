@@ -15,6 +15,8 @@ function fixture() {
 test('compatibility planner is the one shared pure policy', () => {
   const s=fixture(); assert.deepEqual(planTidy(s),planRetirement(s)); assert.equal(planTidy(s).close.length,1);
   s.record.items[0].closed=null;
+  assert.deepEqual(planTidy(s),planRetirement(s)); assert.equal(planTidy(s).close.length,0);
+  s.closeoutQueuePolicy=true;
   assert.deepEqual(planTidy(s),planRetirement(s)); assert.equal(planTidy(s).close.length,1);
   s.git[0].integrated=false;
   assert.deepEqual(planTidy(s),planRetirement(s)); assert.equal(planTidy(s).close.length,0);

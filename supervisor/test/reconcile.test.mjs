@@ -7,6 +7,10 @@ import { setupOrg, report } from '../../test/helpers.mjs';
 import { fold, itemStatus, openRuns } from '../../lib/state.mjs';
 import { fold as olderFold } from '../../test/fixtures/state-v0.mjs';
 import { completionEvents, completionFingerprint, completionDelta, refreshCompletionEvents, digest } from '../../lib/completion.mjs';
+import { handoffCloseout } from '../../lib/closeout-handoff.mjs';
+import { readCloseoutEntries } from '../../lib/closeout.mjs';
+import { drainCloseout } from '../../lib/closeout-consumer.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { reconcile } from '../reconcile.mjs';
 
 function fixture() {
@@ -121,7 +125,7 @@ function git(root, ...args) {
   assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
 }
 function integration(t) {
-  const f = setupOrg(); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  const f = setupOrg(); fixtureFleet(t, f.root); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
   git(f.root, 'init', '-b', 'main'); git(f.root, 'config', 'user.name', 'Fixture'); git(f.root, 'config', 'user.email', 'fixture@example.invalid');
   fs.writeFileSync(path.join(f.root, '.git/info/exclude'), '.org/\n.lane/\n');
   fs.writeFileSync(path.join(f.root, 'source'), 'base\n'); git(f.root, 'add', 'source'); git(f.root, 'commit', '-m', 'base');
@@ -143,7 +147,20 @@ function integration(t) {
   const finish = (code = '0', tip = head) => reconcile(['finish', ...common, '--gate-exit', code, '--tip', tip]);
   const refresh = (accepted, why = 'Inspected the supervisor notes; they do not change acceptance.') =>
     reconcile(['refresh', ...common, '--gate-exit', '0', '--tip', head, '--accept-delta', accepted, '--why', why]);
-  return { ...f, lane, base, head, manifest, prepared, log, common, prepare, finish, refresh };
+  const env = { ...process.env, ORG_DIR: f.dir, HERDR_MONITOR_FLEET: path.join(f.root, 'fleet'),
+    XDG_STATE_HOME: path.join(f.root, 'state'), MONITOR_TEST_SLOT_PATH: path.join(f.root, 'slot'),
+    MONITOR_TEST_SLOT_COMPAT_PATH: path.join(f.root, 'slot'), HERDR_TEST_SCRATCH_ROOTS: '[]' };
+  const tail = (hooks = {}) => {
+    const keys = handoffCloseout({ cwd: f.root, org: f.dir, receipt: prepared + '.record.json', env });
+    return drainCloseout({ cwd: f.root, org: f.dir, env, keys, retirementOptions: { herdr: 'fixture-herdr',
+      readOwner: () => false, log: hooks.log, command: (exe, args, options) => {
+        hooks.command?.(exe, args);
+        if (exe === 'fixture-herdr') return { status: 0, stdout: JSON.stringify(args[0] === 'workspace' ? { workspaces: [] } : { agents: [] }) };
+        if (exe === '/usr/sbin/lsof') return { status: 0, stdout: `p${process.pid}\0${args.includes('-Fpfn0') ? 'fcwd\0' : ''}n${f.root}\0\n` };
+        return spawnSync(exe, args, options);
+      } } });
+  };
+  return { ...f, lane, base, head, manifest, prepared, log, common, prepare, finish, refresh, tail, env };
 }
 
 function refusal(fn) {
@@ -283,6 +300,11 @@ test(`an asked and answered question followed by a ${decision ? 'decision' : 'pl
     assert.equal(f.finish().result, 'reconciled');
     assert.equal(itemStatus(fold(f.events()), 'ENG-1'), 'done');
     assert.equal(f.finish().replayed, true);
+    assert.ok(!f.events().some(e => e.type === 'closeout.evaluated'), 'raw finish and refresh never start a closer');
+    const result = f.tail();
+    assert.ok(result.evaluated.some(e => e.completed && e.source.type === 'promotion.reconciled'), JSON.stringify(result));
+    assert.equal(fs.existsSync(f.lane), false);
+    const after = f.events(); f.tail(); assert.deepEqual(f.events(), after, 'identical tail is idempotent');
   }
   assert.equal(fs.readFileSync(f.prepared, 'utf8'), original);
   assert.equal(fs.readFileSync(f.prepared + '.record.json', 'utf8'), receipt);
@@ -443,11 +465,44 @@ test('shared adapter verifies exact Git integration and uses explicit project re
   assert.equal(itemStatus(fold(done), 'ENG-1'), 'done');
   assert.equal(openRuns(fold(done), 'ENG-1').length, 0);
   assert.equal(f.finish().replayed, true); assert.deepEqual(f.events(), done);
+  assert.ok(!done.some(e => e.type === 'closeout.handoff' || e.type === 'closeout.evaluated'));
+  assert.equal(fs.existsSync(path.join(f.root, '.git/closeout/worker.log')), false);
+  assert.ok(readCloseoutEntries(path.join(f.root, '.git')).some(e => e.signal === 'landed' && !e.handoff));
   f.ok(['reopen', 'ENG-1', '--note', 'New operator direction']);
   assert.equal(f.finish().replayed, true);
   assert.equal(itemStatus(fold(f.events()), 'ENG-1'), 'ready');
+  assert.throws(f.tail, /reopened|run changed/);
+  assert.equal(fs.existsSync(f.lane), true);
   fs.appendFileSync(f.log, 'changed evidence\n');
   assert.throws(f.finish, /evidence changed/);
+});
+
+test('real exact reconcile replay succeeds through observation/preflight and retains its immediate removal refusal and bookkeeping-only recovery', t => {
+  const f = integration(t); f.prepare(); git(f.root, 'merge', '--ff-only', f.head);
+  fs.writeFileSync(f.log, 'one successful gate\n'); f.finish();
+  const phases = new Set();
+  const result = f.tail({
+    command: (exe, args) => {
+      if (exe === 'fixture-herdr' && args[0] === 'workspace') {
+        assert.equal(fs.existsSync(path.join(f.root, '.git/lane-promote.lock')), false);
+        assert.equal(f.finish().replayed, true); phases.add('observation');
+      }
+      if (exe === 'git' && args.includes('remove')) {
+        assert.throws(f.finish, /locked:.*lane-promote.lock/); phases.add('removal');
+      }
+    },
+    log: row => {
+      if (row.action === 'lane-preflight') {
+        assert.equal(fs.existsSync(path.join(f.root, '.git/lane-promote.lock')), false);
+        assert.equal(f.finish().replayed, true); phases.add('preflight');
+      }
+    },
+  });
+  assert.ok(result.evaluated.some(e => e.completed), JSON.stringify(result));
+  assert.equal(f.finish().replayed, true, 'same prepared evidence recovers after the exact removal owner releases');
+  assert.deepEqual([...phases].sort(), ['observation', 'preflight', 'removal']);
+  assert.equal(fs.readFileSync(f.log, 'utf8'), 'one successful gate\n');
+  assert.equal(f.events().filter(e => e.type === 'promotion.reconciled').length, 1);
 });
 
 test('adapter refuses stale record, dirty trees, wrong record, STOP and the actual promotion lock', t => {

@@ -1,47 +1,45 @@
 # Event-driven lane closeout
 
-**ENG-530 design, 2026-10-22; authority review passed.** Option B of ENG-515
-passed its [authority review](../reviews/closer-locks/5f6af1c-r1.md) on
-`review-sol-max`, ahead of the named end Friday, 2026-10-23. This amendment
-changes only the contract; runtime behavior is unchanged. The current option A
-contract follows first. The amendment replaces its activation, landing-start
-and removal-lock rules in the implementation round, when implemented and adopted;
-all other safety and recovery requirements, including option A's landed or
-superseded rules, continue to apply. Current option A requires explicit opt-in
-for every queue source; default-on train landing and explicit named requests
-remain option B implementation work.
+**Option B implementation (ENG-536), 2026-10-22.** Implements the accepted
+[ENG-530 authority amendment](../reviews/closer-locks/5f6af1c-r1.md). Adoption
+still requires the project owner to replace legacy cleanup and inspect surviving
+children under the shared retirement ownership protocol; lane workers never
+manage live schedules.
 
-## Current activation contract (option A)
+## Activation
 
-The event queue is currently opt-in through the canonical project's selected
-lane policy (`.lane.json` for legacy projects):
+Canonical project policy is selected from config-home `lane.json`, otherwise
+`.lane.json`. Missing configuration enables train landing and named ready/recovery
+requests. `true` enables all automatic sources, `false` opts out of queue effects,
+and invalid/unavailable selected policy keeps. Automatic report, review and
+dropped-item sources remain opt-in. A lane copy, inherited identity setting or
+environment override cannot enable retirement. No historical sweep occurs.
 
-```json
-{ "retirement": { "closeout_queue": true } }
+A train landing is actionable only after the completion caller's durable
+post-return handoff. Raw `promotion.reconciled` events retain their exact binding
+but never start a closer. The caller checkpoints the successful receipt and
+terminal references, publishes through the bounded completion outbox, and joins
+its finite attempt outside lifecycle/queue claims. A KEEP or failure retains
+cleanup-pending without repeating integration or validation.
+
+Standalone callers explicitly invoke the tail after successful `finish` or
+`complete-batch` returns (after child exit for a CLI):
+
+```sh
+node supervisor/closeout.mjs handoff --repo PROJECT --org RECORD --receipt PREPARED.record.json
+node supervisor/closeout.mjs migrate EXACT-KEY --repo PROJECT --org RECORD --receipt ORIGINAL.record.json
 ```
 
-Only `retirement.closeout_queue === true` enables the queue for any source:
-landing, report, review, dropped item or explicit named request. Absent files,
-absent `retirement`, an absent `closeout_queue`, and `false` retain existing
-foreground cleanup and never start a detached closer. Close-at-landing for every
-project by default (ENG-515 acceptance 3) is deferred to option B, which will
-separately address lock scope and landing closeout after reconciliation.
-Current option A leaves the consumer's lock handling and reconciliation unchanged.
-A lane copy cannot change the canonical project's policy. Git-only trains
-without a recorded run have no queue target and retain guarded foreground
-cleanup. Manual Git landings emit no train event: use the named recovery or
-guarded sweep below. No release is installed or activated by this change.
+A bare completion has no implicit tail. The migration command converts only the
+named original v1 envelope after source/current-identity/completion verification;
+its backup and journal precede atomic v2 publication. Completed keys stay pruned.
+Git-only trains without a recorded run retain guarded foreground cleanup. Manual
+Git landings use named recovery; unsupported historical sources are never rebound.
 
-Activation transfers retirement ownership. Updated housekeeping and promotion
-cleanup acquire the same project retirement claim as the closer; under that
-claim, queue-owned housekeeping skips both its every-tick tidy and integrated-lane
-sweep, and promotion delegates cleanup to the queue. Other housekeeping work
-continues. Before activation, the supervisor stops any older housekeeping
-runtime and inspects any surviving children, then restarts it from the adopted
-release. The closer refuses effects while a default housekeeping lock lacks
-the new ownership protocol marker, including a stale lock pending inspection.
-Explicit custom state-directory schedules must also be stopped/replaced by the
-project owner. No lane worker starts, stops or restarts a real schedule.
+Updated housekeeping and promotion share `retirement/owner.lock` with the closer.
+Queue ownership skips legacy tidy/sweep work. A legacy housekeeping owner without
+the protocol marker keeps; opt-out/downgrade never starts legacy cleanup over a
+live drain. No release is installed or activated by this change.
 
 ## Sources and durable targets
 
@@ -54,7 +52,7 @@ from the record; it cannot bind a newly recreated lane under an old name.
 | `report.ingested` with `outcome: done` | `ready` |
 | `lane.ready`, from optional `lane ready TOPIC [--run R-n]` | The same `ready` key |
 | `review.verdict` | `review-done` |
-| `promotion.reconciled`, including `record complete-batch` and reconcile finish | `landed`, for each exact recorded run/head |
+| `promotion.reconciled`, including `record complete-batch` and reconcile finish | Bind `landed` for each exact run/head; await verified post-return completion handoff |
 | `item.closed` with `as: dropped` | `parked`, for its recorded runs |
 | `lane.recovery-requested`, explicit named recovery | `landed` or `parked`, still subject to all executor proofs |
 
@@ -72,7 +70,7 @@ The declaration defaults to false, is preserved on settle retry, and is carried
 through the native verdict receipt into `review.verdict`. Finish the follow-up
 with the named `followup-ended` command below; silence never releases it.
 
-Queue entries are `closeout-entry/v1`, stored at
+Queue entries are `closeout-entry/v2`, stored at
 `<canonical-git-common-dir>/closeout/entries/<key>.json`, next to `promote/`.
 The key is SHA-256 of `[absolute lane path, run, signal]`. Publication uses a
 fsynced temporary file, exclusive hard-link publication, and directory fsync.
@@ -161,9 +159,7 @@ revision is already pending. An empty promotion drain never retries history.
 The promotion completion checkpoint carries a bounded notification outbox until
 that targeted enqueue succeeds, so a restart can recover an interrupted handoff.
 
-Under current option A, landed requests run immediately, apart from
-lifecycle-lock contention. The implementation round below instead requires the
-completed handoff before landing closeout starts. The
+Landed requests await their exact completed handoff. The
 lanes view exposes `finishedLanesOpenOver30Minutes` and a worktree's
 `finishedAt`, `finishedAgeMs` and `finishedOpenOver30Minutes`; the project summary
 publishes `lanes.finished_open_over_30_minutes`. This measures reconciliation to

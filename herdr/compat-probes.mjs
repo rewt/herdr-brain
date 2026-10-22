@@ -97,13 +97,20 @@ const probes = {
         'real optional-ready publication and source binding; OLD queue reader only, no eligibility/effects, native occupants or ownership-transfer recovery');
     },
     async read() {
-      const [entry] = (await load('lib/closeout.mjs')).readCloseoutEntries(common);
-      assert.equal(entry.schema, 'closeout-entry/v1'); assert.equal(entry.key, state().key);
+      const invalid = [];
+      const [entry] = (await load('lib/closeout.mjs')).readCloseoutEntries(common, { onInvalid: row => invalid.push(row) });
+      if (!entry) {
+        assert.equal(invalid.length, 1); assert.match(invalid[0].reason, /invalid closeout entry/);
+        assert.ok(fs.existsSync(path.join(common, 'closeout/entries', `${state().key}.json`)));
+        console.log('OLD v1 reader rejected the v2 execution envelope and kept the exact request');
+        return;
+      }
+      assert.equal(entry.schema, 'closeout-entry/v2'); assert.equal(entry.key, state().key);
       assert.equal(entry.head, state().head); assert.equal(entry.run, 'R-1');
       assert.equal(entry.cwd, path.join(directory, 'lane')); assert.equal(entry.common, common);
       assert.equal(entry.branch, 'lane/compat-topic'); assert.equal(entry.source.type, 'lane.ready');
       assert.deepEqual(entry.panes, []);
-      console.log('OLD queue reader accepted the NEW record-bound ready entry; retirement execution is not covered');
+      console.log('v2 reader accepted the record-bound envelope; retirement execution is not covered');
     },
   },
   'record-config': {

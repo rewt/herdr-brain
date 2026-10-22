@@ -15,11 +15,13 @@ import { initOrg, loadEvents, transact } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { joinFleet } from '../lib/fleet.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
-import { completionFingerprint } from '../lib/completion.mjs';
+import { handoffCloseout, migrateCloseout } from '../lib/closeout-handoff.mjs';
+import { completionFingerprint, digest } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
   closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout, closeoutKey,
   recoverLane } from '../lib/closeout.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
+import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { drainCloseout } from '../lib/closeout-consumer.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
 import { enqueue, finishCleanup, retryCleanup, drain as drainPromotions, queueFor } from '../promote/promote.mjs';
@@ -47,9 +49,30 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
   const options = { herdr: f.job.herdr, command: commands.command,
     log: row => { if (row.action === 'scratch-manifest') assertFixtureScratch(row.manifest, f.env, options.scratchRoots); },
     readOwner: owner => (f.read().info?.process_tree ?? []).some(p => p.pid === owner.pid && p.identity === owner.identity) };
+  f.receipts = new Map();
+  f.autoTail = true;
   f.append = add => {
+    // Existing lifecycle cases own a completed post-return tail. New ordering
+    // witnesses explicitly disable this helper and exercise the missing tail.
+    add = add.map(e => {
+      if (e.type !== 'promotion.reconciled') return e;
+      const state = fold(events(f)), id = e.batch ?? `fixture-${events(f).length}`;
+      const log = path.join(f.scratch, `${id}.gate.log`); fs.writeFileSync(log, 'successful offline gate\n');
+      const payload = { version: 1, batch: id, org: f.org, identity: f.common,
+        base: f.git(['rev-parse', 'HEAD']), tip: e.tip ?? f.git(['rev-parse', 'HEAD']),
+        gate: { exit_code: 0, log, sha256: createHash('sha256').update(fs.readFileSync(log)).digest('hex') },
+        items: e.heads.map(h => ({ ...h, item: h.item ?? state.runs.get(h.run).item, superseded: [] })), excluded: [] };
+      const receipt = path.join(f.scratch, `${id}.record.json`); fs.writeFileSync(receipt, JSON.stringify(payload));
+      f.receipts.set(id, receipt);
+      return { ...e, batch: id, tip: payload.tip, gate: payload.gate, fingerprint: digest(payload), heads: payload.items.map(({item,run,head}) => ({item,run,head})) };
+    });
     const result = transact(f.org, current => bindCloseoutSources({ cwd: f.repo, org: f.org, events: current, mutation: { add } }), { actor: 'fixture' });
     publishCloseoutEvents({ cwd: f.repo, org: f.org, added: result.added, start: false, env: f.env });
+    if (f.autoTail) for (const source of result.added.filter(e => e.type === 'promotion.reconciled')) {
+      const state = fold(events(f));
+      if (source.heads.every(h => state.runs.get(h.run)?.report && state.items.get(h.item)?.closed?.as === 'done'))
+        handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });
+    }
     return result.added;
   };
   f.options = options;
@@ -71,12 +94,13 @@ function assertRemoved(f) {
   assert.ok(effects(f).some(e => e.action === 'lane-removed'));
 }
 
-test('default off, explicit opt-in, malformed policy and canonical ownership', t => {
+test('default landing and named requests, full-source opt-in, opt-out and canonical ownership', t => {
   const f = fixture(t, { occupied: false });
   fs.unlinkSync(path.join(f.repo, '.lane.json'));
-  assert.equal(closeoutPolicy(f.repo), false);
+  assert.equal(closeoutPolicy(f.repo), true);
+  assert.equal(closeoutPolicy(f.repo, 'report.ingested'), false);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
-  assert.equal(closeoutPolicy(f.repo), false);
+  assert.equal(closeoutPolicy(f.repo), true);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   assert.equal(closeoutPolicy(f.repo), false);
   fs.writeFileSync(path.join(f.lane, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
@@ -89,11 +113,11 @@ test('default off, explicit opt-in, malformed policy and canonical ownership', t
 });
 
 for (const config of [null, {}, { retirement: {} }, { retirement: { closeout_queue: false } }, { retirement: { closeout_queue: true } }])
-test(`closeout starts only with explicit opt-in (${config === null ? 'no config' : JSON.stringify(config)})`, async t => {
+test(`automatic report stays opt-in; default landing/named policy (${config === null ? 'no config' : JSON.stringify(config)})`, async t => {
   const f = setup(t, { occupied: false }), file = path.join(f.scratch, 'report.md');
   if (config === null) fs.unlinkSync(path.join(f.repo, '.lane.json'));
   else fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify(config));
-  assert.equal(closeoutPolicy(f.repo), Boolean(config?.retirement?.closeout_queue));
+  assert.equal(closeoutPolicy(f.repo), config?.retirement?.closeout_queue !== false);
   fs.writeFileSync(file, '---\nrun: R-1\noutcome: done\nsummary: Complete.\nblockers: []\nproposals: []\n---\n');
   const result = spawnSync(process.execPath, [cli, 'ingest', file], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -109,20 +133,18 @@ test(`closeout starts only with explicit opt-in (${config === null ? 'no config'
     assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false, 'ingestion never launches the closer');
     assert.deepEqual(f.herdrCalls(), []);
     assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);
-    const reviewAndDrop = f.append([
-      { type: 'review.verdict', common: f.common, run: 'R-1', head: f.head, review: { id: 'disabled-review', run: 'R-1' } },
-      { type: 'item.closed', id: 'ENG-1', as: 'dropped' },
-    ]);
     const landed = f.land();
-    readyLane({ cwd: f.repo, org: f.org, topic: 'topic', run: 'R-1', env: f.env });
-    recoverLane({ cwd: f.repo, org: f.org, lane: f.lane, env: f.env });
-    publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [...reviewAndDrop, ...landed], env: f.env });
-    const sources = events(f).filter(e => ['report.ingested', 'review.verdict', 'item.closed',
-      'promotion.reconciled', 'lane.ready', 'lane.recovery-requested'].includes(e.type));
-    assert.equal(sources.length, 7);
-    assert.ok(sources.every(e => e.closeout_targets === undefined));
+    const disabled = config?.retirement?.closeout_queue === false;
+    assert.equal(landed.at(-1).closeout_targets?.length ?? 0, disabled ? 0 : 1);
+    if (!disabled) {
+      assert.equal(readCloseoutEntries(f.common).find(e => e.signal === 'landed').schema, 'closeout-entry/v2');
+      f.drain(); assertRemoved(f);
+      return;
+    }
+    readyLane({ cwd: f.repo, org: f.org, topic: 'topic', run: 'R-1', env: f.env, start: false });
+    recoverLane({ cwd: f.repo, org: f.org, lane: f.lane, env: f.env, start: false });
     assert.deepEqual(readCloseoutEntries(f.common), []);
-    assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false, 'no source launches a closer without opt-in');
+    assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false);
     assert.deepEqual(f.herdrCalls(), []);
     assert.equal(fs.existsSync(f.lane), true);
   }
@@ -143,7 +165,7 @@ test(`publication rechecks opt-in even when ${type} already has a binding`, t =>
     source,
   ] } }));
   assert.equal(added[0].closeout_targets.length, 1);
-  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   assert.deepEqual(publishCloseoutEvents({ cwd: f.repo, org: f.org, added, env: f.env }), []);
   assert.deepEqual(readCloseoutEntries(f.common), []);
   assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false);
@@ -296,14 +318,8 @@ test('promotion retries only its exact deferred lock target; empty drains never 
   const before = events(f).length;
   await drainPromotions(queue);
   assert.equal(events(f).length, before, 'empty promotion drain does not retry historical entries');
-  // A previous drain durably completed these jobs but stopped before notifying
-  // the closer. Keep its consumer claimed so this fixture tests enqueue only.
-  queue.transaction(data => { data.closeout_pending = jobs; });
-  const release = retirementLock(path.join(f.common, 'closeout/consumer.lock'));
-  try { await drainPromotions(queue); } finally { release(); }
-  const added = events(f).filter(e => e.seq > before && e.type === 'closeout.retry');
+  const added = retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false });
   assert.equal(added.length, 1); assert.deepEqual(added[0].keys, [entries.find(e => e.run === 'R-1').key]);
-  assert.deepEqual(queue.load().closeout_pending, [], 'bounded completion outbox is acknowledged after the durable enqueue');
   assert.deepEqual(retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false }), [], 'an already requested retry adds no churn');
   assert.equal(readCloseoutEntries(f.common).some(e => e.run === 'R-3'), false, 'completed request file is pruned after its durable receipt');
   const completed = entries.find(e => e.run === 'R-3'), source = events(f).find(e => e.seq === completed.source.seq);
@@ -648,7 +664,7 @@ test('a report on disk is inert; the actual ingest CLI carries the same optional
   assert.equal(events(f).filter(e => e.type === 'report.ingested').length, 1);
 });
 
-test('opted-in train completion produces a landed entry and closes without manual release or sweep', async t => {
+test('complete-batch binds but cannot start landing; its successful caller tail closes once', async t => {
   const f = setup(t, { merged: true });
   assert.equal(closeoutPolicy(f.repo), true); f.report();
   const gate = path.join(f.scratch, 'gate.log'); fs.writeFileSync(gate, 'offline accepted gate\n');
@@ -659,8 +675,10 @@ test('opted-in train completion produces a landed entry and closes without manua
   const file = path.join(f.scratch, 'completion.json'); fs.writeFileSync(file, JSON.stringify(plan));
   const result = spawnSync(process.execPath, [cli, 'complete-batch', '--file', file], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  await waitForChange([f.eventFile], () => effects(f).some(e => e.action === 'lane-removed') && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')),
-    { timeoutMs: 60000 });
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), false);
+  assert.equal(evaluations(f).length, 0);
+  handoffCloseout({ cwd: f.repo, org: f.org, receipt: file, env: f.env });
+  f.drain();
   assertRemoved(f);
   assert.equal(events(f).find(e => e.type === 'item.closed').as, 'done');
   assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
@@ -814,4 +832,225 @@ test('two concurrent ready enqueues bind one entry and one live closer; shutdown
   await waitForChange([f.eventFile], () => effects(f).some(e => e.action === 'lane-removed') && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), { timeoutMs: 60000 });
   assertRemoved(f);
   assert.equal(f.read().actions.filter(a => a[0] === 'agent').length, 1);
+});
+
+test('an active consumer skips an unhanded landing and explicit event replay cannot start it', t => {
+  const f = setup(t, { occupied: false, merged: true }); f.report(); f.autoTail = false;
+  let source;
+  const first = f.drain({ onClaim: () => {
+    source = f.land().find(e => e.type === 'promotion.reconciled');
+    publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [source], env: f.env });
+  } });
+  assert.equal(first.evaluated.some(e => e.source.type === 'promotion.reconciled'), false);
+  assert.equal(fs.existsSync(f.lane), true);
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false);
+  const keys = handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });
+  const result = f.drain({ keys });
+  assert.equal(result.evaluated.filter(e => e.completed).length, 1, JSON.stringify(result));
+  assertRemoved(f);
+  const before = events(f); handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });
+  f.drain(); assert.deepEqual(events(f), before);
+});
+
+test('native observation, exit and preservation preflight hold only consumer/retirement claims; Git removal alone excludes promotion', t => {
+  const f = setup(t, { terminal: true }), command = f.options.command, log = f.options.log;
+  const phases = new Set();
+  const checkUnlocked = phase => {
+    assert.ok(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
+    assert.ok(fs.existsSync(retirementOwnerLock(f.common)));
+    assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false, phase);
+    const release = acquireLock(path.join(f.common, 'lane-promote.lock')); release();
+    phases.add(phase);
+  };
+  f.options.command = (exe, args, opt) => {
+    if (exe === f.job.herdr && args[0] === 'workspace' && args[1] === 'list') checkUnlocked('native');
+    if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'prompt') checkUnlocked('exit');
+    if (exe === 'git' && args.includes('remove')) {
+      assert.ok(fs.existsSync(path.join(f.common, 'lane-promote.lock')));
+      assert.throws(() => acquireLock(path.join(f.common, 'lane-promote.lock')), /locked:/);
+      phases.add('Git');
+    }
+    return command(exe, args, opt);
+  };
+  f.options.log = row => { log(row); if (row.action === 'lane-preflight') checkUnlocked('preflight'); };
+  f.drain(); assertRemoved(f);
+  assert.deepEqual([...phases].sort(), ['Git', 'exit', 'native', 'preflight']);
+});
+
+test('closer lock contention is immediate and discards preparation; an explicit revision observes again', t => {
+  const f = setup(t, { occupied: false, terminal: true }), release = acquireLock(path.join(f.common, 'lane-promote.lock'));
+  try {
+    f.drain();
+    assert.ok(evaluations(f).some(e => e.waiting?.event === 'lifecycle-lock-released'));
+    assert.equal(fs.existsSync(f.lane), true);
+    assert.equal(effects(f).some(e => e.action === 'worktree-removed'), false);
+  } finally { release(); }
+  const old = evaluations(f).length, native = f.herdrCalls().length;
+  f.drain(); assert.equal(evaluations(f).length, old, 'lock release is not a polling signal');
+  retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'lifecycle-lock-released', start: false });
+  f.drain(); assertRemoved(f); assert.ok(f.herdrCalls().length > native);
+});
+
+for (const change of ['tip', 'branch generation', 'worktree identity', 'Git directory identity', 'registration', 'untracked', 'index flags',
+  'integration', 'source', 'handoff', 'open run', 'job', 'callback', 'reference', 'HOLD', 'protected slot', 'manifest', 'preserved copy', 'source evidence', 'archive collision', 'policy'])
+test(`guarded removal keeps when ${change} changes after preparation`, t => {
+  const f = setup(t, { occupied: false, terminal: true }), command = f.options.command, log = f.options.log;
+  let proof, reads = 0, changed = false;
+  const mutate = () => {
+    changed = true;
+    const entry = readCloseoutEntries(f.common).find(e => e.signal === 'landed');
+    if (change === 'tip') { fs.writeFileSync(path.join(f.lane, 'seed'), 'new work'); f.git(['commit', '-am', 'new work'], f.lane); }
+    if (change === 'branch generation') { f.git(['update-ref', `refs/heads/${entry.branch}`, `${entry.head}^`]); f.git(['update-ref', `refs/heads/${entry.branch}`, entry.head]); }
+    if (change === 'worktree identity') { fs.renameSync(f.lane, f.lane + '-old'); fs.mkdirSync(f.lane); }
+    if (change === 'Git directory identity') { fs.renameSync(entry.gitDirectory, entry.gitDirectory + '-old'); fs.cpSync(entry.gitDirectory + '-old', entry.gitDirectory, { recursive: true }); }
+    if (change === 'registration') fs.writeFileSync(path.join(entry.gitDirectory, 'gitdir'), f.lane + '-elsewhere/.git\n');
+    if (change === 'untracked') fs.writeFileSync(path.join(f.lane, 'new-file'), 'untracked');
+    if (change === 'index flags') f.git(['update-index', '--skip-worktree', 'seed'], f.lane);
+    if (change === 'integration') f.git(['reset', '--hard', 'HEAD^']);
+    if (change === 'source') {
+      const all = events(f), source = all.find(e => e.seq === entry.source.seq); source.closeout_targets[0].head = '0'.repeat(40);
+      fs.writeFileSync(f.eventFile, all.map(e => JSON.stringify(e) + '\n').join(''));
+    }
+    if (change === 'handoff') {
+      const handoff = events(f).find(e => e.type === 'closeout.handoff'); fs.appendFileSync(handoff.checkpoint, 'changed');
+    }
+    if (change === 'open run') f.append([{ type: 'run.started', id: 'R-2', item: 'ENG-1', workspace: f.lane, meta: {} }]);
+    if (change === 'job') {
+      const queue = queueFor(f.repo); queue.transaction(data => data.pending.push({ id: 'live', run: 'R-1', topic: 'topic', cwd: f.lane }));
+    }
+    if (change === 'callback') {
+      fs.mkdirSync(path.join(f.org, 'settle'), { recursive: true });
+      fs.writeFileSync(path.join(f.org, 'settle/R-1.json'), JSON.stringify({ common: f.common, run: 'R-1', workspace: f.lane, stage: 'review' }));
+    }
+    if (change === 'reference') fs.writeFileSync(path.join(f.org, 'references/live.json'), JSON.stringify({
+      schema: 'herdr-reference/v1', owner: 'fixture', kind: 'live', job: 'live', item: 'ENG-1', run: 'R-1', state: 'running',
+      created_at: '2020-01-01', expires_at: '2099-01-01' }));
+    if (change === 'HOLD') hold(f);
+    if (change === 'protected slot') {
+      fs.mkdirSync(path.join(f.common, 'sessions'), { recursive: true }); fs.writeFileSync(path.join(f.common, 'sessions/standard-slots.json'), '{"schema":"unknown"}');
+    }
+    if (change === 'manifest') fs.appendFileSync(proof.evidence.manifest, 'changed');
+    if (change === 'preserved copy') fs.writeFileSync(path.join(proof.evidence.directory, 'files/changed'), 'new evidence');
+    if (change === 'source evidence') { fs.mkdirSync(path.join(f.lane, '.lane')); fs.writeFileSync(path.join(f.lane, '.lane/new-evidence'), 'new evidence'); }
+    if (change === 'archive collision') f.git(['tag', 'archive/lane/topic', `${f.head}^`]);
+    if (change === 'policy') fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
+  };
+  f.options.log = row => { log(row); if (row.action === 'lane-preflight') proof = row; };
+  f.options.command = (exe, args, opt) => {
+    const result = command(exe, args, opt);
+    if (proof && exe === '/usr/sbin/lsof' && ++reads === 2) mutate();
+    return result;
+  };
+  const result = f.drain();
+  assert.ok(changed, 'mutation reached the boundary after selecting the candidate');
+  assert.equal(fs.existsSync(f.lane), true);
+  assert.equal(effects(f).some(e => ['worktree-removed', 'branch-removed', 'lane-removed'].includes(e.action)), false, JSON.stringify(result));
+  assert.ok(result.restart || evaluations(f).some(e => !e.completed && e.reason));
+  if (change !== 'archive collision') assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
+});
+
+test('a new native occupant before the final observation invalidates the selected vacancy', t => {
+  const f = setup(t, { occupied: false, terminal: true }), command = f.options.command, log = f.options.log;
+  let prepared = false, observations = 0;
+  f.options.log = row => { log(row); if (row.action === 'lane-preflight') prepared = true; };
+  f.options.command = (exe, args, opt) => {
+    if (prepared && exe === f.job.herdr && args[0] === 'workspace' && args[1] === 'list' && ++observations === 2) {
+      f.state.panes.push({ pane_id: 'new:p', tab_id: 'new:t', workspace_id: 'w' });
+      f.state.tabs.push({ tab_id: 'new:t', workspace_id: 'w' }); f.save();
+    }
+    return command(exe, args, opt);
+  };
+  f.drain(); assert.equal(fs.existsSync(f.lane), true);
+  assert.ok(evaluations(f).some(e => !e.completed));
+  assert.equal(effects(f).some(e => e.action === 'worktree-removed'), false);
+});
+
+test('v1 is held until exact-key migration; interruption after the migration journal resumes the same bytes', t => {
+  const f = setup(t, { occupied: false }); f.report();
+  const [v2] = readCloseoutEntries(f.common), all = events(f), source = all.find(e => e.seq === v2.source.seq);
+  source.closeout_targets[0].schema = 'closeout-entry/v1';
+  fs.writeFileSync(f.eventFile, all.map(e => JSON.stringify(e) + '\n').join(''));
+  const entry = { ...v2, schema: 'closeout-entry/v1' }, file = path.join(f.common, 'closeout/entries', `${entry.key}.json`);
+  fs.writeFileSync(file, JSON.stringify(entry, null, 2) + '\n');
+  f.drain(); assert.equal(evaluations(f).length, 0);
+  const rename = fs.renameSync;
+  fs.renameSync = (from, to) => { if (to === file) throw Error('interrupted atomic conversion'); return rename(from, to); };
+  try { assert.throws(() => migrateCloseout({ cwd: f.repo, org: f.org, key: entry.key, env: f.env }), /interrupted/); }
+  finally { fs.renameSync = rename; }
+  assert.equal(readCloseoutEntries(f.common)[0].schema, 'closeout-entry/v1');
+  assert.equal(events(f).filter(e => e.type === 'closeout.migrated').length, 1);
+  migrateCloseout({ cwd: f.repo, org: f.org, key: entry.key, env: f.env });
+  const [converted] = readCloseoutEntries(f.common);
+  assert.equal(converted.schema, 'closeout-entry/v2'); assert.equal(converted.cwd, entry.cwd); assert.equal(converted.key, entry.key);
+  f.drain(); assert.ok(evaluations(f).some(e => e.key === entry.key));
+  assert.equal(events(f).filter(e => e.type === 'closeout.migrated').length, 1);
+});
+
+test('v1 landed migration requires the original successful completion tail and preserves the exact original target', t => {
+  const f = setup(t, { occupied: false }); f.report(); f.autoTail = false;
+  const source = f.land().find(e => e.type === 'promotion.reconciled');
+  const entry = readCloseoutEntries(f.common).find(e => e.signal === 'landed'), all = events(f);
+  all.find(e => e.seq === source.seq).closeout_targets[0].schema = 'closeout-entry/v1';
+  fs.writeFileSync(f.eventFile, all.map(e => JSON.stringify(e) + '\n').join(''));
+  const file = path.join(f.common, 'closeout/entries', `${entry.key}.json`);
+  fs.writeFileSync(file, JSON.stringify({ ...entry, schema: 'closeout-entry/v1' }) + '\n');
+  f.drain(); assert.equal(fs.existsSync(f.lane), true);
+  assert.throws(() => migrateCloseout({ cwd: f.repo, org: f.org, key: entry.key, env: f.env }), /original completion receipt/);
+  migrateCloseout({ cwd: f.repo, org: f.org, key: entry.key, receipt: f.receipts.get(source.batch), env: f.env });
+  const converted = readCloseoutEntries(f.common).find(e => e.key === entry.key);
+  assert.deepEqual(converted.worktreeIdentity, entry.worktreeIdentity); assert.equal(converted.head, entry.head);
+  assert.equal(converted.source.seq, entry.source.seq); assert.ok(converted.handoff);
+  f.drain(); assertRemoved(f);
+});
+
+test('a drain launched before fast-forward exits before evaluating the new landing; one fresh successor records the new bytes and epoch', async t => {
+  const f = setup(t, { occupied: false }); f.report();
+  const stop = hold(f), code = path.join(f.scratch, 'brain-code');
+  const source = fileURLToPath(new URL('../', import.meta.url));
+  f.git(['clone', '--quiet', '--shared', source, code]);
+  f.git(['config', 'user.name', 'Fixture'], code); f.git(['config', 'user.email', 'fixture@example.invalid'], code);
+  const beforeCode = f.git(['rev-parse', 'HEAD'], code), marker = path.join(f.scratch, 'loaded'), release = path.join(f.scratch, 'continue');
+  const running = child(process.execPath, ['--input-type=module', '-e', `
+    import fs from 'node:fs';
+    import { drainCloseout } from ${JSON.stringify(new URL('lib/closeout-consumer.mjs', 'file://' + code + '/').href)};
+    import { restartCloseout } from ${JSON.stringify(new URL('lib/closeout-attempt.mjs', 'file://' + code + '/').href)};
+    const cwd = ${JSON.stringify(f.repo)}, org = ${JSON.stringify(f.org)};
+    const result = drainCloseout({ cwd, org, onClaim: binding => {
+      fs.writeFileSync(${JSON.stringify(marker)}, JSON.stringify(binding));
+      const deadline = Date.now() + 60000;
+      while (!fs.existsSync(${JSON.stringify(release)})) {
+        if (Date.now() > deadline) throw Error('stale drain barrier timed out');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      }
+    } });
+    const successor = result.restart && restartCloseout({ cwd, org, restart: result.restart });
+    console.log(JSON.stringify({ result, successor }));
+  `], { cwd: f.repo, env: f.env });
+  let reply, currentCode, head;
+  try {
+    await waitForChange([marker], () => fs.existsSync(marker));
+    // The production incident began 0.2 s before the fast-forward. The barrier
+    // proves import/epoch order; elapsed time itself grants no authority.
+    await pause(200);
+    fs.appendFileSync(path.join(code, 'lib/closeout-consumer.mjs'), '\n// new landing implementation bytes\n');
+    f.git(['commit', '-am', 'new closer bytes'], code); currentCode = f.git(['rev-parse', 'HEAD'], code);
+    f.land(); head = f.git(['rev-parse', 'HEAD']);
+  } finally {
+    fs.writeFileSync(release, 'continue'); reply = await running; stop();
+  }
+  assert.equal(reply.status, 0, reply.stdout + reply.stderr);
+  const result = JSON.parse(reply.stdout.trim());
+  assert.deepEqual(result.result.evaluated, [], 'the old imports evaluated no post-landing entry');
+  assert.equal(result.successor.exit, 0); assert.equal(result.successor.root, code);
+  const handoffs = events(f).filter(e => e.type === 'closeout.code-handoff');
+  assert.equal(handoffs.length, 1); assert.equal(handoffs[0].old.code.commit, beforeCode);
+  assert.equal(handoffs[0].current.code.commit, currentCode);
+  assert.notEqual(handoffs[0].old.epoch.tip, head);
+  const landed = evaluations(f).filter(e => e.source.type === 'promotion.reconciled');
+  assert.equal(landed.length, 1); assert.equal(landed[0].code.code.commit, currentCode); assert.equal(landed[0].code.epoch.tip, head);
+  assert.match(landed[0].reason, /HOLD-WORKER-TAB-CLOSE/);
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), false);
+  assert.equal(fs.existsSync(retirementOwnerLock(f.common)), false);
+  retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'hold removed after joined fresh successor', start: false });
+  f.drain(); assertRemoved(f);
 });

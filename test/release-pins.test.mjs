@@ -261,3 +261,15 @@ assert.equal(projectPin(${JSON.stringify(f.root)}),null);
 console.log('bounded scratch admission and fresh canonical selection');`);
   assert.equal(f.node([probe], target), 'bounded scratch admission and fresh canonical selection');
 });
+
+
+test('fresh closer resolution retains the explicit installed project pin across current and main changes', t => {
+  const f = fixture(t, { markers: false }), repo = f.project('closer-pin'); f.pin(repo, 'blue');
+  f.git(repo, 'commit', '--allow-empty', '-qm', 'new landing epoch');
+  const result = JSON.parse(f.node(['--input-type=module', '-e', `
+    import { resolveFreshCloseoutCode, loadedCloseoutCode } from ${JSON.stringify(pathToFileURL(path.join(f.releases.green, 'lib/closeout-code.mjs')).href)};
+    import { gitProject } from ${JSON.stringify(pathToFileURL(path.join(f.releases.green, 'lib/project.mjs')).href)};
+    console.log(JSON.stringify({ loaded: loadedCloseoutCode.identity, next: resolveFreshCloseoutCode(gitProject(${JSON.stringify(repo)})) }));
+  `], repo));
+  assert.equal(result.loaded.root, f.releases.green); assert.equal(result.next, f.releases.blue);
+});

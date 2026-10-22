@@ -1,5 +1,6 @@
 // One live group leader per suite; no registries, suspended producers or reapers.
-import { loadTimeout, loadFactor } from '../../lib/deadline.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
+import { testLoadFactor } from '../../test-slot/load.mjs';
 import { spawn } from 'node:child_process';
 import { run } from 'node:test';
 import { tap } from 'node:test/reporters';
@@ -24,7 +25,7 @@ const testNamePatterns = nameOption ? [new RegExp(nameOption.slice('--test-name-
 // CLI overrides (including the npm scripts' file/suite limits) scale too.
 const fixedDeadlines = argv.includes('--fixed-deadlines');
 const factorOption = argv.find(arg => arg.startsWith('--load-factor='));
-const factor = factorOption ? Number(factorOption.split('=')[1]) : loadFactor();
+const factor = factorOption ? Number(factorOption.split('=')[1]) : testLoadFactor();
 function timeoutOption(name) {
   const option = argv.find(arg => arg.startsWith(`--${name}=`));
   return option ? Number(option.split('=')[1]) : undefined;

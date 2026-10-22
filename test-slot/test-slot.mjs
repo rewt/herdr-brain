@@ -31,6 +31,7 @@ import { stopGateGroup } from "./watchdog.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { resolveResource } from "./resources.mjs";
+import { testLoadFactor } from './load.mjs';
 import { boundedTelemetry, measureFamily } from "./measurement.mjs";
 import { EXECUTIONS_PER_PROFILE, RETENTION_SCHEMA, pruneExecutions } from './retention.mjs';
 import { randomBytes } from "node:crypto";
@@ -572,8 +573,7 @@ export function shouldRetryTimeout({ status, timeout, load, childRetried = false
 }
 
 async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits, onCapture, measurementOptions, childEnv) {
-  const capacity = Math.max(1, Math.min(4, os.availableParallelism()));
-  let load = os.loadavg()[0] / capacity;
+  let load = testLoadFactor();
   let timeout = false;
   let childRetried = false;
   // Keep a bounded tail for markers split across chunks; never buffer a suite log.
@@ -661,7 +661,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     const { status, signal } = completed;
     if (stopping) await stopping;
     if (stopError) throw stopError;
-    load = Math.max(load, os.loadavg()[0] / capacity);
+    load = Math.max(load, testLoadFactor());
     timeout ||= status === 124;
     // A successful leader can leave pipes/group members alive. Give them a
     // short grace, then clean up as a distinct failure rather than an overrun.

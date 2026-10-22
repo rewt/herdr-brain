@@ -559,13 +559,15 @@ describe('workspace configuration and timeout retry', () => {
     ['timeout under load', 1000, 124, '', 2],
     ['reported Node timeout under load', 1000, 1, 'testTimeoutFailure', 2],
     ['timeout without load', 0, 124, '', 1],
+    ['timeout below 18-core capacity', 7, 124, '', 1],
+    ['timeout above 18-core capacity', 19, 124, '', 2],
     ['ordinary failure under load', 1000, 7, '', 1],
     ['slot refusal under load', 1000, 75, 'ETIMEDOUT', 1],
   ]) {
     it(`retries only once for ${name}`, async () => {
       const s = scratch(); const count = s.file('count'); const identities = s.file('identities');
       const preload = s.file('load.mjs');
-      fs.writeFileSync(preload, `import os from 'node:os';os.loadavg=()=>[${load},${load},${load}];`);
+      fs.writeFileSync(preload, `import os from 'node:os';os.loadavg=()=>[${load},${load},${load}];os.availableParallelism=()=>18;`);
       const body = `const fs=require('fs');let n=fs.existsSync(${JSON.stringify(count)})?Number(fs.readFileSync(${JSON.stringify(count)},'utf8')):0;fs.writeFileSync(${JSON.stringify(count)},String(++n));fs.appendFileSync(${JSON.stringify(identities)},fs.readFileSync(${JSON.stringify(s.lockPath)},'utf8'));console.error(${JSON.stringify(marker)});process.exit(n===1?${firstCode}:0);`;
       const done = await cli(['run', name, '--lock-path', s.lockPath, '--retry-timeout-under-load', '--', process.execPath, '-e', body],
         { env: { ...ENV, NODE_OPTIONS: `--import=${preload}` } }).done;

@@ -51,5 +51,5 @@ export function canonicalTestPlan({ repo, base, ...options }) {
     const candidate = git(options.cwd, ['rev-parse', 'HEAD']).toString('utf8').trim();
     return admittedDeclaredTestPlan({ ...options, repo, base, candidate });
   }
-  return withCanonicalSnapshot({ repo, base, deadline }, plannerRoot => promotionTestPlan({ ...options, plannerRoot }));
+  return withCanonicalSnapshot({ repo, base }, plannerRoot => promotionTestPlan({ ...options, plannerRoot }));
 }

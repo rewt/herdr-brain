@@ -89,7 +89,7 @@ fs.copyFileSync=(source,target,...args)=>{
 ${mode === 'manifest-changed' ? "const read=fs.readFileSync;fs.readFileSync=(file,...args)=>{if(String(file).endsWith('/sha256.json'))write(file,'{}');return read(file,...args);};" : ''}
 `);
   const r = f.close({ preload }); f.kept(r); assert.match(r.stderr, /evidence|copy|hash|inventory/);
-  assert.equal(f.git(['rev-parse', 'archive/lane/topic']), f.head);
+  assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '', 'failed preservation supplies no archive mutation authority');
 });
 
 test('archive durability fresh-read mismatch keeps the lane before deletion', t => {

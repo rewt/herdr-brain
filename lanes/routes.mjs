@@ -252,6 +252,11 @@ export function readRoutesConfig(file) {
   return validateLane(readPolicyFile(file, 'routing'), file, { references: true });
 }
 
+// --route-config consumes an admitted effective snapshot, not a project layer.
+export function readRoutesSnapshot(file) {
+  return validateLane(readPolicyFile(file, 'routing-snapshot'), file, { references: true });
+}
+
 function within(path, boundary) {
   const offset = relative(boundary, path);
   return offset === "" || (offset !== ".." && !offset.startsWith(`..${sep}`) && !isAbsolute(offset));

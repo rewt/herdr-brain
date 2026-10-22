@@ -23,7 +23,7 @@ import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
-import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
+import { loadDiscoveredRoutes, readRoutesSnapshot, resolveRoute } from '../lanes/routes.mjs';
 import { completeBatchCommand } from '../lib/completion.mjs';
 import { releasesCommand } from '../lib/release-record.mjs';
 import { handoffsCommand } from '../lib/handoffs-command.mjs';
@@ -668,8 +668,8 @@ function start(argv) {
     if (copied.length > 0) throw new UserError(`--route cannot be combined with ${copied.map((key) => `--${key}`).join(', ')}`);
     let resolved;
     try {
-      const loaded = loadDiscoveredRoutes({ cwd: process.cwd(), file: values['route-config'] });
-      resolved = resolveRoute(loaded.config, { route: values.route });
+      const config = values['route-config'] === undefined ? loadDiscoveredRoutes({ cwd: process.cwd() }).config : readRoutesSnapshot(values['route-config']);
+      resolved = resolveRoute(config, { route: values.route });
     } catch (error) {
       throw new UserError(error.message);
     }

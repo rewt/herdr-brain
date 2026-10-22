@@ -5,12 +5,12 @@ import crypto from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { gitProject } from '../lib/project.mjs';
 import { policyLocation, homeProject } from '../lib/config-home.mjs';
-import { readPolicyFile, validateLane } from '../lib/config-policy.mjs';
+import { readPolicyFile, validatePolicy } from '../lib/config-policy.mjs';
 import { writeAuditedConfig } from '../lib/config-audit.mjs';
 import { withConfigLock } from '../lib/config-command.mjs';
 import { UserError } from '../lib/store.mjs';
 import { renderRoutes } from '../lib/render.mjs';
-import { loadDiscoveredRoutes, mergeRoutesConfig, validateRoutesConfig } from './routes.mjs';
+import { loadDiscoveredRoutes, mergeRoutesConfig } from './routes.mjs';
 
 export function routesSnapshot(cwd = process.cwd()) {
   let project;
@@ -46,9 +46,9 @@ export function editProjectConfig(mutate, { cwd = process.cwd(), expect, adoptRo
     const selected = policyLocation(cwd, kind), target = policyLocation(cwd, kind, process.env, { write: true }).file;
     const next = fs.existsSync(selected.file) ? readPolicyFile(selected.file, kind, { cwd }) : {};
     mutate(next, current);
-    validateLane(next, current.target);
+    validatePolicy(kind, next, target);
     mergeRoutesConfig([current.config, next]);
-    writeAuditedConfig({ file: target, value: next, kind, binding, cwd, validate: value => validateLane(value, target) });
+    writeAuditedConfig({ file: target, value: next, kind, binding, cwd, validate: value => validatePolicy(kind, value, target) });
     return routesSnapshot(cwd);
   });
   const lock = `${before.target}.lock`;
@@ -62,10 +62,12 @@ export function editProjectConfig(mutate, { cwd = process.cwd(), expect, adoptRo
     const own = fs.existsSync(current.target) ? JSON.parse(fs.readFileSync(current.target, 'utf8')) : {};
     // Materialize the portable preset on its first edit so one override does not
     // silently remove every other suggested route and the selection policy.
-    const next = current.suggested && adoptRoutes ? { ...own, ...structuredClone(current.config) } : own;
+    const portable = mergeRoutesConfig([current.config]);
+    delete portable.launch;
+    const next = current.suggested && adoptRoutes ? { ...own, ...structuredClone(portable) } : own;
     if (current.suggested && adoptRoutes) next.authority = 'Project routes confirmed by the operator';
     mutate(next, current);
-    validateRoutesConfig(next, { references: false });
+    validatePolicy('lane', next, current.target);
     // Project route maps replace individual inherited routes; all policy
     // references must still resolve before any bytes are replaced.
     mergeRoutesConfig([current.config, next]);

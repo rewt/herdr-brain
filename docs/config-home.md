@@ -19,6 +19,10 @@ canonical `project_access` grants and `brain_write` consent. Brain edits no
 native sandbox, credentials, trust or Git identity. The optional argv prefix
 precedes the owner's `herdr agent start` command, in the project directory;
 launch snapshots preserve it. Prefix words are never shell expressions.
+Project lane and routing files reject `launch`, `identity_root`, `defaults_origin`,
+`project_access` and `brain_write`, including repo fallback files. Config and route
+edits refuse those keys before saving an intent or replacing a file. Already
+admitted route snapshots retain their captured launcher and route metadata.
 
 `record config history` reads the existing project record. Identity history uses
 `record config history --scope identity` and one identity `.org/` record. Owning

@@ -60,7 +60,7 @@ import {
 } from "./board/registry.mjs";
 import { herdrSocketPath } from "./board/herdr-client.mjs";
 import {
-  readRoutesConfig,
+  readRoutesSnapshot,
   resolveLaunchRoute,
   routeNames as configuredRouteNames,
   selectRoute,
@@ -351,6 +351,7 @@ if (HOME_PROJECT?.sources.routing) {
   CONFIG_LAYERS.push({ file: routing.file, base: routing.base, config: routing.config });
 }
 if (HOME_PROJECT?.defaults.launch) CONFIG.launch = [...HOME_PROJECT.defaults.launch];
+else if (HOME_PROJECT) delete CONFIG.launch;
 if (!EXPLICIT_CONFIG && !['dispatch', 'routes', 'selection_policy'].some(key => Object.hasOwn(CONFIG, key))) Object.assign(CONFIG, structuredClone(ROUTE_PRESET));
 try {
   validateLane(CONFIG, CONFIG_LAYERS.map(layer => layer.file).join(', '), { references: true });
@@ -414,7 +415,7 @@ function routeNames() {
 function resolveDispatch(options = {}) {
   try {
     if (options.routeConfig !== undefined && options.route === undefined) fail("--route-config requires --route");
-    return resolveLaunchRoute(options.routeConfig === undefined ? CONFIG : readRoutesConfig(options.routeConfig), options);
+    return resolveLaunchRoute(options.routeConfig === undefined ? CONFIG : readRoutesSnapshot(options.routeConfig), options);
   } catch (error) {
     fail(error.message);
   }

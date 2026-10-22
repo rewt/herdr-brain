@@ -19,7 +19,7 @@ import { readFleet } from '../lib/fleet.mjs';
 import { initOrg, findOrgDir } from '../lib/store.mjs';
 import { inspect } from '../sessions/sessions.mjs';
 import { readSessionFacts } from '../sessions/observe.mjs';
-import { routesSnapshot } from '../lanes/routes-command.mjs';
+import { routesSnapshot, editProjectConfig, setProjectRoute } from '../lanes/routes-command.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
 import { discoverProject } from '../housekeeping/housekeeping.mjs';
 import { queueFor } from '../promote/promote.mjs';
@@ -512,4 +512,68 @@ test('standalone routing keeps its route set and origin while full dispatch reta
   assert.ok(view.values.filter(v => v.key.startsWith('routes.')).every(v => v.key.startsWith('routes.solo.')));
   assert.equal(view.values.find(v => v.key === 'routes.solo.kind').source, selected);
   assert.equal(view.values.find(v => v.key === 'dispatch.max_unlanded').source, policyLocation(f.cwd, 'lane').file);
+});
+
+for (const fallback of [false, true]) test(`selected ${fallback ? 'repo fallback' : 'home'} routing refuses every identity-only setting at read`, async t => {
+  const f = configFixture(t, { routing: true });
+  if (fallback) await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === 'lane') throw Error('partial adoption'); } }), /partial adoption/);
+  else await f.adopt();
+  const selected = policyLocation(f.cwd, 'routing'), original = readConfigJSON(selected.file);
+  assert.equal(selected.home, !fallback);
+  assert.equal(loadDiscoveredRoutes({ cwd: f.cwd }).config.routes.engineer.kind, 'codex');
+  for (const [key, value] of Object.entries({ launch: ['project-launch'], identity_root: f.ownerRoot, defaults_origin: {}, project_access: [], brain_write: {} })) {
+    fs.writeFileSync(selected.file, JSON.stringify({ ...original, [key]: value }));
+    assert.throws(() => readProjectPolicy(f.cwd, 'routing'), /identity-only settings belong in identity.json/, key);
+    assert.throws(() => loadDiscoveredRoutes({ cwd: f.cwd }), /identity-only settings belong in identity.json/, key);
+    const run = spawnSync(process.execPath, [path.join(f.bundle, 'lanes/lane.mjs'), 'config'], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
+    assert.notEqual(run.status, 0, key);
+    assert.match(run.stderr, /identity-only settings belong in identity.json/);
+  }
+});
+
+for (const mode of ['legacy', 'home', 'standalone', 'routing-fallback']) test(`${mode} config and route editors reject identity settings before any intent or replacement`, async t => {
+  const routing = ['standalone', 'routing-fallback'].includes(mode), f = configFixture(t, { routing });
+  if (mode === 'routing-fallback') await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === 'lane') throw Error('partial adoption'); } }), /partial adoption/);
+  else if (mode !== 'legacy') await f.adopt();
+  const binding = f.binding(), kind = routing ? 'routing' : 'lane';
+  const selected = policyLocation(f.cwd, kind).file, target = policyLocation(f.cwd, kind, f.env, { write: true }).file;
+  configSnapshot({ cwd: f.cwd });
+  const files = [...new Set([path.join(f.env.ORG_DIR, 'events.jsonl'), selected, target, policyLocation(f.cwd, 'lane').file, path.join(f.cwd, '.lane.json'),
+    ...(binding ? [binding.identityFile, path.join(path.dirname(binding.identityFile), '.org/events.jsonl')] : [])])];
+  const bytes = () => files.map(file => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);
+  for (const [key, value] of Object.entries({ launch: ['project-launch'], identity_root: f.ownerRoot, defaults_origin: {}, project_access: [], brain_write: {} })) {
+    const before = bytes(); let intent = false, replacement = false;
+    const options = { cwd: f.cwd, afterIntent() { intent = true; }, afterReplace() { replacement = true; } };
+    assert.throws(() => setConfig(`${kind}.${key}`, JSON.stringify(value), options), /identity-only settings belong in identity.json/, key);
+    assert.equal(intent, false); assert.equal(replacement, false);
+    assert.deepEqual(bytes(), before);
+    for (const adoptRoutes of routing ? [true, false] : [true]) {
+      assert.throws(() => editProjectConfig(next => { next[key] = value; }, { cwd: f.cwd, adoptRoutes }), /identity-only settings belong in identity.json/, key);
+      assert.deepEqual(bytes(), before);
+    }
+    assert.deepEqual(pendingConfigWrite(f.env.ORG_DIR, target), []);
+  }
+  const before = bytes();
+  const refused = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), 'config', 'set', `${kind}.launch`, '["project-launch"]'], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
+  assert.notEqual(refused.status, 0); assert.match(refused.stderr, /identity-only settings belong in identity.json/);
+  assert.deepEqual(bytes(), before);
+  // The same writers still accept project-owned route changes.
+  setConfig('routes.engineer.model', 'configured-project-model', { cwd: f.cwd });
+  setProjectRoute('engineer', { model: 'edited-project-model' }, { cwd: f.cwd });
+  const saved = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), 'routes', 'set', 'engineer', '--model', 'cli-project-model', '--json'], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
+  assert.equal(saved.status, 0, saved.stderr);
+  assert.equal(loadDiscoveredRoutes({ cwd: f.cwd }).config.routes.engineer.model, 'cli-project-model');
+  assert.equal(fs.existsSync(path.join(f.cwd, '.config.lock')), false);
+});
+
+test('a first legacy route edit materializes suggested routes without copying the identity launcher', t => {
+  const f = configFixture(t), prefix = [process.execPath, 'identity-launch.mjs'];
+  fs.writeFileSync(path.join(f.ownerRoot, '.lane.json'), JSON.stringify({ launch: prefix }));
+  fs.writeFileSync(path.join(f.cwd, '.lane.json'), '{"main":"main"}');
+  assert.equal(routesSnapshot(f.cwd).suggested, true);
+  setProjectRoute('engineer', { model: 'confirmed-project-model' }, { cwd: f.cwd });
+  const own = readConfigJSON(path.join(f.cwd, '.lane.json'));
+  assert.equal(Object.hasOwn(own, 'launch'), false);
+  assert.ok(own.routes.review); assert.ok(own.selection_policy);
+  assert.deepEqual(loadDiscoveredRoutes({ cwd: f.cwd }).config.launch, prefix);
 });

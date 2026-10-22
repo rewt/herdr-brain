@@ -45,7 +45,7 @@ import { waitForPromotionMemory, refuseBeforeTrain } from '../promote/memory-gat
 import { ROUTE_PRESET } from './preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
-import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment, readDeclared } from './validation.mjs';
+import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment, readDeclared, fenceDeclaredMode } from './validation.mjs';
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, requireExactPlan, selectionUnknown } from './exact-validation.mjs';
 import { executionIdentity } from '../promote/execution-identity.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -77,12 +77,25 @@ const CALLER_CWD = process.cwd();
 // Config-home discovery itself can audit. Resolve without effects first, and
 // fence saved batch bindings before loading any layered policy or receipt.
 try {
+  const captured = process.argv[2] === 'promote-batch' && process.argv[3]
+    ? JSON.parse(readFileSync(resolve(process.argv[3]), 'utf8')) : undefined;
+  const targets = new Set([CALLER_CWD]);
+  // Legacy Git selectors may name another checkout. Probe both targets only
+  // for refusal; neither probe grants authority or masks a damaged native cwd.
+  try { targets.add(gitProject(CALLER_CWD).canonical); } catch { /* Normal discovery below owns Git errors. */ }
+  let inspectionError;
+  for (const target of targets) {
+    try { fenceDeclaredMode(target, { captured }); }
+    catch (error) {
+      if (error.code === 'DECLARED_GATES_V2_INERT') throw error;
+      inspectionError ??= error;
+    }
+  }
+  if (inspectionError) throw inspectionError;
   const inspected = homeProject(CALLER_CWD, process.env, { inspection: true });
   let project = inspected?.git;
   if (!project) try { project = gitProject(CALLER_CWD); } catch { /* Ordinary non-repository handling below. */ }
   if (project) {
-    const captured = process.argv[2] === 'promote-batch' && process.argv[3]
-      ? JSON.parse(readFileSync(resolve(process.argv[3]), 'utf8')) : undefined;
     fenceGateIdentity(project.canonical, process.env, { captured });
   }
 } catch (error) { fail(error.message); }

@@ -10,7 +10,7 @@ import { acquireLock } from './promotion-lock.mjs';
 import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 import { resolveResource } from '../test-slot/resources.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
-import { policyLocation, present, configGitEnv } from '../lib/config-home.mjs';
+import { policyLocation, present, configGitEnv, configHome, readConfigJSON } from '../lib/config-home.mjs';
 import { readPolicyFile, readPolicySnapshot, homePolicyDigest } from '../lib/config-policy.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { validateDeclared, readCommitted, DECLARED_SCHEMA, SELECTION_SCHEMA, hash, refuse, object } from '../promote/declaration.mjs';
@@ -39,25 +39,55 @@ export function tapTotals(output) {
   return suites.length ? suites : null;
 }
 
+// Only a confirmed non-repository may use a local declaration. Git damage must
+// not turn a subdirectory or unavailable canonical checkout into a plain path.
+function inspectProject(root, env) {
+  try { return gitProject(root, { env: { ...configGitEnv(env), LC_ALL: 'C' } }); }
+  catch (error) {
+    if (error.status === 128 && /^fatal: not a git repository\b/mu.test(String(error.stderr))) return null;
+    throw error;
+  }
+}
+
+// This probe can only refuse. Raw matching binding metadata is never authority
+// to execute or read policy with auditing. It lets v2 remain identifiable when
+// mutable identity defaults are malformed, even without a .brain link.
+function fenceUnvalidatedHomeMode(project, env) {
+  const directories = directory => {
+    try { return fs.readdirSync(directory, { withFileTypes: true }).filter(e => e.isDirectory() || e.isSymbolicLink()).map(e => path.join(directory, e.name)); }
+    catch { return []; }
+  };
+  for (const identity of directories(configHome(env))) for (const directory of directories(identity)) {
+    let binding;
+    try { binding = readConfigJSON(path.join(directory, 'project.json')); } catch { continue; }
+    if (binding?.common !== project.identity && binding?.checkout !== project.canonical) continue;
+    let value;
+    try { value = readConfigJSON(path.join(directory, 'lane.validation.json')); } catch { continue; }
+    fenceCapturedDeclared(value);
+  }
+}
+
 // Resolve through config-home's one owner source. Git-backed sources come from
 // the captured canonical base, never a lane copy or a working edit.
 export function fenceDeclaredMode(root, { base = 'HEAD', env = process.env, captured } = {}) {
   fenceCapturedDeclared(captured);
-  let value;
+  const project = inspectProject(root, env);
+  let selected;
   try {
     // Use R-759's inspection-only owner discovery: even identity.json must not
     // audit an edit or recover a pending write before the inert refusal.
-    const selected = policyLocation(root, 'validation', env, { canonical: root, audit: false });
-    if (selected.home || !fs.existsSync(path.join(root, '.git'))) {
-      if (present(selected.file)) value = parseUniqueJson(readPlainFile(path.join(fs.realpathSync(path.dirname(selected.file)), path.basename(selected.file))));
-    } else {
-      const gitEnv = configGitEnv(env), project = gitProject(root, { env: gitEnv });
-      value = readCommitted(project.canonical, VALIDATION_FILE, base, { schemaProbe: true, env: gitEnv });
+    selected = policyLocation(root, 'validation', env, { canonical: project?.canonical ?? root, audit: false });
+  } catch (error) {
+    if (project) {
+      fenceUnvalidatedHomeMode(project, env);
+      fenceCapturedDeclared(readCommitted(project.canonical, VALIDATION_FILE, base, { schemaProbe: true, env: configGitEnv(env) }));
     }
-  } catch {
-    // This is mode detection only. Existing readers retain their validation,
-    // auditing and old-schema errors when no v2 declaration can be inspected.
+    // Inconclusive inspection must never fall through to an audited reader.
+    throw error;
   }
+  const value = selected.home || !project
+    ? present(selected.file) ? readConfigJSON(path.join(fs.realpathSync(path.dirname(selected.file)), path.basename(selected.file))) : undefined
+    : readCommitted(project.canonical, VALIDATION_FILE, base, { schemaProbe: true, env: configGitEnv(env) });
   fenceCapturedDeclared(value);
 }
 

@@ -85,6 +85,7 @@ export function fenceDeclaredTarget(project, { jobs: supplied = [] } = {}) {
   return true;
 }
 export function queueFor(cwd, { readOnly = false } = {}) {
+  fenceDeclaredMode(cwd);
   const binding = homeProject(cwd, process.env, { inspection: true }), project = binding?.git ?? gitProject(cwd);
   if (!readOnly) {
     fenceDeclaredTarget(project);

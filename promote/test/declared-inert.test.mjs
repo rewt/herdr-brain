@@ -77,14 +77,15 @@ async function fixture(t, change) {
     fs.writeFileSync(file, JSON.stringify(next));
     // Even discovery of an edited identity home must remain inspection-only.
     const defaults = JSON.parse(fs.readFileSync(binding.identityFile));
-    fs.writeFileSync(binding.identityFile, JSON.stringify({ ...defaults, worktree_root: 'unaudited-lanes' }));
+    fs.writeFileSync(binding.identityFile, JSON.stringify({ ...defaults, worktree_root: change === 'malformed identity defaults' ? 17 : 'unaudited-lanes' }));
+    if (change === 'malformed identity defaults') fs.unlinkSync(path.join(f.cwd, '.brain'));
   }
   const roots = [binding.record, path.join(path.dirname(binding.identityFile), '.org'), binding.directory, binding.identityFile,
     queue.directory, path.join(project.identity, 'lane-validation'), path.join(project.identity, 'declared-gates'), path.join(f.cwd, '.lane')];
   return { ...f, binding, project, identity, queue, base, file, value, owner, spec, job, context, receipt, resultFile, roots };
 }
 
-for (const change of ['unaudited edit', 'pending write']) test(`v2 admission is inert before effects with ${change}`, async t => {
+for (const change of ['unaudited edit', 'pending write', 'malformed identity defaults']) test(`v2 admission is inert before effects with ${change}`, async t => {
   const f = await fixture(t, change);
   const sibling = path.join(f.ownerRoot, 'sibling'), foreign = path.join(f.scratch, 'foreign');
   fs.mkdirSync(sibling); fs.mkdirSync(foreign); fs.writeFileSync(path.join(foreign, '.identity-root'), '');
@@ -118,6 +119,7 @@ for (const change of ['unaudited edit', 'pending write']) test(`v2 admission is 
         adapter: () => runProjectGateSync({ canonical: f.cwd, receipt: f.receipt, argv: ['--version'], env: f.env }),
         'queue fence': () => fenceDeclaredTarget(f.project, { jobs: [job] }),
         queueFor: () => queueFor(f.cwd),
+        'queueFor inspection': () => queueFor(f.cwd, { readOnly: true }),
         'queue transaction': () => f.queue.transaction(() => assert.fail('queue mutation ran')),
         enqueue: () => enqueue(f.queue, ['topic'], {}),
         checkDeclaredJobs: () => checkDeclaredJobs(f.queue, [job]),
@@ -174,6 +176,84 @@ for (const change of ['unaudited edit', 'pending write']) test(`v2 admission is 
         cli('lanes/lane.mjs', args, { ...f.env, GIT_DIR: f.project.identity, GIT_WORK_TREE: f.cwd });
       });
     });
+  }
+});
+
+test('committed v2 refuses from canonical and linked Git subdirectories before record, command or receipt effects', async t => {
+  const f = declaredFixture(t), project = gitProject(f.repo), record = path.join(f.repo, '.org');
+  assert.equal(policyLocation(f.repo, 'validation', f.env, { audit: false }).home, false);
+  fs.mkdirSync(record); fs.writeFileSync(path.join(record, 'events.jsonl'), '');
+  const shared = path.join(project.identity, 'lane-validation'), host = path.join(project.identity, 'inert-subdirectory.json');
+  fs.mkdirSync(shared); fs.writeFileSync(path.join(shared, 'prior.json'), '{"prior":"preserve receipt"}\n');
+  fs.writeFileSync(host, '{"prior":"preserve host receipt"}\n');
+  for (const checkout of [f.repo, f.workspace]) {
+    const cwd = path.join(checkout, 'nested/deeper'); fs.mkdirSync(cwd, { recursive: true });
+    const local = path.join(checkout, '.lane'); fs.mkdirSync(local, { recursive: true });
+    fs.writeFileSync(path.join(local, 'gate.json'), '{"prior":"preserve lane pointer"}\n');
+    process.chdir(cwd);
+    const roots = [record, shared, host, path.join(project.identity, 'promote'), local, f.log];
+    const before = snapshot(roots), unchanged = () => assert.deepEqual(snapshot(roots), before);
+    const entries = {
+      'mode inspection': () => fenceDeclaredMode(cwd, { env: f.env }),
+      'readDeclared audited': () => readDeclared(cwd, { env: f.env }),
+      'readDeclared inspection': () => readDeclared(cwd, { env: f.env, audit: false }),
+      resolveValidation: () => resolveValidation({ root: cwd, env: f.env }),
+      canonicalValidation: () => canonicalValidation(cwd, f.env),
+      validateTree: () => validateTree({ cwd, common: project.identity, env: f.env, tier: 'fast',
+        command: 'node -e \'require("node:fs").writeFileSync(process.env.CHECK_LOG,"unexpected command")\'',
+        onStart() { assert.fail('validation command admission ran'); } }),
+      'identity fence': () => fenceGateIdentity(cwd, f.env),
+      profile: () => resolveGateProfile(cwd, f.env),
+      adapter: () => runProjectGateSync({ canonical: cwd, receipt: host, argv: ['--version'], env: f.env }),
+      queueFor: () => queueFor(cwd),
+      'queueFor inspection': () => queueFor(cwd, { readOnly: true }),
+      configSnapshot: () => configSnapshot({ cwd, env: f.env }),
+      desksSnapshot: () => desksSnapshot(cwd),
+    };
+    for (const [name, entry] of Object.entries(entries)) await t.test(`${path.basename(checkout)} subdirectory ${name}`, () => {
+      assert.throws(entry, refused); unchanged();
+    });
+    await t.test(`${path.basename(checkout)} subdirectory doctor`, async () => {
+      await assert.rejects(doctor({ cwd, env: f.env, observer: { observe() { assert.fail('observer ran'); } } }), refused); unchanged();
+    });
+    for (const action of ['promote', 'handle']) await t.test(`${path.basename(checkout)} subdirectory supervisor ${action}`, () => {
+      assert.throws(() => supervisor([action, 'R-999', '--repo', cwd, '--org', record, '--role', 'supervisor', '--why', 'inert witness']), refused); unchanged();
+    });
+    for (const [relative, args] of [
+      ...['--lock', '--held', '--execute'].map(mode => ['promote/host-gate.mjs', [mode, cwd, host, '--version']]),
+      ...[['config'], ['check'], ['promote', 'topic'], ['promote-batch', host]].map(args => ['lanes/lane.mjs', args]),
+      ['promote/promote.mjs', ['--drain', '--repo', cwd]],
+      ['settle/settle.mjs', ['R-999', '--repo', cwd, '--org', record]],
+    ]) await t.test(`${path.basename(checkout)} subdirectory ${relative} ${args[0]}`, () => {
+      const result = f.run(process.execPath, [path.join(product, relative), ...args], cwd);
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stderr, /DECLARED_GATES_V2_INERT:.*ENG-538/); unchanged();
+    });
+  }
+});
+
+test('v2 detection needs no valid identity JSON, identity root or home link', async t => {
+  const f = await fixture(t, 'malformed identity defaults');
+  for (const bytes of ['{', JSON.stringify({ identity_root: 17 }), JSON.stringify({ identity_root: f.ownerRoot, launch: 17 })]) {
+    fs.writeFileSync(f.binding.identityFile, bytes);
+    const before = snapshot(f.roots);
+    for (const entry of [() => fenceDeclaredMode(f.cwd, { env: f.env }), () => readDeclared(f.cwd, { env: f.env }),
+      () => configSnapshot({ cwd: f.cwd, env: f.env }), () => queueFor(f.cwd, { readOnly: true })]) {
+      assert.throws(entry, refused); assert.deepEqual(snapshot(f.roots), before);
+    }
+  }
+});
+
+test('inconclusive non-v2 inspection holds without audited fallback', async t => {
+  const f = configFixture(t, { custom: 'owner' }); await f.adopt();
+  const binding = f.binding(), project = gitProject(f.cwd);
+  const defaults = JSON.parse(fs.readFileSync(binding.identityFile));
+  fs.writeFileSync(binding.identityFile, JSON.stringify({ ...defaults, worktree_root: 17 }));
+  const roots = [binding.record, path.join(path.dirname(binding.identityFile), '.org'), binding.directory, binding.identityFile,
+    path.join(project.identity, 'lane-validation'), path.join(f.cwd, '.lane')], before = snapshot(roots);
+  for (const entry of [() => readDeclared(f.cwd, { env: f.env }), () => configSnapshot({ cwd: f.cwd, env: f.env }),
+    () => validateTree({ cwd: f.cwd, common: project.identity, command: 'node --version', tier: 'fast', env: f.env })]) {
+    assert.throws(entry, /worktree_root/); assert.deepEqual(snapshot(roots), before);
   }
 });
 

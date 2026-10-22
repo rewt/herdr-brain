@@ -1,5 +1,5 @@
 {
-  "run": "R-761",
+  "run": "R-764",
   "item": "ENG-537",
   "code": "DECLARED_GATES_V2_INERT",
   "unlock_item": "ENG-538",
@@ -8,7 +8,8 @@
   "matrix": {
     "config": [
       "unaudited edit (validation and identity home)",
-      "pending replaced validation write"
+      "pending replaced validation write",
+      "malformed identity worktree_root with the canonical home link absent"
     ],
     "caller": [
       "owner",
@@ -48,11 +49,12 @@
     },
     {
       "entry": "promote/promote.mjs queueFor, fenceDeclaredTarget and transaction",
-      "guard": "Current/saved mode fence precedes homeProject auditing, directory creation and queue lock/mutation.",
+      "guard": "Mode fence precedes even inspection-only homeProject discovery; current/saved fences precede audits, directory creation and queue locks/mutations.",
       "witnesses": [
         "queueFor",
         "queue fence",
-        "queue transaction"
+        "queue transaction",
+        "queueFor inspection"
       ]
     },
     {
@@ -93,7 +95,7 @@
     },
     {
       "entry": "lanes/lane.mjs startup, config, check, promote, promote-batch",
-      "guard": "Existing startup and stage fences reach the inert mode guard before release forwarding or layered config audits.",
+      "guard": "Current/native and legacy Git-selected targets, plus saved batch mode, fence before config-home discovery; neither refusal-only target probe authorizes execution.",
       "witnesses": [
         "lane config",
         "lane check",
@@ -196,7 +198,7 @@
     },
     {
       "entry": "lanes/validation.mjs readDeclared, resolveValidation, canonicalValidation, validateTree",
-      "guard": "Inspection-only owner resolution and raw mode parsing precede audited reads, receipts and commands; inline v2 also refuses.",
+      "guard": "Canonical Git inspection precedes local fallback; a refusal-only raw matching-home probe identifies v2 despite malformed identity defaults. Inconclusive discovery throws before audited readers, receipt writes or commands.",
       "witnesses": [
         "mode inspection",
         "readDeclared audited",
@@ -234,6 +236,48 @@
         "terminalTrainJobs",
         "verifyTrainResult"
       ]
+    }
+  ],
+  "extends_run": "R-761",
+  "regressions": [
+    {
+      "finding": "1430f10-r1 Major at lanes/validation.mjs:51",
+      "witness": "committed v2 refuses from canonical and linked Git subdirectories before record, command or receipt effects",
+      "callers": [
+        "canonical checkout nested/deeper",
+        "linked worktree nested/deeper"
+      ],
+      "controls": [
+        "mode inspection",
+        "readDeclared audited and inspection",
+        "resolveValidation",
+        "canonicalValidation",
+        "validateTree",
+        "identity fence",
+        "profile",
+        "adapter",
+        "queueFor and inspection",
+        "configSnapshot",
+        "desksSnapshot",
+        "doctor",
+        "supervisor promote and handle",
+        "host --lock/--held/--execute",
+        "lane config/check/promote/promote-batch",
+        "promote --drain",
+        "settle"
+      ],
+      "oracle": "Named refusal, no command admission, identical record, shared receipt, lane pointer, host receipt and queue bytes/modes/inventory."
+    },
+    {
+      "finding": "1430f10-r1 Major at lanes/validation.mjs:57",
+      "witness": "v2 admission is inert before effects with malformed identity defaults",
+      "controls": [
+        "all existing matrix entries, including omitted and foreign captured identities",
+        "queueFor inspection",
+        "v2 detection needs no valid identity JSON, identity root or home link",
+        "inconclusive non-v2 inspection holds without audited fallback"
+      ],
+      "oracle": "Named refusal for valid home v2 despite invalid mutable identity data and absent .brain link; unchanged both record trees, policies and receipt inventory. Inconclusive non-v2 inspection throws its original error without auditing."
     }
   ]
 }

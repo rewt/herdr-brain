@@ -8,7 +8,7 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { runMetrics } from '../metrics.mjs';
 import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
-import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook } from './dispatch-fixture.mjs';
+import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts } from './dispatch-fixture.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));

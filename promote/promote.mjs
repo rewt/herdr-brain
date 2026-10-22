@@ -456,7 +456,8 @@ function consumeRequests(queue) {
           if (!keys.length) throw Error('no original completion binding; named recovery required');
           handed = true;
           retryPromotionCloseout({ cwd: queue.project.canonical, org: job.org, jobs: [job], start: false });
-          outcome = joinedCloseoutAttempt({ cwd: queue.project.canonical, org: job.org, keys });
+          outcome = joinedCloseoutAttempt({ cwd: queue.project.canonical, org: job.org, keys,
+            env: { ...process.env, ...(job.herdr ? { HERDR_RETIRE_HERDR: job.herdr } : {}) } });
         } catch (error) { outcome = { complete: false, reason: error.message }; }
         queue.transaction(data => {
           // Ack only the exact durable handoff, not a detached child launch.
@@ -572,7 +573,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
         const completion = result.reconciliation;
         const source = loadEvents(job.org).events.find(e => e.type === 'promotion.reconciled' && e.identity === queue.project.identity && e.fingerprint === completion.fingerprint);
         data.closeout_pending.push({ id: job.id, common: queue.project.identity, project: queue.project.canonical, org: job.org,
-          topic: job.topic, run: job.run, tip: result.tip, reconciliation: completion,
+          topic: job.topic, run: job.run, tip: result.tip, herdr: job.herdr, reconciliation: completion,
           ...(source ? { source: { seq: source.seq, type: source.type, fingerprint: source.fingerprint } } : {}),
           receipt_sha256: createHash('sha256').update(fs.readFileSync(completion.receipt)).digest('hex') });
       }

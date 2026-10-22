@@ -77,7 +77,7 @@ for (const size of [1, 3]) test(`native ${size}-member batch reconciles atomical
   f.drain(); assert.equal(f.gates(), 1);
   const rows = f.queue.load().results;
   assert.equal(rows.length, size);
-  for (const m of f.members) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
+  for (const m of f.members) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false, JSON.stringify({ queue: f.queue.load(), closeout: f.events().filter(e => e.type.startsWith('closeout.')) })); }
   assert.ok(rows.every(r => r.reconciliation.state === 'complete'));
   const events = f.events(), markers = events.filter(e => e.type === 'promotion.reconciled');
   assert.equal(markers.length, 1); assert.equal(markers[0].items.length, size);

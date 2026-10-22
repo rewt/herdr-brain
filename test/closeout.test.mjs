@@ -847,7 +847,7 @@ test('an active consumer skips an unhanded landing and explicit event replay can
   assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false);
   const keys = handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });
   const result = f.drain({ keys });
-  assert.equal(result.evaluated.filter(e => e.completed).length, 1, JSON.stringify(result));
+  assert.equal(result.evaluated.filter(e => e.completed && e.source.type === 'promotion.reconciled').length, 1, JSON.stringify(result));
   assertRemoved(f);
   f.drain(); // Finish the earlier ready request's separate lane-removed revision.
   const before = events(f); handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });

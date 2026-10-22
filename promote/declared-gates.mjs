@@ -52,7 +52,7 @@ export function planDeclaredGateBounded(context) {
   evidence.planning = { file, limits, deadline, binding_hash: hash(bound) }; onUpdate();
   const result = runGateSync('declared canonical planning', [process.execPath, fileURLToPath(new URL('./declared-plan-runner.mjs', import.meta.url)), serialized, file], {
     cwd: input.repo, env, stdio: 'inherit', retryTimeout: false,
-    executionReceipt: path.join(directory, 'planning.execution.json'), timeoutSeconds: remaining(deadline) / 1000, idleTimeoutSeconds: limits.idle_seconds });
+    executionReceipt: path.join(directory, 'planning.execution.json'), timeoutSeconds: remaining(deadline) / 1000, idleTimeoutSeconds: 0 });
   let saved;
   try { saved = JSON.parse(readPlainFile(file)); } catch { /* Keep the immutable input and interrupted receipt. */ }
   if (saved?.evidence) Object.assign(evidence, saved.evidence);
@@ -125,7 +125,9 @@ export function executeDeclaredGate({ spec, env, evidence, onUpdate = () => {}, 
   assertExecutionBinding(spec);
   const result = runGateSync('declared gate executor', [process.execPath, runner, ...(recheck ? ['--recheck'] : []), command, resultFile], {
     cwd: spec.cwd, env, stdio: 'inherit', retryTimeout: false, executionReceipt,
-    timeoutSeconds: remaining(spec.deadline) / 1000, idleTimeoutSeconds: spec.limits.idle_seconds });
+    // Leaf output goes to private logs. Leaves enforce idle limits; this
+    // enclosing watchdog enforces only the shared attempt wall deadline.
+    timeoutSeconds: remaining(spec.deadline) / 1000, idleTimeoutSeconds: 0 });
   let saved;
   try { saved = JSON.parse(readPlainFile(resultFile)); } catch { /* Interrupted child may have only partial evidence. */ }
   if (saved) { recoverCommandEvidence(saved, result.gateTimeout ?? null); evidence.execution = saved; onUpdate(); }

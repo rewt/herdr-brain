@@ -39,17 +39,17 @@ export function tapTotals(output) {
 
 // Resolve through config-home's one owner source. Git-backed sources come from
 // the captured canonical base, never a lane copy or a working edit.
-export function readDeclared(root, { base = 'HEAD', env = process.env, promotion, override } = {}) {
-  const selected = policyLocation(root, 'validation', env, { canonical: root });
+export function readDeclared(root, { base = 'HEAD', env = process.env, promotion, override, audit = true } = {}) {
+  const selected = policyLocation(root, 'validation', env, { canonical: root, audit });
   const gitEnv = configGitEnv(env);
   let value, revision;
   if (selected.home) {
     if (!present(selected.file)) throw refuse('resolved owner validation declaration is missing');
-    const snapshot = readPolicySnapshot(selected.file, 'validation', { cwd: root, env });
+    const snapshot = readPolicySnapshot(selected.file, 'validation', { cwd: root, env, audit });
     value = snapshot.config; revision = `sha256:${snapshot.digest}`;
   } else {
     if (!fs.existsSync(path.join(root, '.git'))) {
-      const local = present(selected.file) ? readPolicyFile(selected.file, 'validation', { cwd: root, env }) : {};
+      const local = present(selected.file) ? readPolicyFile(selected.file, 'validation', { cwd: root, env, audit }) : {};
       if (local.schema !== undefined) throw refuse('declared authority requires a canonical Git project');
       return null;
     }
@@ -62,8 +62,8 @@ export function readDeclared(root, { base = 'HEAD', env = process.env, promotion
   if (value?.schema === undefined) return null;
   validateDeclared(value);
   const resolved = kind => {
-    const location = policyLocation(root, kind, env, { canonical: root });
-    return location.home ? (present(location.file) ? readPolicyFile(location.file, kind, { cwd: root, env }) : {})
+    const location = policyLocation(root, kind, env, { canonical: root, audit });
+    return location.home ? (present(location.file) ? readPolicyFile(location.file, kind, { cwd: root, env, audit }) : {})
       : readCommitted(root, kind === 'lane' ? '.lane.json' : '.promote.json', base, { env: gitEnv }) ?? {};
   };
   promotion ??= resolved('promote');

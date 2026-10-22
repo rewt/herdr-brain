@@ -85,6 +85,7 @@ export function runDeclaredExecution(spec, file, { recheck = false, env = proces
           row.reuse.reason = checked.miss ?? `inputs changed during lookup: ${missDimension(before, checked)}`;
         } else row.reuse.reason = candidate.miss;
       }
+      for (const key of ['source', 'source_candidate', 'source_base', 'source_log', 'observation', 'after', 'integration_observation']) delete row[key];
       const result = runDeclaredCommand({ ...context, command: definition.command, cwd: contained(spec.cwd, definition.cwd), env: gateEnv, kind: `gate:${bound.id}` });
       Object.assign(row, { outcome: result.ok ? 'executed' : 'failed', execution: result.row });
       if (!before.miss && result.ok) {
@@ -119,6 +120,10 @@ export function runDeclaredExecution(spec, file, { recheck = false, env = proces
       // inputs, or the shared deadline holds the attempt; never loop.
       execute(bound, row, { force: true });
       if (row.outcome !== 'executed') return false;
+      // A later forced command may invalidate an earlier hit. Start the
+      // comparison again after every execution. Each restart consumes one
+      // reused row, so at most commands.length commands can be forced.
+      index = -1;
     }
     return true;
   };

@@ -1,0 +1,133 @@
+{
+  "one owner and precedence": {
+    "lanes/test/declared-validation.test.mjs": [
+      "only the canonical base declaration selects commands; working, lane and inherited overrides cannot authorize them",
+      "config-home resolution owns the complete declaration and lost or invalid home policy cannot fall back",
+      "explicit competing .promote.json validate refuses without fallback",
+      "explicit competing .promote.json gate refuses without fallback",
+      "explicit competing .lane.json validate refuses without fallback",
+      "explicit competing .lane.json validation refuses without fallback",
+      "explicit competing .lane.json prepare refuses without fallback"
+    ]
+  },
+  "opaque mixed runners, bytes, order and fixture controls": {
+    "promote/test/declared-mixed.test.mjs": [
+      "opaque BCH-shaped Vitest, dependency build, pnpm recipe and Python fixture execute unchanged in declared order"
+    ],
+    "promote/test/declared-gates.test.mjs": [
+      "opaque commands keep shell bytes, quoting, cwd and order, and allow reviewed candidate helper edits",
+      "Python module, inline and shell-quoted executable spellings remain ordinary opaque commands"
+    ]
+  },
+  "canonical selection and required coverage": {
+    "promote/test/declared-gates.test.mjs": [
+      "canonical IDs and declared whole-file coverage retain exact gate definitions and budgets",
+      "positive deferred work retains estimates and destination but supplies no required coverage",
+      "canonical planner/imports ignore candidate edits and immutable argv cannot omit selection or requirements",
+      "canonical preparation cannot alter captured tracked snapshot source"
+    ],
+    "settle/test/declared-plan.test.mjs": [
+      "declared deferrals retain whole-file tokens, recipe tokens and complete gate requirements without changing legacy parsing",
+      "settle observes canonical declared coverage through host admission without executing candidate gates",
+      "without a planner the mandatory declared command must supply every required token"
+    ]
+  },
+  "identity refusal before effects": {
+    "lanes/test/declared-validation.test.mjs": [
+      "foreign roots, same-identity foreign projects, missing roots and changed bound roots refuse before effects",
+      "unmarked caller and project share the standard default identity",
+      "admission binds full requirements, capable worker, identity and redacts literal environment values",
+      "foreign admission preserves target record bytes with a declaration edit",
+      "foreign admission preserves target record bytes with a pending config write",
+      "declaration inspection preserves both records on invalid or missing policy and identity files",
+      "pending cleanup refuses foreign caller after rollback before any effect",
+      "pending cleanup refuses changed identity root before any effect"
+    ],
+    "promote/test/declared-train.test.mjs": [
+      "terminal validated integration recovers after declaration change without execution or admission",
+      "terminal integrated integration recovers after declaration change without execution or admission",
+      "terminal complete integration recovers after declaration change without execution or admission"
+    ]
+  },
+  "old-reader refusal and legacy parity": {
+    "lanes/test/declared-validation.test.mjs": [
+      "closed v2 declarations require policy, coverage, explicit commands and contained cwd",
+      "parked v1 and incapable worker handshakes refuse v2 before admission",
+      "a declared project cannot forward admission into a pinned incapable worker",
+      "undeclared projects retain command precedence and reject typed gate requirements"
+    ],
+    "lanes/test/exact-validation.test.mjs": [
+      "whole unchanged existing file"
+    ],
+    "promote/test/exact-bridge.test.mjs": [
+      "whole unchanged existing file"
+    ]
+  },
+  "bounded failure and logging": {
+    "promote/test/declared-gates.test.mjs": [
+      "one mandatory failure retains exit, immutable logs and not-reached outcomes",
+      "a signaled gate preserves its original signal and prevents later commands",
+      "input enumeration and byte ceilings are hard refusals of reuse evidence",
+      "bounded malformed planner preserves failed command logs and prevents a green pass",
+      "bounded oversized planner preserves failed command logs and prevents a green pass",
+      "bounded planner preparation deadline preserves failed command logs and prevents a green pass",
+      "bounded candidate preparation deadline preserves failed command logs and prevents a green pass",
+      "bounded gate deadline preserves failed command logs and prevents a green pass",
+      "failed planner retains stdout and original exit",
+      "failed planner retains stdout and original signal",
+      "failed probe retains stdout and original exit",
+      "failed probe retains stdout and original signal",
+      "streaming planner preparation survives outer idle time while a silent leaf times out",
+      "streaming candidate preparation survives outer idle time while a silent leaf times out",
+      "streaming gate survives outer idle time while a silent leaf times out"
+    ]
+  },
+  "every terminal recovery case": {
+    "promote/test/declared-train.test.mjs": [
+      "terminal validated integration recovers after declaration change without execution or admission",
+      "terminal integrated integration recovers after declaration change without execution or admission",
+      "terminal complete integration recovers after declaration change without execution or admission",
+      "refusal-only terminal recovery precedes current declaration and host admission",
+      "mixed refused and integrated bisection recovers each saved terminal member under its captured declaration",
+      "a pre-execution refusal with no attempt or integration branch recovers its bound recorded job without current policy",
+      "unfinished captured work holds on a changed declaration",
+      "declared v2 record-bound promotion completes the existing guarded record transaction",
+      "a corrupted completed integration log refuses recovery without replaying commands",
+      "integrated declared completion retry uses captured requirements after the required gate changes"
+    ]
+  },
+  "B executed-pass reuse and every input dimension": {
+    "promote/test/declared-gates.test.mjs": [
+      "declared-inputs reuses an executed pass across unrelated commits and preserves source logs",
+      "input digests bind bytes, modes, absent paths, membership, ignored output and contained symlinks",
+      "missing runtime/runner and incomplete input declarations are ineligible for reuse",
+      "allowlisted execution omits ambient values and receipts contain digests instead of environment values",
+      "failed probes and always-execute never reuse a pass",
+      "a reused input changed before integration executes once under current inputs",
+      "declared-inputs executes once on a content miss",
+      "declared-inputs executes once on a deletion miss",
+      "declared-inputs executes once on a glob membership miss",
+      "declared-inputs executes once on a mode miss",
+      "declared-inputs executes once on a environment absent-empty miss",
+      "declared-inputs executes once on a toolchain output miss",
+      "declared-inputs executes once on a runtime version output miss",
+      "declared-inputs executes once on a source log integrity miss",
+      "declared-inputs executes once on a execution sidecar integrity miss",
+      "declared-inputs executes once on a reused pointer integrity miss",
+      "declared-inputs executes once when command bytes change",
+      "declared-inputs executes once when cwd change",
+      "declared-inputs executes once when coverage change",
+      "declared-inputs executes once when ordered preparation change",
+      "declared-inputs executes once when environment salt change",
+      "declared-inputs executes once when wall limit change",
+      "declared-inputs executes once when idle limit change",
+      "declared-inputs executes once when host policy change",
+      "declared-inputs executes once when input specification change",
+      "declared-inputs executes once when allowlist names change",
+      "declared-inputs executes once when runtime probe declaration change",
+      "declared-inputs executes once when runner probe declaration change",
+      "a later forced gate invalidates an earlier reused gate and both execute at most once",
+      "declared input mutation during a command never publishes a reusable source"
+    ]
+  }
+}

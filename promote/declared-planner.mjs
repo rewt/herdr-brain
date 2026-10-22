@@ -9,22 +9,38 @@ export function main(args = process.argv.slice(2)) {
   const command = JSON.parse(args[0]);
   if (!argv(command)) throw Error('invalid planner command');
   const child = spawn(command[0], command.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
-  const chunks = [];
   let stdoutBytes = 0, stderrBytes = 0;
+  let oversized = false;
+  const flush = callback => process.stdout.write('', () => process.stderr.write('', callback));
+  const overflow = stream => {
+    if (oversized) return;
+    oversized = true;
+    console.error(`planner ${stream} exceeds 1 MiB`);
+    flush(() => process.exit(1));
+  };
   child.stdout.on('data', chunk => {
+    if (oversized) return;
+    const available = MAX_PLAN_BYTES - stdoutBytes;
     stdoutBytes += chunk.length;
-    if (stdoutBytes > MAX_PLAN_BYTES) { console.error('planner stdout exceeds 1 MiB'); process.exit(1); }
-    chunks.push(chunk);
+    // Retain bounded output as it arrives, even on failure or signal. This
+    // also lets the leaf watchdog observe real output activity.
+    if (available > 0) process.stdout.write(chunk.subarray(0, available));
+    if (stdoutBytes > MAX_PLAN_BYTES) overflow('stdout');
   });
   child.stderr.on('data', chunk => {
+    if (oversized) return;
+    const available = MAX_PLAN_BYTES - stderrBytes;
     stderrBytes += chunk.length;
-    if (stderrBytes > MAX_PLAN_BYTES) { console.error('planner diagnostics exceed 1 MiB'); process.exit(1); }
-    process.stderr.write(chunk);
+    if (available > 0) process.stderr.write(chunk.subarray(0, available));
+    if (stderrBytes > MAX_PLAN_BYTES) overflow('diagnostics');
   });
   child.on('error', error => { console.error(error.message); process.exitCode = 1; });
   child.on('close', (code, signal) => {
-    if (code !== 0 || signal) { process.exitCode = code || 1; return; }
-    process.stdout.write(Buffer.concat(chunks));
+    if (oversized) return;
+    flush(() => {
+      if (signal) process.kill(process.pid, signal);
+      else process.exitCode = code ?? 1;
+    });
   });
   child.stdin.on('error', () => {});
   child.stdin.end(fs.readFileSync(0));

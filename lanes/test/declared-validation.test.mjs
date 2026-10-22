@@ -6,13 +6,14 @@ import { declaredFixture, declaration } from '../../promote/test/helpers/declare
 import { readDeclared, resolveValidation } from '../validation.mjs';
 import { snapshotDeclaration, sameDeclaration, validateDeclared, CAPABILITIES } from '../../promote/declaration.mjs';
 import { executionIdentity } from '../../promote/execution-identity.mjs';
-import { checkDeclaredJobs, requireDeclaredWorker } from '../../promote/promote.mjs';
+import { checkDeclaredJobs, requireDeclaredWorker, queueFor, finishCleanup, retryCleanup } from '../../promote/promote.mjs';
 import { validateDeclared as parkedReader } from './fixtures/parked-v1-declaration.mjs';
 import { bundleRelease } from '../../lib/releases.mjs';
 import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
 import { policyLocation } from '../../lib/config-home.mjs';
 import { spawnSync } from 'node:child_process';
 import { product } from '../../promote/test/helpers/declared-fixture.mjs';
+import { pendingConfigWrite, writeAuditedConfig } from '../../lib/config-audit.mjs';
 
 test('only the canonical base declaration selects commands; working, lane and inherited overrides cannot authorize them', t => {
   const f = declaredFixture(t), original = readDeclared(f.repo);
@@ -89,6 +90,65 @@ test('foreign roots, same-identity foreign projects, missing roots and changed b
   const cli = f.cli(['topic', '--repo', f.repo], f.foreign);
   assert.equal(cli.status, 1); assert.match(cli.stderr, /PROMOTION_IDENTITY_MISMATCH/);
   assert.equal(JSON.stringify(q.load()), before); assert.deepEqual(f.lines(), []);
+});
+
+for (const change of ['declaration edit', 'pending config write']) test(`foreign admission preserves target record bytes with a ${change}`, async t => {
+  const f = configFixture(t, { custom: 'owner' }); await f.adopt();
+  const previous = process.cwd(); t.after(() => process.chdir(previous)); process.chdir(f.cwd);
+  const file = policyLocation(f.cwd, 'validation', f.env).file, value = declaration();
+  fs.writeFileSync(file, JSON.stringify(value)); readDeclared(f.cwd, { env: f.env });
+  const next = { ...value, environment: 'edited declaration' };
+  if (change === 'declaration edit') fs.writeFileSync(file, JSON.stringify(next));
+  else assert.throws(() => writeAuditedConfig({ file, value: next, kind: 'validation', binding: f.binding(), cwd: f.cwd, env: f.env, validate: validateDeclared,
+    afterReplace() { throw Error('interrupted config write'); } }), /interrupted config write/);
+  const record = path.join(f.env.ORG_DIR, 'events.jsonl'), before = fs.readFileSync(record);
+  const foreign = path.join(f.scratch, 'foreign'); fs.mkdirSync(foreign); fs.writeFileSync(path.join(foreign, '.identity-root'), '');
+  const result = spawnSync(process.execPath, [path.join(product, 'promote/promote.mjs'), 'topic', '--repo', f.cwd], { cwd: foreign, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 1); assert.match(result.stderr, /PROMOTION_IDENTITY_MISMATCH/);
+  process.chdir(foreign);
+  assert.throws(() => queueFor(f.cwd), /PROMOTION_IDENTITY_MISMATCH/);
+  assert.deepEqual(fs.readFileSync(record), before);
+  assert.equal(fs.existsSync(path.join(f.cwd, '.git/promote')), false);
+  if (change === 'pending config write') assert.equal(pendingConfigWrite(f.env.ORG_DIR, file).length, 1);
+  // Owner reads still audit/recover exactly the same revision after the fence.
+  process.chdir(f.cwd); assert.equal(readDeclared(f.cwd, { env: f.env }).value.environment, next.environment);
+  assert.ok(fs.readFileSync(record).length > before.length);
+  assert.equal(pendingConfigWrite(f.env.ORG_DIR, file).length, 0);
+});
+
+test('declaration inspection preserves both records on invalid or missing policy and identity files', async t => {
+  const f = configFixture(t, { custom: 'owner' }); await f.adopt();
+  const binding = f.binding(), file = policyLocation(f.cwd, 'validation', f.env).file;
+  fs.writeFileSync(file, JSON.stringify(declaration())); readDeclared(f.cwd, { env: f.env });
+  const records = [path.join(f.env.ORG_DIR, 'events.jsonl'), path.join(path.dirname(binding.identityFile), '.org/events.jsonl')];
+  const before = records.map(record => fs.readFileSync(record));
+  for (const target of [file, binding.identityFile]) {
+    const bytes = fs.readFileSync(target);
+    for (const damage of ['invalid', 'missing']) {
+      if (damage === 'invalid') fs.writeFileSync(target, '{'); else fs.unlinkSync(target);
+      assert.throws(() => readDeclared(f.cwd, { env: f.env, audit: false }));
+      records.forEach((record, i) => assert.deepEqual(fs.readFileSync(record), before[i]));
+      fs.writeFileSync(target, bytes);
+    }
+  }
+});
+
+for (const change of ['foreign caller after rollback', 'changed identity root']) test(`pending cleanup refuses ${change} before any effect`, t => {
+  const f = declaredFixture(t); f.add(); const q = f.queue(), job = q.load().pending[0];
+  const saved = { ...job, outcome: 'promoted', finished: new Date().toISOString(), workspace: f.workspace, tip: f.head(), cleanup: { state: 'pending' } };
+  q.transaction(data => { data.pending = []; data.results.push(saved); });
+  f.git(['rm', '.lane.validation.json']); f.commit();
+  if (change === 'foreign caller after rollback') process.chdir(f.foreign);
+  else fs.unlinkSync(path.join(f.owner, '.identity-root'));
+  const code = change === 'foreign caller after rollback' ? /PROMOTION_IDENTITY_MISMATCH/ : /PROMOTION_IDENTITY_BINDING_CHANGED/;
+  const before = fs.readFileSync(q.file), entries = fs.readdirSync(q.directory).sort();
+  const cli = f.cli(['--cleanup-job', job.id, '--repo', f.repo], process.cwd());
+  assert.equal(cli.status, 1); assert.match(cli.stderr, code);
+  assert.throws(() => queueFor(f.repo), code);
+  assert.throws(() => finishCleanup(saved, saved, q), code);
+  assert.throws(() => retryCleanup(q), code);
+  assert.deepEqual(fs.readFileSync(q.file), before); assert.deepEqual(fs.readdirSync(q.directory).sort(), entries);
+  assert.ok(fs.existsSync(f.workspace)); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head()); assert.deepEqual(f.lines(), []);
 });
 
 test('undeclared projects retain command precedence and reject typed gate requirements', t => {

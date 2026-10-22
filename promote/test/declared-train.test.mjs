@@ -2,12 +2,15 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { declaredFixture, declaration, product } from './helpers/declared-fixture.mjs';
 import { runProjectGateSync } from '../gate-profile.mjs';
 import { runTrain } from '../train.mjs';
 import { terminalTrainJobs, verifyTrainResult } from '../evidence.mjs';
 import { checkDeclaredJobs } from '../promote.mjs';
 import { fixture as completionFixture } from './completion-fixture.mjs';
+import { receiptDirectory } from '../../supervisor/context.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 
 function train(f, t, options = {}) {
   f.add(options);
@@ -91,11 +94,26 @@ test('mixed refused and integrated bisection recovers each saved terminal member
   assert.deepEqual(f.lines(), ['red', 'red', 'green']);
 });
 
-test('unfinished captured work holds on a changed declaration and damaged integration logs cannot recover', t => {
+test('unfinished captured work holds on a changed declaration', t => {
   const f = declaredFixture(t); f.add(); const q = f.queue(), jobs = q.load().pending;
   const next = declaration(); next.promotion = 'false'; f.write('.lane.validation.json', JSON.stringify(next)); f.commit();
   const bytes = fs.readFileSync(q.file, 'utf8'); assert.throws(() => checkDeclaredJobs(q, jobs), /re-admission/);
   assert.equal(fs.readFileSync(q.file, 'utf8'), bytes); assert.deepEqual(f.lines(), []);
+});
+
+test('a corrupted completed integration log refuses recovery without replaying commands', async t => {
+  const f = declaredFixture(t), r = train(f, t); if (!r) return;
+  const saved = r.read(), job = saved.jobs[0], attempt = saved.attempts[0], lines = f.lines();
+  assert.equal(saved.results[job.id].outcome, 'promoted');
+  assert.ok(terminalTrainJobs({ file: r.file, project: r.q.project, jobs: saved.jobs }).has(job.id));
+  fs.appendFileSync(attempt.gate.log, '\ncorrupted completed log');
+  assert.equal(terminalTrainJobs({ file: r.file, project: r.q.project, jobs: saved.jobs }).size, 0);
+  assert.equal(verifyTrainResult({ id: job.id, batch: saved.id, receipt: r.file, source_head: job.expectedHead, tip: attempt.tip },
+    { project: r.q.project, saved: { lane: job.topic, head: job.expectedHead, run: job.run, org: job.org, requiredTests: job.requiredTests } }), false);
+  const next = declaration(); next.promotion = 'false'; f.write('.lane.validation.json', JSON.stringify(next)); f.commit();
+  const before = fs.readFileSync(r.file), tip = f.base();
+  await assert.rejects(runTrain({ file: r.file, canonical: f.repo, identity: r.q.project.identity, main: 'main', prepare: [], validation: { declared: job.declared }, recoveryOnly: true }), /recovery|evidence|terminal|admission|declaration|completed/);
+  assert.deepEqual(fs.readFileSync(r.file), before); assert.deepEqual(f.lines(), lines); assert.equal(f.base(), tip);
 });
 
 test('declared v2 record-bound promotion completes the existing guarded record transaction', t => {
@@ -111,6 +129,43 @@ test('declared v2 record-bound promotion completes the existing guarded record t
   const saved = JSON.parse(fs.readFileSync(result.receipt, 'utf8')); assert.equal(saved.schema, 'promotion-train/v2');
   assert.equal(saved.attempts[0].declared_spec.jobs[0].run, member.run);
   assert.equal(f.events().filter(row => row.type === 'promotion.reconciled').length, 1);
+});
+
+test('integrated declared completion retry uses captured requirements after the required gate changes', async t => {
+  const previous = process.cwd(); t.after(() => process.chdir(previous));
+  const f = completionFixture(t); process.chdir(f.repo);
+  const value = declaration(); value.promotion = `${process.execPath} '${f.checker}'`; delete value.promotion_tests; value.gates = {};
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify(value)); f.git(['add', '.lane.validation.json']); f.git(['commit', '-qm', 'Declare gates']);
+  const next = { ...value, promotion: 'node -e "throw Error(\'future gate executed\')"' };
+  const member = f.lane('completion', false, { requiredTests: [{ gate: 'promotion' }], files: { '.lane.validation.json': JSON.stringify(next) } });
+  const job = f.queue.load().pending[0], directory = receiptDirectory(f.org, f.queue.project.identity);
+  fs.mkdirSync(directory, { recursive: true });
+  const saved = { identity: f.queue.project.identity, org: f.org, run: member.run, lane: member.topic, head: member.head,
+    requiredTests: job.requiredTests, phase: 'acknowledged', queue: { jobs: [member.job] } };
+  fs.writeFileSync(path.join(directory, `${member.run}.json`), JSON.stringify(saved));
+  fs.writeFileSync(f.fault, 'refuse'); f.drain();
+  const pending = f.queue.load().results.find(row => row.id === job.id);
+  assert.equal(pending.outcome, 'promoted', JSON.stringify(pending)); assert.equal(pending.reconciliation.state, 'pending');
+  assert.equal(pending.declared.value.promotion, value.promotion);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.repo, '.lane.validation.json'))).promotion, next.promotion);
+  assert.equal(f.gates(), 1); fs.unlinkSync(f.fault);
+  const retry = () => {
+    const result = spawnSync(process.execPath, [path.join(product, 'supervisor/supervisor.mjs'), 'promote', member.run, '--retry', '--why', 'Recover acknowledged completion',
+      '--role', 'supervisor', '--repo', f.repo, '--org', f.org], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr + result.stdout); return JSON.parse(result.stdout);
+  };
+  assert.equal(retry().result, 'resuming_completion');
+  const deadline = Date.now() + loadTimeout(15000);
+  let completed;
+  do {
+    completed = f.queue.load().results.findLast(row => row.id === job.id);
+    if (completed?.reconciliation?.state === 'complete') break;
+    assert.ok(Date.now() < deadline, 'completion retry did not finish');
+    await new Promise(resolve => setTimeout(resolve, 25));
+  } while (true);
+  assert.equal(completed.outcome, 'promoted'); assert.equal(f.show(member.item).closed.as, 'done'); assert.equal(f.gates(), 1);
+  const recovered = retry(); assert.deepEqual(recovered.requiredTests, saved.requiredTests); assert.equal(recovered.queue.jobs[0].id, job.id);
+  assert.equal(f.gates(), 1); assert.equal(f.events().filter(row => row.type === 'promotion.reconciled').length, 1);
 });
 
 test('a pre-execution refusal with no attempt or integration branch recovers its bound recorded job without current policy', async t => {

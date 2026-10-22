@@ -15,7 +15,8 @@ import { queueJobs } from '../promote/promote.mjs';
 import { verifyTrainResult } from '../promote/train.mjs';
 import { recordedBatchCompletion } from '../promote/completion.mjs';
 import { readDeclared } from '../lanes/validation.mjs';
-import { bindRequirements, unionRequirements } from '../promote/declared-selection.mjs';
+import { bindRequirements, assertBoundRequirements, unionRequirements } from '../promote/declared-selection.mjs';
+import { executionIdentity } from '../promote/execution-identity.mjs';
 import { hash as requirementHash } from '../promote/declaration.mjs';
 import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
@@ -84,9 +85,13 @@ export function main(argv = process.argv.slice(2)) {
   const forwarded = ownership ? null : admitted ? continueOwnerRelease('supervisor/supervisor.mjs', admitted) : forwardRelease('supervisor/supervisor.mjs', opt.repo);
   if (forwarded !== null) { process.exitCode = forwarded; return; }
   let requiredTests = opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']);
-  const declaredRequirements = action === 'promote' ? readDeclared(releaseProject(opt.repo).canonical) : null;
-  if (declaredRequirements) requiredTests = bindRequirements(requiredTests, declaredRequirements.value);
-  else if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('invalid required test files');
+  let declaredRequirements;
+  const bindTests = declaration => {
+    declaredRequirements = declaration;
+    if (declaration) requiredTests = bindRequirements(requiredTests, declaration.value);
+    else if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('invalid required test files');
+  };
+  if (action !== 'promote') bindTests(null);
   const mergeTests = rows => declaredRequirements ? unionRequirements(rows.map(requiredTests => ({ requiredTests: bindRequirements(requiredTests, declaredRequirements.value) }))) : [...new Set(rows.flat())].sort();
   const includesTest = (rows, row) => declaredRequirements ? rows.some(value => requirementHash(value) === requirementHash(row)) : rows.includes(row);
   if (opt['required-tests'] !== undefined && action !== 'promote') throw Error('--required-tests belongs to promote');
@@ -244,6 +249,15 @@ export function main(argv = process.argv.slice(2)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (saved.identity !== project.identity || saved.org !== project.org || saved.run !== id) throw new Error('promotion receipt identity changed');
       if (saved.ownership) assertOwner(readOwnedRun(project.org, id), saved.ownership);
+      // An acknowledged job owns its requirements and identity. Resolve it
+      // before consulting today's declaration: completed bookkeeping cannot
+      // be stranded by the declaration that the integration itself changed.
+      const captured = saved.queue?.jobs?.length === 1 ? queueJobs(loadQueue()).find(job => job.id === saved.queue.jobs[0].id) : null;
+      if (captured?.gate_mode) {
+        executionIdentity(project, { bound: captured.execution_identity ?? null });
+        assertBoundRequirements(captured.requiredTests ?? [], captured.declared?.value);
+      }
+      bindTests(captured?.declared ?? (saved.phase === 'not-queued' ? readDeclared(project.canonical) : null));
       const inheritedTests = mergeTests([...(saved.prior_attempts ?? []), saved].map(attempt =>
         attempt.requiredTests ?? (attempt.test_evidence && !attempt.test_evidence.reexecuted ? attempt.test_evidence.files : [])));
       if (opt['required-tests'] !== undefined && inheritedTests.some(file => !includesTest(requiredTests, file))) throw Error('required tests cannot be removed from an earlier promotion attempt');
@@ -273,6 +287,8 @@ export function main(argv = process.argv.slice(2)) {
       }
     }
     else if (opt.retry) throw new Error('no acknowledged promotion attempt to retry');
+    // Only admission or another execution binds against current owner policy.
+    bindTests(readDeclared(project.canonical));
     // Settle rechecks report hash, record, exact heads, clean trees and readiness.
     const settledFile = path.join(project.org, 'settle', `${id}.json`);
     const settled = fs.existsSync(settledFile) ? JSON.parse(fs.readFileSync(settledFile, 'utf8')) : null;

@@ -123,7 +123,7 @@ for (const dimension of ['content', 'deletion', 'glob membership', 'mode', 'envi
   const second = f.execute(); assert.equal(second.gates[0].outcome, 'executed'); assert.equal(f.lines().length, 2);
 });
 
-test('missing runtime/runner, missing input declarations and failed probes cannot mint reusable evidence', () => {
+test('missing runtime/runner and incomplete input declarations are ineligible for reuse', () => {
   const inputs = reuseInputs();
   assert.equal(inputEligibility(inputs), null);
   for (const incomplete of [undefined, {}, { ...inputs, environment: undefined }, { ...inputs, paths: [] },
@@ -138,6 +138,26 @@ test('a reused input changed before integration executes once under current inpu
   f.write('.fixture/input-late', 'changed', f.workspace);
   const checked = recheckDeclaredGate({ spec: execution.spec, env: f.env, evidence: execution.evidence });
   assert.equal(checked.gates[0].outcome, 'executed'); assert.equal(checked.gates[0].reexecuted, true); assert.equal(f.lines().length, 2);
+});
+
+test('a later forced gate invalidates an earlier reused gate and both execute at most once', t => {
+  const value = declaration();
+  value.inputs = { promotion: { ...reuseInputs(), paths: ['baseline.mjs', '.fixture/earlier'] } };
+  value.gates.tool.inputs = { ...reuseInputs(), paths: ['runner.mjs', '.fixture/later'] };
+  const f = declaredFixture(t, { declared: value });
+  f.write('runner.mjs', "import fs from 'node:fs';fs.writeFileSync('.fixture/earlier',fs.readFileSync('.fixture/later'));fs.appendFileSync(process.env.CHECK_LOG,'tool\\n');", f.workspace); f.commit(f.workspace);
+  f.write('.fixture/earlier', 'one', f.workspace); f.write('.fixture/later', 'one', f.workspace);
+  const required = [{ gate: 'tool' }], first = f.execute(f.plan({ required }));
+  assert.ok(first.gates.every(row => row.source));
+  const execution = f.plan({ required }), reused = f.execute(execution);
+  assert.deepEqual(reused.gates.map(row => row.outcome), ['reused', 'reused']);
+  f.write('.fixture/later', 'two', f.workspace);
+  const final = recheckDeclaredGate({ spec: execution.spec, env: f.env, evidence: execution.evidence });
+  assert.deepEqual(final.gates.map(row => row.outcome), ['executed', 'executed']);
+  assert.ok(final.gates.every(row => row.reexecuted && row.history[0].outcome === 'reused'));
+  assert.deepEqual(f.lines(), ['baseline', 'tool', 'tool', 'baseline']);
+  assert.equal(fs.readFileSync(path.join(f.workspace, '.fixture/earlier'), 'utf8'), 'two');
+  assert.notEqual(final.gates[0].source, first.gates[0].source);
 });
 
 for (const dimension of ['command bytes', 'cwd', 'coverage', 'ordered preparation', 'environment salt', 'wall limit', 'idle limit', 'host policy', 'input specification', 'allowlist names', 'runtime probe declaration', 'runner probe declaration']) test(`declared-inputs executes once when ${dimension} change`, t => {
@@ -173,7 +193,7 @@ test('allowlisted execution omits ambient values and receipts contain digests in
   assert.equal(receipt.includes(f.env.CHECK_LOG), false);
 });
 
-test('failed probes, missing input roles, unstable paths and always-execute never reuse a pass', t => {
+test('failed probes and always-execute never reuse a pass', t => {
   const value = declaration(); value.inputs = { promotion: reuseInputs() }; value.inputs.promotion.toolchains.runner = 'exit 7'; delete value.promotion_tests;
   const f = declaredFixture(t, { declared: value });
   const first = f.execute(), second = f.execute();
@@ -182,6 +202,22 @@ test('failed probes, missing input roles, unstable paths and always-execute neve
   value.receipt_reuse = 'always-execute'; f.write('.lane.validation.json', JSON.stringify(value)); f.commit(); f.git(['rebase', 'main'], f.workspace);
   const third = f.execute(); assert.equal(third.gates[0].outcome, 'executed'); assert.equal(f.lines().length, 3);
   assert.equal(JSON.parse(fs.readFileSync(third.result, 'utf8')).commands.some(row => row.kind === 'version-probe'), false);
+});
+
+test('declared input mutation during a command never publishes a reusable source', t => {
+  const value = declaration(); value.inputs = { promotion: reuseInputs() }; delete value.promotion_tests;
+  const f = declaredFixture(t, { declared: value });
+  f.write('baseline.mjs', "import fs from 'node:fs';fs.appendFileSync('.fixture/input','changed');fs.appendFileSync(process.env.CHECK_LOG,'mutated\\n');", f.workspace); f.commit(f.workspace);
+  f.write('.fixture/input', 'before', f.workspace);
+  for (let i = 0; i < 2; i++) {
+    const gate = f.execute(), row = gate.gates[0];
+    assert.equal(row.outcome, 'executed'); assert.equal(row.source, undefined);
+    assert.notEqual(row.observation.key, row.after.key);
+    assert.match(row.reuse.unstable, /inputs changed during execution/);
+  }
+  assert.deepEqual(f.lines(), ['mutated', 'mutated']);
+  const sources = fs.readdirSync(path.join(f.repo, '.git/declared-gates')).filter(name => name.endsWith('.json'));
+  assert.deepEqual(sources, []);
 });
 
 test('input enumeration and byte ceilings are hard refusals of reuse evidence', t => {
@@ -230,4 +266,56 @@ for (const scenario of ['malformed planner', 'oversized planner', 'planner prepa
     assert.ok(evidence.execution?.commands.length > 0); assert.ok(fs.existsSync(evidence.execution.commands[0].log));
   }
   assert.deepEqual(f.lines(), []);
+});
+
+for (const kind of ['planner', 'probe']) for (const failure of ['exit', 'signal']) test(`failed ${kind} retains stdout and original ${failure}`, t => {
+  const value = declaration();
+  if (kind === 'probe') { value.inputs = { promotion: reuseInputs() }; value.inputs.promotion.toolchains.runner = failure === 'exit' ? 'printf probe-output; exit 7' : 'printf probe-output; kill -TERM $$'; delete value.promotion_tests; }
+  const f = declaredFixture(t, { declared: value });
+  if (kind === 'planner') {
+    f.write('planner.mjs', `process.stdout.write('planner-output');${failure === 'exit' ? 'process.exitCode=7;' : "process.kill(process.pid,'SIGTERM');"}`); f.commit(); f.git(['rebase', 'main'], f.workspace);
+  }
+  const evidence = { commands: [] }, project = f.queue().project;
+  const plan = () => planDeclaredGateBounded({ repo: f.repo, common: project.identity, cwd: f.workspace, base: f.base(), candidate: f.head(),
+    owner: readDeclared(f.repo), identity: executionIdentity(project), required: [], changed: ['product.txt'], env: f.env, evidence });
+  let row;
+  if (kind === 'planner') { assert.throws(plan, /planner/); row = evidence.commands.find(row => row.kind === 'planner'); }
+  else {
+    const gate = f.execute(); assert.equal(gate.gates[0].source, undefined);
+    row = JSON.parse(fs.readFileSync(gate.result, 'utf8')).commands.find(row => row.kind === 'version-probe' && row.outcome === 'failed');
+  }
+  assert.ok(row); assert.equal(fs.readFileSync(row.log, 'utf8'), `${kind}-output`);
+  assert.equal(row.exit_code, failure === 'exit' ? 7 : null); assert.equal(row.signal, failure === 'signal' ? 'SIGTERM' : null);
+  const execution = JSON.parse(fs.readFileSync(row.execution_receipt, 'utf8'));
+  // The watchdog sidecar retains its portable 128+signal exit convention;
+  // runGateSync restores the command's null exit plus original signal.
+  assert.equal(execution.exit_code, failure === 'exit' ? 7 : 143); assert.equal(execution.signal, row.signal);
+});
+
+for (const stage of ['planner preparation', 'candidate preparation', 'gate']) test(`streaming ${stage} survives outer idle time while a silent leaf times out`, t => {
+  const value = declaration(); value.timeout_seconds.promotion = 20; value.idle_timeout_seconds = { promotion: 1 };
+  const command = 'node activity.mjs';
+  if (stage === 'planner preparation') value.promotion_tests.prepare = [{ run: command }];
+  if (stage === 'candidate preparation') value.gate.prepare = [{ run: command }];
+  if (stage === 'gate') value.promotion = command;
+  const f = declaredFixture(t, { declared: value });
+  f.write('activity.mjs', "const timer=setInterval(()=>console.log('active'),100);setTimeout(()=>clearInterval(timer),2200);"); f.commit(); f.git(['rebase', 'main'], f.workspace);
+  const project = f.queue().project, evidence = { commands: [] };
+  const plan = () => planDeclaredGateBounded({ repo: f.repo, common: project.identity, cwd: f.workspace, base: f.base(), candidate: f.head(),
+    owner: readDeclared(f.repo), identity: executionIdentity(project), required: [], changed: ['product.txt'], env: f.env, evidence });
+  assert.equal(f.execute({ ...plan(), evidence }).exit_code, 0);
+  f.write('activity.mjs', 'setTimeout(()=>{},60000);'); f.commit(); f.git(['rebase', 'main'], f.workspace);
+  evidence.commands = []; delete evidence.execution;
+  if (stage === 'planner preparation') {
+    assert.throws(plan, /limits|deadline/);
+    assert.equal(evidence.commands[0].gate_timeout.kind, 'idle');
+  } else {
+    const execution = { ...plan(), evidence };
+    if (stage === 'candidate preparation') {
+      assert.throws(() => f.execute(execution), /limits|deadline/);
+      assert.equal(evidence.execution.commands[0].gate_timeout.kind, 'idle');
+    } else {
+      const gate = f.execute(execution); assert.equal(gate.outcome, 'timeout'); assert.equal(gate.gate_timeout.kind, 'idle');
+    }
+  }
 });

@@ -58,16 +58,30 @@ export function queueJobs(data) {
   return [...new Map(rows.map(job => [job.id, job])).values()];
 }
 
-function hasDeclaredWork(project) {
+function declaredWork(project) {
   const file = path.join(project.identity, 'promote/queue.json');
-  if (!fs.existsSync(file)) return false;
+  if (!fs.existsSync(file)) return [];
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-  return [...(data.pending ?? []), ...(data.current?.jobs ?? (data.current ? [data.current] : [])), ...(data.interrupted ?? []).flatMap(batch => batch.jobs ?? [batch])].some(job => job.gate_mode);
+  return [...(data.pending ?? []), ...(data.current?.jobs ?? (data.current ? [data.current] : [])), ...(data.interrupted ?? []).flatMap(batch => batch.jobs ?? [batch]),
+    ...(data.results ?? []).filter(job => job.cleanup?.state === 'pending')].filter(job => job.gate_mode);
+}
+function hasDeclaredWork(project) { return declaredWork(project).length > 0; }
+function fenceDeclaredTarget(project) {
+  const jobs = declaredWork(project);
+  const declared = jobs.length || readDeclared(project.canonical, { audit: false });
+  if (!declared) return false;
+  executionIdentity(project);
+  for (const job of jobs) executionIdentity(project, { bound: job.execution_identity ?? null });
+  return true;
 }
 export function queueFor(cwd, { readOnly = false } = {}) {
-  const binding = homeProject(cwd), project = binding?.git ?? gitProject(cwd);
+  const binding = homeProject(cwd, process.env, { inspection: true }), project = binding?.git ?? gitProject(cwd);
+  if (!readOnly) {
+    fenceDeclaredTarget(project);
+    homeProject(cwd);
+    if (!hasDeclaredWork(project)) readDeclared(project.canonical);
+  }
   if (binding) for (const key of Object.keys(process.env)) if (key.startsWith('GIT_')) delete process.env[key];
-  if (!readOnly && (hasDeclaredWork(project) || readDeclared(project.canonical))) executionIdentity(project);
   const directory = path.join(project.identity, 'promote');
   const file = path.join(directory, 'queue.json');
   if (!readOnly) fs.mkdirSync(directory, { recursive: true });
@@ -199,6 +213,7 @@ export function checkDeclaredJobs(queue, jobs, { recoveryFirst = true } = {}) {
 }
 
 export function enqueue(queue, topics, options) {
+  fenceDeclaredTarget(queue.project);
   options = { ...options, release: bundleRelease() };
   const declared = readDeclared(queue.project.canonical, { override: options.validate });
   if (declared) {
@@ -417,6 +432,7 @@ function cleanupRevision(job, queue) {
 }
 
 export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
+  if (job.gate_mode) executionIdentity(queue.project, { bound: job.execution_identity ?? null });
   const delegated = () => ({ ...result, cleanup: { state: 'complete', owner: 'closeout-queue' },
     reason: 'green fast-forward; closeout delegated to the event queue' });
   let ownership;
@@ -481,6 +497,8 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
 
 // Restart/reconciliation retries only the cleanup checkpoint, never the gate.
 export function retryCleanup(queue, options = {}) {
+  for (const job of queue.load().results.filter(row => row.cleanup?.state === 'pending' && row.gate_mode))
+    executionIdentity(queue.project, { bound: job.execution_identity ?? null });
   // Housekeeping and the drain share this queue-owned retry lock. Keep the
   // short queue transactions available to enqueuers and bundle continuations.
   const release = acquireLock(path.join(queue.directory, 'cleanup.lock'));
@@ -489,6 +507,7 @@ export function retryCleanup(queue, options = {}) {
 }
 function retryCleanupLocked(queue, { now = Date.now() } = {}) {
   for (const saved of queue.load().results.filter(r => r.outcome === 'promoted' && r.cleanup?.state === 'pending' && r.reconciliation?.state !== 'pending')) {
+    if (saved.gate_mode) executionIdentity(queue.project, { bound: saved.execution_identity ?? null });
     let revision;
     try { revision = cleanupRevision(saved, queue); } catch (e) { revision = `unreadable:${e.message}`; }
     if (saved.cleanup.revision === revision && ((saved.cleanup.attempts ?? 0) >= 5 || now < saved.cleanup.next_attempt_at)) continue;
@@ -543,6 +562,7 @@ function consumeRequests(queue) {
 }
 
 function finishBatchJob(job, result, queue) {
+  if (job.gate_mode) executionIdentity(queue.project, { bound: job.execution_identity ?? null });
   if (result.outcome !== 'promoted' || result.reconciliation?.state === 'pending') return result;
   const warnings = result.replacement_pending ? [] : [...(result.warnings ?? [])];
   if (result.report_to_main_s !== null && result.report_to_main_s !== undefined && job.org && job.run) {
@@ -876,8 +896,7 @@ async function main() {
   if (opt.capabilities) { process.stdout.write(JSON.stringify(CAPABILITIES) + '\n'); return; }
   if (opt['existing-worker'] && (opt.resume || opt.drain)) throw Error('--existing-worker is enqueue-only; it never starts or resumes a worker');
   const target = gitProject(opt.repo);
-  const declaredTarget = !opt.status && (hasDeclaredWork(target) || Boolean(readDeclared(target.canonical)));
-  if (!opt.status && declaredTarget) executionIdentity(target);
+  const declaredTarget = !opt.status && fenceDeclaredTarget(target);
   // --drain/--cleanup-job are continuations of recorded operations, not new
   // admissions. Their immutable path chooses the bundle even after a re-pin.
   if (!opt.drain && !opt['cleanup-job']) {

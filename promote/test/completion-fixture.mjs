@@ -57,6 +57,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
   };
   const lane = (topic, bad = false, options = {}) => {
     const workspace = path.join(root, topic); git(['worktree', 'add', '-qb', `lane/${topic}`, workspace]);
+    for (const [name, bytes] of Object.entries(options.files ?? {})) fs.writeFileSync(path.join(workspace, name), bytes);
     fs.writeFileSync(path.join(workspace, bad ? 'bad' : topic), topic); git(['add', '.'], workspace); git(['commit', '-qm', topic], workspace);
     const item = record(['add', topic]);
     const superseded = options.supersede ? [record(['start', item, '--workspace', workspace]).match(/^R-\d+/)[0]] : [];
@@ -70,7 +71,8 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     if (options.childBeforeAdmission) record(['add', 'New engineering scope', '--role', 'engineer', '--parent', item]);
     const head = git(['rev-parse', 'HEAD'], workspace);
     const job = enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0,
-      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, claimedBy: options.owned === false ? undefined : 'brain', expectedHead: head, superseded })[0];
+      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, claimedBy: options.owned === false ? undefined : 'brain', expectedHead: head, superseded,
+      ...(options.requiredTests ? { requiredTests: options.requiredTests } : {}) })[0];
     const member = { topic, workspace, item, run, head, job, superseded }; members.push(member); return member;
   };
   const drain = () => {

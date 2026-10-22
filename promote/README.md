@@ -37,7 +37,10 @@ The queue captures the declaration/source revision/digest, complete required
 coverage or `{"gate":"id"}` definitions, head/run/release and both identity
 roots. Caller cwd must be this canonical checkout or a linked worktree with the
 same common directory and identity root. Enqueue, worker/dequeue, resume,
-execution, integration and terminal recovery recheck that binding. Native
+execution, integration, terminal recovery and pending cleanup recheck that binding.
+Mode detection reads without auditing; caller/project checks precede config audit
+writes, including recovery of an interrupted config write. Cleanup retains its
+saved identity binding after a declaration rollback or identity-root change. Native
 sandbox settings remain operator-owned; these are routing checks rather than
 native identity attestations. `--capabilities` advertises the exact declaration,
 selection, execution and receipt versions. Admission explicitly checks the bound
@@ -57,7 +60,9 @@ planner execution at 20 seconds/1 MiB stdout. Oversized immutable execution argv
 (over 96 KiB) refuses without dropping binding fields.
 
 One finite attempt deadline contains canonical preparation/planning, candidate
-preparation, declared version probes, hashing and execution. The existing host
+preparation, declared version probes, hashing and execution. Leaf commands enforce
+idle limits against their actual output; enclosing watchdogs enforce the attempt
+wall deadline while leaf output is retained in private logs. The existing host
 adapter owns the lock/slot and nested steps inherit it. Commands run unchanged
 through `/bin/sh -c` at their declared contained cwd: no file-extension filter,
 argument rewriting, launch classifier, recipe expansion or inferred import/runtime
@@ -91,6 +96,9 @@ are verified under the shared receipt lock. Lane pointers, reused pointers and
 legacy receipts are not source authority. A reused pass points to its original
 executed receipt/log and records compared digests. Inputs are rechecked before
 integration; a changed hit executes once within the remaining deadline or holds.
+After a forced command, every surviving hit is checked again, including earlier
+gates whose inputs that command may have changed. Each gate executes at most once
+in this sweep, and the attempt deadline still applies.
 Reuse certifies validation, not build output. Include restored build artifacts
 among the reviewed inputs when downstream gates need them.
 
@@ -101,7 +109,8 @@ Persisted integrated (including lost fast-forward replies), mixed final
 refused/integrated, and refusal-only results recover under their captured rule
 before any current-declaration comparison or host admission. They verify saved
 job/identity, integration/tree/containment and log evidence as applicable and
-never repeat successful commands or integration. Unfinished work still holds
+never repeat successful commands or integration. Supervisor completion retries
+also use the acknowledged job's captured requirements and identity. Unfinished work still holds
 on a changed declaration. Logs and every earlier outcome remain retained.
 
 Development `lane check --cmd` remains available and certifies its command only.

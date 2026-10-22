@@ -187,7 +187,7 @@ test('every planner reason expression is enumerated and mapped; source drift fai
     'recorded idle agent and its descendants; exit before closing the shell',
     '${exited.run}: recorded agent exit; unchanged terminal and shell identity',
     'recorded ${callback.kind} callback complete; unchanged process and shell identity',
-    "record release for ${released.join(', ')}; exact session and head",
+    "record release for ${released.map(r => r.run).join(', ')}; exact session and ${released.some(r => r.head !== git.head) ? 'reverified landed head' : 'head'}",
     "${agents.map(a => matchingRun(a, snapshot.record)?.id).join(', ')}: ingested report and terminal chain, or confirmed retained successor",
     'lane removal preconditions verified',
     'integrated lane eligible; preservation verified on apply',
@@ -195,7 +195,11 @@ test('every planner reason expression is enumerated and mapped; source drift fai
   ];
   const releases = [...policy.matchAll(/why: reason \?\? (?:\(inert \? initial \? ('[^']*') : ('[^']*') : needsExit \? ('[^']*') : exited \? (`[^`]*`) : callback \? (`[^`]*`) : released\.length \? (`[^`]*`) : (`[^`]*`)|\(candidate\.eligibility === 'archival-retirement' \?\s*('[^']*') : ('[^']*')\)|('[^']*'))/g)].flatMap(m => m.slice(1).filter(Boolean).map(s => s.slice(1, -1)));
   assert.deepEqual(releases.sort(), releaseReasons.sort());
-  for (const why of releases) assert.equal(classifyRetirement({ decision: 'release', why }).class, 'TERMINAL');
+  for (const why of [
+    ...releases,
+    'record release for R-1; exact session and head',
+    'record release for R-1; exact session and reverified landed head',
+  ]) assert.equal(classifyRetirement({ decision: 'release', why }).class, 'TERMINAL', why);
 });
 
 test('a scoped malformed initial receipt is UNKNOWN with its explicit keep reason', () => {

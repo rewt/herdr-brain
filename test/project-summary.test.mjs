@@ -355,9 +355,11 @@ test('published promotion classes match the lanes view for pending jobs and expi
   assert.ok(!published.exceptions.some(e => e.name === 'lanes-unknown'));
 });
 
-test('published lane counts match detailed status for clean, dirty, occupied, open-chain and open-run lanes', async t => {
+test('published opted-out lane counts match detailed status for clean, dirty, occupied, open-chain and open-run lanes', async t => {
   const f = fixture(t), clean = path.join(f.root, 'clean'), dirty = path.join(f.root, 'dirty');
   assert.equal(fs.existsSync(path.join(f.repo, '.lane.json')), false);
+  // Preserve the legacy foreground oracle under the option B migration.
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   f.git(['worktree', 'add', '-b', 'lane/clean', clean]);
   f.git(['worktree', 'add', '-b', 'lane/dirty', dirty]); fs.writeFileSync(path.join(dirty, 'seed'), 'work in progress');
   const occupied = path.join(f.root, 'occupied'), chain = path.join(f.root, 'chain'), running = path.join(f.root, 'running');

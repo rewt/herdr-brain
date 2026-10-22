@@ -403,12 +403,16 @@ For B, a gate's `inputs` declaration must explicitly provide all of:
    Literal project env names must be included. Bookkeeping cannot affect test
    selection or behavior. A command needing other/secret ambient inputs runs
    without reusable evidence.
-4. **Project-declared toolchain versions**, observed through the finite, opaque
-   version-probe commands in `inputs.toolchains` under the same identity,
-   environment and deadline. Digest their declarations and successful version
-   output. Brain guesses no `--version` flag, resolves no hidden runtime chain
-   and scans no PATH or imports. Missing/failed/changed version evidence is a
-   miss, not permission to substitute a tool.
+4. **Project-declared toolchain versions** in `inputs.toolchains` must include
+   at least the gate's **runtime** (for example `node`, `python3` or pnpm's Node)
+   and its **test runner or build tool as invoked** (for example `vitest`, `pnpm`
+   or `node` itself for node:test). A declaration missing either is not
+   reuse-eligible and the gate executes. Observe versions through the finite,
+   opaque version-probe commands under the same identity, environment and
+   deadline. Digest their declarations and successful version output. Brain
+   guesses no `--version` flag, resolves no hidden runtime chain and scans no
+   PATH or imports. Missing/failed/changed version evidence is a miss, not
+   permission to substitute a tool.
 
 Completeness is the project's reviewed assertion, not Brain's discovery.
 Undeclared network, host state or mutable dependencies cannot support reuse;

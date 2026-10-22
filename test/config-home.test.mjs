@@ -129,7 +129,11 @@ test('conflicting home ownership holds the claimed project and is isolated from 
   const binding = f.binding(), neighbor = await neighboringProject(f);
   fs.unlinkSync(path.join(f.cwd, '.brain'));
   const duplicate = path.join(path.dirname(binding.directory), 'duplicate'); fs.mkdirSync(duplicate);
-  fs.writeFileSync(path.join(duplicate, 'project.json'), JSON.stringify({ ...readConfigJSON(binding.file), project: 'duplicate' }));
+  const raw = readConfigJSON(binding.file);
+  // A completed receipt names its original file. Use a valid partial binding
+  // so both claims reach the ownership-conflict check under test.
+  const { completed, ...adoption } = raw.adoption;
+  fs.writeFileSync(path.join(duplicate, 'project.json'), JSON.stringify({ ...raw, project: 'duplicate', adoption }));
   assert.throws(() => homeProject(f.cwd, f.env), /conflicting config-home ownership/);
   assert.equal(homeBindings(neighbor.env, { record: neighbor.record }).errors.length, 2);
   assert.equal(homeProject(neighbor.cwd, neighbor.env), null);

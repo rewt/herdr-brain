@@ -7,7 +7,7 @@ import { gitProject } from '../lib/project.mjs';
 import { policyLocation, homeProject } from '../lib/config-home.mjs';
 import { readPolicyFile, validatePolicy } from '../lib/config-policy.mjs';
 import { writeAuditedConfig } from '../lib/config-audit.mjs';
-import { withConfigLock } from '../lib/config-command.mjs';
+import { withConfigLock, materializeSuggestedRoutes, validateEffectivePolicy } from '../lib/config-command.mjs';
 import { UserError } from '../lib/store.mjs';
 import { renderRoutes } from '../lib/render.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig } from './routes.mjs';
@@ -44,11 +44,13 @@ export function editProjectConfig(mutate, { cwd = process.cwd(), expect, adoptRo
     if (expect && current.revision !== expect) throw new UserError('routes changed since you opened the editor; refresh and review again');
     const kind = adoptRoutes && binding.sources.routing ? 'routing' : 'lane';
     const selected = policyLocation(cwd, kind), target = policyLocation(cwd, kind, process.env, { write: true }).file;
-    const next = fs.existsSync(selected.file) ? readPolicyFile(selected.file, kind, { cwd }) : {};
+    const own = fs.existsSync(selected.file) ? readPolicyFile(selected.file, kind, { cwd }) : {};
+    const next = adoptRoutes ? materializeSuggestedRoutes(own, current) : own;
     mutate(next, current);
-    validatePolicy(kind, next, target);
-    mergeRoutesConfig([current.config, next]);
-    writeAuditedConfig({ file: target, value: next, kind, binding, cwd, validate: value => validatePolicy(kind, value, target) });
+    writeAuditedConfig({ file: target, value: next, kind, binding, cwd, validate(value) {
+      validatePolicy(kind, value, target);
+      validateEffectivePolicy(kind, value, { home: binding, binding, cwd, env: process.env });
+    } });
     return routesSnapshot(cwd);
   });
   const lock = `${before.target}.lock`;

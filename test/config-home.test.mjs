@@ -6,9 +6,10 @@ import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeBindings, homeProject, policyLocation, readConfigJSON, contentDigest } from '../lib/config-home.mjs';
-import { readProjectPolicy, readPolicyFile, configBase } from '../lib/config-policy.mjs';
+import { readProjectPolicy, readPolicyFile, configBase, IDENTITY_ONLY_KEYS } from '../lib/config-policy.mjs';
 import { configSnapshot, setConfig, configCommand } from '../lib/config-command.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
+import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { resolveValidation, validateTree } from '../lanes/validation.mjs';
 import { discoverArchive } from '../lib/archive.mjs';
 import { literalLaunch } from '../lib/owner-launch.mjs';
@@ -19,7 +20,7 @@ import { projectFleet, readFleet } from '../lib/fleet.mjs';
 import { initOrg, findOrgDir, transact, loadEvents } from '../lib/store.mjs';
 import { inspect } from '../sessions/sessions.mjs';
 import { readSessionFacts } from '../sessions/observe.mjs';
-import { routesSnapshot, editProjectConfig, setProjectRoute } from '../lanes/routes-command.mjs';
+import { routesSnapshot, editProjectConfig, setProjectRoute, configureProjectRoutes } from '../lanes/routes-command.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
 import { discoverProject } from '../housekeeping/housekeeping.mjs';
 import { queueFor } from '../promote/promote.mjs';
@@ -875,4 +876,157 @@ test('a first legacy route edit materializes suggested routes without copying th
   assert.equal(Object.hasOwn(own, 'launch'), false);
   assert.ok(own.routes.review); assert.ok(own.selection_policy);
   assert.deepEqual(loadDiscoveredRoutes({ cwd: f.cwd }).config.launch, prefix);
+});
+
+async function suggestedHomeFixture(t, { inheritedDesk = false } = {}) {
+  const f = configFixture(t), prefix = [process.execPath, 'identity-launch.mjs'];
+  const settle = { review_route: 'review', fix_route: 'engineer', timeout: 17 };
+  const lifecycle = { main: 'main', archive: { dirs: ['archive'] }, ...(inheritedDesk ? {} : { settle }) };
+  fs.writeFileSync(path.join(f.ownerRoot, '.lane.json'), JSON.stringify({ launch: prefix, worktree_root: 'identity-lanes', ...(inheritedDesk ? { settle } : {}) }));
+  fs.writeFileSync(path.join(f.cwd, '.lane.json'), JSON.stringify(lifecycle));
+  await f.adopt();
+  assert.equal(routesSnapshot(f.cwd).suggested, true);
+  return { f, prefix, settle, lifecycle };
+}
+
+function routeCLI(f, ...args) {
+  const result = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), ...args], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+}
+
+const editedModel = 'confirmed-project-model', addedRoute = { kind: 'codex', model: 'custom-model' };
+const editedPolicy = { by_task_class: { implementation: 'engineer', review: 'review' } };
+const firstRouteEdits = [
+  ['record config set route', f => routeCLI(f, 'config', 'set', 'routes.engineer.model', editedModel), next => { next.routes.engineer.model = editedModel; }],
+  ['record config set selection', f => routeCLI(f, 'config', 'set', 'selection_policy.by_task_class.chore', 'engineer'), next => { next.selection_policy.by_task_class.chore = 'engineer'; }],
+  ['record config set defaults', f => routeCLI(f, 'config', 'set', 'dispatch.effort', 'max'), next => { next.dispatch.effort = 'max'; }],
+  ['record routes set', f => routeCLI(f, 'routes', 'set', 'engineer', '--model', editedModel), next => { next.routes.engineer.model = editedModel; }],
+  ['record routes add', f => routeCLI(f, 'routes', 'add', '--value', JSON.stringify({ name: 'custom', route: addedRoute })), next => { next.routes.custom = addedRoute; }],
+  ['record routes policy', f => routeCLI(f, 'routes', 'policy', '--value', JSON.stringify(editedPolicy)), next => { next.selection_policy = editedPolicy; }],
+  ['setProjectRoute', f => setProjectRoute('engineer', { model: editedModel }, { cwd: f.cwd }), next => { next.routes.engineer.model = editedModel; }],
+  ['configureProjectRoutes add', f => configureProjectRoutes('add', { name: 'custom', route: addedRoute }, { cwd: f.cwd }), next => { next.routes.custom = addedRoute; }],
+  ['configureProjectRoutes policy', f => configureProjectRoutes('policy', editedPolicy, { cwd: f.cwd }), next => { next.selection_policy = editedPolicy; }],
+  ['configureProjectRoutes defaults', f => configureProjectRoutes('defaults', { kind: 'codex', model: editedModel }, { cwd: f.cwd }), next => { next.dispatch = { kind: 'codex', model: editedModel }; }],
+  ['configureProjectRoutes arguments', f => configureProjectRoutes('arguments', { codex: [] }, { cwd: f.cwd }), next => { next.always_args = { codex: [] }; }],
+];
+
+for (const [name, edit, update] of firstRouteEdits) test(`the first adopted ${name} edit materializes the preset and retains the review desk`, async t => {
+  const { f, prefix, settle, lifecycle } = await suggestedHomeFixture(t);
+  const expected = structuredClone(ROUTE_PRESET); update(expected);
+  edit(f);
+  const file = policyLocation(f.cwd, 'lane').file, own = readConfigJSON(file);
+  assert.deepEqual(own.routes, expected.routes);
+  assert.deepEqual(own.selection_policy, expected.selection_policy);
+  assert.deepEqual(own.dispatch, expected.dispatch);
+  assert.equal(own.schema, expected.schema);
+  assert.equal(own.authority, 'Project routes confirmed by the operator');
+  for (const [key, value] of Object.entries(lifecycle)) assert.deepEqual(own[key], value, key);
+  if (expected.always_args) assert.deepEqual(own.always_args, expected.always_args);
+  for (const key of [...IDENTITY_ONLY_KEYS, 'worktree_root']) assert.equal(Object.hasOwn(own, key), false, key);
+  const loaded = loadDiscoveredRoutes({ cwd: f.cwd });
+  assert.equal(loaded.suggested, undefined);
+  assert.deepEqual(loaded.config.routes, expected.routes);
+  assert.deepEqual(loaded.config.selection_policy, expected.selection_policy);
+  assert.deepEqual(loaded.config.settle, settle);
+  assert.deepEqual(loaded.config.launch, prefix);
+  assert.deepEqual(readProjectPolicy(f.cwd, 'lane').config, own);
+  assert.deepEqual(pendingConfigWrite(f.env.ORG_DIR, file), []);
+});
+
+for (const inheritedDesk of [false, true]) test(`refused first adopted edits leave all config and audit bytes unchanged with a ${inheritedDesk ? 'retained identity' : 'retained project'} desk`, async t => {
+  const { f } = await suggestedHomeFixture(t, { inheritedDesk });
+  const binding = f.binding(), target = policyLocation(f.cwd, 'lane').file;
+  configSnapshot({ cwd: f.cwd });
+  const files = [target, binding.file, binding.identityFile, path.join(f.cwd, '.lane.json'),
+    path.join(f.env.ORG_DIR, 'events.jsonl'), path.join(path.dirname(binding.identityFile), '.org/events.jsonl')];
+  const bytes = () => files.map(file => fs.readFileSync(file, 'utf8')), before = bytes();
+  let intent = false, replacement = false;
+  const options = { cwd: f.cwd, afterIntent() { intent = true; }, afterReplace() { replacement = true; } };
+  const missing = { by_task_class: { implementation: 'missing' } };
+  const refusals = [
+    () => assert.throws(() => setConfig('selection_policy', JSON.stringify(missing), options), /names unknown route missing/),
+    () => assert.throws(() => setConfig('routes.review', undefined, { ...options, unset: true }), /unknown route review/),
+    () => assert.throws(() => setProjectRoute('engineer', { model: '' }, { cwd: f.cwd }), /non-empty string/),
+    () => assert.throws(() => configureProjectRoutes('policy', missing, { cwd: f.cwd }), /names unknown route missing/),
+    // Old routes must not satisfy a desk reference after this replacement.
+    () => assert.throws(() => editProjectConfig(next => {
+      next.routes = { engineer: { kind: 'codex' } };
+      next.selection_policy = { by_task_class: { implementation: 'engineer' } };
+    }, { cwd: f.cwd }), /unknown route: review/),
+    () => {
+      const result = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), 'routes', 'policy', '--value', JSON.stringify(missing)], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
+      assert.equal(result.status, 1); assert.match(result.stderr, /names unknown route missing/);
+    },
+  ];
+  for (const refuse of refusals) {
+    refuse();
+    assert.equal(intent, false); assert.equal(replacement, false);
+    assert.deepEqual(bytes(), before);
+    assert.deepEqual(pendingConfigWrite(f.env.ORG_DIR, target), []);
+    assert.equal(routesSnapshot(f.cwd).suggested, true);
+    for (const directory of [binding.directory, path.dirname(binding.identityFile)]) assert.equal(fs.existsSync(path.join(directory, '.config.lock')), false);
+  }
+  setProjectRoute('engineer', { model: editedModel }, { cwd: f.cwd });
+  assert.equal(loadDiscoveredRoutes({ cwd: f.cwd }).config.settle.review_route, 'review');
+  assert.equal(Object.hasOwn(readConfigJSON(target), 'settle'), !inheritedDesk);
+});
+
+test('later adopted edits preserve an explicit reduced route set, policy and authority', async t => {
+  const { f } = await suggestedHomeFixture(t);
+  setProjectRoute('engineer', { model: editedModel }, { cwd: f.cwd });
+  setConfig('selection_policy', JSON.stringify(editedPolicy), { cwd: f.cwd });
+  const routes = { engineer: { kind: 'codex', model: editedModel }, review: { kind: 'claude', model: 'opus' } };
+  setConfig('routes', JSON.stringify(routes), { cwd: f.cwd });
+  setConfig('authority', 'Project-specific authority', { cwd: f.cwd });
+  for (const [, edit, update] of firstRouteEdits.filter(([name]) => !name.includes('add'))) {
+    const expected = readConfigJSON(policyLocation(f.cwd, 'lane').file); update(expected);
+    edit(f);
+    const own = readConfigJSON(policyLocation(f.cwd, 'lane').file);
+    assert.deepEqual(own, expected);
+    assert.deepEqual(Object.keys(own.routes).sort(), ['engineer', 'review']);
+    assert.equal(own.authority, 'Project-specific authority');
+    assert.equal(loadDiscoveredRoutes({ cwd: f.cwd }).suggested, undefined);
+  }
+  configureProjectRoutes('add', { name: 'custom', route: addedRoute }, { cwd: f.cwd });
+  assert.deepEqual(readConfigJSON(policyLocation(f.cwd, 'lane').file).routes, { ...routes, custom: addedRoute });
+});
+
+test('standalone route replacement validates retained identity desks against the exact selected routes before publishing', async t => {
+  const f = configFixture(t, { routing: true });
+  const identity = readConfigJSON(path.join(f.ownerRoot, '.lane.json'));
+  identity.settle = { review_route: 'review' };
+  fs.writeFileSync(path.join(f.ownerRoot, '.lane.json'), JSON.stringify(identity));
+  await f.adopt();
+  configSnapshot({ cwd: f.cwd });
+  const file = policyLocation(f.cwd, 'routing').file;
+  const files = [file, path.join(f.env.ORG_DIR, 'events.jsonl')], before = files.map(file => fs.readFileSync(file, 'utf8'));
+  assert.throws(() => editProjectConfig(next => {
+    next.routes = { engineer: { kind: 'codex' } };
+    next.selection_policy = { by_task_class: { implementation: 'engineer' } };
+  }, { cwd: f.cwd }), /unknown route: review/);
+  assert.deepEqual(files.map(file => fs.readFileSync(file, 'utf8')), before);
+  assert.deepEqual(pendingConfigWrite(f.env.ORG_DIR, file), []);
+  assert.equal(loadDiscoveredRoutes({ cwd: f.cwd }).config.routes.review.kind, 'claude');
+});
+
+test('an interrupted first adopted config route edit retries the same materialized intent', async t => {
+  const { f } = await suggestedHomeFixture(t), file = policyLocation(f.cwd, 'lane').file;
+  assert.throws(() => setConfig('routes.engineer.model', editedModel, { cwd: f.cwd, who: 'first route request', afterIntent() { throw Error('interrupted route intent'); } }), /interrupted route intent/);
+  const [intent] = pendingConfigWrite(f.env.ORG_DIR, file);
+  assert.deepEqual(intent.new_value.selection_policy, ROUTE_PRESET.selection_policy);
+  assert.ok(intent.new_value.routes.review);
+  setConfig('routes.engineer.model', editedModel, { cwd: f.cwd, who: 'retry' });
+  const entries = f.events().filter(e => e.operation === intent.operation);
+  assert.deepEqual(entries.map(e => e.type), ['config.change-intent', 'config.changed']);
+  assert.equal(entries[1].who_asked, 'first route request');
+  assert.equal(loadDiscoveredRoutes({ cwd: f.cwd }).config.routes.engineer.model, editedModel);
+  assert.deepEqual(pendingConfigWrite(f.env.ORG_DIR, file), []);
+});
+
+test('a first legacy config set route keeps its existing partial-declaration behavior', t => {
+  const f = configFixture(t);
+  fs.writeFileSync(path.join(f.ownerRoot, '.lane.json'), '{}');
+  fs.writeFileSync(path.join(f.cwd, '.lane.json'), '{"main":"main"}');
+  setConfig('routes.engineer.model', editedModel, { cwd: f.cwd });
+  assert.deepEqual(readConfigJSON(path.join(f.cwd, '.lane.json')), { main: 'main', routes: { engineer: { model: editedModel } } });
 });

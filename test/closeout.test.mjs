@@ -983,6 +983,7 @@ test('v1 is held until exact-key migration; interruption after the migration jou
   fs.writeFileSync(f.eventFile, all.map(e => JSON.stringify(e) + '\n').join(''));
   const entry = { ...v2, schema: 'closeout-entry/v1' }, file = path.join(f.common, 'closeout/entries', `${entry.key}.json`);
   fs.writeFileSync(file, JSON.stringify(entry, null, 2) + '\n');
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
   f.drain(); assert.equal(evaluations(f).length, 0);
   const rename = fs.renameSync;
   fs.renameSync = (from, to) => { if (to === file) throw Error('interrupted atomic conversion'); return rename(from, to); };
@@ -1076,7 +1077,8 @@ test('a default-on named ready resolves an identical pre-existing automatic read
   readyLane({ cwd: f.repo, org: f.org, topic: 'topic', run: 'R-1', start: false, env: f.env });
   assert.deepEqual(readCloseoutEntries(f.common)[0].source, original.source);
   f.drain();
-  assert.equal(f.read().actions.filter(a => a[0] === 'tab' && a[1] === 'close').length, 1);
+  assert.equal(f.read().actions.filter(a => a[0] === 'tab' && a[1] === 'close').length, 1,
+    JSON.stringify({ evaluations: evaluations(f), ready: events(f).find(e => e.type === 'lane.ready'), original }));
   assert.equal(fs.existsSync(f.lane), true, 'the ready key still supplies only pane authority');
 });
 

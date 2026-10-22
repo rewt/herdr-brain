@@ -26,7 +26,10 @@ export function closeoutMain(argv = process.argv.slice(2)) {
     const keys = handoffCloseout({ cwd, org, receipt: values.receipt });
     result = joinedCloseoutAttempt({ cwd, org, keys });
   }
-  else if (command === 'migrate' && positionals.length === 2) result = migrateCloseout({ cwd, org, key: topic, receipt: values.receipt });
+  else if (command === 'migrate' && positionals.length === 2) {
+    const keys = migrateCloseout({ cwd, org, key: topic, receipt: values.receipt });
+    result = joinedCloseoutAttempt({ cwd, org, keys });
+  }
   else if (command === 'status' && positionals.length === 1) result = readCloseoutEntries(gitProject(cwd).identity);
   else if (command === 'retry' && positionals.length === 2) result = retryCloseout({ cwd, org, topic, why: values.why });
   else if (command === 'followup-ended' && positionals.length === 2) result = endReviewFollowup({ cwd, org, reviewId: topic, why: values.why });

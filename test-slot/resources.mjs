@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { loadFactor } from '../lib/deadline.mjs';
+import { testLoadFactor } from './load.mjs';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -11,10 +11,10 @@ export const FILE_WORKERS = { maximum: 4, scope: 'test files only; transitive CP
   formula: 'max(1, floor(4/loadFactor))', source: 'test/helpers/run.mjs' };
 export function resourceStanza(id, command, admissionClass = 'SHARED') {
   return { id, revision: 1, command, admission_class: admissionClass, M_bytes: null, C: null,
-    worker_caps: FILE_WORKERS, named_claims: [], evidence: ['test/helpers/run.mjs', 'lib/deadline.mjs', 'ARCH-34: ordinary work starts immediately; only declared proving is exclusive'] };
+    worker_caps: FILE_WORKERS, named_claims: [], evidence: ['test/helpers/run.mjs', 'test-slot/load.mjs', 'ARCH-34: ordinary work starts immediately; only declared proving is exclusive'] };
 }
 export function workerSettings(env = process.env) {
-  const factor = loadFactor();
+  const factor = testLoadFactor();
   return { load_factor: factor, test_file_cap: Math.max(1, Math.floor(4 / factor)), maximum_test_file_cap: 4,
     transitive_cpu_bound: null, environment: Object.fromEntries(['UV_THREADPOOL_SIZE', 'OMP_NUM_THREADS', 'GOMAXPROCS', 'CARGO_BUILD_JOBS', 'RAYON_NUM_THREADS']
       .filter(key => env[key] !== undefined).map(key => [key, env[key]])) };

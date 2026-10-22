@@ -374,7 +374,10 @@ Brain profiles use revision 2 for the ARCH-34 shared class. Each stanza contains
 `named_claims: []`, and evidence references. Memory envelopes and transitive
 simultaneous CPU-worker demand are **unknown**, awaiting necessary runs. The
 helper's `max(1, floor(4/loadFactor))` is a cap on simultaneous **test files**,
-not on the threads, subprocesses or CPU workers those files create. `test:slot`
+not on the threads, subprocesses or CPU workers those files create. Its factor
+is `max(1, loadavg()[0] / availableParallelism())`, shared by timeout retry and
+worker telemetry. The product's serialized CLI/IPC allowances retain their
+separate four-core divisor in `lib/deadline.mjs`. `test:slot`
 uses Node's default test-file concurrency instead. The release and promotion
 composites include that step. No worker settings are changed by profiling.
 Bindings record actual argv, recipe, real cwd, tree (or `.release-commit` in an

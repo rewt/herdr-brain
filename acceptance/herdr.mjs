@@ -199,7 +199,7 @@ try {
     if (!fs.existsSync(executable)) {
       const temporary = `${executable}.${process.pid}.tmp`;
       try {
-        fs.copyFileSync(process.execPath, temporary, fs.constants.COPYFILE_FICLONE);
+        fs.writeFileSync(temporary, fs.readFileSync(process.execPath), { mode: 0o700, flag: 'wx' });
         fs.renameSync(temporary, executable);
       } finally { fs.rmSync(temporary, { force: true }); }
     }

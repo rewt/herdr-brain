@@ -73,7 +73,7 @@ async function scriptedFixture(t) {
   fs.writeFileSync(path.join(root, 'product-home-env.json'), JSON.stringify({ realHome: process.env.HOME,
     roots: [root], homes: scratchProductHomes(root) }));
   const executable = path.join(root, 'codex');
-  fs.copyFileSync(process.execPath, executable, fs.constants.COPYFILE_FICLONE);
+  fs.writeFileSync(executable, fs.readFileSync(process.execPath), { mode: 0o700, flag: 'wx' });
   const command = [executable, path.join(root, 'worker.mjs'), root, 'worker', 'worker'].map(quote).join(' ');
   const shell = spawnScenarioChild(t, '/bin/sh', ['-c', `${command}; sleep 0.3; while IFS= read -r line; do :; done`],
     { cwd: f.lane, env: { ...f.env, HERDR_PANE_ID: f.job.pane }, stdio: ['pipe', 'pipe', 'pipe'] });

@@ -232,9 +232,13 @@ test('whole home files do not resurrect removed repo keys; provenance/history in
   view = configSnapshot({ cwd: f.cwd });
   assert.deepEqual(view.values.find(v => v.key === 'launch').value, ['owner-launch', 'literal $(not-executed)']);
   assert.equal(view.values.find(v => v.key === 'launch').scope, 'identity');
-  setConfig('retirement.closeout_queue', 'true', { cwd: f.cwd, scope: 'identity' });
-  assert.ok(!configSnapshot({ cwd: f.cwd }).values.some(v => v.key === 'retirement.closeout_queue'));
-  assert.equal(closeoutPolicy(f.cwd), false, 'reference validation does not inherit retirement activation');
+  for (const enabled of [true, false]) {
+    setConfig('retirement.closeout_queue', JSON.stringify(enabled), { cwd: f.cwd, scope: 'identity' });
+    assert.ok(!configSnapshot({ cwd: f.cwd }).values.some(v => v.key === 'retirement.closeout_queue'));
+    assert.equal(closeoutPolicy(f.cwd), true, 'reference validation does not inherit identity retirement settings');
+  }
+  setConfig('retirement.closeout_queue', 'false', { cwd: f.cwd });
+  assert.equal(closeoutPolicy(f.cwd), false, 'the selected project policy can opt out of default closeout');
 });
 
 for (const mode of ['legacy', 'home', 'standalone']) test(`config set validates complete ${mode} policy references before any intent, replacement or audit`, async t => {

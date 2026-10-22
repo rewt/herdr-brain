@@ -24,6 +24,117 @@ async function command(argv, options) {
   return JSON.parse(output.join(''));
 }
 
+for (const spelling of ['relative', 'symlink']) test(`adopt canonicalizes a ${spelling} scope argument before publishing its binding`, async t => {
+  const f = configFixture(t);
+  f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  let scopeFile = f.scope.scopeFile;
+  if (spelling === 'symlink') {
+    const alias = path.join(f.cwd, '.git/scope-alias.json');
+    fs.symlinkSync(scopeFile, alias); scopeFile = alias;
+  }
+  const result = await command(['.', '--scope', path.relative(f.cwd, scopeFile), '--decision', `${f.decision.id}:${f.decision.seq}`], f.options);
+  assert.equal(result.adopted, true);
+  const binding = f.binding();
+  assert.equal(binding.adoption.scope_file, fs.realpathSync(scopeFile));
+  assert.equal(f.events().find(e => e.type === 'config.adopted').scope, binding.adoption.scope_file);
+  assert.ok(binding.adoption.completed);
+  assert.equal(readStandardSlots(binding.common).slots.length, 1);
+});
+
+test('routing aliases and nonexistent worktree destinations freeze canonical paths without changing policy bytes', async t => {
+  const f = configFixture(t, { custom: true, routing: true });
+  const routing = path.join(f.cwd, 'routing.json'), alias = path.join(f.cwd, '.git/routing-alias.json');
+  fs.symlinkSync(routing, alias);
+  const destination = path.join(f.scratch, 'actual-worktrees'); fs.mkdirSync(destination);
+  fs.symlinkSync(destination, path.join(f.ownerRoot, 'worktree-alias'));
+  const parent = path.join(f.ownerRoot, '.lane.json'), defaults = readConfigJSON(parent);
+  fs.writeFileSync(parent, JSON.stringify({ ...defaults, worktree_root: 'worktree-alias/future' }));
+  const captured = await command(['.', '--inspect', '--routing', '.git/routing-alias.json', '--expires', new Date(Date.now() + 3600000).toISOString()], f.options);
+  const decision = f.question(captured.scope);
+  await command(['.', '--scope', captured.scopeFile, '--routing', '.git/routing-alias.json', '--decision', `${decision.id}:${decision.seq}`], f.options);
+  const binding = f.binding();
+  assert.equal(binding.sources.routing.path, routing);
+  assert.equal(binding.sources.routing.base, f.cwd);
+  assert.equal(binding.worktrees, path.join(destination, 'future/project'));
+  assert.equal(fs.existsSync(binding.worktrees), false);
+  assert.equal(fs.readFileSync(policyLocation(f.cwd, 'routing').file, 'utf8'), fs.readFileSync(routing, 'utf8'));
+});
+
+for (const [field, inject, message] of [
+  ['binding', ({ binding }) => { binding.worktrees = 'relative'; }, /invalid config-home-project\/v1 binding/],
+  ['identity metadata', ({ defaults }) => { defaults.identity_root = 'relative'; }, /identity_root must be a canonical absolute directory/],
+  ['identity policy', ({ defaults }) => { defaults.dispatch = { max_sessions: 0 }; }, /max_sessions/],
+]) test(`an injected invalid assembled ${field} refuses before any home file or config intent`, async t => {
+  const f = configFixture(t);
+  f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  const events = f.events();
+  await assert.rejects(f.adopt({ beforePublish: inject }), message);
+  assert.deepEqual(f.events(), events);
+  assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false, 'no identity record, policy, project staging or binding');
+  for (const file of ['.brain', '.git/sessions/standard-slots.json', '.git/sessions/controller-journal.json'])
+    assert.equal(fs.existsSync(path.join(f.cwd, file)), false, file);
+  assert.equal(f.git('status', '--short'), '');
+});
+
+for (const publication of ['identity', 'binding', 'lane', 'validation', 'promote', 'housekeeping', 'pin']) test(`adoption resumes after ${publication} publication with the same scope and decision`, async t => {
+  const f = configFixture(t);
+  await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === publication) throw Error('publication interrupted'); } }), /publication interrupted/);
+  const home = path.join(f.home, '.herdr-monitor'), files = [];
+  const collect = directory => { for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) collect(file);
+    else if (entry.name !== 'project.json') files.push([file, fs.readFileSync(file), fs.statSync(file).ino]);
+  } };
+  collect(home);
+  const before = f.events(), scopeBytes = fs.readFileSync(f.scope.scopeFile);
+  await f.adopt();
+  assert.deepEqual(f.events().slice(0, before.length), before);
+  assert.deepEqual(fs.readFileSync(f.scope.scopeFile), scopeBytes);
+  for (const [file, bytes, inode] of files) {
+    // Audit records may append missing steps; already published policy is kept.
+    if (file.includes(`${path.sep}.org${path.sep}`)) continue;
+    assert.deepEqual(fs.readFileSync(file), bytes, file);
+    assert.equal(fs.statSync(file).ino, inode, file);
+  }
+  const binding = f.binding();
+  assert.deepEqual(binding.published.sort(), Object.keys(binding.sources).filter(k => binding.sources[k].present).sort());
+  const events = [...f.events(), ...fs.readFileSync(path.join(path.dirname(binding.identityFile), '.org/events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)];
+  for (const type of ['config.change-intent', 'config.changed']) {
+    const operations = events.filter(e => e.type === type).map(e => e.operation);
+    assert.equal(new Set(operations).size, operations.length, type);
+  }
+  assert.equal(f.events().filter(e => e.type === 'config.adopted').length, 1);
+  const journal = readControllerJournal(binding.common);
+  assert.equal(journal.operations.length, 1); assert.equal(journal.operations[0].state, 'acknowledged');
+  assert.equal(readStandardSlots(binding.common).slots.length, 1);
+});
+
+for (const target of ['identity.json', 'lane.json']) for (const replaced of [false, true]) test(`adoption recovers ${target} intent ${replaced ? 'after' : 'before'} replacement without duplicating its audit`, async t => {
+  const f = configFixture(t), rename = fs.renameSync;
+  let interrupted = false;
+  fs.renameSync = function(from, to) {
+    if (!interrupted && path.basename(to) === target) {
+      interrupted = true;
+      if (replaced) rename.call(this, from, to);
+      throw Error('baseline publication interrupted');
+    }
+    return rename.call(this, from, to);
+  };
+  try { await assert.rejects(f.adopt(), /baseline publication interrupted/); }
+  finally { fs.renameSync = rename; }
+  assert.equal(interrupted, true);
+  const identity = path.join(f.home, '.herdr-monitor', f.scope.scope.identity), record = target === 'identity.json' ? path.join(identity, '.org') : f.env.ORG_DIR;
+  const events = () => fs.readFileSync(path.join(record, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  const intent = events().find(e => e.type === 'config.change-intent' && path.basename(e.file) === target);
+  assert.ok(intent); assert.equal(fs.existsSync(intent.file), replaced);
+  assert.ok(!events().some(e => e.type === 'config.changed' && e.operation === intent.operation));
+  await f.adopt();
+  assert.equal(events().filter(e => e.type === 'config.change-intent' && e.operation === intent.operation).length, 1);
+  const completed = events().filter(e => e.type === 'config.changed' && e.operation === intent.operation);
+  assert.equal(completed.length, 1); assert.equal(completed[0].who_asked, intent.who_asked);
+  assert.ok(f.binding().adoption.completed);
+});
+
 test('adopt inspect ignores terminal promotion history and refuses every live writer position', async t => {
   const f = configFixture(t), project = canonicalProject(f.cwd), file = path.join(project.common, 'promote/queue.json');
   fs.mkdirSync(path.dirname(file));

@@ -85,7 +85,10 @@ Discovery enumerates identity folders and their project folders, validates
 `identity.json` and each selected `project.json`, and matches canonical common
 directories. A link is a local convenience and a cross-check of that binding.
 It cannot grant access. Hidden runtime/history directories and the reserved
-`brain/` directory are not projects.
+`brain/` directory are not projects. Identity folder names use the same letters,
+digits, underscores and hyphens as identity desks and journals, beginning with a
+letter or digit. Other names, including `<identity>.held-YYYYMMDD`, are ignored;
+project names retain their existing safe-component rules, including dots.
 
 Until all entries in the existing `fleet.json` have been adopted, the directory
 view is the union of validated home bindings and legacy fleet entries.
@@ -99,9 +102,10 @@ After the last legacy entry is adopted, fleet views and any exported
 `fleet.json` are derived from folders; the export is never a new source of
 ownership or a required index. Reads never enroll projects or repair mappings.
 An invalid unrelated folder is visible in a fleet view; local operations may
-isolate it only when ownership non-overlap is provable, as with today's scoped
-fleet reads. Inability to isolate an ownership conflict holds the affected
-operation. No discovery loop or new service is introduced.
+hold only when that folder positively claims the target's exact canonical common
+directory, checkout or record. A missing or unreadable ownership key supplies no
+match. Duplicate record claims remain an ownership conflict. No discovery loop
+or new service is introduced.
 
 ## Source selection and partial moves
 
@@ -504,8 +508,12 @@ legacy fleet mapping and pin stay readable until a separately reviewed cleanup:
    reset the live supervisor.
 4. Only after checking policy, record ownership and release admission does the
    owner explicitly disable the home binding/local link and resume compatible
-   legacy operations. Record the rollback; a missing file or broken link alone
-   never triggers it automatically.
+   legacy operations. If holding the identity folder, move it **outside** the
+   config home: `~/.herdr-monitor/<identity>` goes to
+   `~/.herdr-monitor-held-<identity>-YYYYMMDD`, never to
+   `~/.herdr-monitor/<identity>.held-YYYYMMDD`. Preserve its contents and remove
+   the explicitly disabled local links. Record the rollback; a missing file or
+   broken link alone never triggers it automatically.
 
 No release swap, adoption or rollback edits native harness config, credentials,
 hooks or another identity's files. Required in-repo harness files (including

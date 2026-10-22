@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { configFixture } from './helpers/config-home-fixture.mjs';
-import { homeProject, policyLocation, readConfigJSON, contentDigest } from '../lib/config-home.mjs';
+import { homeBindings, homeProject, policyLocation, readConfigJSON, contentDigest } from '../lib/config-home.mjs';
 import { readProjectPolicy, readPolicyFile, configBase } from '../lib/config-policy.mjs';
 import { configSnapshot, setConfig, configCommand } from '../lib/config-command.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
@@ -14,9 +14,9 @@ import { discoverArchive } from '../lib/archive.mjs';
 import { literalLaunch } from '../lib/owner-launch.mjs';
 import { requireHomeRelease, projectPin, selectRelease } from '../lib/releases.mjs';
 import { freezeReleaseValidation } from '../herdr/validation-admission.mjs';
-import { adoptCommand } from '../lib/adopt-command.mjs';
+import { adopt, adoptCommand } from '../lib/adopt-command.mjs';
 import { readFleet } from '../lib/fleet.mjs';
-import { initOrg, findOrgDir } from '../lib/store.mjs';
+import { initOrg, findOrgDir, transact, loadEvents } from '../lib/store.mjs';
 import { inspect } from '../sessions/sessions.mjs';
 import { readSessionFacts } from '../sessions/observe.mjs';
 import { routesSnapshot, editProjectConfig, setProjectRoute } from '../lanes/routes-command.mjs';
@@ -45,6 +45,162 @@ function withGitSelectors(run) {
   for (const key of keys) process.env[key] = '/missing-repository-selector';
   try { return run(); } finally { for (const key of keys) if (before[key] === undefined) delete process.env[key]; else process.env[key] = before[key]; }
 }
+
+async function neighboringProject(f, { adopted = false, outsideIdentity = false } = {}) {
+  const cwd = path.join(outsideIdentity ? f.scratch : f.ownerRoot, 'neighbor'), record = path.join(cwd, '.org');
+  fs.mkdirSync(cwd);
+  const env = { ...f.env, ORG_DIR: record };
+  const git = (...args) => execFileSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  git('init', '-qb', 'main'); git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.invalid');
+  fs.writeFileSync(path.join(cwd, '.git/info/exclude'), '.org/\n');
+  fs.writeFileSync(path.join(cwd, '.lane.json'), '{"main":"main"}');
+  git('add', '.'); git('commit', '-qm', 'neighbor policy'); initOrg(record);
+  const cli = (...args) => {
+    const result = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), ...args], { cwd, env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr); return result.stdout;
+  };
+  if (adopted) {
+    const observation = structuredClone(f.observation);
+    Object.assign(observation.workspaces[0].worktree, { repo_key: path.join(cwd, '.git'), repo_root: cwd, checkout_path: cwd });
+    observation.panes[0].foreground_cwd = cwd; observation.agents[0].cwd = cwd;
+    const options = { ...f.options, cwd, env, observer: { observe: async () => structuredClone(observation) } };
+    const captured = await adopt({ ...options, inspectOnly: true, expiresAt: new Date(Date.now() + 3600000).toISOString() });
+    transact(record, () => ({ add: [{ type: 'item.added', id: 'HUM-1', title: 'Authorize neighbor adoption?', role: 'human', meta: { category: 'security', adoption_authorization: JSON.stringify(captured.scope) } }] }), { actor: 'fixture-supervisor' });
+    const answer = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), 'answer', 'HUM-1', 'yes'], { cwd, env: { ...env, ORG_ACTOR: 'human' }, encoding: 'utf8' });
+    assert.equal(answer.status, 0, answer.stderr);
+    const decision = loadEvents(record).events.find(e => e.id === 'HUM-1' && e.kind === 'answer');
+    await adopt({ ...options, scopeFile: captured.scopeFile, decision: { id: decision.id, seq: decision.seq } });
+  }
+  return { cwd, record, env, cli };
+}
+
+for (const adopted of [false, true]) test(`an invalid project binding holds its owner while a neighbor with ${adopted ? 'a valid' : 'no'} home binding reads and writes`, async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), original = readConfigJSON(binding.file), neighbor = await neighboringProject(f, { adopted });
+  for (const omitted of [null, 'common', 'checkout', 'record']) {
+    const invalid = { ...original, adoption: { ...original.adoption, scope_file: '.git/relative-scope.json' } };
+    if (omitted) delete invalid[omitted];
+    fs.writeFileSync(binding.file, JSON.stringify(invalid));
+    const error = `${binding.file}: invalid config-home-project/v1 binding`;
+    assert.throws(() => homeProject(f.cwd, f.env), { message: error });
+    for (const selected of [{ common: path.join(neighbor.cwd, '.git') }, { checkout: neighbor.cwd }, { record: neighbor.record }, {}]) {
+      assert.deepEqual(homeBindings(neighbor.env, selected).errors, [{ file: binding.file, error }]);
+    }
+    assert.equal(homeProject(neighbor.cwd, neighbor.env)?.checkout ?? null, adopted ? neighbor.cwd : null);
+    assert.equal(findOrgDir({ cwd: neighbor.cwd, env: neighbor.env }), neighbor.record);
+    assert.equal(findOrgDir({ cwd: neighbor.cwd, env: { ...neighbor.env, ORG_DIR: undefined } }), neighbor.record);
+    neighbor.cli('snapshot');
+    neighbor.cli('add', `isolated write with ${omitted ?? 'all claims'}`, '--role', 'engineer');
+    assert.equal(loadEvents(neighbor.record).events.at(-1).type, 'item.added');
+    if (omitted !== 'record') assert.throws(() => findOrgDir({ cwd: f.cwd, env: f.env }), { message: error });
+  }
+});
+
+test('unidentifiable JSON or ownership fields never hold a project they cannot positively claim', async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), neighbor = await neighboringProject(f);
+  for (const bytes of ['{', '{"common":"/a","common":"/b"}', '{}', '{"common":"relative","checkout":null}']) {
+    fs.writeFileSync(binding.file, bytes);
+    assert.equal(homeProject(neighbor.cwd, neighbor.env), null);
+    assert.equal(homeBindings(neighbor.env, { record: neighbor.record }).errors.length, 1);
+    neighbor.cli('snapshot'); neighbor.cli('add', 'write despite an unidentifiable foreign binding');
+    assert.throws(() => homeProject(f.cwd, f.env), /unrelated or damaged home link/);
+  }
+});
+
+test('record ownership matches canonical aliases and a shared record remains held by the duplicate-record contract', async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), raw = readConfigJSON(binding.file), neighbor = await neighboringProject(f);
+  fs.writeFileSync(binding.file, JSON.stringify({ ...raw, adoption: { ...raw.adoption, scope_file: 'relative' } }));
+  const alias = path.join(f.scratch, 'shared-record'); fs.symlinkSync(binding.record, alias);
+  const error = `${binding.file}: invalid config-home-project/v1 binding`;
+  // CONFIG-HOME.md:66-67 explicitly holds duplicate record claims for repair.
+  assert.throws(() => homeBindings(f.env, { record: alias }), { message: error });
+  assert.throws(() => findOrgDir({ cwd: neighbor.cwd, env: { ...neighbor.env, ORG_DIR: alias } }), { message: error });
+  for (const key of ['common', 'checkout']) {
+    const claimAlias = path.join(f.scratch, `${key}-alias`); fs.symlinkSync(raw[key], claimAlias);
+    fs.writeFileSync(binding.file, JSON.stringify({ ...raw, [key]: claimAlias, adoption: { ...raw.adoption, scope_file: 'relative' } }));
+    assert.throws(() => homeBindings(f.env, { [key]: raw[key] }), { message: error });
+  }
+});
+
+test('conflicting home ownership holds the claimed project and is isolated from an unrelated record', async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), neighbor = await neighboringProject(f);
+  fs.unlinkSync(path.join(f.cwd, '.brain'));
+  const duplicate = path.join(path.dirname(binding.directory), 'duplicate'); fs.mkdirSync(duplicate);
+  fs.writeFileSync(path.join(duplicate, 'project.json'), JSON.stringify({ ...readConfigJSON(binding.file), project: 'duplicate' }));
+  assert.throws(() => homeProject(f.cwd, f.env), /conflicting config-home ownership/);
+  assert.equal(homeBindings(neighbor.env, { record: neighbor.record }).errors.length, 2);
+  assert.equal(homeProject(neighbor.cwd, neighbor.env), null);
+  neighbor.cli('snapshot'); neighbor.cli('add', 'unrelated record survives conflicting foreign ownership');
+});
+
+for (const damage of ['metadata', 'policy', 'JSON', 'missing']) test(`a real identity folder with ${damage} damage holds only the projects its bindings positively claim`, async t => {
+  const f = configFixture(t, { custom: true }); await f.adopt();
+  const binding = f.binding(), defaults = readConfigJSON(binding.identityFile), neighbor = await neighboringProject(f, { outsideIdentity: true });
+  if (damage === 'missing') fs.unlinkSync(binding.identityFile);
+  else fs.writeFileSync(binding.identityFile, damage === 'JSON' ? '{' : JSON.stringify({ ...defaults,
+    ...(damage === 'metadata' ? { identity_root: 'relative' } : { dispatch: { max_sessions: 0 } }) }));
+  const message = damage === 'metadata' ? /identity_root must be a canonical absolute directory/ : damage === 'policy' ? /max_sessions/ : damage === 'missing' ? /missing identity.json/ : /JSON/;
+  assert.throws(() => homeProject(f.cwd, f.env), message);
+  assert.throws(() => homeBindings(f.env, { record: binding.record }), message);
+  assert.equal(homeProject(neighbor.cwd, neighbor.env), null);
+  assert.equal(findOrgDir({ cwd: neighbor.cwd, env: { ...neighbor.env, ORG_DIR: undefined } }), neighbor.record);
+  assert.equal(homeBindings(neighbor.env, { record: neighbor.record }).errors.length, 1);
+  neighbor.cli('snapshot'); neighbor.cli('add', 'neighbor writes despite a foreign invalid identity');
+});
+
+test('home discovery ignores held, renamed and invalid identity names beside a valid identity', async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), home = path.join(f.home, '.herdr-monitor'), source = path.dirname(binding.identityFile);
+  const neighbor = await neighboringProject(f);
+  for (const name of [`${binding.identity}.held-20261022`, 'bad name', 'bad..name', '.hidden', 'brain']) {
+    const held = path.join(home, name);
+    fs.cpSync(source, held, { recursive: true });
+    fs.writeFileSync(path.join(held, 'identity.json'), '{');
+  }
+  assert.equal(f.binding().file, binding.file);
+  assert.equal(Object.keys(readFleet(f.env).projects).length, 1);
+  assert.deepEqual(homeBindings(f.env, { common: binding.common }).errors, []);
+  assert.equal(homeProject(neighbor.cwd, neighbor.env), null);
+  neighbor.cli('snapshot'); neighbor.cli('add', 'neighbor writes despite ignored holding folders');
+});
+
+test('legacy p worktree and t temporary roots remain untouched and are not discovered as identity homes', async t => {
+  const f = configFixture(t), home = path.join(f.home, '.herdr-monitor');
+  const roots = [path.join(home, 'p/c55c0e01688fa2f8/worktrees'), path.join(home, 't/2dad55753d30b5f3')];
+  for (const directory of roots) {
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'keep.txt'), directory);
+    // A nested temporary/project artifact is not identity binding metadata.
+    fs.mkdirSync(path.join(directory, 'nested-project'));
+    fs.writeFileSync(path.join(directory, 'nested-project/project.json'), '{}');
+  }
+  const files = roots.flatMap(directory => ['keep.txt', 'nested-project/project.json'].map(name => path.join(directory, name)));
+  const bytes = files.map(file => fs.readFileSync(file)), inodes = roots.map(directory => fs.statSync(directory).ino);
+  assert.equal(homeProject(f.cwd, f.env), null);
+  await f.adopt();
+  assert.deepEqual(homeBindings(f.env, { common: f.binding().common }).errors, []);
+  assert.equal(Object.keys(readFleet(f.env).projects).length, 1);
+  assert.deepEqual(files.map(file => fs.readFileSync(file)), bytes);
+  assert.deepEqual(roots.map(directory => fs.statSync(directory).ino), inodes);
+});
+
+test('a dangling foreign identity alias cannot fail the absence precheck or unrelated record reads', async t => {
+  const f = configFixture(t), home = path.join(f.home, '.herdr-monitor');
+  fs.mkdirSync(home); fs.symlinkSync(path.join(f.scratch, 'missing-identity'), path.join(home, 'foreign'));
+  assert.equal(homeProject(f.cwd, f.env), null);
+  assert.equal(homeBindings(f.env, { record: f.env.ORG_DIR }).errors.length, 1);
+  assert.equal(findOrgDir({ cwd: f.cwd, env: f.env }), f.env.ORG_DIR);
+});
+
+test('the adoption writer rejects the same dotted identity names that home discovery ignores', async t => {
+  const f = configFixture(t, { custom: 'alex.held-20261022' }), events = f.events();
+  await assert.rejects(f.capture(), /invalid config-home identity name/);
+  assert.deepEqual(f.events(), events);
+  assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false);
+});
 
 test('unadopted canonical, linked and nested lookups need no Git probes; a damaged canonical link still holds', t => {
   const f = configFixture(t), lane = path.join(f.scratch, 'linked');

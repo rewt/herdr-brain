@@ -1079,3 +1079,30 @@ test('a default-on named ready resolves an identical pre-existing automatic read
   assert.equal(f.read().actions.filter(a => a[0] === 'tab' && a[1] === 'close').length, 1);
   assert.equal(fs.existsSync(f.lane), true, 'the ready key still supplies only pane authority');
 });
+
+for (const stage of ['checkpoint', 'publication']) test(`completion tail resumes after interruption at ${stage} without a lost handoff or duplicate effect`, t => {
+  const f = setup(t, { occupied: false }); f.report(); f.autoTail = false;
+  const source = f.land().find(e => e.type === 'promotion.reconciled');
+  const entry = readCloseoutEntries(f.common).find(e => e.signal === 'landed');
+  const file = path.join(f.common, 'closeout/entries', `${entry.key}.json`), open = fs.openSync, rename = fs.renameSync;
+  let interrupted = false;
+  fs.openSync = (target, flags, ...args) => {
+    if (stage === 'checkpoint' && target === f.eventFile && flags === 'a') { interrupted = true; throw Error('interrupted completion checkpoint append'); }
+    return open(target, flags, ...args);
+  };
+  fs.renameSync = (from, to) => {
+    if (stage === 'publication' && to === file) { interrupted = true; throw Error('interrupted handoff publication acknowledgement'); }
+    return rename(from, to);
+  };
+  const tail = () => handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });
+  try { assert.throws(tail, /interrupted/); }
+  finally { fs.openSync = open; fs.renameSync = rename; }
+  assert.ok(interrupted);
+  assert.equal(fs.existsSync(f.lane), true);
+  assert.equal(readCloseoutEntries(f.common).find(e => e.key === entry.key).handoff, undefined);
+  f.drain(); assert.ok(!evaluations(f).some(e => e.source.seq === source.seq), 'an interrupted tail never becomes actionable');
+  tail(); f.drain(); assertRemoved(f);
+  const before = events(f); tail(); f.drain(); assert.deepEqual(events(f), before);
+  assert.equal(events(f).filter(e => e.type === 'closeout.handoff').length, 1);
+  assert.equal(effects(f).filter(e => e.action === 'worktree-removed').length, 1);
+});

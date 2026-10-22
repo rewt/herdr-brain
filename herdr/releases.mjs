@@ -28,7 +28,10 @@ try {
       fs.writeFileSync(path.join(home, '.release-acceptance.json'), bytes);
     }
     const files = Object.fromEntries(productFiles(home).map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(home, file))).digest('hex')]));
-    fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, config_home: 1, commit, files, acceptance }, null, 2) + '\n');
+    // The shared home-aware policy reader was introduced with config-home.
+    // Only the archived payload can claim it; newer tooling also builds legacy tags.
+    const capability = Object.hasOwn(files, 'lib/config-policy.mjs') ? { config_home: 1 } : {};
+    fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, ...capability, commit, files, acceptance }, null, 2) + '\n');
     const bundle = checkBundle(home, { verifyFiles: true });
     if (target && !releaseAcceptance(bundle).ready) throw Error('acceptance-invalid: manifest does not retain its READY summary');
   } else if (action === 'install') {

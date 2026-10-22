@@ -328,7 +328,7 @@
       "location": "<housekeeping-state>/lock/owner.json",
       "rule": "additive",
       "probe": "housekeeping",
-      "additiveFields": ["retirement_queue_protocol: 2 (default-on queue ownership)"]
+      "additiveFields": ["retirement_queue_protocol"]
     },
     {
       "id": "housekeeping-config",

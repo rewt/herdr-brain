@@ -168,6 +168,49 @@ for (const fleet of [false, true]) test(`implicit shared-record aliases hold bef
   assert.equal(loadEvents(neighbor.record).events.at(-1).title, 'unrelated discovery still writes');
 });
 
+for (const [registry, location] of [['no fleet', 'local'], ['no fleet', 'ancestor'], ['legacy fleet', 'local'], ['valid home', 'local']])
+test(`non-Git ${location} record discovery isolates foreign damage and holds shared aliases with ${registry}`, async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), raw = readConfigJSON(binding.file);
+  if (registry === 'legacy fleet') {
+    fs.mkdirSync(f.env.HERDR_MONITOR_FLEET);
+    fs.writeFileSync(path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'), JSON.stringify({ version: 1, session_limit: 6, projects: {} }));
+  } else if (registry === 'valid home') await neighboringProject(f, { adopted: true });
+  const directory = path.join(f.scratch, 'plain'), nested = path.join(directory, 'nested'), record = path.join(directory, '.org');
+  fs.mkdirSync(nested, { recursive: true }); initOrg(record);
+  const cwd = location === 'local' ? directory : nested, env = { ...f.env };
+  delete env.ORG_DIR;
+  const git = spawnSync('git', ['-C', cwd, 'rev-parse', '--git-common-dir'], { env, encoding: 'utf8' });
+  assert.equal(git.status, 128, git.stderr);
+  fs.writeFileSync(binding.file, JSON.stringify({ ...raw, adoption: { ...raw.adoption, scope_file: 'relative' } }));
+  const error = `${binding.file}: invalid config-home-project/v1 binding`;
+  const history = fs.readFileSync(path.join(binding.record, 'events.jsonl'));
+  const cli = (...args) => spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), ...args], { cwd, env, encoding: 'utf8' });
+  const own = title => {
+    assert.equal(projectFleet(cwd, env).project, null);
+    assert.equal(findOrgDir({ cwd, env }), record);
+    const read = cli('snapshot'); assert.equal(read.status, 0, read.stderr);
+    const write = cli('add', title); assert.equal(write.status, 0, write.stderr);
+    assert.equal(loadEvents(record).events.at(-1).title, title);
+  };
+  own('non-Git discovery writes despite foreign damage');
+  const ownHistory = fs.readFileSync(path.join(record, 'events.jsonl')), saved = path.join(f.scratch, 'saved-record');
+  fs.renameSync(record, saved); fs.symlinkSync(binding.record, record, 'dir');
+  assert.throws(() => projectFleet(cwd, env), { message: error });
+  assert.throws(() => findOrgDir({ cwd, env }), { message: error });
+  for (const args of [['snapshot'], ['add', 'must not write a shared record outside Git']]) {
+    const run = cli(...args);
+    assert.equal(run.status, 1, run.stderr); assert.ok(run.stderr.includes(error), run.stderr);
+  }
+  assert.deepEqual(fs.readFileSync(path.join(binding.record, 'events.jsonl')), history);
+  assert.deepEqual(fs.readFileSync(path.join(saved, 'events.jsonl')), ownHistory);
+  if (registry !== 'no fleet') assert.equal(findOrgDir({ cwd: nested, env }), null, 'fleet discovery must not select an ancestor record outside Git');
+  fs.unlinkSync(record); fs.renameSync(saved, record);
+  own('non-Git discovery writes again after removing the shared alias');
+  assert.deepEqual(fs.readFileSync(path.join(binding.record, 'events.jsonl')), history);
+  assert.throws(() => readFleet(env), { message: error }, 'fleet-wide validation still exposes foreign damage');
+});
+
 test('conflicting home ownership holds the claimed project and is isolated from an unrelated record', async t => {
   const f = configFixture(t); await f.adopt();
   const binding = f.binding(), neighbor = await neighboringProject(f);

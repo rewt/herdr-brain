@@ -1,6 +1,7 @@
 // JSON.parse accepts repeated keys. Scan the grammar first, comparing decoded
 // keys (including escaped spellings) separately for every object.
-export function parseUniqueJson(text) {
+// Session documents default to 1 MiB; callers can supply their own byte budget.
+export function parseUniqueJson(text, { maxBytes = 1024 * 1024 } = {}) {
   let at = 0;
   const fail = message => { throw Error(`${message} at JSON offset ${at}`); };
   const space = () => { while (/\s/u.test(text[at] ?? '') && at < text.length) at++; };
@@ -40,7 +41,7 @@ export function parseUniqueJson(text) {
     if (!token) fail('expected value');
     at += token.length;
   };
-  if (Buffer.byteLength(text) > 1024 * 1024) throw Error('JSON exceeds 1 MiB');
+  if (Buffer.byteLength(text) > maxBytes) throw Error(`JSON exceeds ${maxBytes / (1024 * 1024)} MiB`);
   value(); space();
   if (at !== text.length) fail('trailing JSON input');
   return JSON.parse(text);

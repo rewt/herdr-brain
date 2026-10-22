@@ -83,7 +83,8 @@ export function readSessionFacts({ project, env = process.env, items } = {}) {
   const queue = attempt('promotion queue', () => {
     const file = path.join(project.common, 'promote/queue.json');
     if (!present(file)) return [];
-    const saved = parseUniqueJson(readPlainFile(file));
+    // Promotion's complete retained history needs its own byte budget.
+    const saved = parseUniqueJson(readPlainFile(file), { maxBytes: 64 * 1024 * 1024 });
     if (saved.identity !== project.common || !Array.isArray(saved.pending) || !Array.isArray(saved.results)) throw Error('invalid canonical promotion queue');
     return queueJobs(saved);
   });

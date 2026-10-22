@@ -532,3 +532,64 @@ test('fact readers observe canonical STOP/close hold, dispatch/watch receipts, m
   fs.appendFileSync(path.join(f.org, 'events.jsonl'), '{');
   assert.ok(readSessionFacts({ project: f.project, env: f.env }).errors.includes('incomplete record tail'));
 });
+
+test('fact reader accepts full promotion history over 1 MiB with unchanged references and strict queue checks', t => {
+  const f = fixture(t, []), file = path.join(f.project.common, 'promote/queue.json');
+  fs.mkdirSync(path.dirname(file));
+  const pending = { id: 'open-job', item: 'ENG-232', run: 'R-1', cwd: f.cwd };
+  const history = Array.from({ length: 8192 }, (_, index) => ({
+    id: `promoted-${index}`, item: `ENG-${index + 1}`, run: `R-${index + 1}`, cwd: f.cwd,
+    outcome: 'promoted', finished: '2026-10-21T22:00:00Z', tip: 'a'.repeat(40),
+  }));
+  const queue = { identity: f.project.common, pending: [pending], current: null, results: history.slice(0, 1) };
+  const smallBytes = JSON.stringify(queue);
+  assert.ok(Buffer.byteLength(smallBytes) < 1024 * 1024);
+  fs.writeFileSync(file, smallBytes);
+  const small = readSessionFacts({ project: f.project, env: f.env });
+  assert.deepEqual(small.errors, []);
+  assert.deepEqual(small.references, [{ kind: 'promotion', job: pending.id, item: pending.item, run: pending.run, cwd: pending.cwd }]);
+
+  queue.results = history;
+  const bytes = JSON.stringify(queue);
+  assert.ok(Buffer.byteLength(bytes) > 1024 * 1024);
+  fs.writeFileSync(file, bytes);
+  const large = readSessionFacts({ project: f.project, env: f.env });
+  assert.deepEqual(large.errors, []);
+  assert.deepEqual(large.references, small.references);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes, 'observation preserves the entire on-disk history');
+
+  for (const fields of [{ identity: f.scratch }, { pending: {} }, { results: {} }]) {
+    fs.writeFileSync(file, JSON.stringify({ ...queue, ...fields }));
+    const facts = readSessionFacts({ project: f.project, env: f.env });
+    assert.deepEqual(facts.errors, ['promotion queue: invalid canonical promotion queue']);
+    assert.deepEqual(facts.references, []);
+  }
+  const duplicate = bytes.replace('"outcome":"promoted"', '"outcome":"promoted","\\u006futcome":"promoted"');
+  assert.notEqual(duplicate, bytes);
+  fs.writeFileSync(file, duplicate);
+  const facts = readSessionFacts({ project: f.project, env: f.env });
+  assert.match(facts.errors.join('\n'), /promotion queue: duplicate JSON key "outcome"/);
+  assert.deepEqual(facts.references, []);
+});
+
+test('session manifests, receipts and journals retain their 1 MiB byte limit', t => {
+  const f = fixture(t), limit = 1024 * 1024;
+  const padded = bytes => bytes + ' '.repeat(limit - Buffer.byteLength(bytes));
+  const manifest = example('chat'), markdown = padded(document(manifest));
+  assert.deepEqual(parseManifest(markdown), manifest);
+  assert.throws(() => parseManifest(markdown + ' '), /manifest exceeds 1 MiB/);
+
+  const receiptFile = path.join(f.project.common, 'sessions/standard-slots.json');
+  const receipt = padded(fs.readFileSync(receiptFile, 'utf8'));
+  fs.writeFileSync(receiptFile, receipt);
+  assert.deepEqual(readStandardSlots(f.project.common).errors, []);
+  fs.writeFileSync(receiptFile, receipt + ' ');
+  assert.match(readStandardSlots(f.project.common).errors.join('\n'), /JSON exceeds 1 MiB/);
+
+  const journal = readControllerJournal(f.project.common), journalFile = runtimePaths(f.project.common).journal;
+  const journalBytes = padded(JSON.stringify(journal));
+  fs.writeFileSync(journalFile, journalBytes);
+  assert.deepEqual(readControllerJournal(f.project.common), journal);
+  fs.writeFileSync(journalFile, journalBytes + ' ');
+  assert.throws(() => readControllerJournal(f.project.common), /JSON exceeds 1 MiB/);
+});

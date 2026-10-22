@@ -45,17 +45,17 @@ test('an explicitly selected routing file validates its desk references after ha
   assert.throws(() => loadDiscoveredRoutes({ cwd: root, file }), /unknown route: unknown-hand-edit/);
 });
 
-test('selected project routing refuses identity settings while admitted snapshots retain their launcher', t => {
+test('fresh explicit routing cannot claim snapshot scope for identity settings', t => {
   const root = mkdtempSync(resolve(tmpdir(), 'route-identity-')), file = resolve(root, 'routing.json');
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const config = { routes: { engineer: { kind: 'codex', model: 'captured-model' } }, launch: ['captured-owner', 'literal $(word)'] };
-  const bytes = JSON.stringify(config);
-  writeFileSync(file, bytes);
-  assert.throws(() => readRoutesConfig(file), /identity-only settings belong in identity.json/);
-  assert.throws(() => loadDiscoveredRoutes({ cwd: root, file }), /identity-only settings belong in identity.json/);
-  assert.deepEqual(readRoutesSnapshot(file), config);
-  assert.deepEqual(resolveLaunchRoute(readRoutesSnapshot(file), { route: 'engineer' }).launch, config.launch);
-  assert.equal(readFileSync(file, 'utf8'), bytes, 'history is never rewritten');
+  for (const key of ['launch', 'identity_root', 'defaults_origin', 'project_access', 'brain_write']) {
+    const bytes = JSON.stringify({ routes: { engineer: { kind: 'codex' } }, [key]: null });
+    writeFileSync(file, bytes);
+    assert.throws(() => readRoutesConfig(file), /identity-only settings belong in identity.json/);
+    assert.throws(() => loadDiscoveredRoutes({ cwd: root, file }), /identity-only settings belong in identity.json/);
+    assert.throws(() => readRoutesSnapshot(file, { cwd: root }), /identity-only settings belong in identity.json/);
+    assert.equal(readFileSync(file, 'utf8'), bytes, 'refusal never rewrites the input');
+  }
 });
 
 test("one resolution supplies launch plumbing and opaque run metadata", () => {

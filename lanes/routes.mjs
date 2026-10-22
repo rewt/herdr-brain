@@ -1,11 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ROUTE_PRESET } from './preset.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
 import { homeProject, policyLocation, present } from '../lib/config-home.mjs';
 import { homePolicyLayers, readPolicyFile, validateLane } from '../lib/config-policy.mjs';
+import { findOrgDir } from '../lib/store.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { readPlainFile } from '../lib/files.mjs';
+import { parseUniqueJson } from '../sessions/json.mjs';
 
 // Native lifecycle commands belong to launch plumbing, never record policy.
 const launchData = Object.freeze({
@@ -252,9 +256,44 @@ export function readRoutesConfig(file) {
   return validateLane(readPolicyFile(file, 'routing'), file, { references: true });
 }
 
-// --route-config consumes an admitted effective snapshot, not a project layer.
-export function readRoutesSnapshot(file) {
-  return validateLane(readPolicyFile(file, 'routing-snapshot'), file, { references: true });
+function admittedRoutesSnapshot(file, { cwd, env }) {
+  const operation = basename(dirname(file)), name = basename(file);
+  if (!['dispatch', 'settle'].includes(operation) || !name.endsWith('.routes.json')) return false;
+  const id = name.slice(0, -'.routes.json'.length);
+  if (operation === 'settle' && !/^R-\d+$/u.test(id)) return false;
+  const record = homeProject(cwd, env)?.record ?? findOrgDir({ cwd, env });
+  if (!record) return false;
+  const org = realpathSync(record);
+  if (realpathSync(dirname(file)) !== join(org, operation)) return false;
+  let job;
+  try { job = parseUniqueJson(readPlainFile(join(org, operation, `${id}.json`))); }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  // Only the saved operation in this record and Git identity admits its exact
+  // captured file. A filename, adjacent project-authored JSON or run metadata
+  // cannot grant snapshot scope.
+  if (!(job?.org === org && typeof job.repo === 'string' && isAbsolute(job.repo) &&
+    job.routeConfig === join(org, operation, name) && typeof job.stage === 'string' &&
+    (operation === 'dispatch' ? job.token === id && typeof job.route === 'string'
+      : job.run === id && typeof job.reviewRoute === 'string' && typeof job.fixRoute === 'string'))) return false;
+  const gitEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith('GIT_')));
+  const project = gitProject(cwd, { env: gitEnv });
+  if (job.common !== project.identity) return false;
+  // Dispatch can be admitted from a linked checkout of the same repository.
+  if (job.repo === project.canonical || job.repo === project.checkout) return true;
+  try { return gitProject(job.repo, { env: gitEnv }).identity === project.identity; }
+  catch { return false; }
+}
+
+// Explicit files are project policy unless a saved Brain operation admitted
+// them. Replay keeps its captured identity launcher without reading new defaults.
+export function readRoutesSnapshot(file, { cwd = process.cwd(), env = process.env } = {}) {
+  file = resolve(cwd, file);
+  if (admittedRoutesSnapshot(file, { cwd, env })) {
+    return validateLane(readPolicyFile(file, 'routing-snapshot'), file, { references: true });
+  }
+  const config = readRoutesConfig(file);
+  const launch = loadDiscoveredRoutes({ cwd, env }).config.launch;
+  return launch === undefined ? config : { ...config, launch: [...launch] };
 }
 
 function within(path, boundary) {

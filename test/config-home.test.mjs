@@ -97,6 +97,33 @@ for (const custom of [false, true]) test(`${custom ? 'custom' : 'default'} ident
   assert.equal(configSnapshot({ cwd: lane, env: hostile }).values.find(v => v.key === 'main').value, 'main');
 });
 
+for (const [key, malformed, message] of [
+  ['project_access', {}, /project_access requires canonical source and target common directories/],
+  ['brain_write', [], /brain_write must map canonical common directories to boolean consent/],
+]) test(`adoption refuses malformed parent ${key} before identity intent or home policy publication`, async t => {
+  const f = configFixture(t, { custom: true, routing: true });
+  const parent = path.join(f.ownerRoot, '.lane.json'), defaults = readConfigJSON(parent);
+  const identityHome = path.join(f.home, '.herdr-monitor/alex'), identityFile = path.join(identityHome, 'identity.json');
+  const identityRecord = path.join(identityHome, '.org'), projectHome = path.join(identityHome, 'project');
+  fs.writeFileSync(parent, JSON.stringify({ ...defaults, [key]: malformed }));
+  let published = false;
+  await assert.rejects(f.adopt({ afterPublish() { published = true; } }), message);
+  assert.equal(published, false);
+  assert.equal(fs.existsSync(identityRecord), false, 'no identity record or change intent');
+  assert.equal(fs.existsSync(identityFile), false, 'no invalid shared identity defaults');
+  assert.equal(fs.existsSync(projectHome), false, 'no project binding or policy files');
+  assert.equal(fs.existsSync(path.join(f.cwd, '.brain')), false);
+  assert.ok(!f.events().some(e => ['config.change-intent', 'config.changed', 'config.adopted'].includes(e.type)));
+  assert.equal(homeProject(f.cwd, f.env), null, 'refusal must not hold subsequent discovery');
+
+  const common = path.join(f.cwd, '.git');
+  const valid = key === 'project_access' ? [{ source: common, target: common }] : { [common]: true };
+  fs.writeFileSync(parent, JSON.stringify({ ...defaults, [key]: valid }));
+  f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  await f.adopt();
+  assert.deepEqual(f.binding().defaults[key], valid, 'valid parent defaults still publish');
+});
+
 test('file-by-file partial publication keeps each independent repo fallback and refuses loss of published policy', async t => {
   const f = configFixture(t);
   await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === 'lane') throw Error('fixture interruption'); } }), /fixture interruption/);

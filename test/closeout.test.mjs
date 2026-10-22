@@ -634,7 +634,7 @@ test('activation refuses legacy housekeeping ownership until inspected replaceme
   fs.writeFileSync(owner, JSON.stringify({ cwd: f.repo, org: f.org, pid: process.pid }));
   f.drain(); assert.deepEqual(f.read().actions, []);
   assert.ok(evaluations(f).every(e => /ownership transfer/.test(e.reason)));
-  fs.writeFileSync(owner, JSON.stringify({ cwd: f.repo, org: f.org, pid: process.pid, retirement_queue_protocol: 1 }));
+  fs.writeFileSync(owner, JSON.stringify({ cwd: f.repo, org: f.org, pid: process.pid, retirement_queue_protocol: 2 }));
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'legacy retirement stopped and inspected; adopted runtime restarted', start: false });
   f.drain(); assertRemoved(f);
 });

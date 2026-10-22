@@ -327,7 +327,8 @@
       "writer": "housekeeping/housekeeping.mjs",
       "location": "<housekeeping-state>/lock/owner.json",
       "rule": "additive",
-      "probe": "housekeeping"
+      "probe": "housekeeping",
+      "additiveFields": ["retirement_queue_protocol: 2 (default-on queue ownership)"]
     },
     {
       "id": "housekeeping-config",

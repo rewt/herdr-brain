@@ -340,7 +340,7 @@ async function main() {
   const identity = ownerIdentity(process.pid);
   fs.mkdirSync(lock); // Fail closed on overlap or an unrecovered crash.
   fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, identity, cwd, org: project.org, config: configFile,
-    script, record_cli: recordCLI, release: admittedRelease, retirement_queue_protocol: 1 }));
+    script, record_cli: recordCLI, release: admittedRelease, retirement_queue_protocol: 2 }));
   let stopped = false, wake;
   const stop = () => { stopped = true; wake?.(); };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);

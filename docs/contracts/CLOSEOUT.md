@@ -38,7 +38,7 @@ Git landings use named recovery; unsupported historical sources are never reboun
 
 Updated housekeeping and promotion share `retirement/owner.lock` with the closer.
 Queue ownership skips legacy tidy/sweep work. A legacy housekeeping owner without
-the protocol marker keeps; opt-out/downgrade never starts legacy cleanup over a
+the option B protocol marker (`retirement_queue_protocol: 2`) keeps; opt-out/downgrade never starts legacy cleanup over a
 live drain. No release is installed or activated by this change.
 
 ## Sources and durable targets

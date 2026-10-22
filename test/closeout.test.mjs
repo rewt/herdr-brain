@@ -1065,3 +1065,17 @@ test('a drain launched before fast-forward exits before evaluating the new landi
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'hold removed after joined fresh successor', start: false });
   f.drain(); assertRemoved(f);
 });
+
+
+test('a default-on named ready resolves an identical pre-existing automatic ready without rebinding its source', t => {
+  const f = setup(t); f.report();
+  const [original] = readCloseoutEntries(f.common);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
+  f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done' }]);
+  f.drain(); assert.equal(evaluations(f).length, 0, 'removing full-source opt-in keeps the automatic entry');
+  readyLane({ cwd: f.repo, org: f.org, topic: 'topic', run: 'R-1', start: false, env: f.env });
+  assert.deepEqual(readCloseoutEntries(f.common)[0].source, original.source);
+  f.drain();
+  assert.equal(f.read().actions.filter(a => a[0] === 'tab' && a[1] === 'close').length, 1);
+  assert.equal(fs.existsSync(f.lane), true, 'the ready key still supplies only pane authority');
+});

@@ -415,7 +415,8 @@ test('retirement observes option A policy from the canonical checkout, ignoring 
   const r = f.cli(['--json']); assert.equal(r.status, 0, r.stderr);
   const status = JSON.parse(r.stdout);
   assert.equal(status.rows.find(row => row.type === 'tab').class, 'UNKNOWN');
-  assert.match(status.rows.find(row => row.type === 'tab').reason, /closeout policy unreadable/);
+  assert.match(status.rows.find(row => row.type === 'tab').reason, /archival retirement policy is unavailable/);
+  assert.ok(status.rows.some(row => row.type === 'diagnostic' && /closeout policy unreadable/.test(row.reason)));
 });
 
 for (const progress of ['dirty', 'unintegrated']) for (const problem of ['missing record', 'invalid reference']) {

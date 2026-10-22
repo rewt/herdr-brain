@@ -181,20 +181,21 @@ test('a finite sweep stops when its foreground deadline is reached', t => {
   assert.equal(fs.existsSync(f.lane), true);
 });
 
-for (const record of ['none', 'terminal', 'open']) test(`a lane reset to its opening base keeps only unclaimed dispatch preparation: ${record}`, t => {
+for (const record of ['none', 'terminal', 'open', 'opted-in open']) test(`a lane reset to its opening base follows dispatch history and option A activation: ${record}`, t => {
   const f = fixture(t, { occupied: false }), base = f.git(['rev-parse', `${f.head}^`]);
   f.git(['reset', '--hard', base], f.lane);
   if (record === 'none') fs.writeFileSync(f.eventFile, '');
-  if (record === 'open') fs.writeFileSync(f.eventFile, fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse)
+  if (record.includes('open')) fs.writeFileSync(f.eventFile, fs.readFileSync(f.eventFile, 'utf8').trim().split('\n').map(JSON.parse)
     .filter(e => e.type !== 'item.closed').map(e => JSON.stringify(e) + '\n').join(''));
+  if (record === 'opted-in open') fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   const tree = readRetirementWorktrees(f.common, { main: 'main', env: f.env, sweep: true })[0];
   assert.equal(tree.baseTip, base); assert.equal(tree.hasOwnCommits, false);
   const result = sweep(f);
-  if (record !== 'none') {
+  if (record === 'terminal' || record === 'opted-in open') {
     assert.equal(result.results[0].action, 'lane-removed'); assert.equal(fs.existsSync(f.lane), false);
   } else {
     assert.equal(result.results[0].action, 'keep'); assert.equal(fs.existsSync(f.lane), true);
-    assert.match(result.results[0].why, /no commits of its own/);
+    assert.match(result.results[0].why, record === 'none' ? /no commits of its own/ : /chain is still open/);
     assert.equal(result.calls.some(row => row.args.includes('remove')), false);
   }
 });

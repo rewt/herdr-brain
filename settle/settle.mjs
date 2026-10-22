@@ -858,22 +858,22 @@ function settlePending() {
     else {
       const unverified = remainingUnverified(job.review.text.match(/## Unverified\n([\s\S]*?)\n## Sanitization/)?.[1]?.trim() ?? '- Missing Unverified section.', job.reportIngest);
       if (unverified !== 'None' && unverified !== inheritedValidation && unverified !== '') {
-        const files = deferredTests(unverified ?? '', inheritedValidation);
-        if (!files || job.review.verdict !== 'PASS' || findings?.severities?.length) return escalate('The reviewer has unverified claims; the supervisor must resolve the remaining evidence');
         const declaration = resolveValidation({ root: job.repo });
+        const files = deferredTests(unverified ?? '', inheritedValidation, { declared: Boolean(declaration.declared) });
+        if (!files || job.review.verdict !== 'PASS' || findings?.severities?.length) return escalate('The reviewer has unverified claims; the supervisor must resolve the remaining evidence');
         const changed = changedPaths(workspace, git(['merge-base', job.mainHead, job.finalHead], workspace), job.finalHead);
         let plan = null, plannerError;
         try {
           plan = canonicalTestPlan({ repo: job.repo, base: job.mainHead, cwd: workspace,
-            planner: declaration.promotion_tests, changed, required: files, baseCommand: declaration.tiers.promotion.command });
+            planner: declaration.promotion_tests, declared: declaration.declared, changed, required: files, baseCommand: declaration.tiers.promotion.command });
         } catch (error) { plannerError = error.message; }
-        const covered = [...(plan?.files ?? [])];
+        const covered = [...(plan?.files ?? []), ...(plan?.coverage ?? [])];
         // Whole-file promotion inventory is supplied by the planner separately.
         covered.push(...(plan?.covered ?? []));
-        const reexecuted = recordedTestEvidence({ notes: show(id).notes, common: job.common, head: job.finalHead,
+        const reexecuted = declaration.declared ? null : recordedTestEvidence({ notes: show(id).notes, common: job.common, head: job.finalHead,
           tree: git(['rev-parse', 'HEAD^{tree}'], workspace), files });
         job.testEvidence = { files, plan, ...(plannerError ? { planner_error: plannerError } : {}), ...(reexecuted ? { reexecuted } : {}) }; save();
-        if (!files.every(file => covered.includes(file)) && !reexecuted) return escalate(TEST_ESCALATION);
+        if (!files.every(file => typeof file === 'string' ? covered.includes(file) : plan && ['promotion', ...plan.gates.map(row => row.id)].includes(file.gate)) && !reexecuted) return escalate(TEST_ESCALATION);
       }
       job.stage = 'rebase'; save();
     }

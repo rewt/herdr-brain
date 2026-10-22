@@ -175,7 +175,7 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
     let plan;
     try {
       plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
-      if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs) || !Array.isArray(plan.attempts ?? [])) throw Error('unsupported or foreign receipt');
+      if (!['promotion-train/v1', 'promotion-train/v2'].includes(plan.schema) || plan.identity !== identity || !Array.isArray(plan.jobs) || !Array.isArray(plan.attempts ?? [])) throw Error('unsupported or foreign receipt');
       if (!plan.jobs.every(j => j && typeof j.id === 'string' && typeof j.topic === 'string') ||
           !(plan.attempts ?? []).every(a => a && Array.isArray(a.jobs ?? []) && (a.jobs ?? []).every(j => j && typeof j.topic === 'string') && (!a.gate || typeof a.gate === 'object') &&
             Array.isArray(a.gate_history ?? []) && (a.gate_history ?? []).every(g => g && typeof g === 'object')) ||

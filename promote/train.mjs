@@ -9,7 +9,7 @@ import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { captureCompletionMember, accountUncapturedMember, recordFor } from './completion.mjs';
-import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
+import { validateTree, validationEnvironment, readDeclared } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
@@ -20,25 +20,42 @@ import { changedPaths, plannedCommand } from './test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
 import { shadowSelection, completeShadow } from './selector.mjs';
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, exactIdentity, explainMiss, requireExactPlan, selectionUnknown } from '../lanes/exact-validation.mjs';
+import { executionIdentity } from './execution-identity.mjs';
+import { DECLARED_SCHEMA, sameDeclaration, hash, refuse as declaredRefusal } from './declaration.mjs';
+import { unionRequirements, assertBoundRequirements } from './declared-selection.mjs';
+import { planDeclaredGateBounded, executeDeclaredGate, recheckDeclaredGate } from './declared-gates.mjs';
+import { terminalTrainJobs } from './evidence.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
 export { verifyTrainResult } from './evidence.mjs';
-export async function runTrain({ file, canonical, identity, main, prepare, validation }) {
+export async function runTrain({ file, canonical, identity, main, prepare, validation, recoveryOnly = false }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
+  if (!['promotion-train/v1', 'promotion-train/v2'].includes(plan.schema) || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
+  const declared = validation.declared;
+  if ((declared || plan.jobs.some(job => job.gate_mode)) && plan.schema !== 'promotion-train/v2') throw declaredRefusal('declared work requires the v2 train reader');
+  let recovered = new Set();
+  const checkIdentity = ({ admission = true } = {}) => {
+    if (!declared && !plan.jobs.some(job => job.gate_mode)) return;
+    for (const job of plan.jobs) {
+      if (job.gate_mode !== DECLARED_SCHEMA || job.validate != null || job.laneConfig != null) throw declaredRefusal('incompatible queued job requires explicit disposition');
+      if (!job.declared) throw declaredRefusal('captured declaration is missing');
+      assertBoundRequirements(job.requiredTests ?? [], job.declared.value);
+      executionIdentity({ canonical, identity }, { bound: job.execution_identity ?? null });
+      if (admission && !recovered.has(job.id)) sameDeclaration(job.declared, readDeclared(canonical));
+    }
+    for (const attempt of plan.attempts ?? []) if (attempt.gate_mode) executionIdentity({ canonical, identity }, { bound: attempt.execution_identity ?? null });
+  };
+  checkIdentity({ admission: false }); // no receipt, worktree, lock or project code before this fence
+  recovered = terminalTrainJobs({ file, project: { canonical, identity }, jobs: plan.jobs });
+  if (declared && plan.jobs.some(job => plan.results?.[job.id] && !recovered.has(job.id))) throw declaredRefusal('terminal train binding or execution evidence cannot be verified');
+  if (!plan.attempts?.length) plan.integration_branch ??= main;
   const save = () => writeFileAtomic(file, JSON.stringify(plan, null, 2) + '\n', 0o600);
-  const profile = resolveGateProfile(canonical);
-  if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
-  const env = profile?.env ?? validationEnvironment();
+  let profile;
+  let env = validationEnvironment();
   // Unconfigured trains also queue for the slot with a cap. Explicit host
   // settings, including immediate refusal, retain their existing precedence.
   env.MONITOR_TEST_SLOT_WAIT_SECONDS ??= env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS ?? '7200';
-  if (profile) {
-    prepare = [...prepare, ...profile.prepare];
-    validation = { ...validation, environment: `${validation.environment}\nprofile:${profile.fingerprint}` };
-    checkCompetingProcesses(profile);
-  }
   const run = (args, cwd = canonical, extra = {}) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env, maxBuffer: 32 * 1024 * 1024, ...extra });
   const git = (args, cwd, extra) => {
     const r = run(args, cwd, extra);
@@ -90,11 +107,10 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   const phase = value => { plan.phase = value; save(); };
   // Capture completion inputs before any gate or integration, never on recovery
   // of a legacy successful train that lacked this evidence.
-  if (!plan.completion && !plan.attempts?.length) plan.completion = plan.jobs.every(j => !j.run)
+  if (!plan.completion && !plan.attempts?.length && (!plan.jobs.some(job => job.gate_mode) || plan.jobs.some(job => !plan.results?.[job.id]))) plan.completion = plan.jobs.every(j => !j.run)
     ? { version: 1, git_only: true }
     : { version: 1, identity, canonical, branch: main, base: git(['rev-parse', main]), jobs: [], refused: [] };
   plan.started_at ??= new Date().toISOString();
-  plan.external_lock_required ??= Boolean(profile?.externalLock);
   plan.results ??= {}; plan.attempts ??= []; plan.groups ??= [plan.jobs.map(j => j.id)];
   // A caller can die while its slot child is running. Recover the durable
   // sidecar's original grant before replacing that attempt's gate on resume.
@@ -110,6 +126,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   // A persisted integrated checkpoint never gates or fast-forwards twice.
   const finishIntegrated = attempt => {
     if (!['integrated', 'complete'].includes(attempt.phase)) throw new Error('train bookkeeping requires an integrated checkpoint');
+    if (plan.integration_branch && plan.integration_branch !== main) throw new Error('captured integration branch changed; lane retained');
+    if (attempt.gate_mode && attempt.jobs.some(job => !terminalTrainJobs({ file, project: { canonical, identity }, jobs: [job] }).has(job.id)))
+      throw new Error('integrated declared checkpoint cannot be verified; lane retained');
     phase('closing');
     if (git(['merge-base', attempt.tip, main]) !== attempt.tip) throw new Error('integrated train tip is no longer on main');
     for (const job of attempt.jobs) {
@@ -145,6 +164,23 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     }
     if (attempt.phase === 'integrated') finishIntegrated(attempt);
   }
+  // Recovery used only captured evidence. Current policy governs any work
+  // still requiring preparation, validation or integration.
+  if (recoveryOnly && plan.jobs.some(job => !plan.results[job.id])) return;
+  recovered = terminalTrainJobs({ file, project: { canonical, identity }, jobs: plan.jobs });
+  checkIdentity();
+  if (plan.jobs.some(job => !plan.results[job.id])) {
+    profile = resolveGateProfile(canonical);
+    if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
+    env = profile?.env ?? env;
+    env.MONITOR_TEST_SLOT_WAIT_SECONDS ??= env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS ?? '7200';
+    if (profile) {
+      prepare = [...prepare, ...profile.prepare];
+      validation = { ...validation, environment: `${validation.environment}\nprofile:${profile.fingerprint}` };
+      checkCompetingProcesses(profile);
+    }
+  }
+  plan.external_lock_required ??= Boolean(profile?.externalLock);
   const prepareAttempt = ids => {
     phase('preparing');
     if (!canonicalReady()) return null;
@@ -166,7 +202,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       const base = git(['rev-parse', main]);
       const branch = `promote-train/${randomUUID()}`;
       const scratch = path.join(path.dirname(file), `scratch-${plan.attempts.length}`);
-      attempt = { ids: jobs.map(j => j.id), jobs, base, branch, scratch, tips: {}, phase: 'preparing' };
+      attempt = { ids: jobs.map(j => j.id), jobs, base, branch, scratch, tips: {}, phase: 'preparing',
+        ...(declared ? { gate_mode: declared.schema, execution_identity: executionIdentity({ canonical, identity }) } : {}) };
       plan.attempts.push(attempt); save();
       git(['worktree', 'add', '-b', branch, scratch, base]);
       phase('rebasing');
@@ -220,8 +257,37 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch changed');
     return attempt;
   };
+  const validateDeclaredAttempt = attempt => {
+    checkIdentity();
+    plan.native_context = probeNativeGate(); save();
+    if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
+    const owner = attempt.jobs[0].declared;
+    const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))].sort();
+    const required = unionRequirements(attempt.jobs);
+    if (attempt.declared_execution) (attempt.declared_execution_history ??= []).push(attempt.declared_execution);
+    attempt.declared_execution = { commands: [] };
+    attempt.prepare = { started_at: new Date().toISOString() }; phase('preparing');
+    const execution = planDeclaredGateBounded({ repo: canonical, common: identity, base: attempt.base, cwd: attempt.scratch, candidate: attempt.tip,
+      identity: attempt.execution_identity, owner, required, changed, env, profile,
+      jobs: attempt.jobs.map(job => ({ id: job.id, head: job.sourceHead, expected_head: job.expectedHead, run: job.run ?? null, org: job.org ?? null,
+        declaration_source: job.declared.source, release: job.release, required: job.requiredTests ?? [] })),
+      evidence: attempt.declared_execution, onUpdate: save });
+    clean(attempt.scratch);
+    checkIdentity();
+    attempt.test_plan = execution.plan; attempt.declared_spec = execution.spec;
+    attempt.prepare.finished_at = new Date().toISOString();
+    attempt.phase = 'prepared';
+    if (attempt.gate) (attempt.gate_history ??= []).push(attempt.gate);
+    phase('validating');
+    process.stdout.write(`declared attempt base=${attempt.base} candidate=${attempt.tip} spec=${hash(execution.spec)}\n`);
+    attempt.gate = executeDeclaredGate({ spec: execution.spec, env, evidence: attempt.declared_execution, onUpdate: save });
+    process.stdout.write(`declared gate outcome=${attempt.gate.outcome} exit=${attempt.gate.exit_code} evidence=${attempt.gate.log}\n`);
+    attempt.declared_execution.finished_at = new Date().toISOString(); save();
+  };
   const validateAttempt = attempt => {
     try {
+      if (declared) validateDeclaredAttempt(attempt);
+      else {
       plan.native_context = probeNativeGate(); save();
       if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
       const declaration = readReceiptDeclaration({ repo: canonical, base: attempt.base });
@@ -286,6 +352,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       if (exact && attempt.gate.reused) attempt.receipt_bridge = { outcome: 'reused', field: null,
         receipt: path.join(identity, 'lane-validation/exact', `${attempt.gate.key}.json`) };
       attempt.selector_shadow = completeShadow(attempt.selector_shadow, attempt.gate, [attempt.scratch, canonical]);
+      }
     } catch (error) {
       if (attempt.prepare && !attempt.prepare.finished_at) attempt.prepare.finished_at = new Date().toISOString();
       // A dirty execution is measurable, but never a completed green proof.
@@ -298,7 +365,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         attempt.gate.error = error.message;
       }
       attempt.phase = 'invalid'; attempt.error = error.message; plan.groups.shift();
-      for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), batch: plan.id });
+      if (attempt.declared_execution) Object.assign(attempt.declared_execution, { finished_at: new Date().toISOString(), error: error.message, code: error.code ?? null });
+      for (const job of attempt.jobs) result(job, { outcome: error.code === 'DECLARED_GATE_TIMEOUT' ? 'timeout' : 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), batch: plan.id });
       saveSlotGrant(attempt); save(); return false;
     }
     saveSlotGrant(attempt);
@@ -333,6 +401,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     }
   }
   const integrateAttempt = attempt => {
+    checkIdentity();
     if (attempt.phase !== 'validated' || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) throw new Error('train integration requires exact-commit green evidence');
     if (!canonicalReady()) return false;
     if (profile) checkCompetingProcesses(profile);
@@ -347,6 +416,15 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (invalid) { attempt.phase = 'invalid'; save(); return false; }
     clean(attempt.scratch);
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip) throw new Error('validated train tip changed');
+    if (declared) {
+      attempt.gate = recheckDeclaredGate({ spec: attempt.declared_spec, env, evidence: attempt.declared_execution, onUpdate: save });
+      save();
+      if (attempt.gate.exit_code !== 0 || attempt.gate.signal !== null) {
+        attempt.phase = 'invalid';
+        for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: 'reused inputs changed and re-execution failed', gate: attempt.gate, batch: plan.id });
+        return false;
+      }
+    }
     phase('fast-forwarding');
     try { withPromotionGuards(guards(attempt.jobs), () => git(['merge', '--ff-only', attempt.tip])); }
     catch (error) {

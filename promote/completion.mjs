@@ -12,6 +12,7 @@ import { completionFingerprint, completionEvents, digest, stable } from '../lib/
 import { acquireLock, PROMOTION_LOCK_WAIT_MS } from '../lanes/promotion-lock.mjs';
 import { verifyTrainResult } from './evidence.mjs';
 import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
+import { executionIdentity } from './execution-identity.mjs';
 
 const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 // Terminal results can be produced before capture by canonical/host guards.
@@ -73,8 +74,9 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
   const file = promoted[0].result.receipt;
   try {
     const train = JSON.parse(readPlainFile(file));
+    if (train.schema === 'promotion-train/v2') for (const job of jobs) executionIdentity(project, { bound: job.execution_identity ?? null });
     let prepared = train.completion;
-    if (train.schema !== 'promotion-train/v1' || train.identity !== project.identity || train.phase !== 'complete') throw Error('train completion evidence is missing or incomplete');
+    if (!['promotion-train/v1', 'promotion-train/v2'].includes(train.schema) || train.identity !== project.identity || train.phase !== 'complete') throw Error('train completion evidence is missing or incomplete');
     if (prepared?.git_only && jobs.every(j => !j.run)) return { results, pending: false };
     const legacy = !prepared;
     if (legacy) {

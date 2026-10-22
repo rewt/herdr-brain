@@ -14,6 +14,9 @@ import { coldStart, renderColdStart, briefSize, receiptDirectory } from './conte
 import { queueJobs } from '../promote/promote.mjs';
 import { verifyTrainResult } from '../promote/train.mjs';
 import { recordedBatchCompletion } from '../promote/completion.mjs';
+import { readDeclared } from '../lanes/validation.mjs';
+import { bindRequirements, unionRequirements } from '../promote/declared-selection.mjs';
+import { hash as requirementHash } from '../promote/declaration.mjs';
 import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
 import { safePoint } from './safe-point.mjs';
@@ -81,7 +84,11 @@ export function main(argv = process.argv.slice(2)) {
   const forwarded = ownership ? null : admitted ? continueOwnerRelease('supervisor/supervisor.mjs', admitted) : forwardRelease('supervisor/supervisor.mjs', opt.repo);
   if (forwarded !== null) { process.exitCode = forwarded; return; }
   let requiredTests = opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']);
-  if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('invalid required test files');
+  const declaredRequirements = action === 'promote' ? readDeclared(releaseProject(opt.repo).canonical) : null;
+  if (declaredRequirements) requiredTests = bindRequirements(requiredTests, declaredRequirements.value);
+  else if (!Array.isArray(requiredTests) || requiredTests.length > 512 || requiredTests.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('invalid required test files');
+  const mergeTests = rows => declaredRequirements ? unionRequirements(rows.map(requiredTests => ({ requiredTests: bindRequirements(requiredTests, declaredRequirements.value) }))) : [...new Set(rows.flat())].sort();
+  const includesTest = (rows, row) => declaredRequirements ? rows.some(value => requirementHash(value) === requirementHash(row)) : rows.includes(row);
   if (opt['required-tests'] !== undefined && action !== 'promote') throw Error('--required-tests belongs to promote');
   if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
   if ((opt['fix-findings'] || opt['review-round-cap'] !== undefined) && action !== 'handle') throw new Error('--fix-findings and --review-round-cap belong to handle');
@@ -237,15 +244,15 @@ export function main(argv = process.argv.slice(2)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (saved.identity !== project.identity || saved.org !== project.org || saved.run !== id) throw new Error('promotion receipt identity changed');
       if (saved.ownership) assertOwner(readOwnedRun(project.org, id), saved.ownership);
-      const inheritedTests = [...new Set([...(saved.prior_attempts ?? []), saved].flatMap(attempt =>
-        attempt.requiredTests ?? (attempt.test_evidence && !attempt.test_evidence.reexecuted ? attempt.test_evidence.files : [])))].sort();
-      if (opt['required-tests'] !== undefined && inheritedTests.some(file => !requiredTests.includes(file))) throw Error('required tests cannot be removed from an earlier promotion attempt');
-      requiredTests = [...new Set([...inheritedTests, ...requiredTests])].sort();
+      const inheritedTests = mergeTests([...(saved.prior_attempts ?? []), saved].map(attempt =>
+        attempt.requiredTests ?? (attempt.test_evidence && !attempt.test_evidence.reexecuted ? attempt.test_evidence.files : [])));
+      if (opt['required-tests'] !== undefined && inheritedTests.some(file => !includesTest(requiredTests, file))) throw Error('required tests cannot be removed from an earlier promotion attempt');
+      requiredTests = mergeTests([inheritedTests, requiredTests]);
       if (saved.phase === 'not-queued' && saved.refusal?.code === 'AUTOPILOT_NO_NATIVE_WORKER' && !saved.queue) {
         const { prior_attempts, ...attempt } = saved;
         prior = [...(prior_attempts ?? []), attempt];
       } else {
-        if (requiredTests.some(file => !inheritedTests.includes(file))) throw Error('required tests differ from the acknowledged promotion; inspect queue evidence');
+        if (requiredTests.some(file => !includesTest(inheritedTests, file))) throw Error('required tests differ from the acknowledged promotion; inspect queue evidence');
         if (saved.phase !== 'acknowledged') throw new Error(`promotion enqueue is uncertain; inspect ${file} and ${doc.promotion_queue}; do not blindly enqueue again`);
         if (!opt.retry) { print(saved); return; }
         const jobs = saved.queue?.jobs;
@@ -276,7 +283,7 @@ export function main(argv = process.argv.slice(2)) {
     const result = JSON.parse(call(settle, settleArgs));
     if (!['promotable', 'promotable_with_findings'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
-    const tests = [...new Set([...requiredTests, ...(result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : [])])].sort();
+    const tests = mergeTests([requiredTests, result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : []]);
     const saved = { identity: project.identity, org: project.org, run: id, ownership, requiredTests: tests, lane: result.lane, release: bundleRelease(),
       reviewed_commit: result.reviewed_commit, head: result.head,
       ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',

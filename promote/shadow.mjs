@@ -15,7 +15,7 @@ export function collectShadow({ project = process.cwd() } = {}) {
   for (const batch of fs.existsSync(directory) ? fs.readdirSync(directory).sort() : []) {
     try {
       const plan = JSON.parse(fs.readFileSync(path.join(directory, batch, 'train.json'), 'utf8'));
-      if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity) throw Error('invalid batch identity/schema');
+      if (!['promotion-train/v1', 'promotion-train/v2'].includes(plan.schema) || plan.identity !== identity) throw Error('invalid batch identity/schema');
       for (const [attempt, value] of (plan.attempts ?? []).entries()) {
         const observations = [...(value.selector_shadow_history ?? []), ...(value.selector_shadow ? [value.selector_shadow] : [])];
         for (const [observation, shadow] of observations.entries()) {

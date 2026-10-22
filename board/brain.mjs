@@ -68,7 +68,7 @@ function* brainProjection(project, { now = Date.now(), recentMs = 86400000, limi
     for (const job of jobs.values()) {
       const batch = id(job.batch) ? path.join(directory, 'batches', job.batch) : null;
       const loaded = batch ? localJSON(path.join(batch, 'train.json'), common) : null;
-      const train = loaded?.schema === 'promotion-train/v1' && loaded.identity === common && loaded.id === job.batch && loaded.jobs?.some(j => j.id === job.id) ? loaded : null;
+      const train = ['promotion-train/v1', 'promotion-train/v2'].includes(loaded?.schema) && loaded.identity === common && loaded.id === job.batch && loaded.jobs?.some(j => j.id === job.id) ? loaded : null;
       const attempt = train?.attempts?.findLast(a => a.ids?.includes(job.id));
       const result = job.result ?? (job.outcome ? job : train?.results?.[job.id]);
       let gate = result?.gate ?? attempt?.gate;

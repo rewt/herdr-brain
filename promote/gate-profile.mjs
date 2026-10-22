@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { validationEnvironment } from '../lanes/validation.mjs';
+import { validationEnvironment, readDeclared } from '../lanes/validation.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
@@ -13,6 +13,8 @@ import { readPolicyFile, validatePromote } from '../lib/config-policy.mjs';
 import { parseUniqueJson } from '../sessions/json.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
+import { executionIdentity } from './execution-identity.mjs';
+import { gitProject } from '../lib/project.mjs';
 
 export const HOST_ENV = 'MONITOR_PROMOTION_HOST_PROFILE';
 const HOST = fileURLToPath(new URL('./host-gate.mjs', import.meta.url));
@@ -44,10 +46,13 @@ function committedFile(canonical, relative, env = process.env) {
 // `settings` is a committed .promote.json the caller already read (the queue's per-batch snapshot),
 // so one batch never reads the declaration twice.
 export function resolveGateProfile(canonical, environment = process.env, { settings } = {}) {
+  const declared = readDeclared(canonical, { env: environment, promotion: settings });
+  if (declared) executionIdentity(gitProject(canonical));
   const selected = policyLocation(canonical, 'promote', environment, { canonical });
-  const file = selected.file;
+  const file = declared ? declared.source.file : selected.file;
   let gate = settings?.gate;
-  if (settings === undefined) {
+  if (declared) gate = declared.value.gate ?? {};
+  else if (settings === undefined) {
     if (selected.home) gate = readPolicyFile(file, 'promote', { cwd: canonical, env: environment }).gate;
     else {
       const declared = committedFile(canonical, '.promote.json', selected.binding ? configGitEnv(environment) : process.env);
@@ -117,6 +122,7 @@ export function checkCompetingProcesses(profile) {
 }
 
 export function runProjectGateSync({ canonical, receipt, argv, settings, ...options }) {
+  if (readDeclared(canonical, { env: options.env, promotion: settings })) executionIdentity(gitProject(canonical));
   const evidence = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   evidence.release ??= bundleRelease();
   writeFileAtomic(receipt, JSON.stringify(evidence, null, 2) + '\n', 0o600);

@@ -5,6 +5,8 @@ import { waitForProvingHold } from '../test-slot/reservations.mjs';
 import { admissionDeadline } from '../lib/deadline.mjs';
 import { waitSecondsOf, WAIT_ENV, LEGACY_WAIT_ENV } from '../test-slot/test-slot.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { executionIdentity } from './execution-identity.mjs';
 
 // An initial wait owns no promotion resources. Every re-check by a lock owner
 // has a fixed allowance, independent of the (potentially hours-long) slot wait.
@@ -41,7 +43,12 @@ export function waitForPromotionMemory(canonical, { held = false, checkStop = tr
 // attempt may have integrated before losing its response; retain its checkpoint.
 export function refuseBeforeTrain({ file, identity, error }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
+  if (plan.schema === 'promotion-train/v2') {
+    const project = gitProject(process.cwd());
+    if (project.identity !== identity) throw Error('train project identity changed');
+    for (const job of plan.jobs ?? []) executionIdentity(project, { bound: job.execution_identity ?? null });
+  }
+  if (!['promotion-train/v1', 'promotion-train/v2'].includes(plan.schema) || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   if (plan.attempts?.length) throw error;
   plan.results ??= {};
   for (const job of plan.jobs) plan.results[job.id] ??= { outcome: 'refused', code: error.code, reason: error.message, batch: plan.id };

@@ -2,8 +2,24 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { readPlainFile } from '../lib/files.mjs';
 export const TEST_ESCALATION = 'The reviewer has unverified test evidence outside the promotion test plan; recorded re-execution is required';
-export function deferredTests(text, inherited) {
+export function deferredTests(text, inherited, { declared = false } = {}) {
   const lines = text.split('\n').filter(line => line !== inherited);
+  if (declared) {
+    const prefix = '- Test evidence not re-executed: ';
+    if (!lines.length || lines.length > 512 || lines.some(line => !line.startsWith(prefix) || !line.slice(prefix.length).trim())) return null;
+    const required = [];
+    for (const line of lines) {
+      const token = line.slice(prefix.length);
+      if (token.startsWith('{')) {
+        try {
+          const row = JSON.parse(token);
+          if (!row || Object.keys(row).length !== 1 || typeof row.gate !== 'string' || !row.gate.trim()) return null;
+          required.push(row);
+        } catch { return null; }
+      } else required.push(token);
+    }
+    return [...new Map(required.map(row => [JSON.stringify(row), row])).values()].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  }
   if (!lines.length || lines.some(line => !/^- Test evidence not re-executed: [\w./-]+\.test\.mjs$/.test(line))) return null;
   const files = lines.map(line => line.slice('- Test evidence not re-executed: '.length));
   if (files.some(file => path.isAbsolute(file) || file.split('/').includes('..'))) return null;

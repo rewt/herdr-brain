@@ -16,7 +16,9 @@
       "writer": "lib/project-summary.mjs",
       "location": "<record>/published/summary.{json,md}",
       "rule": "additive",
-      "additiveFields": ["archive.dirs"],
+      "additiveFields": [
+        "archive.dirs"
+      ],
       "probe": "summary"
     },
     {
@@ -169,7 +171,10 @@
       "writer": "lib/scratch-sweep.mjs",
       "location": "<eligible-archive>/lane-sweeps/*.json or <common>/lane-archive/<topic>/*-sweep.json",
       "rule": "additive",
-      "additiveFields": ["counts", "kept_summary"],
+      "additiveFields": [
+        "counts",
+        "kept_summary"
+      ],
       "notCovered": "Diagnostic-only v1 manifests have no runtime entry consumer: retirement, recovery and closeout retain paths and recovery links. Older manifests keep all entries; current entries retain removals, pending intents, uncertainty and ownership failures in full, with ordinary keeps in kept_summary (exact counts by reason, at most 16 sample paths and 4096 serialized path bytes). counts includes detailed and summarized entries. Offline lifecycle fixtures prove clean Git destinations, bounded ordinary keeps, pre-removal persistence and fail-closed disposal."
     },
     {
@@ -571,6 +576,62 @@
       "location": "<record>/handoffs/<workspace>/<slot>/*.md and handoff.recorded events",
       "rule": "closed",
       "notCovered": "Immutable hash-bound continuity payload; needs OLD handoff hash/path validation coverage beyond ordinary generated prose."
+    },
+    {
+      "id": "declared-gates/v2",
+      "version": 2,
+      "writer": "lanes/validation.mjs; promote/declaration.mjs",
+      "location": "Resolved owner policy and captured declaration in admitted queue jobs and v2 attempts",
+      "rule": "closed",
+      "notCovered": "Deliberate old-reader refusal and capable-worker admission are exercised by lanes/test/declared-validation.test.mjs; v2 execution/reuse/terminal recovery by the declared-mode focused tests. The generic OLD compatibility probe does not execute or recover v2."
+    },
+    {
+      "id": "promotion-gates-input/v1",
+      "version": 1,
+      "writer": "promote/declared-gates.mjs",
+      "location": "Canonical planner stdin and retained v2 attempt required/changed/base/candidate binding",
+      "rule": "closed",
+      "notCovered": "Deliberate old-reader refusal and capable-worker admission are exercised by lanes/test/declared-validation.test.mjs; v2 execution/reuse/terminal recovery by the declared-mode focused tests. The generic OLD compatibility probe does not execute or recover v2."
+    },
+    {
+      "id": "promotion-gates/v1",
+      "version": 1,
+      "writer": "promote/declared-selection.mjs",
+      "location": "v2 train attempts[].test_plan and immutable execution binding",
+      "rule": "closed",
+      "notCovered": "Deliberate old-reader refusal and capable-worker admission are exercised by lanes/test/declared-validation.test.mjs; v2 execution/reuse/terminal recovery by the declared-mode focused tests. The generic OLD compatibility probe does not execute or recover v2."
+    },
+    {
+      "id": "declared-gate-execution/v2",
+      "version": 2,
+      "writer": "promote/declared-gates.mjs",
+      "location": "Literal executor argv, retained v2 train attempts[].declared_spec and gate.declared_gate",
+      "rule": "closed",
+      "notCovered": "Deliberate old-reader refusal and capable-worker admission are exercised by lanes/test/declared-validation.test.mjs; v2 execution/reuse/terminal recovery by the declared-mode focused tests. The generic OLD compatibility probe does not execute or recover v2."
+    },
+    {
+      "id": "declared-gate-attempt/v2",
+      "version": 2,
+      "writer": "promote/declared-gates.mjs; promote/declared-runner.mjs; promote/declared-planning.mjs; promote/declared-plan-runner.mjs",
+      "location": "<common>/promote/{planning,declared-attempts} and embedded v2 train gate/evidence",
+      "rule": "closed",
+      "notCovered": "Deliberate old-reader refusal and capable-worker admission are exercised by lanes/test/declared-validation.test.mjs; v2 execution/reuse/terminal recovery by the declared-mode focused tests. The generic OLD compatibility probe does not execute or recover v2."
+    },
+    {
+      "id": "declared-gate-receipt/v2",
+      "version": 2,
+      "writer": "promote/declared-receipts.mjs",
+      "location": "<common>/declared-gates/<key>.<execution>.json, immutable witnesses and cache pointers",
+      "rule": "closed",
+      "notCovered": "Deliberate old-reader refusal and capable-worker admission are exercised by lanes/test/declared-validation.test.mjs; v2 execution/reuse/terminal recovery by the declared-mode focused tests. The generic OLD compatibility probe does not execute or recover v2."
+    },
+    {
+      "id": "promotion-train/v2",
+      "version": 2,
+      "writer": "promote/promote.mjs; promote/train.mjs",
+      "location": "<common>/promote/batches/*/train.json for declared jobs",
+      "rule": "closed",
+      "notCovered": "Deliberate old-reader refusal and capable-worker admission are exercised by lanes/test/declared-validation.test.mjs; v2 execution/reuse/terminal recovery by the declared-mode focused tests. The generic OLD compatibility probe does not execute or recover v2."
     }
   ]
 }

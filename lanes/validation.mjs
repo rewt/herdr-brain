@@ -10,8 +10,10 @@ import { acquireLock } from './promotion-lock.mjs';
 import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 import { resolveResource } from '../test-slot/resources.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
-import { policyLocation, present } from '../lib/config-home.mjs';
-import { readPolicyFile, homePolicyDigest } from '../lib/config-policy.mjs';
+import { policyLocation, present, configGitEnv } from '../lib/config-home.mjs';
+import { readPolicyFile, readPolicySnapshot, homePolicyDigest } from '../lib/config-policy.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { validateDeclared, readCommitted, DECLARED_SCHEMA, SELECTION_SCHEMA, hash, refuse, object } from '../promote/declaration.mjs';
 import { exactIdentity, exactDigest, restrictEnvironment, excludedDelta, explainMiss } from './exact-validation.mjs';
 
 import { VALIDATION_TIERS, validateValidation } from '../lib/validation-declaration.mjs';
@@ -35,14 +37,66 @@ export function tapTotals(output) {
   return suites.length ? suites : null;
 }
 
+// Resolve through config-home's one owner source. Git-backed sources come from
+// the captured canonical base, never a lane copy or a working edit.
+export function readDeclared(root, { base = 'HEAD', env = process.env, promotion, override } = {}) {
+  const selected = policyLocation(root, 'validation', env, { canonical: root });
+  const gitEnv = configGitEnv(env);
+  let value, revision;
+  if (selected.home) {
+    if (!present(selected.file)) throw refuse('resolved owner validation declaration is missing');
+    const snapshot = readPolicySnapshot(selected.file, 'validation', { cwd: root, env });
+    value = snapshot.config; revision = `sha256:${snapshot.digest}`;
+  } else {
+    if (!fs.existsSync(path.join(root, '.git'))) {
+      const local = present(selected.file) ? readPolicyFile(selected.file, 'validation', { cwd: root, env }) : {};
+      if (local.schema !== undefined) throw refuse('declared authority requires a canonical Git project');
+      return null;
+    }
+    const project = gitProject(root, { env: gitEnv });
+    root = project.canonical;
+    value = readCommitted(root, VALIDATION_FILE, base, { schemaProbe: true, env: gitEnv });
+    if (value?.schema === undefined) return null;
+    revision = execFileSync('git', ['-C', root, 'rev-parse', '--verify', base], { env: gitEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  }
+  if (value?.schema === undefined) return null;
+  validateDeclared(value);
+  const resolved = kind => {
+    const location = policyLocation(root, kind, env, { canonical: root });
+    return location.home ? (present(location.file) ? readPolicyFile(location.file, kind, { cwd: root, env }) : {})
+      : readCommitted(root, kind === 'lane' ? '.lane.json' : '.promote.json', base, { env: gitEnv }) ?? {};
+  };
+  promotion ??= resolved('promote');
+  const lane = resolved('lane');
+  if (!object(promotion) || !object(lane)) throw refuse('owner lane and queue policies must be objects');
+  if (['validate', 'gate'].some(key => Object.hasOwn(promotion, key))) throw refuse('.promote.json validate/gate competes with the owner declaration');
+  if (['validate', 'validation', 'prepare'].some(key => Object.hasOwn(lane, key))) throw refuse('.lane.json validate/validation/prepare competes with the owner declaration');
+  if (env.LANE_VALIDATE !== undefined || override !== undefined && override !== null) throw refuse('validation overrides cannot replace declared promotion');
+  return { schema: DECLARED_SCHEMA, selection_schema: SELECTION_SCHEMA, value,
+    source: { file: selected.file, revision, digest: hash(value), storage: selected.home ? 'config-home' : 'committed' } };
+}
+
 // Always use the canonical project's declarations, never a worker's override.
 // A separate tracked file works even when .lane.json is shared machine config.
 export function resolveValidation({ root, config = {}, source = 'lane config', sources = {}, env = process.env } = {}) {
+  const owner = readDeclared(root, { env });
+  if (owner) {
+    const value = owner.value;
+    const tiers = Object.fromEntries(VALIDATION_TIERS.map(tier => [tier, {
+      command: value[tier] ?? value.promotion,
+      timeoutSeconds: typeof value.timeout_seconds === 'object' ? value.timeout_seconds[tier] : value.timeout_seconds,
+      idleTimeoutSeconds: typeof value.idle_timeout_seconds === 'object' ? value.idle_timeout_seconds[tier] : value.idle_timeout_seconds,
+      source: owner.source.file,
+    }]));
+    return { tiers, declared: owner, promotion_tests: value.promotion_tests, environment: value.environment ?? '', environment_source: owner.source.file, file: owner.source.file };
+  }
+  if (config.validation?.schema !== undefined) throw refuse('declared schema requires the resolved owner declaration');
   let declared = config.validation === undefined ? {} : validateValidation(config.validation);
   const file = policyLocation(root, 'validation', env, { canonical: root }).file;
   const declarationSources = Object.fromEntries(Object.keys(declared).map(key => [key, sources.validation ?? source]));
   if (present(file)) {
     const tracked = readPolicyFile(file, 'validation', { cwd: root, env });
+    if (tracked.schema !== undefined) throw refuse('declared schema requires a committed owner declaration');
     declared = { ...declared, ...tracked };
     for (const key of Object.keys(tracked)) declarationSources[key] = file;
   }

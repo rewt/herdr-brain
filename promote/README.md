@@ -19,6 +19,98 @@ exactly one worker owns the drain. A project is its canonical Git common directo
 including calls from linked worktrees. Nothing depends on a project name, remote,
 workspace label or session registry.
 
+## Project-declared gates v2
+
+The opt-in contract is [declared-gates/v2](../docs/contracts/DECLARED-GATES.md).
+The owning project's resolved `.lane.validation.json` is its only gate authority:
+config-home selects the whole file, or the canonical committed base supplies it
+for an unadopted config-home project. A lane or working edit proposes future
+policy; it cannot authorize its own invocation. Promotion/release commands,
+coverage, named gates, planner argv, literal environment, ordered preparation,
+host admission, watchdogs and `receipt_reuse` all belong in that declaration.
+Remove explicit `.lane.json` `validate`/`validation`/`prepare` and `.promote.json`
+`validate`/`gate`. Overrides and incompatible saved jobs refuse; they require
+explicit disposition and re-admission with their requirements retained.
+No project is opted in by this implementation.
+
+The queue captures the declaration/source revision/digest, complete required
+coverage or `{"gate":"id"}` definitions, head/run/release and both identity
+roots. Caller cwd must be this canonical checkout or a linked worktree with the
+same common directory and identity root. Enqueue, worker/dequeue, resume,
+execution, integration and terminal recovery recheck that binding. Native
+sandbox settings remain operator-owned; these are routing checks rather than
+native identity attestations. `--capabilities` advertises the exact declaration,
+selection, execution and receipt versions. Admission explicitly checks the bound
+worker; parked v1 and file-only readers cannot certify v2. Declared trains use
+`promotion-train/v2`, which older train readers refuse.
+
+The canonical planner runs as a subprocess in a private base snapshot. Its
+closed `promotion-gates-input/v1` stdin includes base/candidate, inspection-only
+candidate root, sorted Git changes (deletions and both rename sides), and the
+bound required union. `promotion-gates/v1` stdout selects ordered named IDs and
+reasons; it cannot supply commands or coverage. Mandatory promotion coverage
+plus selected declared coverage must satisfy every exact token and complete
+gate requirement. Optional work defaults to ten gates/300 seconds of estimates;
+required work is counted first and may record `required_over_budget`. Inventories
+are capped at 512. Snapshot/hash enumeration is capped at 10,000 paths/64 MiB;
+planner execution at 20 seconds/1 MiB stdout. Oversized immutable execution argv
+(over 96 KiB) refuses without dropping binding fields.
+
+One finite attempt deadline contains canonical preparation/planning, candidate
+preparation, declared version probes, hashing and execution. The existing host
+adapter owns the lock/slot and nested steps inherit it. Commands run unchanged
+through `/bin/sh -c` at their declared contained cwd: no file-extension filter,
+argument rewriting, launch classifier, recipe expansion or inferred import/runtime
+inventory. Candidate helpers and recipes may change under independent lane review.
+Preparation runs on fresh candidates; an existing dependency directory alone is
+not a preparation witness. Ordinary `unless` file stamps remain ordered guards.
+Each step retains exact command/cwd, clocks, exit/signal/timeout, immutable stdout
+and stderr logs/digests and execution sidecars. Gates record executed, reused,
+failed or not reached. A red mandatory command stops additional work.
+
+`receipt_reuse` is required. `always-execute` runs every gate without version
+probes. The operator-selected `declared-inputs` policy reuses only an originally
+executed green `declared-gate-receipt/v2` whose declared input observations match
+byte for byte. Per-gate (including tier) inputs declare paths/globs, a non-secret
+environment allowlist and opaque toolchain version probes. Supply separate
+runtime and runner/build-tool observations; if one tool serves both, name the
+same probe under both roles. Missing roles, failed/empty probes, unsupported
+globs or unavailable/escaping inputs cause an execution, never guessed evidence.
+The implementation supports `*`, `**` and `?` globs; other glob syntax is a reuse
+miss. Digests include presence/membership, modes/kinds/content, the complete
+command/cwd/coverage, preparation, input specifications, allowlist, relevant host,
+environment and limit policy, and declared probe commands/successful output.
+No environment values are persisted. Reusable preparation/probes/gates receive
+only the allowlist and exact-validation's existing closed bookkeeping names.
+Incompatible shared preparation makes evidence nonreusable.
+
+Preparation precedes lookup. Matching observations before and after execution
+are required to mint a source; red/incomplete/signaled/timed-out or unstable
+sources do not reuse. Sources/logs/sidecars and an independent immutable witness
+are verified under the shared receipt lock. Lane pointers, reused pointers and
+legacy receipts are not source authority. A reused pass points to its original
+executed receipt/log and records compared digests. Inputs are rechecked before
+integration; a changed hit executes once within the remaining deadline or holds.
+Reuse certifies validation, not build output. Include restored build artifacts
+among the reviewed inputs when downstream gates need them.
+
+V2 planning/execution evidence lives under `<common>/promote/{planning,declared-attempts}`;
+immutable executed sources and cache pointers live under `<common>/declared-gates`.
+Train attempts retain the full captured binding and evidence references.
+Persisted integrated (including lost fast-forward replies), mixed final
+refused/integrated, and refusal-only results recover under their captured rule
+before any current-declaration comparison or host admission. They verify saved
+job/identity, integration/tree/containment and log evidence as applicable and
+never repeat successful commands or integration. Unfinished work still holds
+on a changed declaration. Logs and every earlier outcome remain retained.
+
+Development `lane check --cmd` remains available and certifies its command only.
+Declared promotion (including planning-only settle observations) uses the queue
+host admission; direct `lane promote` cannot bypass its binding. Legacy projects
+retain their additive file planner, command precedence/order and unchanged
+`exact-validation/v1` matching/exclusions. The sections below describe that
+legacy behavior unless they explicitly refer to v2.
+
 Queue settings are read once when forming each new batch. A canonical branch
 without a commit, or a commit without `.promote.json`, uses defaults. A Git read
 failure stops the drain with `PROMOTION_SETTINGS_GIT_FAILED`; invalid committed

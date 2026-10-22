@@ -1069,7 +1069,7 @@ test('a drain launched before fast-forward exits before evaluating the new landi
 
 
 test('a default-on named ready resolves an identical pre-existing automatic ready without rebinding its source', t => {
-  const f = setup(t); f.report();
+  const f = setup(t, { merged: true }); f.report();
   const [original] = readCloseoutEntries(f.common);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
   f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done' }]);
@@ -1078,7 +1078,7 @@ test('a default-on named ready resolves an identical pre-existing automatic read
   assert.deepEqual(readCloseoutEntries(f.common)[0].source, original.source);
   f.drain();
   assert.equal(f.read().actions.filter(a => a[0] === 'tab' && a[1] === 'close').length, 1,
-    JSON.stringify({ evaluations: evaluations(f), ready: events(f).find(e => e.type === 'lane.ready'), original }));
+    JSON.stringify(evaluations(f)));
   assert.equal(fs.existsSync(f.lane), true, 'the ready key still supplies only pane authority');
 });
 

@@ -9,7 +9,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { policyLocation, present, homeProject } from '../lib/config-home.mjs';
+import { policyLocation, present, homeProject, configGitEnv } from '../lib/config-home.mjs';
 import { readPolicyFile, validatePromote } from '../lib/config-policy.mjs';
 import { parseUniqueJson } from '../sessions/json.mjs';
 import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
@@ -26,6 +26,7 @@ import { verifyTrainResult, terminalTrainJobs } from './evidence.mjs';
 import { probeNativeGate, nativeWorkerEvidence, liveNativeWorker } from './native-context.mjs';
 import { CAPABILITIES, DECLARED_SCHEMA, sameDeclaration, snapshotDeclaration, refuse as declaredRefusal } from './declaration.mjs';
 import { readDeclared, fenceDeclaredMode } from '../lanes/validation.mjs';
+import { fenceCapturedDeclared } from './declared-inert.mjs';
 import { executionIdentity } from './execution-identity.mjs';
 import { bindRequirements, assertBoundRequirements } from './declared-selection.mjs';
 import { fenceGateIdentity, resolveGateProfile } from './gate-profile.mjs';
@@ -66,6 +67,28 @@ function declaredWork(project) {
     ...(data.results ?? []).filter(job => job.cleanup?.state === 'pending')].filter(job => job.gate_mode);
 }
 function hasDeclaredWork(project) { return declaredWork(project).length > 0; }
+// Native --repo policy and saved work must refuse before record discovery or
+// release forwarding, including status. Legacy Git-selected targets are an
+// additional refusal probe only; they cannot replace or authorize the native one.
+export function fenceDeclaredInvocation(cwd) {
+  let inspectionError;
+  const probe = inspect => {
+    try { inspect(); }
+    catch (error) {
+      if (error.code === 'DECLARED_GATES_V2_INERT') throw error;
+      inspectionError ??= error;
+    }
+  };
+  probe(() => fenceDeclaredMode(cwd));
+  let native;
+  try { native = gitProject(cwd, { env: configGitEnv(process.env) }); } catch { /* Ordinary discovery owns Git errors. */ }
+  if (native) probe(() => fenceCapturedDeclared(declaredWork(native)));
+  let selected;
+  try { selected = gitProject(cwd); } catch { /* Ordinary discovery owns Git errors. */ }
+  if (selected && selected.identity !== native?.identity)
+    probe(() => fenceDeclaredMode(selected.canonical, { captured: declaredWork(selected) }));
+  if (inspectionError) throw inspectionError;
+}
 export function fenceDeclaredTarget(project, { jobs: supplied = [] } = {}) {
   const jobs = [...declaredWork(project), ...supplied.filter(job => job.gate_mode)];
   fenceDeclaredMode(project.canonical, { captured: [...jobs, ...supplied] });
@@ -910,6 +933,7 @@ async function main() {
   } });
   if (opt.capabilities) { process.stdout.write(JSON.stringify(CAPABILITIES) + '\n'); return; }
   if (opt['existing-worker'] && (opt.resume || opt.drain)) throw Error('--existing-worker is enqueue-only; it never starts or resumes a worker');
+  fenceDeclaredInvocation(opt.repo);
   const target = gitProject(opt.repo);
   const declaredTarget = !opt.status && fenceDeclaredTarget(target);
   // --drain/--cleanup-job are continuations of recorded operations, not new

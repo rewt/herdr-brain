@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
 import { declaration, declaredFixture, product } from './helpers/declared-fixture.mjs';
-import { policyLocation } from '../../lib/config-home.mjs';
+import { policyLocation, validateIdentity } from '../../lib/config-home.mjs';
 import { writeAuditedConfig, pendingConfigWrite } from '../../lib/config-audit.mjs';
 import { readDeclared, resolveValidation, canonicalValidation, validateTree, fenceDeclaredMode } from '../../lanes/validation.mjs';
 import { gitProject } from '../../lib/project.mjs';
@@ -13,7 +13,7 @@ import { executionIdentity } from '../execution-identity.mjs';
 import { validateDeclared, snapshotDeclaration, gateDefinition, hash } from '../declaration.mjs';
 import { selectDeclared } from '../declared-selection.mjs';
 import { fenceGateIdentity, resolveGateProfile, runProjectGateSync } from '../gate-profile.mjs';
-import { queueFor, fenceDeclaredTarget, checkDeclaredJobs, enqueue, drain, finishCleanup, retryCleanup } from '../promote.mjs';
+import { queueFor, fenceDeclaredInvocation, fenceDeclaredTarget, checkDeclaredJobs, enqueue, drain, finishCleanup, retryCleanup } from '../promote.mjs';
 import { planDeclaredGate, planDeclaredGateBounded, executeDeclaredGate, recheckDeclaredGate, assertExecutionBinding } from '../declared-gates.mjs';
 import { admittedDeclaredTestPlan } from '../declared-planning.mjs';
 import { runDeclaredExecution, validateExecution } from '../declared-runner.mjs';
@@ -117,6 +117,7 @@ for (const change of ['unaudited edit', 'pending write', 'malformed identity def
         'identity fence': () => fenceGateIdentity(f.cwd, f.env, { captured }),
         profile: () => resolveGateProfile(f.cwd, f.env, { captured }),
         adapter: () => runProjectGateSync({ canonical: f.cwd, receipt: f.receipt, argv: ['--version'], env: f.env }),
+        'CLI invocation fence': () => fenceDeclaredInvocation(f.cwd),
         'queue fence': () => fenceDeclaredTarget(f.project, { jobs: [job] }),
         queueFor: () => queueFor(f.cwd),
         'queueFor inspection': () => queueFor(f.cwd, { readOnly: true }),
@@ -168,14 +169,94 @@ for (const change of ['unaudited edit', 'pending write', 'malformed identity def
         await t.test(relative, () => cli(relative, [JSON.stringify(input), f.receipt]));
       await t.test('bounded output planner CLI', () => cli('promote/declared-planner.mjs', [JSON.stringify(['node', '--version'])]));
       for (const prefix of [[], ['--recheck']]) await t.test(`runner CLI ${prefix.join(' ')}`, () => cli('promote/declared-runner.mjs', [...prefix, JSON.stringify(spec), f.resultFile]));
-      for (const args of [['topic'], ['--drain'], ['--resume'], ['--cleanup-job', job.id]])
+      for (const args of [['topic'], ['--drain'], ['--resume'], ['--cleanup-job', job.id], ['--status']])
         await t.test(`promote CLI ${args[0]}`, () => cli('promote/promote.mjs', [...args, '--repo', f.cwd]));
       for (const action of ['promote', 'handle']) await t.test(`supervisor ${action} CLI`, () => cli('supervisor/supervisor.mjs', [action, 'R-999', '--repo', f.cwd, '--org', f.env.ORG_DIR, '--role', 'supervisor', '--why', 'inert witness']));
       await t.test('settle CLI', () => cli('settle/settle.mjs', ['R-999', '--repo', f.cwd, '--org', f.env.ORG_DIR]));
+      await t.test('settle CLI --status', () => cli('settle/settle.mjs', ['R-999', '--status', '--repo', f.cwd]));
       for (const args of [['check'], ['promote', 'topic'], ['promote-batch', f.receipt], ['config']]) await t.test(`lane ${args[0]}`, () => {
         cli('lanes/lane.mjs', args, { ...f.env, GIT_DIR: f.project.identity, GIT_WORK_TREE: f.cwd });
       });
     });
+  }
+});
+
+for (const change of ['unaudited identity edit', 'pending identity write']) for (const source of ['current declaration', 'captured work'])
+test(`native CLI and status refusal precede discovery with ${change} and ${source}`, async t => {
+  const f = configFixture(t, { custom: 'owner' }); await f.adopt();
+  const binding = f.binding(), project = gitProject(f.cwd), file = policyLocation(f.cwd, 'validation', f.env).file;
+  const value = declaration(); delete value.promotion_tests; value.promotion = 'node --version';
+  writeAuditedConfig({ file, value: source === 'current declaration' ? value : {}, kind: 'validation', binding,
+    cwd: f.cwd, env: f.env, validate: source === 'current declaration' ? validateDeclared : () => {} });
+  const foreign = path.join(f.scratch, 'undeclared'); fs.mkdirSync(foreign);
+  const git = args => {
+    const result = spawnSync('git', ['-C', foreign, ...args], { env: f.env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr); return result.stdout.trim();
+  };
+  git(['init', '-qb', 'main']); git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'Undeclared project']);
+  const selected = gitProject(foreign), directory = path.join(project.identity, 'promote'), queue = path.join(directory, 'queue.json');
+  const receipt = path.join(directory, 'batches/inert-cli/train.json'), shared = path.join(project.identity, 'lane-validation');
+  const journal = path.join(binding.record, 'settle/R-999.json'), lane = path.join(f.cwd, '.lane/gate.json');
+  for (const at of [path.dirname(receipt), shared, path.dirname(journal), path.dirname(lane)]) fs.mkdirSync(at, { recursive: true });
+  for (const at of [receipt, path.join(shared, 'prior.json'), journal, lane]) fs.writeFileSync(at, '{"prior":"preserve receipt"}\n');
+  const defaults = JSON.parse(fs.readFileSync(binding.identityFile)), next = { ...defaults, worktree_root: 'edited-lanes' };
+  const identityRecord = path.join(path.dirname(binding.identityFile), '.org');
+  if (change === 'pending identity write') {
+    assert.throws(() => writeAuditedConfig({ file: binding.identityFile, value: next, kind: 'identity', scope: 'identity', binding,
+      cwd: f.cwd, env: f.env, validate: value => validateIdentity(value, binding.identityFile, binding.identity),
+      afterReplace() { throw Error('interrupted identity replacement'); } }), /interrupted identity replacement/);
+    assert.equal(pendingConfigWrite(identityRecord, binding.identityFile).length, 1);
+  } else fs.writeFileSync(binding.identityFile, JSON.stringify(next));
+  // No captured identity: inertness must not rely on the execution binding.
+  const job = { id: 'inert-cli', gate_mode: value.schema, declared: { value }, cleanup: { state: 'pending' } };
+  const saved = source === 'captured work' ? ['pending', 'current', 'interrupted', 'cleanup'] : ['none'];
+  const roots = [binding.record, identityRecord, binding.directory, binding.identityFile, directory, shared, path.dirname(lane),
+    path.join(selected.identity, 'promote'), path.join(selected.identity, 'lane-validation'), path.join(foreign, '.org')];
+  for (const position of saved) {
+    const state = { identity: project.identity, pending: [], current: null, interrupted: [], results: [] };
+    if (position === 'pending') state.pending.push(job);
+    if (position === 'current') state.current = { id: 'inert-cli', jobs: [job] };
+    if (position === 'interrupted') state.interrupted.push({ id: 'inert-cli', jobs: [job] });
+    if (position === 'cleanup') state.results.push(job);
+    fs.writeFileSync(queue, JSON.stringify(state));
+    const before = snapshot(roots);
+    const invocations = [
+      ...[['topic', '--existing-worker'], ['--resume'], ['--drain'], ['--cleanup-job', job.id], ['--status']]
+        .map(args => ['promote/promote.mjs', args]),
+      ...[[], ['--retry'], ['--status']].map(args => ['settle/settle.mjs', ['R-999', ...args]]),
+    ];
+    for (const selection of ['native', 'conflicting selectors', 'legacy selected v2']) for (const [relative, args] of invocations)
+      await t.test(`${position}, ${selection}, ${relative} ${args.join(' ')}`, () => {
+        const env = { ...f.env }; delete env.ORG_DIR;
+        const repo = selection === 'legacy selected v2' ? foreign : f.cwd;
+        if (selection !== 'native') Object.assign(env, {
+          GIT_DIR: selection === 'legacy selected v2' ? project.identity : selected.identity,
+          GIT_WORK_TREE: selection === 'legacy selected v2' ? f.cwd : foreign,
+        });
+        // Invoke from another checkout: --repo, not process.cwd(), owns the fence.
+        const result = spawnSync(process.execPath, [path.join(product, relative), ...args, '--repo', repo], { cwd: foreign, env, encoding: 'utf8' });
+        assert.equal(result.error, undefined); assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.match(result.stderr, /DECLARED_GATES_V2_INERT:.*ENG-538/);
+        assert.deepEqual(snapshot(roots), before);
+        if (change === 'pending identity write') assert.equal(pendingConfigWrite(identityRecord, binding.identityFile).length, 1);
+      });
+  }
+});
+
+test('undeclared CLI status retains legacy Git selection and saved receipt bytes', t => {
+  const f = declaredFixture(t, { declared: {} }), foreign = path.join(f.foreign, 'undeclared'); fs.mkdirSync(foreign);
+  f.git(['init', '-qb', 'main', foreign]);
+  f.git(['-C', foreign, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'Undeclared project']);
+  const project = gitProject(foreign), record = path.join(f.repo, '.org'), journal = path.join(record, 'settle/R-999.json');
+  fs.mkdirSync(path.dirname(journal), { recursive: true }); fs.writeFileSync(journal, '{"prior":"settle status"}\n');
+  const roots = [record, path.join(f.repo, '.git/promote'), path.join(project.identity, 'promote')], before = snapshot(roots);
+  for (const selectors of [{}, { GIT_DIR: project.identity, GIT_WORK_TREE: foreign }]) {
+    const promoted = f.cli(['--status', '--repo', f.repo], f.repo, selectors);
+    assert.equal(promoted.status, 0, promoted.stderr);
+    assert.equal(JSON.parse(promoted.stdout).queue, path.join(selectors.GIT_DIR ?? path.join(f.repo, '.git'), 'promote/queue.json'));
+    const settled = f.run(process.execPath, [path.join(product, 'settle/settle.mjs'), 'R-999', '--status', '--repo', f.repo, '--org', record], f.repo, selectors);
+    assert.equal(settled.status, 0, settled.stderr); assert.equal(settled.stdout, fs.readFileSync(journal, 'utf8'));
+    assert.deepEqual(snapshot(roots), before);
   }
 });
 

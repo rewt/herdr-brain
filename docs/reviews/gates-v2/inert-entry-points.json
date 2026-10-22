@@ -1,5 +1,5 @@
 {
-  "run": "R-764",
+  "run": "R-768",
   "item": "ENG-537",
   "code": "DECLARED_GATES_V2_INERT",
   "unlock_item": "ENG-538",
@@ -73,13 +73,26 @@
       ]
     },
     {
+      "entry": "promote/promote.mjs fenceDeclaredInvocation and both promote/settle CLI startup paths, including status",
+      "guard": "Native --repo mode and captured queue work fence before Git-selected discovery, record lookup or release forwarding. A legacy selected target is probed only for refusal and cannot replace the native fence. Inspection errors hold without auditing.",
+      "witnesses": [
+        "CLI invocation fence",
+        "native CLI and status refusal precede discovery with unaudited identity edit and current declaration",
+        "native CLI and status refusal precede discovery with pending identity write and current declaration",
+        "native CLI and status refusal precede discovery with unaudited identity edit and captured work",
+        "native CLI and status refusal precede discovery with pending identity write and captured work",
+        "undeclared CLI status retains legacy Git selection and saved receipt bytes"
+      ]
+    },
+    {
       "entry": "promote/promote.mjs performBatch, perform, start (private continuations)",
       "guard": "Private continuations require the fenced enqueue/drain paths; transaction mutations fence again.",
       "witnesses": [
         "enqueue",
         "drain",
         "promote CLI --drain",
-        "promote CLI --resume"
+        "promote CLI --resume",
+        "promote CLI --status"
       ]
     },
     {
@@ -120,10 +133,12 @@
       ]
     },
     {
-      "entry": "settle/settle.mjs main",
-      "guard": "Existing target fence reaches the inert guard before record discovery, ownership continuation or journal writes.",
+      "entry": "settle/settle.mjs main, retry and status",
+      "guard": "Shared native invocation fence includes saved queue work and precedes selected-target discovery, record discovery, ownership continuation or journal writes, including status.",
       "witnesses": [
-        "settle CLI"
+        "settle CLI",
+        "settle CLI --status",
+        "native CLI and status refusal precede discovery"
       ]
     },
     {
@@ -244,8 +259,23 @@
       ]
     }
   ],
-  "extends_run": "R-761",
+  "extends_run": "R-764",
   "regressions": [
+    {
+      "finding": "5332f94-r1 Major at promote/promote.mjs:913 and settle/settle.mjs:593",
+      "witness": "native CLI and status refusal precede discovery with unaudited or pending identity edits and current or captured v2",
+      "controls": [
+        "promote enqueue, resume, drain, cleanup and status",
+        "settle new, retry and status",
+        "native --repo differs from invocation cwd",
+        "conflicting Git selectors choose an undeclared foreign checkout",
+        "legacy selected v2 target with an undeclared native --repo",
+        "captured v2 in pending, current, interrupted and pending-cleanup results after declaration removal",
+        "omitted captured execution identity",
+        "undeclared CLI status preserves native and legacy Git-selected behavior"
+      ],
+      "oracle": "DECLARED_GATES_V2_INERT names ENG-538 before discovery or forwarding. Both record trees, pending identity intent, queue, train, shared receipt and lane pointer bytes, modes and inventory are unchanged. Pending identity writes remain unresolved."
+    },
     {
       "finding": "1430f10-r1 Major at lanes/validation.mjs:51",
       "witness": "committed v2 refuses from canonical and linked Git subdirectories before record, command or receipt effects",

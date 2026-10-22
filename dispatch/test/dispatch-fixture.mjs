@@ -202,4 +202,12 @@ if(process.argv[1]===${JSON.stringify(DISPATCH)}) { ${body} }
   return {NODE_OPTIONS:`${f.env.NODE_OPTIONS ?? ''} --import=${hook}`,PAUSE_MARKER:path.join(f.root,'paused'),PAUSE_RELEASE:path.join(f.root,'release')};
 }
 
-export { DISPATCH, RECORD, WATCH, fixture, rememberProcesses, promptCalls, unlandedSetting, pendingItem, until, pauseHook, hooksTableScreen, startupHookReviewScreen };
+function admissionHook(f, body) {
+  return pauseHook(f, `const list=fs.readdirSync;fs.readdirSync=function(dir,...args) {
+ if(String(dir).endsWith('dispatch-session-cap.contenders')) fs.appendFileSync(process.env.PAUSE_MARKER+'.attempts',process.pid+'\\n');
+ return list.call(this,dir,...args);
+}; ${body}`);
+}
+const admissionAttempts = hook => new Set(fs.readFileSync(`${hook.PAUSE_MARKER}.attempts`, 'utf8').trim().split('\n')).size;
+
+export { DISPATCH, RECORD, WATCH, fixture, rememberProcesses, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts, hooksTableScreen, startupHookReviewScreen };

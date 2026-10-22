@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { publishProvingReservation, RESERVATION_WAIT_EXPIRED_CODE } from '../../test-slot/reservations.mjs';
 import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
 import { policyLocation } from '../../lib/config-home.mjs';
-import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook } from './dispatch-fixture.mjs';
+import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts } from './dispatch-fixture.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
@@ -352,14 +352,6 @@ test('a saved request rechecks the current cap before creating a worker', t => {
   assert.match(retry.stderr, /session cap 1 reached/);
   assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
 });
-
-function admissionHook(f, body) {
-  return pauseHook(f, `const list=fs.readdirSync;fs.readdirSync=function(dir,...args) {
- if(String(dir).endsWith('dispatch-session-cap.contenders')) fs.appendFileSync(process.env.PAUSE_MARKER+'.attempts',process.pid+'\\n');
- return list.call(this,dir,...args);
-}; ${body}`);
-}
-const admissionAttempts = hook => new Set(fs.readFileSync(`${hook.PAUSE_MARKER}.attempts`, 'utf8').trim().split('\n')).size;
 
 for (const cap of [1, 2]) test(`overlapping final launches wait for admission, then respect cap ${cap}`, async t => {
   const f = fixture(t); capSetting(f, cap);

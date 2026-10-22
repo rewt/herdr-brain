@@ -86,6 +86,47 @@ test('default on, explicit opt-out, malformed policy and canonical ownership', t
   assert.throws(() => closeoutPolicy(f.repo), /invalid/);
 });
 
+for (const config of [null, {}, { retirement: { closeout_queue: true } }])
+test(`ingestion starts closeout only with explicit opt-in (${config === null ? 'no config' : JSON.stringify(config)})`, async t => {
+  const f = setup(t, { occupied: false }), file = path.join(f.scratch, 'report.md');
+  if (config === null) fs.unlinkSync(path.join(f.repo, '.lane.json'));
+  else fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify(config));
+  for (const source of ['report.ingested', 'review.verdict', 'item.closed'])
+    assert.equal(closeoutPolicy(f.repo, { source }), Boolean(config?.retirement?.closeout_queue));
+  fs.writeFileSync(file, '---\nrun: R-1\noutcome: done\nsummary: Complete.\nblockers: []\nproposals: []\n---\n');
+  const result = spawnSync(process.execPath, [cli, 'ingest', file], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const source = events(f).find(e => e.type === 'report.ingested');
+  assert.equal(source.report.outcome, 'done');
+  if (config?.retirement?.closeout_queue) {
+    assert.equal(source.closeout_targets.length, 1);
+    await waitForChange([f.eventFile], () => evaluations(f).length && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
+    assert.ok(f.herdrCalls().some(a => a[0] === 'workspace' && a[1] === 'list'));
+  } else {
+    assert.equal(source.closeout_targets, undefined);
+    assert.deepEqual(readCloseoutEntries(f.common), []);
+    assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false, 'ingestion never launches the closer');
+    assert.deepEqual(f.herdrCalls(), []);
+    assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);
+    f.land();
+    assert.deepEqual(readCloseoutEntries(f.common).map(e => e.signal), ['landed']);
+    f.drain(); assertRemoved(f);
+  }
+});
+
+test('publication rechecks report opt-in even when the committed source already has a binding', t => {
+  const f = setup(t, { occupied: false });
+  const { added } = transact(f.org, current => bindCloseoutSources({ cwd: f.repo, org: f.org, events: current, mutation: { add: [
+    { type: 'report.ingested', run: 'R-1', report: { outcome: 'done', summary: 'Complete' }, sha256: 'fixture' },
+  ] } }));
+  assert.equal(added[0].closeout_targets.length, 1);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
+  assert.deepEqual(publishCloseoutEvents({ cwd: f.repo, org: f.org, added, env: f.env }), []);
+  assert.deepEqual(readCloseoutEntries(f.common), []);
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false);
+  assert.deepEqual(f.herdrCalls(), []);
+});
+
 test('a hand-edited unknown desk route holds direct closeout policy and its consumer', t => {
   const f = setup(t, { occupied: false });
   const file = path.join(f.repo, '.lane.json');

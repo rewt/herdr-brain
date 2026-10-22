@@ -64,7 +64,7 @@ const probes = {
       enableCloseout();
       closeout.readyLane({ cwd: repo, org, topic: 'compat-topic', run: 'R-1', start: false });
       (await load('lib/closeout-consumer.mjs')).drainCloseout({ cwd: repo, org });
-      // Default-on report ingestion may already own the consumer. A contended
+      // An earlier publication may already own the consumer. A contended
       // drain returns immediately; observe its completion and pruning here.
       const { loadEvents } = await load('lib/store.mjs'), deadline = Date.now() + 10000;
       let events;

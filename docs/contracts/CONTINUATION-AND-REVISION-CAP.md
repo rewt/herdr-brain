@@ -140,7 +140,7 @@ ladder or waive any current review/readiness check.
 | Owner | herdr implements; opus accepts BCH parity |
 | Contract | This document; acceptance pending Astra review and opus parity ruling |
 | Implementation / release identity | ENG-444 lane commit recorded in R-598 report; supervisor fills release tag and exact commit at release, then BCH pin/activation separately |
-| Pilot evidence | Offline fixtures: `dispatch/test/dispatch.test.mjs`, `settle/test/round-cap.test.mjs`, `supervisor/test/supervisor.test.mjs`, `supervisor/test/autopilot.test.mjs`; phase B live pilot evidence to fill before retiring callers |
+| Pilot evidence | Offline fixtures: `dispatch/test/dispatch-admission.test.mjs`, `dispatch/test/dispatch-options.test.mjs`, `dispatch/test/dispatch-recovery.test.mjs`, `dispatch/test/dispatch-session.test.mjs`, `settle/test/round-cap.test.mjs`, `supervisor/test/supervisor.test.mjs`, `supervisor/test/autopilot.test.mjs`; phase B live pilot evidence to fill before retiring callers |
 | Rollback | Project-local re-pin to the prior accepted release; retain old caller paths until pilot acceptance. Older readers ignore additive metadata/result fields; a prior writer retains its own cap behavior, so rollback requires supervisor control of capped work |
 | Retire list | BCH `cont.sh` and `continue-run.sh` only after the phase B pilot and accepted parity; the cap/ladder prose stays BCH policy data |
 

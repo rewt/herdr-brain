@@ -47,8 +47,10 @@ test('a core-module change selects bounded one-hop extras and defers the expensi
   assert.ok(plan.files.length <= DEFAULT_MAX_FILES);
   assert.ok(plan.budget.estimated_ms <= DEFAULT_BUDGET_MS);
   assert.equal(plan.graph.hops, 1);
-  assert.ok(plan.files.includes('dispatch/test/dispatch.test.mjs')
-    || plan.covered.includes('dispatch/test/dispatch.test.mjs'));
+  for (const file of ['dispatch/test/dispatch-admission.test.mjs', 'dispatch/test/dispatch-options.test.mjs',
+    'dispatch/test/dispatch-recovery.test.mjs', 'dispatch/test/dispatch-session.test.mjs']) {
+    assert.ok(plan.files.includes(file) || plan.covered.includes(file));
+  }
   assert.ok(!plan.covered.includes('settle/test/validation-tiers.test.mjs'));
   assert.ok(plan.files.includes('settle/test/validation-tiers.test.mjs'));
   assert.ok(plan.covered.includes('promote/test/train.test.mjs'));

@@ -35,6 +35,18 @@ test('tier selection covers every current test once in promotion or release and 
   assert.throws(() => tierFiles('unknown', root), /unknown test tier/);
 });
 
+test('split dispatch files retain whole-file promotion coverage and exclude their shared fixture', () => {
+  const files = ['dispatch/test/dispatch-admission.test.mjs', 'dispatch/test/dispatch-options.test.mjs',
+    'dispatch/test/dispatch-recovery.test.mjs', 'dispatch/test/dispatch-session.test.mjs'];
+  for (const file of files) {
+    for (const tier of ['promotion', 'core']) assert.equal(tierFiles(tier, root).filter(candidate => candidate === file).length, 1);
+    assert.ok(!tierFiles('release', root).includes(file));
+  }
+  for (const tier of ['fast', 'promotion', 'release', 'core']) {
+    assert.ok(!tierFiles(tier, root).includes('dispatch/test/dispatch-fixture.mjs'));
+  }
+});
+
 test('split lane CLI files keep release placement and individual suite deadlines', () => {
   const files = ['lanes/test/lane.test.mjs', 'lanes/test/lane-dispatch.test.mjs', 'lanes/test/lane-review.test.mjs'];
   const release = tierFiles('release', root);

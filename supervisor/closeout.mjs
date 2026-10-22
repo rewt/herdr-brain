@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { loadedCloseoutCode } from '../lib/closeout-code.mjs';
 import { restartCloseout, joinedCloseoutAttempt } from '../lib/closeout-attempt.mjs';
 import { handoffCloseout, migrateCloseout } from '../lib/closeout-handoff.mjs';
 import { parseArgs } from 'node:util';
@@ -18,7 +19,7 @@ export function closeoutMain(argv = process.argv.slice(2)) {
   if (command === 'drain' && positionals.length === 1) {
     const keys = values.keys ? JSON.parse(values.keys) : undefined, deadline = values.deadline ? Number(values.deadline) : Date.now() + 180000;
     if ((keys && (!Array.isArray(keys) || keys.some(k => !/^[a-f0-9]{64}$/.test(k)))) || !Number.isSafeInteger(deadline)) throw Error('invalid closer keys/deadline');
-    result = drainCloseout({ cwd, org, keys, retirementOptions: { deadline } });
+    result = drainCloseout({ cwd, org, keys, loadedCode: loadedCloseoutCode, retirementOptions: { deadline } });
     if (result.restart) result.successor = restartCloseout({ cwd, org, restart: result.restart, deadline, noRestart: values['no-restart'] });
   }
   else if (command === 'handoff' && positionals.length === 1 && values.receipt) {

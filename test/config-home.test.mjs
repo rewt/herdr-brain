@@ -1031,3 +1031,11 @@ test('a first legacy config set route keeps its existing partial-declaration beh
   setConfig('routes.engineer.model', editedModel, { cwd: f.cwd });
   assert.deepEqual(readConfigJSON(path.join(f.cwd, '.lane.json')), { main: 'main', routes: { engineer: { model: editedModel } } });
 });
+
+test('a missing selected home retirement policy keeps instead of activating the absent-config default', async t => {
+  const f = configFixture(t); await f.adopt();
+  const selected = policyLocation(f.cwd, 'lane');
+  assert.ok(selected.home);
+  fs.unlinkSync(selected.file);
+  assert.throws(() => closeoutPolicy(f.cwd), /missing|unavailable|invalid/);
+});

@@ -65,7 +65,7 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
         items: e.heads.map(h => ({ ...h, item: h.item ?? state.runs.get(h.run).item, superseded: [] })), excluded: [] };
       const receipt = path.join(f.scratch, `${id}.record.json`); fs.writeFileSync(receipt, JSON.stringify(payload));
       f.receipts.set(id, receipt);
-      return { ...e, batch: id, tip: payload.tip, gate: payload.gate, fingerprint: digest(payload), heads: payload.items.map(({item,run,head}) => ({item,run,head})) };
+      return { ...e, batch: id, base: payload.base, tip: payload.tip, gate: payload.gate, fingerprint: digest(payload), heads: payload.items.map(({item,run,head}) => ({item,run,head})) };
     });
     const result = transact(f.org, current => bindCloseoutSources({ cwd: f.repo, org: f.org, events: current, mutation: { add } }), { actor: 'fixture' });
     publishCloseoutEvents({ cwd: f.repo, org: f.org, added: result.added, start: false, env: f.env });

@@ -72,10 +72,9 @@ An enqueue starts a detached finite closer unless a live closer owns the project
 claim. Concurrent starts use the existing birth-aware retirement lock. Enqueue
 and the consumer's empty-exit handoff share a short queue lock: an enqueue either
 reaches the existing consumer or starts another after its claim is released.
-An explicit drain waits up to 60 seconds for another process's consumer claim,
-outside the queue lock, then drains any remaining revisions before returning.
-Same-process re-entry returns `already_running` without evaluating targets; a
-claim that remains live or unknown past the wait also returns `already_running`.
+A contended drain returns `already_running` immediately without evaluating
+targets, including detached starts and same-process re-entry. Callers that need
+completion observe the running consumer's recorded outcome and claim release.
 There are no timers, debounce windows, idle polling or workspace sweeps in the
 closer. It reads queue entries and their targeted record/native/Git references,
 processes them in source sequence/key order, and exits when no new revision is

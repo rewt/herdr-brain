@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "sourceSha256": "311533e3693a2aa2438a4c17127970689ed515c9ab764dec60e78f66dab8e088",
+  "sourceSha256": "55ef1392934bf8bb20c5bc3b114d22ca9670de23939d56c14b5026478a3754be",
   "targets": {
     "darwin-arm64": {
-      "sha256": "67258651ab5dcc2396bb38155b81f4d1ec8fd338064c1393b6647176a01980d9",
+      "sha256": "710869947739d06c86d335d37d9d2507b1843ce7e597007d8c9aae7fda6a9b54",
       "flags": [
         "-arch",
         "arm64",
@@ -14,7 +14,7 @@
       ]
     },
     "darwin-x64": {
-      "sha256": "86d77bec47d684d70da8cb4e97988571fc1b3427ed80084c90b259a62b28aa2a",
+      "sha256": "026d634773fc808b14396baa1a1ef0072b54853b927c1a24b5d41b699024248b",
       "flags": [
         "-arch",
         "x86_64",

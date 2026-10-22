@@ -24,6 +24,25 @@ test('Darwin lookup uses a non-setuid source and preserves microsecond birth ide
   assert.doesNotMatch(calls[0][0], /(?:^|\/)ps$/);
 });
 
+test('Darwin argv refusal preserves the denied row diagnostic and never retries or supplies partial identities', () => {
+  for (const error of ['Operation not permitted', 'Permission denied']) {
+    let calls = 0;
+    const diagnostic = `KERN_PROCARGS2 pid=202 p_comm="foreign fixture": ${error}`;
+    const result = lookupProcess(undefined, { platform: 'darwin', execute: () => {
+      calls++;
+      return { ...output(row()), status: 125, stderr: `${diagnostic}\nprocess source unavailable or incomplete: ${error}\n` };
+    } });
+    assert.equal(calls, 1, 'permission refusals are never retried');
+    assert.equal(result.ok, false);
+    assert.equal(result.value, undefined, 'partial stdout never becomes process evidence');
+    assert.ok(result.error.includes(diagnostic));
+    const signals = [];
+    const tracker = createProcessTracker({ readIdentities: () => result, sendSignal: (...args) => signals.push(args), report: () => {} });
+    assert.equal(tracker.auditGroup(row()).ok, false);
+    assert.deepEqual(signals, []);
+  }
+});
+
 test('a reused PID with identical argv and a different birth time never licenses PID or group signals', () => {
   for (const group of [false, true]) {
     let current = row();
@@ -150,6 +169,19 @@ test('Darwin identity-only reads can date root-owned PID 1 from an unprivileged 
   const again = lookupProcess(1, { identityOnly: true });
   assert.equal(again.ok, true, again.error);
   assert.equal(again.value?.identity, result.value.identity);
+});
+
+test('Darwin native argv denial reports the kernel PID and comm while identity-only reads remain available', {
+  skip: process.platform !== 'darwin' ? 'Darwin native integration' : process.getuid() === 0 && 'requires an unprivileged caller',
+}, () => {
+  const identity = lookupProcess(1, { identityOnly: true });
+  assert.equal(identity.ok, true, identity.error);
+  const denied = lookupProcess(1);
+  assert.equal(denied.ok, false, 'another uid’s argv must remain refused');
+  assert.equal(denied.value, undefined);
+  const comm = identity.value.command.slice(1, -1);
+  assert.ok(denied.error.includes(`KERN_PROCARGS2 pid=1 p_comm=${JSON.stringify(comm)}:`), denied.error);
+  assert.match(denied.error, /status 125.*(?:Operation not permitted|Permission denied)/s);
 });
 
 test('Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution', async t => {

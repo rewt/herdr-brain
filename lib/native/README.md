@@ -10,6 +10,9 @@ When a live macOS process has no readable argv during exec/exit (`EINVAL`/`EIO`)
 its kernel command name supplies a bracketed command, as with Linux kernel
 threads; permission errors still refuse. Zombies are explicitly marked. A change
 between the full argv and the bracketed name prevents a command match.
+An argv refusal reports the denied PID and JSON-quoted kernel `p_comm` on stderr,
+alongside the original error. This diagnostic does not supply process evidence or
+permit a partial snapshot.
 Snapshots must include their live caller. Cleanup still confirms the exact birth
 and command immediately before signalling, and verifies group leadership.
 The host test slot uses `identityOnly` reads: start identity and ancestry come

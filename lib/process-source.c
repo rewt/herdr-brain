@@ -9,14 +9,14 @@
 #include <unistd.h>
 
 static int gone(void) { return errno == ESRCH || errno == ENOENT; }
-static void json_string(const char *text) {
-  putchar('"');
+static void json_string(FILE *stream, const char *text) {
+  fputc('"', stream);
   for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
-    if (*p == '"' || *p == '\\') printf("\\%c", *p);
-    else if (*p < 32) printf("\\u%04x", *p);
-    else putchar(*p);
+    if (*p == '"' || *p == '\\') fprintf(stream, "\\%c", *p);
+    else if (*p < 32) fprintf(stream, "\\u%04x", *p);
+    else fputc(*p, stream);
   }
-  putchar('"');
+  fputc('"', stream);
 }
 static int identity_only;
 // KERN_PROC_PID exposes births across uids without setuid. PROC_PIDTBSDINFO
@@ -69,7 +69,14 @@ static int lookup(pid_t pid) {
       // (e.g. during exec/exit). A denied read never receives this fallback.
       else if (error == EINVAL || error == EIO) {
         command = kernel_command(&after);
-      } else { errno = error; return -1; }
+      } else {
+        char comm[sizeof(before.kp_proc.p_comm) + 1] = {0};
+        memcpy(comm, before.kp_proc.p_comm, sizeof(before.kp_proc.p_comm));
+        fprintf(stderr, "KERN_PROCARGS2 pid=%d p_comm=", pid);
+        json_string(stderr, comm);
+        fprintf(stderr, ": %s\n", strerror(error));
+        errno = error; return -1;
+      }
     } else {
       if (size < sizeof(int)) { free(args); return -1; }
       int argc; memcpy(&argc, args, sizeof(argc));
@@ -102,7 +109,7 @@ static int lookup(pid_t pid) {
   printf("{\"pid\":%d,\"ppid\":%d,\"pgid\":%d,\"state\":\"%s\",\"identity\":\"%llu:%llu\",\"command\":",
     after.kp_proc.p_pid, after.kp_eproc.e_ppid, after.kp_eproc.e_pgid, states[(int)after.kp_proc.p_stat],
     (unsigned long long)after.kp_proc.p_starttime.tv_sec, (unsigned long long)after.kp_proc.p_starttime.tv_usec);
-  json_string(command); puts("}"); free(command); return 1;
+  json_string(stdout, command); puts("}"); free(command); return 1;
 }
 int main(int argc, char **argv) {
   if (argc > 1 && !strcmp(argv[1], "--identity")) { identity_only = 1; argc--; argv++; }

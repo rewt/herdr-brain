@@ -79,6 +79,10 @@ const refusals = [
   ['integration before release', s => { s.events.at(-1).seq = s.releases[0].seq; }],
   ['integration before successor report', s => { s.events.at(-1).seq = s.record.runs.get('R-2').report.seq; }],
   ['unreported original run', s => { s.record.runs.get('R-1').report = null; }],
+  ['abandoned unreported original run', s => {
+    s.events[2] = { type: 'run.abandoned', id: 'R-1', seq: s.events[2].seq };
+    s.record = fold(s.events);
+  }],
   ['item awaiting correction', s => {
     s.record.items.get('ENG-1').closed = null; s.record.runs.get('R-2').report.outcome = 'blocked';
   }],

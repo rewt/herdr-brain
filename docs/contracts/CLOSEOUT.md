@@ -1,7 +1,20 @@
 # Event-driven lane closeout
 
-The event queue is opt-in through the canonical project's selected lane policy
-(`.lane.json` for legacy projects):
+**ENG-530 design, 2026-10-22; authority review passed.** Option B of ENG-515
+passed its [authority review](../reviews/closer-locks/5f6af1c-r1.md) on
+`review-sol-max`, ahead of the named end Friday, 2026-10-23. This amendment
+changes only the contract; runtime behavior is unchanged. The current option A
+contract follows first. The amendment replaces its activation, landing-start
+and removal-lock rules in the implementation round, when implemented and adopted;
+all other safety and recovery requirements, including option A's landed or
+superseded rules, continue to apply. Current option A requires explicit opt-in
+for every queue source; default-on train landing and explicit named requests
+remain option B implementation work.
+
+## Current activation contract (option A)
+
+The event queue is currently opt-in through the canonical project's selected
+lane policy (`.lane.json` for legacy projects):
 
 ```json
 { "retirement": { "closeout_queue": true } }
@@ -13,7 +26,7 @@ absent `retirement`, an absent `closeout_queue`, and `false` retain existing
 foreground cleanup and never start a detached closer. Close-at-landing for every
 project by default (ENG-515 acceptance 3) is deferred to option B, which will
 separately address lock scope and landing closeout after reconciliation.
-This change leaves the consumer's lock handling and reconciliation unchanged.
+Current option A leaves the consumer's lock handling and reconciliation unchanged.
 A lane copy cannot change the canonical project's policy. Git-only trains
 without a recorded run have no queue target and retain guarded foreground
 cleanup. Manual Git landings emit no train event: use the named recovery or
@@ -148,7 +161,9 @@ revision is already pending. An empty promotion drain never retries history.
 The promotion completion checkpoint carries a bounded notification outbox until
 that targeted enqueue succeeds, so a restart can recover an interrupted handoff.
 
-Landed requests run immediately, apart from lifecycle-lock contention. The
+Under current option A, landed requests run immediately, apart from
+lifecycle-lock contention. The implementation round below instead requires the
+completed handoff before landing closeout starts. The
 lanes view exposes `finishedLanesOpenOver30Minutes` and a worktree's
 `finishedAt`, `finishedAgeMs` and `finishedOpenOver30Minutes`; the project summary
 publishes `lanes.finished_open_over_30_minutes`. This measures reconciliation to
@@ -190,3 +205,317 @@ guarded adapter, then creates and verifies the exact archive before removal.
 Supervisor inbox notification from `review.verdict` is a separate follow-up:
 the existing notice wire formats and delivery paths remain unchanged here.
 Completion is durable in the record, independently of background shell exit.
+
+## ENG-530 amendment: completion before closeout, narrow removal lock
+
+### Authority, scope and stable surfaces
+
+The closer remains a finite, model-free consumer of exact bound requests. A
+landing, report, closed item or elapsed time supplies no new deletion authority.
+Keep the existing common-directory ownership, terminal-chain, native identity,
+HOLD, focus, protected-slot/path, clean-Git, reference, preservation and archive
+guards. Session display metadata still grants no authority. No new scheduler,
+watcher, polling service or parallel retirement executor is introduced.
+
+`supervisor/reconcile.mjs` and `contrib/settle-watch.mjs` retain their bytes,
+paths, flags, output and completion semantics. In particular, reconcile retains
+its immediate `lane-promote.lock` acquisition and exact-evidence replay checks.
+The implementation seams are the existing completion callers/outbox, record CLI
+publication, closeout consumer and shared retirement adapter. This design needs
+no change to either stable file. Another identity's callers/configuration remain
+that identity's work at adoption; this amendment does not edit or re-pin BCH.
+
+R-731 is the motivating witness: a detached drain held `consumer.lock`,
+`retirement/owner.lock` and `lane-promote.lock` throughout native observation.
+Removing the report-ingestion trigger alone left landing closeout racing
+reconcile replay and fixture teardown (424/444 passing). ENG-530 changes the
+lock boundary and completion handoff, not the meaning of successful integration.
+
+### Completion handoff and replay
+
+The implementation round replaces option A's immediate landing-start rule with
+the following post-reconciliation handoff.
+
+`promotion.reconciled` commits the original run/topic/head binding. It is a
+durable landing fact, **not a start signal**: neither `record complete-batch`
+nor another event publisher may make that landing actionable or start its
+closer while the enclosing completion operation is still running. An already
+running drain must also skip such an unhanded landing. Publication and `event`
+recovery cannot bypass this rule.
+
+The native train uses its existing completion checkpoint and bounded
+`closeout_pending[]` outbox for the following handoff:
+
+1. Integrate once and reconcile using the existing successful gate and exact
+   prepared evidence. A failure retains the integrated tip and successful gate
+   with reconciliation pending; it creates no actionable landing closeout.
+2. After reconciliation has returned successfully **and released its promotion
+   lock**, durably mark that exact completion in the caller's checkpoint/outbox.
+   Bind canonical common directory/project/record, batch/job, reconciled source
+   sequence and fingerprint, run/topic/head and completion receipt digest. The
+   caller's live integration/reconciliation/callback references must be terminal
+   before handoff. Cleanup and notice delivery may remain pending.
+3. Outside promotion and queue transactions, publish the bound request with a
+   verifiable reference to that completion checkpoint. Acknowledge the outbox
+   only after the exact request/handoff is durable. A source event, absence of a
+   lock, PID disappearance or delay alone cannot substitute for the checkpoint.
+   A handoff is a resolving revision only for its exact keys; unrelated or
+   historical requests do not become runnable as a side effect.
+4. Start or notify the finite closer. The completion caller awaits the bounded
+   attempt for its own keys, outside locks/resource claims needed by the closer,
+   before declaring cleanup complete or exiting as its last cleanup owner. A
+   KEEP, deadline or startup failure becomes durable cleanup-pending with its
+   resolving event/retry; integration remains successful. Completion does not
+   wait indefinitely for human holds, nor claim that a launched detached child
+   has finished cleanup.
+   A deadline stops new effects and joins the finite attempt; it must not abandon
+   a child still able to write into a fixture being torn down. An unresponsive
+   surviving child retains its ownership/hold and requires inspection.
+
+For callers of the unchanged standalone reconcile adapter, the caller performs
+the same tail **after successful `finish` returns**, following any required
+refresh (after process exit for a CLI child). A refresh/delta-acceptance receipt
+alone is not reconciliation completion. A direct `complete-batch` caller likewise
+performs its tail after its CLI child exits successfully; the record writer
+never infers that it owns the enclosing completion boundary. The tail explicitly
+binds the completion it owns; do not guess from argv, ancestor PIDs or a worker
+label. A bare/manual invocation with no post-return tail retains its source
+binding as awaiting completion handoff. An explicit named recovery verifies
+the original completion evidence and current
+Git/record state, then records that handoff. It never silently launches from
+inside the stable adapter's record-CLI child. Thus ordinary train landings are
+automatic in every project, while unsupported manual completion stays safe.
+
+Identical reconcile replay produces no new binding, handoff or cleanup effect;
+only an unacknowledged exact outbox entry or a named deferral can be retried.
+Changed evidence, a reopened item, a newer run or a different branch generation
+cannot acquire fresh retirement authority from the old completion. If a caller
+dies after the record commit but before handoff, resume bookkeeping, verify the
+same receipt/fingerprint and terminal references, and publish the missing tail.
+An uncertain or failed completion never becomes successful merely because its
+lock disappeared. A refusal before record commit requires the existing
+reconciliation repair/refresh; closeout does not accept a delta or rerun a gate.
+
+A replay during native observation/planning must be able to take the promotion
+lock. There remains a real contention boundary: an arbitrary direct invocation
+of the unchanged, zero-wait reconcile can arrive during actual Git removal and
+receive its existing `locked:` refusal. The caller retains the same prepared
+receipt and retries bookkeeping after that exact removal owner releases the
+lock, within its ordinary operation deadline; a second refusal stays pending.
+It never repeats validation or integration. Promise neither that a short lock
+is contention-free nor that standalone reconcile has gained a wait/retry flag.
+A requirement that even arbitrary overlapping raw replays never refuse would
+need an explicit operator decision about the stable reconcile behavior; it is
+not assumed by this design.
+
+### Observe, prepare, then guard removal
+
+The adapter must split its current `removeLane`/`resumeLaneRemoval` path; merely
+moving the consumer's acquisition around today's whole `removeLane` still holds
+the lock through native scans, evidence copying and workspace close.
+
+| Phase | Permitted work and failure/recovery |
+| --- | --- |
+| Claim and select | Claim the finite consumer and shared retirement owner; validate owning record, policy, source and completed handoff. Missing/foreign/unknown input stays KEEP, with no guessed target. A contended live owner leaves the durable request for its existing handoff or explicit drain. |
+| Observe and release | With **no promotion lock**, observe native/Git/record facts, plan, and perform separately guarded pane/session release and shell close under existing tab claims. Each effect has its existing pre-input intent and exact identity receipt. Re-observe/replan after each effect; never replay a pre-release plan. A changed occupant, hold, live reference or unknown observation keeps the remainder. An interrupted native effect resumes only through its bound intent/exit/absence evidence. |
+| Prepare removal | With **no promotion lock**, collect and hash preservation evidence outside swept paths, prepare the scratch manifest without disposing it, and select one Git-removal candidate using the existing pure planner. Bind source/handoff, filesystem and registered Git identities, branch/reflog generation, exact tip, integration base/tip (or authorized archive disposition), native vacancy proof, relevant record/reference/policy inputs, code epoch and removal plan token. Copy/hash or preflight failure keeps the lane; a proven duplicate copy can be discarded only while its verified original survives. |
+| Final observation | With **no promotion lock**, repeat the executor's final native vacancy/identity and live-process/reference checks after expensive copying/hashing. Compare the selected candidate's native inputs. No native input is made current by reading back a saved token. A detected change discards the candidate and keeps; a later resolving revision can plan afresh. |
+| Guarded Git removal | Immediately try `lane-promote.lock`, with **no acquisition wait**. On contention discard the observation/plan, record `lifecycle-lock-released`, and keep; a retry starts at observation. Under the lock revalidate the inputs below and compare the recomputed candidate token before any Git mutation. Perform only the guarded archive-tag/worktree/branch operations and their necessary local checks and durable effect receipts. Release in `finally` on success, refusal or failure. |
+| Finish | After releasing the promotion lock, execute only the already authorized scratch disposal and separately guarded empty-native-workspace close. Native observation/close, slow evidence work and reporting never extend the promotion lock. Record completion only after all required effects are witnessed; otherwise retain preservation evidence and cleanup-pending. Prune a request only after durable exact completion, under the short queue transaction. |
+
+Under the promotion lock, check the exact project/record and canonical common
+directory, source and handoff receipts, worktree and Git-directory filesystem
+identities/registration, branch name/reflog generation and unchanged tip. Recheck
+cleanliness including untracked files, index safety flags and Git metadata locks;
+prove that the exact landed head is still integrated into current main (or that
+the separately authorized parked/archive proof still holds). Recheck HOLD,
+protected paths/slots, policy, relevant run/chain disposition, pending jobs,
+callbacks and resource/CWD references. Revalidate the preservation manifest's
+identity/digest and archive destination/collision proof, using the completed
+external preflight rather than copying or rehashing the whole evidence tree
+inside this lock. Changed preservation inputs require a new external preflight
+and final observation. Recompute and compare the selected removal token using
+those fresh local inputs and the immediately preceding native proof; a different
+token, missing input or changed main/code
+epoch refuses and keeps. Do not invoke the planner under the promotion lock or
+replace a mismatching plan with a more convenient one there.
+
+Native observation is not atomic with Git, and the promotion lock does not lock
+Herdr or human actions today. Preserve the existing final native check directly
+before the effect boundary: no lock wait, asynchronous yield, copying or other
+slow work may intervene between it and the immediate acquisition/revalidation.
+The implementation must identify every existing removal-token input and show
+how it is freshly checked in this split. It may not drop native/protected-role
+inputs, invent a native generation API, or claim that hashing an old snapshot
+detects a new occupant. If an input cannot be validated with this boundary,
+refuse that removal and return the unresolved guard to authority review; default
+on must not be enabled on the strength of a stale-token workaround.
+
+Create a needed archive tag only under the promotion lock, without overwriting
+a differing tag; verify it resolves durably to the bound tip before removal.
+Use non-forced worktree removal and exact branch-generation checks, retaining
+the existing recoverable archive rule for unintegrated work. A tag-only success
+does not complete retirement. If worktree removal succeeds but branch removal
+or receipt append fails, keep the external preservation proof and pre-effect
+intent; retry only after proving the original worktree's absence, current
+integration/archive, unchanged remaining branch and current safety guards under
+a fresh removal lock. Never adopt a replacement path, branch, pane or workspace.
+Scratch/workspace failure retries that phase without repeating successful Git
+effects. No failed archive/preservation step permits removal, and no failure
+reclassifies an integrated landing as unlanded.
+
+### Locks, order and crash recovery
+
+All paths below are relative to the canonical Git common directory, except the
+owning record lock. No new long-lived completion or reconciliation lock is
+required; durable completion evidence is a prerequisite, not another lock.
+
+Actual worktree/ref removal can outlast a quick local check; acquisition wait
+and lock-holding duration are different. Bound each effect by the existing
+retirement/Git deadline and reserve enough time for the removal steps before
+starting, rather than describing this as a millisecond lease.
+
+| Lock | Scope and recovery |
+| --- | --- |
+| `closeout/queue.lock` | Short publication, handoff acknowledgement, selection/pruning and empty-exit transactions only; no native calls, child waits or Git effects. The startup claim under it tries `consumer.lock` without waiting. Use the existing birth-aware dead-owner recovery, including its serialized `.recovery` claim; live/unknown owners keep. |
+| `closeout/consumer.lock` | One finite drain, including observation; released atomically with the empty-queue handoff under `queue.lock`. Another enqueue either reaches that owner or starts a successor. Crash recovery proves process birth/death and does not duplicate an uncertain native effect. |
+| `retirement/owner.lock` | The existing shared claim for the finite retirement pass and policy transfer. Updated housekeeping/legacy cleanup use it too. It may span observation; it cannot make a promotion/reconcile caller wait for a native scan. Live/unknown ownership keeps; proven-dead recovery retains the existing serialized recovery protocol. |
+| `retirement/tabs/<tab-hash>` | Existing per-tab native intent/release/exit/close serialization; release before entering Git removal. Multiple tab claims use immediate refusals or a consistent order, never opposing waits. Resume only the same bound occupant/intent. |
+| `lane-promote.lock` | For the closer, only guarded Git removal and local revalidation/effect receipts; never native observation/planning, agent exit waits, workspace close, evidence copying or scratch disposal. Closer acquisition is immediate. Promotion/reconcile keep their existing scopes and acquisition behavior. On crash, inspect owner and surviving Git/gate children; never automatically unlink this lock because a parent died. |
+| `<record>/lock` | Existing short record transactions for immutable source, handoff, intent/effect and evaluation evidence. Release before publication, starting/joining a worker or waiting for any lifecycle lock. Unknown/torn record state keeps; use existing store recovery, never hand-edit `events.jsonl`. |
+| `promote/queue.lock`, `promote/worker.lock`, `promote/cleanup.lock` and Git's own ref/index/worktree locks | Keep their existing owners. Queue transactions only publish/checkpoint; callers never wait for the closer while holding a queue transaction or promotion/cleanup claim that the closer needs. A train worker may retain its bookkeeping claim while joining only if its resource references are already terminal and the closer needs no such claim. Foreign Git locks are refusal inputs, not locks to delete. Standard-slot/controller or housekeeping locks are likewise read as KEEP/ownership evidence, never reclaimed by the closer. |
+
+The blocking order is consumer claim, then retirement owner, then **either** tab
+claim(s) for native effects **or** promotion lock for Git effects, then a short
+record append if needed; tab claims and promotion lock never overlap. A running
+consumer can take short queue transactions while retaining its claim/owner,
+but no queue holder waits for those claims: startup tries the consumer claim,
+and record writers release the record lock before entering the queue. If a
+queue transaction needs a diagnostic append, queue precedes record; no record
+transaction waits on queue. Promotion/reconcile may hold promotion then record,
+but must not acquire/wait for retirement-owner, consumer or tab claims from
+there. The completion tail and closer join occur after releasing such claims.
+Recovery claims nest only inside recovery of their own birth-aware lock, with
+the existing dead-owner recheck. A lock timeout is a deferral, not deletion
+authority, a new timer or a reason to repeat a successful gate.
+
+### Default-on policy and older readers
+
+Enable the new default only in the implementation release that supplies both
+the completion handoff and narrowed guarded removal with their witnesses.
+Current option A requires explicit `true` for every queue source, including
+train landing and named requests. The implementation round changes absent
+configuration to the default-on policy below; automatic report, review and
+dropped-item sources remain opt-in.
+Read project-only policy from config-home `lane.json` when selected, otherwise
+canonical `.lane.json`; a lane copy, inherited identity setting or environment
+override cannot enable or weaken retirement. Missing configuration is distinct
+from unreadable/malformed selected configuration: the latter always keeps.
+
+| Canonical `retirement.closeout_queue` | Implemented option B policy |
+| --- | --- |
+| Absent, including no project config or empty config | Train `landed` closeout and explicit named ready/recovery are enabled in every project. Automatic report, review and dropped-item sources remain off, as in current option A. No retrospective discovery/sweep. |
+| `true` | Retains explicit opt-in to the full set of automatic sources and their existing signal-specific guards; landed work still requires the completion handoff. It is redundant for train landing alone; removing it does not disable landing. |
+| `false` | Explicit queue opt-out: no new bindings, publication, worker start or queue effects. Retain pending requests/evidence. Explicit direct guarded recovery remains available under the current contract. Re-enabling requires a fresh guard evaluation, never a cached permission. |
+| Invalid/unavailable selected policy | KEEP with a policy diagnostic; never treat an error as an absent/default-on config. |
+
+Activation still transfers retirement ownership under the shared claim. Before
+using the new default, the project owner stops/replaces legacy housekeeping
+(including custom schedules) and any old drain, and inspects surviving children;
+unknown old ownership keeps. Updated housekeeping skips its legacy lane/tidy
+executor for enabled queue sources and promotion delegates to the closer. There
+must never be two executors. Opt-out or downgrade also requires an orderly
+owner-controlled transfer, rather than starting legacy cleanup over a live
+drain. Lane workers do not manage real schedules or another identity's files.
+
+The new handoff is safety-critical: do **not** add an ignorable field to a
+`closeout-entry/v1` request and expect old consumers to enforce it. Use a
+`closeout-entry/v2` execution envelope in the same entries directory, preserving
+the original immutable target/source/key and binding the verified completion
+handoff for landed work. Existing v1 queue readers reject the unknown schema
+and keep; pre-queue releases ignore the directory. Neither behavior is default-on
+support. Old policy readers still see absent as off and `true` as opt-in; an
+upgrade/re-pin is required to obtain the new default. Old folds ignore additive
+handoff/effect events and derive their existing status normally.
+
+Pending v1 requests are held by the new consumer until a named migration/recovery
+verifies their original source binding, exact current identities and required
+completion tail. Under the shared owner and short queue transaction, retain a
+durable copy/digest of the old envelope and append migration evidence before
+atomically publishing v2 with the **same target**, never rebinding from a topic.
+An interrupted conversion resumes only that recorded conversion; conflicts keep
+both evidence and target. The migration is a resolving revision only for the
+converted keys. Completed v1 receipts stay completed and pruned; no
+historical source is re-enqueued merely because the default changed. The
+implementation updates the format registry/inventory and compatibility probes
+alongside the v2 writer/reader; this design-only amendment changes neither.
+
+### Code freshness
+
+At launch bind the closer's physical code root and immutable release/manifest
+identity (or clean checkout commit), plus the project's current main-tip epoch;
+verify that identity across module loading, before selecting each entry and
+again at the guarded removal boundary. A moved main or changed/unprovable code
+identity invalidates the plan: retain the request, release claims and exit before
+evaluating the newer landing or performing another effect. Hand the exact keys
+to one fresh finite process through the existing outbox/empty-exit protocol,
+resolving code again under the project's adopted release rules; a mutable Brain
+checkout must load the newly landed bytes, while an immutable installed release
+keeps its explicit project pin. Do not hot-reload modules, override a run's bound
+release or follow `current` mid-effect. Record old/new epoch and code identity
+so a drain begun just before a fast-forward cannot silently process that
+landing using its pre-landing imports. Failed restart leaves cleanup pending
+for explicit drain, without a restart loop or a new service.
+
+### Required implementation witnesses (not tests run by this design)
+
+Use disposable offline projects, explicit scratch fleet/native/process sources,
+deterministic barriers and joined finite children; never touch a live project
+schedule or native workspace. Preserve the existing oracle and lifecycle guards.
+The implementation round selects focused tests within its own ask; this list is
+an evidence contract, not authorization to run a tier in the design lane.
+
+- Pause native observation, agent exit and evidence preparation separately:
+  show consumer/retirement claims, absence of `lane-promote.lock`, and successful
+  real reconcile/replay while paused. Pause guarded Git removal: show promotion
+  exclusion, immediate closer deferral if reconcile already owns the lock, and
+  the documented direct-replay refusal/recovery if removal wins.
+- Mutate tip/branch generation, worktree registration/filesystem identity,
+  cleanliness/index flags, integration, source/handoff, relevant record/job/
+  callback/reference, HOLD/protected slots, preservation/archive destination and
+  token inputs between preparation and guard. Each negative control keeps, with
+  no unauthorized tag/removal. Include native occupant/vacancy changes before
+  the final check and lock-contention invalidation; show the token-input mapping.
+  An unchanged positive control removes exactly the bound integrated lane.
+- Reproduce R-731's exact reconcile replay case, including inherited wrong
+  `ORG_DIR`, repeated finish and finish after reopen: same-evidence replay stays
+  idempotent, changed evidence refuses, and reopening supplies no new cleanup
+  authority. Show no closer starts/evaluates before the successful tail, even
+  when another consumer is already active.
+- Reproduce the asked-and-answered question followed by a **plain note**:
+  original finish refuses its delta, explicit refresh preserves the accepted
+  evidence, finish then hands off once. The decision-note control still refuses
+  refresh. Join the targeted closer before fixture teardown; no late writer
+  recreates Git metadata or produces `ENOTEMPTY` during teardown.
+- Exercise real autopilot/settle/train landing paths: awaited and unawaited
+  supervisor wake, deferred test evidence, record-ingest proof variants and the
+  non-blocking proposal case. Show one successful gate/integration, post-reconcile
+  closeout, durable cleanup outcome and no detached writer beyond fixture exit.
+  KEEP cases retain their exact reason and recovery without another gate.
+- Interrupt before/after reconciliation commit, completion-tail checkpoint,
+  outbox publication/ack, archive, preservation intent, worktree removal, branch
+  removal, native workspace close and completion/prune. Restart/replay proves
+  exact identity and no duplicate effects, lost handoff or stranded request;
+  unknown owners and surviving children stay held. Show producer/empty-exit races
+  and the declared lock order, including migration versus a legacy executor.
+- With absent/empty/true/false/invalid project policy, prove the policy table in
+  another disposable project as well as Brain, and canonical/config-home
+  precedence over lane/inherited/foreign-record inputs. Show v1 pending recovery,
+  v2 rejection/KEEP by old readers, old-fold behavior, re-enable/downgrade holds
+  and no blanket historical sweep.
+- Start a drain before a fast-forward, release its barrier after the newer
+  landing, and show it exits without evaluating/effecting that landing. Its
+  successor records the newly resolved code identity and epoch, processes the
+  original binding once, and retains explicit installed-release pins. Finally
+  verify both BCH stable files byte-for-byte and exercise their unchanged flags,
+  outputs, exact-evidence refusal and replay behavior.

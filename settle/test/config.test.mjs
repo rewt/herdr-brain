@@ -185,7 +185,12 @@ test('CLI desk overrides are consumed by settle without adopting routes or losin
   assert.equal(own.validate, 'node --test test.mjs'); assert.equal(Object.hasOwn(own, 'routes'), false);
   f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Configure desks through record CLI']); f.git(['rebase', 'main'], f.workspace);
   const run = f.start(); f.commit('correct\n'); f.report(run);
-  assert.equal(result(f.settle(run)).result, 'promotable');
+  const settled = f.settle(run);
+  if (settled.status !== 0) {
+    const log = path.join(f.org, 'settle', `${run}.review-r1.log`);
+    assert.fail(`${settled.stderr || settled.stdout}\n${fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : 'No reviewer log was written'}`);
+  }
+  assert.equal(result(settled).result, 'promotable');
   const job = receipt(f, run);
   assert.equal(job.reviewRoute, 'review-codex'); assert.equal(job.fixRoute, 'engineer-xhigh'); assert.equal(job.timeout, 15); assert.equal(job.reuse, false); assert.equal(job.to, 'project-supervisor');
   assert.equal(job.reviewPolicy.cap, 2); assert.equal(job.reviewPolicy.source, 'project');

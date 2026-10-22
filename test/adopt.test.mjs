@@ -14,6 +14,8 @@ import { plan } from '../sessions/plan.mjs';
 import { plan as setupPlan } from '../setup/setup.mjs';
 import { digest } from '../lib/digest.mjs';
 import { initOrg } from '../lib/store.mjs';
+import { readSessionFacts } from '../sessions/observe.mjs';
+import { canonicalProject } from '../sessions/project.mjs';
 
 async function command(argv, options) {
   const stdout = process.stdout.write, output = [];
@@ -21,6 +23,41 @@ async function command(argv, options) {
   try { await adoptCommand(argv, options); } finally { process.stdout.write = stdout; }
   return JSON.parse(output.join(''));
 }
+
+test('adopt inspect ignores terminal promotion history and refuses every live writer position', async t => {
+  const f = configFixture(t), project = canonicalProject(f.cwd), file = path.join(project.common, 'promote/queue.json');
+  fs.mkdirSync(path.dirname(file));
+  const job = { id: 'writer', item: 'ENG-1', run: 'R-1', cwd: f.cwd };
+  const idle = { identity: project.common, pending: [], current: null, interrupted: [],
+    results: ['refused', 'timeout', 'promoted', 'cancelled'].map(outcome => ({ ...job, id: `old-${outcome}`, outcome })) };
+  const inspectArgs = ['.', '--inspect', '--expires', new Date(Date.now() + 3600000).toISOString()];
+  const save = queue => { const bytes = JSON.stringify(queue); fs.writeFileSync(file, bytes); return bytes; };
+  const bytes = save(idle);
+  assert.deepEqual(readSessionFacts({ project, env: f.env }).references, []);
+  const captured = await command(inspectArgs, f.options);
+  assert.equal(captured.scope.common, project.common); assert.deepEqual(captured.native_actions, []);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+
+  const batch = result => ({ id: 'batch', phase: 'batching', jobs: [job],
+    ...(result ? { results: [{ job, result }] } : {}) });
+  const cases = [
+    { pending: [job] },
+    { current: batch() },
+    { interrupted: [batch({ outcome: 'interrupted' })] },
+    { interrupted: [{ ...batch({ outcome: 'interrupted', code: 'PROMOTE_NATIVE_PTMX_REFUSED' }), native_refusal: { code: 'PROMOTE_NATIVE_PTMX_REFUSED' } }] },
+    { current: batch({ outcome: 'promoted', reconciliation: { state: 'pending' } }) },
+    { current: batch({ outcome: 'promoted', reconciliation: { state: 'complete' }, replacement_pending: true }) },
+  ];
+  for (const active of cases) {
+    const before = save({ ...idle, ...active });
+    assert.deepEqual(readSessionFacts({ project, env: f.env }).references, [{ kind: 'promotion', job: job.id, item: job.item, run: job.run, cwd: job.cwd }]);
+    await assert.rejects(command(inspectArgs, f.options), /adopt requires owner drain of queued\/current promotion writers/);
+    await assert.rejects(adopt(f.options), /adopt requires owner drain of queued\/current promotion writers/);
+    assert.equal(fs.readFileSync(file, 'utf8'), before);
+  }
+  save(idle);
+  assert.equal((await command(inspectArgs, f.options)).scope.common, project.common);
+});
 
 test('identity metadata names refuse before policy, audit, staging, scope or link publication', async t => {
   const f = configFixture(t), events = f.events();

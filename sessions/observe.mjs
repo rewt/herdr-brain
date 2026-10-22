@@ -86,9 +86,17 @@ export function readSessionFacts({ project, env = process.env, items } = {}) {
     // Promotion's complete retained history needs its own byte budget.
     const saved = parseUniqueJson(readPlainFile(file), { maxBytes: 64 * 1024 * 1024 });
     if (saved.identity !== project.common || !Array.isArray(saved.pending) || !Array.isArray(saved.results)) throw Error('invalid canonical promotion queue');
-    return queueJobs(saved);
+    // Only pending/current/interrupted positions can still write. Retained
+    // results are history, even when their last outcome was an interruption.
+    return queueJobs({ ...saved, results: [] }).filter(job => {
+      const result = job.result ?? job;
+      // Promotion releases refusals/timeouts; promoted members can still own
+      // reconciliation or lane replacement (see completion/finishBatchJob).
+      if (['refused', 'timeout', 'cancelled'].includes(result.outcome)) return false;
+      return result.outcome !== 'promoted' || result.reconciliation?.state === 'pending' || result.replacement_pending;
+    });
   });
-  for (const job of queue ?? []) if (!['promoted', 'cancelled'].includes(job.outcome)) references.references.push({
+  for (const job of queue ?? []) references.references.push({
     kind: 'promotion', job: job.id, item: job.item, run: job.run, cwd: job.cwd });
   const stopped = attempt('STOP', () => [org && path.join(org, 'STOP'), path.join(project.root, '.lane/supervisor/STOP')].filter(Boolean).some(present));
   const closeHold = retirementHold(project.root);

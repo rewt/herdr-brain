@@ -533,6 +533,47 @@ test('fact readers observe canonical STOP/close hold, dispatch/watch receipts, m
   assert.ok(readSessionFacts({ project: f.project, env: f.env }).errors.includes('incomplete record tail'));
 });
 
+test('promotion facts keep live queue members and recovery checkpoints without reviving retained results', t => {
+  const f = fixture(t, []), file = path.join(f.project.common, 'promote/queue.json');
+  fs.mkdirSync(path.dirname(file));
+  const job = id => ({ id, item: 'ENG-232', run: 'R-1', cwd: f.cwd });
+  const history = ['refused', 'timeout', 'promoted', 'cancelled', 'interrupted'].map(outcome => ({ ...job(`old-${outcome}`), outcome }));
+  const queue = { identity: f.project.common, pending: [], current: null, interrupted: [], results: history };
+  const observe = expected => {
+    const bytes = JSON.stringify(queue); fs.writeFileSync(file, bytes);
+    const facts = readSessionFacts({ project: f.project, env: f.env });
+    assert.deepEqual(facts.errors, []);
+    assert.deepEqual(facts.references, expected.map(id => ({ kind: 'promotion', job: id, item: 'ENG-232', run: 'R-1', cwd: f.cwd })));
+    assert.equal(fs.readFileSync(file, 'utf8'), bytes, 'observation preserves all history and checkpoints');
+  };
+  observe([]);
+  queue.pending = [job('old-refused')]; // The active position supersedes history for the same request ID.
+  queue.current = { id: 'batch', phase: 'batching', jobs: [job('current')] };
+  queue.interrupted = [{ id: 'suspended', phase: 'batching', jobs: [job('interrupted')],
+    results: [{ job: job('interrupted'), result: { outcome: 'interrupted', code: 'PROMOTE_NATIVE_PTMX_REFUSED' } }],
+    native_refusal: { code: 'PROMOTE_NATIVE_PTMX_REFUSED', reason: 'prior checkpoints retained; automatic replay blocked' } }];
+  observe(['interrupted', 'current', 'old-refused']);
+
+  // A current batch can contain both finished members and live bookkeeping.
+  const finished = ['refused', 'timeout', 'promoted', 'cancelled'].map(outcome => ({ job: job(`finished-${outcome}`), result: { outcome } }));
+  queue.current.results = [...finished,
+    { job: job('reconciling'), result: { outcome: 'promoted', reconciliation: { state: 'pending' } } },
+    { job: job('replacing'), result: { outcome: 'promoted', reconciliation: { state: 'complete' }, replacement_pending: true } }];
+  queue.current.jobs.push(...queue.current.results.map(member => member.job));
+  queue.current.phase = 'batch-delivering';
+  observe(['interrupted', 'current', 'reconciling', 'replacing', 'old-refused']);
+
+  queue.pending = []; queue.interrupted = [];
+  queue.current = { ...job('legacy-current'), phase: 'promoting' };
+  observe(['legacy-current']);
+  queue.current = { ...job('legacy-current'), phase: 'promoted', tip: 'a'.repeat(40) };
+  observe(['legacy-current']); // Legacy cleanup can still publish record bookkeeping.
+  for (const outcome of ['refused', 'timeout', 'promoted', 'cancelled']) {
+    queue.current = { ...job('legacy-current'), phase: 'completed', result: { outcome } };
+    observe([]);
+  }
+});
+
 test('fact reader accepts full promotion history over 1 MiB with unchanged references and strict queue checks', t => {
   const f = fixture(t, []), file = path.join(f.project.common, 'promote/queue.json');
   fs.mkdirSync(path.dirname(file));

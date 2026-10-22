@@ -15,6 +15,15 @@ const processInfo = () => ({ shell_pid: 5, process_tree_complete: true,
   foreground_processes: [{ pid: 5, name: 'zsh' }], process_tree: [shell()] });
 const nextMeta = meta => ({ ...meta, agent: 'successor', pane: 'w:q', terminal_id: 'next-terminal', agent_session_id: 'next-session' });
 const target = plan => [...plan.close, ...plan.keep].find(row => row.tab_id === 'w:t');
+const agentInfo = (info, helpers = true) => ({ ...info,
+  foreground_processes: [{ pid: 10, name: 'codex', identity: 'agent' }],
+  process_tree: [...info.process_tree, { pid: 10, ppid: info.shell_pid, identity: 'agent', command: '[codex]', state: 'S' },
+    ...(helpers ? [{ pid: 20, ppid: 10, identity: 'helper', command: '[node]', state: 'S' }] : [])] });
+function idleAgent(s, helpers = true) {
+  s.panes[0].shellOnly = false;
+  s.panes[0].process_info = agentInfo(s.panes[0].process_info, helpers);
+  return s;
+}
 
 function snapshot() {
   const meta = { agent: 'worker', pane: 'w:p', worker_workspace: 'w', terminal_id: 'terminal', agent_session_id: 'session', lane: 'topic' };
@@ -49,6 +58,28 @@ test('a superseded released bare shell closes against the exact landed successor
     exit: () => assert.fail('a stale release cannot authorize native exit') });
   assert.deepEqual(closed, ['w:t']); assert.equal(result[0].action, 'closed');
   assert.deepEqual(s, before, 'neither the release nor the record is rewritten');
+  assert.equal(s.releases[0].head, oldHead);
+});
+
+for (const helpers of [false, true]) for (const status of ['idle', 'done']) test(`a stale released ${status} agent exits before close (${helpers ? 'with helpers' : 'agent only'})`, () => {
+  const s = idleAgent(snapshot(), helpers), actions = [];
+  s.agents[0].agent_status = status;
+  const plan = planRetirement(s);
+  assert.equal(target(plan).decision, 'exit');
+  assert.equal(target(plan).why, 'recorded idle agent and its descendants; exit before closing the shell');
+  const result = executeRetirement(plan, { observe: () => s,
+    exit: candidate => {
+      assert.equal(candidate.exit, '/quit'); actions.push('exit-requested');
+      s.panes[0].shellOnly = true; s.panes[0].process_info = processInfo();
+    },
+    exitObserved: candidate => {
+      actions.push('exit-observed');
+      const { pid, identity, command } = shell();
+      assert.deepEqual(candidate.shell, { pid, identity, command });
+    },
+    close: id => actions.push(id) });
+  assert.deepEqual(actions, ['exit-requested', 'exit-observed', 'w:t']);
+  assert.equal(result[0].action, 'closed');
   assert.equal(s.releases[0].head, oldHead);
 });
 
@@ -101,13 +132,12 @@ const refusals = [
   ['replacement terminal', s => { s.agents[0].terminal_id = s.panes[0].terminal_id = 'replacement'; }],
   ['replacement pane', s => { s.agents[0].pane_id = s.panes[0].pane_id = 'w:replacement'; }],
   ['mismatched pane terminal', s => { s.panes[0].terminal_id = 'replacement'; }],
-  ['live foreground agent', s => {
-    s.panes[0].shellOnly = false;
-    s.panes[0].process_info.foreground_processes = [{ pid: 10, name: 'codex' }];
-    s.panes[0].process_info.process_tree.push({ pid: 10, ppid: 5, identity: 'agent', command: '[codex]', state: 'S' });
+  ['working agent', s => { s.agents[0].agent_status = 'working'; }],
+  ['background process', s => { s.panes[0].process_info.process_tree.push({ pid: 30, ppid: 5, identity: 'job', command: '[sleep]', state: 'S' }); }],
+  ['raw zombie child', s => {
+    const info = s.panes[0].process_info;
+    info.process_tree_raw = [...info.process_tree, { pid: 30, ppid: 10, identity: 'job', command: '[sleep]', state: 'Z' }];
   }],
-  ['background process', s => { s.panes[0].process_info.process_tree.push({ pid: 10, identity: 'job', command: '[sleep]', state: 'S' }); }],
-  ['raw zombie child', s => { s.panes[0].process_info.process_tree_raw = [shell(), { pid: 10, identity: 'job', command: '[sleep]', state: 'Z' }]; }],
   ['incomplete process tree', s => { s.panes[0].process_info.process_tree_complete = false; }],
   ['non-shell process', s => { s.panes[0].process_info.process_tree[0].command = '[sleep]'; }],
   ['foreground birth disagreement', s => { s.panes[0].process_info.foreground_processes[0].identity = 'replacement'; }],
@@ -125,14 +155,37 @@ for (const field of ['pane', 'terminal_id', 'agent_session_id']) {
     s.record.runs.set('R-3', { id: 'R-3', item: 'ENG-3', workspace: '/repo/lane', meta, started: { seq: 9 }, report: { seq: 10, outcome: 'done' } });
   }]);
 }
-for (const [name, change] of refusals) test(`a stale release keeps on ${name} in planning and at execution`, () => {
-  const s = snapshot(), plan = planRetirement(s); change(s);
-  assert.equal(target(plan).decision, 'release', 'positive control must reach the new path');
+for (const live of [false, true]) for (const [name, change] of refusals) test(`a stale release keeps its ${live ? 'idle agent' : 'bare shell'} on ${name} in planning and at execution`, () => {
+  const s = live ? idleAgent(snapshot()) : snapshot(), plan = planRetirement(s); change(s);
+  assert.equal(target(plan).decision, live ? 'exit' : 'release', 'positive control must reach the new path');
   assert.equal(target(planRetirement(s)).decision, 'keep');
   const result = executeRetirement(plan, { observe: () => s, close: () => assert.fail('must keep original pane'),
     exit: () => assert.fail('must not send native input') });
   assert.equal(result[0].decision, 'keep');
   assert.ok(['skip-close', 'held'].includes(result[0].action));
+});
+
+test('ambiguous idle agents cannot use a stale release to close their live pane', () => {
+  const s = idleAgent(snapshot(), false), plan = planRetirement(s);
+  s.agents.push(structuredClone(s.agents[0]));
+  assert.equal(target(planRetirement(s)).decision, 'keep');
+  executeRetirement(plan, { observe: () => s, close: () => assert.fail('ambiguous live pane'),
+    exit: () => assert.fail('ambiguous exit recipient') });
+});
+
+test('a stale released agent cannot leave a replacement shell during exit', () => {
+  const s = idleAgent(snapshot()), plan = planRetirement(s);
+  let requests = 0;
+  const result = executeRetirement(plan, { observe: () => s,
+    exit: () => {
+      requests++; s.panes[0].shellOnly = true; s.panes[0].process_info = processInfo();
+      s.panes[0].process_info.process_tree[0].identity = 'replacement-shell-birth';
+    },
+    exitObserved: () => assert.fail('a changed shell cannot be recorded as the original exit'),
+    close: () => assert.fail('the shell must retain its original birth identity') });
+  assert.equal(requests, 1);
+  assert.equal(result[0].action, 'skip-close');
+  assert.match(result[0].why, /occupant or shell identity changed during agent exit/);
 });
 
 test('a different but still bare shell birth cannot reuse the landed-head plan', () => {
@@ -143,7 +196,7 @@ test('a different but still bare shell birth cannot reuse the landed-head plan',
   assert.equal(result[0].action, 'skip-close'); assert.match(result[0].why, /authority changed/);
 });
 
-function landedFixture(t, { exited = false, landed = true } = {}) {
+function landedFixture(t, { exited = false, landed = true, agent = false, rebase = false } = {}) {
   const f = fixture(t, { merged: false });
   const events = loadEvents(f.org).events.filter(e => e.type !== 'item.closed');
   const append = more => {
@@ -155,13 +208,27 @@ function landedFixture(t, { exited = false, landed = true } = {}) {
     evidence: ['fixture release'], confirm: true, why: 'old round finished' }).add);
   f.state.agents[0].agent_status = 'idle';
   Object.assign(f.state.panes[0], { terminal_id: 'term', foreground_cwd: f.lane });
-  f.state.info = processInfo(); f.save();
-  assert.equal(target(f.retirement().plan()).decision, 'release', 'the original head release works before the next commit');
+  f.state.info = processInfo();
+  if (agent) {
+    f.state.agents[0].agent = 'codex'; f.state.agents[0].agent_status = 'done';
+    f.state.exitMode = 'exit';
+    f.state.screen = fs.readFileSync(new URL('../supervisor/test/fixtures/codex-empty.ansi', import.meta.url), 'utf8');
+    f.state.info.shell_pid = f.state.info.process_tree[0].pid = 1;
+    f.state.info = agentInfo(f.state.info);
+  }
+  f.save();
+  assert.equal(target(f.retirement().plan()).decision, agent ? 'exit' : 'release', 'the original head release works before the next commit');
   append([
     { type: 'run.started', id: 'R-2', item: 'ENG-1', workspace: f.lane, meta: nextMeta(events[1].meta) },
     { type: 'report.ingested', run: 'R-2', report: { outcome: 'done' } },
   ]);
   fs.writeFileSync(path.join(f.lane, 'seed'), 'successor fix'); f.git(['commit', '-am', 'successor fix'], f.lane);
+  const successorHead = f.git(['rev-parse', 'HEAD'], f.lane);
+  if (rebase) {
+    fs.writeFileSync(path.join(f.repo, 'train-base'), 'main advanced before promotion');
+    f.git(['add', 'train-base']); f.git(['commit', '-m', 'advance main']);
+    f.git(['rebase', 'main'], f.lane);
+  }
   const head = f.git(['rev-parse', 'HEAD'], f.lane);
   if (landed) {
     f.git(['merge', '--ff-only', head]);
@@ -178,8 +245,50 @@ function landedFixture(t, { exited = false, landed = true } = {}) {
         terminal_id: 'term', agent_session_id: 'session' } }));
     f.state.agents = []; f.save();
   }
-  return { ...f, landedHead: head };
+  return { ...f, successorHead, landedHead: head };
 }
+
+for (const unregister of [false, true]) test(`runtime exits the released idle agent after a rebased successor lands (${unregister ? 'unregistered' : 'retained registry'})`, t => {
+  const f = landedFixture(t, { agent: true, rebase: true }), logs = [];
+  f.state.unregisterOnExit = unregister; f.save();
+  const r = f.retirement({ log: row => logs.push(row) }), before = fs.readFileSync(f.eventFile, 'utf8'), plan = r.plan();
+  assert.equal(target(plan).decision, 'exit');
+  assert.equal(plan.sessionReleases?.length ?? 0, 0);
+  assert.notEqual(f.successorHead, f.landedHead, 'the train rebase must move the successor head');
+  assert.notEqual(f.head, f.landedHead, 'the old release must remain stale');
+  const result = r.apply(plan);
+  assert.equal(result.find(row => row.tab_id === 'w:t').action, 'closed', JSON.stringify(result));
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t']]);
+  const lifecycle = logs.filter(row => ['agent-exit-requested', 'exit-observed', 'shell-close-requested'].includes(row.action));
+  assert.deepEqual(lifecycle.map(row => row.action), ['agent-exit-requested', 'exit-observed', 'shell-close-requested']);
+  assert.deepEqual(lifecycle[1].shell, lifecycle[0].shell, 'the observed exit must bind the original shell birth');
+  assert.equal(lifecycle[1].occupant.agent_session_id, 'session');
+  assert.equal(fs.readFileSync(f.eventFile, 'utf8'), before, 'the stale release is never refreshed');
+  assert.equal(fs.existsSync(f.lane), true, 'tab retirement does not remove the lane');
+});
+
+for (const change of ['working', 'unlanded']) test(`runtime keeps a stale released agent when ${change}`, t => {
+  const f = landedFixture(t, { agent: true, rebase: true, landed: change !== 'unlanded' }), r = f.retirement(), plan = r.plan();
+  if (change === 'working') {
+    assert.equal(target(plan).decision, 'exit');
+    f.state.agents[0].agent_status = 'working'; f.save();
+  }
+  assert.equal(target(r.plan()).decision, 'keep');
+  r.apply(plan);
+  assert.deepEqual(f.read().actions, [], 'neither exit input nor tab close is allowed');
+  assert.equal(fs.existsSync(f.lane), true);
+});
+
+test('runtime keeps a stale released agent whose exit is not observed', t => {
+  const f = landedFixture(t, { agent: true, rebase: true });
+  f.state.exitMode = 'stay'; f.save();
+  const r = f.retirement({ exitTimeoutMs: 0 }), plan = r.plan();
+  assert.equal(target(plan).decision, 'exit');
+  const result = r.apply(plan);
+  assert.match(result.find(row => row.tab_id === 'w:t').why, /agent did not exit through its exit command/);
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit']]);
+  assert.equal(f.read().tabs.length, 1);
+});
 
 for (const exited of [false, true]) test(`runtime closes the released old bare shell after its successor lands (${exited ? 'observed exit' : 'retained registry'})`, t => {
   const f = landedFixture(t, { exited }), r = f.retirement(), before = fs.readFileSync(f.eventFile, 'utf8');

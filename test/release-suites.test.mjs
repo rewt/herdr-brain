@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tierFiles } from './helpers/tier.mjs';
 import { releasePhases, MAX_SUITE_FILES } from './helpers/release-suites.mjs';
@@ -83,6 +84,15 @@ for (const args of ${JSON.stringify(commands)}) {
   fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ release: command, timeout_seconds: { release: seconds } }));
   const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
     MONITOR_GATE_HISTORY_ROOT: path.join(root, 'history') };
+  // The build freezes the tagged declaration before evaluating the snapshot gate.
+  const git = (...args) => execFileSync('git', ['-C', root, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  git('init', '-qb', 'main');
+  git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.invalid');
+  git('add', '.lane.validation.json'); git('commit', '-qm', 'Release validation fixture'); git('tag', 'snapshot');
+  const tools = fileURLToPath(new URL('../herdr/releases.mjs', import.meta.url));
+  const frozen = await waitForExit(spawnScenarioChild(t, process.execPath,
+    [tools, 'freeze-validation', root, 'snapshot', path.join(root, '.release-validation.json')], { cwd: root, env }));
+  assert.equal(frozen.code, 0, frozen.stdout + frozen.stderr);
   assert.equal(env[RELEASE_TIMEOUT_ENV], undefined);
   assert.equal(fs.existsSync(env.MONITOR_GATE_HISTORY_ROOT), false, 'fresh bundle has no gate history');
   const result = await waitForExit(spawnScenarioChild(t, process.execPath, ['--input-type=module', '-e', adapter], { cwd: root, env }));

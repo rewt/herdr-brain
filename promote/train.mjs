@@ -12,7 +12,7 @@ import { captureCompletionMember, accountUncapturedMember, recordFor } from './c
 import { validateTree, validationEnvironment, readDeclared } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
-import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
+import { fenceGateIdentity, resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
 import { probeNativeGate } from './native-context.mjs';
 import { gateHistoryKey } from '../test-slot/limits.mjs';
@@ -34,6 +34,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   if (!['promotion-train/v1', 'promotion-train/v2'].includes(plan.schema) || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   const declared = validation.declared;
   if ((declared || plan.jobs.some(job => job.gate_mode)) && plan.schema !== 'promotion-train/v2') throw declaredRefusal('declared work requires the v2 train reader');
+  fenceGateIdentity(canonical, process.env, { captured: plan });
   let recovered = new Set();
   const checkIdentity = ({ admission = true } = {}) => {
     if (!declared && !plan.jobs.some(job => job.gate_mode)) return;
@@ -42,9 +43,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       if (!job.declared) throw declaredRefusal('captured declaration is missing');
       assertBoundRequirements(job.requiredTests ?? [], job.declared.value);
       executionIdentity({ canonical, identity }, { bound: job.execution_identity ?? null });
-      if (admission && !recovered.has(job.id)) sameDeclaration(job.declared, readDeclared(canonical));
     }
     for (const attempt of plan.attempts ?? []) if (attempt.gate_mode) executionIdentity({ canonical, identity }, { bound: attempt.execution_identity ?? null });
+    if (admission) for (const job of plan.jobs) if (!recovered.has(job.id)) sameDeclaration(job.declared, readDeclared(canonical));
   };
   checkIdentity({ admission: false }); // no receipt, worktree, lock or project code before this fence
   recovered = terminalTrainJobs({ file, project: { canonical, identity }, jobs: plan.jobs });
@@ -63,9 +64,10 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     return r.stdout.trim();
   };
   const clean = cwd => { if (git(['status', '--porcelain=v1', '--untracked-files=all'], cwd)) throw new Error(`worktree is not clean: ${cwd}`); };
-  const canonicalCheck = () => {
+  const canonicalCheck = base => {
     clean(canonical);
     if (git(['symbolic-ref', '--short', 'HEAD']) !== main) throw new Error(`canonical checkout must be on ${main}`);
+    if (base !== undefined && (git(['rev-parse', 'HEAD']) !== base || git(['rev-parse', main]) !== base)) throw new Error('canonical base changed; nothing merged');
   };
   const capture = job => {
     // Reject a foreign record before reading its run or claim, preserving the
@@ -96,7 +98,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     }
     return captured;
   };
-  const guards = jobs => jobs.map(job => ({ canonical, identity, ...job, expectedHead: job.sourceHead,
+  const guards = (jobs, base) => jobs.map(job => ({ canonical, identity, ...job, expectedHead: job.sourceHead,
+    integration: { branch: main, base },
     completionExpected: plan.completion?.jobs?.find(b => b.job === job.id)?.expected }));
   const result = (job, value) => {
     if (['refused', 'timeout'].includes(value.outcome)) accountUncapturedMember(plan, job);
@@ -425,8 +428,14 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         return false;
       }
     }
+    // Rechecking can run project probes or gates. Restore canonical guards
+    // after that code returns, then hold them again under the record locks.
+    if (!canonicalReady()) return false;
+    if (git(['rev-parse', 'HEAD']) !== attempt.base || git(['rev-parse', main]) !== attempt.base) {
+      attempt.phase = 'stale'; attempt.error = 'main moved during integration recheck; replan'; save(); return false;
+    }
     phase('fast-forwarding');
-    try { withPromotionGuards(guards(attempt.jobs), () => git(['merge', '--ff-only', attempt.tip])); }
+    try { withPromotionGuards(guards(attempt.jobs, attempt.base), () => { canonicalCheck(attempt.base); git(['merge', '--ff-only', attempt.tip]); }); }
     catch (error) {
       attempt.phase = 'invalid'; attempt.error = error.message;
       for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, batch: plan.id });

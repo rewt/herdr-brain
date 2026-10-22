@@ -14,7 +14,7 @@ import { fold, children, laterRuns, openRuns, blockersOf, releases, itemStatus, 
 
 const require = createRequire(import.meta.url);
 
-export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, admittedSeq, completionExpected, existingWorker = false, superseded = [] }, operation = () => {}, recordLocked = false) {
+export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, admittedSeq, completionExpected, integration, existingWorker = false, superseded = [] }, operation = () => {}, recordLocked = false) {
   // Refuse disabled requests before Git or green initialization. Enabled
   // authority is still re-read under the record lock below.
   if (existingWorker && run !== undefined) {
@@ -24,6 +24,12 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
   }
   const checkGit = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
+    if (integration) {
+      const git = args => execFileSync('git', ['-C', canonical, ...args], { encoding: 'utf8' }).trim();
+      if (git(['symbolic-ref', '--short', 'HEAD']) !== integration.branch) throw new Error(`canonical checkout must be on ${integration.branch}; nothing merged`);
+      if (git(['status', '--porcelain=v1', '--untracked-files=all'])) throw new Error('canonical worktree is not clean; nothing merged');
+      if (git(['rev-parse', 'HEAD']) !== integration.base || git(['rev-parse', integration.branch]) !== integration.base) throw new Error('canonical base changed; nothing merged');
+    }
     if (expectedHead !== undefined) {
       const actual = execFileSync('git', ['-C', workspace, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
       if (actual !== expectedHead) throw new Error(`lane tip differs from expected head: expected ${expectedHead}, found ${actual}; settle and authorize the new head; nothing merged`);

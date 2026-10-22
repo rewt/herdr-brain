@@ -28,7 +28,7 @@ import { CAPABILITIES, DECLARED_SCHEMA, sameDeclaration, snapshotDeclaration, re
 import { readDeclared } from '../lanes/validation.mjs';
 import { executionIdentity } from './execution-identity.mjs';
 import { bindRequirements, assertBoundRequirements } from './declared-selection.mjs';
-import { resolveGateProfile } from './gate-profile.mjs';
+import { fenceGateIdentity, resolveGateProfile } from './gate-profile.mjs';
 import { runTrain } from './train.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
@@ -66,12 +66,21 @@ function declaredWork(project) {
     ...(data.results ?? []).filter(job => job.cleanup?.state === 'pending')].filter(job => job.gate_mode);
 }
 function hasDeclaredWork(project) { return declaredWork(project).length > 0; }
-function fenceDeclaredTarget(project) {
-  const jobs = declaredWork(project);
+export function fenceDeclaredTarget(project, { jobs: supplied = [] } = {}) {
+  const jobs = [...declaredWork(project), ...supplied.filter(job => job.gate_mode)];
   const declared = jobs.length || readDeclared(project.canonical, { audit: false });
   if (!declared) return false;
   executionIdentity(project);
   for (const job of jobs) executionIdentity(project, { bound: job.execution_identity ?? null });
+  const file = path.join(project.identity, 'promote/queue.json');
+  if (fs.existsSync(file)) {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    for (const batch of [data.current, ...(data.interrupted ?? [])]) {
+      if (!batch?.jobs?.some(job => job.gate_mode)) continue;
+      const receipt = path.join(project.identity, 'promote/batches', batch.id, 'train.json');
+      if (fs.existsSync(receipt)) fenceGateIdentity(project.canonical, process.env, { captured: JSON.parse(fs.readFileSync(receipt, 'utf8')) });
+    }
+  }
   return true;
 }
 export function queueFor(cwd, { readOnly = false } = {}) {
@@ -183,6 +192,7 @@ function settings(project, opt) {
 }
 
 export function checkDeclaredJobs(queue, jobs, { recoveryFirst = true } = {}) {
+  fenceDeclaredTarget(queue.project, { jobs });
   const recovered = new Set(), deferred = new Set();
   // Every stage, including recovery, retains the original identity fence.
   for (const job of jobs.filter(job => job.gate_mode)) {
@@ -432,6 +442,7 @@ function cleanupRevision(job, queue) {
 }
 
 export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
+  fenceDeclaredTarget(queue.project, { jobs: [job] });
   if (job.gate_mode) executionIdentity(queue.project, { bound: job.execution_identity ?? null });
   const delegated = () => ({ ...result, cleanup: { state: 'complete', owner: 'closeout-queue' },
     reason: 'green fast-forward; closeout delegated to the event queue' });
@@ -497,6 +508,7 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
 
 // Restart/reconciliation retries only the cleanup checkpoint, never the gate.
 export function retryCleanup(queue, options = {}) {
+  fenceDeclaredTarget(queue.project);
   for (const job of queue.load().results.filter(row => row.cleanup?.state === 'pending' && row.gate_mode))
     executionIdentity(queue.project, { bound: job.execution_identity ?? null });
   // Housekeeping and the drain share this queue-owned retry lock. Keep the

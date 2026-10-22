@@ -11,7 +11,7 @@ import { writeFileAtomic, findOrgDir } from '../lib/store.mjs';
 import { enterSupervisor } from './entry.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { coldStart, renderColdStart, briefSize, receiptDirectory } from './context.mjs';
-import { queueJobs } from '../promote/promote.mjs';
+import { queueJobs, queueFor, fenceDeclaredTarget } from '../promote/promote.mjs';
 import { verifyTrainResult } from '../promote/train.mjs';
 import { recordedBatchCompletion } from '../promote/completion.mjs';
 import { readDeclared } from '../lanes/validation.mjs';
@@ -74,6 +74,12 @@ export function main(argv = process.argv.slice(2)) {
   } });
   const [action = 'brief', requested] = positionals;
   const ownerRun = requested ?? (opt.notice?.startsWith('[org-report] ') ? noticeRun(opt.notice) : null);
+  if (['handle', 'promote'].includes(action)) {
+    const queue = queueFor(opt.repo, { readOnly: true });
+    const noticeJob = /^\[promote-queue\] id=([a-zA-Z0-9-]+) lane=/.exec(opt.notice ?? '')?.[1];
+    const jobs = queueJobs(queue.load()).filter(job => ownerRun && job.run === ownerRun || noticeJob && job.id === noticeJob);
+    fenceDeclaredTarget(queue.project, { jobs });
+  }
   let ownership;
   if (['handle', 'promote'].includes(action) && ownerRun) {
     const org = opt.org ?? findOrgDir({ cwd: opt.repo });

@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
 import { acquireLock, PROMOTION_LOCK_WAIT_MS } from "./promotion-lock.mjs";
 import { withPromotionGuard } from '../promote/guard.mjs';
 import { runTrain } from '../promote/train.mjs';
-import { resolveGateProfile, HOST_ENV } from '../promote/gate-profile.mjs';
+import { fenceGateIdentity, resolveGateProfile, HOST_ENV } from '../promote/gate-profile.mjs';
 import { waitForPromotionMemory, refuseBeforeTrain } from '../promote/memory-gate.mjs';
 import { ROUTE_PRESET } from './preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
@@ -72,11 +72,22 @@ import {
 } from "./routes.mjs";
 
 cliHelp(import.meta.url, 'Usage: lane open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|ready|close [TOPIC] [OPTIONS]');
-const forwardedRelease = forwardRelease('lanes/lane.mjs', process.cwd());
-if (forwardedRelease !== null) process.exit(forwardedRelease);
-
 const IS_REVIEW_COMMAND = process.argv[2] === "review";
 const CALLER_CWD = process.cwd();
+// Config-home discovery itself can audit. Resolve without effects first, and
+// fence saved batch bindings before loading any layered policy or receipt.
+try {
+  const inspected = homeProject(CALLER_CWD, process.env, { inspection: true });
+  let project = inspected?.git;
+  if (!project) try { project = gitProject(CALLER_CWD); } catch { /* Ordinary non-repository handling below. */ }
+  if (project) {
+    const captured = process.argv[2] === 'promote-batch' && process.argv[3]
+      ? JSON.parse(readFileSync(resolve(process.argv[3]), 'utf8')) : undefined;
+    fenceGateIdentity(project.canonical, process.env, { captured });
+  }
+} catch (error) { fail(error.message); }
+const forwardedRelease = forwardRelease('lanes/lane.mjs', CALLER_CWD);
+if (forwardedRelease !== null) process.exit(forwardedRelease);
 // An adopted project's native directory, never inherited Git selectors, owns
 // its policy and every subsequent Git child. Legacy invocations keep semantics.
 if (homeProject(CALLER_CWD)) for (const key of Object.keys(process.env)) if (key.startsWith('GIT_')) delete process.env[key];
@@ -2530,6 +2541,7 @@ function check(args) {
   // The train plans the sorted union of the jobs' bound test evidence.
   const required = [...new Set(requiredTests ?? [])].sort();
   if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by bash herdr/release.sh build TAG');
+  try { fenceGateIdentity(REPO_ROOT); } catch (error) { fail(error.message); }
   const settings = validationSettings();
   if (settings.declared) {
     try { executionIdentity(gitProject(REPO_ROOT)); } catch (error) { fail(error.message); }
@@ -2613,6 +2625,7 @@ function withPromotionLock(operation) {
 
 function promote(topic, options = {}) {
   const root = repositoryRoot({ requiredBy: "promote" });
+  try { fenceGateIdentity(root); } catch (error) { fail(error.message); }
   if (readDeclared(root)) {
     try { executionIdentity(gitProject(root)); } catch (error) { fail(error.message); }
     fail('declared promotion requires the promotion queue and its captured owner/requirements');
@@ -2908,6 +2921,7 @@ switch (command) {
     const root = repositoryRoot({ requiredBy: 'promote' });
     try {
       const savedFile = resolve(topic), saved = JSON.parse(readFileSync(savedFile, 'utf8'));
+      fenceGateIdentity(root, process.env, { captured: saved });
       if (saved.jobs?.some(job => job.gate_mode)) {
         const project = { canonical: root, identity: REPO_IDENTITY };
         for (const job of saved.jobs) executionIdentity(project, { bound: job.execution_identity ?? null });
@@ -2917,8 +2931,7 @@ switch (command) {
           if (JSON.parse(readFileSync(savedFile, 'utf8')).phase === 'complete') break;
         }
       }
-      if (readDeclared(root)) executionIdentity(gitProject(root));
-      const profile = resolveGateProfile(root);
+      const profile = resolveGateProfile(root, process.env, { captured: saved });
       if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
       const refuse = error => {
         if (!['PROMOTION_STOPPED', 'PROMOTION_MEMORY_PRESSURE', RESERVATION_WAIT_EXPIRED_CODE].includes(error.code)) throw error;

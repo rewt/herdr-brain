@@ -9,7 +9,7 @@ import { bundleRelease } from '../lib/releases.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { resolveResource } from '../test-slot/resources.mjs';
 import { runTestSlotSync } from '../test-slot/run.mjs';
-import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
+import { fenceGateIdentity, resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { canonicalValidation } from '../lanes/validation.mjs';
 import { resolveGateLimits, gateHistoryKey } from '../test-slot/limits.mjs';
@@ -42,12 +42,16 @@ const updateTrain = changes => {
   writeFileAtomic(receipt, JSON.stringify(plan, null, 2) + '\n', 0o600);
 };
 
+let fenced = false;
 try {
+  const captured = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  fenceGateIdentity(canonical, process.env, { captured });
+  fenced = true;
+  const profile = resolveGateProfile(canonical, process.env, { captured });
+  if (!profile) throw new Error('promotion host adapter requires a declared gate profile');
   const native = probeNativeGate();
   updateTrain({ native_context: native });
   if (!native.ok) throw Object.assign(new Error(native.reason), { code: native.code });
-  const profile = resolveGateProfile(canonical);
-  if (!profile) throw new Error('promotion host adapter requires a declared gate profile');
   // Saved attempts may have integrated before losing their response. Keep all
   // memory waits, but leave resumed STOP reconciliation/refusals to runTrain.
   const memoryOptions = { checkStop: !JSON.parse(fs.readFileSync(receipt, 'utf8')).attempts?.length,
@@ -101,8 +105,8 @@ try {
   } else throw new Error('unknown host gate phase');
 } catch (error) {
   const refusal = { phase: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), finished_at: new Date().toISOString() };
-  if (fs.existsSync(hostFile)) update(refusal);
-  else if (error.code?.startsWith('PROMOTE_NATIVE_')) save({ schema: 'promotion-host-gate/v1', ...refusal });
+  if (fenced && fs.existsSync(hostFile)) update(refusal);
+  else if (fenced && error.code?.startsWith('PROMOTE_NATIVE_')) save({ schema: 'promotion-host-gate/v1', ...refusal });
   process.stderr.write(error.message + '\n'); process.exitCode = 75;
 }
 

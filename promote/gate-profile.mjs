@@ -13,13 +13,32 @@ import { readPolicyFile, validatePromote } from '../lib/config-policy.mjs';
 import { parseUniqueJson } from '../sessions/json.mjs';
 
 import { limitSeconds } from '../test-slot/limits.mjs';
-import { executionIdentity } from './execution-identity.mjs';
+import { executionIdentity, identityRefusal } from './execution-identity.mjs';
 import { gitProject } from '../lib/project.mjs';
 
 export const HOST_ENV = 'MONITOR_PROMOTION_HOST_PROFILE';
 const HOST = fileURLToPath(new URL('./host-gate.mjs', import.meta.url));
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
+
+// Inspection cannot audit or finish a pending config write. Check every saved
+// identity before any audited policy read, host update or adapter receipt.
+export function fenceGateIdentity(canonical, environment = process.env, { settings, captured } = {}) {
+  const bindings = [
+    ...(captured && (captured.gate_mode || Object.hasOwn(captured, 'execution_identity') || captured.schema === 'declared-gate-attempt/v2') ? [captured] : []),
+    ...(captured?.jobs ?? []).filter(job => job.gate_mode),
+    ...(captured?.attempts ?? []).flatMap(attempt => [
+      ...(attempt.gate_mode ? [attempt] : []), ...(attempt.jobs ?? []).filter(job => job.gate_mode),
+      ...(attempt.declared_spec ? [{ execution_identity: attempt.declared_spec.identity }] : []),
+    ]),
+  ];
+  if (!bindings.length && !readDeclared(canonical, { env: environment, promotion: settings, audit: false })) return;
+  const project = gitProject(canonical, { env: configGitEnv(environment) });
+  executionIdentity(project);
+  if (captured?.identity !== undefined && captured.identity !== project.identity)
+    throw identityRefusal('PROMOTION_IDENTITY_BINDING_CHANGED', 'receipt Git common directory changed');
+  for (const binding of bindings) executionIdentity(project, { bound: binding.execution_identity ?? null });
+}
 
 // Only the canonical checkout's committed files configure the host: an edited or untracked
 // working copy must never reach a child process before the train's clean-tree refusal.
@@ -45,9 +64,9 @@ function committedFile(canonical, relative, env = process.env) {
 
 // `settings` is a committed .promote.json the caller already read (the queue's per-batch snapshot),
 // so one batch never reads the declaration twice.
-export function resolveGateProfile(canonical, environment = process.env, { settings } = {}) {
+export function resolveGateProfile(canonical, environment = process.env, { settings, captured } = {}) {
+  fenceGateIdentity(canonical, environment, { settings, captured });
   const declared = readDeclared(canonical, { env: environment, promotion: settings });
-  if (declared) executionIdentity(gitProject(canonical));
   const selected = policyLocation(canonical, 'promote', environment, { canonical });
   const file = declared ? declared.source.file : selected.file;
   let gate = settings?.gate;
@@ -122,11 +141,10 @@ export function checkCompetingProcesses(profile) {
 }
 
 export function runProjectGateSync({ canonical, receipt, argv, settings, ...options }) {
-  if (readDeclared(canonical, { env: options.env, promotion: settings })) executionIdentity(gitProject(canonical));
   const evidence = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  const profile = resolveGateProfile(canonical, options.env, { settings, captured: evidence });
   evidence.release ??= bundleRelease();
   writeFileAtomic(receipt, JSON.stringify(evidence, null, 2) + '\n', 0o600);
-  const profile = resolveGateProfile(canonical, options.env, { settings });
   if (!profile) return spawnSync(process.execPath, argv, options);
   const plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   plan.host_receipt = path.join(path.dirname(receipt), 'host-gate.json');

@@ -22,6 +22,7 @@ import { acquire } from './lock.mjs';
 import { changedPaths } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from './test-plan.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
+import { fenceGateIdentity } from '../promote/gate-profile.mjs';
 import { deferredTests, recordedTestEvidence, TEST_ESCALATION } from './test-evidence.mjs';
 import { reportIngestReceipt, remainingUnverified, RECORD_CHECK_CLAIM } from './report-evidence.mjs';
 import { reviewScope } from './review-range.mjs';
@@ -589,6 +590,7 @@ function main() {
   if (positionals.length !== 1 || !/^R-\d+$/.test(id)) throw new Error('settle requires one run ID');
   if (opt['review-again'] && !opt.retry) throw new Error('--review-again requires --retry after inspecting the old reviewer');
   if (opt['fix-findings'] && (!opt.retry || opt['review-again'])) throw new Error('--fix-findings requires --retry and cannot repeat review');
+  if (!opt.status) fenceGateIdentity(gitProject(opt.repo).canonical);
   opt.org ??= findOrgDir({ cwd: opt.repo });
   if (!opt.org) throw new Error('no record discovered; enter the project through discovery first or supply --org');
   opt.org = fs.realpathSync(path.resolve(opt.org));

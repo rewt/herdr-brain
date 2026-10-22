@@ -17,10 +17,46 @@ import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { promotionWorkers } from '../../test/helpers/promotion-worker.mjs';
 import { watchPromotionLock } from '../../test/helpers/promotion-lock.mjs';
 import { healthyMemoryEnvironment, promotionMemoryFixture, healthyMemory, pressuredMemory } from '../../test/helpers/promotion-memory-fixture.mjs';
+import { declaredFixture, declaration, reuseInputs } from './helpers/declared-fixture.mjs';
+import { runProjectGateSync } from '../gate-profile.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const emptyComposer = fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url));
 const typedComposer = fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url));
+
+for (const mutation of ['branch', 'dirty']) test(`declared train refuses a canonical ${mutation} change during the integration-time recheck without integrating`, t => {
+  const value = declaration(); delete value.promotion_tests; value.inputs = { promotion: reuseInputs() };
+  const f = declaredFixture(t, { declared: value }), id = 'late-recheck';
+  const file = path.join(f.repo, '.git/promote/batches', id, 'train.json'), changed = path.join(f.root, 'late-change');
+  const probe = path.join(f.root, 'version.cjs');
+  // Initial validation and its own reuse check run while prepared. Only the
+  // integration recheck sees this durable validated checkpoint.
+  fs.writeFileSync(probe, `const fs=require('node:fs'),cp=require('node:child_process');
+if(fs.existsSync(${JSON.stringify(file)})&&!fs.existsSync(${JSON.stringify(changed)})&&JSON.parse(fs.readFileSync(${JSON.stringify(file)})).attempts?.[0]?.phase==='validated'){
+  ${mutation === 'branch' ? `cp.execFileSync('git',['-C',${JSON.stringify(f.repo)},'switch','-qc','operator']);` : `fs.writeFileSync(${JSON.stringify(path.join(f.repo, 'operator-edit'))},'keep');`}
+  fs.writeFileSync(${JSON.stringify(changed)},'integration recheck');
+}console.log('stable version');`);
+  value.inputs.promotion.toolchains.runner = `node '${probe}'`;
+  f.write('.lane.validation.json', JSON.stringify(value)); f.commit(); f.git(['rebase', 'main'], f.workspace);
+  const sourceGate = f.execute(); assert.equal(sourceGate.gates[0].outcome, 'executed');
+  f.add(); const q = f.queue(), jobs = q.load().pending, base = f.base();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ schema: 'promotion-train/v2', id, identity: q.project.identity, jobs, phase: 'pending' }));
+  const result = runProjectGateSync({ canonical: f.repo, receipt: file,
+    argv: [path.join(source, 'lanes/lane.mjs'), 'promote-batch', file], cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  const saved = JSON.parse(fs.readFileSync(file)), attempt = saved.attempts[0];
+  assert.ok(fs.existsSync(changed), JSON.stringify(saved));
+  assert.equal(attempt.gate.gates[0].outcome, 'reused'); assert.equal(attempt.gate.gates[0].source, sourceGate.gates[0].source);
+  assert.equal(saved.results[jobs[0].id].outcome, 'refused');
+  assert.match(saved.results[jobs[0].id].reason, mutation === 'branch' ? /must be on main/ : /not clean/);
+  assert.equal(f.base(), base); assert.equal(f.git(['rev-parse', 'HEAD']), base);
+  assert.equal(fs.readFileSync(path.join(f.repo, 'product.txt'), 'utf8'), 'base');
+  if (mutation === 'branch') { assert.equal(f.git(['branch', '--show-current']), 'operator'); assert.equal(f.git(['rev-parse', 'operator']), base); }
+  else assert.equal(fs.readFileSync(path.join(f.repo, 'operator-edit'), 'utf8'), 'keep');
+  assert.equal(f.lines().length, 1, 'only the priming gate executed');
+});
+
 async function until(fn) {
   const deadline = Date.now() + loadTimeout(10000);
   while (Date.now() < deadline) { if (fn()) return; await new Promise(resolve => setTimeout(resolve, 20)); }

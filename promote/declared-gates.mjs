@@ -65,6 +65,7 @@ export function planDeclaredGateBounded(context) {
   return { spec: saved.spec, plan: saved.plan, deadline, limits, env };
 }
 export function planDeclaredGate({ repo, common, base, cwd, candidate, identity, owner, required, changed, jobs = [], env, profile, evidence, onUpdate = () => {}, selectionOnly = false, limits: suppliedLimits, deadline: suppliedDeadline }) {
+  executionIdentity({ canonical: repo, identity: common }, { bound: identity });
   const value = owner.value;
   const limits = suppliedLimits ?? attemptLimits({ common, owner, env, profile });
   const deadline = suppliedDeadline ?? Date.now() + Math.ceil(limits.wall_seconds * 1000);

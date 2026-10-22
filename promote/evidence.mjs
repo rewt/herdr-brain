@@ -60,11 +60,20 @@ export function terminalTrainJobs({ file, project, jobs }) {
     const original = plan.jobs?.find(row => row.id === job.id);
     if (!original || admission(original) !== admission(job)) continue;
     const final = plan.results?.[job.id];
-    const integrated = (plan.attempts ?? []).some(attempt => ['validated', 'integrated', 'complete'].includes(attempt.phase) && attempt.jobs?.some(row => row.id === job.id) && attempt.gate?.exit_code === 0);
+    const mayHaveIntegrated = (plan.attempts ?? []).some(attempt => {
+      if (!attempt.jobs?.some(row => row.id === job.id)) return false;
+      if (['integrated', 'complete'].includes(attempt.phase)) return true;
+      if (attempt.phase !== 'validated' || attempt.gate?.exit_code !== 0) return false;
+      // Validation alone is no integration checkpoint. A lost FF response
+      // still requires the full proof below if its candidate is contained.
+      // Unknown ancestry cannot authorize refusal-only recovery either.
+      const contained = spawnSync('git', ['-C', project.canonical, 'merge-base', '--is-ancestor', attempt.tip, 'HEAD'], { encoding: 'utf8' });
+      return Boolean(contained.error || contained.status !== 1);
+    });
     // A refusal-only (or already refused member of a mixed batch) is just as
     // terminal as an integration. No current config or execution admission is
     // needed to finish its bookkeeping. Bind it to the saved job and candidate.
-    if (!integrated && ['refused', 'timeout'].includes(final?.outcome) && typeof final.reason === 'string' && final.reason && final.batch === plan.id &&
+    if (!mayHaveIntegrated && ['refused', 'timeout'].includes(final?.outcome) && typeof final.reason === 'string' && final.reason && final.batch === plan.id &&
         (plan.attempts ?? []).filter(a => a.jobs?.some(j => j.id === job.id)).every(a => a.jobs.filter(j => j.id === job.id).every(j => admission(j) === admission(original) && j.sourceHead === original.expectedHead))) {
       recovered.add(job.id); continue;
     }

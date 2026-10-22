@@ -1,4 +1,5 @@
 import test from '../../test/helpers/bounded-test.mjs';
+import pendingTest from '../../test/helpers/pending-declared.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { product } from '../../promote/test/helpers/declared-fixture.mjs';
 import { pendingConfigWrite, writeAuditedConfig } from '../../lib/config-audit.mjs';
 
-test('only the canonical base declaration selects commands; working, lane and inherited overrides cannot authorize them', t => {
+pendingTest('only the canonical base declaration selects commands; working, lane and inherited overrides cannot authorize them', t => {
   const f = declaredFixture(t), original = readDeclared(f.repo);
   f.write('.lane.validation.json', JSON.stringify({ ...declaration(), promotion: 'false' }), f.workspace); f.commit(f.workspace);
   f.write('.lane.validation.json', JSON.stringify({ ...declaration(), promotion: 'also false' }));
@@ -27,7 +28,7 @@ test('only the canonical base declaration selects commands; working, lane and in
 });
 
 for (const [file, value] of [['.promote.json', { validate: 'node baseline.mjs' }], ['.promote.json', { gate: {} }],
-  ['.lane.json', { validate: 'node baseline.mjs' }], ['.lane.json', { validation: {} }], ['.lane.json', { prepare: [] }]]) test(`explicit competing ${file} ${Object.keys(value)[0]} refuses without fallback`, t => {
+  ['.lane.json', { validate: 'node baseline.mjs' }], ['.lane.json', { validation: {} }], ['.lane.json', { prepare: [] }]]) pendingTest(`explicit competing ${file} ${Object.keys(value)[0]} refuses without fallback`, t => {
   const f = declaredFixture(t); f.write(file, JSON.stringify(value)); f.commit();
   assert.throws(() => readDeclared(f.repo), /competes/); assert.deepEqual(f.lines(), []);
 });
@@ -47,12 +48,12 @@ test('parked v1 and incapable worker handshakes refuse v2 before admission', t =
   assert.equal(fs.existsSync(path.join(f.repo, '.git/promote/queue.json')), false); assert.deepEqual(f.lines(), []);
 });
 
-test('unmarked caller and project share the standard default identity', t => {
+pendingTest('unmarked caller and project share the standard default identity', t => {
   const f = declaredFixture(t, { marked: false }), binding = executionIdentity(f.queue().project);
   assert.equal(binding.caller_root, null); assert.equal(binding.project_root, null);
 });
 
-test('config-home resolution owns the complete declaration and lost or invalid home policy cannot fall back', async t => {
+pendingTest('config-home resolution owns the complete declaration and lost or invalid home policy cannot fall back', async t => {
   const f = configFixture(t); await f.adopt();
   const file = policyLocation(f.cwd, 'validation', f.env).file, value = declaration();
   fs.writeFileSync(file, JSON.stringify(value));
@@ -64,7 +65,7 @@ test('config-home resolution owns the complete declaration and lost or invalid h
   fs.unlinkSync(file); assert.throws(() => readDeclared(f.cwd, { env: f.env }), /missing|owner repair/);
 });
 
-test('a declared project cannot forward admission into a pinned incapable worker', async t => {
+pendingTest('a declared project cannot forward admission into a pinned incapable worker', async t => {
   const f = configFixture(t); await f.adopt();
   fs.writeFileSync(policyLocation(f.cwd, 'validation', f.env).file, JSON.stringify(declaration()));
   const old = f.release('old-worker'), marker = path.join(f.scratch, 'old-admission');
@@ -80,7 +81,7 @@ test('a declared project cannot forward admission into a pinned incapable worker
   assert.equal(fs.existsSync(marker), false); assert.equal(fs.existsSync(path.join(f.cwd, '.git/promote/queue.json')), false);
 });
 
-test('foreign roots, same-identity foreign projects, missing roots and changed bound roots refuse before effects', t => {
+pendingTest('foreign roots, same-identity foreign projects, missing roots and changed bound roots refuse before effects', t => {
   const f = declaredFixture(t), q = f.queue(), before = JSON.stringify(q.load());
   const bound = executionIdentity(q.project);
   assert.equal(bound.caller_root, f.owner); assert.equal(bound.project_root, f.owner);
@@ -92,7 +93,7 @@ test('foreign roots, same-identity foreign projects, missing roots and changed b
   assert.equal(JSON.stringify(q.load()), before); assert.deepEqual(f.lines(), []);
 });
 
-for (const change of ['declaration edit', 'pending config write']) test(`foreign admission preserves target record bytes with a ${change}`, async t => {
+for (const change of ['declaration edit', 'pending config write']) pendingTest(`foreign admission preserves target record bytes with a ${change}`, async t => {
   const f = configFixture(t, { custom: 'owner' }); await f.adopt();
   const previous = process.cwd(); t.after(() => process.chdir(previous)); process.chdir(f.cwd);
   const file = policyLocation(f.cwd, 'validation', f.env).file, value = declaration();
@@ -116,7 +117,7 @@ for (const change of ['declaration edit', 'pending config write']) test(`foreign
   assert.equal(pendingConfigWrite(f.env.ORG_DIR, file).length, 0);
 });
 
-test('declaration inspection preserves both records on invalid or missing policy and identity files', async t => {
+pendingTest('declaration inspection preserves both records on invalid or missing policy and identity files', async t => {
   const f = configFixture(t, { custom: 'owner' }); await f.adopt();
   const binding = f.binding(), file = policyLocation(f.cwd, 'validation', f.env).file;
   fs.writeFileSync(file, JSON.stringify(declaration())); readDeclared(f.cwd, { env: f.env });
@@ -133,7 +134,7 @@ test('declaration inspection preserves both records on invalid or missing policy
   }
 });
 
-for (const change of ['foreign caller after rollback', 'changed identity root']) test(`pending cleanup refuses ${change} before any effect`, t => {
+for (const change of ['foreign caller after rollback', 'changed identity root']) pendingTest(`pending cleanup refuses ${change} before any effect`, t => {
   const f = declaredFixture(t); f.add(); const q = f.queue(), job = q.load().pending[0];
   const saved = { ...job, outcome: 'promoted', finished: new Date().toISOString(), workspace: f.workspace, tip: f.head(), cleanup: { state: 'pending' } };
   q.transaction(data => { data.pending = []; data.results.push(saved); });
@@ -158,7 +159,7 @@ test('undeclared projects retain command precedence and reject typed gate requir
   assert.throws(() => f.add({ requiredTests: [{ gate: 'tool' }] }), /invalid required test files/);
 });
 
-test('admission binds full requirements, capable worker, identity and redacts literal environment values', t => {
+pendingTest('admission binds full requirements, capable worker, identity and redacts literal environment values', t => {
   const value = declaration(); value.gate.env = { DECLARED_LITERAL: 'nonsecret-test-value' };
   const f = declaredFixture(t, { declared: value }); f.add({ requiredTests: [{ gate: 'tool' }] });
   const q = f.queue(), job = q.load().pending[0];

@@ -1,4 +1,5 @@
 import test from '../../test/helpers/bounded-test.mjs';
+import pendingTest from '../../test/helpers/pending-declared.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -24,7 +25,7 @@ const source = fileURLToPath(new URL('../../', import.meta.url));
 const emptyComposer = fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url));
 const typedComposer = fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url));
 
-for (const mutation of ['branch', 'dirty']) test(`declared train refuses a canonical ${mutation} change during the integration-time recheck without integrating`, t => {
+for (const mutation of ['branch', 'dirty']) pendingTest(`declared train refuses a canonical ${mutation} change during the integration-time recheck without integrating`, t => {
   const value = declaration(); delete value.promotion_tests; value.inputs = { promotion: reuseInputs() };
   const f = declaredFixture(t, { declared: value }), id = 'late-recheck';
   const file = path.join(f.repo, '.git/promote/batches', id, 'train.json'), changed = path.join(f.root, 'late-change');

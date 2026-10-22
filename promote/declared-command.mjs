@@ -7,9 +7,11 @@ import { runGateSync } from '../test-slot/run.mjs';
 import { tapTotals } from '../lanes/validation.mjs';
 import { bytesHash, refuse, MAX_PLAN_BYTES } from './declaration.mjs';
 import { remaining, contained } from './declared-support.mjs';
+import { refuseDeclaredGatesV2 } from './declared-inert.mjs';
 
 const boundedOutput = fileURLToPath(new URL('./declared-planner.mjs', import.meta.url));
 export function runDeclaredCommand({ command, argv = ['/bin/sh', '-c', command], cwd, env, deadline, limits, directory, evidence, onUpdate = () => {}, kind, input, capMs, bounded = false, guard = () => {} }) {
+  refuseDeclaredGatesV2();
   guard();
   const id = randomUUID(), log = path.join(directory, `${id}.stdout.log`), stderr = path.join(directory, `${id}.stderr.log`);
   const row = { kind, command: command ?? [...argv], cwd, started_at: new Date().toISOString(), log, stderr_log: stderr,
@@ -60,6 +62,7 @@ export function recoverCommandEvidence(evidence, timeout = null) {
   }
 }
 export function prepareDeclared(steps, context) {
+  refuseDeclaredGatesV2();
   for (const step of steps ?? []) {
     // Honor ordinary ordered guards, but only within this project/snapshot.
     // Dependency directories alone never suppress preparation on a fresh tree.

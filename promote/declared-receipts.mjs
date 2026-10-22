@@ -6,9 +6,13 @@ import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { hash, bytesHash, RECEIPT_SCHEMA } from './declaration.mjs';
 import { remaining } from './declared-support.mjs';
+import { refuseDeclaredGatesV2 } from './declared-inert.mjs';
 
 const read = file => JSON.parse(readPlainFile(file));
-export const receiptDirectory = common => plainDirectory(path.join(common, 'declared-gates'));
+export function receiptDirectory(common) {
+  refuseDeclaredGatesV2();
+  return plainDirectory(path.join(common, 'declared-gates'));
+}
 export function validCommandEvidence(row) {
   try {
     if (!row.executed || row.interrupted || row.exit_code !== 0 || row.signal !== null || row.gate_timeout || row.cleanup_error ||
@@ -30,6 +34,7 @@ function sourceAt(directory, file, expected) {
   return { file, source };
 }
 export function withReceiptLock(common, key, deadline, callback) {
+  refuseDeclaredGatesV2();
   const directory = receiptDirectory(common), release = acquireLock(path.join(directory, `${key}.lock`), { waitMs: Math.min(5000, remaining(deadline)) });
   try { return callback(directory); } finally { release(); }
 }
@@ -43,6 +48,7 @@ export function findSource(directory, observation) {
   } catch { return { miss: 'no completed executed source' }; }
 }
 export function publishSource(directory, { before, after, execution, spec, gate }) {
+  refuseDeclaredGatesV2();
   if (before?.key !== after?.key || hash(before) !== hash(after) || !validCommandEvidence(execution)) return null;
   const source = { schema: RECEIPT_SCHEMA, key: before.key, outcome: 'executed', reused: false,
     project: spec.common, identity: spec.identity, gate, definition: spec.commands.find(row => row.id === gate)?.definition,

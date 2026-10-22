@@ -5,8 +5,11 @@ import { createHash } from 'node:crypto';
 import { readPlainFile } from '../lib/files.mjs';
 import { hash, sameDeclaration, DECLARED_SCHEMA } from './declaration.mjs';
 import { validDeclaredGateEvidence } from './declared-evidence.mjs';
+import { fenceDeclaredMode } from '../lanes/validation.mjs';
+import { fenceCapturedDeclared } from './declared-inert.mjs';
 
 export function verifyTrainResult(result, { project, saved }) {
+  fenceDeclaredMode(project.canonical, { captured: [result, saved] });
   return verifyResult(result, { project, saved });
 }
 function verifyResult(result, { project, saved, plan, phases = ['integrated', 'complete'] }) {
@@ -14,6 +17,7 @@ function verifyResult(result, { project, saved, plan, phases = ['integrated', 'c
     if (result.source_head !== saved.head || typeof result.receipt !== 'string' ||
         path.relative(path.join(project.identity, 'promote/batches'), result.receipt).startsWith('..')) return false;
     plan ??= JSON.parse(readPlainFile(result.receipt));
+    fenceCapturedDeclared(plan);
     const job = plan.jobs.find(j => j.id === result.id);
     if (!['promotion-train/v1', 'promotion-train/v2'].includes(plan.schema) || plan.identity !== project.identity || plan.id !== result.batch ||
         job?.expectedHead !== saved.head || job.run !== saved.run || job.org !== saved.org || job.topic !== saved.lane) return false;
@@ -39,13 +43,17 @@ function verifyResult(result, { project, saved, plan, phases = ['integrated', 'c
     const expected = git(['merge-tree', '--write-tree', onto, saved.head]).split('\n')[0];
     return expected === git(['rev-parse', `${result.tip}^{tree}`]) && git(['merge-base', onto, result.tip]) === onto &&
       git(['rev-list', '--merges', `${onto}..${result.tip}`]) === '';
-  } catch { return false; }
+  } catch (error) {
+    if (error.code === 'DECLARED_GATES_V2_INERT') throw error;
+    return false;
+  }
 }
 
 // A declaration mismatch cannot undo an already integrated effect. Prove the
 // original admission, literal gate, reviewed diff and containment before using
 // its captured declaration for bookkeeping, including a lost FF response.
 export function terminalTrainJobs({ file, project, jobs }) {
+  fenceDeclaredMode(project.canonical, { captured: jobs });
   const recovered = new Set();
   if (!jobs.some(job => job.gate_mode === DECLARED_SCHEMA)) return recovered;
   let plan;

@@ -9,6 +9,7 @@ import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { readDeclared } from '../lanes/validation.mjs';
 import { executionIdentity } from './execution-identity.mjs';
+import { refuseDeclaredGatesV2 } from './declared-inert.mjs';
 import { runProjectGateSync, resolveGateProfile } from './gate-profile.mjs';
 import { planDeclaredGateBounded } from './declared-gates.mjs';
 import { bindRequirements } from './declared-selection.mjs';
@@ -16,6 +17,7 @@ import { snapshotDeclaration, sameDeclaration, MAX_EXECUTION_BYTES, refuse, ATTE
 
 const self = fileURLToPath(import.meta.url), marker = 'DECLARED_PLAN_RESULT ';
 export function admittedDeclaredTestPlan({ repo, base, cwd, candidate, required = [], changed, env = process.env }) {
+  refuseDeclaredGatesV2();
   const project = gitProject(repo), identity = executionIdentity(project);
   const owner = readDeclared(project.canonical, { base, env });
   if (!owner) throw refuse('command planner requires a resolved declared owner');
@@ -48,6 +50,7 @@ if (isMain(import.meta.url)) {
   try {
     if (process.argv.length !== 4 || Buffer.byteLength(process.argv[2]) > MAX_EXECUTION_BYTES) throw refuse('invalid planning binding');
     const input = JSON.parse(process.argv[2]), receipt = process.argv[3];
+    refuseDeclaredGatesV2();
     executionIdentity(gitProject(input.repo), { bound: input.identity });
     const owner = readDeclared(input.repo, { base: input.base }); sameDeclaration(input.owner, owner);
     const evidence = { commands: [] };

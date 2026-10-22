@@ -1,4 +1,5 @@
 import test from '../../test/helpers/bounded-test.mjs';
+import pendingTest from '../../test/helpers/pending-declared.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { declaredFixture, declaration } from '../../promote/test/helpers/declared-fixture.mjs';
@@ -15,7 +16,7 @@ test('declared deferrals retain whole-file tokens, recipe tokens and complete ga
   assert.deepEqual(deferredTests('- Test evidence not re-executed: old.test.mjs', ''), ['old.test.mjs']);
 });
 
-test('settle observes canonical declared coverage through host admission without executing candidate gates', t => {
+pendingTest('settle observes canonical declared coverage through host admission without executing candidate gates', t => {
   const f = declaredFixture(t);
   let plan;
   try { plan = canonicalTestPlan({ repo: f.repo, base: f.base(), cwd: f.workspace, planner: declaration().promotion_tests,
@@ -26,7 +27,7 @@ test('settle observes canonical declared coverage through host admission without
   assert.equal(saved.phase, 'planning-only'); assert.equal(saved.evidence.schema, 'declared-gate-attempt/v2');
 });
 
-test('without a planner the mandatory declared command must supply every required token', t => {
+pendingTest('without a planner the mandatory declared command must supply every required token', t => {
   const value = declaration(); delete value.promotion_tests;
   const f = declaredFixture(t, { declared: value }), owner = readDeclared(f.repo);
   let plan;

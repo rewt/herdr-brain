@@ -1,4 +1,12 @@
 {
+  "ENG-537 inert admission (older execution witnesses remain pending ENG-538)": {
+    "promote/test/declared-inert.test.mjs": [
+      "v2 admission is inert before effects with unaudited edit",
+      "v2 admission is inert before effects with pending write",
+      "captured v2 cleanup and recovery remain inert after the owner removes its declaration",
+      "mode refusal precedes v2 shape errors, overrides and caller bindings"
+    ]
+  },
   "cedd498-r1 entry-point identity fence": {
     "promote/test/gate-identity.test.mjs": [
       "every declared execution entry preserves record and receipt bytes for a foreign caller with an unaudited edit",

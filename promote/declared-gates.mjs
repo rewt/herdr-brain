@@ -10,6 +10,7 @@ import { runGateSync } from '../test-slot/run.mjs';
 import { resolveGateLimits, gateHistoryKey } from '../test-slot/limits.mjs';
 import { withCanonicalSnapshot } from '../settle/test-plan.mjs';
 import { executionIdentity } from './execution-identity.mjs';
+import { refuseDeclaredGatesV2 } from './declared-inert.mjs';
 import { selectDeclared } from './declared-selection.mjs';
 import { remaining, git, captureGit } from './declared-support.mjs';
 import { runDeclaredCommand, prepareDeclared, recoverCommandEvidence } from './declared-command.mjs';
@@ -18,6 +19,7 @@ import { hash, snapshotDeclaration, sameDeclaration, gateDefinition, EXECUTION_S
 
 const runner = fileURLToPath(new URL('./declared-runner.mjs', import.meta.url));
 export function assertExecutionBinding(spec, { current = true } = {}) {
+  refuseDeclaredGatesV2();
   remaining(spec.deadline);
   executionIdentity({ canonical: spec.repo, identity: spec.common }, { bound: spec.identity });
   if (current) sameDeclaration(spec.declaration, readDeclared(spec.repo));
@@ -40,6 +42,7 @@ function attemptLimits({ common, owner, env, profile }) {
 // The watchdog contains the whole planning phase, including synchronous Git,
 // snapshot I/O and hashing. Leaf deadlines alone cannot stop a blocked parent.
 export function planDeclaredGateBounded(context) {
+  refuseDeclaredGatesV2();
   const { onUpdate = () => {}, evidence, env, profile, ...input } = context;
   executionIdentity({ canonical: input.repo, identity: input.common }, { bound: input.identity });
   const limits = attemptLimits(context), deadline = Date.now() + Math.ceil(limits.wall_seconds * 1000);
@@ -65,6 +68,7 @@ export function planDeclaredGateBounded(context) {
   return { spec: saved.spec, plan: saved.plan, deadline, limits, env };
 }
 export function planDeclaredGate({ repo, common, base, cwd, candidate, identity, owner, required, changed, jobs = [], env, profile, evidence, onUpdate = () => {}, selectionOnly = false, limits: suppliedLimits, deadline: suppliedDeadline }) {
+  refuseDeclaredGatesV2();
   executionIdentity({ canonical: repo, identity: common }, { bound: identity });
   const value = owner.value;
   const limits = suppliedLimits ?? attemptLimits({ common, owner, env, profile });
@@ -121,6 +125,7 @@ export function planDeclaredGate({ repo, common, base, cwd, candidate, identity,
   return { spec, plan, deadline, limits, env, selectionOnly };
 }
 export function executeDeclaredGate({ spec, env, evidence, onUpdate = () => {}, recheck = false }) {
+  refuseDeclaredGatesV2();
   const command = serializeExecution(spec), resultFile = path.join(spec.directory, 'result.json');
   const executionReceipt = path.join(spec.directory, `${recheck ? 'recheck' : 'executor'}.${randomUUID()}.execution.json`);
   assertExecutionBinding(spec);

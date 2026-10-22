@@ -2,6 +2,11 @@
 
 Status: accepted (authority review 7346206-r1 PASS); `receipt_reuse` = `declared-inputs` selected by the operator (HUM-38)
 
+Implementation status (ENG-537): **inert**. Every v2 admission is refused with
+`DECLARED_GATES_V2_INERT` before effects. No project can activate this contract
+until ENG-538 completes the identity fence and removes the lock. Behavior tests
+that require admission remain pending ENG-538; there is no activation switch.
+
 Authority: ARCH-38 decisions of 2026-10-21 at 18:51Z (park), 18:52Z (opaque
 commands and declared coverage), and 18:53Z (receipt-reuse alternatives),
 record sequences 13232, 13235 and 13237. The

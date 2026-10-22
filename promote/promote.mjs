@@ -25,7 +25,7 @@ import { reconcileBatchCompletion, accountUncapturedMember } from './completion.
 import { verifyTrainResult, terminalTrainJobs } from './evidence.mjs';
 import { probeNativeGate, nativeWorkerEvidence, liveNativeWorker } from './native-context.mjs';
 import { CAPABILITIES, DECLARED_SCHEMA, sameDeclaration, snapshotDeclaration, refuse as declaredRefusal } from './declaration.mjs';
-import { readDeclared } from '../lanes/validation.mjs';
+import { readDeclared, fenceDeclaredMode } from '../lanes/validation.mjs';
 import { executionIdentity } from './execution-identity.mjs';
 import { bindRequirements, assertBoundRequirements } from './declared-selection.mjs';
 import { fenceGateIdentity, resolveGateProfile } from './gate-profile.mjs';
@@ -68,6 +68,7 @@ function declaredWork(project) {
 function hasDeclaredWork(project) { return declaredWork(project).length > 0; }
 export function fenceDeclaredTarget(project, { jobs: supplied = [] } = {}) {
   const jobs = [...declaredWork(project), ...supplied.filter(job => job.gate_mode)];
+  fenceDeclaredMode(project.canonical, { captured: [...jobs, ...supplied] });
   const declared = jobs.length || readDeclared(project.canonical, { audit: false });
   if (!declared) return false;
   executionIdentity(project);
@@ -101,6 +102,7 @@ export function queueFor(cwd, { readOnly = false } = {}) {
     return data;
   };
   const transaction = (fn) => {
+    fenceDeclaredMode(project.canonical, { captured: declaredWork(project) });
     const release = acquireLock(path.join(directory, 'queue.lock'), { waitMs: 5000 });
     try {
       const data = load();

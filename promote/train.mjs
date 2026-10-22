@@ -9,7 +9,7 @@ import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { captureCompletionMember, accountUncapturedMember, recordFor } from './completion.mjs';
-import { validateTree, validationEnvironment, readDeclared } from '../lanes/validation.mjs';
+import { validateTree, validationEnvironment, readDeclared, fenceDeclaredMode } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
 import { fenceGateIdentity, resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
@@ -31,6 +31,7 @@ const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', imp
 export { verifyTrainResult } from './evidence.mjs';
 export async function runTrain({ file, canonical, identity, main, prepare, validation, recoveryOnly = false }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fenceDeclaredMode(canonical, { captured: [plan, validation?.declared] });
   if (!['promotion-train/v1', 'promotion-train/v2'].includes(plan.schema) || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   const declared = validation.declared;
   if ((declared || plan.jobs.some(job => job.gate_mode)) && plan.schema !== 'promotion-train/v2') throw declaredRefusal('declared work requires the v2 train reader');

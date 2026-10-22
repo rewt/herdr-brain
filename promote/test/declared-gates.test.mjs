@@ -1,4 +1,5 @@
 import test from '../../test/helpers/bounded-test.mjs';
+import pendingTest from '../../test/helpers/pending-declared.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,7 +36,7 @@ test('positive deferred work retains estimates and destination but supplies no r
   for (const key of ['gates', 'deferred', 'unknown']) assert.throws(() => selectDeclared({ ...emptySelection(), [key]: Array(513).fill({}) }, value, []));
 });
 
-test('canonical planner/imports ignore candidate edits and immutable argv cannot omit selection or requirements', t => {
+pendingTest('canonical planner/imports ignore candidate edits and immutable argv cannot omit selection or requirements', t => {
   const f = declaredFixture(t), marker = path.join(f.root, 'candidate-planner');
   f.write('planner.mjs', `import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(marker)},'bad');`, f.workspace);
   f.write('inventory.mjs', "throw Error('candidate inventory ran');", f.workspace); f.commit(f.workspace);
@@ -48,7 +49,7 @@ test('canonical planner/imports ignore candidate edits and immutable argv cannot
   assert.throws(() => validateDeclared({ ...declaration(), schema: 'declared-gates/v1' }), /unsupported/);
 });
 
-test('opaque commands keep shell bytes, quoting, cwd and order, and allow reviewed candidate helper edits', t => {
+pendingTest('opaque commands keep shell bytes, quoting, cwd and order, and allow reviewed candidate helper edits', t => {
   const value = declaration();
   value.gates.tool.command = "node runner.mjs 'a; touch injected' \"quoted arg\"";
   const f = declaredFixture(t, { declared: value });
@@ -60,7 +61,7 @@ test('opaque commands keep shell bytes, quoting, cwd and order, and allow review
   assert.equal(gate.gates.every(row => row.outcome === 'executed'), true);
 });
 
-test('one mandatory failure retains exit, immutable logs and not-reached outcomes', t => {
+pendingTest('one mandatory failure retains exit, immutable logs and not-reached outcomes', t => {
   const f = declaredFixture(t);
   f.write('baseline.mjs', "console.log('negative control');process.exit(9);", f.workspace); f.commit(f.workspace);
   const gate = f.execute(f.plan({ required: [{ gate: 'tool' }] }));
@@ -70,7 +71,7 @@ test('one mandatory failure retains exit, immutable logs and not-reached outcome
   assert.ok(gate.gates[0].execution.execution_hash); assert.deepEqual(f.lines(), []);
 });
 
-test('canonical preparation cannot alter captured tracked snapshot source', t => {
+pendingTest('canonical preparation cannot alter captured tracked snapshot source', t => {
   const value = declaration(); value.promotion_tests.prepare = [{ run: "printf changed > inventory.mjs" }];
   const f = declaredFixture(t, { declared: value });
   assert.throws(() => f.plan(), /snapshot tracked source changed/); assert.deepEqual(f.lines(), []);
@@ -88,7 +89,7 @@ test('input digests bind bytes, modes, absent paths, membership, ignored output 
   assert.throws(() => observe(), /ENOENT|escapes/);
 });
 
-test('declared-inputs reuses an executed pass across unrelated commits and preserves source logs', t => {
+pendingTest('declared-inputs reuses an executed pass across unrelated commits and preserves source logs', t => {
   const value = declaration(); value.inputs = { promotion: reuseInputs() }; delete value.promotion_tests;
   const f = declaredFixture(t, { declared: value }), first = f.execute();
   assert.equal(first.gates[0].outcome, 'executed'); assert.ok(first.gates[0].source);
@@ -100,7 +101,7 @@ test('declared-inputs reuses an executed pass across unrelated commits and prese
   assert.ok(second.gates[0].integration_observation);
 });
 
-for (const dimension of ['content', 'deletion', 'glob membership', 'mode', 'environment absent-empty', 'toolchain output', 'runtime version output', 'source log integrity', 'execution sidecar integrity', 'reused pointer integrity']) test(`declared-inputs executes once on a ${dimension} miss`, t => {
+for (const dimension of ['content', 'deletion', 'glob membership', 'mode', 'environment absent-empty', 'toolchain output', 'runtime version output', 'source log integrity', 'execution sidecar integrity', 'reused pointer integrity']) pendingTest(`declared-inputs executes once on a ${dimension} miss`, t => {
   const value = declaration(); value.inputs = { promotion: reuseInputs() }; delete value.promotion_tests;
   if (dimension === 'toolchain output') value.inputs.promotion.toolchains.runner = 'cat .fixture/version';
   if (dimension === 'runtime version output') value.inputs.promotion.toolchains.runtime = 'cat .fixture/version';
@@ -131,7 +132,7 @@ test('missing runtime/runner and incomplete input declarations are ineligible fo
   assert.ok(inputEligibility(inputs, { OUTSIDE: 'literal' }));
 });
 
-test('a reused input changed before integration executes once under current inputs', t => {
+pendingTest('a reused input changed before integration executes once under current inputs', t => {
   const value = declaration(); value.inputs = { promotion: reuseInputs() }; delete value.promotion_tests;
   const f = declaredFixture(t, { declared: value }); f.execute();
   const execution = f.plan(), second = f.execute(execution); assert.equal(second.gates[0].outcome, 'reused');
@@ -140,7 +141,7 @@ test('a reused input changed before integration executes once under current inpu
   assert.equal(checked.gates[0].outcome, 'executed'); assert.equal(checked.gates[0].reexecuted, true); assert.equal(f.lines().length, 2);
 });
 
-test('a later forced gate invalidates an earlier reused gate and both execute at most once', t => {
+pendingTest('a later forced gate invalidates an earlier reused gate and both execute at most once', t => {
   const value = declaration();
   value.inputs = { promotion: { ...reuseInputs(), paths: ['baseline.mjs', '.fixture/earlier'] } };
   value.gates.tool.inputs = { ...reuseInputs(), paths: ['runner.mjs', '.fixture/later'] };
@@ -160,7 +161,7 @@ test('a later forced gate invalidates an earlier reused gate and both execute at
   assert.notEqual(final.gates[0].source, first.gates[0].source);
 });
 
-for (const dimension of ['command bytes', 'cwd', 'coverage', 'ordered preparation', 'environment salt', 'wall limit', 'idle limit', 'host policy', 'input specification', 'allowlist names', 'runtime probe declaration', 'runner probe declaration']) test(`declared-inputs executes once when ${dimension} change`, t => {
+for (const dimension of ['command bytes', 'cwd', 'coverage', 'ordered preparation', 'environment salt', 'wall limit', 'idle limit', 'host policy', 'input specification', 'allowlist names', 'runtime probe declaration', 'runner probe declaration']) pendingTest(`declared-inputs executes once when ${dimension} change`, t => {
   const value = declaration(), f = declaredFixture(t, { declared: value });
   value.promotion = 'true'; value.gates.tool.command = `node '${f.workspace}/runner.mjs'`;
   value.gates.tool.inputs = { ...reuseInputs(), paths: ['runner.mjs', 'product.txt', '.fixture/input*'] };
@@ -182,7 +183,7 @@ for (const dimension of ['command bytes', 'cwd', 'coverage', 'ordered preparatio
   const second = f.execute(f.plan({ required })); assert.equal(second.gates[1].outcome, 'executed'); assert.equal(f.lines().length, 2);
 });
 
-test('allowlisted execution omits ambient values and receipts contain digests instead of environment values', t => {
+pendingTest('allowlisted execution omits ambient values and receipts contain digests instead of environment values', t => {
   const value = declaration(); value.inputs = { promotion: reuseInputs() }; delete value.promotion_tests;
   const f = declaredFixture(t, { declared: value });
   f.write('baseline.mjs', "import fs from 'node:fs';if(process.env.UNLISTED_TEST_VALUE!==undefined)throw Error('ambient value leaked');fs.appendFileSync(process.env.CHECK_LOG,'baseline\\n');", f.workspace); f.commit(f.workspace);
@@ -193,7 +194,7 @@ test('allowlisted execution omits ambient values and receipts contain digests in
   assert.equal(receipt.includes(f.env.CHECK_LOG), false);
 });
 
-test('failed probes and always-execute never reuse a pass', t => {
+pendingTest('failed probes and always-execute never reuse a pass', t => {
   const value = declaration(); value.inputs = { promotion: reuseInputs() }; value.inputs.promotion.toolchains.runner = 'exit 7'; delete value.promotion_tests;
   const f = declaredFixture(t, { declared: value });
   const first = f.execute(), second = f.execute();
@@ -204,7 +205,7 @@ test('failed probes and always-execute never reuse a pass', t => {
   assert.equal(JSON.parse(fs.readFileSync(third.result, 'utf8')).commands.some(row => row.kind === 'version-probe'), false);
 });
 
-test('declared input mutation during a command never publishes a reusable source', t => {
+pendingTest('declared input mutation during a command never publishes a reusable source', t => {
   const value = declaration(); value.inputs = { promotion: reuseInputs() }; delete value.promotion_tests;
   const f = declaredFixture(t, { declared: value });
   f.write('baseline.mjs', "import fs from 'node:fs';fs.appendFileSync('.fixture/input','changed');fs.appendFileSync(process.env.CHECK_LOG,'mutated\\n');", f.workspace); f.commit(f.workspace);
@@ -220,7 +221,7 @@ test('declared input mutation during a command never publishes a reusable source
   assert.deepEqual(sources, []);
 });
 
-test('input enumeration and byte ceilings are hard refusals of reuse evidence', t => {
+pendingTest('input enumeration and byte ceilings are hard refusals of reuse evidence', t => {
   const f = declaredFixture(t), deadline = Date.now() + 10000, large = path.join(f.workspace, '.fixture/large');
   fs.mkdirSync(path.dirname(large), { recursive: true }); fs.writeFileSync(large, ''); fs.truncateSync(large, 64 * 1024 * 1024 + 1);
   assert.throws(() => observePaths(f.workspace, ['.fixture/large'], deadline), /64 MiB/);
@@ -229,7 +230,7 @@ test('input enumeration and byte ceilings are hard refusals of reuse evidence', 
   assert.throws(() => observePaths(f.workspace, ['.fixture/**'], deadline), /10000 paths/);
 });
 
-test('Python module, inline and shell-quoted executable spellings remain ordinary opaque commands', t => {
+pendingTest('Python module, inline and shell-quoted executable spellings remain ordinary opaque commands', t => {
   const value = declaration(); value.gates.python = { command: `python3 -m fixture_driver && py""thon3 -c 'import os;open(os.environ["CHECK_LOG"],"a").write("python inline\\n")'`, cwd: '.', covers: ['fixture:python-controls'] };
   const f = declaredFixture(t, { declared: value });
   f.write('fixture_driver.py', "import os\nwith open(os.environ['CHECK_LOG'],'a') as log:\n    log.write('python module\\n')\n"); f.commit(); f.git(['rebase', 'main'], f.workspace);
@@ -238,14 +239,14 @@ test('Python module, inline and shell-quoted executable spellings remain ordinar
   assert.deepEqual(f.lines(), ['baseline', 'python module', 'python inline']);
 });
 
-test('a signaled gate preserves its original signal and prevents later commands', t => {
+pendingTest('a signaled gate preserves its original signal and prevents later commands', t => {
   const value = declaration(); value.gates.tool.command = 'kill -TERM $$';
   const f = declaredFixture(t, { declared: value }), gate = f.execute(f.plan({ required: [{ gate: 'tool' }] }));
   assert.equal(gate.outcome, 'red'); assert.equal(gate.gates[1].execution.signal, 'SIGTERM'); assert.equal(gate.gates[1].execution.exit_code, null);
   assert.deepEqual(f.lines(), ['baseline']);
 });
 
-for (const scenario of ['malformed planner', 'oversized planner', 'planner preparation deadline', 'candidate preparation deadline', 'gate deadline']) test(`bounded ${scenario} preserves failed command logs and prevents a green pass`, t => {
+for (const scenario of ['malformed planner', 'oversized planner', 'planner preparation deadline', 'candidate preparation deadline', 'gate deadline']) pendingTest(`bounded ${scenario} preserves failed command logs and prevents a green pass`, t => {
   const value = declaration(); value.timeout_seconds.promotion = scenario.includes('deadline') ? 2 : 20;
   if (scenario === 'planner preparation deadline') value.promotion_tests.prepare = [{ run: 'node -e "setTimeout(()=>{},60000)"' }];
   if (scenario === 'candidate preparation deadline') value.gate.prepare = [{ run: 'node -e "setTimeout(()=>{},60000)"' }];
@@ -268,7 +269,7 @@ for (const scenario of ['malformed planner', 'oversized planner', 'planner prepa
   assert.deepEqual(f.lines(), []);
 });
 
-for (const kind of ['planner', 'probe']) for (const failure of ['exit', 'signal']) test(`failed ${kind} retains stdout and original ${failure}`, t => {
+for (const kind of ['planner', 'probe']) for (const failure of ['exit', 'signal']) pendingTest(`failed ${kind} retains stdout and original ${failure}`, t => {
   const value = declaration();
   if (kind === 'probe') { value.inputs = { promotion: reuseInputs() }; value.inputs.promotion.toolchains.runner = failure === 'exit' ? 'printf probe-output; exit 7' : 'printf probe-output; kill -TERM $$'; delete value.promotion_tests; }
   const f = declaredFixture(t, { declared: value });
@@ -292,7 +293,7 @@ for (const kind of ['planner', 'probe']) for (const failure of ['exit', 'signal'
   assert.equal(execution.exit_code, failure === 'exit' ? 7 : 143); assert.equal(execution.signal, row.signal);
 });
 
-for (const stage of ['planner preparation', 'candidate preparation', 'gate']) test(`streaming ${stage} survives outer idle time while a silent leaf times out`, t => {
+for (const stage of ['planner preparation', 'candidate preparation', 'gate']) pendingTest(`streaming ${stage} survives outer idle time while a silent leaf times out`, t => {
   const value = declaration(); value.timeout_seconds.promotion = 20; value.idle_timeout_seconds = { promotion: 1 };
   const command = 'node activity.mjs';
   if (stage === 'planner preparation') value.promotion_tests.prepare = [{ run: command }];

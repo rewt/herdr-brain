@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { validationEnvironment, readDeclared } from '../lanes/validation.mjs';
+import { validationEnvironment, readDeclared, fenceDeclaredMode } from '../lanes/validation.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
@@ -24,6 +24,7 @@ const object = value => value && typeof value === 'object' && !Array.isArray(val
 // Inspection cannot audit or finish a pending config write. Check every saved
 // identity before any audited policy read, host update or adapter receipt.
 export function fenceGateIdentity(canonical, environment = process.env, { settings, captured } = {}) {
+  fenceDeclaredMode(canonical, { env: environment, captured });
   const bindings = [
     ...(captured && (captured.gate_mode || Object.hasOwn(captured, 'execution_identity') || captured.schema === 'declared-gate-attempt/v2') ? [captured] : []),
     ...(captured?.jobs ?? []).filter(job => job.gate_mode),

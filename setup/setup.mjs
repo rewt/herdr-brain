@@ -11,7 +11,7 @@ import { plan as sessionPlan } from '../sessions/plan.mjs';
 import { createHerdrObserver } from '../sessions/observe.mjs';
 import { herdrSocketPath } from '../lanes/board/herdr-client.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
-import { resolveValidation, validateValidation } from '../lanes/validation.mjs';
+import { resolveValidation, validateValidation, fenceDeclaredMode } from '../lanes/validation.mjs';
 import { readPlainFile } from '../lib/files.mjs';
 import { apply as sessionApply } from '../sessions/apply.mjs';
 import { checkAuthorization } from '../sessions/authorization.mjs';
@@ -45,6 +45,7 @@ export function capabilityHolds(entry) {
 }
 
 function localChecks({ cwd, workspace, env, home, nodeVersion }) {
+  fenceDeclaredMode(cwd, { env });
   const checks = [check('node', { actual: nodeVersion, required: expectedNode }, nodeVersion === expectedNode ? []
     : [reason('node-version', `Use the pinned Node ${expectedNode}.`)])];
   let inspection = null;

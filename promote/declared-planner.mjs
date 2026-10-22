@@ -5,7 +5,9 @@ import fs from 'node:fs';
 import { isMain } from '../lib/cli-help.mjs';
 import { spawn } from 'node:child_process';
 import { MAX_PLAN_BYTES, argv } from './declaration.mjs';
+import { refuseDeclaredGatesV2 } from './declared-inert.mjs';
 export function main(args = process.argv.slice(2)) {
+  refuseDeclaredGatesV2();
   const command = JSON.parse(args[0]);
   if (!argv(command)) throw Error('invalid planner command');
   const child = spawn(command[0], command.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });

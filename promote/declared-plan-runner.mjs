@@ -4,6 +4,7 @@ import { readDeclared } from '../lanes/validation.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { sameDeclaration, MAX_EXECUTION_BYTES, ATTEMPT_SCHEMA, hash, refuse } from './declaration.mjs';
 import { executionIdentity } from './execution-identity.mjs';
+import { refuseDeclaredGatesV2 } from './declared-inert.mjs';
 import { planDeclaredGate } from './declared-gates.mjs';
 
 export function main(args = process.argv.slice(2)) {
@@ -12,6 +13,7 @@ export function main(args = process.argv.slice(2)) {
   try {
     if (args.length !== 2 || Buffer.byteLength(args[0]) > MAX_EXECUTION_BYTES) throw refuse('invalid immutable planning argv');
     const input = JSON.parse(args[0]); file = args[1];
+    refuseDeclaredGatesV2();
     executionIdentity({ canonical: input.repo, identity: input.common }, { bound: input.identity });
     const owner = readDeclared(input.repo, { base: input.base }); sameDeclaration(input.owner, owner);
     owner.source.revision = input.owner.source.revision;

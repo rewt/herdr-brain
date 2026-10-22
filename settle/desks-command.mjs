@@ -4,10 +4,11 @@ import { routesSnapshot, editProjectConfig } from '../lanes/routes-command.mjs';
 import { UserError } from '../lib/store.mjs';
 import { renderDesks } from '../lib/render.mjs';
 import { DESK_FIELDS, DESK_DEFAULTS, parseDeskValue, validateDeskSettings } from './config.mjs';
-import { resolveValidation } from '../lanes/validation.mjs';
+import { resolveValidation, fenceDeclaredMode } from '../lanes/validation.mjs';
 import path from 'node:path';
 
 export function desksSnapshot(cwd = process.cwd()) {
+  fenceDeclaredMode(cwd);
   const routes = routesSnapshot(cwd);
   let settings = {}, source = 'default';
   for (const file of routes.files) {

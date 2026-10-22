@@ -1,4 +1,4 @@
-import test from '../../test/helpers/bounded-test.mjs';
+import test from '../../test/helpers/pending-declared.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';

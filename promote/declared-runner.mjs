@@ -10,11 +10,13 @@ import { hash, closed, validateDeclared, sameDeclaration, gateDefinition, EXECUT
 import { selectDeclared, unionRequirements } from './declared-selection.mjs';
 import { remaining, contained } from './declared-support.mjs';
 import { assertExecutionBinding, serializeExecution } from './declared-gates.mjs';
+import { refuseDeclaredGatesV2 } from './declared-inert.mjs';
 import { runDeclaredCommand, prepareDeclared } from './declared-command.mjs';
 import { inputEligibility, gateEnvironment, preparationEnvironment, observation, missDimension } from './declared-inputs.mjs';
 import { withReceiptLock, findSource, publishSource, verifySource, validCommandEvidence } from './declared-receipts.mjs';
 
 export function validateExecution(spec) {
+  refuseDeclaredGatesV2();
   closed(spec, ['schema', 'repo', 'common', 'base', 'candidate', 'cwd', 'branch', 'identity', 'declaration', 'required', 'changed', 'jobs', 'limits', 'deadline', 'directory', 'selection', 'commands'], 'execution binding');
   serializeExecution(spec);
   if (spec.schema !== EXECUTION_SCHEMA || !Array.isArray(spec.commands) || !spec.commands.length) throw refuse('unsupported immutable execution binding');

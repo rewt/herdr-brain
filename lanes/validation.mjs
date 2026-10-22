@@ -15,6 +15,8 @@ import { readPolicyFile, readPolicySnapshot, homePolicyDigest } from '../lib/con
 import { gitProject } from '../lib/project.mjs';
 import { validateDeclared, readCommitted, DECLARED_SCHEMA, SELECTION_SCHEMA, hash, refuse, object } from '../promote/declaration.mjs';
 import { exactIdentity, exactDigest, restrictEnvironment, excludedDelta, explainMiss } from './exact-validation.mjs';
+import { parseUniqueJson } from '../sessions/json.mjs';
+import { fenceCapturedDeclared } from '../promote/declared-inert.mjs';
 
 import { VALIDATION_TIERS, validateValidation } from '../lib/validation-declaration.mjs';
 export { VALIDATION_TIERS, validateValidation } from '../lib/validation-declaration.mjs';
@@ -39,7 +41,28 @@ export function tapTotals(output) {
 
 // Resolve through config-home's one owner source. Git-backed sources come from
 // the captured canonical base, never a lane copy or a working edit.
+export function fenceDeclaredMode(root, { base = 'HEAD', env = process.env, captured } = {}) {
+  fenceCapturedDeclared(captured);
+  let value;
+  try {
+    // Use R-759's inspection-only owner discovery: even identity.json must not
+    // audit an edit or recover a pending write before the inert refusal.
+    const selected = policyLocation(root, 'validation', env, { canonical: root, audit: false });
+    if (selected.home || !fs.existsSync(path.join(root, '.git'))) {
+      if (present(selected.file)) value = parseUniqueJson(readPlainFile(path.join(fs.realpathSync(path.dirname(selected.file)), path.basename(selected.file))));
+    } else {
+      const gitEnv = configGitEnv(env), project = gitProject(root, { env: gitEnv });
+      value = readCommitted(project.canonical, VALIDATION_FILE, base, { schemaProbe: true, env: gitEnv });
+    }
+  } catch {
+    // This is mode detection only. Existing readers retain their validation,
+    // auditing and old-schema errors when no v2 declaration can be inspected.
+  }
+  fenceCapturedDeclared(value);
+}
+
 export function readDeclared(root, { base = 'HEAD', env = process.env, promotion, override, audit = true } = {}) {
+  fenceDeclaredMode(root, { base, env });
   const selected = policyLocation(root, 'validation', env, { canonical: root, audit });
   const gitEnv = configGitEnv(env);
   let value, revision;
@@ -60,6 +83,7 @@ export function readDeclared(root, { base = 'HEAD', env = process.env, promotion
     revision = execFileSync('git', ['-C', root, 'rev-parse', '--verify', base], { env: gitEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   }
   if (value?.schema === undefined) return null;
+  fenceCapturedDeclared(value);
   validateDeclared(value);
   const resolved = kind => {
     const location = policyLocation(root, kind, env, { canonical: root, audit });
@@ -79,6 +103,7 @@ export function readDeclared(root, { base = 'HEAD', env = process.env, promotion
 // Always use the canonical project's declarations, never a worker's override.
 // A separate tracked file works even when .lane.json is shared machine config.
 export function resolveValidation({ root, config = {}, source = 'lane config', sources = {}, env = process.env } = {}) {
+  fenceCapturedDeclared(config.validation);
   const owner = readDeclared(root, { env });
   if (owner) {
     const value = owner.value;
@@ -120,6 +145,7 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
 // Ask the lane CLI for its canonical, layered configuration. This keeps host
 // envelopes aligned with train settings (including LANE_CONFIG/fleet layers).
 export function canonicalValidation(root, env = process.env) {
+  fenceDeclaredMode(root, { env });
   const cli = fileURLToPath(new URL('./lane.mjs', import.meta.url));
   const output = execFileSync(process.execPath, [cli, 'config'], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const rows = new Map(output.trim().split('\n').map(line => {
@@ -162,6 +188,7 @@ function unchanged(cwd, before, label) {
 }
 
 export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, exact }) {
+  fenceDeclaredMode(cwd, { env });
   const admittedRelease = bundleRelease();
   const policyEnv = env, policyDigest = homePolicyDigest(cwd, policyEnv);
   if (policyDigest) environment = digest({ environment, config_home_inputs: policyDigest });

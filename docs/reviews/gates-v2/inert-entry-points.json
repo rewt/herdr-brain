@@ -1,0 +1,239 @@
+{
+  "run": "R-761",
+  "item": "ENG-537",
+  "code": "DECLARED_GATES_V2_INERT",
+  "unlock_item": "ENG-538",
+  "activation_seam": "none; admission-dependent behavior tests are pending ENG-538",
+  "witness_file": "promote/test/declared-inert.test.mjs",
+  "matrix": {
+    "config": [
+      "unaudited edit (validation and identity home)",
+      "pending replaced validation write"
+    ],
+    "caller": [
+      "owner",
+      "same identity foreign project",
+      "foreign identity"
+    ],
+    "captured_identity": [
+      "present",
+      "omitted"
+    ],
+    "oracle": "Every entry refuses with the named code; both record directories, all policy bytes, queue/train/host/slot/executor/command evidence, receipt-directory inventory and modes are unchanged. Pending writes remain unresolved."
+  },
+  "entries": [
+    {
+      "entry": "promote/gate-profile.mjs fenceGateIdentity and resolveGateProfile",
+      "guard": "Mode inspection precedes identity and audited policy reads.",
+      "witnesses": [
+        "identity fence",
+        "profile"
+      ]
+    },
+    {
+      "entry": "promote/gate-profile.mjs runProjectGateSync",
+      "guard": "Captured/current mode fence precedes release/host receipt annotation and spawn.",
+      "witnesses": [
+        "adapter"
+      ]
+    },
+    {
+      "entry": "promote/host-gate.mjs --lock, --held, --execute",
+      "guard": "Shared fence precedes native_context and all host/train/slot writes; refusal catch stays unfenced.",
+      "witnesses": [
+        "host --lock",
+        "host --held",
+        "host --execute"
+      ]
+    },
+    {
+      "entry": "promote/promote.mjs queueFor, fenceDeclaredTarget and transaction",
+      "guard": "Current/saved mode fence precedes homeProject auditing, directory creation and queue lock/mutation.",
+      "witnesses": [
+        "queueFor",
+        "queue fence",
+        "queue transaction"
+      ]
+    },
+    {
+      "entry": "promote/promote.mjs enqueue, checkDeclaredJobs, drain",
+      "guard": "Current/saved mode fence precedes audited admission, workers, locks and dequeue.",
+      "witnesses": [
+        "enqueue",
+        "checkDeclaredJobs",
+        "drain"
+      ]
+    },
+    {
+      "entry": "promote/promote.mjs performBatch, perform, start (private continuations)",
+      "guard": "Private continuations require the fenced enqueue/drain paths; transaction mutations fence again.",
+      "witnesses": [
+        "enqueue",
+        "drain",
+        "promote CLI --drain",
+        "promote CLI --resume"
+      ]
+    },
+    {
+      "entry": "promote/promote.mjs finishCleanup and retryCleanup",
+      "guard": "Captured v2 jobs remain inert after current policy rollback, before locks, record reconciliation or retirement.",
+      "witnesses": [
+        "finishCleanup",
+        "retryCleanup",
+        "promote CLI --cleanup-job"
+      ]
+    },
+    {
+      "entry": "promote/train.mjs runTrain, recovery and integration",
+      "guard": "Current and captured modes fence before caller identity validation, save, recovery or integration.",
+      "witnesses": [
+        "train",
+        "train recovery"
+      ]
+    },
+    {
+      "entry": "lanes/lane.mjs startup, config, check, promote, promote-batch",
+      "guard": "Existing startup and stage fences reach the inert mode guard before release forwarding or layered config audits.",
+      "witnesses": [
+        "lane config",
+        "lane check",
+        "lane promote",
+        "lane promote-batch"
+      ]
+    },
+    {
+      "entry": "supervisor/supervisor.mjs main promote and handle",
+      "guard": "Existing read-only queue discovery reaches the inert target fence before owner/policy/receipt effects.",
+      "witnesses": [
+        "supervisor promote API",
+        "supervisor handle API",
+        "supervisor promote CLI",
+        "supervisor handle CLI"
+      ]
+    },
+    {
+      "entry": "settle/settle.mjs main",
+      "guard": "Existing target fence reaches the inert guard before record discovery, ownership continuation or journal writes.",
+      "witnesses": [
+        "settle CLI"
+      ]
+    },
+    {
+      "entry": "promote/declared-planning.mjs admittedDeclaredTestPlan and CLI",
+      "guard": "Unconditional v2-only refusal before identity capture/comparison, owner auditing, directories or logs.",
+      "witnesses": [
+        "admittedDeclaredTestPlan",
+        "promote/declared-planning.mjs"
+      ]
+    },
+    {
+      "entry": "promote/declared-gates.mjs planDeclaredGateBounded",
+      "guard": "Unconditional refusal before identity, limits, planning directory and onUpdate.",
+      "witnesses": [
+        "planDeclaredGateBounded"
+      ]
+    },
+    {
+      "entry": "promote/declared-gates.mjs planDeclaredGate",
+      "guard": "Unconditional refusal before identity, limits, snapshots, directories and onUpdate.",
+      "witnesses": [
+        "planDeclaredGate"
+      ]
+    },
+    {
+      "entry": "promote/declared-plan-runner.mjs main and CLI",
+      "guard": "Unconditional refusal after argument parse and before identity, owner audit or state initialization.",
+      "witnesses": [
+        "promote/declared-plan-runner.mjs"
+      ]
+    },
+    {
+      "entry": "promote/declared-gates.mjs assertExecutionBinding, executeDeclaredGate and recheckDeclaredGate",
+      "guard": "Unconditional refusal before binding checks, sidecars, executor spawn or result/log publication.",
+      "witnesses": [
+        "assertExecutionBinding",
+        "captured-only execution binding",
+        "executeDeclaredGate",
+        "recheckDeclaredGate"
+      ]
+    },
+    {
+      "entry": "promote/declared-runner.mjs validateExecution, runDeclaredExecution and CLI",
+      "guard": "Unconditional validation-entry refusal precedes owner auditing, state save, probes, gates and source publication.",
+      "witnesses": [
+        "validateExecution",
+        "runDeclaredExecution",
+        "runner recheck",
+        "runner CLI ",
+        "runner CLI --recheck"
+      ]
+    },
+    {
+      "entry": "promote/declared-planner.mjs bounded output main and CLI",
+      "guard": "Unconditional refusal before parsing/spawning a planner command.",
+      "witnesses": [
+        "bounded output planner",
+        "bounded output planner CLI"
+      ]
+    },
+    {
+      "entry": "promote/declared-command.mjs command/preparation writers",
+      "guard": "Unconditional refusal before command logs, preparation skips or command execution.",
+      "witnesses": [
+        "runDeclaredCommand",
+        "prepareDeclared"
+      ]
+    },
+    {
+      "entry": "promote/declared-receipts.mjs directory, lock, source and witness writers",
+      "guard": "Unconditional refusal before directory creation, locks and receipt/witness/pointer publication; verifySource enters the same lock fence.",
+      "witnesses": [
+        "receiptDirectory",
+        "withReceiptLock",
+        "publishSource",
+        "verifySource"
+      ]
+    },
+    {
+      "entry": "lanes/validation.mjs readDeclared, resolveValidation, canonicalValidation, validateTree",
+      "guard": "Inspection-only owner resolution and raw mode parsing precede audited reads, receipts and commands; inline v2 also refuses.",
+      "witnesses": [
+        "mode inspection",
+        "readDeclared audited",
+        "readDeclared inspection",
+        "resolveValidation",
+        "canonicalValidation",
+        "validateTree"
+      ]
+    },
+    {
+      "entry": "setup/setup.mjs localChecks (doctor)",
+      "guard": "Mode inspection precedes session/config inspection and observation.",
+      "witnesses": [
+        "doctor"
+      ]
+    },
+    {
+      "entry": "lib/config-command.mjs configSnapshot",
+      "guard": "Mode inspection precedes homeProject/config audits.",
+      "witnesses": [
+        "configSnapshot"
+      ]
+    },
+    {
+      "entry": "settle/desks-command.mjs desksSnapshot",
+      "guard": "Mode inspection precedes route/config audits.",
+      "witnesses": [
+        "desksSnapshot"
+      ]
+    },
+    {
+      "entry": "promote/evidence.mjs terminalTrainJobs and verifyTrainResult",
+      "guard": "Current/captured mode fence precedes proof adoption; parsed v2 train proofs also refuse after policy rollback.",
+      "witnesses": [
+        "terminalTrainJobs",
+        "verifyTrainResult"
+      ]
+    }
+  ]
+}

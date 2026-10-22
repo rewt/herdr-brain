@@ -24,7 +24,8 @@
     "git_layout": [
       "canonical checkout root and nested directory",
       "linked worktree root and nested directory",
-      "bare Git common directory and its linked subdirectory"
+      "bare Git common directory and its linked subdirectory",
+      "separate Git metadata directory and checkout subdirectory"
     ]
   },
   "entries": [
@@ -297,6 +298,20 @@
         "existing lanes/test/lane.test.mjs bare repositories with only linked worktrees allow reads and refuse mutations clearly"
       ],
       "oracle": "Bare Git identity is confirmed through Git and supplied to inspection-only home discovery. V2 refuses with the named code and leaves every bare Git/receipt byte unchanged; undeclared bare-linked config/status reads still succeed and mutations retain the existing canonical-checkout refusal."
+    },
+    {
+      "finding": "Separate-Git-dir legacy compatibility control found during R-764 importer validation",
+      "witness": "committed v2 stays inert at separate Git directories and checkout subdirectories",
+      "controls": [
+        "mode inspection",
+        "readDeclared",
+        "canonicalValidation",
+        "validateTree",
+        "profile",
+        "configSnapshot",
+        "existing lanes/test/lane.test.mjs a repository with a separate git directory retains its canonical checkout identity"
+      ],
+      "oracle": "Git confirms that the invocation is the common Git directory itself before committed policy is inspected; no local-file fallback or audited discovery is used. Named v2 refusal preserves all Git and receipt bytes. Undeclared separate-Git-dir open retains its original canonical checkout and common-directory identity."
     }
   ]
 }

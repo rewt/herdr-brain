@@ -46,14 +46,13 @@ function inspectProject(root, env) {
   try { return gitProject(root, { env: gitEnv }); }
   catch (error) {
     if (error.status === 128 && /^fatal: not a git repository\b/mu.test(String(error.stderr))) return null;
-    // A bare common directory has committed policy but no --show-toplevel.
-    // Keep legacy linked-worktree reads working without calling it non-Git.
+    // Bare and separate common directories can expose committed policy without
+    // --show-toplevel. Confirm the Git directory itself, never a local fallback.
     const inspect = args => execFileSync('git', ['-C', root, 'rev-parse', ...args], { env: gitEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
     try {
-      if (inspect(['--is-bare-repository']) === 'true') {
-        const common = fs.realpathSync(inspect(['--path-format=absolute', '--git-common-dir']));
-        return { canonical: common, identity: common };
-      }
+      const common = fs.realpathSync(inspect(['--path-format=absolute', '--git-common-dir']));
+      const directory = fs.realpathSync(inspect(['--path-format=absolute', '--git-dir']));
+      if (common === directory && directory === fs.realpathSync(root)) return { canonical: common, identity: common };
     } catch { /* An unconfirmed Git identity retains the original refusal. */ }
     throw error;
   }
@@ -86,7 +85,7 @@ export function fenceDeclaredMode(root, { base = 'HEAD', env = process.env, capt
   try {
     // Use R-759's inspection-only owner discovery: even identity.json must not
     // audit an edit or recover a pending write before the inert refusal.
-    // Reuse the inspected Git fact, including bare common directories. This
+    // Reuse the inspected Git fact, including common directories. This
     // avoids homeProject's non-worktree error recovery and keeps it unaudited.
     const binding = project ? homeProject(root, env, { git: project, inspection: true }) : undefined;
     selected = policyLocation(root, 'validation', env, { canonical: project?.canonical ?? root, audit: false, ...(project ? { binding } : {}) });

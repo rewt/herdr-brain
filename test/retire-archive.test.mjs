@@ -104,7 +104,7 @@ for (const method of ['cherry-pick', 'rebase']) for (const record of ['terminal'
     assert.equal(retirement.observe().git[0].integrated, false);
     const status = await readRetirementStatus({ cwd: f.repo, org: f.org, env: f.env, herdr: f.job.herdr, ...commands });
     const row = status.rows.find(row => row.type === 'worktree' && row.worktree === f.lane);
-    assert.equal(row.integrated, false); assert.equal(row.class, 'TERMINAL');
+    assert.equal(row.integrated, false); assert.equal(row.class, null, 'CLOSEOUT.md:23-26 keeps foreground sweep candidates inventory-only without opt-in');
     assert.match(row.nextAction, /eligible for archival retirement/);
     boundedSummary(row.archival);
     const result = sweep(f), proof = result.results[0];
@@ -152,9 +152,9 @@ for (const setting of [false, 'lane copy', 'environment override']) test(`explic
   assert.equal(fs.existsSync(path.join(f.common, 'lane-archive')), false);
 });
 
-for (const method of ['cherry-pick', 'rebase']) test(`default ${method} patch proof releases an open item and parent, preserving the exact original tip`, async t => {
+for (const method of ['cherry-pick', 'rebase']) test(`opted-in closeout with default ${method} patch proof releases an open item and parent, preserving the exact original tip`, async t => {
   const f = landed(t, { method, enabled: false });
-  fs.unlinkSync(path.join(f.repo, '.lane.json'));
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   event(f, { type: 'item.reopened', id: 'ENG-1' });
   event(f, { type: 'item.added', id: 'ENG-2', role: 'engineer', parent: 'ENG-1' });
   event(f, { type: 'item.added', id: 'REV-1', role: 'reviewer', parent: 'ENG-1' });

@@ -377,6 +377,47 @@ test('ordinary dirty and unintegrated lanes stay unclassified; compact inventori
   assert.equal(row.class, null); assert.doesNotMatch(row.reason, /not clean/); assert.match(row.nextAction, /inventory only/);
 });
 
+test('option A worktree classes and actions follow the guarded planner only with explicit activation', () => {
+  const s = fixture();
+  s.workspaces = []; s.tabs = []; s.panes = []; s.agents = [];
+  s.git = [];
+  const lane = { worktree: '/repo/lane', identity: s.common, linked: true, branch: 'lane/topic',
+    tip: 'a'.repeat(40), clean: true, integrated: true, hasOwnCommits: true, paneCount: 0 };
+  for (const policy of [undefined, false, true]) {
+    s.closeoutQueuePolicy = policy;
+    item(s).closed = null;
+    const row = retirementStatus(s, { worktrees: [lane] }).rows[0];
+    assert.equal(row.class, policy ? 'TERMINAL' : null);
+    assert.equal(row.nextAction, policy ? 'eligible for integrated-lane sweep; evidence and fresh authority verified on apply' :
+      'keep; review, correction or integration chain is still open');
+    item(s).closed = { as: 'done' };
+    const terminal = retirementStatus(s, { worktrees: [lane] }).rows[0];
+    assert.equal(terminal.class, policy ? 'TERMINAL' : null, 'legacy foreground candidates retain their inventory-only class');
+    assert.match(terminal.nextAction, /^eligible for integrated-lane sweep/);
+  }
+});
+
+test('retirement observes option A policy from the canonical checkout, ignoring a lane opt-in', t => {
+  const f = runtimeFixture(t);
+  fs.writeFileSync(f.eventFile, f.eventBytes.trim().split('\n').map(JSON.parse).filter(e => e.type !== 'item.closed')
+    .map(e => JSON.stringify(e) + '\n').join(''));
+  fs.appendFileSync(path.join(f.common, 'info/exclude'), '\n.lane.json\n');
+  fs.writeFileSync(path.join(f.lane, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
+  const policyFile = path.join(f.repo, '.lane.json');
+  for (const policy of [undefined, false, true, false]) {
+    if (policy !== undefined) fs.writeFileSync(policyFile, JSON.stringify({ retirement: { closeout_queue: policy } }));
+    const r = f.cli(['--json']); assert.equal(r.status, 0, r.stderr);
+    const status = JSON.parse(r.stdout), tab = status.rows.find(row => row.type === 'tab');
+    assert.equal(tab.class, policy ? 'TERMINAL' : 'WAITING');
+    assert.match(tab.reason, policy ? /lane content released or terminal chain/ : /chain is still open/);
+  }
+  fs.writeFileSync(policyFile, '{"retirement":{"closeout_queue":"true"}}');
+  const r = f.cli(['--json']); assert.equal(r.status, 0, r.stderr);
+  const status = JSON.parse(r.stdout);
+  assert.equal(status.rows.find(row => row.type === 'tab').class, 'UNKNOWN');
+  assert.match(status.rows.find(row => row.type === 'tab').reason, /closeout policy unreadable/);
+});
+
 for (const progress of ['dirty', 'unintegrated']) for (const problem of ['missing record', 'invalid reference']) {
   test(`${progress} lane inventory stays unclassified with ${problem}`, async t => {
     const f = runtimeFixture(t);

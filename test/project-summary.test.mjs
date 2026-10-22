@@ -357,6 +357,7 @@ test('published promotion classes match the lanes view for pending jobs and expi
 
 test('published lane counts match detailed status for clean, dirty, occupied, open-chain and open-run lanes', async t => {
   const f = fixture(t), clean = path.join(f.root, 'clean'), dirty = path.join(f.root, 'dirty');
+  assert.equal(fs.existsSync(path.join(f.repo, '.lane.json')), false);
   f.git(['worktree', 'add', '-b', 'lane/clean', clean]);
   f.git(['worktree', 'add', '-b', 'lane/dirty', dirty]); fs.writeFileSync(path.join(dirty, 'seed'), 'work in progress');
   const occupied = path.join(f.root, 'occupied'), chain = path.join(f.root, 'chain'), running = path.join(f.root, 'running');
@@ -393,13 +394,19 @@ test('published lane counts match detailed status for clean, dirty, occupied, op
   assert.ok(f.calls.every(([exe, args]) => exe !== 'git' || (!args.includes('ls-files') && !args.includes('--untracked-files=all'))));
   const lanes = await readRetirementStatus({ cwd: f.repo, org: f.org, herdr: 'fixture-herdr', command, env: f.env });
   const trees = lanes.rows.filter(row => row.type === 'worktree' && row.branch?.startsWith('lane/'));
-  assert.equal(trees.length, 5); assert.ok(trees.every(row => row.class === null));
+  // CLOSEOUT.md:23-26 retains foreground cleanup without explicit opt-in;
+  // :115-133 releases landed open chains only under that option A policy.
+  assert.deepEqual(trees.map(row => [row.lane, row.class]).sort(), [
+    ['chain', null], ['clean', null], ['dirty', null], ['occupied', null], ['running', null],
+  ]);
   assert.equal(trees.find(row => row.worktree === clean).clean, true);
+  assert.equal(trees.find(row => row.worktree === clean).nextAction, 'keep; lane has no commits of its own and no recorded terminal chain');
   assert.match(trees.find(row => row.worktree === dirty).nextAction, /lane worktree is not clean/);
   assert.match(trees.find(row => row.worktree === occupied).nextAction, /occupied lane/);
-  assert.match(trees.find(row => row.worktree === chain).nextAction, /chain is still open/);
+  assert.equal(trees.find(row => row.worktree === chain).nextAction, 'keep; review, correction or integration chain is still open');
   assert.match(trees.find(row => row.worktree === running).nextAction, /open recorded run uses lane/);
   assert.deepEqual(published.lanes.counts, lanes.counts); assert.equal(published.lanes.counts.UNKNOWN, 0);
+  assert.equal(lanes.counts.TERMINAL, 0);
   assert.equal(lanes.counts.ACTIVE, 2, 'only the occupied tab and pane are ACTIVE; worktrees do not duplicate them');
   assert.deepEqual(published.lanes.oldest_unresolved.map(row => row.runs), [['R-3']]);
   assert.ok(!published.exceptions.some(e => ['lanes-unknown', 'unresolved-owner-unknown', 'unresolved-age-unknown'].includes(e.name)));

@@ -23,6 +23,7 @@ const kept = (f, result, pattern) => {
 
 test('an exact archive releases a superseded run under an open item and parent', t => {
   const f = fixture(t, { occupied: false, merged: false });
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   f.git(['tag', 'archive/lane/topic', f.head]);
   const events = f.eventBytes.trim().split('\n').map(JSON.parse).filter(e => e.type !== 'item.closed');
   events[0].parent = 'G-1';
@@ -42,6 +43,8 @@ for (const record of ['terminal chain', 'open item', 'open review', 'established
   if (record === 'open item') fs.writeFileSync(f.eventFile, f.eventBytes.trim().split('\n').map(JSON.parse)
     .filter(e => e.type !== 'item.closed').map(e => JSON.stringify(e) + '\n').join(''));
   if (record === 'open review') fs.appendFileSync(f.eventFile, JSON.stringify({ type: 'item.added', id: 'REV-1', parent: 'ENG-1', role: 'reviewer', seq: 5 }) + '\n');
+  if (record === 'open item' || record === 'open review')
+    fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   const bytes = fs.readFileSync(f.eventFile);
   f.git(['config', 'core.excludesFile', path.join(f.scratch, 'excludes')]);
   fs.writeFileSync(path.join(f.scratch, 'excludes'), '.lane/\n');

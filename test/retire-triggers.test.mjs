@@ -132,9 +132,12 @@ test('terminal age follows the event transition, advances with the clock, and ne
   assert.equal(fs.existsSync(path.join(f.org, 'retirement')), false);
   const events = [...snapshot.events, { type: 'item.reopened', id: 'ENG-1', seq: 5, at: now }];
   const open = { ...snapshot, events, record: fold(events) };
-  assert.equal(retirementStatus(open, { generatedAt: now }).rows[0].terminalAgeMs, 3600000, 'reopening the item does not reactivate landed content');
+  assert.equal(retirementStatus(open, { generatedAt: now }).rows[0].terminalAgeMs, null, 'foreground cleanup retains the reopened chain');
+  assert.equal(retirementStatus({ ...open, closeoutQueuePolicy: true }, { generatedAt: now }).rows[0].terminalAgeMs, 3600000, 'opted-in closeout does not reactivate landed content');
   events.push({ type: 'item.closed', id: 'ENG-1', as: 'done', seq: 6, at: now });
-  assert.equal(retirementStatus({ ...snapshot, events, record: fold(events) }, { generatedAt: now }).rows[0].terminalAgeMs, 3600000);
+  const closed = { ...snapshot, events, record: fold(events) };
+  assert.equal(retirementStatus(closed, { generatedAt: now }).rows[0].terminalAgeMs, 0, 'foreground terminal age restarts when the chain closes again');
+  assert.equal(retirementStatus({ ...closed, closeoutQueuePolicy: true }, { generatedAt: now }).rows[0].terminalAgeMs, 3600000);
 });
 
 test('final report ingestion, a review PASS, reconciliation close and exact pane release determine age', t => {

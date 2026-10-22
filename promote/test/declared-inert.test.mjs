@@ -244,6 +244,25 @@ test('v2 detection needs no valid identity JSON, identity root or home link', as
   }
 });
 
+test('committed v2 stays inert at bare Git roots and their linked subdirectories', async t => {
+  const f = declaredFixture(t), bare = path.join(f.root, 'repository.git'), linked = path.join(f.root, 'bare-linked');
+  f.git(['clone', '--bare', f.repo, bare]); f.git(['--git-dir', bare, 'worktree', 'add', linked, 'main']);
+  const subdirectory = path.join(linked, 'nested/deeper'); fs.mkdirSync(subdirectory, { recursive: true });
+  const receipts = path.join(bare, 'lane-validation'); fs.mkdirSync(receipts);
+  fs.writeFileSync(path.join(receipts, 'prior.json'), '{"prior":"preserve receipt"}\n');
+  const before = snapshot([bare, f.log]);
+  for (const cwd of [bare, subdirectory]) for (const [name, entry] of Object.entries({
+    'mode inspection': () => fenceDeclaredMode(cwd, { env: f.env }),
+    readDeclared: () => readDeclared(cwd, { env: f.env }),
+    canonicalValidation: () => canonicalValidation(cwd, f.env),
+    validateTree: () => validateTree({ cwd, common: bare, command: 'node --version', tier: 'fast', env: f.env }),
+    profile: () => resolveGateProfile(cwd, f.env),
+    configSnapshot: () => configSnapshot({ cwd, env: f.env }),
+  })) await t.test(`${path.basename(cwd)} ${name}`, () => {
+    assert.throws(entry, refused); assert.deepEqual(snapshot([bare, f.log]), before);
+  });
+});
+
 test('inconclusive non-v2 inspection holds without audited fallback', async t => {
   const f = configFixture(t, { custom: 'owner' }); await f.adopt();
   const binding = f.binding(), project = gitProject(f.cwd);

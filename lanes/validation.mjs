@@ -10,7 +10,7 @@ import { acquireLock } from './promotion-lock.mjs';
 import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 import { resolveResource } from '../test-slot/resources.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
-import { policyLocation, present, configGitEnv, configHome, readConfigJSON } from '../lib/config-home.mjs';
+import { policyLocation, present, configGitEnv, configHome, readConfigJSON, homeProject } from '../lib/config-home.mjs';
 import { readPolicyFile, readPolicySnapshot, homePolicyDigest } from '../lib/config-policy.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { validateDeclared, readCommitted, DECLARED_SCHEMA, SELECTION_SCHEMA, hash, refuse, object } from '../promote/declaration.mjs';
@@ -42,9 +42,19 @@ export function tapTotals(output) {
 // Only a confirmed non-repository may use a local declaration. Git damage must
 // not turn a subdirectory or unavailable canonical checkout into a plain path.
 function inspectProject(root, env) {
-  try { return gitProject(root, { env: { ...configGitEnv(env), LC_ALL: 'C' } }); }
+  const gitEnv = { ...configGitEnv(env), LC_ALL: 'C' };
+  try { return gitProject(root, { env: gitEnv }); }
   catch (error) {
     if (error.status === 128 && /^fatal: not a git repository\b/mu.test(String(error.stderr))) return null;
+    // A bare common directory has committed policy but no --show-toplevel.
+    // Keep legacy linked-worktree reads working without calling it non-Git.
+    const inspect = args => execFileSync('git', ['-C', root, 'rev-parse', ...args], { env: gitEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    try {
+      if (inspect(['--is-bare-repository']) === 'true') {
+        const common = fs.realpathSync(inspect(['--path-format=absolute', '--git-common-dir']));
+        return { canonical: common, identity: common };
+      }
+    } catch { /* An unconfirmed Git identity retains the original refusal. */ }
     throw error;
   }
 }
@@ -76,7 +86,10 @@ export function fenceDeclaredMode(root, { base = 'HEAD', env = process.env, capt
   try {
     // Use R-759's inspection-only owner discovery: even identity.json must not
     // audit an edit or recover a pending write before the inert refusal.
-    selected = policyLocation(root, 'validation', env, { canonical: project?.canonical ?? root, audit: false });
+    // Reuse the inspected Git fact, including bare common directories. This
+    // avoids homeProject's non-worktree error recovery and keeps it unaudited.
+    const binding = project ? homeProject(root, env, { git: project, inspection: true }) : undefined;
+    selected = policyLocation(root, 'validation', env, { canonical: project?.canonical ?? root, audit: false, ...(project ? { binding } : {}) });
   } catch (error) {
     if (project) {
       fenceUnvalidatedHomeMode(project, env);

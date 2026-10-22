@@ -4,6 +4,7 @@ import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
 import { createProcessTracker } from '../../test/helpers/processes.mjs';
+import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,6 +21,7 @@ import { fold } from '../../lib/state.mjs';
 import { publishProvingReservation, RESERVATION_WAIT_EXPIRED_CODE } from '../../test-slot/reservations.mjs';
 import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
 import { BRAIN_CONTROLLER } from '../../lib/run-owner.mjs';
+import { policyLocation } from '../../lib/config-home.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -157,16 +159,22 @@ for (const source of ['fake watcher receipt', 'real watcher journal']) {
     receipts.cleanup(); assert.deepEqual(signals, [101]);
   });
 }
-function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure, lateSession = '' } = {}) {
+function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure, lateSession = '', project } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
-  const repo = path.join(root, 'repo'), org = path.join(root, 'org'), bin = path.join(root, 'bin');
-  fs.mkdirSync(repo);fs.mkdirSync(bin);
-  const env = { ...healthyMemoryEnvironment(), ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
+  const repo = project?.cwd ?? path.join(root, 'repo'), org = project?.env.ORG_DIR ?? path.join(root, 'org'), bin = path.join(root, 'bin');
+  // Adopted source entry points select the installed release. Use the fixture's
+  // immutable bundle to keep dispatch, record and run ownership in this product.
+  const dispatchCLI = project ? path.join(project.bundle, 'dispatch/dispatch.mjs') : DISPATCH;
+  const recordCLI = project ? path.join(project.bundle, 'bin/org.mjs') : RECORD;
+  if (!project) fs.mkdirSync(repo);
+  fs.mkdirSync(bin);
+  const env = { ...healthyMemoryEnvironment(project?.env ?? process.env), ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
     MONITOR_SUPERVISOR_AGENT: noticeRecipient, HERDR_AGENT_NAME: 'chat-operator',
     TEST_LATE_SESSION: lateSession, TEST_NATIVE_PID: String(process.pid),
-    HERDR_MONITOR_FLEET: path.join(root, 'fleet.json'), TEST_TIMING_FAILURE: timingFailure ? '1' : '',
+    HERDR_MONITOR_FLEET: project?.env.HERDR_MONITOR_FLEET ?? path.join(root, 'fleet.json'), TEST_TIMING_FAILURE: timingFailure ? '1' : '',
     PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
     HERDR_PANE_ID:'supervisor:pane', HERDR_TAB_ID:'supervisor:tab', HERDR_WORKSPACE_ID:'supervisor:w' };
+  if (project) delete env.LANE_CONFIG;
   if (preload) env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --require=${preload}`;
   for(const key of Object.keys(env)) if(key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM'].includes(key)) delete env[key];
   const receipts = createReceiptTracker();
@@ -181,22 +189,25 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
     return result;
   };
   const git=(args,cwd)=>{const r=exec('git',args,cwd);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
-  git(['init','-b','main']);git(['config','user.name','Dispatch Tests']);git(['config','user.email','dispatch@example.invalid']);
-  fs.writeFileSync(path.join(repo,'seed'),'seed');git(['add','.']);git(['commit','-m','seed']);
-  fs.writeFileSync(path.join(repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex',model:'model-a',effort:'high'}}}));
+  if (!project) {
+    git(['init','-b','main']);git(['config','user.name','Dispatch Tests']);git(['config','user.email','dispatch@example.invalid']);
+    fs.writeFileSync(path.join(repo,'seed'),'seed');git(['add','.']);git(['commit','-m','seed']);
+    fs.writeFileSync(path.join(repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex',model:'model-a',effort:'high'}}}));
+  }
   for(const name of ['herdr','lane','watch','org']) fs.writeFileSync(path.join(bin,name),fake,{mode:0o755});
-  const rec=(args,overrides={})=>{const r=exec(process.execPath,[RECORD,...args],repo,overrides);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
-  rec(['init']);const item=rec(['add','Do the work','--role','engineer']).split('\n')[0].match(/ENG-\d+/)[0];
+  const rec=(args,overrides={})=>{const r=exec(process.execPath,[recordCLI,...args],repo,overrides);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  if (!project) rec(['init']);
+  const item=rec(['add','Do the work','--role','engineer']).split('\n')[0].match(/ENG-\d+/)[0];
   const brief=path.join(root,'brief with spaces.md');fs.writeFileSync(brief,'# Do the work');
   const common=['--org',org,'--repo',repo, ...(timingRecord?['--org-cli',path.join(bin,'org')]:[]),'--lane-cli',path.join(bin,'lane'), ...(realWatch?[]:['--watch-cli',path.join(bin,'watch')])];
-  const dispatch=(args=[],options={})=>exec(process.execPath,[DISPATCH,...common,...args],repo,{},options);
+  const dispatch=(args=[],options={})=>exec(process.execPath,[dispatchCLI,...common,...args],repo,{},options);
   const start=(extra=[],options={})=>dispatch([item,'--lane','topic','--route','engineer','--brief',brief,...extra],options);
   const calls=()=>fs.existsSync(path.join(root,'calls'))?fs.readFileSync(path.join(root,'calls'),'utf8').trim().split('\n').map(x=>JSON.parse(x)):[];
   const jobs=()=>fs.readdirSync(path.join(org,'dispatch')).filter(x=>x.endsWith('.json')&&!x.endsWith('.routes.json')).map(x=>path.join(org,'dispatch',x));
   const fail=(stage)=>fs.writeFileSync(path.join(root,'fail'),stage);
   const show=(run)=>JSON.parse(rec(['show',run,'--json']));
   const concurrent=(args,extraEnv={})=>{
-    const child=spawnChild(t,process.execPath,[DISPATCH,...common,...args],{cwd:repo,env:{...env,...extraEnv},stdio:['ignore','pipe','pipe']});
+    const child=spawnChild(t,process.execPath,[dispatchCLI,...common,...args],{cwd:repo,env:{...env,...extraEnv},stdio:['ignore','pipe','pipe']});
     const done=waitForExit(child);
     return {child,done};
   };
@@ -230,6 +241,97 @@ function pendingItem(f, { item = f.rec(['add', 'Pending landing', '--role', 'eng
   const run = f.rec(['start', item, '--workspace', f.repo, '--meta', `dispatch_project=${project}`, ...meta.flatMap(m => ['--meta', m])]).match(/^(R-\d+) started/m)[1];
   return { item, run };
 }
+
+async function homeCapFixture(t, cap) {
+  // This helper isolates HOME, fleet and record in this process before calling
+  // adoption, as well as in every dispatch/record child. No LANE_CONFIG override.
+  const project = configFixture(t), file = path.join(project.cwd, '.lane.json');
+  if (cap === undefined) fs.unlinkSync(file); // Never publish a lane policy in the default control.
+  else {
+    const config = JSON.parse(fs.readFileSync(file));
+    config.dispatch.max_unlanded = cap;
+    fs.writeFileSync(file, JSON.stringify(config));
+  }
+  project.git('add', '.lane.json'); project.git('commit', '-qm', 'Configure unlanded fixture cap');
+  await project.adopt();
+  return { ...fixture(t, { project }), project };
+}
+
+test('adopted home cap without LANE_CONFIG refuses at two and shares three fix/follow-up slots', async t => {
+  const f = await homeCapFixture(t, 2);
+  assert.equal(Object.hasOwn(process.env, 'LANE_CONFIG'), false);
+  assert.equal(Object.hasOwn(f.env, 'LANE_CONFIG'), false);
+  const selected = policyLocation(f.repo, 'lane', f.env);
+  assert.equal(selected.home, true);
+  assert.equal(selected.file, path.join(f.project.binding().directory, 'lane.json'));
+  assert.equal(JSON.parse(fs.readFileSync(selected.file)).dispatch.max_unlanded, 2);
+  unlandedSetting(f, 8); // A repo fallback would incorrectly admit the third item.
+  const pending = [pendingItem(f, { item: f.item }), pendingItem(f)];
+  const next = f.rec(['add', 'Third unlanded item', '--role', 'engineer']);
+  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
+  assert.equal(refused.status, 1, refused.stderr || refused.stdout);
+  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  assert.match(refused.stderr, /unlanded count 2, cap 2/);
+  for (const { item } of pending) assert.ok(JSON.parse(refused.stdout).reason.includes(item));
+  assert.deepEqual(f.show(next).runs, []);
+  assert.equal(f.calls().some(c => c.type === 'lane'), false);
+
+  f.rec(['claim', pending[0].run, '--controller', 'brain']);
+  const fix = f.start(['--from-run', pending[0].run]);
+  assert.equal(fix.status, 0, fix.stderr);
+  const fixed = JSON.parse(fix.stdout), fixJob = JSON.parse(fs.readFileSync(fixed.journal));
+  assert.equal(fixJob.unlandedCap.cap, 2);
+  assert.equal(fixJob.unlandedCap.count, 2);
+  assert.equal(fixJob.unlandedCap.admission.kind, 'fix');
+  assert.equal(fixJob.unlandedCap.exceptions.count, 0);
+  assert.equal(fixJob.sessionCap.cap, 4);
+  assert.equal(f.show(fixed.run).meta.dispatch_unlanded_exception, 'fix');
+  const active = [fixed.run];
+  for (let n = 1; n <= 2; n++) {
+    const item = f.rec(['add', 'Home-cap landing follow-up', '--role', 'engineer']);
+    const result = f.dispatch([item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--unblocks', pending[1].item]);
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(result.stdout), job = JSON.parse(fs.readFileSync(receipt.journal));
+    active.push(receipt.run);
+    assert.equal(job.unlandedCap.cap, 2);
+    assert.equal(job.unlandedCap.admission.kind, 'unblocks');
+    assert.equal(job.unlandedCap.exceptions.count, n);
+    assert.equal(f.show(receipt.run).meta.dispatch_unblocks, pending[1].item);
+    assert.ok(f.state().links.some(l => l.blocker === item && l.blocked === pending[1].item));
+  }
+  const fourth = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--unblocks', pending[1].item]);
+  assert.equal(fourth.status, 1, fourth.stderr);
+  assert.equal(JSON.parse(fourth.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  assert.match(fourth.stderr, /unlanded count 4, cap 2/);
+  assert.match(fourth.stderr, /All 3 active fix\/follow-up slots are occupied/);
+  for (const run of active) assert.ok(JSON.parse(fourth.stdout).reason.includes(run));
+  assert.deepEqual(f.show(next).runs, []);
+  assert.equal(f.state().links.some(l => l.blocker === next), false);
+});
+
+test('absent home policy without LANE_CONFIG defaults to eight unlanded items', async t => {
+  const f = await homeCapFixture(t);
+  assert.equal(Object.hasOwn(process.env, 'LANE_CONFIG'), false);
+  assert.equal(Object.hasOwn(f.env, 'LANE_CONFIG'), false);
+  const binding = f.project.binding();
+  assert.equal(binding.sources.lane.present, false);
+  assert.equal(binding.published.includes('lane'), false);
+  assert.equal(fs.existsSync(path.join(binding.directory, 'lane.json')), false);
+  assert.equal(policyLocation(f.repo, 'lane', f.env).home, false);
+  assert.equal(fs.existsSync(path.join(f.repo, '.lane.json')), false);
+  const pending = Array.from({ length: 7 }, () => pendingItem(f));
+  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
+  const job = JSON.parse(fs.readFileSync(JSON.parse(admitted.stdout).journal));
+  assert.equal(job.unlandedCap.cap, 8);
+  assert.equal(job.unlandedCap.count, 7);
+  const next = f.rec(['add', 'Ninth home-less item', '--role', 'engineer']);
+  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
+  assert.equal(refused.status, 1, refused.stderr);
+  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  assert.match(refused.stderr, /unlanded count 8, cap 8/);
+  for (const item of [...pending.map(p => p.item), f.item]) assert.ok(JSON.parse(refused.stdout).reason.includes(item));
+  assert.deepEqual(f.show(next).runs, []);
+});
 
 test('default unlanded cap admits the eighth item, then refuses a new item before lane/run or awaited writes', t => {
   const f = fixture(t);

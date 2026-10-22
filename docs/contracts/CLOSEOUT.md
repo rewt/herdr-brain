@@ -23,11 +23,20 @@ its finite attempt outside lifecycle/queue claims. A KEEP or failure retains
 cleanup-pending without repeating integration or validation.
 
 The checkpoint lives under `<canonical-git-common-dir>/closeout/completions/`.
+Its filename is `<source-sequence>-<receipt-sha256>-<key-set-digest-first-16>.json`;
+the key-set digest hashes the sorted exact keys. Proof containment compares
+physical canonical paths for both proof files and lane roots, including system
+temporary-directory aliases and removed worktree paths.
 Receipts and gate logs inside any linked worktree are refused before handoff;
 the caller must retain the original evidence outside those worktrees. Existing
 handoffs backed by disposable paths also keep. After a named retry completes,
 promotion bookkeeping and run-ownership readers reconcile only the exact
 source/fingerprint, target key/run/topic/head and durable completion outcome.
+Each evaluation records the exact handoff sequence and digest it used. Completed
+bookkeeping follows that binding; source publication and pending recovery select
+the latest exact recorded handoff and verify its proof before effects. A legacy
+completed evaluation without a binding is accepted only with one unambiguous
+prior handoff; a later replacement cannot retroactively authorize an outcome.
 
 Standalone callers explicitly invoke the tail after successful `finish` or
 `complete-batch` returns (after child exit for a CLI):

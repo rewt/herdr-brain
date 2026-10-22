@@ -41,7 +41,7 @@
       "id": "closeout-completion/v1",
       "version": 1,
       "writer": "lib/closeout-handoff.mjs (explicit post-return caller tail)",
-      "location": "<completion-receipt>.closeout-<key-set-digest>.json",
+      "location": "<canonical-git-common-dir>/closeout/completions/<source-sequence>-<receipt-sha256>-<key-set-digest-first-16>.json",
       "rule": "closed",
       "notCovered": "Exact receipt/source/target completion and caller-tail interruption recovery are exercised by offline closeout/reconcile/train witnesses; the schema-rejection probe does not produce a completed landing."
     },

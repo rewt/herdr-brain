@@ -7,7 +7,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { completedCloseoutKeys } from '../lib/closeout-handoff.mjs';
+import { completedCloseoutKeys, handoffCloseout } from '../lib/closeout-handoff.mjs';
+import { recordedCloseoutHandoff } from '../lib/closeout.mjs';
+import { readPlainFile } from '../lib/files.mjs';
 import { digest } from '../lib/completion.mjs';
 import { promotionCloseoutOutcome } from '../lib/closeout-results.mjs';
 import { outstandingEffects } from '../lib/run-owner.mjs';
@@ -52,6 +54,14 @@ function fixture(t, { handed = true } = {}) {
     source: { seq: source.seq, type: source.type, fingerprint: source.fingerprint } };
   const resolve = (binding = expected) => completedCloseoutKeys({ cwd: repo, org, expected: binding });
   return { repo, common, org, git, target, source, tail, payload, receipt, checkpoint, log, events, eventFile, save, expected, resolve };
+}
+
+function systemAlias(t, file) {
+  for (const alias of ['/var', '/tmp', '/etc']) {
+    const physical = fs.realpathSync(alias);
+    if (alias !== physical && file.startsWith(physical + path.sep)) return alias + file.slice(physical.length);
+  }
+  t.skip('this host has no macOS system alias for the scratch directory');
 }
 
 test('a recovered source alone cannot substitute for its manual caller tail', t => {
@@ -118,6 +128,50 @@ for (const location of ['receipt', 'checkpoint', 'gate']) test(`legacy completio
   assert.equal(fs.existsSync(f.target.cwd), true);
 });
 
+for (const address of ['proof', 'lane']) for (const location of ['receipt', 'checkpoint', 'gate'])
+test(`physical proof containment refuses a system alias on the ${address} (${location})`, t => {
+  const f = fixture(t), directory = path.join(f.target.cwd, '.lane'); fs.mkdirSync(directory, { recursive: true });
+  let inside = path.join(directory, `${location}.json`);
+  const aliased = systemAlias(t, address === 'proof' ? inside : f.target.cwd);
+  if (!aliased) return;
+  if (address === 'proof') inside = aliased; else f.target.cwd = aliased;
+  if (location === 'receipt') {
+    fs.copyFileSync(f.receipt, inside); f.tail.receipt.file = inside;
+  } else if (location === 'checkpoint') f.events.at(-1).checkpoint = inside;
+  else {
+    fs.copyFileSync(f.log, inside); f.source.gate.log = inside; f.payload.gate.log = inside;
+    fs.writeFileSync(f.receipt, JSON.stringify(f.payload)); f.source.fingerprint = digest(f.payload);
+    f.tail.receipt.sha256 = sha(fs.readFileSync(f.receipt)); f.tail.receipt.fingerprint = f.source.fingerprint;
+    f.expected.source.fingerprint = f.source.fingerprint;
+  }
+  f.tail.source.digest = digest(f.source); f.tail.source.fingerprint = f.source.fingerprint;
+  fs.writeFileSync(f.events.at(-1).checkpoint, JSON.stringify(f.tail)); f.events.at(-1).digest = digest(f.tail); f.save();
+  assert.ok(readPlainFile(inside).length, 'the proof reader accepts the OS alias');
+  const before = fs.readFileSync(f.eventFile);
+  assert.throws(() => f.resolve(), /proof is inside a closing worktree/);
+  assert.deepEqual(fs.readFileSync(f.eventFile), before); assert.equal(fs.existsSync(f.target.cwd), true);
+});
+
+for (const location of ['receipt', 'gate', 'other-worktree'])
+test(`alias-addressed disposable ${location} is refused before publishing any handoff`, t => {
+  const f = fixture(t, { handed: false });
+  const lane = location === 'other-worktree' ? path.join(f.repo, 'registered-other') : f.target.cwd;
+  if (location === 'other-worktree') f.git(['worktree', 'add', '-qb', 'lane/other', lane]);
+  fs.mkdirSync(path.join(lane, '.lane'), { recursive: true });
+  const inside = systemAlias(t, path.join(lane, '.lane/proof.json'));
+  if (!inside) return;
+  let receipt = f.receipt;
+  if (location === 'gate') {
+    fs.copyFileSync(f.log, inside); f.payload.gate.log = inside; f.source.gate.log = inside;
+    fs.writeFileSync(receipt, JSON.stringify(f.payload)); f.source.fingerprint = digest(f.payload); f.save();
+  } else { fs.copyFileSync(receipt, inside); receipt = inside; }
+  const before = fs.readFileSync(f.eventFile);
+  assert.throws(() => handoffCloseout({ cwd: f.repo, org: f.org, receipt }), /proof is inside a closing worktree/);
+  assert.deepEqual(fs.readFileSync(f.eventFile), before);
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/completions')), false);
+  assert.equal(fs.existsSync(lane), true); assert.equal(f.git(['branch', '--list', 'lane/other']) !== '', location === 'other-worktree');
+});
+
 function promotion(f) {
   const queue = queueFor(f.repo), job = { id: 'deferred', org: f.org, run: f.target.run, item: f.target.item,
     topic: 'topic', tip: f.target.head, outcome: 'promoted', delivered: true,
@@ -127,12 +181,76 @@ function promotion(f) {
   const run = { id: f.target.run, item: f.target.item, report: { outcome: 'done' } };
   const read = () => outstandingEffects(f.org, run, f.common);
   const outcome = completed => {
+    const handoff = f.events.findLast(e => e.type === 'closeout.handoff');
     f.events.push({ type: 'closeout.evaluated', seq: f.events.length + 1, identity: f.common, key: f.target.key,
       run: f.target.run, item: f.target.item, source: { seq: f.source.seq, type: f.source.type }, completed,
+      ...(handoff ? { handoff: { seq: handoff.seq, digest: handoff.digest } } : {}),
       ...(!completed ? { reason: 'HOLD', waiting: { event: 'hold-removed' } } : {}) }); f.save();
   };
   return { queue, job, read, outcome };
 }
+
+function replaceDisposableHandoff(f) {
+  const inside = path.join(f.target.cwd, '.lane/original.record.json'); fs.mkdirSync(path.dirname(inside), { recursive: true });
+  fs.copyFileSync(f.receipt, inside);
+  const obsolete = f.events.find(e => e.type === 'closeout.handoff');
+  fs.writeFileSync(obsolete.checkpoint, JSON.stringify({ ...f.tail, receipt: { ...f.tail.receipt, file: inside } }));
+  obsolete.digest = digest(JSON.parse(fs.readFileSync(obsolete.checkpoint)));
+  const checkpoint = path.join(f.common, 'closeout/completions', `${f.source.seq}-${f.tail.receipt.sha256}-${digest(f.tail.keys).slice(0, 16)}.json`);
+  fs.mkdirSync(path.dirname(checkpoint), { recursive: true }); fs.writeFileSync(checkpoint, JSON.stringify(f.tail));
+  const replacement = { ...obsolete, seq: f.events.length + 1, checkpoint, digest: digest(f.tail) };
+  f.events.push(replacement); f.save(); return { obsolete, replacement, inside };
+}
+
+test('a successful replacement of obsolete disposable proof clears exact outcomes, recovery and ownership after removal', t => {
+  const f = fixture(t), p = promotion(f), { replacement, inside } = replaceDisposableHandoff(f);
+  const entry = { ...f.target, source: f.expected.source };
+  assert.equal(recordedCloseoutHandoff(entry, f.events).seq, replacement.seq, 'publication recovery selects the replacement');
+  assert.deepEqual(f.resolve(), [f.target.key], 'recovered outbox uses the current exact tail before evaluation');
+  p.outcome(false); retryCleanup(p.queue); assert.equal(p.queue.load().results[0].cleanup.state, 'pending');
+  p.outcome(true);
+  assert.deepEqual(f.events.at(-1).handoff, { seq: replacement.seq, digest: replacement.digest });
+  fs.rmSync(f.target.cwd, { recursive: true }); assert.equal(fs.existsSync(inside), false);
+  const before = fs.readFileSync(f.eventFile), gate = fs.readFileSync(f.log), receipt = fs.readFileSync(f.receipt);
+  assert.equal(promotionCloseoutOutcome(p.job, f.common).complete, true);
+  assert.deepEqual(f.resolve(), [f.target.key]); assert.deepEqual(p.read(), []);
+  retryCleanup(p.queue); const saved = p.queue.load().results[0]; assert.equal(saved.cleanup.state, 'complete');
+  retryCleanup(p.queue); assert.deepEqual(p.queue.load().results[0], saved);
+  assert.deepEqual(fs.readFileSync(f.eventFile), before); assert.deepEqual(fs.readFileSync(f.log), gate);
+  assert.deepEqual(fs.readFileSync(f.receipt), receipt);
+});
+
+for (const change of ['obsolete', 'sequence', 'digest', 'future', 'ambiguous-legacy'])
+test(`completed bookkeeping cannot substitute another handoff for its ${change} binding`, t => {
+  const f = fixture(t), p = promotion(f);
+  if (change === 'future') p.outcome(true);
+  const { obsolete, replacement } = replaceDisposableHandoff(f);
+  if (change !== 'future') p.outcome(true);
+  const outcome = f.events.findLast(e => e.type === 'closeout.evaluated');
+  if (change === 'obsolete') outcome.handoff = { seq: obsolete.seq, digest: obsolete.digest };
+  if (change === 'sequence') outcome.handoff.seq = 999;
+  if (change === 'digest') outcome.handoff.digest = 'f'.repeat(64);
+  if (change === 'future') outcome.handoff = { seq: replacement.seq, digest: replacement.digest };
+  if (change === 'ambiguous-legacy') delete outcome.handoff;
+  f.save();
+  assert.throws(() => f.resolve(), /handoff|proof is inside/);
+  retryCleanup(p.queue); assert.equal(p.queue.load().results[0].cleanup.state, 'pending');
+  assert.deepEqual(p.read(), ['promotion:unreconciled/pending-callback']);
+});
+
+test('a legacy completed evaluation with one exact handoff still clears bookkeeping', t => {
+  const f = fixture(t), p = promotion(f); p.outcome(true); delete f.events.at(-1).handoff; f.save();
+  assert.deepEqual(f.resolve(), [f.target.key]); assert.deepEqual(p.read(), []);
+  retryCleanup(p.queue); assert.equal(p.queue.load().results[0].cleanup.state, 'complete');
+});
+
+test('a later unrelated tail cannot redirect a completed outcome from its verified handoff', t => {
+  const f = fixture(t), p = promotion(f); p.outcome(true);
+  f.events.push({ ...f.events.find(e => e.type === 'closeout.handoff'), seq: f.events.length + 1,
+    checkpoint: path.join(f.repo, 'missing-checkpoint.json'), digest: 'f'.repeat(64) }); f.save();
+  assert.deepEqual(f.resolve(), [f.target.key]); assert.deepEqual(p.read(), []);
+  retryCleanup(p.queue); assert.equal(p.queue.load().results[0].cleanup.state, 'complete');
+});
 
 test('KEEP then exact durable completion clears promotion bookkeeping and outstanding effects without another executor', t => {
   const f = fixture(t), p = promotion(f);

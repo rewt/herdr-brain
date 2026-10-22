@@ -15,7 +15,7 @@ import { initOrg, loadEvents, transact } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { joinFleet } from '../lib/fleet.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
-import { handoffCloseout, migrateCloseout } from '../lib/closeout-handoff.mjs';
+import { completedCloseoutKeys, handoffCloseout, migrateCloseout } from '../lib/closeout-handoff.mjs';
 import { completionFingerprint, digest } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
   closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout, closeoutKey,
@@ -1114,7 +1114,7 @@ for (const stage of ['checkpoint', 'publication']) test(`completion tail resumes
   assert.equal(effects(f).filter(e => e.action === 'worktree-removed').length, 1);
 });
 
-test('a receipt originally inside its target is refused before handoff, then external proof survives removal and restart', t => {
+test('replacing an obsolete disposable handoff survives publication recovery, removal, restart and promotion bookkeeping', t => {
   const f = setup(t, { occupied: false }); f.report(); f.autoTail = false;
   const source = f.land().find(e => e.type === 'promotion.reconciled');
   const entry = readCloseoutEntries(f.common).find(e => e.signal === 'landed');
@@ -1124,20 +1124,47 @@ test('a receipt originally inside its target is refused before handoff, then ext
   assert.throws(() => handoffCloseout({ cwd: f.repo, org: f.org, receipt: inside, env: f.env }), /proof is inside a closing worktree/);
   assert.deepEqual(events(f), before); assert.equal(fs.existsSync(f.lane), true);
   assert.deepEqual(f.read().actions, []);
+  // Retain history produced by a pre-guard writer, whose receipt/checkpoint
+  // would both disappear at worktree removal. Recovery must leave it obsolete.
+  const oldCheckpoint = inside + '.closeout.json';
+  const oldTail = { schema: 'closeout-completion/v1', identity: f.common, project: f.repo, org: f.org,
+    source: { seq: source.seq, type: source.type, fingerprint: source.fingerprint, digest: digest(source), batch: source.batch },
+    receipt: { file: inside, sha256: createHash('sha256').update(fs.readFileSync(inside)).digest('hex'), fingerprint: source.fingerprint }, keys: [entry.key] };
+  fs.writeFileSync(oldCheckpoint, JSON.stringify(oldTail));
+  f.append([{ type: 'closeout.handoff', identity: f.common, project: f.repo, org: f.org,
+    source: { seq: source.seq, type: source.type }, checkpoint: oldCheckpoint, digest: digest(oldTail), keys: [entry.key] }]);
+  const obsolete = events(f).find(e => e.type === 'closeout.handoff');
   const receipt = path.join(f.scratch, 'retained-completion.record.json'); fs.copyFileSync(inside, receipt);
-  handoffCloseout({ cwd: f.repo, org: f.org, receipt, env: f.env });
-  const handoff = events(f).find(e => e.type === 'closeout.handoff');
+  const entryFile = path.join(f.common, 'closeout/entries', `${entry.key}.json`), rename = fs.renameSync;
+  fs.renameSync = (from, to) => { if (to === entryFile) throw Error('interrupted replacement publication'); return rename(from, to); };
+  try { assert.throws(() => handoffCloseout({ cwd: f.repo, org: f.org, receipt, env: f.env }), /interrupted replacement publication/); }
+  finally { fs.renameSync = rename; }
+  const handoff = events(f).findLast(e => e.type === 'closeout.handoff');
+  assert.notEqual(handoff.seq, obsolete.seq);
   assert.ok(handoff.checkpoint.startsWith(path.join(f.common, 'closeout/completions') + path.sep));
+  fs.unlinkSync(entryFile); // Restart publication from the immutable source.
+  publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [source], env: f.env, start: false });
+  assert.deepEqual(readCloseoutEntries(f.common).find(e => e.key === entry.key).handoff, { seq: handoff.seq, digest: handoff.digest });
+  const queue = queueFor(f.repo), job = { id: 'replacement-cleanup', org: f.org, run: entry.run, item: entry.item, topic: 'topic', tip: entry.head,
+    outcome: 'promoted', delivered: true, reconciliation: { state: 'complete', fingerprint: source.fingerprint, receipt },
+    cleanup: { state: 'pending', owner: 'closeout-queue', keys: [entry.key], source: { seq: source.seq, type: source.type, fingerprint: source.fingerprint } } };
+  queue.transaction(data => data.results.push(job));
   const command = f.options.command; let refuse = true;
   f.options.command = (exe, args, opt) => exe === 'git' && args.includes('-D') && refuse ?
     { status: 1, stdout: '', stderr: 'injected branch removal interruption' } : command(exe, args, opt);
   f.drain({ keys: [entry.key] });
   assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
   assert.ok(fs.existsSync(receipt)); assert.ok(fs.existsSync(handoff.checkpoint));
+  assert.equal(fs.existsSync(oldCheckpoint), false);
   assert.equal(evaluations(f).findLast(e => e.key === entry.key).completed, false);
   refuse = false;
   retryCloseout({ cwd: f.repo, org: f.org, topic: entry.key, why: 'branch removal recovered', env: f.env, start: false });
   f.drain({ keys: [entry.key] }); assertRemoved(f);
+  assert.deepEqual(evaluations(f).findLast(e => e.key === entry.key).handoff, { seq: handoff.seq, digest: handoff.digest });
+  assert.deepEqual(completedCloseoutKeys({ cwd: f.repo, org: f.org, expected: { common: f.common, project: f.repo, org: f.org,
+    item: entry.item, run: entry.run, topic: 'topic', tip: entry.head, source: job.cleanup.source }, env: f.env }), [entry.key]);
+  assert.deepEqual(outstandingEffects(f.org, fold(events(f)).runs.get(entry.run), f.common), []);
+  retryCleanup(queue); assert.equal(queue.load().results[0].cleanup.state, 'complete');
   const completed = events(f); handoffCloseout({ cwd: f.repo, org: f.org, receipt, env: f.env });
   f.drain({ keys: [entry.key] }); assert.deepEqual(events(f), completed);
   assert.equal(effects(f).filter(e => e.action === 'worktree-removed').length, 1);

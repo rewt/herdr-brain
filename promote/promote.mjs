@@ -7,6 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeoutPolicy, claimRetirementOwner, retryPromotionCloseout } from '../lib/closeout.mjs';
 import { handoffCloseout, completedCloseoutKeys } from '../lib/closeout-handoff.mjs';
 import { joinedCloseoutAttempt } from '../lib/closeout-attempt.mjs';
+import { promotionCloseoutOutcome } from '../lib/closeout-results.mjs';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
@@ -415,7 +416,21 @@ export function retryCleanup(queue, options = {}) {
   finally { release(); }
 }
 function retryCleanupLocked(queue, { now = Date.now() } = {}) {
-  for (const saved of queue.load().results.filter(r => r.outcome === 'promoted' && r.cleanup?.owner !== 'closeout-queue' && r.cleanup?.state === 'pending' && r.reconciliation?.state !== 'pending')) {
+  for (const saved of queue.load().results.filter(r => r.outcome === 'promoted' && r.cleanup?.state === 'pending' && r.reconciliation?.state !== 'pending')) {
+    if (saved.cleanup.owner === 'closeout-queue') {
+      const outcome = promotionCloseoutOutcome(saved, queue.project.identity);
+      if (outcome?.complete) queue.transaction(data => {
+        const row = data.results.findLast(r => r.id === saved.id);
+        // Re-read the exact row under the queue transaction before recording
+        // bookkeeping; a later job/result cannot inherit another completion.
+        const current = row && promotionCloseoutOutcome(row, queue.project.identity);
+        if (!current?.complete) return;
+        row.cleanup = { state: 'complete', owner: 'closeout-queue', keys: current.keys, source: current.source,
+          outcomes: current.outcomes.map(e => e.seq) };
+        row.reason = 'green fast-forward; closeout complete';
+      });
+      continue;
+    }
     let revision;
     try { revision = cleanupRevision(saved, queue); } catch (e) { revision = `unreadable:${e.message}`; }
     if (saved.cleanup.revision === revision && ((saved.cleanup.attempts ?? 0) >= 5 || now < saved.cleanup.next_attempt_at)) continue;
@@ -449,10 +464,9 @@ function consumeRequests(queue) {
     if (closeoutPolicy(queue.project.canonical)) {
       const completedJobs = queue.load().closeout_pending ?? [];
       for (const job of completedJobs) {
-        let outcome, handed = false;
+        let outcome, keys, handed = false;
         try {
           if (!job.reconciliation?.receipt || job.reconciliation.state !== 'complete') throw Error('closeout outbox lacks exact completion evidence; named recovery required');
-          let keys;
           if (job.reconciliation.recovered) {
             if (createHash('sha256').update(fs.readFileSync(job.reconciliation.receipt)).digest('hex') !== job.receipt_sha256 ||
                 !recordedBatchCompletion({ result: job, project: { ...queue.project, org: job.org }, run: { id: job.run, item: job.item } }))
@@ -470,6 +484,7 @@ function consumeRequests(queue) {
           if (handed) data.closeout_pending = (data.closeout_pending ?? []).filter(row => row.id !== job.id);
           const row = data.results.findLast(r => r.id === job.id);
           if (row) Object.assign(row, { cleanup: { state: outcome.complete ? 'complete' : 'pending', owner: 'closeout-queue',
+            ...(handed ? { keys, source: job.source } : {}),
             ...(!outcome.complete ? { reason: outcome.reason } : {}) },
             reason: outcome.complete ? 'green fast-forward; closeout complete' : `integrated-but-cleanup-pending: ${outcome.reason}` });
         });

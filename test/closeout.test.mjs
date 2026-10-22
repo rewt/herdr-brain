@@ -28,6 +28,7 @@ import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeepi
 import { enqueue, finishCleanup, retryCleanup, drain as drainPromotions, queueFor } from '../promote/promote.mjs';
 import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { retirementStatus, renderRetirementStatus } from '../lib/retire-status.mjs';
+import { outstandingEffects } from '../lib/run-owner.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const closer = fileURLToPath(new URL('../supervisor/closeout.mjs', import.meta.url));
@@ -620,7 +621,7 @@ test('finished-lane age counts worktrees once, including protected/kept lanes, f
 
 test('the closer is finite, has no timers or polling, and a second claim cannot evaluate targets', t => {
   const f = setup(t, { terminal: true });
-  const source = fs.readFileSync(new URL('../lib/closeout-consumer.mjs', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../lib/closeout-executor.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /\bset(?:Interval|Timeout)\s*\(|\bwhile\s*\(|for\s*\(\s*;\s*;/);
   let second;
   f.drain({ onClaim: () => { second = f.drain(); } });
@@ -1111,4 +1112,122 @@ for (const stage of ['checkpoint', 'publication']) test(`completion tail resumes
   const before = events(f); tail(); f.drain(); assert.deepEqual(events(f), before);
   assert.equal(events(f).filter(e => e.type === 'closeout.handoff').length, 1);
   assert.equal(effects(f).filter(e => e.action === 'worktree-removed').length, 1);
+});
+
+test('a receipt originally inside its target is refused before handoff, then external proof survives removal and restart', t => {
+  const f = setup(t, { occupied: false }); f.report(); f.autoTail = false;
+  const source = f.land().find(e => e.type === 'promotion.reconciled');
+  const entry = readCloseoutEntries(f.common).find(e => e.signal === 'landed');
+  const inside = path.join(f.lane, '.lane/completion.record.json'); fs.mkdirSync(path.dirname(inside), { recursive: true });
+  fs.copyFileSync(f.receipts.get(source.batch), inside);
+  const before = events(f);
+  assert.throws(() => handoffCloseout({ cwd: f.repo, org: f.org, receipt: inside, env: f.env }), /proof is inside a closing worktree/);
+  assert.deepEqual(events(f), before); assert.equal(fs.existsSync(f.lane), true);
+  assert.deepEqual(f.read().actions, []);
+  const receipt = path.join(f.scratch, 'retained-completion.record.json'); fs.copyFileSync(inside, receipt);
+  handoffCloseout({ cwd: f.repo, org: f.org, receipt, env: f.env });
+  const handoff = events(f).find(e => e.type === 'closeout.handoff');
+  assert.ok(handoff.checkpoint.startsWith(path.join(f.common, 'closeout/completions') + path.sep));
+  const command = f.options.command; let refuse = true;
+  f.options.command = (exe, args, opt) => exe === 'git' && args.includes('-D') && refuse ?
+    { status: 1, stdout: '', stderr: 'injected branch removal interruption' } : command(exe, args, opt);
+  f.drain({ keys: [entry.key] });
+  assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+  assert.ok(fs.existsSync(receipt)); assert.ok(fs.existsSync(handoff.checkpoint));
+  assert.equal(evaluations(f).findLast(e => e.key === entry.key).completed, false);
+  refuse = false;
+  retryCloseout({ cwd: f.repo, org: f.org, topic: entry.key, why: 'branch removal recovered', env: f.env, start: false });
+  f.drain({ keys: [entry.key] }); assertRemoved(f);
+  const completed = events(f); handoffCloseout({ cwd: f.repo, org: f.org, receipt, env: f.env });
+  f.drain({ keys: [entry.key] }); assert.deepEqual(events(f), completed);
+  assert.equal(effects(f).filter(e => e.action === 'worktree-removed').length, 1);
+});
+
+test('named drains and their stale-code successors isolate two eligible lanes, including an empty key set', t => {
+  const f = setup(t, { occupied: false, terminal: true }), other = path.join(f.scratch, 'other-lane');
+  f.git(['worktree', 'add', '-b', 'lane/other', other]);
+  f.append([{ type: 'item.added', id: 'ENG-2', kind: 'work', role: 'engineer' },
+    { type: 'run.started', id: 'R-2', item: 'ENG-2', workspace: other, meta: {} },
+    { type: 'report.ingested', run: 'R-2', report: { outcome: 'done' }, sha256: 'fixture-two' },
+    { type: 'item.closed', id: 'ENG-2', as: 'done' },
+    { type: 'promotion.reconciled', identity: f.common, batch: 'other-landing', tip: f.head,
+      heads: [{ run: 'R-2', item: 'ENG-2', head: f.head }], runs: ['R-2'], items: ['ENG-2'] }]);
+  const entries = readCloseoutEntries(f.common), one = entries.find(e => e.run === 'R-1' && e.signal === 'landed');
+  const otherEntries = entries.filter(e => e.run === 'R-2'), bytes = otherEntries.map(e =>
+    fs.readFileSync(path.join(f.common, 'closeout/entries', `${e.key}.json`), 'utf8'));
+  const before = events(f);
+  assert.deepEqual(f.drain({ keys: [], onClaim: () => assert.fail('empty keys cannot claim or observe') }), { evaluated: [] });
+  assert.deepEqual(events(f), before); assert.deepEqual(f.herdrCalls(), []);
+  const stale = f.drain({ keys: [one.key], onClaim: () => f.git(['commit', '--allow-empty', '-qm', 'main epoch changed']) });
+  assert.deepEqual(stale.evaluated, []); assert.deepEqual(stale.restart.keys, [one.key]);
+  assert.deepEqual(events(f).findLast(e => e.type === 'closeout.code-handoff').keys, [one.key]);
+  f.drain({ keys: stale.restart.keys });
+  assert.equal(fs.existsSync(f.lane), false); assert.equal(fs.existsSync(other), true);
+  assert.ok(otherEntries.every(e => !events(f).some(event => event.key === e.key)));
+  assert.deepEqual(otherEntries.map(e => fs.readFileSync(path.join(f.common, 'closeout/entries', `${e.key}.json`), 'utf8')), bytes);
+  f.drain(); assert.equal(fs.existsSync(other), false); assert.equal(f.git(['branch', '--list', 'lane/other']), '');
+});
+
+test('KEEP followed by a successful named closer retry clears the promotion result and ownership readers', t => {
+  const f = setup(t, { occupied: false, terminal: true }), stop = hold(f), queue = queueFor(f.repo);
+  const source = events(f).find(e => e.type === 'promotion.reconciled'), target = source.closeout_targets[0];
+  f.drain({ keys: [target.key] });
+  assert.match(evaluations(f).findLast(e => e.key === target.key).reason, /HOLD/);
+  const row = { ...f.job, id: 'kept-completion', org: f.org, run: target.run, item: target.item, topic: 'topic',
+    tip: target.head, outcome: 'promoted', delivered: true,
+    reconciliation: { state: 'complete', fingerprint: source.fingerprint, receipt: f.receipts.get(source.batch) },
+    cleanup: { state: 'pending', owner: 'closeout-queue', keys: [target.key],
+      source: { seq: source.seq, type: source.type, fingerprint: source.fingerprint } } };
+  queue.transaction(data => data.results.push(row));
+  const read = () => outstandingEffects(f.org, fold(events(f)).runs.get(target.run), f.common);
+  assert.ok(read().includes('promotion:unreconciled/pending-callback'));
+  retryCleanup(queue); assert.equal(queue.load().results[0].cleanup.state, 'pending');
+  const receipt = fs.readFileSync(row.reconciliation.receipt), reconciled = events(f).filter(e => e.type === 'promotion.reconciled');
+  stop(); retryCloseout({ cwd: f.repo, org: f.org, topic: target.key, why: 'hold removed', env: f.env, start: false });
+  f.drain({ keys: [target.key] }); assertRemoved(f);
+  assert.deepEqual(read(), [], 'the reader recognizes the durable exact outcome before bookkeeping catches up');
+  retryCleanup(queue); assert.equal(queue.load().results[0].cleanup.state, 'complete');
+  assert.deepEqual(events(f).filter(e => e.type === 'promotion.reconciled'), reconciled);
+  assert.deepEqual(fs.readFileSync(row.reconciliation.receipt), receipt);
+});
+
+test('a production drain fast-forwarded during module loading hands only its named landing to one fresh successor', async t => {
+  const f = setup(t, { occupied: false }); f.report(); const stop = hold(f);
+  const code = path.join(f.scratch, 'loading-code'), marker = path.join(f.scratch, 'graph-loading'), release = path.join(f.scratch, 'graph-continue');
+  f.git(['clone', '--quiet', '--shared', fileURLToPath(new URL('../', import.meta.url)), code]);
+  f.git(['config', 'user.name', 'Loading fixture'], code); f.git(['config', 'user.email', 'loading@example.invalid'], code);
+  const runtime = path.join(code, 'lib/closeout-executor.mjs'), original = fs.readFileSync(runtime, 'utf8');
+  fs.appendFileSync(runtime, `
+fs.writeFileSync(${JSON.stringify(marker)}, 'old modules loaded');
+const loadingDeadline = Date.now() + 60000;
+while (!fs.existsSync(${JSON.stringify(release)})) {
+  if (Date.now() > loadingDeadline) throw Error('loading barrier expired');
+  await new Promise(resolve => setTimeout(resolve, 10));
+}
+`);
+  f.git(['commit', '-am', 'Pause during consumer loading'], code);
+  const beforeCode = f.git(['rev-parse', 'HEAD'], code), branch = f.git(['symbolic-ref', '--short', 'HEAD'], code);
+  f.git(['checkout', '-qb', 'new-loading-code'], code);
+  fs.writeFileSync(runtime, original + '\n// newly landed removal implementation\n');
+  f.git(['commit', '-am', 'Land fresh consumer bytes'], code); const freshCode = f.git(['rev-parse', 'HEAD'], code);
+  f.git(['checkout', '-q', branch], code);
+  const key = closeoutKey(f.lane, 'R-1', 'landed');
+  const running = child(process.execPath, [path.join(code, 'supervisor/closeout.mjs'), 'drain', '--repo', f.repo,
+    '--org', f.org, '--keys', JSON.stringify([key])], { cwd: f.repo, env: f.env });
+  let reply;
+  try {
+    await waitForChange([marker], () => fs.existsSync(marker));
+    f.git(['merge', '--ff-only', 'new-loading-code'], code); f.land();
+  } finally { fs.writeFileSync(release, 'continue'); reply = await running; stop(); }
+  assert.equal(reply.status, 0, reply.stdout + reply.stderr);
+  const result = JSON.parse(reply.stdout.trim());
+  assert.deepEqual(result.evaluated, []); assert.deepEqual(result.restart.keys, [key]);
+  assert.equal(result.restart.old.code.commit, beforeCode); assert.equal(result.restart.current.code.commit, freshCode);
+  assert.equal(result.successor.exit, 0); assert.equal(result.successor.root, code);
+  const observed = evaluations(f); assert.equal(observed.length, 1); assert.equal(observed[0].key, key);
+  assert.equal(observed[0].code.code.commit, freshCode); assert.equal(observed[0].code.epoch.tip, f.head);
+  assert.match(observed[0].reason, /HOLD/);
+  assert.equal(events(f).filter(e => e.type === 'closeout.code-handoff').length, 1);
+  retryCloseout({ cwd: f.repo, org: f.org, topic: key, why: 'hold removed after fresh loading successor', env: f.env, start: false });
+  f.drain({ keys: [key] }); assertRemoved(f);
 });

@@ -22,6 +22,13 @@ terminal references, publishes through the bounded completion outbox, and joins
 its finite attempt outside lifecycle/queue claims. A KEEP or failure retains
 cleanup-pending without repeating integration or validation.
 
+The checkpoint lives under `<canonical-git-common-dir>/closeout/completions/`.
+Receipts and gate logs inside any linked worktree are refused before handoff;
+the caller must retain the original evidence outside those worktrees. Existing
+handoffs backed by disposable paths also keep. After a named retry completes,
+promotion bookkeeping and run-ownership readers reconcile only the exact
+source/fingerprint, target key/run/topic/head and durable completion outcome.
+
 Standalone callers explicitly invoke the tail after successful `finish` or
 `complete-batch` returns (after child exit for a CLI):
 
@@ -89,6 +96,8 @@ reaches the existing consumer or starts another after its claim is released.
 A contended drain returns `already_running` immediately without evaluating
 targets, including detached starts and same-process re-entry. Callers that need
 completion observe the running consumer's recorded outcome and claim release.
+An explicit key set restricts selection, pruning and stale-code successor
+handoff to those keys; an empty set does no work. Omitting it drains the queue.
 There are no timers, debounce windows, idle polling or workspace sweeps in the
 closer. It reads queue entries and their targeted record/native/Git references,
 processes them in source sequence/key order, and exits when no new revision is
@@ -503,6 +512,11 @@ release or follow `current` mid-effect. Record old/new epoch and code identity
 so a drain begun just before a fast-forward cannot silently process that
 landing using its pre-landing imports. Failed restart leaves cleanup pending
 for explicit drain, without a restart loop or a new service.
+
+The CLI captures its launch binding before dynamically importing the queue and
+retirement graph. The library consumer bootstrap likewise captures code before
+its dynamic executor import. The executor rechecks the original launch binding;
+it never recaptures a newer commit or main epoch after loading old modules.
 
 ### Required implementation witnesses (not tests run by this design)
 

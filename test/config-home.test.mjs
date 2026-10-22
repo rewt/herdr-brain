@@ -15,7 +15,7 @@ import { literalLaunch } from '../lib/owner-launch.mjs';
 import { requireHomeRelease, projectPin, selectRelease } from '../lib/releases.mjs';
 import { freezeReleaseValidation } from '../herdr/validation-admission.mjs';
 import { adopt, adoptCommand } from '../lib/adopt-command.mjs';
-import { readFleet } from '../lib/fleet.mjs';
+import { projectFleet, readFleet } from '../lib/fleet.mjs';
 import { initOrg, findOrgDir, transact, loadEvents } from '../lib/store.mjs';
 import { inspect } from '../sessions/sessions.mjs';
 import { readSessionFacts } from '../sessions/observe.mjs';
@@ -124,6 +124,50 @@ test('record ownership matches canonical aliases and a shared record remains hel
   }
 });
 
+for (const fleet of [false, true]) test(`implicit shared-record aliases hold before ${fleet ? 'legacy fleet' : 'no-fleet'} discovery returns`, async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), raw = readConfigJSON(binding.file), neighbor = await neighboringProject(f);
+  const env = { ...neighbor.env, ORG_DIR: undefined };
+  if (fleet) {
+    fs.mkdirSync(env.HERDR_MONITOR_FLEET);
+    fs.writeFileSync(path.join(env.HERDR_MONITOR_FLEET, 'fleet.json'), JSON.stringify({ version: 1, session_limit: 6, projects: {} }));
+  }
+  const linked = path.join(f.scratch, 'neighbor-linked');
+  execFileSync('git', ['-C', neighbor.cwd, 'worktree', 'add', '-qb', 'lane/record-alias', linked], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const nested = path.join(neighbor.cwd, 'nested'); fs.mkdirSync(nested);
+  fs.writeFileSync(binding.file, JSON.stringify({ ...raw, adoption: { ...raw.adoption, scope_file: 'relative' } }));
+  const error = `${binding.file}: invalid config-home-project/v1 binding`;
+  const history = fs.readFileSync(path.join(binding.record, 'events.jsonl'));
+  assert.equal(findOrgDir({ cwd: neighbor.cwd, env }), neighbor.record);
+  for (const [location, cwd, alias] of [
+    ['canonical', neighbor.cwd, neighbor.record],
+    ['nested', nested, path.join(nested, '.org')],
+    ['linked worktree', linked, path.join(linked, '.org')],
+    ['ancestor', neighbor.cwd, path.join(f.ownerRoot, '.org')],
+  ]) {
+    // Keep the neighbor's real record for the positive controls. For ancestor
+    // discovery, no record may be present in the entered checkout itself.
+    const saved = path.join(f.scratch, 'neighbor-record');
+    if (location === 'canonical' || location === 'ancestor') fs.renameSync(neighbor.record, saved);
+    fs.symlinkSync(binding.record, alias, 'dir');
+    assert.throws(() => projectFleet(cwd, env), { message: error }, location);
+    assert.throws(() => findOrgDir({ cwd, env }), { message: error }, location);
+    assert.throws(() => findOrgDir({ cwd, env: { ...env, ORG_DIR: alias } }), { message: error }, `${location} explicit selector`);
+    for (const args of [['snapshot'], ['add', 'must not write the shared record']]) {
+      const run = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), ...args], { cwd, env, encoding: 'utf8' });
+      assert.equal(run.status, 1, `${location}: ${run.stderr}`);
+      assert.ok(run.stderr.includes(error), `${location}: ${run.stderr}`);
+    }
+    assert.deepEqual(fs.readFileSync(path.join(binding.record, 'events.jsonl')), history);
+    fs.unlinkSync(alias);
+    if (location === 'canonical' || location === 'ancestor') fs.renameSync(saved, neighbor.record);
+    assert.equal(findOrgDir({ cwd: neighbor.cwd, env }), neighbor.record);
+  }
+  const write = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), 'add', 'unrelated discovery still writes'], { cwd: neighbor.cwd, env, encoding: 'utf8' });
+  assert.equal(write.status, 0, write.stderr);
+  assert.equal(loadEvents(neighbor.record).events.at(-1).title, 'unrelated discovery still writes');
+});
+
 test('conflicting home ownership holds the claimed project and is isolated from an unrelated record', async t => {
   const f = configFixture(t); await f.adopt();
   const binding = f.binding(), neighbor = await neighboringProject(f);
@@ -153,6 +197,27 @@ for (const damage of ['metadata', 'policy', 'JSON', 'missing']) test(`a real ide
   assert.equal(findOrgDir({ cwd: neighbor.cwd, env: { ...neighbor.env, ORG_DIR: undefined } }), neighbor.record);
   assert.equal(homeBindings(neighbor.env, { record: neighbor.record }).errors.length, 1);
   neighbor.cli('snapshot'); neighbor.cli('add', 'neighbor writes despite a foreign invalid identity');
+});
+
+for (const kind of ['file', 'loop']) test(`missing identity metadata scopes a ${kind} child alias and still holds the claimed project`, async t => {
+  const f = configFixture(t, { custom: true }); await f.adopt();
+  const binding = f.binding(), neighbor = await neighboringProject(f, { outsideIdentity: true });
+  const directory = path.dirname(binding.identityFile), alias = path.join(directory, 'a-unreadable');
+  const target = kind === 'file' ? path.join(f.scratch, 'regular-file') : alias;
+  if (kind === 'file') fs.writeFileSync(target, 'not a directory');
+  fs.symlinkSync(target, alias);
+  fs.unlinkSync(binding.identityFile);
+  const error = `${directory}: missing identity.json`, file = path.join(alias, 'project.json');
+  const errors = homeBindings(neighbor.env, { record: neighbor.record }).errors;
+  assert.equal(errors.length, 2);
+  assert.ok(errors.some(e => e.file === file && e.error.includes(kind === 'file' ? 'ENOTDIR' : 'ELOOP')));
+  assert.ok(errors.some(e => e.file === binding.file && e.error === error));
+  assert.throws(() => homeProject(f.cwd, f.env), { message: error });
+  assert.throws(() => homeBindings(f.env, { record: binding.record }), { message: error });
+  assert.equal(homeProject(neighbor.cwd, neighbor.env), null);
+  assert.equal(findOrgDir({ cwd: neighbor.cwd, env: { ...neighbor.env, ORG_DIR: undefined } }), neighbor.record);
+  neighbor.cli('snapshot'); neighbor.cli('add', `unrelated writes survive a ${kind} child alias`);
+  assert.equal(loadEvents(neighbor.record).events.at(-1).type, 'item.added');
 });
 
 test('home discovery ignores held, renamed and invalid identity names beside a valid identity', async t => {

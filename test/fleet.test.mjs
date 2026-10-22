@@ -61,6 +61,33 @@ test('a generated home key cannot replace an unrelated legacy fleet mapping', as
   assert.equal(Object.keys(discovered).length, 2);
 });
 
+test('a legacy mapping rechecks its record against an invalid home ownership claim', async t => {
+  const f = configFixture(t); await f.adopt();
+  const binding = f.binding(), raw = JSON.parse(fs.readFileSync(binding.file, 'utf8'));
+  const cwd = path.join(f.scratch, 'legacy-project');
+  execFileSync('git', ['clone', '-q', f.cwd, cwd], { env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const record = path.join(cwd, '.org'); initOrg(record);
+  const project = { identity: path.join(cwd, '.git'), checkout: cwd, record, worktrees: path.join(f.scratch, 'legacy-lanes'), layers: [] };
+  const file = path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'); fs.mkdirSync(path.dirname(file));
+  const write = selected => fs.writeFileSync(file, JSON.stringify({ version: 1, session_limit: 6, projects: { legacy: { ...project, record: selected } } }));
+  const env = { ...f.env, ORG_DIR: undefined };
+  fs.writeFileSync(binding.file, JSON.stringify({ ...raw, adoption: { ...raw.adoption, scope_file: 'relative' } }));
+  write(record);
+  assert.equal(projectFleet(cwd, env).project.record, record);
+  assert.equal(findOrgDir({ cwd, env }), record);
+  const alias = path.join(f.scratch, 'shared-record'); fs.symlinkSync(binding.record, alias, 'dir');
+  const before = fs.readFileSync(path.join(binding.record, 'events.jsonl'));
+  write(alias);
+  const error = `${binding.file}: invalid config-home-project/v1 binding`;
+  assert.throws(() => projectFleet(cwd, env), { message: error });
+  assert.throws(() => findOrgDir({ cwd, env }), { message: error });
+  const run = spawnSync(process.execPath, [path.join(f.bundle, 'bin/org.mjs'), 'snapshot'], { cwd, env, encoding: 'utf8' });
+  assert.equal(run.status, 1, run.stderr); assert.ok(run.stderr.includes(error), run.stderr);
+  assert.deepEqual(fs.readFileSync(path.join(binding.record, 'events.jsonl')), before);
+  write(record);
+  assert.equal(findOrgDir({ cwd, env }), record);
+});
+
 
 test('concurrent joins publish one complete fleet with both projects', async t => {
   const f = fixture(t), a = f.repo('a'), b = f.repo('b');

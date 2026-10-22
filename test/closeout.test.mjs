@@ -994,6 +994,7 @@ test('v1 is held until exact-key migration; interruption after the migration jou
   migrateCloseout({ cwd: f.repo, org: f.org, key: entry.key, env: f.env });
   const [converted] = readCloseoutEntries(f.common);
   assert.equal(converted.schema, 'closeout-entry/v2'); assert.equal(converted.cwd, entry.cwd); assert.equal(converted.key, entry.key);
+  assert.deepEqual(migrateCloseout({ cwd: f.repo, org: f.org, key: entry.key, env: f.env }), [entry.key]);
   f.drain(); assert.ok(evaluations(f).some(e => e.key === entry.key));
   assert.equal(events(f).filter(e => e.type === 'closeout.migrated').length, 1);
 });
@@ -1012,6 +1013,9 @@ test('v1 landed migration requires the original successful completion tail and p
   const converted = readCloseoutEntries(f.common).find(e => e.key === entry.key);
   assert.deepEqual(converted.worktreeIdentity, entry.worktreeIdentity); assert.equal(converted.head, entry.head);
   assert.equal(converted.source.seq, entry.source.seq); assert.ok(converted.handoff);
+  const beforeTail = events(f).filter(e => e.type === 'closeout.handoff').length;
+  handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });
+  assert.equal(events(f).filter(e => e.type === 'closeout.handoff').length, beforeTail);
   f.drain(); assertRemoved(f);
 });
 

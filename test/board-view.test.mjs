@@ -176,16 +176,49 @@ test('a worktree created after board startup joins row and project slot matching
 });
 test('CLI validates options, independent snapshots survive closure, and all sources pass through the privacy filter', async t => {
   const f = boardFixture(t), raw = f.document(); raw.rows[0].status.text = 'PLANTED_token_123'; raw.rows[0].where.pane = 'wGone:p9';
-  const script = f.write('rows.mjs', `console.log(${JSON.stringify(JSON.stringify(raw))});`);
-  const args = ['--project', f.root, '--source', 'bch=rows.mjs', '--log-root', f.root, '--once'];
+  const project = path.join(f.root, 'fixture-project'), home = path.join(project, 'home'), record = path.join(project, '.org');
+  fs.mkdirSync(home, { recursive: true });
+  const herdr = f.write('fixture-project/home/bin/herdr', '#!/bin/sh\nexit 1\n'); fs.chmodSync(herdr, 0o755);
+  const env = { PATH: `${path.dirname(herdr)}:${process.env.PATH}`, HOME: home, ORG_DIR: record,
+    HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET,
+    MONITOR_TEST_SLOT_PATH: process.env.MONITOR_TEST_SLOT_PATH, MONITOR_TEST_SLOT_COMPAT_PATH: process.env.MONITOR_TEST_SLOT_COMPAT_PATH,
+    NO_COLOR: '1' };
+  // Without its own Git identity, a nested fixture discovers its parent's live queue.
+  for (const cwd of [f.root, project]) execFileSync('git', ['init', '-qb', 'main', cwd], { env, timeout: 10000 });
+  const outside = { id: 'outside-pending-job', topic: 'outside-lane', queued: '2026-10-16T12:00:00.000Z' };
+  const outsideQueue = { identity: fs.realpathSync(path.join(f.root, '.git')), pending: [outside], results: [] };
+  const outsideFile = f.write('.git/promote/queue.json', outsideQueue);
+  f.write('fixture-project/.git/promote/queue.json', { identity: fs.realpathSync(path.join(project, '.git')),
+    pending: [{ id: 'fixture-pending-job', topic: 'fixture-lane', run: 'R-1', queued: outside.queued }], results: [] });
+  f.write('fixture-project/.org/events.jsonl', [
+    { type: 'item.added', id: 'ENG-1', title: 'Fixture item', role: 'engineer' },
+    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: project },
+  ].map((event, i) => JSON.stringify({ ...event, seq: i + 1, at: outside.queued, by: 'fixture' })).join('\n') + '\n');
+  const script = f.write('fixture-project/rows.mjs', `if(process.cwd()!==${JSON.stringify(project)}||process.env.HOME!==${JSON.stringify(home)}||process.env.ORG_DIR!==${JSON.stringify(record)})process.exit(4);console.log(${JSON.stringify(JSON.stringify(raw))});`);
+  const args = ['--project', project, '--source', 'bch=rows.mjs', '--log-root', f.root, '--once'];
   const parsed = parseOptions([...args, '--interval', '0.5']); assert.equal(parsed.interval, 500); assert.equal(parsed.sources[0].script, script);
   assert.equal(parseOptions(['--project', f.root, '--source', 'one=a.mjs', '--project', f.root + '/logs', '--source', 'two=b.mjs']).sources[1].project, f.root + '/logs');
   for (const invalid of [['--interval', '0'], ['--interval', 'NaN'], ['--source', 'Bad=a'], ['--project'], ['--bogus']]) assert.throws(() => parseOptions(invalid));
   const cli = new URL('../board/board.mjs', import.meta.url);
-  const run = (extra, width = 80) => spawnSync(process.execPath, [cli.pathname, ...args, ...extra], { env: { ...process.env, NO_COLOR: '1', COLUMNS: String(width) }, encoding: 'utf8', timeout: 15000 });
+  const run = (extra, width = 80) => spawnSync(process.execPath, [cli.pathname, ...args, ...extra], { cwd: project, env: { ...env, COLUMNS: String(width) }, encoding: 'utf8', timeout: 15000 });
+  const outsidePhase = () => {
+    const r = run(['--project', f.root, '--json']); assert.equal(r.status, 0, r.stderr);
+    return JSON.parse(r.stdout).rows.find(row => row.id === outside.id)?.phase;
+  };
+  assert.equal(outsidePhase(), 'queued', 'positive control: the outside pending job is discoverable');
   for (const width of [80, 160]) { const r = run([], width); assert.equal(r.status, 0, r.stderr); assert.ok(r.stdout.split('\n').every(l => l.length <= width)); assert.equal(r.stdout.includes('\x1b'), false); assert.equal(r.stdout.includes('PLANTED'), false); }
-  const a = run(['--json']), b = run(['--json']); assert.equal(a.status, 0, a.stderr); assert.equal(b.status, 0, b.stderr);
+  const a = run(['--json']); assert.equal(a.status, 0, a.stderr);
+  outsideQueue.pending = []; outsideQueue.current = { ...outside, phase: 'promoting' };
+  fs.writeFileSync(outsideFile, JSON.stringify(outsideQueue));
+  assert.equal(outsidePhase(), 'admission', 'the outside job changes between the isolated snapshots');
+  const b = run(['--json']); assert.equal(b.status, 0, b.stderr);
   assert.deepEqual(JSON.parse(a.stdout).rows, JSON.parse(b.stdout).rows);
+  for (const r of [a, b]) {
+    const rows = JSON.parse(r.stdout).rows;
+    assert.deepEqual(rows.map(row => row.id).sort(), [raw.rows[0].id, 'fixture-pending-job'].sort(), 'only fixture rows are present');
+    assert.equal(rows.find(row => row.id === 'fixture-pending-job').item, 'ENG-1', 'the fixture record supplies the item');
+    assert.equal(r.stdout.includes(outside.id), false, 'the outside queue never enters the isolated output');
+  }
   const row = JSON.parse(a.stdout).rows.find(r => r.project === 'bch-cloak');
   assert.equal(row.status.text, 'withheld'); assert.equal(row.where.pane, 'withheld'); assert.equal(row.where.log, f.log); assert.equal('worktree' in row, false);
   const collect = createBoard({ projects: [f.root], sources: [], roots: [f.root] }, { discover: () => ({ identity: f.root, paths: [f.root] }), refresh: p => p, brain: async () => raw,

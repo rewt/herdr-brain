@@ -13,10 +13,13 @@ const refusal = (code, message) => Object.assign(Error(message), { code });
 
 // Callers supply original run.started facts, never folded display metadata.
 // Recovery and reservation replacement must agree before a journal can advance.
+// Older journals and their starts both lack the admission marker; new ones must
+// match it too, so an unmarked start cannot silently release a counted slot.
 export function matchesDispatchStart(start, job) {
   const meta = start.meta ?? {}, kind = job.unlandedCap?.admission?.kind;
   return Boolean(meta.dispatch_project) && Boolean(job.token) && canonical(meta.dispatch_project) === canonical(job.common) &&
     start.item === job.item && meta.dispatch_journal === job.journal && meta.dispatch_attempt === job.token &&
+    meta.dispatch_unlanded_admitted === job.unlandedCap?.admission?.admitted &&
     meta.dispatch_unlanded_exception === (kind === 'regular' ? undefined : kind);
 }
 
@@ -47,7 +50,7 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
       if (landedProjects.has(event.id)) return landedProjects.get(event.id).has(common);
       if (!workspaces.has(event.workspace)) {
         try { workspaces.set(event.workspace, canonical(projectIdentity(event.workspace)) === common); }
-        catch { workspaces.set(event.workspace, true); } // Missing legacy evidence cannot free a slot.
+        catch { workspaces.set(event.workspace, true); } // Keep unknown legacy work visible for hygiene.
       }
       return workspaces.get(event.workspace);
     };
@@ -62,11 +65,14 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
     const start = starts.get(head.run);
     if (head.identity === common && start) landed.set(head.item, Math.max(landed.get(head.item) ?? -1, start.order));
   }
-  const items = [];
+  const items = [], legacy = [];
   for (const [id, runs] of projects) {
     const item = state.items.get(id), latest = runs.at(-1);
-    if (item?.closed?.as === 'dropped' || latest.order <= (landed.get(id) ?? -1)) continue;
-    items.push({ item: id, title: item?.title ?? id, runs: runs.map(s => s.run.id), latest: latest.run.id });
+    if (item?.closed || latest.order <= (landed.get(id) ?? -1)) continue;
+    // No time cutoff or record migration: only this latest start's original
+    // admission fact opts the item into the cap. Older work stays diagnostic.
+    const target = latest.meta.dispatch_unlanded_admitted === true ? items : legacy;
+    target.push({ item: id, title: item?.title ?? id, runs: runs.map(s => s.run.id), latest: latest.run.id });
   }
   const exceptions = [...starts.values()].filter(s => ['fix', 'unblocks'].includes(s.meta.dispatch_unlanded_exception) &&
     !s.run.report && !s.run.abandoned).map(s => ({ run: s.run.id, item: s.run.item, kind: s.meta.dispatch_unlanded_exception }));
@@ -80,14 +86,16 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
   for (const j of reservations) {
     let item = items.find(i => i.item === j.item);
     if (!item) {
-      item = { item: j.item, title: state.items.get(j.item)?.title ?? j.item, runs: [], latest: null };
+      const index = legacy.findIndex(i => i.item === j.item);
+      item = index < 0 ? { item: j.item, title: state.items.get(j.item)?.title ?? j.item, runs: [], latest: null }
+        : legacy.splice(index, 1)[0];
       items.push(item);
     }
     (item.pending ??= []).push(j.journal);
     const kind = j.unlandedCap?.admission?.kind;
     if (['fix', 'unblocks'].includes(kind)) exceptions.push({ run: null, item: j.item, kind, journal: j.journal });
   }
-  return { state, starts, items, exceptions, reservations };
+  return { state, starts, items, legacy, exceptions, reservations };
 }
 
 function startJournals(org) {
@@ -110,7 +118,7 @@ export function checkUnlandedCap({ config, org, events, journals, request, requi
   // could miss both the reservation and the run during that transition.
   journals ??= startJournals(org);
   events ??= loadEvents(org).events;
-  const { state, starts, items, exceptions, reservations } = countUnlanded({ events, journals, ...options });
+  const { state, starts, items, legacy, exceptions, reservations } = countUnlanded({ events, journals, ...options });
   if (request.fromRun) {
     const origin = starts.get(request.fromRun);
     if (!origin || origin.run.item !== request.item) {
@@ -118,7 +126,7 @@ export function checkUnlandedCap({ config, org, events, journals, request, requi
     }
   }
   if (request.unblocks != null) {
-    if (request.unblocks === request.item || !items.some(i => i.item === request.unblocks && i.runs.length)) {
+    if (request.unblocks === request.item || ![...items, ...legacy].some(i => i.item === request.unblocks && i.runs.length)) {
       throw refusal('DISPATCH_UNBLOCKS_INVALID', `--unblocks must name another unlanded item in this project; ${request.unblocks} is not a pending landing`);
     }
     if (requireLink && !state.links.some(l => l.blocker === request.item && l.blocked === request.unblocks)) {
@@ -126,16 +134,18 @@ export function checkUnlandedCap({ config, org, events, journals, request, requi
     }
   }
   const kind = items.length < cap ? 'regular' : request.fromRun ? 'fix' : request.unblocks ? 'unblocks' : null;
-  const evidence = { cap, count: items.length, items, pending_starts: reservations.map(j => ({ item: j.item, journal: j.journal })),
+  const evidence = { cap, count: items.length, items, legacy: { count: legacy.length, counted: false, items: legacy },
+    pending_starts: reservations.map(j => ({ item: j.item, journal: j.journal })),
     exceptions: { cap: UNLANDED_EXCEPTION_CAP, count: exceptions.length, runs: exceptions },
-    admission: { kind, from_run: request.fromRun ?? null, unblocks: request.unblocks ?? null } };
+    admission: { kind, admitted: true, from_run: request.fromRun ?? null, unblocks: request.unblocks ?? null } };
   if (!kind || (kind !== 'regular' && exceptions.length >= UNLANDED_EXCEPTION_CAP)) {
     const list = items.map(i => i.item).join(', ');
     const active = exceptions.map(e => e.run ?? `pending start for ${e.item} (${e.journal})`).join(', ') || 'none';
     const reason = !kind ? 'Only a fix round with --from-run or a landing follow-up with --unblocks ITEM can proceed.'
       : `All ${UNLANDED_EXCEPTION_CAP} active fix/follow-up slots are occupied (${active}); finish one of those runs first.`;
     const pending = reservations.length ? ` Pending record starts (${reservations.map(j => `${j.item}: ${j.journal}`).join(', ')}) retain capacity; inspect and retry their saved requests after the writers finish.` : '';
-    const error = refusal('DISPATCH_UNLANDED_CAP', `unlanded count ${items.length}, cap ${cap}: ${list}. ${reason} Finish a listed landing or explicitly drop the work before starting more items.${pending}`);
+    const historical = legacy.length ? ` Legacy, not counted (${legacy.length}): ${legacy.map(i => i.item).join(', ')}.` : '';
+    const error = refusal('DISPATCH_UNLANDED_CAP', `unlanded count ${items.length}, cap ${cap}: ${list}. ${reason} Finish a listed landing or close the work as done or dropped before starting more items.${pending}${historical}`);
     error.unlanded = evidence;
     throw error;
   }

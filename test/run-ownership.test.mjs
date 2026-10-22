@@ -376,7 +376,7 @@ console.log(JSON.stringify(enqueue(queueFor(${JSON.stringify(f.repo)}),['topic']
   const queued = queueFor(f.repo).load().pending.length;
   assert.equal(queued + events(f).filter(e => e.type === 'run.claimed').length, 1);
   assert.match(attempts.find(r => r.code === 1).stderr, /RUN_OWNED_ELSEWHERE|RUN_CLAIM_TRANSFER_REFUSED/);
-  fs.rmSync(queueFor(f.repo).file); // Both children finished; neither starts a worker.
+  fs.rmSync(queueFor(f.repo).file, { force: true }); // The claim winner leaves no queue; neither child starts a worker.
 });
 
 test('concurrent transfers compare one exact incarnation', async t => {

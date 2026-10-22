@@ -236,9 +236,10 @@ function unlandedSetting(f, cap) {
   config.dispatch = { ...config.dispatch, max_unlanded: cap };
   fs.writeFileSync(file, JSON.stringify(config));
 }
-function pendingItem(f, { item = f.rec(['add', 'Pending landing', '--role', 'engineer']), meta = [] } = {}) {
+function pendingItem(f, { item = f.rec(['add', 'Pending landing', '--role', 'engineer']), meta = [], admitted = true } = {}) {
   const project = f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
-  const run = f.rec(['start', item, '--workspace', f.repo, '--meta', `dispatch_project=${project}`, ...meta.flatMap(m => ['--meta', m])]).match(/^(R-\d+) started/m)[1];
+  const run = f.rec(['start', item, '--workspace', f.repo, '--meta', `dispatch_project=${project}`,
+    ...(admitted ? ['--meta', 'dispatch_unlanded_admitted=true'] : []), ...meta.flatMap(m => ['--meta', m])]).match(/^(R-\d+) started/m)[1];
   return { item, run };
 }
 
@@ -285,6 +286,7 @@ test('adopted home cap without LANE_CONFIG refuses at two and shares three fix/f
   assert.equal(fixJob.unlandedCap.admission.kind, 'fix');
   assert.equal(fixJob.unlandedCap.exceptions.count, 0);
   assert.equal(fixJob.sessionCap.cap, 4);
+  assert.equal(f.show(fixed.run).meta.dispatch_unlanded_admitted, true);
   assert.equal(f.show(fixed.run).meta.dispatch_unlanded_exception, 'fix');
   const active = [fixed.run];
   for (let n = 1; n <= 2; n++) {
@@ -296,6 +298,7 @@ test('adopted home cap without LANE_CONFIG refuses at two and shares three fix/f
     assert.equal(job.unlandedCap.cap, 2);
     assert.equal(job.unlandedCap.admission.kind, 'unblocks');
     assert.equal(job.unlandedCap.exceptions.count, n);
+    assert.equal(f.show(receipt.run).meta.dispatch_unlanded_admitted, true);
     assert.equal(f.show(receipt.run).meta.dispatch_unblocks, pending[1].item);
     assert.ok(f.state().links.some(l => l.blocker === item && l.blocked === pending[1].item));
   }
@@ -339,6 +342,8 @@ test('default unlanded cap admits the eighth item, then refuses a new item befor
   const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
   const receipt = JSON.parse(admitted.stdout), job = JSON.parse(fs.readFileSync(receipt.journal));
   assert.equal(job.unlandedCap.cap, 8); assert.equal(job.unlandedCap.count, 7);
+  assert.equal(f.show(receipt.run).meta.dispatch_unlanded_admitted, true);
+  assert.equal(f.show(receipt.run).meta.dispatch_unlanded_exception, undefined);
   const next = f.rec(['add', 'Ninth item', '--role', 'engineer']);
   const events = fs.readFileSync(path.join(f.org, 'events.jsonl')), calls = f.calls().length;
   const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--awaited']);
@@ -351,12 +356,33 @@ test('default unlanded cap admits the eighth item, then refuses a new item befor
   assert.equal(f.jobs().length, 1);
 });
 
-for (const disposition of ['dropped', 'landed']) test(`${disposition} items release unlanded capacity while closed without landing still counts`, t => {
+test('adoption admits new work despite done closures and pre-cap open runs, listing legacy work as not counted', t => {
+  const f = fixture(t); unlandedSetting(f, 1);
+  const done = pendingItem(f); f.rec(['close', done.item]);
+  const legacy = [pendingItem(f, { admitted: false }), pendingItem(f, { admitted: false })];
+  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
+  const receipt = JSON.parse(admitted.stdout), job = JSON.parse(fs.readFileSync(receipt.journal));
+  assert.equal(job.unlandedCap.count, 0);
+  assert.equal(job.unlandedCap.admission.kind, 'regular');
+  assert.equal(f.show(receipt.run).meta.dispatch_unlanded_admitted, true);
+  assert.equal(receipt.legacy.counted, false);
+  assert.equal(receipt.legacy.count, 2);
+  assert.deepEqual(receipt.legacy.items.map(i => i.item), legacy.map(i => i.item));
+  assert.deepEqual(receipt.legacy, job.unlandedCap.legacy);
+  const next = f.rec(['add', 'After first admitted start', '--role', 'engineer']);
+  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
+  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
+  assert.match(refused.stderr, /unlanded count 1, cap 1/);
+  assert.ok(refused.stderr.includes(`Legacy, not counted (2): ${legacy.map(i => i.item).join(', ')}`));
+  assert.deepEqual(f.show(next).runs, []);
+});
+
+for (const disposition of ['done', 'dropped', 'landed']) test(`${disposition} items release unlanded capacity`, t => {
   const f = fixture(t); unlandedSetting(f, 1);
   const prior = pendingItem(f);
-  f.rec(['close', prior.item]);
   const refused = f.start(); assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  if (disposition === 'dropped') f.rec(['close', prior.item, '--dropped']);
+  if (disposition === 'done') f.rec(['close', prior.item]);
+  else if (disposition === 'dropped') f.rec(['close', prior.item, '--dropped']);
   else {
     // Fixture a recorded train landing; this test never runs a promotion gate.
     const file = path.join(f.org, 'events.jsonl'), state = f.state();
@@ -539,6 +565,7 @@ process.exit(result.status??1);
     const pending = JSON.parse(fs.readFileSync(journal));
     assert.equal(pending.stage, 'starting'); assert.equal(pending.run, null);
     assert.equal(pending.unlandedCap.admission.kind, exceptional ? 'unblocks' : 'regular');
+    assert.equal(pending.unlandedCap.admission.admitted, true);
     assert.equal(first.child.kill('SIGKILL'), true);
     assert.equal((await first.done).signal, 'SIGKILL');
     assert.equal(lookupProcess(writer.pid).value?.pid, writer.pid, 'the orphan writer must remain able to append');
@@ -553,11 +580,11 @@ process.exit(result.status??1);
     if (displayOnly) {
       // A reported ordinary run can acquire every matching display field later.
       // Landing it makes the item reservation the only remaining item capacity.
-      decoy = pendingItem(f, { item: f.item }).run;
+      decoy = pendingItem(f, { item: f.item, admitted: false }).run;
       const report = path.join(f.root, 'decoy-report.md');
       fs.writeFileSync(report, `---\nrun: ${decoy}\noutcome: done\nsummary: Ordinary run finished\n---\n`);
       f.rec(['ingest', report]);
-      f.rec(['set', decoy, `dispatch_journal=${journal}`, `dispatch_attempt=${pending.token}`,
+      f.rec(['set', decoy, `dispatch_journal=${journal}`, `dispatch_attempt=${pending.token}`, 'dispatch_unlanded_admitted=true',
         ...(exceptional ? ['dispatch_unlanded_exception=unblocks'] : [])]);
       const state = f.state();
       fs.appendFileSync(path.join(f.org, 'events.jsonl'), JSON.stringify({ type: 'promotion.reconciled', seq: state.eventCount + 1,
@@ -591,6 +618,7 @@ process.exit(result.status??1);
   assert.equal(f.show(f.item).runs.length, displayOnly ? 2 : 1, 'recovery adopts the matching original start without another run');
   const run = JSON.parse(recovered.stdout).run;
   assert.notEqual(run, decoy, 'the display-only match cannot replace the original dispatch start');
+  assert.equal(f.show(run).meta.dispatch_unlanded_admitted, true);
   if (exceptional) f.rec(['abandon', run]);
   else f.rec(['close', f.item, '--dropped']);
   const contender = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === other);

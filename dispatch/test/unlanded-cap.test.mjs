@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { countUnlanded, checkUnlandedCap, DEFAULT_UNLANDED_CAP, UNLANDED_EXCEPTION_CAP } from '../unlanded-cap.mjs';
+import { fold as oldFold } from '../../test/fixtures/state-pre-session-bind.mjs';
 
 const common = '/project/.git';
 function record() {
@@ -11,7 +12,7 @@ function record() {
   const add = event => { events.push({ seq: events.length + 1, at: '2026-10-21T12:00:00Z', ...event }); return event; };
   const item = (n, fields = {}) => add({ type: 'item.added', id: `ENG-${n}`, title: `Work ${n}`, ...fields }).id;
   const start = (n, target = `ENG-${n}`, meta = {}, fields = {}) => add({ type: 'run.started', id: `R-${n}`, item: target,
-    workspace: '/project/lane', meta: { dispatch_project: common, ...meta }, ...fields }).id;
+    workspace: '/project/lane', meta: { dispatch_project: common, dispatch_unlanded_admitted: true, ...meta }, ...fields }).id;
   const land = (n, fields = {}) => add({ type: 'promotion.reconciled', identity: common, items: [`ENG-${n}`], runs: [`R-${n}`],
     heads: [{ item: `ENG-${n}`, run: `R-${n}`, head: 'a'.repeat(40) }], ...fields });
   return { events, add, item, start, land };
@@ -19,7 +20,7 @@ function record() {
 const count = r => countUnlanded({ events: r.events, common });
 const check = (r, request = { item: 'ENG-new' }, config = {}, extra = {}) => checkUnlandedCap({ events: r.events, common, request, config, ...extra });
 
-test('unlanded items count once across attempts, done reports, ordinary closure, parked/kept lanes and abandonment', () => {
+test('admitted open items count once across attempts, done reports, parked/kept lanes and abandonment; closed items do not', () => {
   const r = record();
   for (let n = 1; n <= 8; n++) r.item(n);
   for (let n = 1; n <= 7; n++) r.start(n, undefined, { lane: `lane-${n}` });
@@ -31,17 +32,76 @@ test('unlanded items count once across attempts, done reports, ordinary closure,
   r.add({ type: 'run.abandoned', id: 'R-5' });
   r.add({ type: 'item.closed', id: 'ENG-6', as: 'dropped' });
   r.land(7);
-  assert.deepEqual(count(r).items.map(i => i.item), ['ENG-1', 'ENG-2', 'ENG-3', 'ENG-4', 'ENG-5']);
+  assert.deepEqual(count(r).items.map(i => i.item), ['ENG-1', 'ENG-3', 'ENG-4', 'ENG-5']);
   assert.deepEqual(count(r).items[0].runs, ['R-1', 'R-9']);
   assert.equal(count(r).items[0].latest, 'R-9');
 });
 
-test('a dropped closure frees the item only until it is reopened', () => {
+for (const as of ['done', 'dropped']) test(`a ${as} closure frees an admitted item only until it is reopened`, () => {
   const r = record(); r.item(1); r.start(1);
-  r.add({ type: 'item.closed', id: 'ENG-1', as: 'dropped' });
+  r.add({ type: 'item.closed', id: 'ENG-1', as });
   assert.equal(count(r).items.length, 0);
   r.add({ type: 'item.reopened', id: 'ENG-1' });
   assert.equal(count(r).items.length, 1);
+});
+
+test('historical done closures and pre-cap open work cannot freeze adoption; legacy work stays visible', () => {
+  const r = record();
+  for (let n = 1; n <= 164; n++) {
+    r.item(n); r.start(n, undefined, { dispatch_unlanded_admitted: undefined });
+    if (n <= 116) r.add({ type: 'item.closed', id: `ENG-${n}`, as: 'done' });
+  }
+  const admitted = check(r);
+  assert.equal(admitted.count, 0);
+  assert.equal(admitted.admission.kind, 'regular');
+  assert.equal(admitted.legacy.count, 48);
+  assert.equal(admitted.legacy.counted, false);
+  assert.deepEqual(admitted.legacy.items.map(i => i.item), Array.from({ length: 48 }, (_, n) => `ENG-${n + 117}`));
+  r.add({ type: 'item.reopened', id: 'ENG-1' });
+  assert.equal(check(r).count, 0, 'reopening pre-cap work does not invent an admission');
+  r.item(165); r.start(165);
+  assert.equal(check(r).count, 1, 'the first cap-aware start immediately consumes capacity');
+});
+
+test('nine cap-admitted open items refuse a tenth and distinguish legacy work in the refusal', () => {
+  const r = record();
+  for (let n = 1; n <= 9; n++) { r.item(n); r.start(n); }
+  r.item(10); r.item(11); r.start(11, undefined, { dispatch_unlanded_admitted: undefined });
+  assert.throws(() => check(r, { item: 'ENG-10' }), e => {
+    assert.equal(e.code, 'DISPATCH_UNLANDED_CAP');
+    assert.match(e.message, /unlanded count 9, cap 8: ENG-1, ENG-2, ENG-3, ENG-4, ENG-5, ENG-6, ENG-7, ENG-8, ENG-9\./);
+    assert.match(e.message, /Legacy, not counted \(1\): ENG-11/);
+    assert.equal(e.unlanded.count, 9);
+    assert.equal(e.unlanded.legacy.counted, false);
+    return true;
+  });
+});
+
+test('only the latest original start marker counts; display edits cannot invent or remove an admission', () => {
+  const r = record(); r.item(1); r.start(1);
+  r.add({ type: 'run.updated', id: 'R-1', meta: { dispatch_unlanded_admitted: false } });
+  assert.equal(count(r).items.length, 1);
+  r.start(2, 'ENG-1', { dispatch_unlanded_admitted: undefined });
+  r.add({ type: 'run.updated', id: 'R-2', meta: { dispatch_unlanded_admitted: true } });
+  assert.equal(count(r).items.length, 0);
+  assert.equal(count(r).legacy[0].latest, 'R-2');
+  r.start(3, 'ENG-1');
+  assert.equal(count(r).items[0].latest, 'R-3');
+  assert.deepEqual(count(r).legacy, []);
+  for (const marker of [undefined, false, 'true', 1]) {
+    r.start(4, 'ENG-1', { dispatch_unlanded_admitted: marker });
+    assert.equal(count(r).items.length, 0, `marker ${marker} is not an admission`);
+    r.events.pop();
+  }
+});
+
+test('older record folds treat the admission marker as opaque metadata', () => {
+  const r = record(); r.item(1); r.start(1);
+  const unmarked = structuredClone(r.events);
+  delete unmarked.at(-1).meta.dispatch_unlanded_admitted;
+  const markedState = oldFold(r.events), unmarkedState = oldFold(unmarked);
+  delete markedState.runs.get('R-1').meta.dispatch_unlanded_admitted;
+  assert.deepEqual(markedState, unmarkedState, 'the marker has no other effect on an older fold');
 });
 
 test('only a matching project promotion covers its attempts; excluded items and newer attempts still count', () => {
@@ -73,7 +133,8 @@ test('canonical Git identity scopes record-only and dispatched runs, including s
     if (cwd === 'gone') throw Error('workspace removed');
     return cwd === 'legacy' ? alias : '/elsewhere/.git';
   } });
-  assert.deepEqual(evidence.items.map(i => i.item), ['ENG-1', 'ENG-3', 'ENG-5', 'ENG-6']);
+  assert.deepEqual(evidence.items.map(i => i.item), ['ENG-1']);
+  assert.deepEqual(evidence.legacy.map(i => i.item), ['ENG-3', 'ENG-5', 'ENG-6']);
   assert.deepEqual(lookups, ['legacy', 'foreign', 'gone'], 'resolve each legacy workspace once per count');
 });
 
@@ -89,11 +150,12 @@ test('matching promotion evidence identifies removed legacy workspaces before an
   r.start(7); r.land(7, { identity: foreign }); // Original dispatch project wins a conflicting receipt.
   const missing = () => { throw Error('workspace removed'); };
   const evidence = countUnlanded({ events: r.events, common, projectIdentity: missing });
-  assert.deepEqual(evidence.items.map(i => i.item), ['ENG-2', 'ENG-3', 'ENG-4', 'ENG-6', 'ENG-7']);
+  assert.deepEqual(evidence.items.map(i => i.item), ['ENG-7']);
+  assert.deepEqual(evidence.legacy.map(i => i.item), ['ENG-2', 'ENG-3', 'ENG-4', 'ENG-6']);
   assert.equal(evidence.starts.has('R-1'), false, 'a proven foreign landing cannot qualify as an unblocks target');
   assert.throws(() => check(r, { item: 'ENG-new', unblocks: 'ENG-1' }, {}, { projectIdentity: missing }),
     e => e.code === 'DISPATCH_UNBLOCKS_INVALID');
-  assert.deepEqual(countUnlanded({ events: r.events, common: foreign, projectIdentity: missing }).items.map(i => i.item),
+  assert.deepEqual(countUnlanded({ events: r.events, common: foreign, projectIdentity: missing }).legacy.map(i => i.item),
     ['ENG-2', 'ENG-3', 'ENG-4', 'ENG-6']);
   assert.equal(countUnlanded({ events: r.events, common, projectIdentity: () => common }).starts.has('R-1'), false,
     'a replacement checkout at the old path cannot override a recorded foreign landing');
@@ -102,7 +164,7 @@ test('matching promotion evidence identifies removed legacy workspaces before an
 test('uncertain starts reserve distinct items and exception runs until their original record start replaces them', () => {
   const r = record(); r.item(1); r.start(1); r.item(2);
   const journal = (name, fields = {}) => ({ journal: `/record/dispatch/${name}.json`, token: name, common, item: 'ENG-2',
-    stage: 'starting', unlandedCap: { admission: { kind: 'unblocks' } }, ...fields });
+    stage: 'starting', unlandedCap: { admission: { kind: 'unblocks', admitted: true } }, ...fields });
   const first = journal('first'), second = journal('second');
   const journals = [first, second, journal('foreign', { common: '/other/.git' }),
     journal('refused', { startRefused: true }), journal('not-started', { stage: 'start' })];
@@ -125,7 +187,7 @@ test('uncertain starts reserve distinct items and exception runs until their ori
   assert.equal(landed.exceptions.length, 1, 'the stale first journal cannot recreate a reported exception');
 });
 
-test('a journal reference releases its reservation only for the original project, item, attempt and exception facts', () => {
+test('a journal reference releases its reservation only for the original project, item, attempt, admission and exception facts', () => {
   for (const [label, item, override] of [
     ['other item', 'ENG-3', {}],
     ['other journal', 'ENG-2', { dispatch_journal: '/record/dispatch/other.json' }],
@@ -133,14 +195,17 @@ test('a journal reference releases its reservation only for the original project
     ['missing attempt', 'ENG-2', { dispatch_attempt: undefined }],
     ['other project', 'ENG-2', { dispatch_project: '/other/.git' }],
     ['missing project', 'ENG-2', { dispatch_project: undefined }],
+    ['missing admission', 'ENG-2', { dispatch_unlanded_admitted: undefined }],
+    ['false admission', 'ENG-2', { dispatch_unlanded_admitted: false }],
     ['other exception', 'ENG-2', { dispatch_unlanded_exception: 'fix' }],
     ['missing exception', 'ENG-2', { dispatch_unlanded_exception: undefined }],
     ['display-only match', 'ENG-2', { dispatch_journal: undefined, dispatch_attempt: undefined, dispatch_unlanded_exception: undefined }],
   ]) {
     const r = record(); r.item(2); r.item(3);
     const journal = '/record/dispatch/start.json', token = 'wanted';
-    const pending = { journal, token, common, item: 'ENG-2', stage: 'starting', unlandedCap: { admission: { kind: 'unblocks' } } };
-    const meta = { dispatch_project: common, dispatch_journal: journal, dispatch_attempt: token, dispatch_unlanded_exception: 'unblocks' };
+    const pending = { journal, token, common, item: 'ENG-2', stage: 'starting', unlandedCap: { admission: { kind: 'unblocks', admitted: true } } };
+    const meta = { dispatch_project: common, dispatch_journal: journal, dispatch_attempt: token,
+      dispatch_unlanded_admitted: true, dispatch_unlanded_exception: 'unblocks' };
     r.start(1, item, { ...meta, ...override });
     r.add({ type: 'run.updated', id: 'R-1', meta }); // Display edits cannot manufacture the missing original match.
     assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 1, label);
@@ -148,10 +213,40 @@ test('a journal reference releases its reservation only for the original project
     assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 0,
       `${label}: a matching original start replaces the reservation`);
     r.add({ type: 'run.updated', id: 'R-2', meta: { dispatch_project: '/other/.git', dispatch_journal: 'display-only',
-      dispatch_attempt: 'display-only', dispatch_unlanded_exception: 'fix' } });
+      dispatch_attempt: 'display-only', dispatch_unlanded_admitted: false, dispatch_unlanded_exception: 'fix' } });
     assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 0,
       `${label}: later display edits cannot invalidate a matching original start`);
   }
+});
+
+test('pre-marker journals retain reservations until an exact original pre-marker start replaces them', () => {
+  for (const kind of ['regular', 'unblocks']) {
+    const r = record(); r.item(1);
+    const journal = '/record/dispatch/old.json', token = 'old';
+    const pending = { journal, token, common, item: 'ENG-1', stage: 'starting', unlandedCap: { admission: { kind } } };
+    assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).items.length, 1);
+    r.start(1, undefined, { dispatch_journal: journal, dispatch_attempt: token,
+      dispatch_unlanded_exception: kind === 'regular' ? undefined : kind });
+    assert.equal(countUnlanded({ events: r.events, common, journals: [pending] }).reservations.length, 1,
+      'a new marked start cannot replace an old unmarked reservation');
+    r.start(2, 'ENG-1', { dispatch_journal: journal, dispatch_attempt: token, dispatch_unlanded_admitted: undefined,
+      dispatch_unlanded_exception: kind === 'regular' ? undefined : kind });
+    const evidence = countUnlanded({ events: r.events, common, journals: [pending] });
+    assert.equal(evidence.reservations.length, 0);
+    assert.equal(evidence.items.length, 0);
+    assert.equal(evidence.legacy.length, 1);
+  }
+});
+
+test('an uncertain cap admission reserves its legacy item without listing the item twice', () => {
+  const r = record(); r.item(1); r.start(1, undefined, { dispatch_unlanded_admitted: undefined });
+  const pending = { journal: '/record/dispatch/new.json', token: 'new', common, item: 'ENG-1', stage: 'starting',
+    unlandedCap: { admission: { kind: 'regular', admitted: true } } };
+  const evidence = countUnlanded({ events: r.events, common, journals: [pending] });
+  assert.equal(evidence.items.length, 1);
+  assert.deepEqual(evidence.items[0].runs, ['R-1']);
+  assert.deepEqual(evidence.items[0].pending, [pending.journal]);
+  assert.deepEqual(evidence.legacy, []);
 });
 
 test('recovery between the journal and event snapshots cannot hide both an uncertain start and its committed run', t => {
@@ -160,7 +255,7 @@ test('recovery between the journal and event snapshots cannot hide both an uncer
   const r = record(); r.item(1);
   const log = path.join(org, 'events.jsonl'), journal = path.join(org, 'dispatch/start.json');
   fs.mkdirSync(path.dirname(journal));
-  const job = { token: 'snapshot', common, item: 'ENG-1', stage: 'starting', unlandedCap: { admission: { kind: 'regular' } } };
+  const job = { token: 'snapshot', common, item: 'ENG-1', stage: 'starting', unlandedCap: { admission: { kind: 'regular', admitted: true } } };
   fs.writeFileSync(journal, JSON.stringify(job));
   fs.writeFileSync(log, r.events.map(e => JSON.stringify(e)).join('\n') + '\n');
   const read = fs.readFileSync;
@@ -216,6 +311,19 @@ test('only explicit continuations and recorded landing follow-ups qualify over t
   assert.throws(() => check(r, request, config, { requireLink: true }), /recorded landing link missing/);
   for (const unblocks of ['ENG-2', 'ENG-unknown', '', ' ']) assert.throws(() => check(r, { item: 'ENG-2', unblocks }, config), e => e.code === 'DISPATCH_UNBLOCKS_INVALID');
   r.land(1);
+  assert.throws(() => check(r, request, config), e => e.code === 'DISPATCH_UNBLOCKS_INVALID');
+});
+
+test('legacy open work remains a landing follow-up target without consuming an item slot', () => {
+  const r = record(); r.item(1); r.start(1); r.item(2);
+  r.start(2, undefined, { dispatch_unlanded_admitted: undefined });
+  r.item(3); r.add({ type: 'link.added', blocker: 'ENG-3', blocked: 'ENG-2' });
+  const request = { item: 'ENG-3', unblocks: 'ENG-2' }, config = { dispatch: { max_unlanded: 1 } };
+  const admitted = check(r, request, config, { requireLink: true });
+  assert.equal(admitted.count, 1);
+  assert.equal(admitted.admission.kind, 'unblocks');
+  assert.equal(admitted.legacy.count, 1);
+  r.add({ type: 'item.closed', id: 'ENG-2', as: 'done' });
   assert.throws(() => check(r, request, config), e => e.code === 'DISPATCH_UNBLOCKS_INVALID');
 });
 

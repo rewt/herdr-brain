@@ -83,21 +83,37 @@ the config home when supplied by that loader); there is no separate cap config
 path. The usual `.lane.json` fallback layers and explicit `LANE_CONFIG` apply.
 For example, `"dispatch": { "max_sessions": 7, "max_unlanded": 8 }` sets both.
 
-The unlanded count is derived from record events, once per item with a
-`run.started` in this project, including manual record starts. A matching
-`promotion.reconciled` item/run/head tuple covers that attempt and earlier
-attempts; a later run on the item makes it unlanded again. An explicit current
-`item.closed` as `dropped` also releases the item; reopening a dropped item
-restores its unlanded count. A done report, abandoned run or ordinary closure as
-done **does not release it** without a recorded landing. Parked and kept lanes
-still count. Items with no run and another project's runs are excluded from the
-count; promotion exclusions do not establish a landing. Original start metadata
-supplies project identity. A matching promotion item/run/head receipt identifies
-a legacy run's project before consulting its workspace through Git, so a removed
-foreign workspace cannot consume this project's cap or qualify as a landing to
-unblock. Without recorded project or matching promotion evidence, unavailable
-legacy workspace evidence conservatively counts. No worktree census or display
-session registry supplies authority.
+The unlanded count is derived from record events, once per open item whose
+latest `run.started` in this project carries `dispatch_unlanded_admitted=true`.
+Every newly admitted dispatch records this boolean in the original start,
+including regular admissions below the cap, fixes and follow-ups. It is an
+admission fact, not stored status; later display metadata edits cannot create
+or remove it, and older record readers continue to treat it as opaque metadata.
+Manual and pre-cap starts without that marker do not count. This lets a project
+with existing history adopt the cap without freezing dispatch; its first new
+cap-aware dispatch immediately consumes capacity.
+
+A matching `promotion.reconciled` item/run/head tuple covers that attempt and
+earlier attempts; a later cap-admitted run makes the open item count again.
+An explicit current `item.closed` as **done or dropped releases the item**,
+including hand landings and non-code work without promotion receipts. Reopening
+restores its count only when its latest start was cap-admitted and remains
+unlanded. A done report or abandoned run alone does not release the item.
+Parked and kept lanes still count. Items with no run and another project's runs
+are excluded; promotion exclusions do not establish a landing.
+
+Open, unlanded items whose latest start lacks the marker appear as **legacy,
+not counted**. Dispatch's JSON receipt and admission journal include their IDs
+under `legacy.items`, with `legacy.counted=false`; cap refusals list them
+separately after the counted items. A pending start reservation takes precedence
+over a legacy listing for the same item. Legacy items remain valid landing
+targets for `--unblocks` while open. Original start metadata supplies project
+identity. A matching promotion item/run/head receipt identifies a legacy run's
+project before consulting its workspace through Git, so a removed foreign
+workspace cannot qualify as this project's landing to unblock. Without recorded
+project or matching promotion evidence, unavailable legacy workspace evidence
+remains visible in the diagnostic list. No worktree census or display session
+registry supplies authority.
 
 At or above the cap, only these explicit exceptions dispatch:
 
@@ -115,8 +131,8 @@ or explicit abandonment ends that exception's occupancy; it does not itself
 land the item. Normal admissions below the cap consume no exception slot.
 `DISPATCH_UNLANDED_CAP` refuses ordinary work at the cap or a fourth active
 exception. Its message names the current count, cap and unlanded item IDs,
-and tells the caller to finish a listed landing or explicitly drop that work;
-when exception slots are full it also names the active runs to finish first.
+and tells the caller to finish a listed landing or close that work as done or
+dropped; when exception slots are full it also names the active runs to finish first.
 An invalid target uses `DISPATCH_UNBLOCKS_INVALID`.
 
 Early unlanded checks precede lane, run and awaited-item writes. After the open
@@ -126,10 +142,14 @@ spawning `record start`, dispatch saves `starting` and its item/exception admiss
 in the request journal. This pending start reserves capacity even if its
 coordinator dies and a surviving child can still append after the lock is
 reclaimed. An original `run.started` with the same project, item, journal,
-attempt token and exception kind replaces the journal reservation exactly once;
-a stray journal reference or later display edit cannot release it. Automatic
+attempt token, admission marker and exception kind replaces the journal
+reservation exactly once; a stray journal reference or later display edit
+cannot release it. Automatic
 retry and explicit `--recover-run` use those same original start facts before
-advancing the journal; unmatched starts stay reserved. Admission
+advancing the journal; unmatched starts stay reserved. For pre-marker journals,
+both the saved admission and original start must lack the marker, preserving
+recovery of starts already in flight at upgrade. Their existing exception facts
+still occupy the shared three slots until report or abandonment. Admission
 snapshots journals before record events so concurrent
 start recovery cannot hide both forms of the reservation. An unmatched uncertain
 start remains occupied until reconciled; coordinator death or age never clears

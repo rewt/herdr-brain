@@ -418,6 +418,7 @@ async function main() {
     try { output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
       '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`,
+      '--meta', 'dispatch_unlanded_admitted=true',
       ...(job.fromRun ? ['--meta', `dispatch_from_run=${job.fromRun}`] : []),
       ...(job.unblocks ? ['--meta', `dispatch_unblocks=${job.unblocks}`] : []),
       ...(job.unlandedCap.admission.kind !== 'regular' ? ['--meta', `dispatch_unlanded_exception=${job.unlandedCap.admission.kind}`] : []),
@@ -576,7 +577,7 @@ function outputReceipt() {
     ? { status: 'unknown', retry: `node dispatch/dispatch.mjs --retry ${job.run}` }
     : { status: job.sessionBinding?.status ?? (job.worker.agentSessionId ? 'recorded' : 'unbound') };
   process.stdout.write(`${JSON.stringify({ run: job.run, item: job.item, lane: job.lane, route: job.route, ...job.declared,
-    agent: job.worker.agentName, pane: job.worker.pane, watcher: job.watcher, journal, binding })}\n`);
+    agent: job.worker.agentName, pane: job.worker.pane, watcher: job.watcher, journal, binding, legacy: job.unlandedCap?.legacy })}\n`);
 }
 try { await main(); }
 catch (error) {

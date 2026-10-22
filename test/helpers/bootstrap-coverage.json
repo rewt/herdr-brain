@@ -1,0 +1,1319 @@
+{
+  "schema": "bootstrap-coverage/v1",
+  "source_commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+  "generation_command": "node --experimental-vm-modules test/helpers/bootstrap-coverage.mjs",
+  "inputs_sha256": "6b8aad2739ecfc02c219d7797d0feab382ca1e32053b44d3aba139c943ca07f9",
+  "source_sha256": {
+    "tier": "49e21e9b3a2659a95a48bc2fda897abd1332bbe97b1a06b55bc4e54e6fd16a20",
+    "package": "ff3bc1743163ed25dd91a0488a987b6d42a10ec661c994ba20dbe7f1353bdaec"
+  },
+  "stack_commits": {
+    "lane/gate-policy": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "lane/dispatch-test-split": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "lane/runner-capacity": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+    "lane/closer-status": "b476afff02821c120afc4533a56b70e7ff889560",
+    "lane/board-isolation": "b650e34fe71b65f3f4392a362c05511493c2f423",
+    "lane/route-preset": "c72385d890dd9158d7025b10b8158279ad2e17c4",
+    "lane/slot-conformance": "03a0d8422f62e0f066e0acb47043b964372e6b9f"
+  },
+  "coverage": {
+    "promotion": [
+      "acceptance/test/cases.test.mjs",
+      "acceptance/test/deadlines.test.mjs",
+      "acceptance/test/environment.test.mjs",
+      "acceptance/test/focus-classification.test.mjs",
+      "acceptance/test/load.test.mjs",
+      "acceptance/test/probe.test.mjs",
+      "acceptance/test/results.test.mjs",
+      "acceptance/test/signal.test.mjs",
+      "acceptance/test/snapshot.test.mjs",
+      "dispatch/test/timing.test.mjs",
+      "dispatch/test/dispatch.test.mjs",
+      "dispatch/test/retired-flags.test.mjs",
+      "dispatch/test/session-cap.test.mjs",
+      "lanes/test/herdr-client.test.mjs",
+      "lanes/test/no-focus.test.mjs",
+      "lanes/test/routes.test.mjs",
+      "lanes/test/reservations.test.mjs",
+      "lanes/test/validation.test.mjs",
+      "lanes/test/exact-validation.test.mjs",
+      "promote/test/exact-bridge.test.mjs",
+      "promote/test/promote.test.mjs",
+      "promote/test/memory-gate.test.mjs",
+      "promote/test/train.test.mjs",
+      "promote/test/workflow-train.test.mjs",
+      "test/bch-cloak-contract.test.mjs",
+      "test/board-view.test.mjs",
+      "test/contracts-conformance.test.mjs",
+      "test/formats.test.mjs",
+      "test/compat.test.mjs",
+      "test/closeout.test.mjs",
+      "supervisor/test/request.test.mjs",
+      "settle/test/rebase-paths.test.mjs",
+      "settle/test/rebase-review.test.mjs",
+      "settle/test/rebase-safety.test.mjs",
+      "settle/test/rebase.test.mjs",
+      "settle/test/record-recovery.test.mjs",
+      "settle/test/record-safety.test.mjs",
+      "settle/test/review-scope.test.mjs",
+      "settle/test/train.test.mjs",
+      "supervisor/test/autopilot.test.mjs",
+      "supervisor/test/green-pass.test.mjs",
+      "supervisor/test/green-manifest.test.mjs",
+      "supervisor/test/chats.test.mjs",
+      "supervisor/test/reconcile.test.mjs",
+      "test/activation-seam.test.mjs",
+      "test/approvals.test.mjs",
+      "test/discernment.test.mjs",
+      "test/file-wait.test.mjs",
+      "test/flow.test.mjs",
+      "test/git-seed.test.mjs",
+      "test/inbox.test.mjs",
+      "test/lane-removal-protection.test.mjs",
+      "test/lessons.test.mjs",
+      "test/main-module.test.mjs",
+      "test/memory.test.mjs",
+      "test/name-alias.test.mjs",
+      "test/no-setuid-processes.test.mjs",
+      "test/offline-herdr.test.mjs",
+      "test/one-watcher.test.mjs",
+      "test/processes.test.mjs",
+      "test/report.test.mjs",
+      "test/record-guard.test.mjs",
+      "test/run-ownership.test.mjs",
+      "test/release-acceptance.test.mjs",
+      "test/retire-status.test.mjs",
+      "test/retire.test.mjs",
+      "test/retire-archive.test.mjs",
+      "test/retire-removal-deadlines.test.mjs",
+      "test/review-children.test.mjs",
+      "test/sanitization.test.mjs",
+      "test/session-release.test.mjs",
+      "test/setup.test.mjs",
+      "test/setup-apply.test.mjs",
+      "test/suite.test.mjs",
+      "test/tidy-tabs.test.mjs",
+      "test/tier-plan.test.mjs",
+      "test/today.test.mjs",
+      "watch/test/lock.test.mjs"
+    ],
+    "slot": [
+      "test-slot/test/conformance.test.mjs",
+      "test-slot/test/gate-profile.test.mjs",
+      "test-slot/test/host-paths.test.mjs",
+      "test-slot/test/memory-floor.test.mjs",
+      "test-slot/test/no-setuid.test.mjs",
+      "test-slot/test/occupancy-project.test.mjs",
+      "test-slot/test/profile-rejection.test.mjs",
+      "test-slot/test/release-limits.test.mjs",
+      "test-slot/test/reservations.test.mjs",
+      "test-slot/test/resources.test.mjs",
+      "test-slot/test/retention.test.mjs",
+      "test-slot/test/shared.test.mjs",
+      "test-slot/test/test-slot.test.mjs",
+      "test-slot/test/ticket-queue.test.mjs",
+      "test-slot/test/train-conformance.test.mjs",
+      "test-slot/test/watchdog.test.mjs"
+    ],
+    "lane": [
+      "lanes/test/lane.test.mjs"
+    ],
+    "logic": [
+      "test/load-deadlines.test.mjs",
+      "settle/test/ref-deadlines.test.mjs",
+      "supervisor/test/delivery.test.mjs",
+      "housekeeping/test/housekeeping.test.mjs",
+      "supervisor/test/entry.test.mjs",
+      "acceptance/test/cleanup.test.mjs",
+      "acceptance/test/focus.test.mjs",
+      "acceptance/test/recovery.test.mjs",
+      "dispatch/test/dispatch.test.mjs",
+      "housekeeping/test/auto-tidy.test.mjs",
+      "watch/test/watch.test.mjs"
+    ],
+    "smoke": [
+      "test/compat.test.mjs",
+      "test/contracts-conformance.test.mjs",
+      "test/flow.test.mjs",
+      "test/formats.test.mjs",
+      "test/main-module.test.mjs",
+      "test/processes.test.mjs",
+      "test/report.test.mjs",
+      "test/tier-plan.test.mjs"
+    ]
+  },
+  "required_tests": [
+    {
+      "source": ".org/evidence/SUPERVISOR-SCRATCH-20261017/eng-536-required-tests.json",
+      "sha256": "e4c06b75c8e446e8f95a174078e476daf422778f9fbce3fd9d1be98cbc5cc8cf",
+      "file_count": 54
+    },
+    {
+      "source": ".org/evidence/SUPERVISOR-SCRATCH-20261017/eng-537-required-tests.json",
+      "sha256": "6e3928dc4c6f689762e4c6f8763e3386933e38a444ef175cfb6fac7f596107bf",
+      "file_count": 39
+    },
+    {
+      "source": ".org/evidence/SUPERVISOR-SCRATCH-20261017/eng-539-required-tests.json",
+      "sha256": "79c8a6de3b54b86af4977af5d415aeafad6fd13fbd2052741525b7598d303559",
+      "file_count": 26
+    },
+    {
+      "source": ".org/evidence/SUPERVISOR-SCRATCH-20261017/eng-547-required-tests.json",
+      "sha256": "2bc93b026b7b0ecb048eed2e76b859c2914368a071b6091818ff24b46a043980",
+      "file_count": 7
+    }
+  ],
+  "changed_tests": [
+    "dispatch/test/dispatch-admission.test.mjs",
+    "dispatch/test/dispatch-options.test.mjs",
+    "dispatch/test/dispatch-recovery.test.mjs",
+    "dispatch/test/dispatch-session.test.mjs",
+    "promote/test/affected-tests.test.mjs",
+    "settle/test/test-plan.test.mjs",
+    "test-slot/test/test-slot.test.mjs",
+    "test-slot/test/train-conformance.test.mjs",
+    "test/board-view.test.mjs",
+    "test/config-home.test.mjs",
+    "test/lane-removal.test.mjs",
+    "test/project-summary.test.mjs",
+    "test/retire-archive.test.mjs",
+    "test/retire-followups.test.mjs",
+    "test/retire-status.test.mjs",
+    "test/retire-sweep.test.mjs",
+    "test/retire-triggers.test.mjs",
+    "test/retire.test.mjs",
+    "test/runner-capacity.test.mjs",
+    "test/session-release.test.mjs",
+    "test/tidy-tabs.test.mjs",
+    "test/tier-plan.test.mjs"
+  ],
+  "bootstrap_tests": [
+    "test/bootstrap-coverage.test.mjs",
+    "test/bootstrap-gate.test.mjs"
+  ],
+  "dispatch": {
+    "source_commit": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "registered_names": 100,
+    "registrations_sha256": "bf496c51852fa03ffc848fd794e3eac4b1231a4abb6380fc4b5f41fe3ac1b8e7",
+    "groups": {
+      "dispatch/test/dispatch-admission.test.mjs": 32,
+      "dispatch/test/dispatch-options.test.mjs": 4,
+      "dispatch/test/dispatch-recovery.test.mjs": 24,
+      "dispatch/test/dispatch-session.test.mjs": 40
+    },
+    "registrations": [
+      {
+        "name": "Codex captured hooks event table blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once",
+        "body_sha256": "768c0cd5ea741d63574404054a510c0c8bc950403660985649cb8b17f6a534da"
+      },
+      {
+        "name": "Codex captured hooks event table blocks the brief visibly in the default profile and ordinary retry delivers once",
+        "body_sha256": "768c0cd5ea741d63574404054a510c0c8bc950403660985649cb8b17f6a534da"
+      },
+      {
+        "name": "Codex startup dialog blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once",
+        "body_sha256": "768c0cd5ea741d63574404054a510c0c8bc950403660985649cb8b17f6a534da"
+      },
+      {
+        "name": "Codex startup dialog blocks the brief visibly in the default profile and ordinary retry delivers once",
+        "body_sha256": "768c0cd5ea741d63574404054a510c0c8bc950403660985649cb8b17f6a534da"
+      },
+      {
+        "name": "Linux dispatch watcher receipt and journal round-trip as strings through record set",
+        "body_sha256": "85509336456ccc2784b195f03a5f3864c9059c3d443457572544ee6f3f2075b8"
+      },
+      {
+        "name": "STOP during dispatch open memory wait retains the request without a worker launch",
+        "body_sha256": "9ee449faa2a45e6c06dcdbbabaca77b38b67f51df9effd5a4d86356ff55c40bb"
+      },
+      {
+        "name": "STOP during dispatch worker memory wait retains the request without a worker launch",
+        "body_sha256": "9ee449faa2a45e6c06dcdbbabaca77b38b67f51df9effd5a4d86356ff55c40bb"
+      },
+      {
+        "name": "a dead project admission owner and contender are reclaimed before launching",
+        "body_sha256": "4fe8fee259f438cf6dafb1c3119e685f76bd8fa285516b9d6d0de3d74d0aaab1"
+      },
+      {
+        "name": "a fix round can reuse a stopped worker or start fresh; changed route is refused",
+        "body_sha256": "7b09a9a6a6ec1041c59fb2d2138c375c70edba8a1fef925237d7fee44f844b30"
+      },
+      {
+        "name": "a from-run fix dispatches over the unlanded cap and records its admission without changing the session cap",
+        "body_sha256": "897f9e952a4cd6ce8b3a32fd44978894e785645d86c1cb00508213389c09d50c"
+      },
+      {
+        "name": "a killed coordinator cannot release the last unlanded exception slot while its record start child survives",
+        "body_sha256": "ae8f4167dba08b788d3bbe27951aec769f41d65b9a3f7b13cea2a5d976764be7"
+      },
+      {
+        "name": "a killed coordinator cannot release the last unlanded exception slot while its record start child survives, even after retry with a display-only journal match",
+        "body_sha256": "ae8f4167dba08b788d3bbe27951aec769f41d65b9a3f7b13cea2a5d976764be7"
+      },
+      {
+        "name": "a killed coordinator cannot release the last unlanded item slot while its record start child survives",
+        "body_sha256": "ae8f4167dba08b788d3bbe27951aec769f41d65b9a3f7b13cea2a5d976764be7"
+      },
+      {
+        "name": "a killed coordinator cannot release the last unlanded item slot while its record start child survives, even after retry with a display-only journal match",
+        "body_sha256": "ae8f4167dba08b788d3bbe27951aec769f41d65b9a3f7b13cea2a5d976764be7"
+      },
+      {
+        "name": "a open memory wait allows another dispatch below cap 2 and recounts before launch",
+        "body_sha256": "37560dbe7f288c9590ae58aa638d7d6c6bee2171c555857c2bc03736e8cd1f92"
+      },
+      {
+        "name": "a proving reservation pauses dispatch before lane open within the existing memory_open clock",
+        "body_sha256": "ab3cac0868ec552b5eebba8ffe0c90d8da6271810a3692c49ef8f3efd187dbfb"
+      },
+      {
+        "name": "a real detached watcher acknowledges initialization and sheds supervisor pane identity",
+        "body_sha256": "52ba822584c4bffe9710bc49cc1a0f908606d0f3cb9534c6c64be0809b5b1af6"
+      },
+      {
+        "name": "a refused record start with no matching run retries the saved request",
+        "body_sha256": "f69360d0f85be016f9902cd5556056c86780b5b86e999333f08a04d719a4e4b6"
+      },
+      {
+        "name": "a run ID supplied as ITEM is refused before creating a lane or journal",
+        "body_sha256": "7330712116ffdd6fd3bee72fcdc1c736d2b6432ac224022889283068e5673d45"
+      },
+      {
+        "name": "a saved request rechecks the current cap before creating a worker",
+        "body_sha256": "2f18e32b7a2b367d572cdf38dc01107d6ead4298047b777c0033deb37501c5d1"
+      },
+      {
+        "name": "a worker memory wait allows another dispatch below cap 1 and recounts before launch",
+        "body_sha256": "37560dbe7f288c9590ae58aa638d7d6c6bee2171c555857c2bc03736e8cd1f92"
+      },
+      {
+        "name": "a worker memory wait allows another dispatch below cap 2 and recounts before launch",
+        "body_sha256": "37560dbe7f288c9590ae58aa638d7d6c6bee2171c555857c2bc03736e8cd1f92"
+      },
+      {
+        "name": "absent home policy without LANE_CONFIG defaults to eight unlanded items",
+        "body_sha256": "3ea974c796ce18209cfe1acfdb94ef0561a2083f705d5b685d33ae1116343c60"
+      },
+      {
+        "name": "accept-delivered binds an expired uncertain delivery once using original launch evidence",
+        "body_sha256": "b5db2629752a46f552dd28e6782136c2f23f543d0a08a98bcf590e9ec2501dc9"
+      },
+      {
+        "name": "accept-delivered refuses a changed worker name without binding or delivering",
+        "body_sha256": "a3bc1f656978e3bd00dfe9a6cb93f56e9f822661576324533cb56d6106d1726e"
+      },
+      {
+        "name": "accept-delivered refuses a changed worker terminal_id without binding or delivering",
+        "body_sha256": "a3bc1f656978e3bd00dfe9a6cb93f56e9f822661576324533cb56d6106d1726e"
+      },
+      {
+        "name": "accept-delivered rejects a replacement native process in the original terminal",
+        "body_sha256": "d7730762d0d81c4c1a5c5dea3f85e9bce6f63522156be513d0637aca10cfd501"
+      },
+      {
+        "name": "adopted home cap without LANE_CONFIG refuses at two and shares three fix/follow-up slots",
+        "body_sha256": "81d88043c5b33dc7e1e0eecc65a282597267a1da43c50d0324fdaaf662299866"
+      },
+      {
+        "name": "adoption admits new work despite done closures and pre-cap open runs, listing legacy work as not counted",
+        "body_sha256": "5eae0ef89e71ce704a2e5fdd4d497fe2ace3558f6e62e4badcd32c35acc2f5fc"
+      },
+      {
+        "name": "after-prompt recovers within the saved opportunity without replaying delivery",
+        "body_sha256": "3bb26d6118b0a7f1610f5dee69fff3db3d7b401bb1be061c0c797bc2e818a261"
+      },
+      {
+        "name": "an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery",
+        "body_sha256": "6d3b62a7c3694eacbf3f3e68dd9684c212dc4d1c5f1c752732d6f7f601349be3"
+      },
+      {
+        "name": "an older reported run cannot lend a worker held by a newer open correction, even when idle or done",
+        "body_sha256": "576b9f2528dfe0135d03617d1038126940be268700f8f90337a60629a5c368a4"
+      },
+      {
+        "name": "an unknown start outcome with no match stays conservative; multiple matches require explicit recovery",
+        "body_sha256": "fbd4a5400e27d6087d3ad443150a00f49834714ee7b45677c3f218a6aca29671"
+      },
+      {
+        "name": "another project in the same record does not occupy this project session cap",
+        "body_sha256": "cfb290e89a3615fba1095173b99bec5786ccbb3639f51e426890b1618ea3fe24"
+      },
+      {
+        "name": "awaited dispatch records the notification and plan step before launching and preserves retry flags",
+        "body_sha256": "4a45677dbc8943c152938cd4522a79fbad79448ba109a9a913ac70571def1e19"
+      },
+      {
+        "name": "base moves a clean reused lane only by fast-forward; dirty lane is preserved",
+        "body_sha256": "675cc45811eacb1ccb171c818d6329b85f1856da08bd33823509468196449a6e"
+      },
+      {
+        "name": "bind-lost-reply recovers within the saved opportunity without replaying delivery",
+        "body_sha256": "3bb26d6118b0a7f1610f5dee69fff3db3d7b401bb1be061c0c797bc2e818a261"
+      },
+      {
+        "name": "captured Codex hooks event table detects the warning count while quoted task text stays safe",
+        "body_sha256": "39dc6f7ff56ccb56d284604ba7b4e032d3312ca8f25834d8dae274a6215cb89e"
+      },
+      {
+        "name": "concurrent dead-owner reclaim cannot remove the new project admission lock",
+        "body_sha256": "02a86888922d72e408376edd85aad79cb856be8fd13c5e8b715e36aee800dc96"
+      },
+      {
+        "name": "concurrent unlanded exception admissions grant only the last available slot",
+        "body_sha256": "df413b18b09f36ffca716a6b67aaffbee4580c96639869749b803f8c9b47884d"
+      },
+      {
+        "name": "concurrent unlanded item admissions grant only the last available slot",
+        "body_sha256": "df413b18b09f36ffca716a6b67aaffbee4580c96639869749b803f8c9b47884d"
+      },
+      {
+        "name": "cross-item reuse accepts the same lane and identity without adding an origin precondition",
+        "body_sha256": "961edcc20f1d53e4a1cb0dca1a255e73d12b4c44b3fe7444f3f51e26010f0208"
+      },
+      {
+        "name": "default unlanded cap admits the eighth item, then refuses a new item before lane/run or awaited writes",
+        "body_sha256": "6f6ab505705c0f4ccc41647cfdd27f8218c8bff8dca853388d05b8fb1d8aba40"
+      },
+      {
+        "name": "delayed native session binds separately before same-session continuation reuses it",
+        "body_sha256": "22edac33ecee98b989938c8c8cd124ad4e0fa84733c305561fa1c69d2b2688b0"
+      },
+      {
+        "name": "dispatch defaults to project ops from a chat environment and explicit --to wins",
+        "body_sha256": "64f8b0859cd7d6cbe823d01be7e5f79d3610edf47433796b04c807d31d102ac7"
+      },
+      {
+        "name": "dispatch help documents the unlanded limit, explicit exceptions and stable refusal",
+        "body_sha256": "de8af1c2e7e52cf1f738ece241fb0c1412e656a8b3facedeb1a11e7ae69f1629"
+      },
+      {
+        "name": "dispatch journals memory and final admission gates and mirrors allowlisted events into run metadata",
+        "body_sha256": "f3aaa7482ccca65d15d16095d749bd972e8f47ee4adf66f8ac40464d3327cf8d"
+      },
+      {
+        "name": "dispatch open proving wait defers at the existing admission deadline and retains its stage",
+        "body_sha256": "73362f2f4e0f079ed02512d3655a9c0de738ff58aa0736ca77617a3d85e0a37a"
+      },
+      {
+        "name": "dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24",
+        "body_sha256": "a63e053a13fc37a55e756dc74b0f50fed14e67be1d5cf13c56c42e856eade649"
+      },
+      {
+        "name": "dispatch waits under simulated swap pressure before opening a lane and resumes the same request",
+        "body_sha256": "ef4cdbe47331ce3ab0f60f7fc6690f4e226b19f958a25d379ac7e9f3b868e22a"
+      },
+      {
+        "name": "dispatch worker proving wait defers at the existing admission deadline and retains its stage",
+        "body_sha256": "73362f2f4e0f079ed02512d3655a9c0de738ff58aa0736ca77617a3d85e0a37a"
+      },
+      {
+        "name": "done items release unlanded capacity",
+        "body_sha256": "ac239f14ce15bc5445ddbbf9e564035fab4bd2a5b9aea0af473aa1cb0e8ffdad"
+      },
+      {
+        "name": "dropped items release unlanded capacity",
+        "body_sha256": "ac239f14ce15bc5445ddbbf9e564035fab4bd2a5b9aea0af473aa1cb0e8ffdad"
+      },
+      {
+        "name": "explicit fresh launch and accepted delivery recover uncertain attempts",
+        "body_sha256": "4a126765822f8a1d8a39d752d36c8e70ea3d1f1865d6a790203f8e3ce3814058"
+      },
+      {
+        "name": "failed timing record sets leave lane open, launch and prompt delivery unchanged and clocks missing",
+        "body_sha256": "2d4136e955849fe16fb20d6789997fac77876cdfb966795226b052fc23a49005"
+      },
+      {
+        "name": "failed timing record sets preserve STOP during the worker wait and its stopped receipt",
+        "body_sha256": "f79fa8946a8c2f8d585d4f8aa14f0018ecd9208438591f84598f015b10a04aac"
+      },
+      {
+        "name": "fake Herdr readers see complete worker state while a concurrent writer is paused mid-write",
+        "body_sha256": "c9463e7c641839f98d5ce46460ad002198312e698bcbcebc18a8606780af9370"
+      },
+      {
+        "name": "fake watcher receipt refuses PID reuse before registration and retains ownership across retries",
+        "body_sha256": "35543783e0d3f49cd4fb5fc1b9e692e91ccd1f234aff16fae7216a4e208d5cae"
+      },
+      {
+        "name": "from-run refuses another item and superseded origins before opening a lane or starting a run",
+        "body_sha256": "f0805e18b7749b5e783dc732b16568d0adbeaba7ee7561095b6a9261328990ba"
+      },
+      {
+        "name": "hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose",
+        "body_sha256": "65d70120679bc406a93a8e90b7e4e62313ab7fc6fe3f81006c372c2d423482e6"
+      },
+      {
+        "name": "invalid route and empty brief mutate neither lane nor record",
+        "body_sha256": "2f77f2695f3174fc919d7d03d4994e16cc4ab5f3795ab8caf4748de8ff8ad7f6"
+      },
+      {
+        "name": "landed items release unlanded capacity",
+        "body_sha256": "ac239f14ce15bc5445ddbbf9e564035fab4bd2a5b9aea0af473aa1cb0e8ffdad"
+      },
+      {
+        "name": "landing follow-ups record their dependency and share three active slots; a fourth refuses until one finishes",
+        "body_sha256": "64334b9518156b90c4dfcd7c37dfd51b07076ce5524bf8933b4a6a5c15672b35"
+      },
+      {
+        "name": "late reuse identity and busy refusals retain their messages and supply stable codes",
+        "body_sha256": "4d747d1e58c9201acb0120facf7f809240712601f1096f4786fc3838380f11c5"
+      },
+      {
+        "name": "live request locks refuse retries without changing the journal",
+        "body_sha256": "76d431c47c66e0ca141933d2b81bb835c10800eaa3d59781b451c185b6412ae9"
+      },
+      {
+        "name": "live reuse and setup-only retries remain admitted at the cap",
+        "body_sha256": "08fde2d04d620c62d3ac03e0210f5586ad9bfdfd60465447dcfdd10acd36bf0c"
+      },
+      {
+        "name": "lost record start result is visible and recovered without starting a second run",
+        "body_sha256": "30c8a720377b71792c9e79027ed2be0c7788b0febab1d01720a57ad574676912"
+      },
+      {
+        "name": "native filesystem error codes are normalized without changing failure reasons",
+        "body_sha256": "895da7608ce036bdbf2886cea4461b9223fd397eb054de4736cc9e1a473ad2d6"
+      },
+      {
+        "name": "open/prepare failures keep a visible request, create no run, and retry cleanly",
+        "body_sha256": "a31bc3c8b1ed3a257d51a6fe6bc1802bb83b6df6bd29f5354cd7b9fb07fdb559"
+      },
+      {
+        "name": "ordinary retry after a blocked first delivery binds without another worker or watcher",
+        "body_sha256": "9100f28c4e8572e193b9f42aa813b3f9385db289aab265dcf04d4ac7c8ffd47c"
+      },
+      {
+        "name": "overlapping final launches wait for admission, then respect cap 1",
+        "body_sha256": "bd436bdb6c5155b0b0f63acd0551477f7b190aaac6d6ade9bbdb652a3688e74a"
+      },
+      {
+        "name": "overlapping final launches wait for admission, then respect cap 2",
+        "body_sha256": "bd436bdb6c5155b0b0f63acd0551477f7b190aaac6d6ade9bbdb652a3688e74a"
+      },
+      {
+        "name": "real watcher journal refuses PID reuse before registration and retains ownership across retries",
+        "body_sha256": "35543783e0d3f49cd4fb5fc1b9e692e91ccd1f234aff16fae7216a4e208d5cae"
+      },
+      {
+        "name": "recovery skips timing record sets when metadata already equals the journal",
+        "body_sha256": "ef8846f3fb725d1cf56e7ed3b27d763bb9a106cffd08df78820fa51f1952a14c"
+      },
+      {
+        "name": "resend binds an expired uncertain delivery once using original launch evidence",
+        "body_sha256": "b5db2629752a46f552dd28e6782136c2f23f543d0a08a98bcf590e9ec2501dc9"
+      },
+      {
+        "name": "resend refuses a changed worker name without binding or delivering",
+        "body_sha256": "a3bc1f656978e3bd00dfe9a6cb93f56e9f822661576324533cb56d6106d1726e"
+      },
+      {
+        "name": "resend refuses a changed worker terminal_id without binding or delivering",
+        "body_sha256": "a3bc1f656978e3bd00dfe9a6cb93f56e9f822661576324533cb56d6106d1726e"
+      },
+      {
+        "name": "resend rejects a replacement native process in the original terminal",
+        "body_sha256": "d7730762d0d81c4c1a5c5dea3f85e9bce6f63522156be513d0637aca10cfd501"
+      },
+      {
+        "name": "retry locks before reading its journal so another retry cannot replay stale progress",
+        "body_sha256": "66ee0301e154b68ab8ac2b8dc0588c6df6e464df1e009c0263877f2ec4546e42"
+      },
+      {
+        "name": "retry pins routes across config edits and detects a replaced occupant",
+        "body_sha256": "25d998d148266a15d8728f9f209391a327df9c2a08a3b059f26e87098b8f433f"
+      },
+      {
+        "name": "reuse accepts an abandoned run with the same stopped occupant",
+        "body_sha256": "22aa301cc51be8a1fbea705e1c259fe3ec0a917bd35aab79f0b611ec58fffd18"
+      },
+      {
+        "name": "reuse bypasses only session admission and needs an explicit continuation at the unlanded cap",
+        "body_sha256": "dcae0718bb196f1b38e736c19ecf0d834ee1f0ed0cc7e99ecff19435c4ff85ac"
+      },
+      {
+        "name": "reuse identity classification is local to the worker stage and preserves existing codes",
+        "body_sha256": "b8cce8ccd001f0e6ae4fd75fe7beaf312539f28f0ba8a29d09dc6c89763172b5"
+      },
+      {
+        "name": "reuse lane, route and declared-field mismatches refuse before any lane or run side effect",
+        "body_sha256": "d2cffeaa1164cb354562276c63a9856f1f0f11d76b016db8941cf54cbaa5103c"
+      },
+      {
+        "name": "reuse rechecks newer open occupant holders immediately before prompting",
+        "body_sha256": "896889830b5af88953c775310d43660dca678286d3939a6fea4f81d737193eb6"
+      },
+      {
+        "name": "reuse refuses an idle worker whose previous run is still open",
+        "body_sha256": "35fea7541cd9df3d2c654d7dd18fa55d5a1bd415ab14c49feab839cc13ffc1c3"
+      },
+      {
+        "name": "same-terminal replacement keeps the original launch unbound despite matching topology",
+        "body_sha256": "5604089a0cbe5661740dbd8e497e6eb61dbb8ea56251a653a2b6285db4426531"
+      },
+      {
+        "name": "same-terminal replacement-before-prompt keeps the original launch unbound despite matching topology",
+        "body_sha256": "5604089a0cbe5661740dbd8e497e6eb61dbb8ea56251a653a2b6285db4426531"
+      },
+      {
+        "name": "screen read failure leaves delivery unsent and retryable",
+        "body_sha256": "27f20882d921afb88da8cfc125aba092944a0b75b3238da66d228c83308327ed"
+      },
+      {
+        "name": "session cap refuses before lane/run creation, lists occupants and admits after an ESRCH exit",
+        "body_sha256": "0353d04729218ecec2fb5f74253b152560bd29e3a997e04a5d43f564ae325a86"
+      },
+      {
+        "name": "terminal-only reuse refused before prompting retries with a fresh session binding window",
+        "body_sha256": "5fe86fa7efe60cc9a4967a6ac998cc2b14dab30bcbfad2cf610ff30ebca62ac3"
+      },
+      {
+        "name": "the saved bind writer finishes without the observation SIGKILL deadline",
+        "body_sha256": "19bf86984fdd9cfa7186d80363b353852c8f805ec007b0fe149ff1c2dadddebc"
+      },
+      {
+        "name": "two retries cannot both take over a dead-owner lock",
+        "body_sha256": "c74f917b223ebda86aeb92eefe8fce2f38dc899d6df33aeb033fcdd3d7d97c29"
+      },
+      {
+        "name": "unblocks validates a pending landing before side effects and invalid configured caps fail on reuse too",
+        "body_sha256": "6427744080f8b5b5c310d32e5a8ed0815a774524a4c8457e29d5f78d8147007f"
+      },
+      {
+        "name": "uncertain launch refuses automatic replay and requires explicit adoption",
+        "body_sha256": "c725ec0b1b8330480d59d07d941ae23cf2ab3d85d91a0c16975dedd44480b879"
+      },
+      {
+        "name": "uncertain prompt refuses automatic resend; caller can authorize it after inspection",
+        "body_sha256": "a7a0f5623db40a140a2d88b962ef1d138fad52fdf6183d0cacb19c3103cd00b0"
+      },
+      {
+        "name": "unlanded admission retries current config before starting a run and preserves an already recorded reservation",
+        "body_sha256": "8d379ce8c07f2d1103ea742eb5029f8cde4bf1f1f5f56ca3bce8bb9864586fe4"
+      },
+      {
+        "name": "watch failure records a worker but never sends work; retry reuses the same worker/run",
+        "body_sha256": "86dc9d537c596b738064c1391d2bbfb4f1e20ed53e456d5391d75e4e4dd79dea"
+      },
+      {
+        "name": "worker prompt preserves the final test selection (declared fast tier false)",
+        "body_sha256": "48ba6efd2dbd51fd3f8c7c7589445dc7dbe360f139cb41c49bdc6ba88749e3b5"
+      },
+      {
+        "name": "worker prompt preserves the final test selection (declared fast tier true)",
+        "body_sha256": "48ba6efd2dbd51fd3f8c7c7589445dc7dbe360f139cb41c49bdc6ba88749e3b5"
+      }
+    ],
+    "original_sha256": "9e9eb8fab2e4cd8f9928f5e7065045980eb1683c9ac47716eff341c14189da8a",
+    "sources": {
+      "dispatch/test/dispatch-admission.test.mjs": "6502c855580f78724b1f8d90cd75168bc8ccf24662b1c2fc0004169739dffe87",
+      "dispatch/test/dispatch-options.test.mjs": "a7055117709ab95d4649909b837ff29b99eae391a4b04a70da2ea48e086dd429",
+      "dispatch/test/dispatch-recovery.test.mjs": "216a0100affe1b5d0c27a2cec4cd295144c14d0cd2f964239861ba3b3ec112b3",
+      "dispatch/test/dispatch-session.test.mjs": "a0b1206ca3632cd74d12b2b51c30307eebdcdda53f5b90bdf4bf7650eae50d23",
+      "dispatch/test/dispatch-fixture.mjs": "979f7140a82c2a53558693f479c7406403102b35692b52a2f47f845922a5dbb8"
+    }
+  },
+  "execution_sources": {
+    "test/helpers/release-suites.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "2303f587b3ee34cf067c1d804833473fefdf388e2272e56558cf2a7cfff38d67"
+    },
+    "test/helpers/runner-limits.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "d98482346d3878cb079a683c9dd44cf20819fcfae8d822be56e3f6297d028c3e"
+    },
+    "test/helpers/fixture-policy.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "e1093e3558c33dac8320a5a99600d7d05c315c91428f0dd5f740f46d422ab631"
+    },
+    "test/helpers/processes.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "25d2fb492f16da9ab961b205d7471f9af497a1495d7ae295255301e75c37a998"
+    },
+    "test/helpers/offline-herdr.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "9901e04237ed29580b75f585c5c4f7a76f099a22360ab17d7b28bff9493aed7a"
+    },
+    "test/helpers/fixture-lifetime.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "ad649bdb2884298dc4f29b46c0449093084f6ee8829ef19a8ccf39f5df155bef"
+    },
+    "test/helpers/fixture-lifetime.c": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "489eb4c0b13af4dbe94c5828062c04e2fa8bd445126b489a1be2a67fb707253e"
+    },
+    "test/helpers/bounded-test.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "f9321979b682c4f5f2ac2650b301f5ff67f08ced651b62d186b7da3dee502db3"
+    },
+    "lib/deadline.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "646e91c327307f60358709110f349c1a41d79f60d18dc6375978bca385c75c54"
+    },
+    "test/helpers/run.mjs": {
+      "commit": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+      "sha256": "7151705785f5105d6212204e17b3802a3e605147c784f7c1b52c0467d29e5cad"
+    },
+    "test-slot/load.mjs": {
+      "commit": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+      "sha256": "27497f05eb3be6759a3edd0465851f9308b86cb6cddedf47e16c88fa177ead1f"
+    },
+    "test-slot/run.mjs": {
+      "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+      "sha256": "0aa730524e84cd0820a844f24fd333a89c6b2ed649802e40236bb9d491640e6f"
+    },
+    "test-slot/test-slot.mjs": {
+      "commit": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+      "sha256": "05554a9f0cdbb7fed60c3a5695af9916a814fb81bb190088f303e7ba853f3cad"
+    }
+  },
+  "file_count": 161,
+  "files_sha256": "ad3de40cb3c3f84bc7ab8416e1e24b1ca342da813377265f5bd581a409cb0333",
+  "files": [
+    "acceptance/test/cases.test.mjs",
+    "acceptance/test/cleanup.test.mjs",
+    "acceptance/test/deadlines.test.mjs",
+    "acceptance/test/default-cycle.test.mjs",
+    "acceptance/test/environment.test.mjs",
+    "acceptance/test/focus-classification.test.mjs",
+    "acceptance/test/focus.test.mjs",
+    "acceptance/test/harness.test.mjs",
+    "acceptance/test/identity.test.mjs",
+    "acceptance/test/load-round2.test.mjs",
+    "acceptance/test/load.test.mjs",
+    "acceptance/test/probe.test.mjs",
+    "acceptance/test/recovery.test.mjs",
+    "acceptance/test/results.test.mjs",
+    "acceptance/test/signal.test.mjs",
+    "acceptance/test/snapshot.test.mjs",
+    "dispatch/test/dispatch-admission.test.mjs",
+    "dispatch/test/dispatch-options.test.mjs",
+    "dispatch/test/dispatch-recovery.test.mjs",
+    "dispatch/test/dispatch-session.test.mjs",
+    "dispatch/test/retired-flags.test.mjs",
+    "dispatch/test/session-bind.test.mjs",
+    "dispatch/test/session-cap.test.mjs",
+    "dispatch/test/timing.test.mjs",
+    "housekeeping/test/auto-tidy.test.mjs",
+    "housekeeping/test/housekeeping.test.mjs",
+    "lanes/test/exact-validation.test.mjs",
+    "lanes/test/herdr-client.test.mjs",
+    "lanes/test/lane-dispatch.test.mjs",
+    "lanes/test/lane.test.mjs",
+    "lanes/test/no-focus.test.mjs",
+    "lanes/test/reservations.test.mjs",
+    "lanes/test/routes.test.mjs",
+    "lanes/test/validation.test.mjs",
+    "lanes/test/workspace-native.test.mjs",
+    "promote/test/affected-tests.test.mjs",
+    "promote/test/completion-recovery.test.mjs",
+    "promote/test/completion.test.mjs",
+    "promote/test/declared-train.test.mjs",
+    "promote/test/exact-bridge.test.mjs",
+    "promote/test/guard.test.mjs",
+    "promote/test/memory-gate.test.mjs",
+    "promote/test/metrics-profile.test.mjs",
+    "promote/test/promote.test.mjs",
+    "promote/test/selector.test.mjs",
+    "promote/test/train.test.mjs",
+    "promote/test/workflow-train.test.mjs",
+    "settle/test/auto-retry.test.mjs",
+    "settle/test/config.test.mjs",
+    "settle/test/declared-plan.test.mjs",
+    "settle/test/default-validation.test.mjs",
+    "settle/test/memory-boundaries.test.mjs",
+    "settle/test/rebase-paths.test.mjs",
+    "settle/test/rebase-review.test.mjs",
+    "settle/test/rebase-safety.test.mjs",
+    "settle/test/rebase.test.mjs",
+    "settle/test/record-recovery.test.mjs",
+    "settle/test/record-safety.test.mjs",
+    "settle/test/ref-deadlines.test.mjs",
+    "settle/test/review-scope.test.mjs",
+    "settle/test/settle.test.mjs",
+    "settle/test/test-evidence.test.mjs",
+    "settle/test/test-plan.test.mjs",
+    "settle/test/train.test.mjs",
+    "settle/test/validation-tiers.test.mjs",
+    "supervisor/test/autopilot.test.mjs",
+    "supervisor/test/chats.test.mjs",
+    "supervisor/test/delivery.test.mjs",
+    "supervisor/test/entry.test.mjs",
+    "supervisor/test/green-manifest.test.mjs",
+    "supervisor/test/green-pass.test.mjs",
+    "supervisor/test/reconcile.test.mjs",
+    "supervisor/test/request.test.mjs",
+    "supervisor/test/supervisor.test.mjs",
+    "test-slot/test/conformance.test.mjs",
+    "test-slot/test/gate-profile.test.mjs",
+    "test-slot/test/host-paths.test.mjs",
+    "test-slot/test/memory-floor.test.mjs",
+    "test-slot/test/no-setuid.test.mjs",
+    "test-slot/test/occupancy-project.test.mjs",
+    "test-slot/test/profile-rejection.test.mjs",
+    "test-slot/test/release-limits.test.mjs",
+    "test-slot/test/reservations.test.mjs",
+    "test-slot/test/resources.test.mjs",
+    "test-slot/test/retention.test.mjs",
+    "test-slot/test/shared.test.mjs",
+    "test-slot/test/test-slot.test.mjs",
+    "test-slot/test/ticket-queue.test.mjs",
+    "test-slot/test/train-conformance.test.mjs",
+    "test-slot/test/watchdog.test.mjs",
+    "test/activation-seam.test.mjs",
+    "test/approvals.test.mjs",
+    "test/bch-cloak-contract.test.mjs",
+    "test/board-view.test.mjs",
+    "test/bootstrap-coverage.test.mjs",
+    "test/bootstrap-gate.test.mjs",
+    "test/closeout-code.test.mjs",
+    "test/closeout-handoff.test.mjs",
+    "test/closeout.test.mjs",
+    "test/compat.test.mjs",
+    "test/config-home.test.mjs",
+    "test/contracts-conformance.test.mjs",
+    "test/deadline-boundaries.test.mjs",
+    "test/discernment.test.mjs",
+    "test/file-wait.test.mjs",
+    "test/fixture-lifetime.test.mjs",
+    "test/flow.test.mjs",
+    "test/formats.test.mjs",
+    "test/git-seed.test.mjs",
+    "test/inbox.test.mjs",
+    "test/lane-removal-disposable.test.mjs",
+    "test/lane-removal-protection.test.mjs",
+    "test/lane-removal.test.mjs",
+    "test/lessons.test.mjs",
+    "test/load-deadlines.test.mjs",
+    "test/main-module.test.mjs",
+    "test/memory.test.mjs",
+    "test/name-alias.test.mjs",
+    "test/no-setuid-processes.test.mjs",
+    "test/offline-herdr.test.mjs",
+    "test/one-watcher.test.mjs",
+    "test/processes.test.mjs",
+    "test/project-summary.test.mjs",
+    "test/pty.test.mjs",
+    "test/record-guard.test.mjs",
+    "test/release-acceptance.test.mjs",
+    "test/release-pins.test.mjs",
+    "test/release-suites.test.mjs",
+    "test/release.test.mjs",
+    "test/report.test.mjs",
+    "test/retire-archive.test.mjs",
+    "test/retire-exits.test.mjs",
+    "test/retire-followups-removal.test.mjs",
+    "test/retire-followups.test.mjs",
+    "test/retire-initial-shell.test.mjs",
+    "test/retire-paths.test.mjs",
+    "test/retire-removal-deadlines.test.mjs",
+    "test/retire-reused-pane.test.mjs",
+    "test/retire-stale-release.test.mjs",
+    "test/retire-status.test.mjs",
+    "test/retire-sweep-binding.test.mjs",
+    "test/retire-sweep.test.mjs",
+    "test/retire-triggers.test.mjs",
+    "test/retire.test.mjs",
+    "test/review-children.test.mjs",
+    "test/run-ownership.test.mjs",
+    "test/runner-capacity.test.mjs",
+    "test/sanitization.test.mjs",
+    "test/scratch-sweep.test.mjs",
+    "test/session-release.test.mjs",
+    "test/settle-watch.test.mjs",
+    "test/setup-apply.test.mjs",
+    "test/setup.test.mjs",
+    "test/suite.test.mjs",
+    "test/test-hangs.test.mjs",
+    "test/tidy-tabs.test.mjs",
+    "test/tier-plan.test.mjs",
+    "test/today.test.mjs",
+    "verify/test/verify.test.mjs",
+    "watch/test/lock.test.mjs",
+    "watch/test/watch.test.mjs"
+  ],
+  "groups_sha256": "9b2901ef9f0c3d691fe62288f5b621776cb866fd974400793149e0710274b84a",
+  "groups": [
+    [
+      "acceptance/test/cases.test.mjs:1",
+      [
+        "acceptance/test/cases.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/cleanup.test.mjs:1",
+      [
+        "acceptance/test/cleanup.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/deadlines.test.mjs:1",
+      [
+        "acceptance/test/deadlines.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/default-cycle.test.mjs:1",
+      [
+        "acceptance/test/default-cycle.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/environment.test.mjs:1",
+      [
+        "acceptance/test/environment.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/focus-classification.test.mjs:1",
+      [
+        "acceptance/test/focus-classification.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/focus.test.mjs:1",
+      [
+        "acceptance/test/focus.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/harness.test.mjs:1",
+      [
+        "acceptance/test/harness.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/identity.test.mjs:1",
+      [
+        "acceptance/test/identity.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/load-round2.test.mjs:1",
+      [
+        "acceptance/test/load-round2.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/load.test.mjs:1",
+      [
+        "acceptance/test/load.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/probe.test.mjs:1",
+      [
+        "acceptance/test/probe.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/recovery.test.mjs:1",
+      [
+        "acceptance/test/recovery.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/results.test.mjs:1",
+      [
+        "acceptance/test/results.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/signal.test.mjs:1",
+      [
+        "acceptance/test/signal.test.mjs"
+      ]
+    ],
+    [
+      "acceptance/test/snapshot.test.mjs:1",
+      [
+        "acceptance/test/snapshot.test.mjs"
+      ]
+    ],
+    [
+      "dispatch/test:1",
+      [
+        "dispatch/test/dispatch-admission.test.mjs",
+        "dispatch/test/dispatch-options.test.mjs",
+        "dispatch/test/dispatch-recovery.test.mjs",
+        "dispatch/test/dispatch-session.test.mjs"
+      ]
+    ],
+    [
+      "dispatch/test:2",
+      [
+        "dispatch/test/retired-flags.test.mjs",
+        "dispatch/test/session-bind.test.mjs",
+        "dispatch/test/session-cap.test.mjs",
+        "dispatch/test/timing.test.mjs"
+      ]
+    ],
+    [
+      "housekeeping/test:1",
+      [
+        "housekeeping/test/auto-tidy.test.mjs",
+        "housekeeping/test/housekeeping.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/exact-validation.test.mjs:1",
+      [
+        "lanes/test/exact-validation.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/herdr-client.test.mjs:1",
+      [
+        "lanes/test/herdr-client.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/lane-dispatch.test.mjs:1",
+      [
+        "lanes/test/lane-dispatch.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/lane.test.mjs:1",
+      [
+        "lanes/test/lane.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/no-focus.test.mjs:1",
+      [
+        "lanes/test/no-focus.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/reservations.test.mjs:1",
+      [
+        "lanes/test/reservations.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/routes.test.mjs:1",
+      [
+        "lanes/test/routes.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/validation.test.mjs:1",
+      [
+        "lanes/test/validation.test.mjs"
+      ]
+    ],
+    [
+      "lanes/test/workspace-native.test.mjs:1",
+      [
+        "lanes/test/workspace-native.test.mjs"
+      ]
+    ],
+    [
+      "promote/test:1",
+      [
+        "promote/test/affected-tests.test.mjs",
+        "promote/test/declared-train.test.mjs",
+        "promote/test/exact-bridge.test.mjs",
+        "promote/test/guard.test.mjs"
+      ]
+    ],
+    [
+      "promote/test:2",
+      [
+        "promote/test/memory-gate.test.mjs",
+        "promote/test/metrics-profile.test.mjs",
+        "promote/test/promote.test.mjs",
+        "promote/test/selector.test.mjs"
+      ]
+    ],
+    [
+      "promote/test:3",
+      [
+        "promote/test/train.test.mjs",
+        "promote/test/workflow-train.test.mjs"
+      ]
+    ],
+    [
+      "promote/test/completion-recovery.test.mjs:1",
+      [
+        "promote/test/completion-recovery.test.mjs"
+      ]
+    ],
+    [
+      "promote/test/completion.test.mjs:1",
+      [
+        "promote/test/completion.test.mjs"
+      ]
+    ],
+    [
+      "settle/test:1",
+      [
+        "settle/test/auto-retry.test.mjs",
+        "settle/test/config.test.mjs",
+        "settle/test/declared-plan.test.mjs",
+        "settle/test/default-validation.test.mjs"
+      ]
+    ],
+    [
+      "settle/test:2",
+      [
+        "settle/test/memory-boundaries.test.mjs",
+        "settle/test/rebase-paths.test.mjs",
+        "settle/test/rebase-review.test.mjs",
+        "settle/test/rebase-safety.test.mjs"
+      ]
+    ],
+    [
+      "settle/test:3",
+      [
+        "settle/test/rebase.test.mjs",
+        "settle/test/record-recovery.test.mjs",
+        "settle/test/record-safety.test.mjs",
+        "settle/test/ref-deadlines.test.mjs"
+      ]
+    ],
+    [
+      "settle/test:4",
+      [
+        "settle/test/review-scope.test.mjs",
+        "settle/test/settle.test.mjs",
+        "settle/test/test-evidence.test.mjs",
+        "settle/test/test-plan.test.mjs"
+      ]
+    ],
+    [
+      "settle/test:5",
+      [
+        "settle/test/train.test.mjs",
+        "settle/test/validation-tiers.test.mjs"
+      ]
+    ],
+    [
+      "supervisor/test:1",
+      [
+        "supervisor/test/autopilot.test.mjs",
+        "supervisor/test/chats.test.mjs",
+        "supervisor/test/delivery.test.mjs",
+        "supervisor/test/entry.test.mjs"
+      ]
+    ],
+    [
+      "supervisor/test:2",
+      [
+        "supervisor/test/green-manifest.test.mjs",
+        "supervisor/test/green-pass.test.mjs",
+        "supervisor/test/reconcile.test.mjs",
+        "supervisor/test/request.test.mjs"
+      ]
+    ],
+    [
+      "supervisor/test:3",
+      [
+        "supervisor/test/supervisor.test.mjs"
+      ]
+    ],
+    [
+      "test-slot/test:1",
+      [
+        "test-slot/test/conformance.test.mjs",
+        "test-slot/test/gate-profile.test.mjs",
+        "test-slot/test/host-paths.test.mjs",
+        "test-slot/test/memory-floor.test.mjs"
+      ]
+    ],
+    [
+      "test-slot/test:2",
+      [
+        "test-slot/test/no-setuid.test.mjs",
+        "test-slot/test/occupancy-project.test.mjs",
+        "test-slot/test/profile-rejection.test.mjs",
+        "test-slot/test/release-limits.test.mjs"
+      ]
+    ],
+    [
+      "test-slot/test:3",
+      [
+        "test-slot/test/reservations.test.mjs",
+        "test-slot/test/resources.test.mjs",
+        "test-slot/test/retention.test.mjs",
+        "test-slot/test/shared.test.mjs"
+      ]
+    ],
+    [
+      "test-slot/test:4",
+      [
+        "test-slot/test/test-slot.test.mjs",
+        "test-slot/test/ticket-queue.test.mjs",
+        "test-slot/test/train-conformance.test.mjs",
+        "test-slot/test/watchdog.test.mjs"
+      ]
+    ],
+    [
+      "test:1",
+      [
+        "test/activation-seam.test.mjs",
+        "test/approvals.test.mjs",
+        "test/bch-cloak-contract.test.mjs",
+        "test/board-view.test.mjs"
+      ]
+    ],
+    [
+      "test:2",
+      [
+        "test/bootstrap-coverage.test.mjs",
+        "test/bootstrap-gate.test.mjs",
+        "test/closeout-code.test.mjs",
+        "test/closeout-handoff.test.mjs"
+      ]
+    ],
+    [
+      "test:3",
+      [
+        "test/closeout.test.mjs",
+        "test/compat.test.mjs",
+        "test/config-home.test.mjs",
+        "test/contracts-conformance.test.mjs"
+      ]
+    ],
+    [
+      "test:4",
+      [
+        "test/deadline-boundaries.test.mjs",
+        "test/discernment.test.mjs",
+        "test/file-wait.test.mjs",
+        "test/fixture-lifetime.test.mjs"
+      ]
+    ],
+    [
+      "test:5",
+      [
+        "test/flow.test.mjs",
+        "test/formats.test.mjs",
+        "test/git-seed.test.mjs",
+        "test/inbox.test.mjs"
+      ]
+    ],
+    [
+      "test:6",
+      [
+        "test/lane-removal-disposable.test.mjs",
+        "test/lane-removal-protection.test.mjs",
+        "test/lane-removal.test.mjs",
+        "test/lessons.test.mjs"
+      ]
+    ],
+    [
+      "test:7",
+      [
+        "test/load-deadlines.test.mjs",
+        "test/main-module.test.mjs",
+        "test/memory.test.mjs",
+        "test/name-alias.test.mjs"
+      ]
+    ],
+    [
+      "test:8",
+      [
+        "test/no-setuid-processes.test.mjs",
+        "test/offline-herdr.test.mjs",
+        "test/one-watcher.test.mjs",
+        "test/processes.test.mjs"
+      ]
+    ],
+    [
+      "test:9",
+      [
+        "test/project-summary.test.mjs",
+        "test/pty.test.mjs",
+        "test/record-guard.test.mjs",
+        "test/release-acceptance.test.mjs"
+      ]
+    ],
+    [
+      "test:10",
+      [
+        "test/release-pins.test.mjs",
+        "test/release-suites.test.mjs",
+        "test/release.test.mjs",
+        "test/report.test.mjs"
+      ]
+    ],
+    [
+      "test:11",
+      [
+        "test/retire-archive.test.mjs",
+        "test/retire-exits.test.mjs",
+        "test/retire-followups-removal.test.mjs",
+        "test/retire-followups.test.mjs"
+      ]
+    ],
+    [
+      "test:12",
+      [
+        "test/retire-initial-shell.test.mjs",
+        "test/retire-paths.test.mjs",
+        "test/retire-removal-deadlines.test.mjs",
+        "test/retire-reused-pane.test.mjs"
+      ]
+    ],
+    [
+      "test:13",
+      [
+        "test/retire-stale-release.test.mjs",
+        "test/retire-status.test.mjs",
+        "test/retire-sweep-binding.test.mjs",
+        "test/retire-sweep.test.mjs"
+      ]
+    ],
+    [
+      "test:14",
+      [
+        "test/retire-triggers.test.mjs",
+        "test/retire.test.mjs",
+        "test/review-children.test.mjs",
+        "test/run-ownership.test.mjs"
+      ]
+    ],
+    [
+      "test:15",
+      [
+        "test/runner-capacity.test.mjs",
+        "test/sanitization.test.mjs",
+        "test/scratch-sweep.test.mjs",
+        "test/session-release.test.mjs"
+      ]
+    ],
+    [
+      "test:16",
+      [
+        "test/settle-watch.test.mjs",
+        "test/setup-apply.test.mjs",
+        "test/setup.test.mjs",
+        "test/suite.test.mjs"
+      ]
+    ],
+    [
+      "test:17",
+      [
+        "test/test-hangs.test.mjs",
+        "test/tidy-tabs.test.mjs",
+        "test/tier-plan.test.mjs",
+        "test/today.test.mjs"
+      ]
+    ],
+    [
+      "verify/test:1",
+      [
+        "verify/test/verify.test.mjs"
+      ]
+    ],
+    [
+      "watch/test:1",
+      [
+        "watch/test/lock.test.mjs",
+        "watch/test/watch.test.mjs"
+      ]
+    ]
+  ]
+}

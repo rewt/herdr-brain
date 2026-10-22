@@ -13,6 +13,8 @@ between the full argv and the bracketed name prevents a command match.
 An argv refusal reports the denied PID and JSON-quoted kernel `p_comm` on stderr,
 alongside the original error, parent, group and birth. This diagnostic does not
 supply process evidence or permit a partial snapshot.
+It also survives a refused identity re-read or changed birth. A confirmed
+disappearance retains the existing absent result without a refusal diagnostic.
 Snapshots must include their live caller. Cleanup still confirms the exact birth
 and command immediately before signalling, and verifies group leadership.
 The host test slot uses `identityOnly` reads: start identity and ancestry come

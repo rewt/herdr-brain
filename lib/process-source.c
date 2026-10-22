@@ -44,6 +44,18 @@ static char *kernel_command(const struct kinfo_proc *info) {
   if (command) snprintf(command, sizeof(info->kp_proc.p_comm) + 3, "[%.*s]", (int)sizeof(info->kp_proc.p_comm), info->kp_proc.p_comm);
   return command;
 }
+static void report_argv_refusal(const struct kinfo_proc *info, int error) {
+  int saved = errno;
+  char comm[sizeof(info->kp_proc.p_comm) + 1] = {0};
+  memcpy(comm, info->kp_proc.p_comm, sizeof(info->kp_proc.p_comm));
+  fprintf(stderr, "KERN_PROCARGS2 pid=%d p_comm=", info->kp_proc.p_pid);
+  json_string(stderr, comm);
+  fprintf(stderr, ": %s (ppid=%d pgid=%d birth=%llu:%llu)\n", strerror(error),
+    info->kp_eproc.e_ppid, info->kp_eproc.e_pgid,
+    (unsigned long long)info->kp_proc.p_starttime.tv_sec,
+    (unsigned long long)info->kp_proc.p_starttime.tv_usec);
+  errno = saved;
+}
 static int lookup(pid_t pid) {
   struct kinfo_proc before, after;
   int result = read_identity(pid, &before);
@@ -62,22 +74,20 @@ static int lookup(pid_t pid) {
       // Exit may change a readable live row into a zombie between these calls.
       // Confirm that through a new kernel read, never infer absence from EIO.
       result = read_identity(pid, &after);
-      if (result != 1) return result;
-      if (!same_birth(&before, &after)) return -1;
+      if (result != 1) {
+        if (result < 0) report_argv_refusal(&before, error);
+        return result;
+      }
+      if (!same_birth(&before, &after)) {
+        report_argv_refusal(&before, error); errno = error; return -1;
+      }
       if (after.kp_proc.p_stat == SZOMB) command = strdup("<defunct>");
       // Like ps, retain the kernel command name when no argument vector exists
       // (e.g. during exec/exit). A denied read never receives this fallback.
       else if (error == EINVAL || error == EIO) {
         command = kernel_command(&after);
       } else {
-        char comm[sizeof(before.kp_proc.p_comm) + 1] = {0};
-        memcpy(comm, before.kp_proc.p_comm, sizeof(before.kp_proc.p_comm));
-        fprintf(stderr, "KERN_PROCARGS2 pid=%d p_comm=", pid);
-        json_string(stderr, comm);
-        fprintf(stderr, ": %s (ppid=%d pgid=%d birth=%llu:%llu)\n", strerror(error),
-          before.kp_eproc.e_ppid, before.kp_eproc.e_pgid,
-          (unsigned long long)before.kp_proc.p_starttime.tv_sec,
-          (unsigned long long)before.kp_proc.p_starttime.tv_usec);
+        report_argv_refusal(&before, error);
         errno = error; return -1;
       }
     } else {

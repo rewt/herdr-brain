@@ -74,7 +74,10 @@ static int lookup(pid_t pid) {
         memcpy(comm, before.kp_proc.p_comm, sizeof(before.kp_proc.p_comm));
         fprintf(stderr, "KERN_PROCARGS2 pid=%d p_comm=", pid);
         json_string(stderr, comm);
-        fprintf(stderr, ": %s\n", strerror(error));
+        fprintf(stderr, ": %s (ppid=%d pgid=%d birth=%llu:%llu)\n", strerror(error),
+          before.kp_eproc.e_ppid, before.kp_eproc.e_pgid,
+          (unsigned long long)before.kp_proc.p_starttime.tv_sec,
+          (unsigned long long)before.kp_proc.p_starttime.tv_usec);
         errno = error; return -1;
       }
     } else {

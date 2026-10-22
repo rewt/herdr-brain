@@ -171,19 +171,6 @@ test('Darwin identity-only reads can date root-owned PID 1 from an unprivileged 
   assert.equal(again.value?.identity, result.value.identity);
 });
 
-test('Darwin native argv denial reports the kernel PID and comm while identity-only reads remain available', {
-  skip: process.platform !== 'darwin' ? 'Darwin native integration' : process.getuid() === 0 && 'requires an unprivileged caller',
-}, () => {
-  const identity = lookupProcess(1, { identityOnly: true });
-  assert.equal(identity.ok, true, identity.error);
-  const denied = lookupProcess(1);
-  assert.equal(denied.ok, false, 'another uid’s argv must remain refused');
-  assert.equal(denied.value, undefined);
-  const comm = identity.value.command.slice(1, -1);
-  assert.ok(denied.error.includes(`KERN_PROCARGS2 pid=1 p_comm=${JSON.stringify(comm)}:`), denied.error);
-  assert.match(denied.error, /status 125.*(?:Operation not permitted|Permission denied)/s);
-});
-
 test('Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution', async t => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eng122-bundle-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));

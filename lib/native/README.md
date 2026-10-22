@@ -11,8 +11,8 @@ its kernel command name supplies a bracketed command, as with Linux kernel
 threads; permission errors still refuse. Zombies are explicitly marked. A change
 between the full argv and the bracketed name prevents a command match.
 An argv refusal reports the denied PID and JSON-quoted kernel `p_comm` on stderr,
-alongside the original error. This diagnostic does not supply process evidence or
-permit a partial snapshot.
+alongside the original error, parent, group and birth. This diagnostic does not
+supply process evidence or permit a partial snapshot.
 Snapshots must include their live caller. Cleanup still confirms the exact birth
 and command immediately before signalling, and verifies group leadership.
 The host test slot uses `identityOnly` reads: start identity and ancestry come
@@ -36,7 +36,10 @@ node lib/native/build.mjs
 
 Commit the source, executables and manifest together. Runtime never compiles or
 downloads anything. Focused acceptance tests live in
-`test/no-setuid-processes.test.mjs`; the seatbelt test explicitly skips if it is
+`test/no-setuid-processes.test.mjs`. The Darwin regression in
+`test/process-source.test.mjs` compiles a syscall fixture around the real reader
+to exercise denied argv and diagnostic escaping without changing permissions.
+The seatbelt test explicitly skips if it is
 already inside a nontrivial macOS sandbox, where seatbelt cannot nest. Run that
 test on the promotion host to prove kernel refusal of setuid `ps` alongside
 successful bounded runner execution and group cleanup.

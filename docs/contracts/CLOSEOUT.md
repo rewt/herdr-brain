@@ -1,18 +1,19 @@
 # Event-driven lane closeout
 
-Every project's train landings use the event queue by default. The canonical
-project's `.lane.json` can explicitly opt out:
+The event queue is opt-in through the canonical project's selected lane policy
+(`.lane.json` for legacy projects):
 
 ```json
-{ "retirement": { "closeout_queue": false } }
+{ "retirement": { "closeout_queue": true } }
 ```
 
-Absent files, absent `retirement`, and an absent `closeout_queue` enable
-train-landing closeout and explicit named requests; `false` retains foreground
-cleanup. Automatic report, review and dropped-item signals still require
-`retirement.closeout_queue: true`. This keeps report ingestion from launching a
-closer ahead of promotion or record reconciliation. Existing `true` declarations
-retain the full event queue.
+Only `retirement.closeout_queue === true` enables the queue for any source:
+landing, report, review, dropped item or explicit named request. Absent files,
+absent `retirement`, an absent `closeout_queue`, and `false` retain existing
+foreground cleanup and never start a detached closer. Close-at-landing for every
+project by default (ENG-515 acceptance 3) is deferred to option B, which will
+separately address lock scope and landing closeout after reconciliation.
+This change leaves the consumer's lock handling and reconciliation unchanged.
 A lane copy cannot change the canonical project's policy. Git-only trains
 without a recorded run have no queue target and retain guarded foreground
 cleanup. Manual Git landings emit no train event: use the named recovery or
@@ -37,11 +38,11 @@ from the record; it cannot bind a newly recreated lane under an old name.
 
 | Source event | Request |
 | --- | --- |
-| `report.ingested` with `outcome: done` (opt-in) | `ready` |
+| `report.ingested` with `outcome: done` | `ready` |
 | `lane.ready`, from optional `lane ready TOPIC [--run R-n]` | The same `ready` key |
-| `review.verdict` (opt-in) | `review-done` |
+| `review.verdict` | `review-done` |
 | `promotion.reconciled`, including `record complete-batch` and reconcile finish | `landed`, for each exact recorded run/head |
-| `item.closed` with `as: dropped` (opt-in) | `parked`, for its recorded runs |
+| `item.closed` with `as: dropped` | `parked`, for its recorded runs |
 | `lane.recovery-requested`, explicit named recovery | `landed` or `parked`, still subject to all executor proofs |
 
 `review.verdict` records run, verdict, evidence hash, reviewed head, current

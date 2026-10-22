@@ -266,7 +266,8 @@ They use the exact archive-tag and preservation path before removal. Untagged,
 unlanded lanes retain the existing chain holds, and no label proves supersession.
 Open local runs, unknown run bindings, occupants, references and all ordinary
 lifecycle guards still keep a lane. See the [closeout contract](../docs/contracts/CLOSEOUT.md)
-for the default train queue, explicit opt-out and precise supersession evidence.
+for the opt-in train queue and precise supersession evidence. Close-at-landing
+for every project by default is deferred to the separate option B lock-scope work.
 Before deleting anything, close probes writes, renames and removal in the affected
 Git metadata directories and copies ignored/untracked evidence (including `.lane/`)
 to `GIT_COMMON_DIR/lane-archive/<topic>/<unique timestamp>/`. Its `sha256.json`

@@ -235,10 +235,10 @@ test('whole home files do not resurrect removed repo keys; provenance/history in
   for (const enabled of [true, false]) {
     setConfig('retirement.closeout_queue', JSON.stringify(enabled), { cwd: f.cwd, scope: 'identity' });
     assert.ok(!configSnapshot({ cwd: f.cwd }).values.some(v => v.key === 'retirement.closeout_queue'));
-    assert.equal(closeoutPolicy(f.cwd), true, 'reference validation does not inherit identity retirement settings');
+    assert.equal(closeoutPolicy(f.cwd), false, 'reference validation does not inherit identity retirement activation');
   }
-  setConfig('retirement.closeout_queue', 'false', { cwd: f.cwd });
-  assert.equal(closeoutPolicy(f.cwd), false, 'the selected project policy can opt out of default closeout');
+  setConfig('retirement.closeout_queue', 'true', { cwd: f.cwd });
+  assert.equal(closeoutPolicy(f.cwd), true, 'only the selected project policy can opt in to closeout');
 });
 
 for (const mode of ['legacy', 'home', 'standalone']) test(`config set validates complete ${mode} policy references before any intent, replacement or audit`, async t => {

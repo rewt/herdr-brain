@@ -71,12 +71,12 @@ function assertRemoved(f) {
   assert.ok(effects(f).some(e => e.action === 'lane-removed'));
 }
 
-test('default on, explicit opt-out, malformed policy and canonical ownership', t => {
+test('default off, explicit opt-in, malformed policy and canonical ownership', t => {
   const f = fixture(t, { occupied: false });
   fs.unlinkSync(path.join(f.repo, '.lane.json'));
-  assert.equal(closeoutPolicy(f.repo), true);
+  assert.equal(closeoutPolicy(f.repo), false);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
-  assert.equal(closeoutPolicy(f.repo), true);
+  assert.equal(closeoutPolicy(f.repo), false);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   assert.equal(closeoutPolicy(f.repo), false);
   fs.writeFileSync(path.join(f.lane, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
@@ -84,15 +84,16 @@ test('default on, explicit opt-out, malformed policy and canonical ownership', t
   assert.deepEqual(readCloseoutEntries(f.common), []);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":"yes"}}');
   assert.throws(() => closeoutPolicy(f.repo), /invalid/);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
+  assert.equal(closeoutPolicy(f.repo), true);
 });
 
-for (const config of [null, {}, { retirement: { closeout_queue: true } }])
-test(`ingestion starts closeout only with explicit opt-in (${config === null ? 'no config' : JSON.stringify(config)})`, async t => {
+for (const config of [null, {}, { retirement: {} }, { retirement: { closeout_queue: false } }, { retirement: { closeout_queue: true } }])
+test(`closeout starts only with explicit opt-in (${config === null ? 'no config' : JSON.stringify(config)})`, async t => {
   const f = setup(t, { occupied: false }), file = path.join(f.scratch, 'report.md');
   if (config === null) fs.unlinkSync(path.join(f.repo, '.lane.json'));
   else fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify(config));
-  for (const source of ['report.ingested', 'review.verdict', 'item.closed'])
-    assert.equal(closeoutPolicy(f.repo, { source }), Boolean(config?.retirement?.closeout_queue));
+  assert.equal(closeoutPolicy(f.repo), Boolean(config?.retirement?.closeout_queue));
   fs.writeFileSync(file, '---\nrun: R-1\noutcome: done\nsummary: Complete.\nblockers: []\nproposals: []\n---\n');
   const result = spawnSync(process.execPath, [cli, 'ingest', file], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -108,16 +109,38 @@ test(`ingestion starts closeout only with explicit opt-in (${config === null ? '
     assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false, 'ingestion never launches the closer');
     assert.deepEqual(f.herdrCalls(), []);
     assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);
-    f.land();
-    assert.deepEqual(readCloseoutEntries(f.common).map(e => e.signal), ['landed']);
-    f.drain(); assertRemoved(f);
+    const reviewAndDrop = f.append([
+      { type: 'review.verdict', common: f.common, run: 'R-1', head: f.head, review: { id: 'disabled-review', run: 'R-1' } },
+      { type: 'item.closed', id: 'ENG-1', as: 'dropped' },
+    ]);
+    const landed = f.land();
+    readyLane({ cwd: f.repo, org: f.org, topic: 'topic', run: 'R-1', env: f.env });
+    recoverLane({ cwd: f.repo, org: f.org, lane: f.lane, env: f.env });
+    publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [...reviewAndDrop, ...landed], env: f.env });
+    const sources = events(f).filter(e => ['report.ingested', 'review.verdict', 'item.closed',
+      'promotion.reconciled', 'lane.ready', 'lane.recovery-requested'].includes(e.type));
+    assert.equal(sources.length, 7);
+    assert.ok(sources.every(e => e.closeout_targets === undefined));
+    assert.deepEqual(readCloseoutEntries(f.common), []);
+    assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false, 'no source launches a closer without opt-in');
+    assert.deepEqual(f.herdrCalls(), []);
+    assert.equal(fs.existsSync(f.lane), true);
   }
 });
 
-test('publication rechecks report opt-in even when the committed source already has a binding', t => {
+for (const type of ['report.ingested', 'review.verdict', 'item.closed', 'promotion.reconciled', 'lane.ready', 'lane.recovery-requested'])
+test(`publication rechecks opt-in even when ${type} already has a binding`, t => {
   const f = setup(t, { occupied: false });
+  const source = {
+    'report.ingested': { type, run: 'R-1', report: { outcome: 'done', summary: 'Complete' }, sha256: 'fixture' },
+    'review.verdict': { type, common: f.common, run: 'R-1', head: f.head, review: { id: 'bound-review', run: 'R-1' } },
+    'item.closed': { type, id: 'ENG-1', as: 'dropped' },
+    'promotion.reconciled': { type, identity: f.common, runs: ['R-1'], heads: [{ run: 'R-1', head: f.head }] },
+    'lane.ready': { type, common: f.common, run: 'R-1', head: f.head },
+    'lane.recovery-requested': { type, common: f.common, run: 'R-1', head: f.head, signal: 'landed' },
+  }[type];
   const { added } = transact(f.org, current => bindCloseoutSources({ cwd: f.repo, org: f.org, events: current, mutation: { add: [
-    { type: 'report.ingested', run: 'R-1', report: { outcome: 'done', summary: 'Complete' }, sha256: 'fixture' },
+    source,
   ] } }));
   assert.equal(added[0].closeout_targets.length, 1);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{}');
@@ -625,9 +648,8 @@ test('a report on disk is inert; the actual ingest CLI carries the same optional
   assert.equal(events(f).filter(e => e.type === 'report.ingested').length, 1);
 });
 
-test('train completion with no project config produces a landed entry and closes without manual release or sweep', async t => {
+test('opted-in train completion produces a landed entry and closes without manual release or sweep', async t => {
   const f = setup(t, { merged: true });
-  fs.unlinkSync(path.join(f.repo, '.lane.json'));
   assert.equal(closeoutPolicy(f.repo), true); f.report();
   const gate = path.join(f.scratch, 'gate.log'); fs.writeFileSync(gate, 'offline accepted gate\n');
   const plan = { version: 1, org: f.org, batch: 'bch-eng-1661', identity: f.common, base: f.head, tip: f.head,
@@ -644,9 +666,8 @@ test('train completion with no project config produces a landed entry and closes
   assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
 });
 
-test('the native train lands and delegates closeout with no project config', async t => {
-  const f = setup(t, { occupied: false });
-  fs.unlinkSync(path.join(f.repo, '.lane.json')); f.report();
+test('the opted-in native train lands and delegates closeout', async t => {
+  const f = setup(t, { occupied: false }); f.report();
   const queue = queueFor(f.repo);
   t.after(() => stopFixtureInbox(path.join(f.org, 'supervisor/inbox.log'), {
     script: fileURLToPath(new URL('../supervisor/prompt-supervisor.mjs', import.meta.url)) }));
@@ -660,7 +681,7 @@ test('the native train lands and delegates closeout with no project config', asy
   assertRemoved(f);
   const landed = events(f).find(e => e.type === 'promotion.reconciled');
   assert.equal(landed.closeout_targets[0].signal, 'landed');
-  assert.equal(fs.existsSync(path.join(f.repo, '.lane.json')), false);
+  assert.equal(closeoutPolicy(f.repo), true);
 });
 
 test('named manual recovery records a fresh bound request for a legacy lane without a landed queue entry', async t => {
@@ -675,7 +696,6 @@ test('named manual recovery records a fresh bound request for a legacy lane with
 
 function manualContentFixture(t, kind) {
   const f = setup(t, { occupied: false, merged: kind === 'integrated' });
-  fs.unlinkSync(path.join(f.repo, '.lane.json'));
   const original = events(f); original[0].parent = 'G-1';
   fs.writeFileSync(f.eventFile, original.map(e => JSON.stringify(e) + '\n').join(''));
   f.append([{ type: 'item.added', id: 'G-1', kind: 'goal' }]); f.report();
@@ -709,7 +729,7 @@ require('node:module').syncBuiltinESMExports();\n`);
     cwd: f.repo, env: { ...f.env, NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}` }, encoding: 'utf8' });
 }
 
-for (const kind of ['integrated', 'archival-retirement', 'archive-tagged']) test(`default-policy sweep CLI releases a ${kind} legacy lane with an open item and parent`, async t => {
+for (const kind of ['integrated', 'archival-retirement', 'archive-tagged']) test(`opted-in sweep CLI releases a ${kind} legacy lane with an open item and parent`, async t => {
   const f = manualContentFixture(t, kind);
   assert.equal(readCloseoutEntries(f.common).some(e => ['landed', 'parked'].includes(e.signal)), false);
   fs.mkdirSync(path.join(f.lane, '.lane'));
@@ -744,7 +764,7 @@ for (const changed of ['patch history', 'patch policy', 'archive removed', 'arch
   assert.equal(source.content.kind, kind);
   assert.deepEqual(readCloseoutEntries(f.common).find(e => e.signal === 'landed').content, source.content);
   if (changed === 'patch history') f.git(['reset', '--hard', 'HEAD^']);
-  if (changed === 'patch policy') fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"archival_retirement":false}}');
+  if (changed === 'patch policy') fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":true,"archival_retirement":false}}');
   if (changed === 'archive removed') f.git(['tag', '-d', 'archive/lane/topic']);
   if (changed === 'archive moved') f.git(['tag', '-f', 'archive/lane/topic', 'main']);
   f.drain();
@@ -756,7 +776,7 @@ for (const changed of ['patch history', 'patch policy', 'archive removed', 'arch
   if (!changed.startsWith('archive moved')) assert.equal(f.git(['tag', '--list', 'archive/lane/topic']), '');
 });
 
-test('default-policy sweep CLI keeps unintegrated untagged work with an open item', t => {
+test('opted-in sweep CLI keeps unintegrated untagged work with an open item', t => {
   const f = manualContentFixture(t, 'unintegrated'), result = manualSweep(f);
   assert.equal(result.status, 1); assert.match(result.stderr, /not integrated or exactly archived/);
   assert.equal(events(f).some(e => e.type === 'lane.recovery-requested'), false);

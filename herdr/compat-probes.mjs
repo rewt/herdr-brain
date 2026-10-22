@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
-import { setTimeout as pause } from 'node:timers/promises';
 
 const [phase, root, name, directory] = process.argv.slice(2);
 const repo = path.join(directory, 'project'), org = path.join(repo, '.org'), common = path.join(repo, '.git');
@@ -64,17 +63,7 @@ const probes = {
       enableCloseout();
       closeout.readyLane({ cwd: repo, org, topic: 'compat-topic', run: 'R-1', start: false });
       (await load('lib/closeout-consumer.mjs')).drainCloseout({ cwd: repo, org });
-      // An earlier publication may already own the consumer. A contended
-      // drain returns immediately; observe its completion and pruning here.
-      const { loadEvents } = await load('lib/store.mjs'), deadline = Date.now() + 10000;
-      let events;
-      for (;;) {
-        events = loadEvents(org).events;
-        if (events.some(e => e.type === 'closeout.evaluated') &&
-            !fs.existsSync(path.join(common, 'closeout/consumer.lock')) && !closeout.readCloseoutEntries(common).length) break;
-        assert.ok(Date.now() < deadline, 'the closer must record completion and prune the compatibility entries');
-        await pause(25);
-      }
+      const events = (await load('lib/store.mjs')).loadEvents(org).events;
       assert.equal(events.find(e => e.type === 'lane.ready').closeout_targets.length, 1);
       assert.equal(events.find(e => e.type === 'closeout.evaluated').completed, true);
       assert.deepEqual(closeout.readCloseoutEntries(common), []);

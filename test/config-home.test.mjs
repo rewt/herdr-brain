@@ -504,7 +504,8 @@ test('whole home files do not resurrect removed repo keys; provenance/history in
   for (const enabled of [true, false]) {
     setConfig('retirement.closeout_queue', JSON.stringify(enabled), { cwd: f.cwd, scope: 'identity' });
     assert.ok(!configSnapshot({ cwd: f.cwd }).values.some(v => v.key === 'retirement.closeout_queue'));
-    assert.equal(closeoutPolicy(f.cwd), false, 'reference validation does not inherit identity retirement activation');
+    assert.equal(closeoutPolicy(f.cwd), true, 'named/landing defaults do not inherit the identity opt-out');
+    assert.equal(closeoutPolicy(f.cwd, 'report.ingested'), false, 'automatic sources do not inherit identity activation');
   }
   setConfig('retirement.closeout_queue', 'true', { cwd: f.cwd });
   assert.equal(closeoutPolicy(f.cwd), true, 'only the selected project policy can opt in to closeout');

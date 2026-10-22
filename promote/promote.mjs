@@ -452,7 +452,7 @@ function consumeRequests(queue) {
         let outcome, handed = false;
         try {
           if (!job.reconciliation?.receipt || job.reconciliation.state !== 'complete') throw Error('closeout outbox lacks exact completion evidence; named recovery required');
-          const keys = handoffCloseout({ cwd: queue.project.canonical, org: job.org, receipt: job.reconciliation.receipt });
+          const keys = handoffCloseout({ cwd: queue.project.canonical, org: job.org, receipt: job.reconciliation.receipt, expected: job });
           if (!keys.length) throw Error('no original completion binding; named recovery required');
           handed = true;
           retryPromotionCloseout({ cwd: queue.project.canonical, org: job.org, jobs: [job], start: false });
@@ -568,8 +568,14 @@ export async function drain(queue, { attempted = new Set() } = {}) {
       // Persist the bounded notification outbox with completion. A crash before
       // finally can replay these exact jobs without visiting promotion history.
       data.closeout_pending ??= [];
-      if (!data.closeout_pending.some(row => row.id === job.id))
-        data.closeout_pending.push({ id: job.id, org: job.org, topic: job.topic, run: job.run, tip: result.tip, reconciliation: result.reconciliation });
+      if (!data.closeout_pending.some(row => row.id === job.id)) {
+        const completion = result.reconciliation;
+        const source = loadEvents(job.org).events.find(e => e.type === 'promotion.reconciled' && e.identity === queue.project.identity && e.fingerprint === completion.fingerprint);
+        data.closeout_pending.push({ id: job.id, common: queue.project.identity, project: queue.project.canonical, org: job.org,
+          topic: job.topic, run: job.run, tip: result.tip, reconciliation: completion,
+          ...(source ? { source: { seq: source.seq, type: source.type, fingerprint: source.fingerprint } } : {}),
+          receipt_sha256: createHash('sha256').update(fs.readFileSync(completion.receipt)).digest('hex') });
+      }
     }
   };
   // Serialize the startup/empty-exit handoff with enqueuers. A worker releases

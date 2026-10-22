@@ -204,6 +204,32 @@ Completion is durable in the record, independently of background shell exit.
 
 ## ENG-530 amendment: completion before closeout, narrow removal lock
 
+### Implementation input map
+
+The pure planner still selects the original `laneRemovalToken`. The adapter
+compares that selected token with `validateLaneRemoval`, which calls the same
+token function without running the planner or choosing a different candidate.
+The final snapshot is a new native observation. The external preflight seals
+local sources before that observation; under the immediate removal lock it
+checks their current filesystem identities and metadata again. A changed source
+requires a new preparation, even if a newly convenient plan could remove it.
+
+| Token / additional removal input | Fresh boundary check |
+| --- | --- |
+| Common directory, decision/removal proof, exact lane Git head/branch/content | Canonical common directory, registration, filesystem identities, branch tip/reflog generation, clean index/untracked state, metadata locks, current main branch/tip and ancestry are re-read under the lock. Patch history is prepared externally and bound to unchanged refs, policy, replace/graft/shallow inputs. |
+| Workspaces, tabs, panes, agents, process trees and vacancy | A full new executor observation follows evidence hashing and permission preflight; the immediately preceding native/process proof participates in the recomputed token. There is no promotion-lock wait. Native changes before that observation invalidate selection. Herdr remains non-atomic with Git. |
+| Relevant runs, items, links, references and standard slots | Final observation reads the record, callbacks, jobs, watcher/resource ownership and CWD references. Under-lock seals recheck the record and reference/callback/queue/slot files; source/handoff and canonical policy are independently verified again. Unknown facts keep. |
+| HOLD, policy and errors | HOLD and canonical policy are read again under the lock; selected config-home policy/digests and native errors remain in the proof. The option A policy guards remain intact. |
+| Preservation manifest, evidence, scratch intent and archive destination | Full copy/hash verification and Git permission probes run externally. Current identity/ctime/mtime/size and directory inventories detect changed source/copy inputs without rehashing evidence payloads inside the lock; the manifest and scratch intent are sealed too. Tag presence/target and branch generation are rechecked before creating a tag or removing Git state. |
+| Source, completion and code epoch | Original committed target/source, receipt/checkpoint digests and completion fingerprint are revalidated. Loaded physical code identity and main epoch must still match before selecting work, native effects and guarded Git removal. |
+
+The preflight and exact branch generation remain in durable effect evidence for
+partial-removal recovery. Scratch disposal and empty-workspace observation/close
+run after the Git lock is released. Code-change exit releases its claims in the
+same short queue transaction that captures pending keys, so a racing producer
+either enters that handoff or observes a released consumer. Its successor is
+resolved once; another change or failed restart leaves explicit drain pending.
+
 ### Authority, scope and stable surfaces
 
 The closer remains a finite, model-free consumer of exact bound requests. A

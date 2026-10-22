@@ -20,6 +20,7 @@ import { completionFingerprint, digest } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
   closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout, closeoutKey,
   recoverLane } from '../lib/closeout.mjs';
+import { reconcile } from '../supervisor/reconcile.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { drainCloseout } from '../lib/closeout-consumer.mjs';
@@ -848,18 +849,28 @@ test('an active consumer skips an unhanded landing and explicit event replay can
   const result = f.drain({ keys });
   assert.equal(result.evaluated.filter(e => e.completed).length, 1, JSON.stringify(result));
   assertRemoved(f);
+  f.drain(); // Finish the earlier ready request's separate lane-removed revision.
   const before = events(f); handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });
   f.drain(); assert.deepEqual(events(f), before);
 });
 
 test('native observation, exit and preservation preflight hold only consumer/retirement claims; Git removal alone excludes promotion', t => {
-  const f = setup(t, { terminal: true }), command = f.options.command, log = f.options.log;
+  const f = setup(t), command = f.options.command, log = f.options.log;
+  f.report(); initOrg(f.org);
+  const manifest = path.join(f.scratch, 'replay-manifest.json'), prepared = path.join(f.scratch, 'replay-prepared.json'), gate = path.join(f.scratch, 'replay-gate.log');
+  fs.writeFileSync(manifest, JSON.stringify({ batch: 'native-lock-witness', candidate: f.head,
+    items: [{ item: 'ENG-1', run: 'R-1', head: f.head, superseded: [], why: 'accepted offline witness' }], excluded: [] }));
+  const args = ['--repo', f.repo, '--org', f.org, '--role', 'supervisor', '--prepared', prepared];
+  reconcile(['prepare', ...args, '--manifest', manifest, '--gate-log', gate]);
+  f.git(['merge', '--ff-only', f.head]); fs.writeFileSync(gate, 'one successful offline gate\n');
+  const finish = () => reconcile(['finish', ...args, '--gate-exit', '0', '--tip', f.head]);
+  finish(); handoffCloseout({ cwd: f.repo, org: f.org, receipt: prepared + '.record.json', env: f.env });
   const phases = new Set();
   const checkUnlocked = phase => {
     assert.ok(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
     assert.ok(fs.existsSync(retirementOwnerLock(f.common)));
     assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false, phase);
-    const release = acquireLock(path.join(f.common, 'lane-promote.lock')); release();
+    if (!phases.has(phase)) assert.equal(finish().replayed, true);
     phases.add(phase);
   };
   f.options.command = (exe, args, opt) => {
@@ -867,13 +878,13 @@ test('native observation, exit and preservation preflight hold only consumer/ret
     if (exe === f.job.herdr && args[0] === 'agent' && args[1] === 'prompt') checkUnlocked('exit');
     if (exe === 'git' && args.includes('remove')) {
       assert.ok(fs.existsSync(path.join(f.common, 'lane-promote.lock')));
-      assert.throws(() => acquireLock(path.join(f.common, 'lane-promote.lock')), /locked:/);
+      assert.throws(finish, /locked:.*lane-promote.lock/);
       phases.add('Git');
     }
     return command(exe, args, opt);
   };
   f.options.log = row => { log(row); if (row.action === 'lane-preflight') checkUnlocked('preflight'); };
-  f.drain(); assertRemoved(f);
+  f.drain(); assertRemoved(f); assert.equal(finish().replayed, true);
   assert.deepEqual([...phases].sort(), ['Git', 'exit', 'native', 'preflight']);
 });
 

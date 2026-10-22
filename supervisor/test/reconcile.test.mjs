@@ -467,7 +467,7 @@ test('shared adapter verifies exact Git integration and uses explicit project re
   assert.equal(f.finish().replayed, true); assert.deepEqual(f.events(), done);
   assert.ok(!done.some(e => e.type === 'closeout.handoff' || e.type === 'closeout.evaluated'));
   assert.equal(fs.existsSync(path.join(f.root, '.git/closeout/worker.log')), false);
-  assert.ok(readCloseoutEntries(path.join(f.root, '.git')).some(e => e.signal === 'landed' && !e.handoff));
+  assert.ok(readCloseoutEntries(fs.realpathSync(path.join(f.root, '.git'))).some(e => e.signal === 'landed' && !e.handoff));
   f.ok(['reopen', 'ENG-1', '--note', 'New operator direction']);
   assert.equal(f.finish().replayed, true);
   assert.equal(itemStatus(fold(f.events()), 'ENG-1'), 'ready');

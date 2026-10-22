@@ -14,18 +14,19 @@ test('the real canonical planner loads its transitive base imports while selecti
   if (!gitTree) return t.skip(SNAPSHOT);
   const repo = fs.realpathSync(new URL('../../', import.meta.url));
   const base = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const dispatchFiles = ['dispatch/test/dispatch-admission.test.mjs', 'dispatch/test/dispatch-options.test.mjs',
+    'dispatch/test/dispatch-recovery.test.mjs', 'dispatch/test/dispatch-session.test.mjs'];
   const plan = canonicalTestPlan({ repo, base, cwd: repo, planner: 'test/helpers/affected-tests.mjs',
     changed: ['supervisor/chats.mjs', 'dispatch/dispatch.mjs', 'settle/test/test-evidence.test.mjs'],
-    required: ['lanes/test/lane.test.mjs', 'dispatch/test/dispatch.test.mjs', 'settle/test/test-evidence.test.mjs'],
+    required: ['lanes/test/lane.test.mjs', ...dispatchFiles, 'settle/test/test-evidence.test.mjs'],
     baseCommand: 'npm run test:promotion' });
   assert.ok(!plan.covered.includes('lanes/test/lane.test.mjs'));
   assert.ok(plan.files.includes('lanes/test/lane.test.mjs'));
-  assert.ok(plan.files.includes('dispatch/test/dispatch.test.mjs')
-    || plan.covered.includes('dispatch/test/dispatch.test.mjs'));
+  for (const file of dispatchFiles) assert.ok(plan.files.includes(file) || plan.covered.includes(file));
   assert.ok(plan.files.includes('settle/test/test-evidence.test.mjs'));
   assert.ok(plan.covered.includes('promote/test/train.test.mjs'));
   assert.equal(plan.graph.max_suite_files, 4);
-  assert.deepEqual(plan.required, ['dispatch/test/dispatch.test.mjs', 'lanes/test/lane.test.mjs', 'settle/test/test-evidence.test.mjs']);
+  assert.deepEqual(plan.required, [...dispatchFiles, 'lanes/test/lane.test.mjs', 'settle/test/test-evidence.test.mjs']);
 });
 
 test('the real canonical planner works with TMPDIR set to a symlinked directory and removes its snapshot', t => {

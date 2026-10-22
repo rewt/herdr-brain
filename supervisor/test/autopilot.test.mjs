@@ -296,7 +296,8 @@ test('promoted queue notice handles its bound run and a closed item is a no-op',
   const note = f.exec(process.execPath, [path.join(f.source, 'bin/org.mjs'), 'note', f.item, 'Not completion'], f.repo, { ORG_DIR: f.org });
   assert.equal(note.status, 3); assert.match(note.stderr, /promotion write guard REFUSED/);
   f.entry.message = '[promote-queue] id=job lane=topic outcome=promoted reason="landed"';
-  assert.equal(autopilotNotice(f.entry, { execute }).disposition, 'handled'); assert.ok(f.calls[0].args.includes('--notice'));
+  const handled = autopilotNotice(f.entry, { execute });
+  assert.equal(handled.disposition, 'handled', fs.readFileSync(handled.receipt, 'utf8')); assert.ok(f.calls[0].args.includes('--notice'));
   assert.equal(f.show(f.item).closed.as, 'done');
   assert.ok(!loadEvents(f.org).events.some(e => e.type === 'promotion.write-overridden'));
   const saved = JSON.parse(fs.readFileSync(f.apply().receipt)); assert.equal(saved.actions.length, 1);

@@ -9,7 +9,7 @@ import { receiptDirectory } from '../../supervisor/context.mjs';
 import { reconcile } from '../../supervisor/reconcile.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
 
-import { fixture, source, manualRecovery } from './completion-fixture.mjs';
+import { fixture, source, manualRecovery, finishManualCloseout } from './completion-fixture.mjs';
 
 function splitBatch(f) {
   const id = 'interrupted-split', directory = path.join(f.queue.directory, 'batches', id);
@@ -127,6 +127,7 @@ test(`legacy queue and late notices recover only inspected exact coverage: ${mod
     assert.ok(Date.now() < deadline, 'resume worker finished'); await new Promise(r => setTimeout(r, 20));
   }
   const recovered = ['complete', 'reopened', 'new-run'].includes(mode);
+  if (recovered) finishManualCloseout(f);
   assert.equal(f.gates(), 3); assert.equal((f.queue.load().interrupted ?? []).length, recovered ? 0 : 1);
   assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);
@@ -180,6 +181,7 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
   manualRecovery(f, rows);
   if (failTelemetry) fs.appendFileSync(f.preload, `\nif(process.argv[1]?.endsWith('org.mjs')&&process.argv.includes('note')&&process.argv.some(a=>a.startsWith('Promotion: report-to-main'))){console.error('injected telemetry refusal');process.exit(1);}`);
   f.drain(); assert.equal(f.gates(), 1);
+  finishManualCloseout(f);
   assert.equal((f.queue.load().interrupted ?? []).length, 0);
   assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);

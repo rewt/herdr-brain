@@ -53,7 +53,7 @@ test('incomplete archival observations retain their diagnostic in decisions and 
 });
 
 const policy = (f, value = true, extra = {}) => fs.writeFileSync(path.join(f.repo, '.lane.json'),
-  JSON.stringify({ retirement: { archival_retirement: value, ...extra } }));
+  JSON.stringify({ retirement: { closeout_queue: false, archival_retirement: value, ...extra } }));
 function landed(t, { method = 'cherry-pick', enabled = true, occupied = false } = {}) {
   const f = fixture(t, { merged: false, occupied });
   fs.writeFileSync(path.join(f.repo, 'main-only'), 'independent main work');

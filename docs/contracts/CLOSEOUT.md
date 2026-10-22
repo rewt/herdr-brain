@@ -221,6 +221,12 @@ requires a new preparation, even if a newly convenient plan could remove it.
 | Relevant runs, items, links, references and standard slots | Final observation reads the record, callbacks, jobs, watcher/resource ownership and CWD references. Under-lock folding rechecks the relevant record and seals recheck reference/callback/queue/slot files; source/handoff and canonical policy are independently verified again. Unknown facts keep. |
 | HOLD, policy and errors | HOLD and canonical policy are read again under the lock; selected config-home policy/digests and native errors remain in the proof. The option A policy guards remain intact. |
 | Preservation manifest, evidence, scratch intent and archive destination | Full copy/hash verification and Git permission probes run externally. Current identity/ctime/mtime/size and directory inventories detect changed source/copy inputs without rehashing evidence payloads inside the lock; the manifest and scratch intent are sealed too. Tag presence/target and branch generation are rechecked before creating a tag or removing Git state. |
+
+The existing occupants/exits readers ignore symlink directory entries. Their
+immediate ignored entries remain inert inventory: seals retain their lstat
+identity and link text without following the link. Changing that inventory
+invalidates the preflight. A root input, receipt directory, Git input or other
+authority path redirected by a symlink still keeps the lane.
 | Source, completion and code epoch | Original committed target/source, receipt/checkpoint digests and completion fingerprint are revalidated. Loaded physical code identity and main epoch must still match before selecting work, native effects and guarded Git removal. |
 
 The preflight and exact branch generation remain in durable effect evidence for
@@ -317,6 +323,15 @@ same receipt/fingerprint and terminal references, and publish the missing tail.
 An uncertain or failed completion never becomes successful merely because its
 lock disappeared. A refusal before record commit requires the existing
 reconciliation repair/refresh; closeout does not accept a delta or rerun a gate.
+
+Native bookkeeping covered by a separate manual reconciliation retains both
+receipts. Its outbox binds the exact covering source, and verifies the original
+whole-batch coverage and receipt digest before resolving the manual caller's
+committed post-return tail. It cannot publish that caller's missing tail. Once
+native bookkeeping releases its references, the manual owner performs the tail;
+the native outbox can then join those exact keys without another handoff or gate.
+Delayed native lane-head replacement finishes with its original Git CAS before
+record completion captures the lane generation.
 
 A replay during native observation/planning must be able to take the promotion
 lock. There remains a real contention boundary: an arbitrary direct invocation

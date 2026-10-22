@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { closeoutPolicy, claimRetirementOwner, retryPromotionCloseout } from '../lib/closeout.mjs';
-import { handoffCloseout } from '../lib/closeout-handoff.mjs';
+import { handoffCloseout, completedCloseoutKeys } from '../lib/closeout-handoff.mjs';
 import { joinedCloseoutAttempt } from '../lib/closeout-attempt.mjs';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +23,7 @@ import { consumeRetirement } from '../lib/retire-trigger.mjs';
 import { retirementHold } from '../lib/retire-hold.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { runProjectGateSync } from './gate-profile.mjs';
-import { reconcileBatchCompletion, accountUncapturedMember } from './completion.mjs';
+import { reconcileBatchCompletion, accountUncapturedMember, recordedBatchCompletion } from './completion.mjs';
 import { verifyTrainResult } from './evidence.mjs';
 import { probeNativeGate, nativeWorkerEvidence, liveNativeWorker } from './native-context.mjs';
 
@@ -452,7 +452,13 @@ function consumeRequests(queue) {
         let outcome, handed = false;
         try {
           if (!job.reconciliation?.receipt || job.reconciliation.state !== 'complete') throw Error('closeout outbox lacks exact completion evidence; named recovery required');
-          const keys = handoffCloseout({ cwd: queue.project.canonical, org: job.org, receipt: job.reconciliation.receipt, expected: job });
+          let keys;
+          if (job.reconciliation.recovered) {
+            if (createHash('sha256').update(fs.readFileSync(job.reconciliation.receipt)).digest('hex') !== job.receipt_sha256 ||
+                !recordedBatchCompletion({ result: job, project: { ...queue.project, org: job.org }, run: { id: job.run, item: job.item } }))
+              throw Error('original native completion recovery proof changed; keep');
+            keys = completedCloseoutKeys({ cwd: queue.project.canonical, org: job.org, expected: job });
+          } else keys = handoffCloseout({ cwd: queue.project.canonical, org: job.org, receipt: job.reconciliation.receipt, expected: job });
           if (!keys.length) throw Error('no original completion binding; named recovery required');
           handed = true;
           retryPromotionCloseout({ cwd: queue.project.canonical, org: job.org, jobs: [job], start: false });
@@ -571,9 +577,13 @@ export async function drain(queue, { attempted = new Set() } = {}) {
       data.closeout_pending ??= [];
       if (!data.closeout_pending.some(row => row.id === job.id)) {
         const completion = result.reconciliation;
-        const source = loadEvents(job.org).events.find(e => e.type === 'promotion.reconciled' && e.identity === queue.project.identity && e.fingerprint === completion.fingerprint);
+        const source = loadEvents(job.org).events.find(e => e.type === 'promotion.reconciled' && e.identity === queue.project.identity &&
+          e.fingerprint === (completion.recovered?.fingerprint ?? completion.fingerprint));
+        const payload = JSON.parse(fs.readFileSync(completion.receipt));
+        const item = payload.items.find(t => t.run === job.run && t.head === result.tip)?.item;
         data.closeout_pending.push({ id: job.id, common: queue.project.identity, project: queue.project.canonical, org: job.org,
-          topic: job.topic, run: job.run, tip: result.tip, herdr: job.herdr, reconciliation: completion,
+          topic: job.topic, run: job.run, item, tip: result.tip, batch: result.batch, receipt: result.receipt,
+          herdr: job.herdr, reconciliation: completion,
           ...(source ? { source: { seq: source.seq, type: source.type, fingerprint: source.fingerprint } } : {}),
           receipt_sha256: createHash('sha256').update(fs.readFileSync(completion.receipt)).digest('hex') });
       }

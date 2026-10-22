@@ -57,7 +57,7 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
     // witnesses explicitly disable this helper and exercise the missing tail.
     add = add.map(e => {
       if (e.type !== 'promotion.reconciled') return e;
-      const state = fold(events(f)), id = e.batch ?? `fixture-${events(f).length}`;
+      const state = fold([...events(f), ...add]), id = e.batch ?? `fixture-${events(f).length}`;
       const log = path.join(f.scratch, `${id}.gate.log`); fs.writeFileSync(log, 'successful offline gate\n');
       const payload = { version: 1, batch: id, org: f.org, identity: f.common,
         base: f.git(['rev-parse', 'HEAD']), tip: e.tip ?? f.git(['rev-parse', 'HEAD']),

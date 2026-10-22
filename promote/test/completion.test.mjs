@@ -20,7 +20,7 @@ import { runTrain } from '../train.mjs';
 import { resolveValidation } from '../../lanes/validation.mjs';
 import { watchPromotionLock } from '../../test/helpers/promotion-lock.mjs';
 
-import { fixture, source, manualRecovery } from './completion-fixture.mjs';
+import { fixture, source, manualRecovery, finishManualCloseout } from './completion-fixture.mjs';
 
 test('promotion claim checks keep supervisor cycle modules out of the lane static import graph', () => {
   // Ask Node's parser for static dependencies without evaluating any module.
@@ -398,6 +398,8 @@ for (const mode of ['complete', 'missing-member', 'wrong-head', 'reopened', 'new
     await f.workers.wait();
     assert.equal(f.queue.load().current, null, 'normal resume worker completes bookkeeping');
   } else f.drain();
+  assert.ok(fs.existsSync(second.workspace), 'native bookkeeping cannot tail the separate manual completion');
+  finishManualCloseout(f);
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
   assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);
@@ -436,6 +438,7 @@ for (const mode of ['covered', 'missing-exclusion']) test(`bisected manual recov
   reconcile(['prepare', ...args, '--manifest', manifest, '--gate-log', rows[0].log]);
   reconcile(['finish', ...args, '--gate-exit', '0', '--tip', original.tip]);
   f.drain(); assert.equal(f.gates(), 3); assert.deepEqual(f.show(bad.item), excludedBefore);
+  if (mode === 'covered') finishManualCloseout(f, prepared + '.record.json');
   assert.ok(fs.existsSync(bad.workspace));
   assert.equal((f.queue.load().interrupted ?? []).length, mode === 'covered' ? 0 : 1);
   for (const m of [first, second]) assert.equal(fs.existsSync(m.workspace), mode !== 'covered');

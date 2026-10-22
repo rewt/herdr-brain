@@ -397,7 +397,7 @@ test('option A worktree classes and actions follow the guarded planner only with
   }
 });
 
-test('retirement observes option A policy from the canonical checkout, ignoring a lane opt-in', t => {
+test('retirement observes default-on canonical policy, ignoring a lane opt-in', t => {
   const f = runtimeFixture(t);
   fs.writeFileSync(f.eventFile, f.eventBytes.trim().split('\n').map(JSON.parse).filter(e => e.type !== 'item.closed')
     .map(e => JSON.stringify(e) + '\n').join(''));
@@ -405,11 +405,12 @@ test('retirement observes option A policy from the canonical checkout, ignoring 
   fs.writeFileSync(path.join(f.lane, '.lane.json'), '{"retirement":{"closeout_queue":true}}');
   const policyFile = path.join(f.repo, '.lane.json');
   for (const policy of [undefined, false, true, false]) {
-    if (policy !== undefined) fs.writeFileSync(policyFile, JSON.stringify({ retirement: { closeout_queue: policy } }));
+    if (policy === undefined) fs.rmSync(policyFile, { force: true });
+    else fs.writeFileSync(policyFile, JSON.stringify({ retirement: { closeout_queue: policy } }));
     const r = f.cli(['--json']); assert.equal(r.status, 0, r.stderr);
     const status = JSON.parse(r.stdout), tab = status.rows.find(row => row.type === 'tab');
-    assert.equal(tab.class, policy ? 'TERMINAL' : 'WAITING');
-    assert.match(tab.reason, policy ? /lane content released or terminal chain/ : /chain is still open/);
+    assert.equal(tab.class, policy !== false ? 'TERMINAL' : 'WAITING');
+    assert.match(tab.reason, policy !== false ? /lane content released or terminal chain/ : /chain is still open/);
   }
   fs.writeFileSync(policyFile, '{"retirement":{"closeout_queue":"true"}}');
   const r = f.cli(['--json']); assert.equal(r.status, 0, r.stderr);

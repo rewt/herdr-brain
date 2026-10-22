@@ -14,6 +14,7 @@ import { verifyTrainResult } from './evidence.mjs';
 import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
 
 const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
+const REPLACE = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 // Terminal results can be produced before capture by canonical/host guards.
 // Account for them without creating a record binding or replacing one we have.
 export function accountUncapturedMember(plan, job) {
@@ -130,6 +131,26 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
         guardPromotionJob(job);
         if (result.receipt !== file || !verifyTrainResult({ ...result, id: job.id }, { project, saved: { head: job.expectedHead, run: job.run, org: job.org, lane: job.topic } })) throw Error(`integrated proof differs for ${job.topic}`);
         git(project.canonical, ['merge-base', '--is-ancestor', result.tip, tip]);
+        // A resumed train may have integrated while a canonical dirty/off-main
+        // guard prevented replacement. Finish the original CAS before the
+        // record transaction binds the lane's branch generation. This is the
+        // same integrated proof and replacement used by the train, no new gate.
+        if (result.replacement_pending) {
+          const workspace = result.workspace;
+          if (!workspace) throw Error('pending lane replacement lacks its original workspace');
+          if (git(workspace, ['rev-parse', 'HEAD']) !== result.tip) {
+            const fresh = loadEvents(org);
+            if (fresh.tornTail || !binding.expected || completionFingerprint(fold(fresh.events), binding.item) !== binding.expected)
+              throw Error('record changed since lane replacement preparation; retain the original checkout for inspected recovery');
+            const reply = spawnSync(process.execPath, [REPLACE, JSON.stringify({ workspace, repo: project.canonical,
+              common: project.identity, branch: `refs/heads/lane/${job.topic}`, from: result.source_head, to: result.tip,
+              main: prepared.branch, mainHead: git(project.canonical, ['rev-parse', 'HEAD']) })],
+            { cwd: project.canonical, env: process.env, encoding: 'utf8', timeout: 30000 });
+            if (reply.error || reply.status !== 0) throw Error(reply.stderr || reply.error?.message || 'lane replacement refused');
+          }
+          results = results.map(member => member.job.id === job.id ? { ...member,
+            result: { ...member.result, replacement_pending: false, warnings: [] } } : member);
+        }
         included.push({ item: binding.item, run: binding.run, expected: binding.expected, superseded: binding.superseded,
           head: result.tip, why: `Native queue ${job.id}: queue-bound head ${job.expectedHead}; preserved diff and successful gate in train ${train.id}.` });
       }

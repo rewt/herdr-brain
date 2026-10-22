@@ -114,7 +114,10 @@ test('an invalid accepted pin fails closed instead of silently falling back to c
 });
 
 test('housekeeping admitted on blue keeps its child and evidence after the project adopts green', t => {
-  const f = fixture(t, { markers: false }), repo = f.project('project'); f.pin(repo, 'blue');
+  const f = fixture(t, { markers: false }), repo = f.project('project');
+  // This witness deliberately exercises the legacy tidy child and its pin.
+  fs.writeFileSync(path.join(repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
+  f.git(repo, 'add', '.lane.json'); f.git(repo, 'commit', '-qm', 'Use legacy housekeeping child'); f.pin(repo, 'blue');
   const org = path.join(f.root, 'record'); fs.mkdirSync(org); fs.writeFileSync(path.join(org, 'events.jsonl'), '');
   const fake = path.join(f.root, 'fake.cjs');
   fs.writeFileSync(fake, `#!${process.execPath}\nconst a=process.argv.slice(2);console.log(JSON.stringify(a[0]==='status'?{runs:[],items:[]}:{result:{workspaces:[],agents:[],tabs:[]}}));`, { mode: 0o755 });
@@ -158,6 +161,7 @@ enqueue(queueFor(${JSON.stringify(repo)}),['topic'],{to:'supervisor-fixture',att
   const queue = JSON.parse(fs.readFileSync(path.join(repo, '.git/promote/queue.json'), 'utf8'));
   assert.equal(queue.current, null); assert.equal(queue.results.length, 1);
   assert.equal(queue.results[0].release.root, f.releases.blue); assert.equal(queue.results[0].outcome, 'refused');
+  assert.ok(fs.existsSync(trace), JSON.stringify(queue.results));
   assert.equal(JSON.parse(fs.readFileSync(trace, 'utf8').trim()).root, f.releases.blue);
   assert.ok(fs.existsSync(f.releases.blue), 'completed and recoverable evidence retains its bundle');
 });

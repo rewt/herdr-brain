@@ -9,6 +9,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
 import { reconcile } from '../../supervisor/reconcile.mjs';
+import { handoffCloseout } from '../../lib/closeout-handoff.mjs';
+import { digest } from '../../lib/completion.mjs';
 import { fold } from '../../lib/state.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
@@ -106,5 +108,23 @@ export function manualRecovery(f, rows, mode = 'complete') {
   const log = mode === 'wrong-log' ? path.join(f.root, 'other-gate.log') : rows[0].log;
   if (mode === 'wrong-log') fs.copyFileSync(rows[0].log, log);
   reconcile(['prepare', ...args, '--manifest', manifest, '--gate-log', log]);
-  return reconcile(['finish', ...args, '--gate-exit', '0', '--tip', f.git(['rev-parse', 'main'])]);
+  const result = reconcile(['finish', ...args, '--gate-exit', '0', '--tip', f.git(['rev-parse', 'main'])]);
+  f.manualReceipt = prepared + '.record.json';
+  return result;
+}
+
+// The caller of the stable manual adapter owns its tail, after native
+// bookkeeping releases the interrupted integration/reconciliation references.
+export function finishManualCloseout(f, receipt = f.manualReceipt) {
+  const events = f.events(), state = fold(events), payload = JSON.parse(fs.readFileSync(receipt));
+  const source = events.find(e => e.type === 'promotion.reconciled' && e.batch === payload.batch && e.fingerprint === digest(payload));
+  assert.ok(source);
+  const keys = source.closeout_targets.filter(t => {
+    const item = state.items.get(t.item), run = state.runs.get(t.run);
+    return item?.closed?.as === 'done' && item.runs.at(-1) === t.run && run?.report && !run.abandoned &&
+      !events.some(e => e.seq > source.seq && e.type === 'item.reopened' && e.id === t.item);
+  }).map(t => t.key);
+  assert.ok(keys.length, 'manual caller retains at least one exact closed target');
+  handoffCloseout({ cwd: f.repo, org: f.org, receipt, keys, env: f.env });
+  f.drain();
 }

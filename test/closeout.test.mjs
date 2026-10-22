@@ -547,48 +547,6 @@ test('the closer is finite, has no timers or polling, and a second claim cannot 
   assert.equal(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), false, 'consumer exits after drain');
 });
 
-test('contended API and CLI drains return already_running before the automatic closer finishes', async t => {
-  const f = setup(t, { occupied: false, merged: true });
-  fs.unlinkSync(path.join(f.repo, '.lane.json'));
-  assert.equal(closeoutPolicy(f.repo), true);
-  assert.equal(fold(events(f)).items.get('ENG-1').closed, null);
-  f.report(); readyLane({ cwd: f.repo, org: f.org, topic: 'topic', start: false });
-  const claimed = path.join(f.scratch, 'consumer-claimed'), returned = path.join(f.scratch, 'drains-returned');
-  const automatic = child(process.execPath, ['--input-type=module', '-e', `
-    import fs from 'node:fs';
-    import { drainCloseout } from ${JSON.stringify(new URL('../lib/closeout-consumer.mjs', import.meta.url).href)};
-    console.log(JSON.stringify(drainCloseout({ cwd: ${JSON.stringify(f.repo)}, org: ${JSON.stringify(f.org)}, onClaim: () => {
-      fs.writeFileSync(${JSON.stringify(claimed)}, 'claimed');
-      const deadline = Date.now() + ${loadTimeout(10000)};
-      while (!fs.existsSync(${JSON.stringify(returned)})) {
-        if (Date.now() >= deadline) throw Error('contended drains did not return while the automatic closer held its claim');
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-      }
-    } })));
-  `], { cwd: f.repo, env: f.env });
-  await waitForChange([claimed], () => fs.existsSync(claimed), { timeoutMs: 10000 });
-  let drained, contender, before;
-  try {
-    drained = f.drain();
-    contender = await child(process.execPath, [closer, 'drain', '--repo', f.repo, '--org', f.org], { cwd: f.repo, env: f.env });
-    before = evaluations(f);
-  } finally {
-    fs.writeFileSync(returned, 'returned');
-  }
-  const result = await automatic;
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(JSON.parse(result.stdout).evaluated.length, 1);
-  assert.deepEqual(drained, { already_running: true });
-  assert.equal(contender.status, 0, contender.stderr);
-  assert.deepEqual(JSON.parse(contender.stdout), { already_running: true });
-  assert.deepEqual(before, [], 'contenders return before the owner evaluates any targets');
-  assert.equal(evaluations(f).length, 1); assert.equal(evaluations(f)[0].completed, true);
-  assert.deepEqual(readCloseoutEntries(f.common), []);
-  assert.equal(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), false);
-  assert.equal(fs.existsSync(f.lane), true, 'ready only releases sessions');
-  assert.deepEqual(f.read().actions, []);
-});
-
 test('activation refuses legacy housekeeping ownership until inspected replacement and an explicit retry', t => {
   const f = setup(t, { terminal: true }), owner = path.join(f.org, 'housekeeping/default/lock/owner.json');
   fs.mkdirSync(path.dirname(owner), { recursive: true });

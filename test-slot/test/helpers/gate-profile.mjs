@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from '../../../test/helpers/fixture-environment.mjs';
 import { provingResource } from './proving.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -27,7 +28,7 @@ export function fixture(t, { externalLock = false, ...changes } = {}) {
   fixtureFleet(t, root);
   fs.mkdirSync(repo);
   // These lifecycle cases inspect synchronous delivery; opt into a bounded wait.
-  const env = { ...testSlotEnvironment(), ...scratchEnvironment(root), HOME: path.join(root, 'home'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '10' };
+  const env = { ...fixtureEnvironment(testSlotEnvironment()), ...scratchEnvironment(root), HOME: path.join(root, 'home'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '10' };
   env.HERDR_FIXTURE_GATE_LIFETIME = '1';
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)|MONITOR_PROMOTION_|.*TEST_SLOT_TOKEN)/.test(key)) delete env[key];
   const slot = path.join(root, 'slot'); env.MONITOR_TEST_SLOT_PATH = env.MONITOR_TEST_SLOT_COMPAT_PATH = slot;

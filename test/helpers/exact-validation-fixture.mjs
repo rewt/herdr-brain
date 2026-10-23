@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './fixture-environment.mjs';
 import { healthyMemoryEnvironment } from './promotion-memory-fixture.mjs';
 // Disposable offline repos for the opt-in exact receipt contract.
 import assert from 'node:assert/strict';
@@ -18,7 +19,7 @@ export function exactFixture(t, { declared = true, planner = true, prepare = [],
   fixtureFleet(t, root);
   fs.mkdirSync(repo);
   const config = path.join(root, 'config.json'); fs.writeFileSync(config, '{}');
-  const env = { ...healthyMemoryEnvironment(), LANE_CONFIG: config, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', UNLISTED: 'must not reach children', EXACT_VALUE: 'one',
+  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), LANE_CONFIG: config, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', UNLISTED: 'must not reach children', EXACT_VALUE: 'one',
     SUPERVISOR_INPUT_WAIT_SECONDS: '10', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
   for (const name of Object.keys(env)) if (/^(LANE_VALIDATE|ORG_|HERDR_(PANE|TAB|WORKSPACE)_ID|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(name)) delete env[name];
   const workers = promotionWorkers(repo);

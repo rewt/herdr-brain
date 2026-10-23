@@ -8,6 +8,7 @@ import { copyProduct } from '../../lib/product-files.mjs';
 import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 import { adopt } from '../../lib/adopt-command.mjs';
 import { homeProject } from '../../lib/config-home.mjs';
+import { PROMOTION_REQUEST_KEYS } from './fixture-environment.mjs';
 
 const product = fileURLToPath(new URL('../../', import.meta.url));
 export function configFixture(t, { custom = false, routing = false } = {}) {
@@ -15,11 +16,11 @@ export function configFixture(t, { custom = false, routing = false } = {}) {
   const ownerRoot = custom ? path.join(home, 'development', typeof custom === 'string' ? custom : 'alex') : path.join(home, 'development'), cwd = path.join(ownerRoot, 'project');
   fs.mkdirSync(cwd, { recursive: true });
   if (custom) fs.writeFileSync(path.join(ownerRoot, '.identity-root'), 'fixture\n');
-  const keys = ['HOME', 'HERDR_MONITOR_FLEET', 'ORG_DIR', 'ORG_ACTOR', 'HERDR_AGENT_NAME', 'HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', 'LANE_CONFIG'];
+  const keys = ['HOME', 'HERDR_MONITOR_FLEET', 'ORG_ACTOR', 'HERDR_AGENT_NAME', 'HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', ...PROMOTION_REQUEST_KEYS];
   const before = Object.fromEntries(keys.map(k => [k, process.env[k]]));
+  for (const key of PROMOTION_REQUEST_KEYS) delete process.env[key];
   Object.assign(process.env, { HOME: home, HERDR_MONITOR_FLEET: path.join(scratch, 'fleet'), ORG_DIR: path.join(cwd, '.org'), ORG_ACTOR: 'fixture-supervisor',
     HERDR_AGENT_NAME: 'fixture-supervisor', HERDR_PANE_ID: 'pane', HERDR_WORKSPACE_ID: 'workspace' });
-  delete process.env.LANE_CONFIG;
   const env = { ...process.env };
   t.after(() => { for (const key of keys) if (before[key] === undefined) delete process.env[key]; else process.env[key] = before[key]; fs.rmSync(scratch, { recursive: true, force: true }); });
   const git = (...args) => execFileSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();

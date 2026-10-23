@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { startFocusMonitor, assertFocus } from '../../acceptance/focus.mjs';
 import { cleanupWorkspaces } from '../../acceptance/cleanup.mjs';
 import { stopProducers, awaitProducers } from '../../acceptance/producers.mjs';
+import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 
 const enabled = process.env.LANE_HERDR_WORKSPACE_TEST === '1';
 const herdr = spawnSync('/bin/sh', ['-c', 'command -v herdr'], { encoding: 'utf8' }).stdout.trim();
@@ -18,7 +19,7 @@ test('native dispatch opens a one-tab lane from a project with no Herdr workspac
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'herdr-lane-native-')));
   const repo = path.join(root, 'repo'), bin = path.join(root, 'bin'), evidence = path.join(root, 'evidence');
   for (const dir of [repo, bin, evidence]) fs.mkdirSync(dir);
-  const env = { ...process.env, TMPDIR: root, ACCEPTANCE_ROOT: root, ORG_ACTOR: 'eng133-native-test',
+  const env = { ...fixtureEnvironment(), TMPDIR: root, ACCEPTANCE_ROOT: root, ORG_ACTOR: 'eng133-native-test',
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_DIR|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_|GIT_CONFIG_VALUE_)/u.test(key)) delete env[key];
   env.LANE_CONFIG = path.join(root, "lane.json");

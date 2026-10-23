@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 import { provingRun } from './helpers/proving.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,7 +30,7 @@ function scratch(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gate-watchdog-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const lock = path.join(root, 'slot'), result = path.join(root, 'result.json');
-  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
+  const env = { ...fixtureEnvironment(testSlotEnvironment()), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const run = (args, command) => spawnSync(process.execPath, [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command], { cwd: root, env, encoding: 'utf8', timeout: 15000 });
   return { root, lock, result, env, run };
 }

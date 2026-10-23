@@ -65,6 +65,67 @@ test("git helpers isolate the operator's global excludes file", () => {
   }
 });
 
+test("fixtures ignore parent promotion requests before capturing lane environments", () => {
+  // Set the parent inputs before the fresh fixture import, including its
+  // module-level OPERATOR_GIT_ENV and TEST_PROCESS_ENV snapshots.
+  const program = `
+    import assert from 'node:assert/strict';
+    import fs from 'node:fs';
+    import os from 'node:os';
+    import path from 'node:path';
+    await import(${JSON.stringify(new URL('../../test/helpers/bounded-test.mjs', import.meta.url).href)});
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lane-request-control-'));
+    let fixture;
+    try {
+      const config = path.join(root, 'train-config.json');
+      fs.writeFileSync(config, JSON.stringify({ main: 'main', validate: 'exit 98' }));
+      const poison = { LANE_VALIDATE: 'exit 97', LANE_CONFIG: config,
+        ORG_DIR: path.join(root, 'train-record'), HERDR_RETIRE_HERDR: path.join(root, 'train-herdr'),
+        MONITOR_PROMOTION_TEST_FILES: '["train-only.test.mjs"]' };
+      Object.assign(process.env, poison);
+      const f = await import(${JSON.stringify(new URL('./lane-fixture.mjs', import.meta.url).href)});
+      fixture = f.makeFixture({ main: 'main', validate: 'fixture-gate' });
+      f.ignoreLaneState(fixture);
+      const counts = path.join(root, 'configured-gates');
+      f.writeExecutable(fixture, 'fixture-gate', "printf 'configured\\n' >> '" + counts + "'");
+      const workspace = f.openLane(fixture, 'request-isolation');
+      f.commitFile(workspace, 'candidate.txt', 'candidate\\n', 'Candidate');
+      const checkedHead = f.git(workspace, ['rev-parse', 'HEAD']);
+      const checked = f.lane(fixture, ['check'], { cwd: workspace });
+      const checkedGate = JSON.parse(fs.readFileSync(path.join(workspace, '.lane/gate.json'), 'utf8'));
+      // A different tree makes promote execute its gate rather than reuse the
+      // check receipt, so both paths must reach the configured fixture command.
+      f.commitFile(workspace, 'promotion.txt', 'promotion\\n', 'Promotion candidate');
+      const head = f.git(workspace, ['rev-parse', 'HEAD']);
+      const promoted = f.lane(fixture, ['promote', 'request-isolation']);
+      console.log(JSON.stringify({ check: checked.status, promote: promoted.status,
+        check_output: checked.stdout + checked.stderr, promote_output: promoted.stdout + promoted.stderr }));
+      assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+      assert.equal(promoted.status, 0, promoted.stdout + promoted.stderr);
+      assert.equal(fs.readFileSync(counts, 'utf8'), 'configured\\nconfigured\\n');
+      assert.equal(f.git(fixture.repo, ['rev-parse', 'main']), head);
+      const gate = JSON.parse(fs.readFileSync(path.join(workspace, '.lane/gate.json'), 'utf8'));
+      assert.equal(checkedGate.command, 'fixture-gate');
+      assert.equal(checkedGate.head, checkedHead);
+      assert.equal(gate.command, 'fixture-gate');
+      assert.equal(gate.head, head);
+      for (const key of Object.keys(poison)) {
+        assert.equal(Object.hasOwn(f.OPERATOR_GIT_ENV, key), false, key + ' operator capture');
+        assert.equal(Object.hasOwn(f.TEST_PROCESS_ENV, key), false, key + ' test capture');
+      }
+      assert.equal(fixture.env.LANE_CONFIG, fixture.configPath);
+      assert.equal(fixture.env.ORG_DIR, '');
+      for (const key of ['LANE_VALIDATE', 'HERDR_RETIRE_HERDR', 'MONITOR_PROMOTION_TEST_FILES'])
+        assert.equal(Object.hasOwn(fixture.env, key), false, key + ' fixture input');
+    } finally {
+      fixture?.cleanup();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', program], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
+
 test("open creates a lane and refuses duplicate, invalid, and unresolved inputs", () => {
   const fixture = makeFixture();
   try {

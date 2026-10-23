@@ -11,15 +11,17 @@ import { projectFleet, readFleet, checkFleetRecord } from '../lib/fleet.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { discoverArchive } from '../lib/archive.mjs';
 import { configFixture } from './helpers/config-home-fixture.mjs';
+import { fixtureEnvironment, PROMOTION_REQUEST_KEYS } from './helpers/fixture-environment.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const client = path.join(root, 'discovery/client.mjs');
 function fixture(t) {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'ft-'));
   const fleetHome = path.join(scratch, 'fleet'), consoleFile = path.join(scratch, 'console.json');
-  const env = { ...process.env, HERDR_MONITOR_FLEET: fleetHome, HERDR_ORG_CONSOLE_CONFIG: consoleFile, ORG_DIR: '' };
+  const env = { ...fixtureEnvironment(), HERDR_MONITOR_FLEET: fleetHome, HERDR_ORG_CONSOLE_CONFIG: consoleFile, ORG_DIR: '' };
   const before = { ...process.env };
   const entries = [];
+  for (const key of PROMOTION_REQUEST_KEYS) delete process.env[key];
   Object.assign(process.env, env);
   t.after(() => { for (const entry of entries) entry.close(); for (const k of Object.keys(process.env)) if (!(k in before)) delete process.env[k]; Object.assign(process.env, before); fs.rmSync(scratch, { recursive: true, force: true }); });
   const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();

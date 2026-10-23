@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit, childProcessEntry } from '../../test/helpers/child.mjs';
@@ -59,7 +60,7 @@ function fixture(t) {
   const repo = path.join(root, 'project'); fs.mkdirSync(repo);
   // Keep short project paths for native socket fixtures, but inherit both slot
   // paths from bounded-test's private os.tmpdir scratch, including descendants.
-  const env = { ...healthyMemoryEnvironment(), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     npm_config_cache: path.join(root, 'cache'), npm_config_update_notifier: 'false' };
   delete env.NODE_TEST_CONTEXT;
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(?:DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];

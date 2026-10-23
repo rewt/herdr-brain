@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from '../../../test/helpers/fixture-environment.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -45,7 +46,7 @@ export function fixture(t) {
     fs.rmSync(root, { recursive: true, force: true });
   });
   const config = path.join(root, 'config.json'); fs.writeFileSync(config, '{}');
-  const env = { ...testSlotEnvironment(), LANE_CONFIG: config, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const env = { ...fixtureEnvironment(testSlotEnvironment()), LANE_CONFIG: config, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(ORG_|HERDR_(?!TEST_|MONITOR_FLEET)|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];
   env.HERDR_FIXTURE_GATE_LIFETIME = '1';
   delete env.LANE_VALIDATE;

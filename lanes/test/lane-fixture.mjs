@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 // Shared fixture setup for the split lane CLI tests; no test cases register here.
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
@@ -58,7 +59,7 @@ const OPERATOR_XDG_CONFIG_HOME = join(OPERATOR_GIT_ENV_ROOT, "xdg");
 mkdirSync(join(OPERATOR_XDG_CONFIG_HOME, "git"), { recursive: true });
 writeFileSync(join(OPERATOR_XDG_CONFIG_HOME, "git", "ignore"), ".lane/\n");
 const OPERATOR_GIT_ENV = {
-  ...process.env,
+  ...fixtureEnvironment(),
   HOME: OPERATOR_HOME,
   XDG_CONFIG_HOME: OPERATOR_XDG_CONFIG_HOME,
 };

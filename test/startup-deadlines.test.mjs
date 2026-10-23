@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/fixture-environment.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
@@ -40,7 +41,7 @@ for (const module of ['watch', 'promote', 'inbox', 'housekeeping']) {
       return;
     }
     const repo = path.join(root, 'project'); fs.mkdirSync(repo);
-    const env = { ...process.env, ORG_ACTOR: `startup-${module}-fixture`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    const env = { ...fixtureEnvironment(), ORG_ACTOR: `startup-${module}-fixture`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
     for (const key of Object.keys(env)) if (key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'].includes(key)) delete env[key];
     const git = spawnSync('git', ['init', '-qb', 'main', repo], { env, encoding: 'utf8' });
     assert.equal(git.status, 0, git.stderr);

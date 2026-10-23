@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/fixture-environment.mjs';
 import { healthyMemoryEnvironment } from './helpers/promotion-memory-fixture.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
@@ -17,7 +18,7 @@ function fixture(t, { merged = false } = {}) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const repo = path.join(root, 'repo'), lane = path.join(root, 'lane'), org = path.join(root, 'record');
   fs.mkdirSync(repo); fs.mkdirSync(org);
-  const env = { ...healthyMemoryEnvironment(), ...scratchEnvironment(root), ORG_DIR: org, HERDR_MONITOR_FLEET: path.join(root, 'fleet'),
+  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), ...scratchEnvironment(root), ORG_DIR: org, HERDR_MONITOR_FLEET: path.join(root, 'fleet'),
     MONITOR_TEST_SLOT_PATH: path.join(root, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'slot'),
     XDG_STATE_HOME: path.join(root, 'state'), HERDR_TAB_ID: '', HERDR_PANE_ID: '' };
   for (const key of Object.keys(env)) if (/^LANE_|^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|CONFIG)/.test(key)) delete env[key];

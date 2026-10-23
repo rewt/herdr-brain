@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/fixture-environment.mjs';
 import { healthyMemoryEnvironment } from './helpers/promotion-memory-fixture.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ function fixture(t, { markers = true } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'release-pins-')));
   const home = path.join(root, '.local/share/herdr-monitor'), bin = path.join(root, 'bin');
   const teardown = [];
-  const env = { ...healthyMemoryEnvironment(), HOME: root, HERDR_MONITOR_FLEET: path.join(root, 'fleet'), ORG_ACTOR: 'release-pin-fixture',
+  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), HOME: root, HERDR_MONITOR_FLEET: path.join(root, 'fleet'), ORG_ACTOR: 'release-pin-fixture',
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.01',
     SUPERVISOR_INPUT_POLL_SECONDS: '0.01', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_DIR$|HERDR_(?:PANE|TAB|WORKSPACE)_ID|GIT_(?:DIR|COMMON_DIR|INDEX_FILE|WORK_TREE|CONFIG_COUNT)$)/.test(key)) delete env[key];

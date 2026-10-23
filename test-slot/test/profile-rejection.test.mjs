@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -29,7 +30,7 @@ function fixture(t, admissionClass) {
   // native process-source read and cannot be mistaken for an enclosing holder.
   const holder = JSON.stringify({ pid: process.pid, processStart: null, pgid: null, token: 'fixture-holder', label: 'peer' });
   fs.writeFileSync(lock, holder);
-  const env = { ...testSlotEnvironment(), PATH: `${bin}:${process.env.PATH}`, HERDR_MONITOR_FLEET: path.join(root, 'fleet'),
+  const env = { ...fixtureEnvironment(testSlotEnvironment()), PATH: `${bin}:${process.env.PATH}`, HERDR_MONITOR_FLEET: path.join(root, 'fleet'),
     MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const run = (argv = ['npm', 'run', 'prove']) => spawnSync(process.execPath, [cli, 'run', 'rejection witness', '--wait', '0',
     '--result-path', receipt, '--', ...argv], { cwd: root, env, encoding: 'utf8', timeout: loadTimeout(15000) });

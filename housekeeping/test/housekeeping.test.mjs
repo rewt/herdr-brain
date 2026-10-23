@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
@@ -22,7 +23,7 @@ import { recordInitialShell } from '../../lib/initial-shell.mjs';
 import { retirementLock } from '../../lib/retire-lock.mjs';
 import { retirementOwnerLock } from '../../lib/closeout.mjs';
 
-const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
+const TEST_ENV = { ...fixtureEnvironment(), ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
 function fixture(t, { promoted = true, reported = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'housekeeping-'));

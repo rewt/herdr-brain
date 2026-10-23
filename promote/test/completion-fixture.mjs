@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 // Shared private record, lane and native-worker fixture for completion cases.
 import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import assert from 'node:assert/strict';
@@ -18,7 +19,7 @@ export function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'batch-complete-'))), repo = path.join(root, 'repo');
   fixtureFleet(t, root); fs.mkdirSync(repo);
   // These lifecycle cases inspect synchronous delivery; opt into a bounded wait.
-  const env = { ...healthyMemoryEnvironment(), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '10', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
+  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '10', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
   for (const k of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(k)) delete env[k];
   env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
   const exec = (command, args, cwd = repo, extraEnv = {}) => spawnSync(command, args, { cwd, env: { ...env, ...extraEnv }, encoding: 'utf8', [commandAllowance]: 60000 });

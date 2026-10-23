@@ -171,7 +171,7 @@
     "test:promotion:logic": {
       "id": "herdr/test:promotion:logic",
       "revision": 3,
-      "command_sha256": "d3040376ccc7603bf9edf0aaf9770b3fd9441b16353ceb29a217d17993517318",
+      "command_sha256": "a2fc47c377b162d0ecf2d69938049b4bea86168ec43b65728182a2c919535f68",
       "admission_class": "SHARED",
       "M_bytes": null,
       "C": null,

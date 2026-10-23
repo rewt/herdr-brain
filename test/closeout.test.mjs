@@ -667,10 +667,17 @@ test('opted-in train completion produces a landed entry and closes without manua
 });
 
 test('the opted-in native train lands and delegates closeout', async t => {
-  const f = setup(t, { occupied: false }); f.report();
+  let f;
+  // After hooks run in registration order. Stop the owner and its lifetime
+  // watcher before fixture() removes the scratch directory and owner receipt.
+  t.after(async () => {
+    if (!f) return;
+    assert.ok(fs.existsSync(f.scratch), 'inbox teardown must precede fixture scratch removal');
+    await stopFixtureInbox(path.join(f.org, 'supervisor/inbox.log'), {
+      script: fileURLToPath(new URL('../supervisor/prompt-supervisor.mjs', import.meta.url)) });
+  });
+  f = setup(t, { occupied: false }); f.report();
   const queue = queueFor(f.repo);
-  t.after(() => stopFixtureInbox(path.join(f.org, 'supervisor/inbox.log'), {
-    script: fileURLToPath(new URL('../supervisor/prompt-supervisor.mjs', import.meta.url)) }));
   enqueue(queue, ['topic'], { org: f.org, run: 'R-1', expectedHead: f.head,
     validate: 'true', laneCLI: lanes, herdr: f.job.herdr, to: 'fixture-supervisor', attempts: 1, retry: 0 });
   await drainPromotions(queue);

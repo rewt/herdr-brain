@@ -68,7 +68,8 @@ export async function collectDispatch(read, commit, file) {
   return rows;
 }
 
-export async function generateCoverage(inputs, { read = readGit, list = git, collect = collectDispatch } = {}) {
+export async function generateCoverage(inputs, { read = readGit, list = git, collect = collectDispatch,
+  localFile = file => fs.statSync(path.join(root, file), { throwIfNoEntry: false })?.isFile() === true } = {}) {
   assert.equal(inputs.source_commit, SOURCE_COMMIT, 'bootstrap base must stay frozen');
   const base = inputs.source_commit, split = inputs.stack_commits['lane/dispatch-test-split'];
   const tier = read(base, 'test/helpers/tier.mjs'), pkg = read(base, 'package.json');
@@ -82,9 +83,29 @@ export async function generateCoverage(inputs, { read = readGit, list = git, col
   const witnesses = name => scripts[name].split(/\s+/).filter(word => /^[\w./-]+\.test\.mjs$/.test(word));
   const coverage = { promotion, slot, lane: witnesses('test:promotion:lanes'), logic: witnesses('test:promotion:logic'), smoke: SMOKE_FILES };
   assert.equal(coverage.lane.length, 1); assert.equal(coverage.logic.length, 11);
-  const required = inputs.required_tests.flatMap(row => checkFiles(row.files));
-  const changed = [...new Set(Object.values(inputs.stack_commits).flatMap(head => list(['diff', '--name-only', '--diff-filter=ACMRT', base, head]).trim().split('\n').filter(file => file.endsWith('.test.mjs'))))].sort();
+  const required = [...inputs.required_tests.flatMap(row => checkFiles(row.files)), ...checkFiles(inputs.required_files)];
+  const lines = text => text.trim().split('\n').filter(file => file.endsWith('.test.mjs'));
+  const tree = commit => new Set(lines(list(['ls-tree', '-r', '--name-only', commit])));
+  const sources = new Map([...tree(base)].map(file => [file, base]));
+  const changed = new Set(), removed = new Set();
+  for (const head of new Set(Object.values(inputs.stack_commits))) {
+    if (head === base) continue;
+    const available = tree(head);
+    for (const file of lines(list(['diff', '--name-only', '--no-renames', '--diff-filter=ACMRT', base, head]))) {
+      assert.ok(available.has(file), `missing stack source: ${head}:${file}`);
+      changed.add(file); sources.set(file, head);
+    }
+    for (const file of lines(list(['diff', '--name-only', '--no-renames', '--diff-filter=D', base, head]))) removed.add(file);
+  }
+  // Project the combined tree from the base and captured stack deltas. A
+  // deletion cannot be satisfied by an older tree that still has that path.
+  for (const file of removed) sources.delete(file);
+  for (const file of checkFiles(inputs.bootstrap_tests)) {
+    assert.ok(localFile(file), `missing bootstrap lane source: ${file}`);
+    sources.set(file, 'bootstrap lane');
+  }
   const files = checkFiles(replaceDispatch([...Object.values(coverage).flat(), ...required, ...changed, ...inputs.bootstrap_tests]));
+  for (const file of files) assert.ok(sources.has(file), `missing bootstrap source in combined stack: ${file}`);
   const before = await collect(read, base, MONOLITH), after = {};
   for (const file of DISPATCH_FILES) after[file] = await collect(read, split, file);
   const dispatch = { source_commit: split, ...reconcileDispatch(before, after),
@@ -101,7 +122,8 @@ export async function generateCoverage(inputs, { read = readGit, list = git, col
     generation_command: 'node --experimental-vm-modules test/helpers/bootstrap-coverage.mjs', inputs_sha256: sha256(JSON.stringify(inputs)),
     source_sha256: { tier: sha256(tier), package: sha256(pkg) }, stack_commits: inputs.stack_commits,
     coverage, required_tests: inputs.required_tests.map(({ source, sha256: digest, files: rows }) => ({ source, sha256: digest, file_count: rows.length })),
-    changed_tests: changed, bootstrap_tests: inputs.bootstrap_tests, dispatch,
+    required_files: inputs.required_files, changed_tests: [...changed].sort(), bootstrap_tests: inputs.bootstrap_tests, dispatch,
+    test_sources: Object.fromEntries(files.map(file => [file, sources.get(file)])),
     execution_sources: Object.fromEntries(execution.map(([file, commit]) => [file, { commit, sha256: sha256(read(commit, file)) }])),
     file_count: files.length, files_sha256: sha256(JSON.stringify(files)), files, groups_sha256: sha256(JSON.stringify(groups)), groups };
 }

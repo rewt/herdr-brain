@@ -2,7 +2,7 @@
   "schema": "bootstrap-coverage/v1",
   "source_commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
   "generation_command": "node --experimental-vm-modules test/helpers/bootstrap-coverage.mjs",
-  "inputs_sha256": "6b8aad2739ecfc02c219d7797d0feab382ca1e32053b44d3aba139c943ca07f9",
+  "inputs_sha256": "f33dfdb1f949511d0eed429642ae91c6c0e4fdb3ef75528d19543dec28f2f3db",
   "source_sha256": {
     "tier": "49e21e9b3a2659a95a48bc2fda897abd1332bbe97b1a06b55bc4e54e6fd16a20",
     "package": "ff3bc1743163ed25dd91a0488a987b6d42a10ec661c994ba20dbe7f1353bdaec"
@@ -144,16 +144,6 @@
   },
   "required_tests": [
     {
-      "source": ".org/evidence/SUPERVISOR-SCRATCH-20261017/eng-536-required-tests.json",
-      "sha256": "e4c06b75c8e446e8f95a174078e476daf422778f9fbce3fd9d1be98cbc5cc8cf",
-      "file_count": 54
-    },
-    {
-      "source": ".org/evidence/SUPERVISOR-SCRATCH-20261017/eng-537-required-tests.json",
-      "sha256": "6e3928dc4c6f689762e4c6f8763e3386933e38a444ef175cfb6fac7f596107bf",
-      "file_count": 39
-    },
-    {
       "source": ".org/evidence/SUPERVISOR-SCRATCH-20261017/eng-539-required-tests.json",
       "sha256": "79c8a6de3b54b86af4977af5d415aeafad6fd13fbd2052741525b7598d303559",
       "file_count": 26
@@ -163,6 +153,9 @@
       "sha256": "2bc93b026b7b0ecb048eed2e76b859c2914368a071b6091818ff24b46a043980",
       "file_count": 7
     }
+  ],
+  "required_files": [
+    "test-slot/test/train-conformance.test.mjs"
   ],
   "changed_tests": [
     "dispatch/test/dispatch-admission.test.mjs",
@@ -613,6 +606,135 @@
       "dispatch/test/dispatch-fixture.mjs": "979f7140a82c2a53558693f479c7406403102b35692b52a2f47f845922a5dbb8"
     }
   },
+  "test_sources": {
+    "acceptance/test/cases.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/cleanup.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/deadlines.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/environment.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/focus-classification.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/focus.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/harness.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/load.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/probe.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/recovery.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/results.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/signal.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "acceptance/test/snapshot.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "dispatch/test/dispatch-admission.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "dispatch/test/dispatch-options.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "dispatch/test/dispatch-recovery.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "dispatch/test/dispatch-session.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "dispatch/test/retired-flags.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "dispatch/test/session-cap.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "dispatch/test/timing.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "housekeeping/test/auto-tidy.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "housekeeping/test/housekeeping.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "lanes/test/exact-validation.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "lanes/test/herdr-client.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "lanes/test/lane.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "lanes/test/no-focus.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "lanes/test/reservations.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "lanes/test/routes.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "lanes/test/validation.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "promote/test/affected-tests.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "promote/test/exact-bridge.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "promote/test/memory-gate.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "promote/test/promote.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "promote/test/train.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "promote/test/workflow-train.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/rebase-paths.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/rebase-review.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/rebase-safety.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/rebase.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/record-recovery.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/record-safety.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/ref-deadlines.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/review-scope.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "settle/test/test-plan.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "settle/test/train.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "supervisor/test/autopilot.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "supervisor/test/chats.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "supervisor/test/delivery.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "supervisor/test/entry.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "supervisor/test/green-manifest.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "supervisor/test/green-pass.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "supervisor/test/reconcile.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "supervisor/test/request.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/conformance.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/gate-profile.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/host-paths.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/memory-floor.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/no-setuid.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/occupancy-project.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/profile-rejection.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/release-limits.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/reservations.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/resources.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/retention.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/shared.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/test-slot.test.mjs": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+    "test-slot/test/ticket-queue.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test-slot/test/train-conformance.test.mjs": "03a0d8422f62e0f066e0acb47043b964372e6b9f",
+    "test-slot/test/watchdog.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/activation-seam.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/approvals.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/bch-cloak-contract.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/board-view.test.mjs": "b650e34fe71b65f3f4392a362c05511493c2f423",
+    "test/bootstrap-coverage.test.mjs": "bootstrap lane",
+    "test/bootstrap-gate.test.mjs": "bootstrap lane",
+    "test/closeout.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/compat.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/config-home.test.mjs": "c72385d890dd9158d7025b10b8158279ad2e17c4",
+    "test/contracts-conformance.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/deadline-boundaries.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/discernment.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/file-wait.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/fixture-lifetime.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/flow.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/formats.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/git-seed.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/inbox.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/lane-removal-protection.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/lane-removal.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/lessons.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/load-deadlines.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/main-module.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/memory.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/name-alias.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/no-setuid-processes.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/offline-herdr.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/one-watcher.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/processes.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/project-summary.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/pty.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/record-guard.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/release-acceptance.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/release-pins.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/release-suites.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/report.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/retire-archive.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/retire-followups.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/retire-removal-deadlines.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/retire-status.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/retire-sweep.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/retire-triggers.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/retire.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/review-children.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/run-ownership.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/runner-capacity.test.mjs": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+    "test/sanitization.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/session-release.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/setup-apply.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/setup.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/suite.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/test-hangs.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/tidy-tabs.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
+    "test/tier-plan.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "test/today.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "verify/test/verify.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "watch/test/lock.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "watch/test/watch.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674"
+  },
   "execution_sources": {
     "test/helpers/release-suites.mjs": {
       "commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
@@ -667,19 +789,16 @@
       "sha256": "05554a9f0cdbb7fed60c3a5695af9916a814fb81bb190088f303e7ba853f3cad"
     }
   },
-  "file_count": 161,
-  "files_sha256": "ad3de40cb3c3f84bc7ab8416e1e24b1ca342da813377265f5bd581a409cb0333",
+  "file_count": 127,
+  "files_sha256": "09b1ff511493bd424fe2254f36a7439044d6c704c065ac986f3c6bdfd84f0d9f",
   "files": [
     "acceptance/test/cases.test.mjs",
     "acceptance/test/cleanup.test.mjs",
     "acceptance/test/deadlines.test.mjs",
-    "acceptance/test/default-cycle.test.mjs",
     "acceptance/test/environment.test.mjs",
     "acceptance/test/focus-classification.test.mjs",
     "acceptance/test/focus.test.mjs",
     "acceptance/test/harness.test.mjs",
-    "acceptance/test/identity.test.mjs",
-    "acceptance/test/load-round2.test.mjs",
     "acceptance/test/load.test.mjs",
     "acceptance/test/probe.test.mjs",
     "acceptance/test/recovery.test.mjs",
@@ -691,37 +810,23 @@
     "dispatch/test/dispatch-recovery.test.mjs",
     "dispatch/test/dispatch-session.test.mjs",
     "dispatch/test/retired-flags.test.mjs",
-    "dispatch/test/session-bind.test.mjs",
     "dispatch/test/session-cap.test.mjs",
     "dispatch/test/timing.test.mjs",
     "housekeeping/test/auto-tidy.test.mjs",
     "housekeeping/test/housekeeping.test.mjs",
     "lanes/test/exact-validation.test.mjs",
     "lanes/test/herdr-client.test.mjs",
-    "lanes/test/lane-dispatch.test.mjs",
     "lanes/test/lane.test.mjs",
     "lanes/test/no-focus.test.mjs",
     "lanes/test/reservations.test.mjs",
     "lanes/test/routes.test.mjs",
     "lanes/test/validation.test.mjs",
-    "lanes/test/workspace-native.test.mjs",
     "promote/test/affected-tests.test.mjs",
-    "promote/test/completion-recovery.test.mjs",
-    "promote/test/completion.test.mjs",
-    "promote/test/declared-train.test.mjs",
     "promote/test/exact-bridge.test.mjs",
-    "promote/test/guard.test.mjs",
     "promote/test/memory-gate.test.mjs",
-    "promote/test/metrics-profile.test.mjs",
     "promote/test/promote.test.mjs",
-    "promote/test/selector.test.mjs",
     "promote/test/train.test.mjs",
     "promote/test/workflow-train.test.mjs",
-    "settle/test/auto-retry.test.mjs",
-    "settle/test/config.test.mjs",
-    "settle/test/declared-plan.test.mjs",
-    "settle/test/default-validation.test.mjs",
-    "settle/test/memory-boundaries.test.mjs",
     "settle/test/rebase-paths.test.mjs",
     "settle/test/rebase-review.test.mjs",
     "settle/test/rebase-safety.test.mjs",
@@ -730,11 +835,8 @@
     "settle/test/record-safety.test.mjs",
     "settle/test/ref-deadlines.test.mjs",
     "settle/test/review-scope.test.mjs",
-    "settle/test/settle.test.mjs",
-    "settle/test/test-evidence.test.mjs",
     "settle/test/test-plan.test.mjs",
     "settle/test/train.test.mjs",
-    "settle/test/validation-tiers.test.mjs",
     "supervisor/test/autopilot.test.mjs",
     "supervisor/test/chats.test.mjs",
     "supervisor/test/delivery.test.mjs",
@@ -743,7 +845,6 @@
     "supervisor/test/green-pass.test.mjs",
     "supervisor/test/reconcile.test.mjs",
     "supervisor/test/request.test.mjs",
-    "supervisor/test/supervisor.test.mjs",
     "test-slot/test/conformance.test.mjs",
     "test-slot/test/gate-profile.test.mjs",
     "test-slot/test/host-paths.test.mjs",
@@ -766,8 +867,6 @@
     "test/board-view.test.mjs",
     "test/bootstrap-coverage.test.mjs",
     "test/bootstrap-gate.test.mjs",
-    "test/closeout-code.test.mjs",
-    "test/closeout-handoff.test.mjs",
     "test/closeout.test.mjs",
     "test/compat.test.mjs",
     "test/config-home.test.mjs",
@@ -780,7 +879,6 @@
     "test/formats.test.mjs",
     "test/git-seed.test.mjs",
     "test/inbox.test.mjs",
-    "test/lane-removal-disposable.test.mjs",
     "test/lane-removal-protection.test.mjs",
     "test/lane-removal.test.mjs",
     "test/lessons.test.mjs",
@@ -798,19 +896,11 @@
     "test/release-acceptance.test.mjs",
     "test/release-pins.test.mjs",
     "test/release-suites.test.mjs",
-    "test/release.test.mjs",
     "test/report.test.mjs",
     "test/retire-archive.test.mjs",
-    "test/retire-exits.test.mjs",
-    "test/retire-followups-removal.test.mjs",
     "test/retire-followups.test.mjs",
-    "test/retire-initial-shell.test.mjs",
-    "test/retire-paths.test.mjs",
     "test/retire-removal-deadlines.test.mjs",
-    "test/retire-reused-pane.test.mjs",
-    "test/retire-stale-release.test.mjs",
     "test/retire-status.test.mjs",
-    "test/retire-sweep-binding.test.mjs",
     "test/retire-sweep.test.mjs",
     "test/retire-triggers.test.mjs",
     "test/retire.test.mjs",
@@ -818,9 +908,7 @@
     "test/run-ownership.test.mjs",
     "test/runner-capacity.test.mjs",
     "test/sanitization.test.mjs",
-    "test/scratch-sweep.test.mjs",
     "test/session-release.test.mjs",
-    "test/settle-watch.test.mjs",
     "test/setup-apply.test.mjs",
     "test/setup.test.mjs",
     "test/suite.test.mjs",
@@ -832,7 +920,7 @@
     "watch/test/lock.test.mjs",
     "watch/test/watch.test.mjs"
   ],
-  "groups_sha256": "9b2901ef9f0c3d691fe62288f5b621776cb866fd974400793149e0710274b84a",
+  "groups_sha256": "3e1da2da3aacda31879218bcf6ffb5f9bb091af2b31a0c1cbe715ea34577b816",
   "groups": [
     [
       "acceptance/test/cases.test.mjs:1",
@@ -850,12 +938,6 @@
       "acceptance/test/deadlines.test.mjs:1",
       [
         "acceptance/test/deadlines.test.mjs"
-      ]
-    ],
-    [
-      "acceptance/test/default-cycle.test.mjs:1",
-      [
-        "acceptance/test/default-cycle.test.mjs"
       ]
     ],
     [
@@ -880,18 +962,6 @@
       "acceptance/test/harness.test.mjs:1",
       [
         "acceptance/test/harness.test.mjs"
-      ]
-    ],
-    [
-      "acceptance/test/identity.test.mjs:1",
-      [
-        "acceptance/test/identity.test.mjs"
-      ]
-    ],
-    [
-      "acceptance/test/load-round2.test.mjs:1",
-      [
-        "acceptance/test/load-round2.test.mjs"
       ]
     ],
     [
@@ -943,7 +1013,6 @@
       "dispatch/test:2",
       [
         "dispatch/test/retired-flags.test.mjs",
-        "dispatch/test/session-bind.test.mjs",
         "dispatch/test/session-cap.test.mjs",
         "dispatch/test/timing.test.mjs"
       ]
@@ -965,12 +1034,6 @@
       "lanes/test/herdr-client.test.mjs:1",
       [
         "lanes/test/herdr-client.test.mjs"
-      ]
-    ],
-    [
-      "lanes/test/lane-dispatch.test.mjs:1",
-      [
-        "lanes/test/lane-dispatch.test.mjs"
       ]
     ],
     [
@@ -1004,89 +1067,44 @@
       ]
     ],
     [
-      "lanes/test/workspace-native.test.mjs:1",
-      [
-        "lanes/test/workspace-native.test.mjs"
-      ]
-    ],
-    [
       "promote/test:1",
       [
         "promote/test/affected-tests.test.mjs",
-        "promote/test/declared-train.test.mjs",
         "promote/test/exact-bridge.test.mjs",
-        "promote/test/guard.test.mjs"
+        "promote/test/memory-gate.test.mjs",
+        "promote/test/promote.test.mjs"
       ]
     ],
     [
       "promote/test:2",
-      [
-        "promote/test/memory-gate.test.mjs",
-        "promote/test/metrics-profile.test.mjs",
-        "promote/test/promote.test.mjs",
-        "promote/test/selector.test.mjs"
-      ]
-    ],
-    [
-      "promote/test:3",
       [
         "promote/test/train.test.mjs",
         "promote/test/workflow-train.test.mjs"
       ]
     ],
     [
-      "promote/test/completion-recovery.test.mjs:1",
-      [
-        "promote/test/completion-recovery.test.mjs"
-      ]
-    ],
-    [
-      "promote/test/completion.test.mjs:1",
-      [
-        "promote/test/completion.test.mjs"
-      ]
-    ],
-    [
       "settle/test:1",
       [
-        "settle/test/auto-retry.test.mjs",
-        "settle/test/config.test.mjs",
-        "settle/test/declared-plan.test.mjs",
-        "settle/test/default-validation.test.mjs"
+        "settle/test/rebase-paths.test.mjs",
+        "settle/test/rebase-review.test.mjs",
+        "settle/test/rebase-safety.test.mjs",
+        "settle/test/rebase.test.mjs"
       ]
     ],
     [
       "settle/test:2",
       [
-        "settle/test/memory-boundaries.test.mjs",
-        "settle/test/rebase-paths.test.mjs",
-        "settle/test/rebase-review.test.mjs",
-        "settle/test/rebase-safety.test.mjs"
+        "settle/test/record-recovery.test.mjs",
+        "settle/test/record-safety.test.mjs",
+        "settle/test/ref-deadlines.test.mjs",
+        "settle/test/review-scope.test.mjs"
       ]
     ],
     [
       "settle/test:3",
       [
-        "settle/test/rebase.test.mjs",
-        "settle/test/record-recovery.test.mjs",
-        "settle/test/record-safety.test.mjs",
-        "settle/test/ref-deadlines.test.mjs"
-      ]
-    ],
-    [
-      "settle/test:4",
-      [
-        "settle/test/review-scope.test.mjs",
-        "settle/test/settle.test.mjs",
-        "settle/test/test-evidence.test.mjs",
-        "settle/test/test-plan.test.mjs"
-      ]
-    ],
-    [
-      "settle/test:5",
-      [
-        "settle/test/train.test.mjs",
-        "settle/test/validation-tiers.test.mjs"
+        "settle/test/test-plan.test.mjs",
+        "settle/test/train.test.mjs"
       ]
     ],
     [
@@ -1105,12 +1123,6 @@
         "supervisor/test/green-pass.test.mjs",
         "supervisor/test/reconcile.test.mjs",
         "supervisor/test/request.test.mjs"
-      ]
-    ],
-    [
-      "supervisor/test:3",
-      [
-        "supervisor/test/supervisor.test.mjs"
       ]
     ],
     [
@@ -1163,140 +1175,112 @@
       [
         "test/bootstrap-coverage.test.mjs",
         "test/bootstrap-gate.test.mjs",
-        "test/closeout-code.test.mjs",
-        "test/closeout-handoff.test.mjs"
+        "test/closeout.test.mjs",
+        "test/compat.test.mjs"
       ]
     ],
     [
       "test:3",
       [
-        "test/closeout.test.mjs",
-        "test/compat.test.mjs",
         "test/config-home.test.mjs",
-        "test/contracts-conformance.test.mjs"
+        "test/contracts-conformance.test.mjs",
+        "test/deadline-boundaries.test.mjs",
+        "test/discernment.test.mjs"
       ]
     ],
     [
       "test:4",
       [
-        "test/deadline-boundaries.test.mjs",
-        "test/discernment.test.mjs",
         "test/file-wait.test.mjs",
-        "test/fixture-lifetime.test.mjs"
+        "test/fixture-lifetime.test.mjs",
+        "test/flow.test.mjs",
+        "test/formats.test.mjs"
       ]
     ],
     [
       "test:5",
       [
-        "test/flow.test.mjs",
-        "test/formats.test.mjs",
         "test/git-seed.test.mjs",
-        "test/inbox.test.mjs"
+        "test/inbox.test.mjs",
+        "test/lane-removal-protection.test.mjs",
+        "test/lane-removal.test.mjs"
       ]
     ],
     [
       "test:6",
       [
-        "test/lane-removal-disposable.test.mjs",
-        "test/lane-removal-protection.test.mjs",
-        "test/lane-removal.test.mjs",
-        "test/lessons.test.mjs"
+        "test/lessons.test.mjs",
+        "test/load-deadlines.test.mjs",
+        "test/main-module.test.mjs",
+        "test/memory.test.mjs"
       ]
     ],
     [
       "test:7",
       [
-        "test/load-deadlines.test.mjs",
-        "test/main-module.test.mjs",
-        "test/memory.test.mjs",
-        "test/name-alias.test.mjs"
+        "test/name-alias.test.mjs",
+        "test/no-setuid-processes.test.mjs",
+        "test/offline-herdr.test.mjs",
+        "test/one-watcher.test.mjs"
       ]
     ],
     [
       "test:8",
       [
-        "test/no-setuid-processes.test.mjs",
-        "test/offline-herdr.test.mjs",
-        "test/one-watcher.test.mjs",
-        "test/processes.test.mjs"
+        "test/processes.test.mjs",
+        "test/project-summary.test.mjs",
+        "test/pty.test.mjs",
+        "test/record-guard.test.mjs"
       ]
     ],
     [
       "test:9",
       [
-        "test/project-summary.test.mjs",
-        "test/pty.test.mjs",
-        "test/record-guard.test.mjs",
-        "test/release-acceptance.test.mjs"
+        "test/release-acceptance.test.mjs",
+        "test/release-pins.test.mjs",
+        "test/release-suites.test.mjs",
+        "test/report.test.mjs"
       ]
     ],
     [
       "test:10",
       [
-        "test/release-pins.test.mjs",
-        "test/release-suites.test.mjs",
-        "test/release.test.mjs",
-        "test/report.test.mjs"
+        "test/retire-archive.test.mjs",
+        "test/retire-followups.test.mjs",
+        "test/retire-removal-deadlines.test.mjs",
+        "test/retire-status.test.mjs"
       ]
     ],
     [
       "test:11",
       [
-        "test/retire-archive.test.mjs",
-        "test/retire-exits.test.mjs",
-        "test/retire-followups-removal.test.mjs",
-        "test/retire-followups.test.mjs"
+        "test/retire-sweep.test.mjs",
+        "test/retire-triggers.test.mjs",
+        "test/retire.test.mjs",
+        "test/review-children.test.mjs"
       ]
     ],
     [
       "test:12",
       [
-        "test/retire-initial-shell.test.mjs",
-        "test/retire-paths.test.mjs",
-        "test/retire-removal-deadlines.test.mjs",
-        "test/retire-reused-pane.test.mjs"
+        "test/run-ownership.test.mjs",
+        "test/runner-capacity.test.mjs",
+        "test/sanitization.test.mjs",
+        "test/session-release.test.mjs"
       ]
     ],
     [
       "test:13",
       [
-        "test/retire-stale-release.test.mjs",
-        "test/retire-status.test.mjs",
-        "test/retire-sweep-binding.test.mjs",
-        "test/retire-sweep.test.mjs"
+        "test/setup-apply.test.mjs",
+        "test/setup.test.mjs",
+        "test/suite.test.mjs",
+        "test/test-hangs.test.mjs"
       ]
     ],
     [
       "test:14",
       [
-        "test/retire-triggers.test.mjs",
-        "test/retire.test.mjs",
-        "test/review-children.test.mjs",
-        "test/run-ownership.test.mjs"
-      ]
-    ],
-    [
-      "test:15",
-      [
-        "test/runner-capacity.test.mjs",
-        "test/sanitization.test.mjs",
-        "test/scratch-sweep.test.mjs",
-        "test/session-release.test.mjs"
-      ]
-    ],
-    [
-      "test:16",
-      [
-        "test/settle-watch.test.mjs",
-        "test/setup-apply.test.mjs",
-        "test/setup.test.mjs",
-        "test/suite.test.mjs"
-      ]
-    ],
-    [
-      "test:17",
-      [
-        "test/test-hangs.test.mjs",
         "test/tidy-tabs.test.mjs",
         "test/tier-plan.test.mjs",
         "test/today.test.mjs"

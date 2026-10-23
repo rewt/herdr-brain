@@ -4,11 +4,17 @@ This is the operator-approved option D from R-769. Use it for the combined
 policy-changing promotion, then let later requests use the adopted policy.
 The supervisor submits the reviewed stack through the existing unsandboxed train.
 
-`bootstrap-coverage.json` freezes **161 whole files** from main
+`bootstrap-coverage.json` freezes **127 whole files** from main
 `876f08b45a07ebfd01c4d9a8ab96203f0f45d674`: the 78 promotion files, 16 slot files,
-one lane witness, 11 logic witnesses, eight adopted smoke files, the union of all
-four supplied L-43 lists, the captured stack's changed tests and these two bootstrap
-unit files. The dispatch monolith is replaced everywhere by the four files from
+one lane witness, 11 logic witnesses, eight adopted smoke files, the Phase 1
+required files, the captured stack's changed tests and these two bootstrap unit
+files. Phase 1 includes ENG-547, ENG-539, ENG-534, ENG-542, ENG-518 and ENG-554:
+only `eng-539-required-tests.json` and `eng-547-required-tests.json` supply lists,
+with ENG-554's `test-slot/test/train-conformance.test.mjs` required explicitly.
+ENG-536 (`closer-b`) and ENG-537 (`gates-v2`) land afterward; their lists are
+excluded per the supervisor's R-774 correction. Their four absent later-only paths
+(`declared-train`, `declared-plan`, `closeout-code`, `closeout-handoff`) are not
+bootstrap prerequisites. The dispatch monolith is replaced everywhere by the four files from
 `4a4799ea21e62b78febb4f0ef8c6b721972f41ec`. Registration-only collection proves
 the same **100 names and callback hashes** (32 admission, 4 options, 24 recovery,
 40 session). It runs neither callbacks nor product/fixture imports.
@@ -18,6 +24,14 @@ contents, plus immutable stack heads. Its `inputs_sha256` in the generated manif
 hashes compact JSON. All inventories come from those inputs and pinned Git objects;
 the new selector is never asked to define the bootstrap coverage.
 
+Generation validates every runnable path against the frozen base plus captured
+Phase 1 test deltas, applying deletions before accepting the projected combined
+inventory. It records each path's source in `test_sources`; only the two bootstrap
+unit files come from this lane, and their presence is checked separately. A missing
+required path refuses generation; it is never silently dropped. This availability
+projection does not prove merge compatibility. The recipe's existing file-existence
+preflight still refuses missing files in the actual combined candidate.
+
 Regenerate with Node 20.19.4 from a checkout containing the captured Git objects:
 
 ```sh
@@ -25,7 +39,7 @@ node --experimental-vm-modules test/helpers/bootstrap-coverage.mjs
 git diff -- test/helpers/bootstrap-coverage.json
 ```
 
-The checked-in manifest has 64 groups before partitioning. `releasePhases()`
+The checked-in manifest has 50 groups before partitioning. `releasePhases()`
 keeps groups at four files or fewer and isolates every lane, acceptance and
 completion file. The recipe calls the existing bounded runner once per group,
 sequentially, with `--file-timeout=480000 --suite-timeout=540000`. It preserves the
@@ -38,7 +52,7 @@ grouping and containment sources. The command pins the manifest and recipe bytes
 Every stacked request must use this **identical** `--validate` value:
 
 ```text
-/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=3ab01e439985adb2ac21356b10fae0eb19efb92517134b6a73a34d716fabb877 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa
+/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=6e41487b21b3752671934ad49bb59e42049d0efa53d08db1e7bf4b5a582059a3 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa
 ```
 
 At R-769's idle train boundary, launch the queue worker/drain with
@@ -57,7 +71,7 @@ MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1 PATH=/Users/rewt/.nvm/versions/node/v20.19.4
 node promote/promote.mjs TOPIC --org /Users/rewt/development/rewt/.org \
   --expected-head FULL_REVIEWED_HEAD --if-current-run R-NUMBER \
   --required-tests 'JOB_REQUIRED_FILES_JSON' \
-  --validate '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=3ab01e439985adb2ac21356b10fae0eb19efb92517134b6a73a34d716fabb877 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa'
+  --validate '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=6e41487b21b3752671934ad49bb59e42049d0efa53d08db1e7bf4b5a582059a3 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa'
 ```
 
 `promote/promote.mjs` chooses `opt.validate` before `LANE_VALIDATE` and committed
@@ -102,6 +116,13 @@ Run only these native-free unit files on the clean committed lane candidate:
 node /Users/rewt/development/rewt/herdr-brain/lanes/lane.mjs check --cmd 'node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/bootstrap-coverage.test.mjs test/bootstrap-gate.test.mjs'
 ```
 
-The generator tests only registration and pinned source reads. Recipe tests inject
-group results, including failure, timeout, signal and launch error; they never run
-the manifest. L-43 files stay deferred to the supervisor's bound required tests.
+Generator tests inject source text and tree fixtures, exercise real registration
+collection twice in a directory without Git metadata or a Git executable, and
+reject missing required paths, stack deletions and absent bootstrap unit sources.
+Only the additional `checkout-only: frozen manifest regenerates from pinned Git
+objects and registrations` probe needs history; it reports an explicit named skip
+in release archive snapshots. All injected generator coverage runs there unchanged.
+Recipe tests inject group results, including failure, timeout, signal and launch
+error; they never run the manifest. L-43 files stay deferred to the supervisor's
+bound Phase 1 required tests; do not bind the later ENG-536/ENG-537 lists to this
+bootstrap.

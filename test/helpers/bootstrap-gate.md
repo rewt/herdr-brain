@@ -15,7 +15,7 @@ ENG-536 (`closer-b`) and ENG-537 (`gates-v2`) land afterward; their lists are
 excluded per the supervisor's R-774 correction. Their four absent later-only paths
 (`declared-train`, `declared-plan`, `closeout-code`, `closeout-handoff`) are not
 bootstrap prerequisites. The dispatch monolith is replaced everywhere by the four files from
-`4a4799ea21e62b78febb4f0ef8c6b721972f41ec`. Registration-only collection proves
+`1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c`. Registration-only collection proves
 the same **100 names and callback hashes** (32 admission, 4 options, 24 recovery,
 40 session). It runs neither callbacks nor product/fixture imports.
 
@@ -52,7 +52,7 @@ grouping and containment sources. The command pins the manifest and recipe bytes
 Every stacked request must use this **identical** `--validate` value:
 
 ```text
-/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=6e41487b21b3752671934ad49bb59e42049d0efa53d08db1e7bf4b5a582059a3 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa
+/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=a0f33ea19d660ea6bdb9db6496dd2fb89d056aab7a2a800a019a3a994aaff4f5 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa
 ```
 
 At R-769's idle train boundary, launch the queue worker/drain with
@@ -71,7 +71,7 @@ MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1 PATH=/Users/rewt/.nvm/versions/node/v20.19.4
 node promote/promote.mjs TOPIC --org /Users/rewt/development/rewt/.org \
   --expected-head FULL_REVIEWED_HEAD --if-current-run R-NUMBER \
   --required-tests 'JOB_REQUIRED_FILES_JSON' \
-  --validate '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=6e41487b21b3752671934ad49bb59e42049d0efa53d08db1e7bf4b5a582059a3 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa'
+  --validate '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=a0f33ea19d660ea6bdb9db6496dd2fb89d056aab7a2a800a019a3a994aaff4f5 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa'
 ```
 
 `promote/promote.mjs` chooses `opt.validate` before `LANE_VALIDATE` and committed

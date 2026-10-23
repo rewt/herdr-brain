@@ -2,8 +2,8 @@
   "source_commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
   "stack_commits": {
     "lane/gate-policy": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
-    "lane/dispatch-test-split": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
-    "lane/runner-capacity": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+    "lane/dispatch-test-split": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
+    "lane/runner-capacity": "ffc06cb20462e0dffb107314599cb75c367f04ee",
     "lane/closer-status": "b476afff02821c120afc4533a56b70e7ff889560",
     "lane/board-isolation": "b650e34fe71b65f3f4392a362c05511493c2f423",
     "lane/route-preset": "c72385d890dd9158d7025b10b8158279ad2e17c4",

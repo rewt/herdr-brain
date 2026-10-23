@@ -2,15 +2,15 @@
   "schema": "bootstrap-coverage/v1",
   "source_commit": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
   "generation_command": "node --experimental-vm-modules test/helpers/bootstrap-coverage.mjs",
-  "inputs_sha256": "f33dfdb1f949511d0eed429642ae91c6c0e4fdb3ef75528d19543dec28f2f3db",
+  "inputs_sha256": "31bc66656bab6a001ab9cd0a6f645f46364f20f4ea34ca8d597a6cf6ed54c0f2",
   "source_sha256": {
     "tier": "49e21e9b3a2659a95a48bc2fda897abd1332bbe97b1a06b55bc4e54e6fd16a20",
     "package": "ff3bc1743163ed25dd91a0488a987b6d42a10ec661c994ba20dbe7f1353bdaec"
   },
   "stack_commits": {
     "lane/gate-policy": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
-    "lane/dispatch-test-split": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
-    "lane/runner-capacity": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+    "lane/dispatch-test-split": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
+    "lane/runner-capacity": "ffc06cb20462e0dffb107314599cb75c367f04ee",
     "lane/closer-status": "b476afff02821c120afc4533a56b70e7ff889560",
     "lane/board-isolation": "b650e34fe71b65f3f4392a362c05511493c2f423",
     "lane/route-preset": "c72385d890dd9158d7025b10b8158279ad2e17c4",
@@ -178,6 +178,7 @@
     "test/retire.test.mjs",
     "test/runner-capacity.test.mjs",
     "test/session-release.test.mjs",
+    "test/suite.test.mjs",
     "test/tidy-tabs.test.mjs",
     "test/tier-plan.test.mjs"
   ],
@@ -186,7 +187,7 @@
     "test/bootstrap-gate.test.mjs"
   ],
   "dispatch": {
-    "source_commit": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "source_commit": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
     "registered_names": 100,
     "registrations_sha256": "bf496c51852fa03ffc848fd794e3eac4b1231a4abb6380fc4b5f41fe3ac1b8e7",
     "groups": {
@@ -620,10 +621,10 @@
     "acceptance/test/results.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "acceptance/test/signal.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "acceptance/test/snapshot.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
-    "dispatch/test/dispatch-admission.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
-    "dispatch/test/dispatch-options.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
-    "dispatch/test/dispatch-recovery.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
-    "dispatch/test/dispatch-session.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "dispatch/test/dispatch-admission.test.mjs": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
+    "dispatch/test/dispatch-options.test.mjs": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
+    "dispatch/test/dispatch-recovery.test.mjs": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
+    "dispatch/test/dispatch-session.test.mjs": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
     "dispatch/test/retired-flags.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "dispatch/test/session-cap.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "dispatch/test/timing.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
@@ -636,7 +637,7 @@
     "lanes/test/reservations.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "lanes/test/routes.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "lanes/test/validation.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
-    "promote/test/affected-tests.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "promote/test/affected-tests.test.mjs": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
     "promote/test/exact-bridge.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "promote/test/memory-gate.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "promote/test/promote.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
@@ -650,7 +651,7 @@
     "settle/test/record-safety.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "settle/test/ref-deadlines.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "settle/test/review-scope.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
-    "settle/test/test-plan.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "settle/test/test-plan.test.mjs": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
     "settle/test/train.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "supervisor/test/autopilot.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "supervisor/test/chats.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
@@ -672,7 +673,7 @@
     "test-slot/test/resources.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "test-slot/test/retention.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "test-slot/test/shared.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
-    "test-slot/test/test-slot.test.mjs": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+    "test-slot/test/test-slot.test.mjs": "ffc06cb20462e0dffb107314599cb75c367f04ee",
     "test-slot/test/ticket-queue.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "test-slot/test/train-conformance.test.mjs": "03a0d8422f62e0f066e0acb47043b964372e6b9f",
     "test-slot/test/watchdog.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
@@ -721,15 +722,15 @@
     "test/retire.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
     "test/review-children.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "test/run-ownership.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
-    "test/runner-capacity.test.mjs": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+    "test/runner-capacity.test.mjs": "ffc06cb20462e0dffb107314599cb75c367f04ee",
     "test/sanitization.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "test/session-release.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
     "test/setup-apply.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "test/setup.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
-    "test/suite.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
+    "test/suite.test.mjs": "ffc06cb20462e0dffb107314599cb75c367f04ee",
     "test/test-hangs.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "test/tidy-tabs.test.mjs": "b476afff02821c120afc4533a56b70e7ff889560",
-    "test/tier-plan.test.mjs": "4a4799ea21e62b78febb4f0ef8c6b721972f41ec",
+    "test/tier-plan.test.mjs": "1e1ad4e03f903a62a9f9ffc4c29047ebcd20bd6c",
     "test/today.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "verify/test/verify.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
     "watch/test/lock.test.mjs": "876f08b45a07ebfd01c4d9a8ab96203f0f45d674",
@@ -773,11 +774,11 @@
       "sha256": "646e91c327307f60358709110f349c1a41d79f60d18dc6375978bca385c75c54"
     },
     "test/helpers/run.mjs": {
-      "commit": "5a0221b603f4b732acbad78350dbf29578ec2c78",
-      "sha256": "7151705785f5105d6212204e17b3802a3e605147c784f7c1b52c0467d29e5cad"
+      "commit": "ffc06cb20462e0dffb107314599cb75c367f04ee",
+      "sha256": "0f3756b67a994e9df4eb39648db5812d8b1c3297cc5603f637b7475b8744c14b"
     },
     "test-slot/load.mjs": {
-      "commit": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+      "commit": "ffc06cb20462e0dffb107314599cb75c367f04ee",
       "sha256": "27497f05eb3be6759a3edd0465851f9308b86cb6cddedf47e16c88fa177ead1f"
     },
     "test-slot/run.mjs": {
@@ -785,7 +786,7 @@
       "sha256": "0aa730524e84cd0820a844f24fd333a89c6b2ed649802e40236bb9d491640e6f"
     },
     "test-slot/test-slot.mjs": {
-      "commit": "5a0221b603f4b732acbad78350dbf29578ec2c78",
+      "commit": "ffc06cb20462e0dffb107314599cb75c367f04ee",
       "sha256": "05554a9f0cdbb7fed60c3a5695af9916a814fb81bb190088f303e7ba853f3cad"
     }
   },

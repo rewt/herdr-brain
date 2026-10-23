@@ -7,29 +7,79 @@ import { spawnSync } from 'node:child_process';
 import { spawnChild, waitForExit, killChild } from '../../test/helpers/child.mjs';
 import { startFocusMonitor, assertFocus } from '../focus.mjs';
 import { HarnessLimit } from '../limits.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 
-async function fixture(t, { panes = [], workspaces = [], startupPanes = [], continuousFocusMs = 0, serverVersion = '0.8.2' } = {}) {
+function readRows(file) {
+  if (!fs.existsSync(file)) return [];
+  const content = fs.readFileSync(file, 'utf8');
+  // The monitor may be appending its next row while the parent reads.
+  return content.slice(0, content.lastIndexOf('\n') + 1).split('\n').filter(Boolean).map(JSON.parse);
+}
+
+async function waitFor(check, description) {
+  const deadline = Date.now() + loadTimeout(3000);
+  while (!check()) {
+    assert.ok(Date.now() < deadline, `timed out waiting for ${description}`);
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
+async function fixture(t, { panes = [], workspaces = [], startupPanes = [], replayEvents = 0, replayIntervalMs = 0, continuousFocusMs = 0, serverVersion = '0.8.2' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-focus-'));
   const socketPath = path.join(root, 'server.sock');
   const serverFile = path.join(root, 'server.mjs');
+  const changePath = path.join(root, 'change');
+  const readsPath = path.join(root, 'pane-reads.jsonl');
+  const tracePath = path.join(root, 'focus-trace.jsonl');
   fs.writeFileSync(serverFile, `import net from 'node:net';import fs from 'node:fs';
 const subscriptions=new Set();let pane='operator:p7';
 const workspace=id=>id==='unlisted:p3'?'scratch':id.split(':')[0];
-const event=id=>({event:'pane_focused',data:{type:'pane_focused',pane_id:id,workspace_id:workspace(id)}});
+const event=(id,includeWorkspace=true)=>({event:'pane_focused',data:{type:'pane_focused',pane_id:id,...(includeWorkspace?{workspace_id:workspace(id)}:{})}});
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const writes=new WeakMap();
+function send(socket,message){
+  const pending=(writes.get(socket)||Promise.resolve()).then(()=>{
+    if(socket.destroyed)return false;
+    if(socket.write(JSON.stringify(message)+'\\n'))return true;
+    return new Promise(resolve=>{
+      const done=()=>{socket.off('drain',done);socket.off('close',done);resolve(!socket.destroyed);};
+      socket.once('drain',done);socket.once('close',done);
+    });
+  });
+  writes.set(socket,pending);return pending;
+}
+async function stream(socket){
+  for(const id of ${JSON.stringify(startupPanes)}){await pause(100);if(!await send(socket,event(id)))return;}
+  // Replay is finite; subsequent live traffic is paced after each write drains.
+  for(let i=0;i<${replayEvents};i++){
+    if(${replayIntervalMs})await pause(${replayIntervalMs});
+    pane=i%2?'operator:p7':'external:p1';
+    if(!await send(socket,event(pane)))return;
+  }
+  while(${continuousFocusMs}&&!socket.destroyed){
+    await pause(${continuousFocusMs || 100});
+    if(socket.destroyed)return;
+    pane=pane==='operator:p7'?'external:p1':'operator:p7';
+    if(!await send(socket,event(pane)))return;
+  }
+}
 const server=net.createServer(socket=>{let buffer='';socket.setEncoding('utf8');socket.on('error',()=>{});
 socket.on('data',chunk=>{buffer+=chunk;while(buffer.includes('\\n')){const i=buffer.indexOf('\\n'),r=JSON.parse(buffer.slice(0,i));buffer=buffer.slice(i+1);
-if(r.method==='events.subscribe'){if(JSON.stringify(r.params.subscriptions)!==JSON.stringify([{type:'pane.focused'}]))throw Error('invalid native subscription shape');subscriptions.add(socket);socket.write(JSON.stringify({id:r.id,result:{type:'subscription_started'}})+'\\n');
-${JSON.stringify(startupPanes)}.forEach((id,i)=>setTimeout(()=>{if(!socket.destroyed)socket.write(JSON.stringify(event(id))+'\\n');},100*(i+1)));}
-else if(r.method==='ping')socket.write(JSON.stringify({id:r.id,result:{type:'pong',version:${JSON.stringify(serverVersion)},protocol:20}})+'\\n');
-else if(r.method==='pane.current'){if(JSON.stringify(r.params)!=='{}')throw Error('sampler must read global focus without caller context');socket.write(JSON.stringify({id:r.id,result:{type:'pane_current',pane:{pane_id:pane,workspace_id:workspace(pane),focused:true}}})+'\\n');}
-else if(r.method==='pane.get')socket.write(JSON.stringify({id:r.id,result:{pane:{pane_id:r.params.pane_id,workspace_id:workspace(r.params.pane_id)}}})+'\\n');
-else socket.write(JSON.stringify({id:r.id,error:{code:'forbidden',message:'monitor attempted a mutation'}})+'\\n');}});
+if(r.method==='events.subscribe'){if(JSON.stringify(r.params.subscriptions)!==JSON.stringify([{type:'pane.focused'}]))throw Error('invalid native subscription shape');subscriptions.add(socket);void send(socket,{id:r.id,result:{type:'subscription_started'}}).then(()=>stream(socket));}
+else if(r.method==='ping')void send(socket,{id:r.id,result:{type:'pong',version:${JSON.stringify(serverVersion)},protocol:20}});
+else if(r.method==='pane.current'){if(JSON.stringify(r.params)!=='{}')throw Error('sampler must read global focus without caller context');void send(socket,{id:r.id,result:{type:'pane_current',pane:{pane_id:pane,workspace_id:workspace(pane),focused:true}}});}
+else if(r.method==='pane.get'){
+  fs.appendFileSync(${JSON.stringify(readsPath)},JSON.stringify({pane:r.params.pane_id})+'\\n');
+  void send(socket,{id:r.id,result:{pane:{pane_id:r.params.pane_id,workspace_id:workspace(r.params.pane_id)}}});
+}
+else void send(socket,{id:r.id,error:{code:'forbidden',message:'monitor attempted a mutation'}});}});
 socket.on('close',()=>subscriptions.delete(socket));});
 server.listen(${JSON.stringify(socketPath)},()=>console.log('ready'));
-if(${continuousFocusMs})setInterval(()=>{if(!subscriptions.size)return;pane=pane==='operator:p7'?'external:p1':'operator:p7';for(const socket of subscriptions)socket.write(JSON.stringify(event(pane))+'\\n');},${continuousFocusMs || 100});
-setInterval(()=>{const file=${JSON.stringify(path.join(root, 'change'))};if(!fs.existsSync(file))return;const content=fs.readFileSync(file,'utf8');fs.unlinkSync(file);
-const change=content?JSON.parse(content):{panes:['scratch:p2','operator:p7']};
-for(const next of change.panes){pane=next;if(change.events!==false)for(const socket of subscriptions)socket.write(JSON.stringify(event(pane))+'\\n');}},10);
+let consuming=false;
+setInterval(async()=>{const file=${JSON.stringify(changePath)};if(consuming||!fs.existsSync(file))return;consuming=true;
+const change=JSON.parse(fs.readFileSync(file,'utf8'));
+for(const next of change.panes){pane=next;if(change.events)await Promise.all([...subscriptions].map(socket=>send(socket,event(pane,change.includeWorkspace))));}
+fs.renameSync(file,${JSON.stringify(changePath)}+'.'+change.id+'.consumed');consuming=false;},10);
 `);
   let monitor, server;
   t.after(async () => {
@@ -42,7 +92,38 @@ for(const next of change.panes){pane=next;if(change.events!==false)for(const soc
   const ownership = path.join(root, 'ownership.json');
   fs.writeFileSync(ownership, JSON.stringify({ panes, workspaces }));
   monitor = await startFocusMonitor({ socketPath, evidence: root, ownership, intervalMs: 25 });
-  return { root, monitor, ownership, change: (panes, events = true) => fs.writeFileSync(path.join(root, 'change'), JSON.stringify({ panes, events })) };
+  let sequence = 0, pending = false;
+  const change = (panes, events = true, { includeWorkspace = true } = {}) => {
+    assert.equal(pending, false, 'observe the previous command before publishing another');
+    assert.equal(fs.existsSync(changePath), false, 'the previous command must be consumed');
+    if (!events) assert.equal(panes.length, 1, 'a silent command needs a stable sample destination');
+    const id = ++sequence, start = readRows(tracePath).length, readsStart = readRows(readsPath).length;
+    const temporary = `${changePath}.${id}.tmp`;
+    fs.writeFileSync(temporary, JSON.stringify({ id, panes, events, includeWorkspace }), { flag: 'wx' });
+    fs.renameSync(temporary, changePath);
+    pending = true;
+    const consumed = () => waitFor(() => fs.existsSync(`${changePath}.${id}.consumed`), `command ${id} consumption`);
+    return {
+      async observed() {
+        await consumed();
+        await waitFor(() => {
+          const rows = readRows(tracePath).slice(start);
+          if (!events) return rows.some(row => row.type === 'sample' && row.panes[0] === panes[0]);
+          let next = 0;
+          for (const row of rows) if (row.type === 'event' && row.panes[0] === panes[next]) next++;
+          return next === panes.length;
+        }, `monitor observations for command ${id}: ${panes.join(', ')}`);
+        pending = false;
+      },
+      async queried(pane) {
+        await consumed();
+        // A creation event cannot finish classification until its later result
+        // receipt. This read-only lookup proves the monitor captured the event.
+        await waitFor(() => readRows(readsPath).slice(readsStart).some(row => row.pane === pane), `monitor lookup of ${pane}`);
+      },
+    };
+  };
+  return { root, monitor, ownership, change };
 }
 
 test('focus sampling continues while the acceptance parent blocks and spans cleanup', async (t) => {
@@ -60,12 +141,13 @@ test('focus sampling continues while the acceptance parent blocks and spans clea
 });
 
 test('native pane_focused events catch a transient change between unchanged samples and name both calls', async (t) => {
-  const { root, monitor } = await fixture(t);
+  const { root, monitor, change } = await fixture(t);
   fs.writeFileSync(path.join(root, 'focus-phase.json'), JSON.stringify({ key: 'configured-cycle' }));
   fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'call-1', at: Date.now(),
     args: ['pane', 'run', 'scratch:p2', 'worker'], requested: ['agent', 'start', 'worker', '--pane', 'scratch:p2'] }) + '\n');
-  fs.writeFileSync(path.join(root, 'change'), '');
+  const changed = change(['scratch:p2', 'operator:p7']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await changed.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.externalChanges.length, 0);
@@ -82,8 +164,9 @@ test('native pane_focused events catch a transient change between unchanged samp
 
 test('native startup replay settles before the baseline and subsequent transient owned moves still fail', async (t) => {
   const { root, monitor, change } = await fixture(t, { workspaces: ['scratch'], startupPanes: ['scratch:p1', 'operator:p7'] });
-  change(['scratch:p2', 'operator:p7']);
+  const changed = change(['scratch:p2', 'operator:p7']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await changed.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.baseline, 'operator:p7');
@@ -101,13 +184,18 @@ test('native startup replay settles before the baseline and subsequent transient
 });
 
 test('continuous operator focus starts without silence and an immediate transient harness move still fails', async (t) => {
-  // More than five seconds with no quiet interval reproduces RC-2. The stream
-  // keeps running after readiness, rather than stopping to let startup pass.
-  const { root, monitor, change } = await fixture(t, { workspaces: ['scratch'], continuousFocusMs: 12 });
+  // A 512-event replay at 12ms spans more than five seconds without silence.
+  // Live traffic continues every 100ms through readiness and the owned move.
+  const { root, monitor, change } = await fixture(t, {
+    workspaces: ['scratch'], replayEvents: 512, replayIntervalMs: 12, continuousFocusMs: 100,
+  });
   fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'busy-call', at: Date.now(),
     args: ['pane', 'run', 'scratch:p2', 'worker'], requested: ['agent', 'start', 'worker', '--pane', 'scratch:p2'] }) + '\n');
-  change(['scratch:p2', 'operator:p7']);
+  const changed = change(['scratch:p2', 'operator:p7']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,150)']);
+  await changed.observed();
+  await waitFor(() => readRows(path.join(root, 'focus-trace.jsonl')).some(row =>
+    row.type === 'event' && row.classification === 'external'), 'live operator activity after the immediate owned move');
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.startupDrain.reason, 'replay-bound');
@@ -124,7 +212,9 @@ test('continuous operator focus starts without silence and an immediate transien
 });
 
 test('continuous operator activity alone passes after bounded replay', async (t) => {
-  const { monitor } = await fixture(t, { continuousFocusMs: 1 });
+  const { root, monitor } = await fixture(t, { replayEvents: 512, continuousFocusMs: 100 });
+  await waitFor(() => readRows(path.join(root, 'focus-trace.jsonl')).some(row =>
+    row.type === 'event' && row.classification === 'external'), 'live operator activity after replay');
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
   const summary = await monitor.stop();
   assert.equal(summary.startupDrain.reason, 'replay-bound');
@@ -134,7 +224,7 @@ test('continuous operator activity alone passes after bounded replay', async (t)
 });
 
 test('a busy stream from an unknown server never assumes the verified replay bound', async (t) => {
-  await assert.rejects(fixture(t, { continuousFocusMs: 1, serverVersion: '0.9.0' }),
+  await assert.rejects(fixture(t, { replayEvents: 512, continuousFocusMs: 100, serverVersion: '0.9.0' }),
     error => error instanceof HarnessLimit && /replay bound unavailable for Herdr 0.9.0/.test(error.message));
 });
 
@@ -150,10 +240,12 @@ test('owned changes need no correlated call and incomplete monitoring never pass
 
 test('external sampled and transient event moves are recorded and re-baseline without failing', async (t) => {
   const { root, monitor, change } = await fixture(t);
-  change(['external:p1'], false);
+  const sampled = change(['external:p1'], false);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
-  change(['external:p2', 'external:p1']);
+  await sampled.observed();
+  const transient = change(['external:p2', 'external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await transient.observed();
   const summary = await monitor.stop();
   assert.equal(summary.baseline, 'operator:p7');
   assert.equal(summary.currentBaseline, 'external:p1');
@@ -169,12 +261,14 @@ test('external sampled and transient event moves are recorded and re-baseline wi
 
 test('an unlisted owned pane retains a warning during operator activity, even through cleanup', async (t) => {
   const { root, monitor, change, ownership } = await fixture(t, { workspaces: ['scratch'] });
-  change(['external:p1']);
+  const external = change(['external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await external.observed();
   // Cleanup removes the ledger. The lifetime creation receipts still count.
   fs.unlinkSync(ownership);
-  change(['unlisted:p3', 'external:p1']);
+  const unlisted = change(['unlisted:p3', 'external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await unlisted.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.externalChanges.length, 2);
@@ -194,16 +288,18 @@ test('an unlisted owned pane retains a warning during operator activity, even th
 
 test('a delayed product focus move to a sibling owned pane still fails during observed operator activity', async t => {
   const { root, monitor, change } = await fixture(t, { workspaces: ['scratch'] });
-  change(['external:p1']);
+  const external = change(['external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await external.observed();
   const at = Date.now() - 3000;
   fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), [
     { type: 'start', id: 'delayed-send', at: at - 100, origin: 'product',
       args: ['pane', 'send-keys', 'scratch:p2', 'Enter'], requested: ['agent', 'prompt', 'worker', 'continue'] },
     { type: 'end', id: 'delayed-send', at },
   ].map(JSON.stringify).join('\n') + '\n');
-  change(['scratch:p3', 'external:p1']);
+  const owned = change(['scratch:p3', 'external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await owned.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.changes.length, 1);
@@ -216,15 +312,18 @@ test('a delayed product focus move to a sibling owned pane still fails during ob
 
 test('external moves during unrelated active and completed calls re-baseline without failing', async (t) => {
   const { root, monitor, change } = await fixture(t);
-  change(['external:p1']);
+  const external = change(['external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await external.observed();
   fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'call', at: Date.now(),
     args: ['workspace', 'close', 'scratch'], requested: ['workspace', 'close', 'scratch'] }) + '\n');
-  change(['foreign:p9']);
+  const active = change(['foreign:p9']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await active.observed();
   fs.appendFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'end', id: 'call', at: Date.now() }) + '\n');
-  change(['external:p1']);
+  const completed = change(['external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await completed.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.externalChanges.length, 3);
@@ -238,12 +337,14 @@ test('external moves during unrelated active and completed calls re-baseline wit
 
 test('a move to the pane targeted by a concurrent call fails after an external re-baseline', async (t) => {
   const { root, monitor, change } = await fixture(t);
-  change(['external:p1']);
+  const external = change(['external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await external.observed();
   fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'call', at: Date.now(),
     args: ['pane', 'run', 'foreign:p9', 'worker'], requested: ['agent', 'start', 'worker', '--pane', 'foreign:p9'] }) + '\n');
-  change(['foreign:p9', 'external:p1']);
+  const targeted = change(['foreign:p9', 'external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await targeted.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.externalChanges.length, 1);
@@ -264,8 +365,9 @@ test('workspace destinations correlate only with their matching call despite a n
   fs.appendFileSync(calls, JSON.stringify({ ...call, id: 'unrelated', at: at + 2,
     args: ['workspace', 'close', 'scratch'], requested: ['workspace', 'close', 'scratch'] }) + '\n');
   fs.appendFileSync(calls, JSON.stringify({ type: 'end', id: 'unrelated', at: at + 3 }) + '\n');
-  change(['foreign:p9', 'operator:p7']);
+  const changed = change(['foreign:p9', 'operator:p7']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await changed.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.changes.length, 1);
@@ -279,8 +381,9 @@ test('a resolved agent target receipt correlates a named call without guessing p
   fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'named-agent', at: Date.now(),
     args: ['agent', 'send-keys', 'worker', 'Enter'], requested: ['agent', 'send-keys', 'worker', 'Enter'],
     targets: { panes: ['foreign:p9'], workspaces: [] } }) + '\n');
-  change(['foreign:p9', 'operator:p7']);
+  const changed = change(['foreign:p9', 'operator:p7']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await changed.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.changes.length, 1);
@@ -295,9 +398,15 @@ test('a creation receipt attributes a transient move before ownership is registe
     args: ['workspace', 'create', '--cwd', '/scratch/project', '--no-focus'],
     requested: ['workspace', 'create', '--cwd', '/scratch/project'] };
   fs.writeFileSync(calls, JSON.stringify(call) + '\n');
-  change(['unlisted:p3', 'operator:p7']);
+  // Omit the optional workspace so the monitor's native pane.get proves it
+  // observed this event before we publish the creation result.
+  const changed = change(['unlisted:p3', 'operator:p7'], true, { includeWorkspace: false });
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await changed.queried('unlisted:p3');
+  assert.equal(readRows(path.join(root, 'focus-trace.jsonl')).some(row => row.type === 'event'), false,
+    'classification must still be waiting for the creation receipt');
   fs.appendFileSync(calls, JSON.stringify({ type: 'end', id: call.id, at: Date.now(), created: { panes: [], workspaces: ['scratch'] } }) + '\n');
+  await changed.observed();
   const summary = await monitor.stop();
   assert.equal(summary.errors.length, 0);
   assert.equal(summary.changes.length, 1);
@@ -307,7 +416,7 @@ test('a creation receipt attributes a transient move before ownership is registe
 });
 
 test('a focus event after a slow completed call names that call using its completion time', async (t) => {
-  const { root, monitor } = await fixture(t);
+  const { root, monitor, change } = await fixture(t);
   const calls = path.join(root, 'focus-calls.jsonl');
   const call = { type: 'start', id: 'slow-call', at: Date.now(),
     args: ['pane', 'run', 'scratch:p2', 'worker'], requested: ['agent', 'start', 'worker', '--pane', 'scratch:p2'] };
@@ -319,8 +428,9 @@ test('a focus event after a slow completed call names that call using its comple
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1100)']);
   const completedAt = Date.now();
   fs.appendFileSync(calls, JSON.stringify({ type: 'end', id: call.id, at: completedAt }) + '\n');
-  fs.writeFileSync(path.join(root, 'change'), '');
+  const changed = change(['scratch:p2', 'operator:p7']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await changed.observed();
   const summary = await monitor.stop();
   assert.ok(completedAt - call.at > 1000);
   assert.equal(summary.changes[0].calls[0].id, call.id);
@@ -355,8 +465,9 @@ test('unattributed owned focus failures retain the previous operator pane and ne
     { type: 'end', id: 'product', at: at + 30 },
   ];
   fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), calls.map(JSON.stringify).join('\n') + '\n');
-  change(['scratch:p2', 'operator:p7']);
+  const changed = change(['scratch:p2', 'operator:p7']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  await changed.observed();
   const summary = await monitor.stop(), first = summary.changes[0];
   assert.deepEqual(first.calls, [], 'nearest diagnostics must not create correlation');
   assert.equal(first.previousPane, 'operator:p7'); assert.equal(first.previousOwnership, 'operator');

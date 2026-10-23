@@ -58,13 +58,13 @@ for (const signal of ['SIGINT', 'SIGTERM']) for (const form of ['workspace', 'cr
         const intent=JSON.parse(fs.readFileSync(root+'/creation-intents.jsonl','utf8').trim());
         if(JSON.stringify(intent.args)!==JSON.stringify(a)) throw Error('intent not persisted before creation');
         const state=JSON.parse(fs.readFileSync(root+'/ownership.json'));state.workspaces=[];fs.writeFileSync(root+'/ownership.json',JSON.stringify(state));
-        fs.writeFileSync(root+'/active','yes');setInterval(()=>{},1000);
         let ended=false;const finish=()=>{if(ended)return;ended=true;setTimeout(()=>{
           const added=[{workspace_id:'created',label:intent.label}];
           if(a.includes('--cwd')&&a[0]==='worktree') added.push({workspace_id:'implicit',label:'Main',cwd:root});
           fs.writeFileSync(file,JSON.stringify([...rows(),...added]));fs.writeFileSync(root+'/completed',String(Date.now()));process.exit(0);
         },200)};
         process.on('SIGINT',finish);process.on('SIGTERM',finish);
+        fs.writeFileSync(root+'/active','yes');setInterval(()=>{},1000);
       }
     `, { mode: 0o755 });
     const code = `

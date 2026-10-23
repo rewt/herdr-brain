@@ -6,8 +6,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { phases } from './helpers/suite.mjs';
 import { tierFiles } from './helpers/tier.mjs';
-import { spawnChild, waitForExit } from './helpers/child.mjs';
+import { spawnChild, spawnScenarioChild, waitForExit } from './helpers/child.mjs';
 import { runnerLimits } from './helpers/runner-limits.mjs';
+import { testSlotEnvironment } from './helpers/test-slot-env.mjs';
 
 process.env.ORG_ACTOR = 'suite-tests';
 
@@ -77,6 +78,107 @@ test('bounded runner selects merge checks and forwards the selection to its work
   const failed = await waitForExit(spawnChild(t, process.execPath, [runner, '--test-name-pattern=^release integration$', 'selected.mjs'], { cwd: root }));
   assert.equal(failed.code, 1, failed.stdout + failed.stderr);
   assert.match(failed.stdout, /release-only failure/);
+});
+
+function requestEnvironmentFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'runner-request-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const runner = fileURLToPath(new URL('./helpers/run.mjs', import.meta.url));
+  const affected = fileURLToPath(new URL('./helpers/affected-tests.mjs', import.meta.url));
+  const policy = fileURLToPath(new URL('./helpers/fixture-policy.mjs', import.meta.url));
+  const validation = new URL('../lanes/validation.mjs', import.meta.url).href;
+  const keys = ['LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR', 'HERDR_RETIRE_HERDR', 'MONITOR_PROMOTION_TEST_FILES'];
+  const env = { ...testSlotEnvironment(), LANE_VALIDATE: 'poisoned-train-command',
+    LANE_CONFIG: path.join(root, 'poisoned-config.json'), ORG_DIR: path.join(root, 'poisoned-record'),
+    HERDR_RETIRE_HERDR: path.join(root, 'poisoned-herdr'), MONITOR_PROMOTION_TEST_FILES: '[]',
+    MONITOR_TEST_SLOT_TIMEOUT_RETRIED: '1', MONITOR_TEST_SLOT_PATH: path.join(root, 'slot.lock'),
+    MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'slot.lock'), HERDR_SOCKET_PATH: path.join(root, 'absent.sock') };
+  fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ fast: 'project-fast-command' }));
+  const retained = Object.fromEntries(['MONITOR_TEST_SLOT_TIMEOUT_RETRIED', 'MONITOR_TEST_SLOT_PATH',
+    'MONITOR_TEST_SLOT_COMPAT_PATH', 'HERDR_SOCKET_PATH', 'HERDR_TEST_OFFLINE_ROOT', 'HERDR_TEST_SCRATCH_ROOTS', 'PATH']
+    .map(key => { assert.equal(typeof env[key], 'string', key); return [key, env[key]]; }));
+  const checks = `
+for (const key of ${JSON.stringify(keys)}) assert.equal(Object.hasOwn(process.env, key), false, key + ' leaked at startup');
+for (const [key, value] of Object.entries(${JSON.stringify(retained)})) assert.equal(process.env[key], value, key);
+assert.equal(process.execPath, ${JSON.stringify(process.execPath)});
+assert.ok(process.env.NODE_OPTIONS.includes(${JSON.stringify(policy)}), 'containment preload retained');
+assert.ok(process.env.NODE_OPTIONS.includes(${JSON.stringify(env.NODE_OPTIONS)}), 'other preloads retained');
+assert.ok(Number(process.env.HERDR_TEST_SUITE_PID) > 1, 'suite ownership retained');
+assert.ok(process.env.HERDR_MONITOR_FLEET.startsWith(process.env.HERDR_TEST_OFFLINE_ROOT + '/'), 'scratch fleet retained');
+if (process.env.RUNNER_FIXTURE_DIRECT === '1') {
+  assert.equal(process.env.MONITOR_TEST_SLOT_TOKEN, 'fixture-slot-token', 'slot token retained');
+  assert.equal(process.env.BCH_CLOAK_TEST_SLOT_TOKEN, 'fixture-slot-token', 'legacy slot token retained');
+}
+assert.ok(process.env.MONITOR_TEST_SLOT_OCCUPANCY_PATH.startsWith(${JSON.stringify(path.join(root, 'slot.lock.occupancy') + path.sep)}), 'slot occupancy retained');
+`;
+  // This is the first executed import in each test module. No product consumer
+  // loads until both the module and its normally inherited descendant are clean.
+  fs.writeFileSync(path.join(root, 'environment.mjs'), `
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+${checks}
+const child = spawnSync(process.execPath, ['--input-type=module', '-e', ${JSON.stringify("import assert from 'node:assert/strict';\n" + checks + "console.log('descendant clean');")}], { encoding: 'utf8', timeout: 5000 });
+assert.equal(child.status, 0, child.stdout + child.stderr);
+assert.equal(child.stdout, 'descendant clean\\n');
+const { resolveValidation } = await import(${JSON.stringify(validation)});
+const own = resolveValidation({ root: ${JSON.stringify(root)}, config: { validate: 'fallback-command' } });
+assert.equal(own.tiers.fast.command, 'project-fast-command');
+assert.equal(own.tiers.fast.source, ${JSON.stringify(path.join(root, '.lane.validation.json'))});
+process.env.LANE_VALIDATE = 'deliberate-fixture-command';
+assert.equal(resolveValidation({ root: ${JSON.stringify(root)} }).tiers.fast.command, 'deliberate-fixture-command');
+assert.equal(resolveValidation({ root: ${JSON.stringify(root)} }).tiers.fast.source, 'env');
+delete process.env.LANE_VALIDATE;
+`);
+  const rows = name => fs.existsSync(path.join(root, name)) ? fs.readFileSync(path.join(root, name), 'utf8').trim().split('\n') : [];
+  function file(name, releaseFailure = false) {
+    fs.writeFileSync(path.join(root, name), `
+import test from 'node:test';
+import fs from 'node:fs';
+await import('./environment.mjs');
+fs.appendFileSync('startups', ${JSON.stringify(name + '\n')});
+test('merge guard', () => fs.appendFileSync('cases', ${JSON.stringify(name + ':merge\n')}));
+test('release integration', () => { ${releaseFailure ? "throw Error('name filter was lost');" : `fs.appendFileSync('cases', ${JSON.stringify(name + ':release\n')});`} });
+`);
+  }
+  return { env, file, rows,
+    run: args => waitForExit(spawnChild(t, process.execPath, [runner, ...args], { cwd: root,
+      env: { ...env, RUNNER_FIXTURE_DIRECT: '1', MONITOR_TEST_SLOT_TOKEN: 'fixture-slot-token', BCH_CLOAK_TEST_SLOT_TOKEN: 'fixture-slot-token',
+        MONITOR_TEST_SLOT_OCCUPANCY_PATH: path.join(root, 'slot.lock.occupancy', 'fixture.json') } })),
+    append: files => waitForExit(spawnScenarioChild(t, process.execPath, [affected, '--run', JSON.stringify(files)], { cwd: root, env })),
+  };
+}
+
+test('an empty promotion selection starts clean modules and descendants and permits deliberate fixture overrides', async t => {
+  const f = requestEnvironmentFixture(t);
+  f.file('remaining.test.mjs', true);
+  const result = await f.run(['--test-name-pattern=^merge guard$', 'remaining.test.mjs']);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual(f.rows('startups'), ['remaining.test.mjs']);
+  assert.deepEqual(f.rows('cases'), ['remaining.test.mjs:merge']);
+  const empty = await f.append([]);
+  assert.equal(empty.code, 0, empty.stdout + empty.stderr);
+  assert.deepEqual(f.rows('startups'), ['remaining.test.mjs'], 'empty append starts no test files');
+  const missing = await f.run([]);
+  assert.equal(missing.code, 1, missing.stdout + missing.stderr);
+  assert.match(missing.stderr, /usage: node test\/helpers\/run.mjs/);
+});
+
+for (const allSelected of [false, true]) test(`promotion selection survives until the worker consumes it (${allSelected ? 'all selected' : 'mixed files'})`, async t => {
+  const f = requestEnvironmentFixture(t), selected = ['selected-one.test.mjs', 'selected-two.test.mjs'];
+  for (const name of selected) f.file(name);
+  f.file('remaining.test.mjs', true);
+  f.env.MONITOR_PROMOTION_TEST_FILES = JSON.stringify(selected);
+  const patterned = await f.run(['--test-name-pattern=^merge guard$', ...selected, ...(allSelected ? [] : ['remaining.test.mjs'])]);
+  assert.equal(patterned.code, 0, patterned.stdout + patterned.stderr);
+  const priorStarts = allSelected ? [] : ['remaining.test.mjs'];
+  const priorCases = allSelected ? [] : ['remaining.test.mjs:merge'];
+  assert.deepEqual(f.rows('startups'), priorStarts, 'P is omitted before any selected module starts');
+  assert.deepEqual(f.rows('cases'), priorCases, 'the remaining file retains its name filter');
+  const appended = await f.append(selected);
+  assert.equal(appended.code, 0, appended.stdout + appended.stderr);
+  assert.deepEqual(f.rows('startups').sort(), [...priorStarts, ...selected].sort(), 'actual append starts every P file exactly once');
+  assert.deepEqual(f.rows('cases').sort(), [...priorCases, ...selected.flatMap(name => [`${name}:merge`, `${name}:release`])].sort(),
+    'actual append runs every P file in full');
 });
 
 // The release tier retains all former promotion paths, including future files.

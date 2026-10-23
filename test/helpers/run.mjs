@@ -36,6 +36,9 @@ if (!files.length && selected.size) { cleanupHerdr(); process.exit(0); }
 if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] [--fixed-deadlines] [--test-name-pattern=REGEX] TEST_FILES...');
 
 if (worker) {
+  // Selection above consumes the train's request; test files start with their
+  // own project settings. Keep containment, slot ownership and retry state.
+  for (const key of ['LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR', 'HERDR_RETIRE_HERDR', 'MONITOR_PROMOTION_TEST_FILES']) delete process.env[key];
   // This leader never exits voluntarily with fixtures running in its group.
   const owner = registerProcess(process.pid, true);
   process.env.HERDR_TEST_SUITE_PID = String(process.pid);

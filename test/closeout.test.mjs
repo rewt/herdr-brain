@@ -1,6 +1,7 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -1257,4 +1258,40 @@ while (!fs.existsSync(${JSON.stringify(release)})) {
   assert.equal(events(f).filter(e => e.type === 'closeout.code-handoff').length, 1);
   retryCloseout({ cwd: f.repo, org: f.org, topic: key, why: 'hold removed after fresh loading successor', env: f.env, start: false });
   f.drain({ keys: [key] }); assertRemoved(f);
+});
+
+for (const budgetMs of [50000, 180000, 240000]) test(`loaded removal reserves both Git steps inside a fixed ${budgetMs / 1000} s closeout pass`, t => {
+  const f = setup(t, { occupied: false, terminal: true });
+  let now = Date.now();
+  const deadline = now + budgetMs, preparationMs = 30000, calls = [];
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(os, 'loadavg', () => [16, 16, 16]);
+  t.mock.method(os, 'availableParallelism', () => 4);
+  const command = f.options.command, log = f.options.log;
+  f.options.command = (exe, args, options) => {
+    if (exe === 'git' && ((args[2] === 'worktree' && args[3] === 'remove') || (args[2] === 'branch' && args[3] === '-D')))
+      calls.push({ action: args[2], timeout: options.timeout });
+    return command(exe, args, options);
+  };
+  f.options.log = row => { log(row); if (row.action === 'lane-preflight') now += preparationMs; };
+  const result = f.drain({ retirementOptions: { ...f.options, deadline } });
+  const availableMs = budgetMs - preparationMs;
+  if (budgetMs === 50000) {
+    assert.deepEqual(calls, [], 'insufficient base reserve starts neither Git effect');
+    assert.ok(result.evaluated.some(e => !e.completed && /removal needs .*pass has/.test(e.reason)), JSON.stringify(result));
+    assert.equal(fs.existsSync(f.lane), true); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+    assert.equal(effects(f).some(e => ['worktree-removed', 'branch-removed', 'lane-removed'].includes(e.action)), false);
+  } else {
+    assertRemoved(f);
+    assert.deepEqual(calls.map(c => c.action), ['worktree', 'branch']);
+    assert.ok(calls.every(c => c.timeout >= 30000), JSON.stringify(calls));
+    const reservedMs = calls.reduce((sum, c) => sum + c.timeout, 0);
+    assert.ok(reservedMs <= availableMs, JSON.stringify({ availableMs, calls }));
+    if (budgetMs === 180000) assert.equal(reservedMs, availableMs, 'load headroom fits the original remaining deadline');
+    else {
+      assert.ok(calls[0].timeout >= 120000, 'a larger pass retains the full load-scaled worktree allowance');
+      assert.equal(calls[1].timeout, 60000, 'the existing branch allowance cap stays intact');
+    }
+  }
+  t.diagnostic(JSON.stringify({ budgetMs, preparationMs, calls }));
 });

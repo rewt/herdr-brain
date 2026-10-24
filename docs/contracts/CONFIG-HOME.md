@@ -195,11 +195,12 @@ even if a compatibility repo copy differs. Show that difference as rollback
 information, not as effective config. Holds are derived diagnostics, never stored
 project status. Repair is a fresh validated read, not clearing a status flag.
 
-An incomplete binding considers only its own adoption operation's publication
-events, plus its `published` list. An earlier, rolled-back operation's audit
-does not turn an unpublished file in a new binding into a missing published
-file. Completed bindings retain the missing-policy hold. Bare identity or empty
-project directories carry no project policy authority.
+A binding considers its own adoption operation's publication events and its
+`published` list, plus config writes after its recorded completion. An earlier,
+rolled-back operation's audit does not turn an unpublished file in a new binding
+into a missing published file, even after the new adoption completes. Current
+publications and subsequent config writes retain the missing-policy hold.
+Bare identity or empty project directories carry no project policy authority.
 When an incomplete binding reuses files named in its answered supersession scope,
 those retained bytes stay outside effective policy until this operation publishes
 their replacement. Ordinary reads use the validated repo fallback and do not
@@ -425,8 +426,11 @@ ownership and generated-key rules. Acquire both config locks and repeat that
 union check and every source's presence/digest and baseline checks before the
 first identity record, policy, binding, link or enrollment publication. A refusal
 leaves existing files, audit and enrollment untouched; remove only empty lock
-preparation directories created by this attempt. A directory with no binding may
-be reused only when empty or containing selected policy files with baselines in
+preparation directories created by this attempt, preserving any that became
+nonempty. Observer and controller lease release still run if directory cleanup
+fails, and controller lease release still runs if observer cleanup fails.
+A directory with no binding may be reused only when empty or containing selected
+policy files with baselines in
 this project's own record; foreign files and unrelated bindings still refuse.
 Adoption's preflight reads validate without appending hand-edit/recovery events;
 ordinary config reads retain their existing audit behavior. Explicit scope

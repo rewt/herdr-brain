@@ -8,6 +8,7 @@ import { gitProject } from '../lib/project.mjs';
 import { initOrg, transact } from '../lib/store.mjs';
 import { auditEvents } from '../lib/config-audit.mjs';
 import { readProjectPolicy } from '../lib/config-policy.mjs';
+import { setConfig } from '../lib/config-command.mjs';
 import { projectFleet, readFleet } from '../lib/fleet.mjs';
 import { digest } from '../lib/digest.mjs';
 import { inspect } from '../sessions/sessions.mjs';
@@ -16,6 +17,7 @@ import { adopt, adoptCommand } from '../lib/adopt-command.mjs';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { fold } from '../lib/state.mjs';
+import { HerdrClient } from '../lanes/board/herdr-client.mjs';
 
 // ENG-603, 2026-10-24: the retained incident artifacts contain identity.json,
 // an identity record and project.json with no published policy. The project
@@ -249,6 +251,41 @@ for (const when of ['pre-existing', 'under config locks']) test(`a ${when === 'p
   if (when === 'under config locks') assert.equal(locks, 2);
 });
 
+test('a fleet collision arriving in the shared config root preserves external bytes and releases the controller lease', async t => {
+  const f = configFixture(t);
+  process.env.HERDR_MONITOR_FLEET = f.env.HERDR_MONITOR_FLEET = path.join(f.home, '.herdr-monitor');
+  f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  const other = path.join(f.scratch, 'legacy'); fs.mkdirSync(other);
+  execFileSync('git', ['init', '-qb', 'main', other], { env: f.env });
+  const legacy = { identity: path.join(other, '.git'), checkout: other, record: path.join(other, '.org'), worktrees: path.join(f.scratch, 'legacy-lanes'), layers: [] };
+  initOrg(legacy.record);
+  const file = path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json');
+  const bytes = JSON.stringify({ version: 1, session_limit: 6, projects: { [`${f.scope.scope.identity}/project`]: legacy } });
+  const events = f.events(), record = fs.readFileSync(path.join(legacy.record, 'events.jsonl'));
+  const exclude = fs.readFileSync(path.join(f.cwd, '.git/info/exclude'));
+  const mkdir = fs.mkdirSync; let locks = 0;
+  fs.mkdirSync = function(target, ...args) {
+    const result = mkdir.call(this, target, ...args);
+    if (path.basename(String(target)) === '.config.lock' && ++locks === 2) fs.writeFileSync(file, bytes);
+    return result;
+  };
+  let refusal;
+  try { await f.adopt(); } catch (error) { refusal = error; }
+  finally { fs.mkdirSync = mkdir; }
+  assert.equal(locks, 2);
+  assert.deepEqual(homeSnapshot(f), [['fleet.json', bytes]], 'preserve only the external arrival, without adoption publication');
+  assert.deepEqual(f.events(), events);
+  assert.deepEqual(fs.readFileSync(path.join(legacy.record, 'events.jsonl')), record);
+  assert.deepEqual(fs.readFileSync(path.join(f.cwd, '.git/info/exclude')), exclude);
+  for (const name of ['.brain', '.git/sessions/controller.lock', '.git/sessions/standard-slots.json', '.git/sessions/controller-journal.json'])
+    assert.equal(fs.existsSync(path.join(f.cwd, name)), false, name);
+  assert.match(refusal?.message ?? '', /fleet key collision/);
+  assert.equal(policyLocation(f.cwd, 'lane', f.env).home, false);
+  fs.unlinkSync(file);
+  await f.adopt();
+  assert.ok(f.binding().adoption.completed, 'the exact answered adoption can retry once the external conflict is repaired');
+});
+
 for (const kind of ['validation', 'housekeeping']) for (const when of ['second observation', 'under config locks'])
   test(`an absent ${kind} source arriving ${when === 'second observation' ? 'during the second observation' : when} refuses before publication`, async t => {
     const f = configFixture(t), file = path.join(f.cwd, kind === 'validation' ? '.lane.validation.json' : '.housekeeping.json');
@@ -360,6 +397,39 @@ test('a completed adoption rolled back outside the audit can be re-adopted with 
   assert.equal(f.events().filter(e => e.type === 'config.adopted').length, 2);
 });
 
+for (const kind of ['lane', 'validation']) test(`completed re-adoption ignores the rolled-back ${kind} publication when its current source is absent and holds on later loss`, async t => {
+  const f = configFixture(t); await f.adopt();
+  const old = f.binding(), prior = f.events(), evidence = path.join(f.scratch, 'rollback-evidence');
+  fs.mkdirSync(evidence);
+  fs.renameSync(old.directory, path.join(evidence, 'project'));
+  fs.renameSync(path.join(old.common, 'sessions'), path.join(evidence, 'sessions'));
+  fs.unlinkSync(path.join(f.cwd, '.brain'));
+  fs.unlinkSync(old.sources[kind].path);
+  f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  assert.equal(f.scope.scope.migration.sources[kind].present, false);
+  assert.ok(!f.scope.scope.migration.supersedes.some(s => s.file === path.join(old.directory, kind === 'lane' ? 'lane.json' : 'lane.validation.json')));
+  await f.adopt();
+  const binding = f.binding(), history = f.events();
+  assert.ok(binding.adoption.completed);
+  assert.ok(!binding.published.includes(kind));
+  assert.deepEqual(history.slice(0, prior.length), prior);
+  assert.equal(readProjectPolicy(f.cwd, kind, f.env).home, false);
+  assert.equal(inspect({ cwd: f.cwd, env: f.env }).valid, true);
+  assert.deepEqual(f.events(), history, 'old publication history must not cause a missing-policy audit');
+  assert.equal((await f.adopt()).unchanged, true, 'completed read-back remains usable');
+
+  const saved = setConfig(kind === 'lane' ? 'main' : 'validation.fast', kind === 'lane' ? 'readopt-main' : 'node --version', { cwd: f.cwd, env: f.env });
+  assert.equal(saved.changed, true);
+  assert.equal(readProjectPolicy(f.cwd, kind, f.env).home, true);
+  assert.ok(f.events().some(e => e.type === 'config.changed' && e.file === saved.file && e.seq > binding.adoption.completed));
+  fs.unlinkSync(saved.file);
+  for (let read = 0; read < 2; read++) assert.throws(() => readProjectPolicy(f.cwd, kind, f.env), /published home file is missing/);
+  const current = kind === 'lane' ? 'validation' : 'lane', selected = policyLocation(f.cwd, current, f.env);
+  assert.equal(selected.home, true);
+  fs.unlinkSync(selected.file);
+  assert.throws(() => readProjectPolicy(f.cwd, current, f.env), /published home file is missing/);
+});
+
 test('a project lock refusal removes only its own newly created preparation directories', async t => {
   const f = configFixture(t); f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
   const mkdir = fs.mkdirSync; let locks = 0;
@@ -370,6 +440,32 @@ test('a project lock refusal removes only its own newly created preparation dire
   try { await refusesWithoutPublication(f, {}, /project config lock busy/); }
   finally { fs.mkdirSync = mkdir; }
   assert.equal(locks, 2); assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false);
+});
+
+test('a config lock cleanup error still releases the controller lease', async t => {
+  const f = configFixture(t); f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  const rmdir = fs.rmdirSync; let interrupted = false;
+  fs.rmdirSync = function(directory, ...args) {
+    if (path.basename(String(directory)) === '.config.lock' && !interrupted) { interrupted = true; throw Error('config cleanup interrupted'); }
+    return rmdir.call(this, directory, ...args);
+  };
+  try { await assert.rejects(f.adopt(), /config cleanup interrupted/); }
+  finally { fs.rmdirSync = rmdir; }
+  assert.equal(interrupted, true);
+  assert.equal(fs.existsSync(path.join(f.cwd, '.git/sessions/controller.lock')), false);
+  assert.ok(f.binding().adoption.completed, 'the cleanup fault follows a successful fixture publication');
+});
+
+test('an owned observer cleanup error still releases the controller lease', async t => {
+  const f = configFixture(t); f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  const { snapshot, close } = HerdrClient.prototype; let closed = false;
+  HerdrClient.prototype.snapshot = async () => { throw Error('observation interrupted'); };
+  HerdrClient.prototype.close = () => { closed = true; throw Error('observer cleanup interrupted'); };
+  try { await assert.rejects(f.adopt({ observer: undefined }), /observer cleanup interrupted/); }
+  finally { Object.assign(HerdrClient.prototype, { snapshot, close }); }
+  assert.equal(closed, true);
+  assert.equal(fs.existsSync(path.join(f.cwd, '.git/sessions/controller.lock')), false);
+  assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false);
 });
 
 test('a refused invocation without an owner answer leaves no scope, controller or config publication', async t => {

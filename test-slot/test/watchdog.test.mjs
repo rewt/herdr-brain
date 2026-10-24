@@ -103,6 +103,24 @@ test('silence produces one durable notice and keeps running through later silenc
   assert.equal(fs.existsSync(s.lock), false);
 });
 
+test('reusing a result path enqueues a distinct single silence notice for each run', { timeout: 15000 }, t => {
+  const s = scratch(t), inbox = path.join(s.root, 'supervisor/inbox.log'), ids = [];
+  s.env.MONITOR_GATE_NOTICE_CONTEXT = JSON.stringify({ to: 'owning-supervisor', inbox });
+  for (const threshold of ['.05', '.1']) {
+    const result = s.run(['--idle-timeout-seconds', threshold], [process.execPath, '-e', 'setTimeout(()=>{},400)']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal((result.stderr.match(/TEST_WATCH_SILENCE:/g) ?? []).length, 1);
+    const receipt = JSON.parse(fs.readFileSync(s.result));
+    assert.equal(receipt.observations.length, 1);
+    assert.equal(receipt.observations[0].notice.error, undefined);
+    ids.push(receipt.observations[0].notice.id);
+  }
+  assert.notEqual(ids[0], ids[1]);
+  const notices = fs.readFileSync(inbox, 'utf8').trim().split('\n').map(JSON.parse).filter(row => row.type === 'notice');
+  assert.deepEqual(notices.map(row => row.id), ids);
+  assert.ok(notices.every(row => row.to === 'owning-supervisor' && row.message.includes('test continues')));
+});
+
 test('wall overrun and a descendant marker cannot spend a load retry', t => {
   assert.equal(shouldRetryTimeout({ status: 124, timeout: true, load: 100, gateTimeout: { kind: 'wall' } }), false);
   const s = scratch(t);

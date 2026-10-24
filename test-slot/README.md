@@ -257,7 +257,8 @@ record in `MONITOR_GATE_NOTICE_CONTEXT`; other callers use
 `idle_timeout_seconds` / `--idle-timeout-seconds` select the observation threshold
 (`0` disables the notice). Further silence never repeats the notice or fails the
 test. Nested gates and suites inherit the outer watcher, so one run has one
-silence notice.
+silence notice. A per-run nonce keeps notices distinct even when a caller reuses
+its result path; retries share the same nonce and one-notice boundary.
 
 The recommended last resort is **four hours with neither output nor observed
 CPU or process activity**. `MONITOR_TEST_SLOT_FROZEN_SECONDS=14400` names this one
@@ -270,8 +271,10 @@ Unknown CPU evidence never proves a freeze. A confirmed freeze records the
 supporting process observations, sends TERM then KILL through the existing
 birth-confirmed cleanup path, and exits **124**, without spending a load retry.
 Unrelated processes receive no signal. The gate retains existing cleanup and
-slot-release safety checks. Slot admission waits and proving reservation expiry
-are independent of running tests.
+slot-release safety checks. Slot admission waits retain their existing bounds.
+Proving execution reserves the full six-hour host-contract allowance, independent
+of its advisory expected end; reaching that reservation expiry never stops tests
+or permits a live prover's bridge locks to be taken over.
 
 Execution receipts retain `duration_s`, `longest_silence_s`, `observations` and
 `activity_audits`. Silence is persisted when observed, before the run finishes.
@@ -279,8 +282,11 @@ File, suite and tier start/finish observations are appended to
 `RECEIPT.execution.json.timings.jsonl` and included as `timings` in the completed
 execution receipt. Start-only rows preserve evidence of interrupted files;
 results and durations are observations, with no stored slow/hung classification.
-Gate receipts point to the same sibling journal. Standalone test runners without
-a gate use a journal under `GIT_COMMON_DIR/lane-validation/`. Read-only averages:
+Gate receipts point to the same sibling journal. Only the owning gate creates a
+journal and starts it empty for each run; retries and nested gates append to the
+inherited journal. Standalone runners record only when they inherit
+`MONITOR_TEST_TIMINGS_PATH`, so ungated developer/fixture runs create no orphan
+journals in the Git common directory. Read-only averages:
 
 ```sh
 node test-slot/timing-averages.mjs /path/to/*.execution.json
@@ -288,7 +294,7 @@ node test-slot/timing-averages.mjs /path/to/*.execution.json
 
 The helper deduplicates observation IDs and reports file/suite/tier sample
 counts, averages and exit results, excluding nested fixture observations. It also
-accepts standalone `.timings.jsonl` journals. Release snapshot gates retain their
+accepts `.timings.jsonl` journals directly. Release snapshot gates retain their
 execution receipt and journal under the frozen canonical Git common directory,
 outside the immutable release archive. This is intentionally a small receipt reader,
 not the held measurement-view design. Automatic receipt retention removes its
@@ -447,8 +453,11 @@ Declared EXCLUSIVE steps additionally publish `host-reservation/v1` beside compa
 with reason, expected end and mandatory expiry. The payload starts behind a
 barrier until both lock records and the reservation contain its group identity.
 `--reason TEXT`, `--expected-seconds N` and `--reserve-gib N` supply bounded step
-metadata; the default advisory expected end is 75 minutes and reservation expiry
-is 30 seconds later (independent of test wall time), capped at six hours.
+metadata; the default advisory expected end is 75 minutes. Execution expiry uses
+the full six hours from acquisition allowed by the shared contract, including
+after a memory-floor grant or permitted retry. An overdue estimate remains
+blocking until the owned group ends or that contract expiry arrives. Renewals
+cannot extend the original six-hour cap; expiry never preempts a running command.
 Only launch gates pause for live/unexpired proving; shared/nested `run` and held
 promotion re-checks do not read reservations. STOP still cancels launch waits.
 

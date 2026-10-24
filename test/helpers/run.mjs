@@ -71,7 +71,7 @@ if (worker) {
   child.stderr.on('data', data => { watcher?.output(); process.stderr.write(data); });
   // An enclosing gate watches the entire run once, including nested suites.
   if (!process.env.MONITOR_TEST_WATCH_OWNER) watcher = watchRun({ pid: child.pid,
-    onSilence: observation => { observation.notice = silenceNotice(observation, { label: files.join(', '), receipt: process.env[TIMINGS_ENV] }); timing(observation); },
+    onSilence: observation => { observation.notice = silenceNotice(observation, { label: files.join(', '), receipt: process.env[TIMINGS_ENV], runId: finishTiming.id }); timing(observation); },
     onFrozen: observation => { timing(observation); console.error(`GATE_TIMEOUT: frozen limit ${observation.limit_seconds}s exceeded; elapsed ${observation.elapsed_s.toFixed(3)}s`); finish(1); },
   });
   function finish(code, audit = false) {

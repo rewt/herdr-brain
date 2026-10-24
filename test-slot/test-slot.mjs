@@ -37,7 +37,7 @@ import { resolveResource } from "./resources.mjs";
 import { testLoadFactor } from './load.mjs';
 import { boundedTelemetry, measureFamily } from "./measurement.mjs";
 import { EXECUTIONS_PER_PROFILE, RETENTION_SCHEMA, pruneExecutions } from './retention.mjs';
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import { setTimeout as pollSleep } from 'node:timers/promises';
@@ -45,7 +45,7 @@ import { setTimeout as pollSleep } from 'node:timers/promises';
 import { probe, processStartRecord, processState, removeStaleLock } from "./lock-support.mjs";
 import { readTestSlotQueue, testSlotTicket } from './ticket-queue.mjs';
 import { occupancyState, readTestSlotOccupancy, sharedOccupancy } from './occupancy.mjs';
-import { publishProvingReservation } from './reservations.mjs';
+import { publishProvingReservation, MAX_RESERVATION_MS } from './reservations.mjs';
 import { waitForMemoryFloor, MEMORY_CODE } from './memory-floor.mjs';
 import { TEST_SLOT_PATH, PATH_ENV, COMPAT_PATH_ENV, LOCK_PATH_INVALID_CODE, slotPathOf, validateSlotPath } from './paths.mjs';
 export { TEST_SLOT_PATH, PATH_ENV, COMPAT_PATH_ENV, LOCK_PATH_INVALID_CODE, slotPathOf } from './paths.mjs';
@@ -459,7 +459,9 @@ export async function run({ positional, options, child }) {
       // It grants no waiting authority and needs no artificial wait/grace.
       const reservation = publishProvingReservation({ lockPath: options.compatPath, label, reason: options.reason ?? label,
         expectedEnd: new Date(acquired + (options.expectedSeconds ?? 4500) * 1000).toISOString(),
-        expiresAt: new Date(floor === undefined ? acquired + 4530 * 1000 : Math.max(acquired, deadline)).toISOString(),
+        // Execution has no wall limit. Keep proving presence for the full
+        // contract allowance, independent of its advisory expected end.
+        expiresAt: new Date(floor === undefined ? acquired + MAX_RESERVATION_MS : Math.max(acquired, deadline)).toISOString(),
         ...(floor === undefined ? {} : { now: () => acquired }), reserveGib: options.reserveGib, provers: options.provers });
       const setGroup = slot.setGroup, release = slot.release;
       slot.reservation = reservation;
@@ -485,7 +487,7 @@ export async function run({ positional, options, child }) {
         confirm();
         const granted = Date.now();
         reservation.renew({ expectedEnd: new Date(granted + (options.expectedSeconds ?? 4500) * 1000).toISOString(),
-          expiresAt: new Date(granted + 4530 * 1000).toISOString() });
+          expiresAt: new Date(granted + MAX_RESERVATION_MS).toISOString() });
         process.stderr.write(`TEST_SLOT_MEMORY_GRANTED: ${label}; floor ${floor} bytes; admission deadline ${new Date(deadline).toISOString()}\n`);
       }
     }
@@ -533,16 +535,22 @@ export async function run({ positional, options, child }) {
     const telemetry = resource.profile && !slot.nested && !options.noSlot && options.resultPath
       ? boundedTelemetry(`${options.resultPath}.samples.jsonl`) : null;
     const measurementAttempts = [];
-    const executionAttempts = [], silenceState = { notified: false };
-    const timingsPath = process.env[TIMINGS_ENV] ?? (options.resultPath && `${options.resultPath}.timings.jsonl`);
+    const executionAttempts = [], silenceState = { notified: false }, runId = randomUUID();
+    let timingsPath = process.env[TIMINGS_ENV] ?? (options.resultPath && `${options.resultPath}.timings.jsonl`);
+    if (timingsPath && !process.env[TIMINGS_ENV]) {
+      // A caller may reuse its receipt path. Keep retries/nested gates in this
+      // run's journal, but never append a later run to this gate-owned file.
+      try { writeFileAtomic(timingsPath, '', 0o600); }
+      catch (error) { timingsPath = undefined; process.stderr.write(`TEST_TIMING_WARNING: ${error.message}\n`); }
+    }
     const watchReceipt = options.resultPath ?? `test-slot-${process.pid}`;
     let received = null;
-    let execution = { resource, class: slot.class, occupancy_path: slot.occupancyPath };
+    let execution = { run_id: runId, resource, class: slot.class, occupancy_path: slot.occupancyPath };
     let firstStartedAt;
     const started = proc => {
       const at = new Date().toISOString();
       firstStartedAt ??= at;
-      execution = { resource, class: slot.class, occupancy_path: slot.occupancyPath,
+      execution = { run_id: runId, resource, class: slot.class, occupancy_path: slot.occupancyPath,
         command_started: true, command_pid: proc.pid, started_at: firstStartedAt, attempt_started_at: at };
       saveExecution(execution);
     };
@@ -551,7 +559,7 @@ export async function run({ positional, options, child }) {
       const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture, resource.profile && !slot.nested && !options.noSlot ? {
         telemetryPath: options.resultPath ? `${options.resultPath}.samples.jsonl` : undefined, telemetry, notes: options.measurementNotes,
       } : null, { [RELEASE_TIMEOUT_ENV]: '0', MONITOR_TEST_WATCH_OWNER: process.env.MONITOR_TEST_WATCH_OWNER ?? String(process.pid),
-        ...(timingsPath ? { [TIMINGS_ENV]: timingsPath } : {}) }, { label, silenceState, receipt: watchReceipt, persist: observation => saveExecution({ ...execution, limits, watch_observation: observation, timings_path: timingsPath }) });
+        ...(timingsPath ? { [TIMINGS_ENV]: timingsPath } : {}) }, { label, runId, silenceState, receipt: watchReceipt, persist: observation => saveExecution({ ...execution, limits, watch_observation: observation, timings_path: timingsPath }) });
       if (result.measurement) measurementAttempts.push({ attempt: attempt + 1, ...result.measurement });
       executionAttempts.push({ attempt: attempt + 1, exit_code: result.status, signal: result.signal, duration_s: result.duration_s,
         longest_silence_s: result.longest_silence_s, observations: result.observations });
@@ -565,7 +573,7 @@ export async function run({ positional, options, child }) {
       if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
       if (!result.groupGone) return result.status || 1;
       if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
-        slot.reservation?.renew({ expiresAt: new Date(Date.now() + 4530 * 1000).toISOString() });
+        slot.reservation?.renew({ expiresAt: new Date(Date.now() + MAX_RESERVATION_MS).toISOString() });
         process.stderr.write(`TEST_SLOT_TIMEOUT_RETRY: ${label}: timeout under load; re-running once inside the held slot.\n`);
         continue;
       }

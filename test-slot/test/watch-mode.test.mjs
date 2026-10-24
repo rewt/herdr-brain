@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { watchRun, activitySnapshot, frozenSeconds, FROZEN_SECONDS_ENV } from '../watch.mjs';
 import { timingAverages } from '../timing-averages.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
+import { provingResource } from './helpers/proving.mjs';
+import { silenceNotice } from '../watch-notice.mjs';
 
 function clockFixture(extra = {}) {
   let at = 0, cpu = '00:00.00', state = 'S', available = true;
@@ -95,4 +97,98 @@ test('a progressing file exceeds old scaled caps and records passing and failing
   const averages = timingAverages([passed, failed, passed]);
   assert.equal(averages.find(row => row.kind === 'file' && row.name === 'slow.test.mjs').samples, 1, 'shared journals are deduplicated');
   assert.ok(averages.every(row => Number.isFinite(row.average_s)));
+});
+
+function journalFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'watch-journal-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
+  const runner = fileURLToPath(new URL('../../test/helpers/run.mjs', import.meta.url));
+  const receipt = path.join(root, 'stable.execution.json'), env = testSlotEnvironment();
+  for (const file of ['first.test.mjs', 'second.test.mjs'])
+    fs.writeFileSync(path.join(root, file), `import test from 'node:test';test(${JSON.stringify(file)},()=>{});`);
+  const run = (file, extraEnv = {}) => {
+    const result = spawnSync(process.execPath, [cli, 'run', 'journal', '--no-slot', '--result-path', receipt, '--', process.execPath, runner, file],
+      { cwd: root, env: { ...env, ...extraEnv }, encoding: 'utf8', timeout: 15000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return JSON.parse(fs.readFileSync(receipt));
+  };
+  return { root, runner, receipt, env, run };
+}
+
+test('ungated timing spans and a standalone runner create no unpaired journal or inherited timing path', t => {
+  const f = journalFixture(t);
+  const git = spawnSync('git', ['init', '-q'], { cwd: f.root, env: f.env, encoding: 'utf8' });
+  assert.equal(git.status, 0, git.stderr);
+  const library = new URL('../timings.mjs', import.meta.url).href;
+  const spans = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';import {startTiming,TIMINGS_ENV} from ${JSON.stringify(library)};
+    assert.equal(process.env[TIMINGS_ENV],undefined);
+    for(const kind of ['tier','suite','file'])startTiming(kind,'ungated')({exit_code:0});
+    assert.equal(process.env[TIMINGS_ENV],undefined);`], { cwd: f.root, env: f.env, encoding: 'utf8', timeout: 15000 });
+  assert.equal(spans.status, 0, spans.stdout + spans.stderr);
+  const runner = spawnSync(process.execPath, [f.runner, 'first.test.mjs'], { cwd: f.root, env: f.env, encoding: 'utf8', timeout: 15000 });
+  assert.equal(runner.status, 0, runner.stdout + runner.stderr);
+  assert.equal(fs.existsSync(path.join(f.root, '.git', 'lane-validation')), false);
+  assert.equal(fs.existsSync(path.join(f.root, 'lane-validation')), false);
+});
+
+test('an ungated runner can enqueue one silence notice without allocating a timing receipt', t => {
+  const f = journalFixture(t), inbox = path.join(f.root, 'supervisor', 'inbox.log'), notices = [];
+  const env = { MONITOR_GATE_NOTICE_CONTEXT: JSON.stringify({ to: 'owning-supervisor', inbox }) };
+  const clock = clockFixture({ onSilence: observation => notices.push(silenceNotice(observation, { label: 'ungated', runId: 'suite-span', env })) });
+  clock.tick(10); clock.tick(20); clock.tick(30);
+  assert.equal(notices.length, 1); assert.equal(notices[0].error, undefined);
+  const entries = fs.readFileSync(inbox, 'utf8').trim().split('\n').map(JSON.parse).filter(row => row.type === 'notice');
+  assert.equal(entries.length, 1); assert.equal(entries[0].to, 'owning-supervisor');
+  assert.match(entries[0].message, /test continues/); assert.doesNotMatch(entries[0].message, /receipt=undefined/);
+  assert.equal(fs.existsSync(`${f.receipt}.timings.jsonl`), false);
+});
+
+test('a reused result path starts a fresh gate-owned timing journal for each run', t => {
+  const f = journalFixture(t), first = f.run('first.test.mjs'), second = f.run('second.test.mjs');
+  assert.notEqual(first.run_id, second.run_id);
+  assert.equal(first.timings_path, second.timings_path);
+  assert.ok(first.timings.some(row => row.kind === 'file' && row.name === 'first.test.mjs' && row.event === 'finish'));
+  assert.deepEqual(second.timings.filter(row => row.kind === 'file' && row.event === 'finish').map(row => row.name), ['second.test.mjs']);
+  const firstIds = new Set(first.timings.map(row => row.id));
+  assert.ok(second.timings.every(row => !firstIds.has(row.id)), 'no earlier spans leak into the replacement receipt');
+  assert.deepEqual(fs.readFileSync(second.timings_path, 'utf8').trim().split('\n').map(JSON.parse), second.timings);
+});
+
+test('nested gates preserve an inherited timing journal across reused result paths', t => {
+  const f = journalFixture(t), journal = path.join(f.root, 'parent.timings.jsonl');
+  const parent = { id: 'parent', kind: 'tier', name: 'parent', event: 'start' };
+  fs.writeFileSync(journal, JSON.stringify(parent) + '\n');
+  f.run('first.test.mjs', { MONITOR_TEST_TIMINGS_PATH: journal });
+  const second = f.run('second.test.mjs', { MONITOR_TEST_TIMINGS_PATH: journal });
+  assert.equal(second.timings_path, journal);
+  assert.deepEqual(second.timings[0], parent);
+  assert.deepEqual(second.timings.filter(row => row.kind === 'file' && row.event === 'finish').map(row => row.name), ['first.test.mjs', 'second.test.mjs']);
+  assert.equal(fs.existsSync(`${f.receipt}.timings.jsonl`), false, 'nested gates never allocate their own journal');
+});
+
+for (const floor of [undefined, 0]) test(`uncapped EXCLUSIVE execution remains reserved beyond its expected end and the former expiry${floor === 0 ? ' after a floor grant' : ''}`, t => {
+  const f = journalFixture(t), cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
+  const command = [process.execPath, '--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import {readProvingReservations,MAX_RESERVATION_MS,waitForProvingHold,RESERVATION_WAIT_EXPIRED_CODE} from ${JSON.stringify(new URL('../reservations.mjs', import.meta.url).href)};
+    await new Promise(resolve=>setTimeout(resolve,40));
+    const lock=process.env.MONITOR_TEST_SLOT_COMPAT_PATH,record=readProvingReservations(lock)[0].record;
+    assert.equal(record.pgid,process.pid);
+    const acquired=Date.parse(record.acquiredAt),now=acquired+4531*1000;
+    assert(Date.now()>Date.parse(record.expectedEnd),'payload progressed past its scaled expected end');
+    assert.equal(Date.parse(record.expiresAt),acquired+MAX_RESERVATION_MS);
+    assert.equal(readProvingReservations(lock,{now})[0].state,'overdue');
+    assert.throws(()=>waitForProvingHold({deadline:performance.now(),now:()=>now,notify:()=>{}}),error=>error.code===RESERVATION_WAIT_EXPIRED_CODE);
+    assert.equal(readProvingReservations(lock,{now:acquired+MAX_RESERVATION_MS})[0].state,'expired','shared six-hour authority remains bounded');
+    console.log('overdue execution still reserves launches');`];
+  const resource = { ...provingResource(command), ...(floor === undefined ? {} : { memory_floor_bytes: floor }) };
+  const lock = path.join(f.root, 'slot');
+  const result = spawnSync(process.execPath, [cli, 'run', 'uncapped-proof', '--lock-path', lock, '--expected-seconds', '.001',
+    '--resource', JSON.stringify(resource), '--', ...command], { cwd: f.root, env: f.env, encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /overdue execution still reserves launches/);
+  assert.equal(fs.existsSync(lock), false);
+  assert.deepEqual(fs.readdirSync(`${lock}.occupancy`), [], 'completed proving releases its reservation');
 });

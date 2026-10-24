@@ -6,6 +6,7 @@
     "closeout_queue": true
   },
   "settle": {
+    "review_route": "review-codex",
     "review_round_cap": 3
   },
   "dispatch": {

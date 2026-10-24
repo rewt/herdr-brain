@@ -11,12 +11,12 @@ import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
 for (const nested of [false, true]) test(`cancel signals compound gate descendants in a ${nested ? 'nested' : 'top-level'} slot`, { timeout: loadTimeout(10000) }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-conformance-'));
-  const ready = path.join(root, 'ready'), got = path.join(root, 'got'), wrapper = path.join(root, 'wrapper'), lock = path.join(root, 'lock');
+  const ready = path.join(root, 'ready'), got = path.join(root, 'got'), wrapper = path.join(root, 'wrapper'), lock = path.join(root, 'lock'), result = path.join(root, 'result');
   const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const leaf = path.join(root, 'leaf.cjs');
   fs.writeFileSync(leaf, `const fs=require('fs');process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(got)},'SIGTERM');process.exit(0);});fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`);
   const shell = `${JSON.stringify(process.execPath)} ${JSON.stringify(leaf)}; :`;
-  const args = ['run', 'outer', '--', ...(nested ? [process.execPath, cli, 'run', 'inner', '--', '/bin/sh', '-c', `echo $$ > '${wrapper}'; exec /bin/sh -c '${shell}'`] : ['/bin/sh', '-c', shell])];
+  const args = ['run', 'outer', '--result-path', result, '--', ...(nested ? [process.execPath, cli, 'run', 'inner', '--', '/bin/sh', '-c', `echo $$ > '${wrapper}'; exec /bin/sh -c '${shell}'`] : ['/bin/sh', '-c', shell])];
   const child = spawn(process.execPath, [cli, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = ''; child.stderr.on('data', d => { stderr += d; }); child.stdout.resume();
   const done = new Promise(resolve => child.once('close', code => resolve(code)));
@@ -36,10 +36,20 @@ for (const nested of [false, true]) test(`cancel signals compound gate descendan
     inner = lookupProcess(target).value.ppid;
   }
   process.kill(inner, 'SIGTERM');
-  // Bound the witness so a surviving descendant cannot hang the suite.
-  const finished = await Promise.race([done, new Promise(r => setTimeout(() => r(null), 1500))]);
+  // The existing outer test deadline bounds a surviving descendant. Native
+  // snapshots, TERM grace and pipe close need not fit a separate 1500 ms timer.
+  const finished = await done;
   assert.equal(fs.existsSync(got), true, 'the Node descendant receives the signal');
+  assert.equal(fs.readFileSync(got, 'utf8'), 'SIGTERM');
   assert.notEqual(finished, null, stderr); assert.notEqual(finished, 0);
+  const receipt = JSON.parse(fs.readFileSync(result, 'utf8'));
+  const { lookupProcess } = await import('../../lib/processes.mjs');
+  const descendant = lookupProcess(Number(fs.readFileSync(ready, 'utf8')), { identityOnly: true });
+  assert.equal(descendant.ok, true, descendant.error); assert.equal(descendant.value, null);
+  assert.throws(() => process.kill(-receipt.command_pid, 0), { code: 'ESRCH' }, 'the owned command group has disappeared');
+  assert.equal(fs.existsSync(lock), false, 'cancellation releases the slot');
+  assert.equal(receipt.attempts, 1); assert.equal(receipt.gate_timeout, null);
+  assert.doesNotMatch(stderr, /TEST_SLOT_TIMEOUT_RETRY/);
 });
 
 for (const nested of [false, true]) test(`spawnSync timeout signals compound gate descendants in a ${nested ? 'nested' : 'top-level'} slot`, { timeout: loadTimeout(15000) }, async t => {

@@ -24,6 +24,7 @@ import { enqueue, queueFor } from '../../promote/promote.mjs';
 import { resolveGateProfile } from '../../promote/gate-profile.mjs';
 import { resolveValidation, validateValidation } from '../../lanes/validation.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { silenceCommand, finishAfterSilence } from './helpers/silence.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
 function scratch(t) {
@@ -32,7 +33,14 @@ function scratch(t) {
   const lock = path.join(root, 'slot'), result = path.join(root, 'result.json');
   const env = { ...fixtureEnvironment(testSlotEnvironment()), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const run = (args, command) => spawnSync(process.execPath, [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command], { cwd: root, env, encoding: 'utf8', timeout: 15000 });
-  return { root, lock, result, env, run };
+  const noticeRun = async (args, inbox, seenIds = []) => {
+    const child = spawnChild(t, process.execPath,
+      [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...silenceCommand()],
+      { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const notice = await finishAfterSilence(child, { inbox, seenIds });
+    return { ...await waitForExit(child), notice };
+  };
+  return { root, lock, result, env, run, noticeRun };
 }
 
 test('config and healthy history remain observations independent of slot waiting', t => {
@@ -77,7 +85,14 @@ for (const escaped of [false, true]) test(`confirmed inactivity stops a forever-
   assert.equal(r.status, 124, r.stderr); assert.match(r.stderr, /GATE_TIMEOUT: frozen limit 0.5s exceeded; elapsed/);
   assert.doesNotMatch(r.stderr, /TEST_SLOT_TIMEOUT_RETRY/);
   const receipt = JSON.parse(fs.readFileSync(s.result));
-  assert.equal(receipt.attempts, 1); assert.equal(receipt.gate_timeout.kind, 'frozen'); assert.ok(receipt.duration_s < 5);
+  assert.equal(receipt.attempts, 1); assert.equal(receipt.gate_timeout.kind, 'frozen');
+  // duration_s includes native audits and TERM/KILL cleanup. The fixed fixture
+  // deadline bounds completion; the receipt must prove the inactivity decision.
+  assert.equal(receipt.gate_timeout.limit_seconds, .5);
+  assert.ok(receipt.gate_timeout.inactivity_s >= .5); assert.ok(receipt.gate_timeout.silence_s >= .5);
+  assert.ok(receipt.duration_s >= receipt.gate_timeout.elapsed_s);
+  assert.ok(receipt.activity_audits.samples >= 2);
+  assert.deepEqual(receipt.observations.filter(row => row.kind === 'frozen'), [receipt.gate_timeout]);
   const ids = fs.readFileSync(pids, 'utf8').trim().split('\n').map(Number); assert.equal(ids.length, 2);
   for (const pid of ids) assert.equal(lookupProcess(pid, { identityOnly: true }).value, null, `pid ${pid} gone`);
   assert.throws(() => process.kill(-receipt.command_pid, 0), { code: 'ESRCH' });
@@ -86,33 +101,35 @@ for (const escaped of [false, true]) test(`confirmed inactivity stops a forever-
   assert.equal(healthyHistory(s.root, 'promotion', [process.execPath, '-e', "console.log('healthy')"]).length, 1);
 });
 
-test('silence produces one durable notice and keeps running through later silence', { timeout: 15000 }, t => {
+test('silence produces one durable notice and keeps running through later silence', { timeout: 15000 }, async t => {
   const s = scratch(t), inbox = path.join(s.root, 'supervisor/inbox.log');
   s.env.MONITOR_GATE_NOTICE_CONTEXT = JSON.stringify({ to: 'owning-supervisor', inbox });
-  const r = s.run(['--timeout-seconds', '.1', '--idle-timeout-seconds', '.15'],
-    [process.execPath, '-e', "setTimeout(()=>console.log('still working'),450);setTimeout(()=>{},850)"]);
+  const r = await s.noticeRun(['--timeout-seconds', '.1', '--idle-timeout-seconds', '.15'], inbox);
   assert.equal(r.status, 0, r.stderr);
   assert.equal((r.stderr.match(/TEST_WATCH_SILENCE:/g) ?? []).length, 1);
   const receipt = JSON.parse(fs.readFileSync(s.result));
   assert.equal(receipt.gate_timeout, null);
-  assert.ok(receipt.duration_s >= .85); assert.ok(receipt.longest_silence_s >= .4);
+  assert.ok(receipt.duration_s >= .4); assert.ok(receipt.longest_silence_s >= .4);
   assert.equal(receipt.observations.length, 1); assert.equal(receipt.observations[0].kind, 'silence');
+  assert.equal(receipt.observations[0].notice.id, r.notice.id);
+  assert.equal(receipt.observations[0].notice.error, undefined);
   const entries = fs.readFileSync(inbox, 'utf8').trim().split('\n').map(JSON.parse).filter(row => row.type === 'notice');
   assert.equal(entries.length, 1); assert.equal(entries[0].to, 'owning-supervisor');
   assert.match(entries[0].message, /test continues/);
   assert.equal(fs.existsSync(s.lock), false);
 });
 
-test('reusing a result path enqueues a distinct single silence notice for each run', { timeout: 15000 }, t => {
+test('reusing a result path enqueues a distinct single silence notice for each run', { timeout: 15000 }, async t => {
   const s = scratch(t), inbox = path.join(s.root, 'supervisor/inbox.log'), ids = [];
   s.env.MONITOR_GATE_NOTICE_CONTEXT = JSON.stringify({ to: 'owning-supervisor', inbox });
   for (const threshold of ['.05', '.1']) {
-    const result = s.run(['--idle-timeout-seconds', threshold], [process.execPath, '-e', 'setTimeout(()=>{},400)']);
+    const result = await s.noticeRun(['--idle-timeout-seconds', threshold], inbox, ids);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal((result.stderr.match(/TEST_WATCH_SILENCE:/g) ?? []).length, 1);
     const receipt = JSON.parse(fs.readFileSync(s.result));
     assert.equal(receipt.observations.length, 1);
     assert.equal(receipt.observations[0].notice.error, undefined);
+    assert.equal(receipt.observations[0].notice.id, result.notice.id);
     ids.push(receipt.observations[0].notice.id);
   }
   assert.notEqual(ids[0], ids[1]);

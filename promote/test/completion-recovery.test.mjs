@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { enqueue } from '../promote.mjs';
-import { loadTimeout } from '../../lib/deadline.mjs';
 import { receiptDirectory } from '../../supervisor/context.mjs';
 import { reconcile } from '../../supervisor/reconcile.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
@@ -120,19 +119,23 @@ test(`legacy queue and late notices recover only inspected exact coverage: ${mod
     train.results[first.job.id].tip = payload.tip; fs.writeFileSync(receipt, JSON.stringify(train));
   }
   const retry = supervisor(f, ['promote', first.run, '--retry', '--why', 'Independent manual inspection']);
-  assert.equal(retry.status, 0, retry.stderr); assert.equal(JSON.parse(retry.stdout).result, 'resuming_completion');
-  const deadline = Date.now() + loadTimeout(10000);
-  // Pending batches stay interrupted, but the worker must finish this drain.
-  while (fs.existsSync(path.join(f.queue.directory, 'worker.lock'))) {
-    assert.ok(Date.now() < deadline, 'resume worker finished'); await new Promise(r => setTimeout(r, 20));
-  }
+  assert.equal(retry.status, 0, retry.stderr);
+  const reply = JSON.parse(retry.stdout); assert.equal(reply.result, 'resuming_completion');
+  // ENG-530: lock absence is not completion. The drain releases worker.lock
+  // before its final closeout callbacks; join the exact worker before our tail.
+  f.workers.remember(reply); await f.workers.wait();
+  assert.equal(f.queue.load().current, null, 'resume worker finished bookkeeping');
   const recovered = ['complete', 'reopened', 'new-run'].includes(mode);
   if (recovered) finishManualCloseout(f);
   assert.equal(f.gates(), 3); assert.equal((f.queue.load().interrupted ?? []).length, recovered ? 0 : 1);
   assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);
   assert.deepEqual(f.show(bad.item), excludedBefore); assert.ok(fs.existsSync(bad.workspace));
-  for (const m of [first, second]) assert.equal(fs.existsSync(m.workspace), !recovered || (m === first && mode !== 'complete'));
+  for (const m of [first, second]) {
+    const result = f.queue.load().results.findLast(row => row.id === m.job.id);
+    assert.equal(fs.existsSync(m.workspace), !recovered || (m === first && mode !== 'complete'),
+      JSON.stringify({ topic: m.topic, cleanup: result?.cleanup, reason: result?.reason }));
+  }
   const before = f.events();
   for (const notice of [`[org-report] run=${first.run} item=${first.item} outcome=done headline=Completed`, `[promote-queue] id=${first.job.id} lane=${first.topic}`]) {
     const late = supervisor(f, ['handle', '--notice', notice]);

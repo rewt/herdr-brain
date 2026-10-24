@@ -12,7 +12,10 @@ import { setConfig } from '../lib/config-command.mjs';
 import { projectFleet, readFleet } from '../lib/fleet.mjs';
 import { digest } from '../lib/digest.mjs';
 import { inspect } from '../sessions/sessions.mjs';
-import { recordStandardSlot } from '../sessions/receipts.mjs';
+import { recordStandardSlot, readStandardSlots } from '../sessions/receipts.mjs';
+import { agentBinding } from '../sessions/observe.mjs';
+import { specDigest, validStartOperation } from '../sessions/lifecycle-evidence.mjs';
+import { durableWrite, emptyJournal, readControllerJournal, runtimePaths } from '../sessions/runtime.mjs';
 import { adopt, adoptCommand } from '../lib/adopt-command.mjs';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -286,6 +289,34 @@ test('a fleet collision arriving in the shared config root preserves external by
   assert.ok(f.binding().adoption.completed, 'the exact answered adoption can retry once the external conflict is repaired');
 });
 
+for (const when of ['pre-existing', 'under config locks']) test(`an alias-identity fleet collision ${when} refuses before config, audit, links or enrollment change`, async t => {
+  const f = configFixture(t); f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  const other = path.join(f.scratch, 'legacy'), alias = path.join(f.scratch, 'common-alias');
+  fs.mkdirSync(other); initOrg(path.join(other, '.org'));
+  fs.symlinkSync(path.join(f.cwd, '.git'), alias, 'dir');
+  const legacy = { identity: alias, checkout: other, record: path.join(other, '.org'), worktrees: path.join(f.scratch, 'legacy-lanes'), layers: [] };
+  const file = path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'); fs.mkdirSync(path.dirname(file));
+  const bytes = JSON.stringify({ version: 1, session_limit: 6, projects: { legacy } });
+  const record = fs.readFileSync(path.join(legacy.record, 'events.jsonl'));
+  const routes = ['lane', 'validation', 'promote', 'housekeeping'].map(kind => readProjectPolicy(f.cwd, kind, f.env));
+  if (when === 'pre-existing') fs.writeFileSync(file, bytes);
+  const mkdir = fs.mkdirSync; let locks = 0;
+  fs.mkdirSync = function(target, ...args) {
+    const result = mkdir.call(this, target, ...args);
+    if (path.basename(String(target)) === '.config.lock' && ++locks === 2 && when === 'under config locks') fs.writeFileSync(file, bytes);
+    return result;
+  };
+  try { await refusesWithoutPublication(f, {}, /ambiguous projects.*overlapping Git identity/); }
+  finally { fs.mkdirSync = mkdir; }
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  assert.deepEqual(readFleet(f.env).projects, { legacy });
+  assert.deepEqual(fs.readFileSync(path.join(legacy.record, 'events.jsonl')), record);
+  assert.deepEqual(['lane', 'validation', 'promote', 'housekeeping'].map(kind => readProjectPolicy(f.cwd, kind, f.env)), routes);
+  assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false);
+  assert.equal(fs.existsSync(path.join(f.cwd, '.git/sessions/controller.lock')), false);
+  assert.equal(locks, when === 'under config locks' ? 2 : 0);
+});
+
 for (const kind of ['validation', 'housekeeping']) for (const when of ['second observation', 'under config locks'])
   test(`an absent ${kind} source arriving ${when === 'second observation' ? 'during the second observation' : when} refuses before publication`, async t => {
     const f = configFixture(t), file = path.join(f.cwd, kind === 'validation' ? '.lane.validation.json' : '.housekeeping.json');
@@ -318,6 +349,33 @@ test('a competing KEEP layout refuses without changing existing enrollment or pu
   await refusesWithoutPublication(f, {}, /existing KEEP layout conflicts/);
   assert.deepEqual(fs.readFileSync(file), bytes);
   assert.equal(fs.existsSync(path.join(f.cwd, '.git/sessions/controller-journal.json')), false);
+});
+
+test('adoption reuses a controller-created supervisor KEEP without duplicate enrollment receipts', async t => {
+  const f = configFixture(t), inspection = inspect({ cwd: f.cwd, env: f.env });
+  const entry = inspection.entries.find(e => e.manifest.spec.role === 'supervisor'), common = inspection.project.common;
+  const binding = agentBinding(f.observation.agents[0], f.observation.server, 'tab');
+  const op = { id: 'create-supervisor', kind: 'create-standard-slot', uid: entry.manifest.metadata.uid,
+    generation: entry.manifest.metadata.generation, specDigest: specDigest(entry), spec: entry.resolvedSpec, standardSlot: 'supervisor',
+    target: { server: binding.server, workspace: binding.workspace, checkout: binding.checkout }, state: 'acknowledged' };
+  op.receipt = { operationId: op.id, uid: op.uid, generation: op.generation, specDigest: op.specDigest, binding };
+  assert.equal(validStartOperation(op), true);
+  const journalFile = runtimePaths(common).journal, historyFile = path.join(common, 'sessions/standard-slots.json');
+  durableWrite(journalFile, { ...emptyJournal(common), operations: [op] });
+  const journal = fs.readFileSync(journalFile), enrollment = readStandardSlots(common);
+  assert.deepEqual(enrollment.errors, []); assert.equal(enrollment.slots.length, 1);
+  assert.equal(enrollment.slots[0].controllerOperation, op.id);
+  assert.equal(fs.existsSync(historyFile), false);
+  const result = await f.adopt();
+  assert.equal(result.adopted, true); assert.ok(f.binding().adoption.completed);
+  assert.deepEqual(result.native.operations, []);
+  assert.deepEqual(readStandardSlots(common), enrollment);
+  assert.deepEqual(fs.readFileSync(journalFile), journal);
+  assert.deepEqual(readControllerJournal(common).operations, [op]);
+  assert.equal(fs.existsSync(historyFile), false, 'controller ownership requires no adopt history');
+  assert.equal((await f.adopt()).unchanged, true);
+  assert.deepEqual(fs.readFileSync(journalFile), journal);
+  assert.equal(fs.existsSync(historyFile), false);
 });
 
 test('an incomplete new binding ignores the old operation audit when selecting unpublished policy', async t => {
@@ -366,6 +424,30 @@ test('the replacement audit selects superseded policy before binding progress is
   await f.adopt(); assert.ok(f.binding().adoption.completed);
   assert.equal(f.events().filter(e => e.type === 'config.baseline-superseded' && e.file === old.file).length, 1);
 });
+
+for (const publication of ['binding', 'lane']) for (const recover of [false, true])
+  test(`a partial move after ${publication} publication holds on loss of a ${recover ? 'read-recovered' : 'completed'} config-command policy across repeated reads`, async t => {
+    const f = configFixture(t);
+    await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === publication) throw Error('partial move interrupted'); } }), /partial move interrupted/);
+    const binding = f.binding();
+    assert.equal(binding.adoption.completed, undefined);
+    assert.ok(!binding.published.includes('promote'));
+    const options = { cwd: f.cwd, env: f.env, ...(recover ? { afterReplace() { throw Error('config replacement interrupted'); } } : {}) };
+    if (recover) assert.throws(() => setConfig('promote.max_batch', '5', options), /config replacement interrupted/);
+    else assert.equal(setConfig('promote.max_batch', '5', options).changed, true);
+    const selected = readProjectPolicy(f.cwd, 'promote', f.env);
+    assert.equal(selected.home, true); assert.equal(selected.config.max_batch, 5);
+    assert.ok(!f.binding().published.includes('promote'));
+    const history = f.events(), changed = history.findLast(e => e.type === 'config.changed' && e.file === selected.file);
+    assert.equal(changed.origin, 'command');
+    assert.notEqual(changed.operation, `${binding.adoption.id}:promote`);
+    fs.unlinkSync(selected.file);
+    for (let read = 0; read < 2; read++) assert.throws(() => readProjectPolicy(f.cwd, 'promote', f.env), /published home file is missing/);
+    const after = f.events();
+    assert.equal(after.length, history.length + 1, 'the repeated hold must not duplicate the missing-file audit');
+    assert.equal(after.at(-1).new_value.unavailable, 'unavailable');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(f.cwd, '.promote.json'))).max_batch, 3);
+  });
 
 test('bare identity and empty project directories never select a home policy without a binding', async t => {
   const f = configFixture(t), identity = projectIdentity(gitProject(f.cwd), f.env).name;

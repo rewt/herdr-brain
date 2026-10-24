@@ -84,9 +84,12 @@ export function prepareObservedEnrollment({ scope, authorization, adoptionId, ac
     const receiptUid = `adopt:${digest([common, selected.slot.tab]).slice(0, 24)}`;
     const conflicting = history.slots.find(s => s.server === selected.slot.server && (s.tab === selected.slot.tab || s.workspace === selected.slot.workspace && s.standardSlot === selected.slot.standardSlot));
     if (conflicting && digest(Object.fromEntries(Object.keys(selected.slot).map(k => [k, conflicting[k]]))) !== digest(selected.slot)) fail('existing KEEP layout conflicts');
-    let keep = conflicting && saved.operations.findLast(o => o.uid === conflicting.uid && o.action === 'adopt');
+    // Controller-created slots already derive KEEP from their launch receipt;
+    // they need neither a second predicted slot nor an adopt history entry.
+    const savedKeep = conflicting && saved.operations.findLast(o => o.uid === conflicting.uid && o.action === 'adopt');
+    let keep = Boolean(conflicting);
     const pending = journal.operations.find(op => op.kind === 'adopt-standard-slot' && op.adoptionId === adoptionId && op.keep.uid === receiptUid);
-    const planned = keep ?? pending?.keep.operation ?? { seq: saved.operations.length + 1, action: 'adopt', uid: receiptUid, actor, why: `Owner-authorized observed adoption ${adoptionId}`, at: new Date().toISOString(), slot: selected.slot };
+    const planned = savedKeep ?? pending?.keep.operation ?? { seq: saved.operations.length + 1, action: 'adopt', uid: receiptUid, actor, why: `Owner-authorized observed adoption ${adoptionId}`, at: new Date().toISOString(), slot: selected.slot };
     if (!keep) {
       saved.operations.push(planned);
       validateStandardSlots(saved, common);
@@ -112,7 +115,7 @@ export function prepareObservedEnrollment({ scope, authorization, adoptionId, ac
       }
       if (!keep) {
         if (digest(planned) !== op.keep.sha256) fail('KEEP sequence changed; inspect the retained intent');
-        keep = planned;
+        keep = true;
         writes.push(keepWrite(planned));
       }
       if (op.state !== 'acknowledged') writes.push({ apply: () => { op.state = 'acknowledged'; durableWrite(runtimePaths(common).journal, journal); } });

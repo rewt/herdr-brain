@@ -196,7 +196,10 @@ information, not as effective config. Holds are derived diagnostics, never store
 project status. Repair is a fresh validated read, not clearing a status flag.
 
 A binding considers its own adoption operation's publication events and its
-`published` list, plus config writes after its recorded completion. An earlier,
+`published` list, config-command publications tagged with its adoption ID from
+binding creation onward, and older untagged config writes after its recorded
+completion. Command intents retain that ID through completion and read recovery,
+so a partial move also holds on loss of a command-published file. An earlier,
 rolled-back operation's audit does not turn an unpublished file in a new binding
 into a missing published file, even after the new adoption completes. Current
 publications and subsequent config writes retain the missing-policy hold.
@@ -360,7 +363,9 @@ and hashes, and the inspected desired UID/generation/spec digest at adoption.
 The desired spec is a comparison baseline, not a claim about instructions or
 model settings already loaded in a manual conversation. Mark the origin as
 observed adoption. Existing acknowledged starts remain their original operations
-and are verified/reused rather than relabelled.
+and are verified/reused rather than relabelled. An acknowledged controller-created
+slot already supplies derived KEEP ownership; reuse it without adding a duplicate
+predicted slot or persisting an additional `adopt` history entry.
 
 The reconciler and unowned-workspace guard must recognize a valid acknowledged
 adoption as ownership sufficient for KEEP. It is never a synthetic
@@ -422,9 +427,11 @@ Before publication, check every identity and project baseline and unresolved
 intent, selected source and destination, effective policy reference, compatible
 release, owner answer, fresh native observation, controller ownership and KEEP
 layout. Check the prospective binding against the home/legacy fleet union's
-ownership and generated-key rules. Acquire both config locks and repeat that
-union check and every source's presence/digest and baseline checks before the
-first identity record, policy, binding, link or enrollment publication. A refusal
+generated-key rules and the reader's canonical ownership-overlap validation,
+including symlink aliases of Git identities, checkouts and records. Acquire both
+config locks and repeat that union check and every source's presence/digest and
+baseline checks before the first identity record, policy, binding, link or
+enrollment publication. A refusal
 leaves existing files, audit and enrollment untouched; remove only empty lock
 preparation directories created by this attempt, preserving any that became
 nonempty. Observer and controller lease release still run if directory cleanup

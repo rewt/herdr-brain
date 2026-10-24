@@ -127,7 +127,13 @@ for (const method of ['cherry-pick', 'rebase']) for (const record of ['terminal'
     const archive = result.calls.findIndex(row => row.exe === 'git' && row.args[2] === 'tag' && row.args[3] === 'archive/lane/topic');
     assert.ok(archive >= 0 && archive < removal); assert.equal(result.calls[archive].locked, true);
     assert.equal(result.calls[removal].locked, true);
-    assert.deepEqual(result.calls[removal - 1].args.slice(2), ['rev-parse', '--verify', 'refs/heads/main']);
+    // ENG-530: fresh main proof precedes tag creation; exact archive durability
+    // is verified immediately before removal, within that same removal lock.
+    const main = result.calls.findLastIndex((row, index) => index < archive && row.exe === 'git' &&
+      JSON.stringify(row.args.slice(2)) === JSON.stringify(['rev-parse', '--verify', 'refs/heads/main']));
+    assert.ok(main >= 0 && main < archive, 'main is freshly checked before creating the archive');
+    assert.deepEqual(result.calls[removal - 1].args.slice(2), ['rev-parse', '--verify', `refs/tags/${proof.archiveTag}^{commit}`]);
+    assert.ok(result.calls.slice(main, removal + 1).every(row => row.locked), 'main, archive and removal share the guarded lock');
     assert.deepEqual(f.read().actions, [['workspace', 'close', 'w']]);
     assert.deepEqual(fs.readFileSync(f.eventFile), recordBefore);
     assert.deepEqual(sweep(f).results, []);

@@ -131,26 +131,6 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
         guardPromotionJob(job);
         if (result.receipt !== file || !verifyTrainResult({ ...result, id: job.id }, { project, saved: { head: job.expectedHead, run: job.run, org: job.org, lane: job.topic } })) throw Error(`integrated proof differs for ${job.topic}`);
         git(project.canonical, ['merge-base', '--is-ancestor', result.tip, tip]);
-        // A resumed train may have integrated while a canonical dirty/off-main
-        // guard prevented replacement. Finish the original CAS before the
-        // record transaction binds the lane's branch generation. This is the
-        // same integrated proof and replacement used by the train, no new gate.
-        if (result.replacement_pending) {
-          const workspace = result.workspace;
-          if (!workspace) throw Error('pending lane replacement lacks its original workspace');
-          if (git(workspace, ['rev-parse', 'HEAD']) !== result.tip) {
-            const fresh = loadEvents(org);
-            if (fresh.tornTail || !binding.expected || completionFingerprint(fold(fresh.events), binding.item) !== binding.expected)
-              throw Error('record changed since lane replacement preparation; retain the original checkout for inspected recovery');
-            const reply = spawnSync(process.execPath, [REPLACE, JSON.stringify({ workspace, repo: project.canonical,
-              common: project.identity, branch: `refs/heads/lane/${job.topic}`, from: result.source_head, to: result.tip,
-              main: prepared.branch, mainHead: git(project.canonical, ['rev-parse', 'HEAD']) })],
-            { cwd: project.canonical, env: process.env, encoding: 'utf8', timeout: 30000 });
-            if (reply.error || reply.status !== 0) throw Error(reply.stderr || reply.error?.message || 'lane replacement refused');
-          }
-          results = results.map(member => member.job.id === job.id ? { ...member,
-            result: { ...member.result, replacement_pending: false, warnings: [] } } : member);
-        }
         included.push({ item: binding.item, run: binding.run, expected: binding.expected, superseded: binding.superseded,
           head: result.tip, why: `Native queue ${job.id}: queue-bound head ${job.expectedHead}; preserved diff and successful gate in train ${train.id}.` });
       }
@@ -164,6 +144,28 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
       const receipt = file + '.record.json';
       if (fs.existsSync(receipt) && stable(JSON.parse(readPlainFile(receipt))) !== stable(payload)) throw Error('completion evidence changed; retain the original receipt');
       if (!fs.existsSync(receipt)) writeFileAtomic(receipt, JSON.stringify(payload, null, 2) + '\n', 0o600);
+      // Retain the verified whole-batch coverage even when replacement lacks
+      // authority. This receipt is inert evidence for independent inspection,
+      // not permission to replace a lane or complete its record transaction.
+      // ENG-530 requires the original CAS before completion binds generation.
+      for (const { job, binding, result } of entries) {
+        if (result.outcome !== 'promoted' || !result.replacement_pending) continue;
+        const workspace = result.workspace;
+        if (!workspace) throw Error('pending lane replacement lacks its original workspace');
+        if (git(workspace, ['rev-parse', 'HEAD']) !== result.tip) {
+          if (!binding.expected) throw Error('batch lacks original record preparation for lane replacement; retain the original checkout for inspected recovery');
+          const fresh = loadEvents(org);
+          if (fresh.tornTail || completionFingerprint(fold(fresh.events), binding.item) !== binding.expected)
+            throw Error('record changed since lane replacement preparation; retain the original checkout for inspected recovery');
+          const reply = spawnSync(process.execPath, [REPLACE, JSON.stringify({ workspace, repo: project.canonical,
+            common: project.identity, branch: `refs/heads/lane/${job.topic}`, from: result.source_head, to: result.tip,
+            main: prepared.branch, mainHead: git(project.canonical, ['rev-parse', 'HEAD']) })],
+          { cwd: project.canonical, env: process.env, encoding: 'utf8', timeout: 30000 });
+          if (reply.error || reply.status !== 0) throw Error(reply.stderr || reply.error?.message || 'lane replacement refused');
+        }
+        results = results.map(member => member.job.id === job.id ? { ...member,
+          result: { ...member.result, replacement_pending: false, warnings: [] } } : member);
+      }
       const loaded = loadEvents(org);
       if (loaded.tornTail) throw Error('incomplete record tail during completion');
       const recovered = recoveryMarker(loaded.events, payload);

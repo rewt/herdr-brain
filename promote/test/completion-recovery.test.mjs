@@ -153,7 +153,12 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
   if (variant === 'legacy') {
     delete train.completion; fs.writeFileSync(receipt, JSON.stringify(train));
     if (fs.existsSync(receipt + '.record.json')) fs.unlinkSync(receipt + '.record.json');
-  } else f.recover(first, ['note', first.item, 'Inspected native fingerprint drift']);
+  } else {
+    // ENG-530 finishes authorized delayed CAS before recording generation. The
+    // second lane actually needs replacement; drift on the first cannot hold it.
+    f.recover(second, ['note', second.item, 'Inspected native fingerprint drift']);
+  }
+  const heads = [first, second].map(m => f.git(['rev-parse', 'HEAD'], m.workspace));
   f.drain(); assert.equal(f.gates(), 1);
   const original = fs.readFileSync(receipt + '.record.json', 'utf8');
   assert.equal(!!JSON.parse(original).recovery_only, variant === 'legacy');
@@ -162,9 +167,12 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
     const pending = f.queue.load().results.findLast(r => r.id === m.job.id);
     assert.equal(pending.reconciliation.state, 'pending');
     assert.equal(f.show(m.item).closed, null);
-    assert.match(pending.reconciliation.reason, variant === 'prepared' ? /changed since batch preparation/ : /lacks original record preparation/);
+    assert.match(pending.reconciliation.reason, variant === 'prepared' ? /record changed since lane replacement preparation/ : /lacks original record preparation/);
   }
+  assert.deepEqual([first, second].map(m => f.git(['rev-parse', 'HEAD'], m.workspace)), heads);
+  assert.equal(f.events().some(e => e.type === 'promotion.reconciled' || e.type === 'closeout.handoff'), false);
   assert.throws(() => manualRecovery(f, rows), /head\/workspace differs/);
+  assert.equal(fs.existsSync(path.join(f.repo, '.lane/manual-prepared.json')), false);
   for (const row of rows) {
     if (f.git(['rev-parse', 'HEAD'], row.workspace) === row.tip) continue;
     const release = acquireLock(path.join(f.queue.project.identity, 'lane-promote.lock'));
@@ -179,13 +187,22 @@ for (const variant of ["legacy", "prepared"]) for (const failTelemetry of [false
   }
   // The refused prepare wrote no receipt; inspection and clean CAS allow it.
   manualRecovery(f, rows);
+  const manual = f.events().find(e => e.type === 'promotion.reconciled');
   if (failTelemetry) fs.appendFileSync(f.preload, `\nif(process.argv[1]?.endsWith('org.mjs')&&process.argv.includes('note')&&process.argv.some(a=>a.startsWith('Promotion: report-to-main'))){console.error('injected telemetry refusal');process.exit(1);}`);
   f.drain(); assert.equal(f.gates(), 1);
+  for (const m of [first, second]) assert.ok(fs.existsSync(m.workspace), 'native bookkeeping awaits the manual owner\'s post-return tail');
+  assert.equal(f.events().some(e => e.type === 'closeout.handoff'), false);
   finishManualCloseout(f);
+  const handoff = f.events().find(e => e.type === 'closeout.handoff');
+  assert.equal(handoff.source.seq, manual.seq);
+  assert.deepEqual([...handoff.keys].sort(), manual.closeout_targets.map(target => target.key).sort());
   assert.equal((f.queue.load().interrupted ?? []).length, 0);
   assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);
-  for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
+  for (const m of [first, second]) {
+    assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false);
+    assert.equal(f.queue.load().results.findLast(r => r.id === m.job.id).cleanup.state, 'complete');
+  }
   if (failTelemetry) assert.ok(f.queue.load().results.slice(-2).every(r => r.warnings.some(w => w.includes('velocity record'))));
 });
 

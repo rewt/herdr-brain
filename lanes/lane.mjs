@@ -2572,7 +2572,7 @@ function check(args) {
   let gate;
   try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier,
     timeoutSeconds: profile?.timeoutSeconds ?? settings.tiers[tier].timeoutSeconds, idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? settings.tiers[tier].idleTimeoutSeconds,
-    prepare, environment, env, exact }); }
+    prepare, environment, env, exact, watchContext: profile?.env ?? validationEnvironment() }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75); // validateTree already emitted its one coded line.
     fail(error.message);

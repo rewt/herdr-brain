@@ -1,4 +1,4 @@
-// Healthy command clocks, never slot waits, provide project-local watchdog limits.
+// Command clocks are observations; only confirmed inactivity permits a stop.
 import fs from 'node:fs';
 import path from 'node:path';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -6,8 +6,17 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs';
 
+export const FROZEN_SECONDS_ENV = 'MONITOR_TEST_SLOT_FROZEN_SECONDS';
+export const FROZEN_SECONDS = 4 * 60 * 60;
+export const SILENCE_SECONDS = 900;
+export function frozenSeconds(env = process.env) {
+  const value = Number(env[FROZEN_SECONDS_ENV] ?? FROZEN_SECONDS);
+  if (!Number.isFinite(value) || value < 0 || value > 9999999) throw Error(`${FROZEN_SECONDS_ENV} must be non-negative bounded seconds (0 disables)`);
+  return value;
+}
+
 export const WALL_FLOOR_SECONDS = 600;
-export const WALL_DEFAULT_SECONDS = 4500;
+export const WALL_DEFAULT_SECONDS = 0;
 export const RELEASE_TIMEOUT_ENV = 'MONITOR_TEST_SLOT_RELEASE_TIMEOUT_SECONDS';
 export const IDLE_FLOOR_SECONDS = 300;
 export const MIN_HEALTHY_SAMPLES = 3;
@@ -22,8 +31,8 @@ export const HISTORY_FILES = 128;
 export const TIMEOUT_EXIT = 124;
 export const TIMEOUT_CODE = 'GATE_TIMEOUT';
 export function limitSeconds(value, name, { idle = false } = {}) {
-  if (!Number.isFinite(value) || value < (idle ? 0 : Number.MIN_VALUE) || value > 9999999)
-    throw Error(`${name} must be ${idle ? 'a non-negative' : 'a positive'} bounded number of seconds`);
+  if (!Number.isFinite(value) || value < 0 || value > 9999999)
+    throw Error(`${name} must be a non-negative bounded number of seconds`);
   return value;
 }
 export function projectCommon(cwd = process.cwd()) {
@@ -57,23 +66,16 @@ export function healthyHistory(common, tier, command, file, historyKey) {
   } catch { return []; }
 }
 export function resolveGateLimits({ common, tier = 'gate', command, historyKey, timeoutSeconds, idleTimeoutSeconds, env = process.env, history } = {}) {
-  history ??= healthyHistory(common, tier, command, historyFile(common, tier, command, historyKey, env), historyKey);
-  const samples = history.filter(run => Number.isFinite(run.duration_s) && run.duration_s >= sampleFloorSeconds(tier) &&
-    Number.isFinite(run.longest_silence_s) && run.longest_silence_s >= 0 && run.longest_silence_s <= run.duration_s);
-  const measured = samples.length >= MIN_HEALTHY_SAMPLES;
+  // Historical/explicit wall allowances remain readable for old declarations,
+  // but never authorize stopping a working run. Zero is the only wall limit.
   if (timeoutSeconds !== undefined) limitSeconds(timeoutSeconds, 'timeout_seconds');
-  // The release gate has already resolved the project's declaration (or its
-  // history/default). Its descendants must not learn a shorter wall limit.
-  const releaseTimeoutSeconds = timeoutSeconds === undefined && env[RELEASE_TIMEOUT_ENV] !== undefined
-    ? limitSeconds(Number(env[RELEASE_TIMEOUT_ENV]), RELEASE_TIMEOUT_ENV) : undefined;
   if (idleTimeoutSeconds !== undefined) limitSeconds(idleTimeoutSeconds, 'idle_timeout_seconds', { idle: true });
-  return {
-    wall_seconds: timeoutSeconds ?? releaseTimeoutSeconds ?? (measured ? Math.max(wallFloorSeconds(tier), Math.ceil(2 * Math.max(...samples.map(r => r.duration_s)))) : WALL_DEFAULT_SECONDS),
-    wall_source: timeoutSeconds !== undefined ? 'config' : releaseTimeoutSeconds !== undefined ? 'release' : measured ? 'history' : 'default',
-    idle_seconds: idleTimeoutSeconds ?? (measured ? Math.max(IDLE_FLOOR_SECONDS, Math.ceil(3 * Math.max(...samples.map(r => r.longest_silence_s)))) : 0),
-    idle_source: idleTimeoutSeconds !== undefined ? 'config' : measured ? 'history' : 'off',
-  };
+  return { wall_seconds: 0, wall_source: 'watch',
+    idle_seconds: idleTimeoutSeconds ?? SILENCE_SECONDS,
+    idle_source: idleTimeoutSeconds !== undefined ? 'config' : 'default',
+    frozen_seconds: frozenSeconds(env) };
 }
+
 export function recordHealthyGate({ common, tier = 'gate', command, historyKey, duration_s, longest_silence_s, env = process.env, file = historyFile(common, tier, command, historyKey, env) }) {
   if (!file) return;
   const key = checkedKey(tier, command, historyKey);

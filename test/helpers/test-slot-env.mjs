@@ -10,5 +10,5 @@ delete process.env[RELEASE_TIMEOUT_ENV];
 // Admission uses private healthy memory unless a case overrides this result.
 export function testSlotEnvironment(env = process.env) {
   return healthyMemoryEnvironment(Object.fromEntries(Object.entries(env).filter(([key]) =>
-    !/^(MONITOR_TEST_SLOT_|BCH_CLOAK_TEST_SLOT_)/.test(key))));
+    !/^(MONITOR_TEST_SLOT_|BCH_CLOAK_TEST_SLOT_|MONITOR_TEST_WATCH_OWNER$|MONITOR_TEST_TIMINGS_PATH$|MONITOR_TEST_TIMING_DEPTH$|MONITOR_GATE_NOTICE_CONTEXT$)/.test(key))));
 }

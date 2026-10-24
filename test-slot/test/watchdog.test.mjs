@@ -35,26 +35,26 @@ function scratch(t) {
   return { root, lock, result, env, run };
 }
 
-test('config, recent healthy clocks and conservative default resolve independently of slot waiting', t => {
+test('config and healthy history remain observations independent of slot waiting', t => {
   const s = scratch(t);
   assert.equal(resolveGateLimits({ common: s.root }).wall_seconds, WALL_DEFAULT_SECONDS);
-  assert.equal(resolveGateLimits({ common: s.root }).idle_seconds, 0);
+  assert.equal(resolveGateLimits({ common: s.root }).idle_seconds, 900);
   for (const duration_s of [1865, 1900, 1855, 1853, 2067, 2158]) recordHealthyGate({ common: s.root, tier: 'promotion', command: 'full', duration_s, longest_silence_s: 120 });
   const derived = resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full' });
-  assert.equal(derived.wall_seconds, 4316); assert.equal(derived.wall_source, 'history');
-  assert.equal(derived.idle_seconds, 360);
+  assert.equal(derived.wall_seconds, 0); assert.equal(derived.wall_source, 'watch');
+  assert.equal(derived.idle_seconds, 900);
   const configured = resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full', timeoutSeconds: 5000, idleTimeoutSeconds: 0 });
-  assert.equal(configured.wall_seconds, 5000); assert.equal(configured.idle_seconds, 0);
+  assert.equal(configured.wall_seconds, 0); assert.equal(configured.idle_seconds, 0);
   assert.equal(resolveGateLimits({ history: [{ duration_s: 10, longest_silence_s: 1 }] }).wall_seconds, WALL_DEFAULT_SECONDS);
   for (let i = 0; i < 20; i++) recordHealthyGate({ common: s.root, tier: 'promotion', command: 'narrow', duration_s: 180, longest_silence_s: 1 });
   assert.equal(healthyHistory(s.root, 'promotion', 'narrow').length, 20);
-  assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full' }).wall_seconds, 4316);
-  assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'narrow' }).wall_seconds, 1200);
+  assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full' }).wall_seconds, 0);
+  assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'narrow' }).wall_seconds, 0);
   const unknown = resolveGateLimits({ common: s.root, tier: 'promotion', command: 'new full' });
-  assert.equal(unknown.wall_seconds, 4500); assert.equal(unknown.idle_seconds, 0);
-  assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full' }).idle_seconds, 360);
-  assert.equal(resolveGateLimits({ common: s.root, tier: 'release' }).wall_source, 'default');
-  for (const timeoutSeconds of [0, -1, NaN, Infinity]) assert.throws(() => resolveGateLimits({ timeoutSeconds }));
+  assert.equal(unknown.wall_seconds, 0); assert.equal(unknown.idle_seconds, 900);
+  assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full' }).idle_seconds, 900);
+  assert.equal(resolveGateLimits({ common: s.root, tier: 'release' }).wall_source, 'watch');
+  for (const timeoutSeconds of [-1, NaN, Infinity]) assert.throws(() => resolveGateLimits({ timeoutSeconds }));
   for (const value of [{ timeout_seconds: -1 }, { idle_timeout_seconds: false }, { timeout_seconds: { unknown: 10 } }]) assert.throws(() => validateValidation(value));
   fs.writeFileSync(path.join(s.root, '.lane.validation.json'), JSON.stringify({ timeout_seconds: { promotion: 700 }, idle_timeout_seconds: 0 }));
   assert.equal(resolveValidation({ root: s.root, env: {} }).tiers.promotion.timeoutSeconds, 700);
@@ -65,18 +65,19 @@ test('config, recent healthy clocks and conservative default resolve independent
   assert.equal(resolveGateProfile(s.root, s.env).timeoutSeconds, 800);
 });
 
-for (const escaped of [false, true]) test(`wall timeout stops a forever-blocked grandchild${escaped ? ' in its own group' : ''}, releases slot and never retries under load`, { timeout: 20000 }, t => {
+for (const escaped of [false, true]) test(`confirmed inactivity stops a forever-blocked grandchild${escaped ? ' in its own group' : ''}, releases slot and never retries under load`, { timeout: 20000 }, t => {
   const s = scratch(t), pids = path.join(s.root, 'pids');
   const preload = path.join(s.root, 'load.mjs'); fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");
   s.env.NODE_OPTIONS = `${s.env.NODE_OPTIONS ?? ''} --import=${preload}`;
   const leaf = path.join(s.root, 'leaf.cjs'), parent = path.join(s.root, 'parent.cjs');
   fs.writeFileSync(leaf, `require('fs').appendFileSync(${JSON.stringify(pids)},process.pid+'\\n');process.on('SIGTERM',()=>{});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);`);
   fs.writeFileSync(parent, `require('fs').appendFileSync(${JSON.stringify(pids)},process.pid+'\\n');require('child_process').spawn(process.execPath,[${JSON.stringify(leaf)}],{detached:${escaped},stdio:'inherit'});process.on('SIGTERM',()=>{});setInterval(()=>{},1000);`);
-  const r = s.run(['--timeout-seconds', '0.5', '--retry-timeout-under-load'], [process.execPath, parent]);
-  assert.equal(r.status, 124, r.stderr); assert.match(r.stderr, /GATE_TIMEOUT: wall limit 0.5s exceeded; elapsed/);
+  s.env.MONITOR_TEST_SLOT_FROZEN_SECONDS = '.5';
+  const r = s.run(['--timeout-seconds', '0', '--retry-timeout-under-load'], [process.execPath, parent]);
+  assert.equal(r.status, 124, r.stderr); assert.match(r.stderr, /GATE_TIMEOUT: frozen limit 0.5s exceeded; elapsed/);
   assert.doesNotMatch(r.stderr, /TEST_SLOT_TIMEOUT_RETRY/);
   const receipt = JSON.parse(fs.readFileSync(s.result));
-  assert.equal(receipt.attempts, 1); assert.equal(receipt.gate_timeout.kind, 'wall'); assert.ok(receipt.duration_s < 5);
+  assert.equal(receipt.attempts, 1); assert.equal(receipt.gate_timeout.kind, 'frozen'); assert.ok(receipt.duration_s < 5);
   const ids = fs.readFileSync(pids, 'utf8').trim().split('\n').map(Number); assert.equal(ids.length, 2);
   for (const pid of ids) assert.equal(lookupProcess(pid, { identityOnly: true }).value, null, `pid ${pid} gone`);
   assert.throws(() => process.kill(-receipt.command_pid, 0), { code: 'ESRCH' });
@@ -85,15 +86,20 @@ for (const escaped of [false, true]) test(`wall timeout stops a forever-blocked 
   assert.equal(healthyHistory(s.root, 'promotion', [process.execPath, '-e', "console.log('healthy')"]).length, 1);
 });
 
-test('enabled idle limit stops silence, output refreshes it and healthy clocks record final silence', { timeout: 15000 }, t => {
-  const s = scratch(t);
-  const r = s.run(['--timeout-seconds', '4', '--idle-timeout-seconds', '0.2'], [process.execPath, '-e', 'setInterval(()=>{},1000)']);
-  assert.equal(r.status, 124, r.stderr); assert.match(r.stderr, /GATE_TIMEOUT: idle limit/);
-  assert.equal(JSON.parse(fs.readFileSync(s.result)).gate_timeout.kind, 'idle');
-  const good = s.run(['--timeout-seconds', '4', '--idle-timeout-seconds', '0.3'], [process.execPath, '-e', "let n=0;const t=setInterval(()=>{console.log('alive');if(++n===6){clearInterval(t);setTimeout(()=>{},100);}},70)"]);
-  assert.equal(good.status, 0, good.stderr);
-  const history = healthyHistory(s.root, 'promotion', [process.execPath, '-e', "let n=0;const t=setInterval(()=>{console.log('alive');if(++n===6){clearInterval(t);setTimeout(()=>{},100);}},70)"]); assert.equal(history.length, 1);
-  assert.ok(history[0].longest_silence_s >= .09); assert.ok(history[0].duration_s < 2);
+test('silence produces one durable notice and keeps running through later silence', { timeout: 15000 }, t => {
+  const s = scratch(t), inbox = path.join(s.root, 'supervisor/inbox.log');
+  s.env.MONITOR_GATE_NOTICE_CONTEXT = JSON.stringify({ to: 'owning-supervisor', inbox });
+  const r = s.run(['--timeout-seconds', '.1', '--idle-timeout-seconds', '.15'],
+    [process.execPath, '-e', "setTimeout(()=>console.log('still working'),450);setTimeout(()=>{},850)"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal((r.stderr.match(/TEST_WATCH_SILENCE:/g) ?? []).length, 1);
+  const receipt = JSON.parse(fs.readFileSync(s.result));
+  assert.equal(receipt.gate_timeout, null);
+  assert.ok(receipt.duration_s >= .85); assert.ok(receipt.longest_silence_s >= .4);
+  assert.equal(receipt.observations.length, 1); assert.equal(receipt.observations[0].kind, 'silence');
+  const entries = fs.readFileSync(inbox, 'utf8').trim().split('\n').map(JSON.parse).filter(row => row.type === 'notice');
+  assert.equal(entries.length, 1); assert.equal(entries[0].to, 'owning-supervisor');
+  assert.match(entries[0].message, /test continues/);
   assert.equal(fs.existsSync(s.lock), false);
 });
 
@@ -141,6 +147,7 @@ test('a throwing capture callback reports its error only after TERM and KILL sto
 
 for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records timeout, isolates correction and leaves main unchanged`, { timeout: 20000 }, t => {
   const f = fixture(t); fixtureFleet(t, f.root); f.env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
+  f.env.MONITOR_TEST_SLOT_FROZEN_SECONDS = '.4';
   const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   const declaration = JSON.parse(fs.readFileSync(path.join(f.repo, '.lane.validation.json')));
   fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ ...declaration, fast: declaration.promotion, timeout_seconds: { promotion: .4, fast: .4 }, idle_timeout_seconds: 0 }));
@@ -179,7 +186,7 @@ for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records ti
     const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../promote/promote.mjs', import.meta.url)), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
     assert.equal(r.status, 0, r.stderr);
     const results = queue.load().results; assert.equal(results.length, 2);
-    for (const result of results) { assert.equal(result.outcome, 'timeout', JSON.stringify(result)); assert.match(result.reason, /gate wall-clock limit exceeded; batch timed out; re-enqueue lanes individually/); }
+    for (const result of results) { assert.equal(result.outcome, 'timeout', JSON.stringify(result)); assert.match(result.reason, /gate frozen without output or process activity; batch timed out; re-enqueue lanes individually/); }
     assert.equal(JSON.parse(fs.readFileSync(results[0].receipt)).attempts.length, 1, 'no bisection or replay');
   }
   assert.equal(f.git(['rev-parse', 'main']), base); assert.equal(fs.existsSync(f.env.MONITOR_TEST_SLOT_PATH), false);
@@ -217,7 +224,7 @@ test('slot waiting consumes none of a short command deadline', { timeout: loadTi
   assert.equal(wait.state, 'acquired'); assert.ok(wait.waits.length > 0);
   const receipt = JSON.parse(fs.readFileSync(s.result)); assert.ok(Math.abs(receipt.duration_s - .05) < 1e-9);
   assert.ok(receipt.duration_s < .3);
-  assert.equal(receipt.limits.wall_seconds, .3);
+  assert.equal(receipt.limits.wall_seconds, 0);
   assert.equal(receipt.gate_timeout, null); assert.equal(fs.existsSync(s.lock), false);
 });
 async function nativeGroupScenario(t, mode) {
@@ -265,7 +272,7 @@ test('canonical validation includes layered lane-only wall and idle settings for
 
 test('nested watchdog stops its parent-walk children and preserves a sibling in the shared group', { timeout: 10000 }, t => {
   const s = scratch(t), witness = path.join(s.root, 'nested.json'), script = path.join(s.root, 'nested.cjs');
-  fs.writeFileSync(script, `const cp=require('child_process'),fs=require('fs');const sibling=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});const result=cp.spawnSync(process.execPath,${JSON.stringify([cli, 'run', 'inner', '--project-common', s.root, '--timeout-seconds', '.3', '--', process.execPath, '-e', 'setInterval(()=>{},1000)'])},{stdio:'inherit',env:process.env,timeout:2000});let alive=false;try{process.kill(sibling.pid,0);alive=true;}catch{}fs.writeFileSync(${JSON.stringify(witness)},JSON.stringify({status:result.status,alive}));sibling.kill('SIGTERM');sibling.once('close',()=>process.exit(result.status));`);
+  fs.writeFileSync(script, `const cp=require('child_process'),fs=require('fs');const sibling=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});const result=cp.spawnSync(process.execPath,${JSON.stringify([cli, 'run', 'inner', '--project-common', s.root, '--timeout-seconds', '.3', '--', process.execPath, '-e', 'setInterval(()=>{},1000)'])},{stdio:'inherit',env:{...process.env,MONITOR_TEST_WATCH_OWNER:'',MONITOR_TEST_SLOT_FROZEN_SECONDS:'.3'},timeout:5000});let alive=false;try{process.kill(sibling.pid,0);alive=true;}catch{}fs.writeFileSync(${JSON.stringify(witness)},JSON.stringify({status:result.status,alive}));sibling.kill('SIGTERM');sibling.once('close',()=>process.exit(result.status));`);
   const r = s.run(['--timeout-seconds', '5'], [process.execPath, script]);
   assert.equal(r.status, 124, r.stderr);
   assert.deepEqual(JSON.parse(fs.readFileSync(witness)), { status: 124, alive: true });
@@ -280,7 +287,7 @@ for (const status of [0, 1, 124]) test(`printed descendant timeout marker follow
   assert.equal(receipt.gate_timeout?.descendant ?? false, status === 124);
 });
 
-test('failed descendant identity source stops the owned hung group and retains the slot',
+test('unknown process activity never proves a freeze',
   t => nativeGroupScenario(t, 'gate-identity'));
 
 test('planned train file lists record and resolve one declared command history', t => {
@@ -298,7 +305,7 @@ test('planned train file lists record and resolve one declared command history',
     const batch = f.batch([topic]); const r = batch.run(); assert.equal(r.status, 0, r.stderr + r.stdout);
     const gate = batch.read().attempts[0].gate;
     commands.push(gate.command);
-    assert.equal(gate.limits.wall_seconds, 12000); assert.equal(gate.limits.wall_source, 'history');
+    assert.equal(gate.limits.wall_seconds, 0); assert.equal(gate.limits.wall_source, 'watch');
   }
   assert.notEqual(commands[0], commands[1]);
   const file = historyFile(f.identity, 'promotion', undefined, key);
@@ -441,29 +448,29 @@ for (const writer of ['unattributed', 'foreign', 'descendant-leak']) test(`histo
   }
 });
 
-test('three sane samples are required for wall and idle derivation, including legacy fixture history', () => {
+test('healthy sample counts cannot turn observations back into wall or silence caps', () => {
   for (const tier of ['promotion', 'release', 'release-prepare', 'test:acceptance']) {
     const floor = sampleFloorSeconds(tier), sane = { duration_s: floor, longest_silence_s: 1 };
     for (const history of [[], [sane], [sane, sane], Array(20).fill({ duration_s: floor - .01, longest_silence_s: 1 }),
       [sane, sane, ...Array(18).fill({ duration_s: .5, longest_silence_s: .02 })]]) {
       const limits = resolveGateLimits({ tier, history });
-      assert.equal(limits.wall_source, 'default'); assert.equal(limits.wall_seconds, 4500);
-      assert.equal(limits.idle_seconds, 0); assert.equal(limits.idle_source, 'off');
+      assert.equal(limits.wall_source, 'watch'); assert.equal(limits.wall_seconds, 0);
+      assert.equal(limits.idle_seconds, 900); assert.equal(limits.idle_source, 'default');
     }
     const derived = resolveGateLimits({ tier, history: [sane, sane, sane, { duration_s: .5, longest_silence_s: .02 }] });
-    assert.equal(derived.wall_source, 'history'); assert.equal(derived.wall_seconds, wallFloorSeconds(tier));
-    assert.equal(derived.idle_source, 'history'); assert.equal(derived.idle_seconds, 300);
+    assert.equal(derived.wall_source, 'watch'); assert.equal(derived.wall_seconds, 0);
+    assert.equal(derived.idle_source, 'default'); assert.equal(derived.idle_seconds, 900);
     const config = resolveGateLimits({ tier, history: [], timeoutSeconds: .25, idleTimeoutSeconds: .1 });
-    assert.equal(config.wall_seconds, .25); assert.equal(config.idle_seconds, .1);
+    assert.equal(config.wall_seconds, 0); assert.equal(config.idle_seconds, .1);
   }
 });
 
-test('observed healthy full gates fit clean-history defaults and trained limits', () => {
+test('observed healthy full gates never learn a blocking wall limit', () => {
   for (const [tier, durations, expected] of [['promotion', [420, 510, 600], 1200],
     ['release', [1200, 1500, 1800], 3600], ['pnpm validate:all-safe', [1865, 2158, 2340], 4680]]) {
     const history = durations.map(duration_s => ({ duration_s, longest_silence_s: 100 }));
-    assert.equal(resolveGateLimits({ tier, history: [] }).wall_seconds, 4500);
-    assert.equal(resolveGateLimits({ tier, history }).wall_seconds, expected);
+    assert.equal(resolveGateLimits({ tier, history: [] }).wall_seconds, 0);
+    assert.equal(resolveGateLimits({ tier, history }).wall_seconds, 0);
     assert.ok(expected >= 2 * Math.max(...durations));
     assert.ok(4500 > Math.max(...durations));
   }

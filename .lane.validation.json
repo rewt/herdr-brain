@@ -3,6 +3,6 @@
   "promotion_tests": "test/helpers/affected-tests.mjs",
   "promotion": "npm run test:promotion",
   "release": "npm run test:release",
-  "timeout_seconds": { "promotion": 3600, "release": 7200 },
-  "idle_timeout_seconds": { "promotion": 900 }
+  "timeout_seconds": 0,
+  "idle_timeout_seconds": 900
 }

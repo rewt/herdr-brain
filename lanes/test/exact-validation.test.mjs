@@ -8,6 +8,20 @@ import { validateTree } from '../validation.mjs';
 
 const options = f => ({ cwd: f.workspace, common: f.common, command: f.command, tier: 'fast', env: f.env, exact: { base: f.base, declaration: f.declaration } });
 
+test('exact gates retain outer watch transport without admitting unlisted product inputs', t => {
+  const f = exactFixture(t), journal = path.join(f.root, 'outer.timings.jsonl');
+  f.commit('check.cjs', `const assert=require('assert/strict');
+assert.equal(process.env.UNLISTED,undefined);
+assert.equal(process.env.MONITOR_TEST_WATCH_OWNER,'outer-owner');
+assert.equal(process.env.MONITOR_TEST_TIMINGS_PATH,${JSON.stringify(journal)});
+require('fs').appendFileSync(${JSON.stringify(f.counts)},'gate\\n');`);
+  const watchContext = { MONITOR_TEST_WATCH_OWNER: 'outer-owner', MONITOR_TEST_TIMINGS_PATH: journal,
+    MONITOR_TEST_SLOT_FROZEN_SECONDS: '0', UNLISTED: 'must stay excluded' };
+  const first = validateTree({ ...options(f), env: restrictEnvironment(f.env, f.declaration), watchContext });
+  assert.equal(first.exit_code, 0); assert.equal(first.timings_path, journal); assert.equal(first.limits.frozen_seconds, 0);
+  assert.equal(JSON.stringify(first.exact.identity).includes('outer-owner'), false);
+});
+
 test('the committed canonical base alone opts in and declarations are closed', t => {
   const f = exactFixture(t, { declared: false });
   f.commit('.validation-receipts.json', JSON.stringify(f.declaration));

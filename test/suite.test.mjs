@@ -12,29 +12,17 @@ import { testSlotEnvironment } from './helpers/test-slot-env.mjs';
 
 process.env.ORG_ACTOR = 'suite-tests';
 
-for (const [factor, concurrency, fileTimeout, suiteTimeout] of [
-  [1, 4, 300_000, 360_000],
-  [1.5, 2, 450_000, 720_000],
-  [2.6, 1, 780_000, 1_440_000],
-  [5, 1, 1_500_000, 1_800_000],
-]) test(`runner deadlines cover reduced file concurrency at load factor ${factor}`, () => {
-  const limits = runnerLimits({ factor });
-  assert.deepEqual(limits, { concurrency, fileTimeout, suiteTimeout });
-  assert.ok(limits.suiteTimeout >= 360_000 * (4 / limits.concurrency));
-});
+for (const [factor, concurrency] of [[1, 4], [1.5, 2], [2.6, 1], [5, 1]])
+  test(`runner load factor ${factor} changes admission without time caps`, () => {
+    assert.deepEqual(runnerLimits({ factor }), { concurrency, fileTimeout: 0, suiteTimeout: 0 });
+  });
 
-test('runner overrides retain their ceilings, fixed cancellation deadlines and finite timer bounds', () => {
-  assert.deepEqual(runnerLimits({ factor: 2.6, fileTimeout: 480_000, suiteTimeout: 540_000 }),
-    { concurrency: 1, fileTimeout: 1_248_000, suiteTimeout: 2_160_000 });
-  assert.deepEqual(runnerLimits({ factor: 2.6, fixedDeadlines: true, fileTimeout: 5000, suiteTimeout: 1000 }),
-    { concurrency: 1, fileTimeout: 5000, suiteTimeout: 1000 });
-  const extreme = runnerLimits({ factor: Number.MAX_VALUE });
-  assert.deepEqual(extreme, { concurrency: 1, fileTimeout: 2 ** 31 - 1, suiteTimeout: 2 ** 31 - 1 });
-  for (const factor of [0, 0.9, NaN, Infinity]) assert.throws(() => runnerLimits({ factor }), /invalid test load factor/);
-  for (const [name, maximum] of [['fileTimeout', 480_000], ['suiteTimeout', 540_000]]) {
-    for (const value of [0, -1, 1.5, NaN, Infinity, maximum + 1])
-      assert.throws(() => runnerLimits({ factor: 1, [name]: value }), /must be 1\.\./);
+test('legacy runner deadline arguments cannot restore time caps', () => {
+  for (const factor of [1, 2.6, Number.MAX_VALUE]) {
+    assert.deepEqual(runnerLimits({ factor, fixedDeadlines: true, fileTimeout: 1, suiteTimeout: 1 }),
+      { concurrency: Math.max(1, Math.floor(4 / factor)), fileTimeout: 0, suiteTimeout: 0 });
   }
+  for (const factor of [0, 0.9, NaN, Infinity]) assert.throws(() => runnerLimits({ factor }), /invalid test load factor/);
 });
 
 test('npm phases preserve every file once and group module families', () => {
@@ -57,13 +45,14 @@ test('the phased command propagates a failing suite and never starts its later p
   assert.equal(fs.existsSync(path.join(root, 'later-was-run')), false);
 });
 
-test('the phased command forwards suite watchdog overrides to its bounded runner', async t => {
+test('the phased command runs a progressing file past legacy file and suite caps', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phased-watchdog-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(root, 'blocked.mjs'), 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);');
-  const result = await waitForExit(spawnChild(t, process.execPath, [fileURLToPath(new URL('./helpers/suite.mjs', import.meta.url)), '--fixed-deadlines', '--file-timeout=5000', '--suite-timeout=1000', 'blocked.mjs'], { cwd: root }));
-  assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /Test suite exceeded 1000ms/);
+  fs.writeFileSync(path.join(root, 'blocked.mjs'), `import test from 'node:test';test('slow progress',async()=>{for(let n=0;n<4;n++){console.log('progress');await new Promise(r=>setTimeout(r,50));}});`);
+  const result = await waitForExit(spawnChild(t, process.execPath, [fileURLToPath(new URL('./helpers/suite.mjs', import.meta.url)), '--fixed-deadlines', '--file-timeout=1', '--suite-timeout=1', 'blocked.mjs'], { cwd: root }));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /slow progress/);
+  assert.doesNotMatch(result.stderr, /exceeded/);
 });
 
 // Use the existing bounded owner even when selecting the merge-critical subset.

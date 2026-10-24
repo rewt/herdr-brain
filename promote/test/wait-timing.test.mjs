@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fixture } from './helpers/conformance.mjs';
 
-for (const [kind, topics] of [['wall', ['timeout']], ['wall', ['timeout', 'other']], ['idle', ['timeout']]]) {
+for (const [kind, topics] of [['frozen', ['timeout']], ['frozen', ['timeout', 'other']]]) {
   test(`${kind} timeout retains wait metrics and correction outcomes for ${topics.length} lane(s)`, t => {
-    const f = fixture(t);
+    const f = fixture(t); f.env.MONITOR_TEST_SLOT_FROZEN_SECONDS = '.4';
     const declaration = path.join(f.repo, '.lane.validation.json');
     fs.writeFileSync(declaration, JSON.stringify({ ...JSON.parse(fs.readFileSync(declaration)),
       timeout_seconds: kind === 'wall' ? .4 : 4, idle_timeout_seconds: kind === 'idle' ? .2 : 0 }));
@@ -30,7 +30,7 @@ for (const [kind, topics] of [['wall', ['timeout']], ['wall', ['timeout', 'other
     assert.equal(attempt.gate.exit_code, 124);
     for (const topic of topics) {
       assert.equal(train.results[topic].outcome, 'timeout');
-      assert.equal(train.results[topic].reason, `gate ${kind === 'idle' ? 'no-output' : 'wall-clock'} limit exceeded; ${topics.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`);
+      assert.equal(train.results[topic].reason, `gate frozen without output or process activity; ${topics.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`);
     }
     const directory = path.join(f.identity, 'lane-validation');
     const gates = fs.readdirSync(directory).filter(n => n.endsWith('.json') && !n.endsWith('.execution.json'));

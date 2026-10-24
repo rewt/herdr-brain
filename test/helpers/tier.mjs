@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { startTiming } from '../../test-slot/timings.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from '../../lib/cli-help.mjs';
@@ -119,5 +120,10 @@ if (isMain(import.meta.url)) {
   const [tier, ...options] = process.argv.slice(2);
   if (options.some(option => !option.startsWith('--'))) throw Error('expected runner options after tier');
   process.chdir(root);
-  suite([...options, ...tierFiles(tier)]);
+  process.env.MONITOR_TEST_TIER = tier;
+  const finish = startTiming('tier', tier);
+  let failed = false;
+  try { suite([...options, ...tierFiles(tier)]); }
+  catch (error) { failed = true; throw error; }
+  finally { finish({ exit_code: failed ? 1 : process.exitCode ?? 0 }); }
 }

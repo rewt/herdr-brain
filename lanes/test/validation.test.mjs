@@ -68,20 +68,20 @@ test('defaults, legacy commands, partial tracked overrides and invalid declarati
   assert.match(f.lane(['check', '--tier', 'release']).stderr, /release gates are run by bash herdr\/release\.sh build TAG/);
 });
 
-test('project gate limits override healthy history for promotion and release', t => {
+test('project gate timing is watch-only for promotion and release', t => {
   const declaration = JSON.parse(fs.readFileSync(new URL('../../.lane.validation.json', import.meta.url), 'utf8'));
   const f = fixture(t, declaration);
   const settings = resolveValidation({ root: f.repo, env: {} });
   const history = Array.from({ length: 3 }, () => ({ duration_s: 1001, longest_silence_s: 100 }));
-  for (const [tier, wallSeconds] of [['promotion', 3600], ['release', 7200]]) {
+  for (const [tier, wallSeconds] of [['promotion', 0], ['release', 0]]) {
     const limits = resolveGateLimits({ tier, ...settings.tiers[tier], history });
     assert.equal(limits.wall_seconds, wallSeconds);
-    assert.equal(limits.wall_source, 'config');
-    assert.equal(limits.idle_seconds, tier === 'promotion' ? 900 : 300);
-    assert.equal(limits.idle_source, tier === 'promotion' ? 'config' : 'history');
+    assert.equal(limits.wall_source, 'watch');
+    assert.equal(limits.idle_seconds, 900);
+    assert.equal(limits.idle_source, 'config');
   }
-  assert.equal(settings.tiers.fast.timeoutSeconds, undefined);
-  assert.equal(settings.tiers.fast.idleTimeoutSeconds, undefined);
+  assert.equal(settings.tiers.fast.timeoutSeconds, 0);
+  assert.equal(settings.tiers.fast.idleTimeoutSeconds, 900);
 });
 
 test('validation looks up an exact command profile outside the legacy declaration', { timeout: 20000 }, t => {

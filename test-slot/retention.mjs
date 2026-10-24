@@ -40,11 +40,17 @@ export function pruneExecutions(currentFile, profileId, stateOfHolder) {
         if (current?.token === holder.token && stateOfHolder(current).state !== 'gone') protectedByLock = true;
       }
       if (protectedByLock || readPlainFile(row.file) !== row.bytes) continue;
-      const samples = `${row.file}.samples.jsonl`;
+      const siblings = [`${row.file}.samples.jsonl`, `${row.file}.timings.jsonl`];
       // Do not follow a telemetry pointer from receipt content, or remove a
       // redirected/non-file sibling. Only this fixed managed pair is eligible.
-      try { if (!fs.lstatSync(samples).isFile()) continue; fs.unlinkSync(samples); }
-      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      for (const file of siblings) {
+        try { if (!fs.lstatSync(file).isFile()) throw Error('redirected evidence sibling'); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
+      for (const file of siblings) {
+        try { fs.unlinkSync(file); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
       fs.unlinkSync(row.file);
       pruned++;
     } catch { /* Liveness or storage uncertainty preserves the receipt. */ }

@@ -225,8 +225,8 @@ function perform(job, queue) {
   if (r.error || r.status !== 0) {
     const detail = reason();
     if (r.status === 124 && /GATE_TIMEOUT:/.test(detail)) {
-      const limit = /GATE_TIMEOUT: idle/.test(detail) ? 'no-output' : 'wall-clock';
-      return { outcome: 'timeout', reason: `gate ${limit} limit exceeded; lane isolated for correction`, log };
+      const reason = /GATE_TIMEOUT: frozen/.test(detail) ? 'gate frozen without output or process activity' : `gate ${/GATE_TIMEOUT: idle/.test(detail) ? 'no-output' : 'wall-clock'} limit exceeded`;
+      return { outcome: 'timeout', reason: `${reason}; lane isolated for correction`, log };
     }
     return { outcome: 'refused', reason: singleLine(detail), log };
   }
@@ -295,7 +295,7 @@ function performBatch(batch, queue, settings) {
       const last = train.attempts?.at(-1);
       const cancelled = new Set(last?.phase === 'invalid' && last.prepare?.failure?.signal ? last.ids : []);
       const limit = host.gate_timeout?.kind === 'idle' ? 'no-output' : 'wall-clock';
-      const reason = `gate ${limit} limit exceeded; ${batch.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`;
+      const reason = `${host.gate_timeout?.kind === 'frozen' ? 'gate frozen without output or process activity' : `gate ${limit} limit exceeded`}; ${batch.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`;
       for (const job of batch.jobs) {
         if (!train.results[job.id] || (train.results[job.id].outcome === 'refused' && cancelled.has(job.id)))
           train.results[job.id] = { outcome: 'timeout', reason, batch: batch.id, host_receipt: hostFile };

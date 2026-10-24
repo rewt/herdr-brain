@@ -21,13 +21,13 @@ for (const [load, parallelism, factor, concurrency] of [
   assert.equal(runnerLimits({ factor: measured }).concurrency, concurrency);
 });
 
-test('sampled load 7 on 18 cores keeps four files, base deadlines and matching slot telemetry', t => {
+test('sampled load 7 on 18 cores keeps four files, no deadlines and matching slot telemetry', t => {
   t.mock.method(os, 'loadavg', () => [7, 7, 7]);
   t.mock.method(os, 'availableParallelism', () => 18);
   const factor = testLoadFactor();
   assert.equal(factor, 1);
   assert.deepEqual(runnerLimits({ factor, fileTimeout: 480_000, suiteTimeout: 540_000 }),
-    { concurrency: 4, fileTimeout: 480_000, suiteTimeout: 540_000 });
+    { concurrency: 4, fileTimeout: 0, suiteTimeout: 0 });
   const workers = workerSettings({});
   assert.equal(workers.load_factor, factor);
   assert.equal(workers.test_file_cap, 4);
@@ -37,12 +37,12 @@ test('sampled load 7 on 18 cores keeps four files, base deadlines and matching s
   assert.equal(loadFactor(), 1.75);
 });
 
-test('actual host overload still reduces concurrency, scales deadlines and permits a timeout retry', t => {
+test('actual host overload still reduces concurrency, keeps deadlines off and permits a timeout retry', t => {
   t.mock.method(os, 'loadavg', () => [27, 27, 27]);
   t.mock.method(os, 'availableParallelism', () => 18);
   const factor = testLoadFactor();
   assert.deepEqual(runnerLimits({ factor }),
-    { concurrency: 2, fileTimeout: 450_000, suiteTimeout: 720_000 });
+    { concurrency: 2, fileTimeout: 0, suiteTimeout: 0 });
   assert.equal(workerSettings({}).test_file_cap, 2);
   assert.equal(shouldRetryTimeout({ status: 124, timeout: true, load: factor }), true);
 });

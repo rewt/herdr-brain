@@ -42,11 +42,13 @@ build() {
   done
   # Like the promotion train, queue for the shared host test slot instead of refusing while another
   # project's gate holds it; an explicit setting (0 refuses at once) wins. Agents ship with one bare
-  # command, so they cannot set this themselves. One hour leaves the gate time within its release timeout.
+  # command, so they cannot set this themselves. This bounds admission, never test execution.
   export MONITOR_TEST_SLOT_WAIT_SECONDS=${MONITOR_TEST_SLOT_WAIT_SECONDS:-${BCH_CLOAK_TEST_SLOT_WAIT_SECONDS:-3600}}
   (cd "$dir.partial" && node --input-type=module <<'NODE'
 import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { validateValidation } from './lanes/validation.mjs';
 import { runGateSync } from './test-slot/run.mjs';
 const frozen = JSON.parse(fs.readFileSync('.release-validation.json', 'utf8'));
@@ -56,8 +58,12 @@ const timeoutSeconds = typeof declared.timeout_seconds === 'object'
   ? declared.timeout_seconds.release : declared.timeout_seconds;
 const idleTimeoutSeconds = typeof declared.idle_timeout_seconds === 'object'
   ? declared.idle_timeout_seconds.release : declared.idle_timeout_seconds;
+const directory = path.join(frozen.common, 'lane-validation');
+fs.mkdirSync(directory, { recursive: true });
+const executionReceipt = path.join(directory, `release-${randomUUID()}.execution.json`);
+console.error(`release gate receipt: ${executionReceipt}`);
 const run = runGateSync('release snapshot', ['/bin/sh', '-c', declared.release ?? 'npm run test:release'], {
-  tier: 'release', timeoutSeconds, idleTimeoutSeconds, retryTimeout: false, stdio: 'inherit',
+  common: frozen.common, executionReceipt, tier: 'release', timeoutSeconds, idleTimeoutSeconds, retryTimeout: false, stdio: 'inherit',
 });
 if (run.error) console.error(run.error.message);
 process.exitCode = run.status ?? (run.signal ? 128 + (os.constants.signals[run.signal] ?? 0) : 1);

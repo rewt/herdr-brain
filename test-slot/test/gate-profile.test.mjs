@@ -405,12 +405,12 @@ test('malformed profiles and missing exact Node pins fail closed; effective decl
   commit('.nvmrc', '0.0.0'); assert.throws(() => resolveGateProfile(f.repo, f.env));
 });
 
-test('inner idle timeout uses canonical lane-only limits without timing out the completed host envelope', t => {
+test('host observes canonical silence once while a silent gate continues and promotes', t => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ validation: { timeout_seconds: { promotion: 5000 }, idle_timeout_seconds: { promotion: .2 } } }));
   f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Canonical watchdog settings']);
   const before = f.git(['rev-parse', 'main']);
-  f.env.LANE_VALIDATE = 'node -e "setInterval(()=>{},1000)"';
+  f.env.LANE_VALIDATE = 'node -e "setTimeout(()=>{},650)"';
   const result = f.run();
   // The train completed and recorded a lane timeout; its zero exit and printed
   // descendant marker cannot turn this completed host lifecycle into a timeout.
@@ -419,16 +419,16 @@ test('inner idle timeout uses canonical lane-only limits without timing out the 
   assert.equal(saved.phase, 'finished'); assert.equal(saved.exit_code, 0);
   assert.equal(saved.gate_timeout, undefined);
   const train = JSON.parse(fs.readFileSync(f.receipt));
-  assert.equal(train.attempts[0].gate.limits.wall_seconds, 5000);
-  assert.equal(train.results.job.outcome, 'timeout');
-  assert.equal(train.attempts[0].gate.gate_timeout.kind, 'idle');
-  assert.match(train.results.job.reason, /gate no-output limit exceeded; lane isolated for correction/);
-  assert.doesNotMatch(train.results.job.reason, /wall-clock/);
-  assert.equal(f.git(['rev-parse', 'main']), before);
+  assert.equal(train.attempts[0].gate.limits.wall_seconds, 0);
+  assert.equal(train.results.job.outcome, 'promoted');
+  assert.equal(train.attempts[0].gate.gate_timeout, null);
+  const execution = JSON.parse(fs.readFileSync(saved.execution_receipt));
+  assert.equal(execution.observations.filter(row => row.kind === 'silence').length, 1);
+  assert.notEqual(f.git(['rev-parse', 'main']), before);
   assert.equal(fs.existsSync(f.slot), false);
 });
 
-test('promotion host envelope derives from the declared inner history key', t => {
+test('promotion host and inner gate remain uncapped despite long historical durations', t => {
   const f = fixture(t), common = path.join(f.repo, '.git');
   f.env.MONITOR_GATE_HISTORY_ROOT = path.join(f.root, 'history');
   const key = gateHistoryKey('promotion', ['/bin/sh', '-c', 'node gate.cjs']);
@@ -440,9 +440,9 @@ test('promotion host envelope derives from the declared inner history key', t =>
   const train = JSON.parse(fs.readFileSync(f.receipt));
   assert.ok(train.attempts[0].gate, JSON.stringify(train) + r.stdout + r.stderr);
   const inner = train.attempts[0].gate.limits;
-  assert.equal(inner.wall_seconds, 12000); assert.equal(inner.wall_source, 'history');
+  assert.equal(inner.wall_seconds, 0); assert.equal(inner.wall_source, 'watch');
   const args = JSON.parse(fs.readFileSync(evidence));
-  assert.ok(Number(args[args.indexOf('--timeout-seconds') + 1]) > inner.wall_seconds);
+  assert.equal(Number(args[args.indexOf('--timeout-seconds') + 1]), 0);
 });
 
 test('three-lane red bisection fits the host envelope and promotes both healthy green lanes', t => {
@@ -466,11 +466,11 @@ test('three-lane red bisection fits the host envelope and promotes both healthy 
   assert.equal(train.attempts.length, 5);
   for (const attempt of train.attempts) {
     assert.ok(attempt.gate, f.diagnostics());
-    assert.equal(attempt.gate.limits.wall_seconds, 12000);
+    assert.equal(attempt.gate.limits.wall_seconds, 0);
     assert.equal(attempt.gate.gate_timeout, null);
   }
   const args = JSON.parse(fs.readFileSync(evidence));
-  assert.equal(Number(args[args.indexOf('--timeout-seconds') + 1]), 5 * (12000 + 600) + 60);
+  assert.equal(Number(args[args.indexOf('--timeout-seconds') + 1]), 0);
   assert.equal(train.results.red.outcome, 'refused');
   for (const topic of ['green-one', 'green-two']) {
     assert.equal(train.results[topic].outcome, 'promoted');
@@ -481,12 +481,12 @@ test('three-lane red bisection fits the host envelope and promotes both healthy 
   assert.equal(fs.existsSync(f.slot), false);
 });
 
-test('two-lane host envelope timeout returns batch re-enqueue wording', t => {
+test('two-lane frozen host returns batch re-enqueue wording', t => {
   const f = fixture(t, { prepare: [{ run: 'node -e "setInterval(()=>{},1000)"' }] });
   const other = path.join(f.root, 'other'); f.git(['worktree', 'add', '-qb', 'lane/other', other]);
   fs.writeFileSync(path.join(other, 'other'), 'other'); f.git(['add', '.'], other); f.git(['commit', '-qm', 'Other'], other);
   const preload = path.join(f.root, 'short-host.mjs');
-  fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){args=[...args];args[args.indexOf('--timeout-seconds')+1]='.8';}return run(cmd,args,opts);};syncBuiltinESMExports();`);
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){opts={...opts,env:{...opts.env,MONITOR_TEST_SLOT_FROZEN_SECONDS:'.8'}};}return run(cmd,args,opts);};syncBuiltinESMExports();`);
   f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
   const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   const queue = queueFor(f.repo);
@@ -497,7 +497,7 @@ test('two-lane host envelope timeout returns batch re-enqueue wording', t => {
   const results = queue.load().results; assert.equal(results.length, 2);
   for (const result of results) {
     assert.equal(result.outcome, 'timeout', JSON.stringify({ outcome: result.outcome, code: result.code, reason: result.reason }));
-    assert.equal(result.reason, 'gate wall-clock limit exceeded; batch timed out; re-enqueue lanes individually');
+    assert.equal(result.reason, 'gate frozen without output or process activity; batch timed out; re-enqueue lanes individually');
     const host = JSON.parse(fs.readFileSync(result.host_receipt)); assert.equal(host.phase, 'timeout'); assert.equal(host.gate_timeout.descendant ?? false, false);
   }
   assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(fs.existsSync(f.slot), false);
@@ -518,7 +518,7 @@ test('host timeout preserves an earlier preparation refusal while classifying it
   const other = path.join(f.root, 'other'); f.git(['worktree', 'add', '-qb', 'lane/other', other]);
   fs.writeFileSync(path.join(other, 'other'), 'other'); f.git(['add', '.'], other); f.git(['commit', '-qm', 'Other'], other);
   const preload = path.join(f.root, 'split-host.mjs');
-  fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){args=[...args];args[args.indexOf('--timeout-seconds')+1]='${loadTimeout(3000) / 1000}';}return run(cmd,args,opts);};syncBuiltinESMExports();`);
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){opts={...opts,env:{...opts.env,MONITOR_TEST_SLOT_FROZEN_SECONDS:'.4'}};}return run(cmd,args,opts);};syncBuiltinESMExports();`);
   f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
   const herdr = path.join(f.root, 'herdr'); fs.writeFileSync(herdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   const queue = queueFor(f.repo);
@@ -536,6 +536,6 @@ test('host timeout preserves an earlier preparation refusal while classifying it
   const results = queue.load().results;
   assert.deepEqual(results.map(result => result.outcome), ['refused', 'timeout']);
   assert.match(results[0].reason, /train preparation failed/);
-  assert.equal(results[1].reason, 'gate wall-clock limit exceeded; batch timed out; re-enqueue lanes individually');
+  assert.equal(results[1].reason, 'gate frozen without output or process activity; batch timed out; re-enqueue lanes individually');
   assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(fs.existsSync(f.slot), false);
 });

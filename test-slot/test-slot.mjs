@@ -28,6 +28,9 @@
 
 import { resolveGateLimits, projectCommon, recordHealthyGate, historyFile, gateHistoryKey, TIMEOUT_EXIT, RELEASE_TIMEOUT_ENV } from "./limits.mjs";
 import { stopGateGroup } from "./watchdog.mjs";
+import { watchRun } from './watch.mjs';
+import { silenceNotice } from './watch-notice.mjs';
+import { TIMINGS_ENV, readTimings } from './timings.mjs';
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { resolveResource } from "./resources.mjs";
@@ -455,8 +458,8 @@ export async function run({ positional, options, child }) {
       // A zero-budget attempt publishes an already-expired, zero-duration row.
       // It grants no waiting authority and needs no artificial wait/grace.
       const reservation = publishProvingReservation({ lockPath: options.compatPath, label, reason: options.reason ?? label,
-        expectedEnd: new Date(acquired + (options.expectedSeconds ?? limits.wall_seconds) * 1000).toISOString(),
-        expiresAt: new Date(floor === undefined ? acquired + (limits.wall_seconds + 30) * 1000 : Math.max(acquired, deadline)).toISOString(),
+        expectedEnd: new Date(acquired + (options.expectedSeconds ?? 4500) * 1000).toISOString(),
+        expiresAt: new Date(floor === undefined ? acquired + 4530 * 1000 : Math.max(acquired, deadline)).toISOString(),
         ...(floor === undefined ? {} : { now: () => acquired }), reserveGib: options.reserveGib, provers: options.provers });
       const setGroup = slot.setGroup, release = slot.release;
       slot.reservation = reservation;
@@ -481,8 +484,8 @@ export async function run({ positional, options, child }) {
         waiting.signal.throwIfAborted();
         confirm();
         const granted = Date.now();
-        reservation.renew({ expectedEnd: new Date(granted + (options.expectedSeconds ?? limits.wall_seconds) * 1000).toISOString(),
-          expiresAt: new Date(granted + (limits.wall_seconds + 30) * 1000).toISOString() });
+        reservation.renew({ expectedEnd: new Date(granted + (options.expectedSeconds ?? 4500) * 1000).toISOString(),
+          expiresAt: new Date(granted + 4530 * 1000).toISOString() });
         process.stderr.write(`TEST_SLOT_MEMORY_GRANTED: ${label}; floor ${floor} bytes; admission deadline ${new Date(deadline).toISOString()}\n`);
       }
     }
@@ -530,32 +533,46 @@ export async function run({ positional, options, child }) {
     const telemetry = resource.profile && !slot.nested && !options.noSlot && options.resultPath
       ? boundedTelemetry(`${options.resultPath}.samples.jsonl`) : null;
     const measurementAttempts = [];
+    const executionAttempts = [], silenceState = { notified: false };
+    const timingsPath = process.env[TIMINGS_ENV] ?? (options.resultPath && `${options.resultPath}.timings.jsonl`);
+    const watchReceipt = options.resultPath ?? `test-slot-${process.pid}`;
     let received = null;
     let execution = { resource, class: slot.class, occupancy_path: slot.occupancyPath };
+    let firstStartedAt;
     const started = proc => {
+      const at = new Date().toISOString();
+      firstStartedAt ??= at;
       execution = { resource, class: slot.class, occupancy_path: slot.occupancyPath,
-        command_started: true, command_pid: proc.pid, started_at: new Date().toISOString() };
+        command_started: true, command_pid: proc.pid, started_at: firstStartedAt, attempt_started_at: at };
       saveExecution(execution);
     };
     const retryTimeout = options.retryTimeout && process.env[RETRIED_ENV] !== "1";
     for (let attempt = 0; attempt < 2; attempt++) {
       const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits, options.onCapture, resource.profile && !slot.nested && !options.noSlot ? {
         telemetryPath: options.resultPath ? `${options.resultPath}.samples.jsonl` : undefined, telemetry, notes: options.measurementNotes,
-      } : null, tier === 'release' ? { [RELEASE_TIMEOUT_ENV]: String(limits.wall_seconds) } : {});
+      } : null, { [RELEASE_TIMEOUT_ENV]: '0', MONITOR_TEST_WATCH_OWNER: process.env.MONITOR_TEST_WATCH_OWNER ?? String(process.pid),
+        ...(timingsPath ? { [TIMINGS_ENV]: timingsPath } : {}) }, { label, silenceState, receipt: watchReceipt, persist: observation => saveExecution({ ...execution, limits, watch_observation: observation, timings_path: timingsPath }) });
       if (result.measurement) measurementAttempts.push({ attempt: attempt + 1, ...result.measurement });
+      executionAttempts.push({ attempt: attempt + 1, exit_code: result.status, signal: result.signal, duration_s: result.duration_s,
+        longest_silence_s: result.longest_silence_s, observations: result.observations });
       saveExecution({ ...execution, signal: received ?? result.signal,
         measurement: result.measurement ?? { status: slot.nested ? 'nested; sampling owned by top-level holder if profiled' : options.noSlot ? 'unslotted' : 'unprofiled' }, measurement_attempts: measurementAttempts,
-        history_key: historyKey, exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() });
+        history_key: historyKey, exit_code: result.status, attempts: attempt + 1, execution_attempts: executionAttempts, limits, gate_timeout: result.gateTimeout,
+        duration_s: executionAttempts.reduce((sum, row) => sum + row.duration_s, 0),
+        longest_silence_s: Math.max(...executionAttempts.map(row => row.longest_silence_s)),
+        observations: executionAttempts.flatMap(row => row.observations), activity_audits: result.activity_audits, timings_path: timingsPath, timings: timingsPath ? readTimings(timingsPath) : [],
+        cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() });
       if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
       if (!result.groupGone) return result.status || 1;
       if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
-        slot.reservation?.renew({ expiresAt: new Date(Date.now() + (limits.wall_seconds + 30) * 1000).toISOString() });
+        slot.reservation?.renew({ expiresAt: new Date(Date.now() + 4530 * 1000).toISOString() });
         process.stderr.write(`TEST_SLOT_TIMEOUT_RETRY: ${label}: timeout under load; re-running once inside the held slot.\n`);
         continue;
       }
       const released = slot.release();
       if (released !== false && result.status === 0 && received === null && !result.gateTimeout) {
-        try { recordHealthyGate({ common, tier, historyKey, file: historyPath, command: child, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s }); }
+        try { recordHealthyGate({ common, tier, historyKey, file: historyPath, command: child,
+          duration_s: executionAttempts.reduce((sum, row) => sum + row.duration_s, 0), longest_silence_s: Math.max(...executionAttempts.map(row => row.longest_silence_s)) }); }
         catch (error) { process.stderr.write(`GATE_HISTORY_WARNING: ${error.message}\n`); }
       }
       if (released === false) process.stderr.write('TEST_SLOT_GROUP_REMAINS: nested command group still exists; lock retained.\n');
@@ -572,7 +589,7 @@ export function shouldRetryTimeout({ status, timeout, load, childRetried = false
   return status !== 0 && status !== REFUSED_EXIT && !gateTimeout && timeout && load > 1 && !childRetried;
 }
 
-async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits, onCapture, measurementOptions, childEnv) {
+async function executeCommand(argv, slot, received, lockPath, compatPath, retried, started, limits, onCapture, measurementOptions, childEnv, watchOptions) {
   let load = testLoadFactor();
   let timeout = false;
   let childRetried = false;
@@ -581,18 +598,19 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
   const clock = () => Number(process.hrtime.bigint()) / 1e9;
   const commandStart = clock();
   let lastOutput = commandStart, longestSilence = 0;
-  let stopping, stopError, failWatchdog, rootIdentity, measurement;
+  let stopping, stopError, failWatchdog, rootIdentity, measurement, watcher;
   const ownsGroup = !slot.nested;
   let leftover = false;
   const failure = new Promise(resolve => { failWatchdog = error => resolve({ error }); });
   const tracked = new Map();
   let tail = "";
   const observe = (data) => {
+    watcher?.output();
     const now = clock();
     longestSilence = Math.max(longestSilence, now - lastOutput);
     lastOutput = now;
     const text = tail + String(data);
-    const overrun = text.match(/(?:^|\n)GATE_TIMEOUT: (wall|idle) limit ([0-9.]+)s exceeded; elapsed ([0-9.]+)s/u);
+    const overrun = text.match(/(?:^|\n)GATE_TIMEOUT: (wall|idle|frozen) limit ([0-9.]+)s exceeded; elapsed ([0-9.]+)s/u);
     if (overrun) descendantTimeout ??= { kind: overrun[1], limit_seconds: Number(overrun[2]), elapsed_s: Number(overrun[3]), descendant: true };
     timeout ||= /ETIMEDOUT|testTimeoutFailure|Test (?:file|suite) exceeded \d+ms|ERR_TEST_FAILURE[^\n]*timeout|failureType: ['"]testTimeoutFailure/u.test(text);
     // A nested wrapper already spent this command's single retry. Its timeout
@@ -621,17 +639,23 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     proc.stdout.on("data", data => { observe(data); process.stdout.write(data); });
     proc.stderr.on("data", data => { observe(data); process.stderr.write(data); });
   }
-  const watcher = setInterval(() => {
-    if (proc.pid === undefined || stopping) return;
-    const elapsed = clock() - commandStart, idle = clock() - lastOutput;
-    const kind = elapsed >= limits.wall_seconds ? 'wall' : limits.idle_seconds > 0 && idle >= limits.idle_seconds ? 'idle' : null;
-    if (!kind) return;
-    gateTimeout = { kind, limit_seconds: kind === 'wall' ? limits.wall_seconds : limits.idle_seconds, elapsed_s: elapsed };
-    process.stderr.write(`GATE_TIMEOUT: ${kind} limit ${gateTimeout.limit_seconds}s exceeded; elapsed ${elapsed.toFixed(3)}s\n`);
-    stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
-  }, 50);
+  if (proc.pid !== undefined && !process.env.MONITOR_TEST_WATCH_OWNER) watcher = watchRun({ pid: proc.pid, ownsGroup,
+    idleSeconds: limits.idle_seconds, frozen: limits.frozen_seconds, silenceState: watchOptions.silenceState,
+    onSilence: observation => {
+      observation.notice = silenceNotice(observation, watchOptions);
+      watchOptions.persist(observation);
+      process.stderr.write(`TEST_WATCH_SILENCE: no output for ${observation.silence_s.toFixed(3)}s; command continues.\n`);
+    },
+    onFrozen: observation => {
+      gateTimeout = observation;
+      watchOptions.persist(observation);
+      process.stderr.write(`GATE_TIMEOUT: frozen limit ${observation.limit_seconds}s exceeded; elapsed ${observation.elapsed_s.toFixed(3)}s\n`);
+      stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
+    },
+  });
   const forwarded = new Set();
   const forward = (signal) => {
+    watcher?.stop();
     received(signal);
     // Nested gates share the holder group; cancel only their descendants.
     if (forwarded.has(signal)) return;
@@ -665,7 +689,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     timeout ||= status === 124;
     // A successful leader can leave pipes/group members alive. Give them a
     // short grace, then clean up as a distinct failure rather than an overrun.
-    clearInterval(watcher);
+    watcher?.stop();
     let groupGone = true;
     if (proc.pid !== undefined) {
       const remains = () => ownsGroup ? probe(-proc.pid) !== false : [...tracked.values()].some(saved => {
@@ -683,7 +707,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
       if (stopError) throw stopError;
       groupGone = !remains();
     }
-    clearInterval(watcher);
+    watcher?.stop();
     // Cleanup is confirmed; close inherited pipes even if an unobserved daemon
     // retained them outside the supported parent-walk boundary.
     let drainTimer;
@@ -694,20 +718,23 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     longestSilence = Math.max(longestSilence, ended - lastOutput);
     if (status === TIMEOUT_EXIT) gateTimeout ??= descendantTimeout;
     // Signals are never retryable, including commands that swallow a signal.
-    return { status: gateTimeout ? TIMEOUT_EXIT : leftover ? LEFTOVER_EXIT : status, signal: gateTimeout ? null : signal, gateTimeout, duration_s, longest_silence_s: longestSilence, timeout: signal ? false : timeout, load, childRetried, groupGone, measurement: measurement?.finish() };
+    return { status: gateTimeout ? TIMEOUT_EXIT : leftover ? LEFTOVER_EXIT : status, signal: gateTimeout ? null : signal, gateTimeout, duration_s, longest_silence_s: longestSilence,
+      observations: watcher?.snapshot().observations ?? [], activity_audits: watcher?.snapshot().activity_audits,
+      timeout: signal ? false : timeout, load, childRetried, groupGone, measurement: measurement?.finish() };
   } catch (error) {
     if (barrier) proc.stdio[3].destroy(); // No grant means no payload, including publication failure.
     if (gateTimeout || leftover) {
       process.stderr.write(`${gateTimeout ? 'GATE_TIMEOUT_CLEANUP_FAILED' : 'GATE_LEFTOVER_GROUP_CLEANUP_FAILED'}: ${error.message}; slot retained.\n`);
       proc.stdout.destroy(); proc.stderr.destroy(); proc.unref();
       return { status: gateTimeout ? TIMEOUT_EXIT : LEFTOVER_EXIT, signal: null, gateTimeout, groupGone: false,
-        duration_s: clock() - commandStart, longest_silence_s: clock() - lastOutput, cleanup_error: error.message, measurement: measurement?.finish() };
+        duration_s: clock() - commandStart, longest_silence_s: clock() - lastOutput, observations: watcher?.snapshot().observations ?? [],
+        activity_audits: watcher?.snapshot().activity_audits, cleanup_error: error.message, measurement: measurement?.finish() };
     }
     forward("SIGTERM");
     throw error;
   } finally {
     measurement?.stop?.();
-    clearInterval(watcher);
+    watcher?.stop();
     for (const signal of SIGNALS) process.off(signal, forward);
   }
 }

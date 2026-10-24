@@ -107,8 +107,8 @@ ${kind === 'assertion' ? "throw Error('injected failure before waitForExit');" :
   });
 }
 
-for (const kind of ['file', 'suite']) {
-  test(`${kind} watchdog bounds a blocked event loop and clears the fixture group`, async (t) => {
+for (const kind of ['SIGTERM', 'SIGHUP']) {
+  test(`${kind} cancellation clears a blocked event loop and the fixture group`, async (t) => {
     const f = fixture(t, (root) => `test('blocked event loop culprit',async(t)=>{
 const child=spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)']);
 fs.writeFileSync(${JSON.stringify(path.join(root, 'pid'))},String(child.pid));
@@ -118,13 +118,13 @@ Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
     // deadline can kill the launcher before this test ever owns a fixture PID.
     const preload = path.join(f.root, 'slow-start.mjs');
     fs.writeFileSync(preload, `if(process.argv[1]===${JSON.stringify(f.file)}) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1250);`);
-    const child = runFixture(t, ['--fixed-deadlines', `--${kind}-timeout=3000`, f.file], {
+    const child = runFixture(t, [f.file], {
       env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` },
     });
+    await launched(child, path.join(f.root, 'pid'));
+    child.kill(kind);
     const result = await waitForExit(child);
     assert.equal(result.code, 1, result.stdout + result.stderr);
-    assert.ok((result.stdout + result.stderr).includes(f.file), result.stdout + result.stderr);
-    assert.match(result.stdout + result.stderr, kind === 'file' ? /testTimeoutFailure/ : /Test suite exceeded 3000ms/);
     await assertGone(Number(fs.readFileSync(path.join(f.root, 'pid'), 'utf8')));
   });
 }
@@ -230,10 +230,11 @@ cp.spawnSync=(command,args,options)=>{
 syncBuiltinESMExports();
 spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true});
 });`);
-  const child = runFixture(t, ['--fixed-deadlines', '--suite-timeout=2500', f.file]);
+  const child = runFixture(t, [f.file]);
+  await launched(child, path.join(f.root, 'spawning'));
+  child.kill('SIGTERM');
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /Test suite exceeded 2500ms/);
   const state = JSON.parse(fs.readFileSync(path.join(f.root, 'spawning'), 'utf8'));
   for (const pid of Object.values(state)) await assertGone(pid);
 });

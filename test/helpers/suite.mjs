@@ -1,5 +1,4 @@
-// The complete npm test list, split into finite suites to avoid aggregate timeout
-// by module family. Fixture/command bounds remain unchanged.
+// The complete npm test list, grouped by module family. Time is observation only.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isMain } from '../../lib/cli-help.mjs';
@@ -18,14 +17,14 @@ export function main(argv = process.argv.slice(2)) {
   if (options.some(arg => arg !== '--fixed-deadlines' && !/^--(file|suite)-timeout=\d+$/.test(arg))) throw new Error('unsupported suite option');
   const files = argv.filter(arg => !arg.startsWith('--'));
   const groups = phases(files);
-  console.log(`Complete supplied test list: ${files.length} files; ${groups.length} bounded phases`);
+  console.log(`Complete supplied test list: ${files.length} files; ${groups.length} phases`);
   for (const [name, rows] of groups) {
     console.log(`Validation phase ${name}: ${rows.length} files`);
-    const result = spawnSync(process.execPath, [fileURLToPath(new URL('./run.mjs', import.meta.url)), ...options, ...rows], { stdio: 'inherit' });
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('./run.mjs', import.meta.url)), ...options, ...rows], { stdio: 'inherit', env: { ...process.env, MONITOR_TEST_SUITE_NAME: name } });
     if (result.error) throw result.error;
     if (result.status !== 0) { process.exitCode = result.status ?? 1; return; }
   }
-  console.log('All supplied test files passed in bounded phases.');
+  console.log('All supplied test files passed in phases.');
 }
 
 if (isMain(import.meta.url)) main();

@@ -38,6 +38,8 @@ else if(a[1]==='unlink'){if(process.env.FIXTURE_UNLINK_FAIL)process.exit(9);fs.w
   const plist = path.join(root, 'old.plist');
   const env = releaseEnvironment(process.env, { HOME: root, HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home,
     HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist, HERDR_BIN_PATH: `${herdr}.cjs`, HERDR_MONITOR_FLEET: path.join(root, 'fleet') });
+  // This is an independent mock release, with its own durable observations.
+  for (const key of ['MONITOR_TEST_TIMINGS_PATH', 'MONITOR_TEST_WATCH_OWNER', 'MONITOR_TEST_TIMING_DEPTH']) delete env[key];
   const run = (a, extra = {}) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 30000 });
   const ok = (a, extra) => { const r = run(a, extra); assert.equal(r.status, 0, r.stdout + r.stderr); return r; };
   const release = tag => path.join(home, 'releases', tag);
@@ -51,6 +53,11 @@ test('build gates the tagged partial snapshot once, then publishes a read-only i
   assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('t1')}.partial\n`);
   assert.equal(fs.statSync(path.join(f.release('t1'), 'bin/org.mjs')).mode & 0o222, 0);
   assert.match(fs.readFileSync(path.join(f.release('t1'), '.release-commit'), 'utf8'), /^[a-f0-9]{40}\n$/);
+  const receipts = path.join(f.repo, '.git/lane-validation');
+  const receipt = JSON.parse(fs.readFileSync(path.join(receipts, fs.readdirSync(receipts).find(name => name.endsWith('.execution.json')))));
+  assert.equal(receipt.exit_code, 0); assert.equal(receipt.limits.wall_seconds, 0);
+  assert.ok(receipt.duration_s >= 0); assert.ok(receipt.longest_silence_s >= 0);
+  assert.ok(receipt.timings_path.startsWith(receipts + path.sep), 'release observations survive the temporary snapshot runner');
   assert.match(f.run(['build', 't1']).stderr, /already exists/);
   assert.match(f.run(['build', 'main']).stderr, /no tag/);
   assert.match(f.run(['build', '../escape']).stderr, /invalid release/);
@@ -82,25 +89,25 @@ test('build uses the tagged release declaration instead of the npm fallback or w
   f.ok(['build', 'declared'], { LANE_VALIDATE: 'exit 9' });
   assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('declared')}.partial\ndeclared\n`);
 });
-test('declared scalar and release-specific timeouts stop the gate once and retain the partial copy', t => {
+test('legacy scalar and release-specific wall allowances never stop a progressing gate', t => {
   const f = scratch(t);
-  f.write('slow.cjs', `require('fs').appendFileSync(${JSON.stringify(f.gateLog)},process.cwd()+'\\n');setInterval(()=>{},1000);`);
+  f.write('slow.cjs', `require('fs').appendFileSync(${JSON.stringify(f.gateLog)},process.cwd()+'\\n');setTimeout(()=>console.log('completed past old cap'),700);`);
   for (const [tag, timeout] of [['scalar', 0.5], ['tier', { release: 0.5 }]]) {
     f.write('.lane.validation.json', JSON.stringify({ release: 'node slow.cjs', timeout_seconds: timeout }));
     f.git('add', '.'); f.git('commit', '-qm', tag); f.git('tag', tag);
     const r = f.run(['build', tag]);
-    assert.equal(r.status, 124, r.stdout + r.stderr);
-    assert.match(r.stderr, /GATE_TIMEOUT: wall limit 0.5s exceeded/);
-    assert.equal(fs.existsSync(f.release(tag)), false);
-    assert.equal(fs.existsSync(`${f.release(tag)}.partial`), true);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.doesNotMatch(r.stderr, /GATE_TIMEOUT:/);
+    assert.equal(fs.existsSync(f.release(tag)), true);
+    assert.equal(fs.existsSync(`${f.release(tag)}.partial`), false);
   }
   assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('scalar')}.partial\n${f.release('tier')}.partial\n`);
 });
 test('an invalid release declaration refuses before running a gate', t => {
   const f = scratch(t);
-  f.write('.lane.validation.json', JSON.stringify({ release: 'node gate.cjs', timeout_seconds: { release: 0 } }));
+  f.write('.lane.validation.json', JSON.stringify({ release: 'node gate.cjs', timeout_seconds: { release: -1 } }));
   f.git('add', '.'); f.git('commit', '-qm', 'Invalid gate'); f.git('tag', 'invalid');
-  assert.match(f.run(['build', 'invalid']).stderr, /positive.*number of seconds/);
+  assert.match(f.run(['build', 'invalid']).stderr, /non-negative.*number of seconds/);
   assert.equal(fs.existsSync(f.gateLog), false);
 });
 test('--live is explicit, follows the offline gate, and a live failure prevents completion', t => {

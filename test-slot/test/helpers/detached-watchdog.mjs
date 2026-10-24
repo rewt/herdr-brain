@@ -116,7 +116,7 @@ if (['gate-leftover-pipes', 'gate-leftover-ignore'].includes(mode)) {
   });
 }
 
-if (mode === 'gate-identity') test('failed descendant identity source stops the owned hung group and retains the slot', () => {
+if (mode === 'gate-identity') test('unknown process activity never proves a freeze', () => {
   const deny = path.join(root, 'deny.mjs');
   fs.writeFileSync(deny, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
 const execute=cp.spawnSync,read=fs.readFileSync,list=fs.readdirSync;
@@ -124,15 +124,12 @@ cp.spawnSync=(file,argv,...args)=>String(file).includes('process-source-')&&!arg
 fs.readFileSync=(file,...args)=>String(file).startsWith('/proc/')&&Number.isInteger(Number(String(file).split('/')[2]))&&!String(file).startsWith('/proc/'+process.pid+'/')?(()=>{throw Error('injected source failure');})():read(file,...args);
 fs.readdirSync=(file,...args)=>String(file)==='/proc'?(()=>{throw Error('injected source failure');})():list(file,...args);syncBuiltinESMExports();`);
   env.NODE_OPTIONS += ` --import=${JSON.stringify(deny)}`;
-  const outcome = run(['--timeout-seconds', '.3'], [process.execPath, '-e', "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"]);
-  assert.equal(outcome.status, 124, outcome.stderr);
-  assert.match(outcome.stderr, /GATE_TIMEOUT_CLEANUP_FAILED: cannot snapshot gate descendants: .*injected source failure.*slot retained/);
+  env.MONITOR_TEST_SLOT_FROZEN_SECONDS = '.15';
+  const outcome = run(['--timeout-seconds', '.1'], [process.execPath, '-e', "setTimeout(()=>{},550)"]);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.doesNotMatch(outcome.stderr, /GATE_TIMEOUT:/);
   const receipt = JSON.parse(fs.readFileSync(result));
-  assert.equal(receipt.gate_timeout.kind, 'wall');
-  assert.match(receipt.cleanup_error, /cannot snapshot gate descendants: .*injected source failure/);
-  assert.ok(receipt.duration_s < 5);
-  assert.throws(() => process.kill(-receipt.command_pid, 0), { code: 'ESRCH' });
-  const holder = JSON.parse(fs.readFileSync(lock));
-  assert.equal(holder.pgid, receipt.command_pid);
-  assert.equal(holder.groupStart, null, 'the injected child start lookup also failed');
+  assert.equal(receipt.gate_timeout, null);
+  assert.ok(receipt.activity_audits.unavailable > 0);
+  assert.equal(fs.existsSync(lock), false);
 });

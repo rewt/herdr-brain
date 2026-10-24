@@ -60,7 +60,7 @@ export function main(argv = process.argv.slice(2)) {
   const values = JSON.parse(json);
   if (!Array.isArray(values) || values.some(v => typeof v !== 'string')) throw Error('expected a path array');
   if (mode === '--run') {
-    if (values.length) runRelease(['--file-timeout=480000', '--suite-timeout=540000', ...values]);
+    if (values.length) runRelease(values);
   } else if (mode === '--plan') {
     const root = process.cwd();
     const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 }).split('\0').filter(Boolean);

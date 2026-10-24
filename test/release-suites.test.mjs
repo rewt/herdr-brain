@@ -40,7 +40,7 @@ test('growing directories add bounded suites without losing or repeating files',
 
 test('release scripts retain one shared family without retrying the entire release inventory', () => {
   const scripts = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).scripts;
-  assert.match(scripts['test:release:only'], /^node test-slot\/test-slot.mjs run test:release:only -- node test\/helpers\/release-suites.mjs --file-timeout=480000 --suite-timeout=540000$/);
+  assert.match(scripts['test:release:only'], /^node test-slot\/test-slot.mjs run test:release:only -- node test\/helpers\/release-suites.mjs$/);
   assert.ok(scripts['test:release:steps'].endsWith(' && npm run test:release:only'));
   assert.doesNotMatch(scripts['test:release:steps'], /test-slot\.mjs run test:release:only/);
   assert.equal(scripts['test:release'], 'node test-slot/test-slot.mjs run test:release -- npm run test:release:steps');
@@ -80,7 +80,7 @@ for (const args of ${JSON.stringify(commands)}) {
     '--', process.execPath, driver].map(quote).join(' ');
   const lock = path.join(root, 'slot.lock');
   const declaration = JSON.parse(fs.readFileSync(new URL('../.lane.validation.json', import.meta.url)));
-  const seconds = declaration.timeout_seconds.release;
+  const seconds = declaration.timeout_seconds;
   fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ release: command, timeout_seconds: { release: seconds } }));
   const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
     MONITOR_GATE_HISTORY_ROOT: path.join(root, 'history') };
@@ -99,11 +99,11 @@ for (const args of ${JSON.stringify(commands)}) {
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const topReceipt = JSON.parse(fs.readFileSync(path.join(root, 'top.json')));
   assert.equal(topReceipt.limits.wall_seconds, seconds);
-  assert.equal(topReceipt.limits.wall_source, 'release');
+  assert.equal(topReceipt.limits.wall_source, 'watch');
   for (const [i, [label]] of prefixes.entries()) {
     const receipt = JSON.parse(fs.readFileSync(path.join(root, `${i}.json`)));
-    assert.equal(receipt.limits.wall_seconds, label === 'explicit' ? 17 : seconds, label);
-    assert.equal(receipt.limits.wall_source, label === 'explicit' ? 'config' : 'release', label);
+    assert.equal(receipt.limits.wall_seconds, 0, label);
+    assert.equal(receipt.limits.wall_source, 'watch', label);
     assert.equal(receipt.exit_code, 0, label);
   }
 });
@@ -142,17 +142,17 @@ ${i === 1 ? failure : ''}
   return { ...result, attempts: attempts.map(row => row.file), files };
 }
 
-test('a suite deadline under load retries only that suite and continues once', async t => {
-  const result = await scenario(t, "if(!before.some(row=>row.file===file)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);");
+test('an internal test timeout under load retries only that suite and continues once', async t => {
+  const result = await scenario(t, "if(!before.some(row=>row.file===file)){console.error('testTimeoutFailure');process.exit(124);}");
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual(result.attempts, [result.files[0], result.files[1], result.files[1], result.files[2]]);
-  assert.match(result.stderr, /Test suite exceeded 1500ms/);
+  assert.match(result.stdout + result.stderr, /testTimeoutFailure/);
   assert.match(result.stderr, /TEST_SLOT_TIMEOUT_RETRY: test:release:lanes\/test\/lane.test.mjs:1/);
   assert.equal((result.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
 });
 
-test('a repeated suite deadline stops without replaying completed or later suites', async t => {
-  const result = await scenario(t, 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);');
+test('a repeated internal test timeout stops without replaying completed or later suites', async t => {
+  const result = await scenario(t, "console.error('testTimeoutFailure');process.exit(124);");
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.deepEqual(result.attempts, [result.files[0], result.files[1], result.files[1]]);
   assert.equal((result.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);

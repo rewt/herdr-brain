@@ -82,7 +82,7 @@ An exact declared profile with `admission_class: "EXCLUSIVE"` selects the
 existing exclusive path. A found declaration that says EXCLUSIVE also stays
 exclusive if validation rejects it, so a mis-specified proving step cannot run
 shared. That path's legacy lock, FIFO queue, one-token bridge,
-watchdog and conformance behavior remain unchanged. Declare the proving command
+admission and conformance behavior remain unchanged. Declare the proving command
 in the calling project's `package.json.resources` with the matching script
 `command_sha256`, or in `test-slot/validation-resources.json` with the exact shell
 command. Use the same stanza fields described below, set `admission_class` to
@@ -230,7 +230,7 @@ again. When a containing wrapper initiates the retry, it passes
 `MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1` so descendants cannot add another attempt.
 Ordinary failures, signals and exit 75 never retry. The release claim and snapshot
 are created once; only its gate command can retry, never preparation or the
-release lifecycle. Gate commands must be safe to rerun after a timeout. Deadlines and retry scope remain the same for both execution classes.
+release lifecycle. Gate commands must be safe to rerun after a timeout. Watch observations and internal-timeout retry scope are the same for both execution classes.
 
 `npm run test:slot` exercises temporary locks and owned child groups offline;
 `npm test` includes it. These tests need kernel process reads and signal access and
@@ -238,107 +238,71 @@ run outside the fixture policy that disables detached processes. Other offline
 fixtures receive a temporary slot per test file and never take the machine's
 real slot. No model calls or live acceptance harness are involved.
 
-Every `run` also has a gate watchdog. Its monotonic wall clock starts when the
-command starts inside the acquired slot; slot waits consume none of it. On an
-overrun it prints `GATE_TIMEOUT: wall limit Ns exceeded; elapsed Ms`, sends TERM
-to its owned command group, waits one second, then sends KILL. A kernel snapshot
-before signalling walks the command's parent chain to include descendants that
-created separate groups; each such PID is confirmed against its kernel birth
-identity immediately before signalling. It waits for the group and those
-children to disappear before releasing the slot, and exits **124**. Descendants
-double-forked to init before observation are outside the parent walk; ENG-275
-provides the reclaim backstop for that accepted boundary. Unrelated
-processes receive no signal. Identity failures retain the lock.
+Every `run` watches its foreground command. **Zero means no wall-clock cap**:
+`limits.wall_seconds` is always `0` with `wall_source: "watch"`. Legacy
+`validation.timeout_seconds`, profile `gate.timeout_seconds`, and CLI
+`--timeout-seconds` values remain readable but cannot stop a run. Healthy history
+never enables a blocking limit. The test runner similarly has no file or suite
+wall timer; legacy file/suite timeout options are accepted without enforcement.
+Individual tests' own deadlines and product IPC allowances still apply. Load
+continues to control file admission through `max(1, floor(4 / loadFactor))`.
 
-Set `validation.timeout_seconds` in canonical lane configuration or
-`.lane.validation.json` to a positive number of seconds, either for all tiers
-or as a map such as `{"promotion":4500,"release":7200}`. A promotion host profile
-may override it with `.promote.json`'s `gate.timeout_seconds`. CLI callers can
-pass `--timeout-seconds SECONDS`, `--project-common GIT_COMMON_DIR`, and
-`--tier TIER`; otherwise the CLI discovers the Git common directory and uses
-its label as the tier. Fast and other non-slot validation tiers use the same process-group watchdog through `runGateSync` and never acquire the host slot (`run --no-slot` on the CLI). Their healthy history is recorded under their own tier.
+Output on either stream refreshes the monotonic silence clock. At **900 seconds**
+without output, the watcher records one silence observation and enqueues one
+`[test-watch]` notice through `supervisor/prompt-supervisor.mjs`'s
+`enqueueSupervisor`. The existing supervisor inbox delivery owner drains it;
+no model is invoked by the watcher. The train supplies its job's recipient and
+record in `MONITOR_GATE_NOTICE_CONTEXT`; other callers use
+`MONITOR_SUPERVISOR_AGENT` (default `supervisor-herdr`) and the discovered record.
+`idle_timeout_seconds` / `--idle-timeout-seconds` select the observation threshold
+(`0` disables the notice). Further silence never repeats the notice or fails the
+test. Nested gates and suites inherit the outer watcher, so one run has one
+silence notice.
 
-A `--tier release` gate exports its resolved wall limit to its command as
-`MONITOR_TEST_SLOT_RELEASE_TIMEOUT_SECONDS`. The release snapshot gate already
-reads the tagged `.lane.validation.json`, so its declared release timeout is the
-single source for the inner `test:release` wrapper and all descendant wrappers,
-including `test:core`, `test:cycle`, `test:lanes`, `test:acceptance`,
-`test:release:only` and its per-suite adapters. Each uses that full wall allowance
-(recorded with `wall_source: "release"`) before consulting its own history or the
-4500-second default. The outer gate still bounds the entire release. An explicit
-`--timeout-seconds` on any wrapper wins, allowing a deliberate narrower limit.
-This context is inherited only by the release command's process tree; promotion
-and standalone commands retain their existing resolution. Idle and bounded test
-file/suite deadlines are unchanged. Test fixtures clear the inherited release
-context along with their slot context.
+The recommended last resort is **four hours with neither output nor observed
+CPU or process activity**. `MONITOR_TEST_SLOT_FROZEN_SECONDS=14400` names this one
+setting; the operator may remove the stop with `=0`. It is independent of wall
+and notice thresholds. Birth-confirmed owned-group/descendant audits compare
+cumulative CPU time, thread scheduling state and process membership at most every
+30 seconds. CPU changes, runnable processes, topology/state changes, output, or
+an incomplete/unavailable audit prevent the stop and restart the relevant clock.
+Unknown CPU evidence never proves a freeze. A confirmed freeze records the
+supporting process observations, sends TERM then KILL through the existing
+birth-confirmed cleanup path, and exits **124**, without spending a load retry.
+Unrelated processes receive no signal. The gate retains existing cleanup and
+slot-release safety checks. Slot admission waits and proving reservation expiry
+are independent of running tests.
 
-Without an explicit or inherited release limit, successful command durations in
-`GIT_COMMON_DIR/gate-watchdog/` supply twice the maximum of the last 20 healthy
-runs for that project, tier and command fingerprint, **only after three usable
-samples**. Samples below 180 seconds for `promotion`, 300 seconds for `release`,
-and 30 seconds for other tiers do not influence either wall or idle limits.
-This sanity filter also excludes legacy subsecond fixture samples; short genuine
-commands retain the conservative default or use an explicit project override.
-The wall floor is **1200 seconds for promotion**, **3600 seconds for release**,
-and **600 seconds for other tiers**. Full promotion and release commands can
-select bounded extras, so these floors preserve twice the observed healthy
-10-minute promotion and 30-minute release durations even after narrower runs.
+Execution receipts retain `duration_s`, `longest_silence_s`, `observations` and
+`activity_audits`. Silence is persisted when observed, before the run finishes.
+File, suite and tier start/finish observations are appended to
+`RECEIPT.execution.json.timings.jsonl` and included as `timings` in the completed
+execution receipt. Start-only rows preserve evidence of interrupted files;
+results and durations are observations, with no stored slow/hung classification.
+Gate receipts point to the same sibling journal. Standalone test runners without
+a gate use a journal under `GIT_COMMON_DIR/lane-validation/`. Read-only averages:
 
-Tests set `MONITOR_GATE_HISTORY_ROOT` to a disposable absolute directory in the
-process calling product code and in child environments. History then lives at
-`ROOT/SHA256(GIT_COMMON_DIR)/KEY.json`, preserving project isolation without
-writing shared Git metadata. The shared offline and slot fixture helpers create
-this override for direct test-file runs as well as bounded runs. They also install
-an inherited `MONITOR_GATE_HISTORY_ORIGIN` token, which healthy samples retain
-as `origin`. Nested test helpers preserve the token. Their exit guard fails only
-if the real repository history contains a sample from that test process tree;
-other writers' samples produce a non-failing diagnostic. Locks and concurrent
-pruning do not count as leaks. The watchdog regression runs a fixture against
-the actual Git common directory and checks only its unique command fingerprint
-and scratch file. Concurrent-writer and deliberate-leak controls use independent
-disposable Git repositories. A scratch slot lock alone
-is insufficient: linked worktrees share their canonical Git common directory.
+```sh
+node test-slot/timing-averages.mjs /path/to/*.execution.json
+```
 
-Train plans use an explicit history key (`--history-key` JSON: tier and declared
-base command fingerprint), so affected file lists share history. Release gates
-use their declared argv before candidate substitution. Both host envelopes
-resolve from the same key as their inner gate. Recording keeps at most 128
-command history files per project, pruning the least recently updated files. With fewer
-than three usable matching samples (including older tier-only records),
-the **4500-second (75-minute) default** bounds unfamiliar full gates
-conservatively. Healthy promotion runs of 7–10 minutes train a **20-minute**
-limit; release adapter runs of 20–30 minutes train a **60-minute** limit;
-bch-cloak full runs up to 39 minutes train a **78-minute** limit. The 75-minute
-warm-up default leaves 65, 45 and 36 minutes respectively above those maxima;
-trained limits leave at least 2× room. Earlier bch-cloak clocks of 31m05s,
-31m40s, 30m55s, 30m53s, 34m27s and 35m58s trained **71m56s**; their slot waits are never
-recorded as command time. Only successful executions add samples; reuse,
-refusals, overruns, and failures do not. Receipts and live slot records name the
-resolved limits. The promotion host lifecycle allows up to `2 * jobs - 1`
-sequential gates for batch bisection, each with its full inner wall allowance
-and ten minutes for preparation, plus a final minute for bookkeeping and cleanup.
-The release host allows the resolved prepare wall limit (when declared), twice
-the resolved gate wall limit for its permitted load retry, and ten minutes for
-snapshotting and bookkeeping. Both backstops let inner watchdogs persist their
-exact outcomes first. A failed descendant snapshot still stops an owned child
-group, but records a cleanup failure and retains the slot for inspection.
+The helper deduplicates observation IDs and reports file/suite/tier sample
+counts, averages and exit results, excluding nested fixture observations. It also
+accepts standalone `.timings.jsonl` journals. Release snapshot gates retain their
+execution receipt and journal under the frozen canonical Git common directory,
+outside the immutable release archive. This is intentionally a small receipt reader,
+not the held measurement-view design. Automatic receipt retention removes its
+fixed timing and telemetry siblings together.
 
-Output from both streams is observed and forwarded without buffering a suite
-log. Each healthy sample also records its longest silence, including the final
-stretch before exit. `validation.idle_timeout_seconds` or
-`gate.idle_timeout_seconds` enables a no-output limit (`0` disables it); the CLI
-accepts `--idle-timeout-seconds`. With three usable samples it defaults to three times
-the longest recorded silence, with a **300-second floor**. With fewer than three usable samples it is
-**off**: an unmeasured build may legitimately be silent for a long time.
-
-Wall and idle overruns, including a nested gate's timeout marker, never spend
-the timeout-under-load retry. Lane promotion exits 124 and keeps the lane for a
-fix round. The merge train records `timeout` and isolates singleton candidates
-for correction. Multi-lane timeouts report a batch timeout and permit plain
-re-enqueue individually, without blaming each lane. Nothing replays automatically
-and main stays unchanged.
-The timeout receipt distinguishes this from ordinary test failures and a slot
-wait refusal. Tests use scratch slot paths and never take the real host slot.
+Healthy command observations still live in `GIT_COMMON_DIR/gate-watchdog/`, keyed
+by project, tier and declared-command fingerprint, with the last 20 successes
+and at most 128 command files. They never set time limits. Tests set
+`MONITOR_GATE_HISTORY_ROOT` to scratch in-process and in child environments,
+with an inherited `MONITOR_GATE_HISTORY_ORIGIN` token. Their exit guard fails
+only for a sample from that test tree in the real repository history; concurrent
+writers produce a diagnostic. Linked worktrees share their Git common directory,
+so a scratch slot path alone does not isolate history. Tests exercise the frozen
+rule with scaled clocks and fixtures, without real multi-minute waits.
 
 ## Resource profiles and measurements
 
@@ -483,7 +447,8 @@ Declared EXCLUSIVE steps additionally publish `host-reservation/v1` beside compa
 with reason, expected end and mandatory expiry. The payload starts behind a
 barrier until both lock records and the reservation contain its group identity.
 `--reason TEXT`, `--expected-seconds N` and `--reserve-gib N` supply bounded step
-metadata; expiry is the watchdog wall limit plus 30 seconds, capped at six hours.
+metadata; the default advisory expected end is 75 minutes and reservation expiry
+is 30 seconds later (independent of test wall time), capped at six hours.
 Only launch gates pause for live/unexpired proving; shared/nested `run` and held
 promotion re-checks do not read reservations. STOP still cancels launch waits.
 

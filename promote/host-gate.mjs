@@ -117,12 +117,7 @@ async function execute(profile, memoryOptions) {
   const declared = canonicalValidation(canonical, profile.env).tiers.promotion;
   const limits = resolveGateLimits({ common, env: profile.env, tier: 'promotion', historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', declared.command]), timeoutSeconds: profile.timeoutSeconds ?? declared.timeoutSeconds,
     idleTimeoutSeconds: profile.idleTimeoutSeconds ?? declared.idleTimeoutSeconds });
-  // A fully red binary bisection visits at most 2*n-1 groups, sequentially.
-  // Each group gets its full inner allowance (the train gate does not retry),
-  // ten minutes for preparation, and a final minute for bookkeeping/cleanup.
   const plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
-  const gates = Math.max(1, 2 * plan.jobs.length - 1);
-  const envelopeSeconds = gates * (limits.wall_seconds + 600) + 60;
   const command = [process.execPath, SELF, '--execute', canonical, receipt, ...argv];
   const resolved = resolveResource(['/bin/sh', '-c', declared.command], { cwd: canonical, env: profile.env });
   const declaredResource = profile.resource ?? resolved.profile ?? resolved.declaration;
@@ -132,11 +127,12 @@ async function execute(profile, memoryOptions) {
   const executionReceipt = path.join(path.dirname(receipt), `host-gate.${randomUUID()}.execution.json`);
   update({ execution_receipt: executionReceipt });
   const result = runTestSlotSync(`train ${canonical}`, command,
-    { cwd: canonical, env: profile.env, resource, executionReceipt, common, tier: 'promotion-host', timeoutSeconds: envelopeSeconds, idleTimeoutSeconds: 0, waitSeconds: profile.waitSeconds, waitReceipt: slotFile, retryTimeout: false, stdio: 'inherit' });
+    { cwd: canonical, env: { ...profile.env, MONITOR_GATE_NOTICE_CONTEXT: JSON.stringify({ to: plan.jobs[0]?.to, org: plan.jobs[0]?.org ?? undefined, cwd: canonical, herdr: plan.jobs[0]?.herdr }) },
+      resource, executionReceipt, common, tier: 'promotion-host', timeoutSeconds: 0, idleTimeoutSeconds: limits.idle_seconds, waitSeconds: profile.waitSeconds, waitReceipt: slotFile, retryTimeout: false, stdio: 'inherit' });
   update({ resource: result.execution?.resource, measurement: result.execution?.measurement });
   const saved = read();
   if (result.gateTimeout) update({ phase: 'timeout', finished_at: new Date().toISOString(), exit_code: 124, gate_timeout: result.gateTimeout,
-    reason: result.gateTimeout.kind === 'idle' ? 'gate no-output limit exceeded; lane isolated for correction' : 'gate wall-clock limit exceeded; lane isolated for correction' });
+    reason: result.gateTimeout.kind === 'frozen' ? 'gate frozen without output or process activity; lane isolated for correction' : result.gateTimeout.kind === 'idle' ? 'gate no-output limit exceeded; lane isolated for correction' : 'gate wall-clock limit exceeded; lane isolated for correction' });
   if (!saved.command_started) {
     const slotReason = fs.existsSync(slotFile) ? JSON.parse(fs.readFileSync(slotFile, 'utf8')).reason : null;
     update({ phase: 'refused', finished_at: new Date().toISOString(), reason: saved.reason ?? slotReason ?? `TEST_SLOT_REFUSED: exit ${exitOf(result)}; inspect the gate log` });

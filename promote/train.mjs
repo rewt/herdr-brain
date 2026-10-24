@@ -281,7 +281,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       phase('validating');
       attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command, historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', validation.tiers.promotion.command]),
         prepare, timeoutSeconds: profile?.timeoutSeconds ?? validation.tiers.promotion.timeoutSeconds,
-        idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? validation.tiers.promotion.idleTimeoutSeconds, environment: validation.environment, env: gateEnv, exact, label: 'train scratch',
+        idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? validation.tiers.promotion.idleTimeoutSeconds, environment: validation.environment,
+        env: gateEnv, watchContext: { ...env, MONITOR_GATE_NOTICE_CONTEXT: JSON.stringify({ to: attempt.jobs[0].to, org: attempt.jobs[0].org ?? undefined, cwd: canonical, herdr: attempt.jobs[0].herdr }) }, exact, label: 'train scratch',
         onStart: gate => { attempt.gate = gate; save(); } });
       if (exact && attempt.gate.reused) attempt.receipt_bridge = { outcome: 'reused', field: null,
         receipt: path.join(identity, 'lane-validation/exact', `${attempt.gate.key}.json`) };
@@ -305,7 +306,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     attempt.phase = attempt.gate.outcome === 'timeout' ? 'timeout' : attempt.gate.exit_code === 0 ? 'validated' : 'red'; save();
     if (attempt.phase === 'timeout') {
       plan.groups.shift();
-      const reason = attempt.gate.gate_timeout?.kind === 'idle' ? 'gate no-output limit exceeded' : 'gate wall-clock limit exceeded';
+      const reason = attempt.gate.gate_timeout?.kind === 'frozen' ? 'gate frozen without output or process activity' : attempt.gate.gate_timeout?.kind === 'idle' ? 'gate no-output limit exceeded' : 'gate wall-clock limit exceeded';
       for (const job of attempt.jobs) result(job, { outcome: 'timeout', reason: `${reason}; ${attempt.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`, gate: attempt.gate, batch: plan.id });
       save(); return false;
     }

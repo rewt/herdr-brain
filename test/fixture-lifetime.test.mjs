@@ -164,7 +164,7 @@ test('native lifetime guard observes EOF and its finite deadline with the caller
   }
 });
 
-for (const cancellation of ['SIGKILL', 'suite timeout']) {
+for (const cancellation of ['SIGKILL', 'SIGTERM']) {
   test(`${cancellation} of an enclosing suite leaves no settle inbox or gate-profile fixture`, async t => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-lifetime-regression-')));
     const owned = [], scratchRoots = [];
@@ -211,7 +211,7 @@ test('live fixture victim',async t=>{
     // node --test victim acquires its own writer when fixtureFleet runs.
     const env = { ...process.env }; delete env.NODE_OPTIONS; delete env.NODE_TEST_CONTEXT;
     const args = cancellation === 'SIGKILL' ? ['--test', file] :
-      [local('./helpers/run.mjs'), '--fixed-deadlines', '--suite-timeout=8000', file];
+      [local('./helpers/run.mjs'), file];
     const child = spawnScenarioChild(t, process.execPath, args, { env });
     let finished;
     waitForExit(child).then(result => { finished = result; });
@@ -242,9 +242,9 @@ test('live fixture victim',async t=>{
       const suite = owned.find(entry => entry.pid === evidence.suite);
       assert.equal(tracker.killProcess(suite).signaled, true);
     }
+    if (cancellation === 'SIGTERM') child.kill('SIGTERM');
     const result = await waitForExit(child);
     assert.equal(result.code, 1, result.stdout + result.stderr);
-    if (cancellation === 'suite timeout') assert.match(result.stderr, /Test suite exceeded 8000ms/);
     await until(() => !alive(owned).length, () => `fixtures survived ${cancellation}: ${JSON.stringify(alive(owned))}`);
     // Report-only root enumeration catches a late spawn after the receipt.
     assert.deepEqual([...snapshot().values()].filter(row => !/^Z/.test(row.state) &&

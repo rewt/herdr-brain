@@ -50,7 +50,7 @@ test('all participating named npm recipes have a bound shared profile', () => {
     const resource = resolveResource(['npm', 'run', name], { cwd: source });
     assert.equal(resource.reason, 'profiled', name); assert.equal(resource.admission_class, 'SHARED', name);
   }
-  const script = ['node', 'test/helpers/release-suites.mjs', '--file-timeout=480000', '--suite-timeout=540000'];
+  const script = ['node', 'test/helpers/release-suites.mjs'];
   assert.equal(resolveResource(script, { cwd: source }).reason, 'profiled');
   assert.match(resolveResource([...script, '--unknown'], { cwd: source }).reason, /TEST_SLOT_PROFILE_REJECTED.*failed command$/);
 });

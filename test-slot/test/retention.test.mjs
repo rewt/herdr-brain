@@ -24,6 +24,7 @@ function receipt(directory, index, changes = {}) {
     retention: { schema: RETENTION_SCHEMA, holder: { pid: 2147483647, pgid: null, token: `token-${index}`, liveness: 'gone' }, lock_paths: [] }, ...changes };
   fs.writeFileSync(file, JSON.stringify(value));
   fs.writeFileSync(`${file}.samples.jsonl`, '{}\n');
+  fs.writeFileSync(`${file}.timings.jsonl`, '{}\n');
   return file;
 }
 
@@ -40,16 +41,19 @@ test('retention keeps newest evidence per profile and protects current, live, un
   change(4, value => { value.retention.lock_paths = [lock]; });
   const foreign = path.join(root, 'foreign'); fs.writeFileSync(foreign, 'must survive');
   fs.unlinkSync(`${files[5]}.samples.jsonl`); fs.symlinkSync(foreign, `${files[5]}.samples.jsonl`);
+  fs.unlinkSync(`${files[8]}.timings.jsonl`); fs.symlinkSync(foreign, `${files[8]}.timings.jsonl`);
   change(6, value => { value.measurement = { telemetry_path: foreign, telemetry_file: '../foreign' }; });
   change(7, value => { delete value.finished_at; value.command_pid = 2147483647; });
   const other = receipt(root, 50, { resource: { profile: { id: 'fixture/other' } } });
   const legacy = receipt(root, 51, { retention: undefined });
-  const before = new Map([...files.slice(0, 6), ...files.slice(20), other, legacy].map(file => [file, fs.readFileSync(file, 'utf8')]));
+  const before = new Map([...files.slice(0, 6), files[8], ...files.slice(20), other, legacy].map(file => [file, fs.readFileSync(file, 'utf8')]));
   const pruned = pruneExecutions(files[0], 'fixture/profile', holder => ({ state: holder?.liveness ?? 'unknown' }));
-  assert.equal(pruned, 14);
+  assert.equal(pruned, 13);
   for (const [file, bytes] of before) assert.equal(fs.readFileSync(file, 'utf8'), bytes);
-  for (const file of files.slice(6, 20)) {
+  assert.equal(fs.existsSync(`${files[8]}.samples.jsonl`), true, 'a redirected timing sibling protects the whole receipt');
+  for (const file of files.slice(6, 20).filter(file => file !== files[8])) {
     assert.equal(fs.existsSync(file), false); assert.equal(fs.existsSync(`${file}.samples.jsonl`), false);
+    assert.equal(fs.existsSync(`${file}.timings.jsonl`), false);
   }
   assert.equal(fs.readFileSync(foreign, 'utf8'), 'must survive');
 });

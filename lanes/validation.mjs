@@ -83,7 +83,7 @@ export function canonicalValidation(root, env = process.env) {
 // command inputs except transport/cwd bookkeeping. Unlisted variables invalidate
 // reuse conservatively. Projects can salt ignored dependencies/container images
 // with validation.environment; lockfiles and scripts already belong to the tree.
-const bookkeeping = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'ORG_ACTOR', 'ORG_DIR', 'LANE_CONFIG', 'LANE_VALIDATE', 'LANE_WORKTREE_ROOT', 'MONITOR_VALIDATION_TIER', 'MONITOR_VALIDATION_DEADLINE', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'MONITOR_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_OCCUPANCY_PATH', 'MONITOR_TEST_SLOT_WAIT_SECONDS', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_WAIT_SECONDS']);
+const bookkeeping = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'ORG_ACTOR', 'ORG_DIR', 'LANE_CONFIG', 'LANE_VALIDATE', 'LANE_WORKTREE_ROOT', 'MONITOR_VALIDATION_TIER', 'MONITOR_VALIDATION_DEADLINE', 'MONITOR_TEST_WATCH_OWNER', 'MONITOR_TEST_TIMINGS_PATH', 'MONITOR_GATE_NOTICE_CONTEXT', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'MONITOR_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_OCCUPANCY_PATH', 'MONITOR_TEST_SLOT_WAIT_SECONDS', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_WAIT_SECONDS']);
 const paneIdentity = new Set(['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID']);
 // Session identity cannot be a validation input. Remove it from both execution
 // and hashing, matching the promotion queue's detached environment.
@@ -107,8 +107,11 @@ function unchanged(cwd, before, label) {
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
 }
 
-export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, exact }) {
+export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, exact, watchContext = env }) {
   const admittedRelease = bundleRelease();
+  // Notice routing is transport context, outside the exact proof environment.
+  const observationEnv = Object.fromEntries(['MONITOR_GATE_NOTICE_CONTEXT', 'MONITOR_TEST_WATCH_OWNER', 'MONITOR_TEST_TIMINGS_PATH', 'MONITOR_TEST_TIMING_DEPTH', 'MONITOR_TEST_SLOT_FROZEN_SECONDS']
+    .filter(key => watchContext[key] !== undefined).map(key => [key, watchContext[key]]));
   const policyEnv = env, policyDigest = homePolicyDigest(cwd, policyEnv);
   if (policyDigest) environment = digest({ environment, config_home_inputs: policyDigest });
   env = exact ? restrictEnvironment(env, exact.declaration) : validationEnvironment(env);
@@ -173,7 +176,8 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
       const execute = usesSlot ? runTestSlotSync : runGateSync;
       const resolved = resolveResource(['/bin/sh', '-c', command], { cwd, env });
       const resource = resolved.profile ?? resolved.declaration;
-      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: usesSlot, cwd, env, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt,
+      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: usesSlot, cwd,
+        env: { ...env, ...observationEnv }, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt,
         resource,
         ...(usesSlot ? { waitReceipt: slotReceipt } : {}), retryTimeout: false, stdio: ['inherit', fd, fd] });
     }
@@ -198,6 +202,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
       duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
       execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits,
+      observations: run.execution?.observations ?? [], timings_path: run.execution?.timings_path,
       ...(usesSlot ? { slot_receipt: slotReceipt,
         ...(execution.command_started === true ? { command_started_at: execution.started_at, command_finished_at: execution.finished_at } : {}) } : {}) };
     // Failed, dirty or moving executions never become reusable green evidence.

@@ -177,9 +177,10 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`shared occupancy is 
   assert.equal(result.code, 128 + os.constants.signals[signal], result.stderr);
   assert.deepEqual(readTestSlotOccupancy(f.compat), []);
 });
-test('shared occupancy is removed on a wall timeout', t => {
-  const f = fixture(t), result = f.run([process.execPath, '-e', 'setInterval(()=>{},1000)'], ['--timeout-seconds', '.3']);
-  assert.equal(result.status, 124, result.stderr); assert.equal(f.saved().gate_timeout.kind, 'wall');
+test('shared occupancy is removed after confirmed frozen inactivity', t => {
+  const f = fixture(t); f.env.MONITOR_TEST_SLOT_FROZEN_SECONDS = '.3';
+  const result = f.run([process.execPath, '-e', 'setInterval(()=>{},1000)'], ['--timeout-seconds', '0']);
+  assert.equal(result.status, 124, result.stderr); assert.equal(f.saved().gate_timeout.kind, 'frozen');
   assert.deepEqual(readTestSlotOccupancy(f.compat), []);
 });
 test('a killed shared owner stays reserved while its command group lives, then becomes stale', async t => {

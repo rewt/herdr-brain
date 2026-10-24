@@ -134,7 +134,7 @@ test('PTY command timeout clears its separate group, including SIGHUP handlers w
   await waitForCleanup(f.root, receipt);
   assert.ok(Date.now() - start < loadTimeout(8000), 'command and descendant cleanup have an independent bound');
 });
-for (const kind of ['normal exit', 'SIGTERM', 'SIGKILL', 'SIGKILL shell job', 'suite deadline']) {
+for (const kind of ['normal exit', 'SIGTERM', 'SIGKILL', 'SIGKILL shell job', 'SIGHUP']) {
   test(`${kind} of the outer suite clears the independently owned PTY session`, { skip: PTY_SKIP_REASON }, async t => {
     const f = fixture(t, { block: kind !== 'normal exit' }), file = path.join(f.root, 'culprit.test.mjs');
     // The success case exits its main command while leaving a blocked background
@@ -146,7 +146,7 @@ for (const kind of ['normal exit', 'SIGTERM', 'SIGKILL', 'SIGKILL shell job', 's
 import {runPTY} from ${JSON.stringify(ptyHelper)};
 import assert from 'node:assert/strict';
 test('blocked PTY culprit',()=>{const result=runPTY(${JSON.stringify(binary)},${JSON.stringify(args)},{timeout:5000});assert.equal(result.status,0,result.stdout+result.stderr);});`);
-    const outer = spawnChild(t, process.execPath, [runner, '--fixed-deadlines', ...(kind === 'suite deadline' ? ['--suite-timeout=3000'] : []), file]);
+    const outer = spawnChild(t, process.execPath, [runner, file]);
     const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
     await waitForFile(f.receipt, text => text.length > 0);
     const receipt = readReceipt(f);
@@ -157,13 +157,11 @@ test('blocked PTY culprit',()=>{const result=runPTY(${JSON.stringify(binary)},${
       assert.equal(snapshot.value.get(receipt.session)?.pgid, receipt.session, 'owner remains the separate session leader');
       if (shellJob) assert.notEqual(receipt.pgid, receipt.session, 'interactive shell creates a separate job group inside the owned session');
     }
-    if (kind === 'SIGTERM' || kind.startsWith('SIGKILL')) outer.kill(kind === 'SIGTERM' ? 'SIGTERM' : 'SIGKILL');
+    if (kind === 'SIGTERM' || kind === 'SIGHUP' || kind.startsWith('SIGKILL')) outer.kill(kind === 'SIGHUP' ? 'SIGHUP' : kind === 'SIGTERM' ? 'SIGTERM' : 'SIGKILL');
     const result = await waitForExit(outer);
     if (kind === 'normal exit') assert.equal(result.code, 0, result.stdout + result.stderr);
-    if (kind === 'suite deadline') {
+    if (kind === 'SIGHUP') {
       assert.equal(result.code, 1, result.stdout + result.stderr);
-      assert.match(result.stderr, /Test suite exceeded 3000ms/);
-      assert.ok(result.stderr.includes(file), 'timeout names the culprit');
     }
     await waitForCleanup(f.root, receipt);
     assert.doesNotThrow(() => process.kill(sentinel.pid, 0), 'PTY cleanup preserves an unrelated child');

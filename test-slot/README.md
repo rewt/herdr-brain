@@ -247,6 +247,14 @@ wall timer; legacy file/suite timeout options are accepted without enforcement.
 Individual tests' own deadlines and product IPC allowances still apply. Load
 continues to control file admission through `max(1, floor(4 / loadFactor))`.
 
+When a proof must use a pinned canonical CLI from before watch mode, that outer
+adapter still has its legacy 4,500-second default. Give that check invocation
+`MONITOR_TEST_SLOT_RELEASE_TIMEOUT_SECONDS=9999999`, its existing compatibility
+allowance, and run the candidate's watch gate around the prescribed selection.
+The canonical adapter still writes the receipt; the candidate records wall `0`
+and retains its silence notice and four-hour inactivity stop. Keep the prescribed
+test files, groups and concurrency limits unchanged during this transition.
+
 Output on either stream refreshes the monotonic silence clock. At **900 seconds**
 without output, the watcher records one silence observation and enqueues one
 `[test-watch]` notice through `supervisor/prompt-supervisor.mjs`'s

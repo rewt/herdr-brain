@@ -195,6 +195,12 @@ even if a compatibility repo copy differs. Show that difference as rollback
 information, not as effective config. Holds are derived diagnostics, never stored
 project status. Repair is a fresh validated read, not clearing a status flag.
 
+An incomplete binding considers only its own adoption operation's publication
+events, plus its `published` list. An earlier, rolled-back operation's audit
+does not turn an unpublished file in a new binding into a missing published
+file. Completed bindings retain the missing-policy hold. Bare identity or empty
+project directories carry no project policy authority.
+
 ## Identity and permissions
 
 With no custom marker, use one identity named after the operating-system user.
@@ -389,6 +395,44 @@ A half move keeps valid legacy fallbacks for unpublished files, and protects any
 already adopted slots. Resume only missing steps after revalidation; never erase
 evidence to restart. No success is acknowledged until config audit and enrollment
 are complete. No background migration, fleet-wide adoption or setup auto-enrollment.
+
+### Re-adoption and baseline supersession
+
+An unaudited rollback can leave `config.changed` history after removing the home
+files or binding. Re-adoption preserves that history. Scope capture includes an
+optional `migration.supersedes` array: each entry names `file`, owning `record`,
+`scope` (identity or project), old `operation`, old event `seq`, its `digest`, and
+`observed_digest` (the current file's SHA-256, or null for absence). These entries
+are part of the saved scope digest and the workspace owner's exact affirmative
+answer. Changing a file, audit revision or supersession entry requires a fresh
+scope and answer. Identical bytes under a different operation still require an
+explicit supersession. Existing, unchanged identity defaults can be shared, but
+their baseline under the new adoption operation is explicitly superseded too.
+
+Before publication, check every identity and project baseline and unresolved
+intent, selected source and destination, effective policy reference, compatible
+release, owner answer, fresh native observation, controller ownership and KEEP
+layout. Acquire both config locks and repeat source/baseline checks before the
+first identity record, policy, binding, link or enrollment publication. A refusal
+leaves existing files, audit and enrollment untouched; remove only empty lock
+preparation directories created by this attempt. A directory with no binding may
+be reused only when empty or containing selected policy files with baselines in
+this project's own record; foreign files and unrelated bindings still refuse.
+Adoption's preflight reads validate without appending hand-edit/recovery events;
+ordinary config reads retain their existing audit behavior. Explicit scope
+capture saves only its scope, and a refused unapproved execution saves none.
+
+Publication appends `config.baseline-superseded` and the replacement
+`config.change-intent` together under the owning record lock. The supersession
+event names `file`, `scope`, new `operation`, `previous: {operation, seq, digest}`,
+`observed_digest`, `new_digest`, `scope_sha256`, the attributed owner
+`authorization`, caller and requester. Identity events stay in the identity
+record; project events stay in the existing project record. Actual bytes and the
+old event are digest-checked against the answered scope. The new baseline then
+uses the ordinary durable replacement and `config.changed` completion. Older
+folds ignore the additive event. Interrupted IO retains the original scope,
+intent, supersession and any published files for exact, idempotent resumption;
+it never deletes or edits historical events to make a retry pass.
 
 ## Config commands, provenance and history
 

@@ -14,7 +14,7 @@ export const slotReceiptFile = common => path.join(common, 'sessions', 'standard
 const exact = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(key => keys.includes(key));
 const text = value => typeof value === 'string' && value.trim() && !/[\x00-\x1f\x7f]/u.test(value);
 const identifier = value => text(value) && /^[a-zA-Z0-9][a-zA-Z0-9:._/-]*$/u.test(value) && !value.includes('..');
-function validate(history, common) {
+export function validateStandardSlots(history, common) {
   if (!exact(history, ['schema', 'common', 'operations']) || history.schema !== schema || history.common !== common || !Array.isArray(history.operations)) throw Error('invalid canonical standard-slot history');
   const adopted = new Map();
   for (const [index, op] of history.operations.entries()) {
@@ -53,7 +53,7 @@ export function readStandardSlots(common) {
     try { fs.lstatSync(path.join(path.dirname(slotReceiptFile(common)), 'standard-slots.lock')); throw Error('standard-slot operation in progress or lock unresolved'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     const history = load(common);
-    const slots = validate(history, common), journal = readControllerJournal(common);
+    const slots = validateStandardSlots(history, common), journal = readControllerJournal(common);
     for (const op of journal.operations.filter(op => op.kind === 'create-standard-slot' && op.state === 'acknowledged')) {
       const b = op.receipt.binding;
       if (slots.some(s => s.server === b.server && (s.tab === b.tab || s.workspace === b.workspace && s.standardSlot === op.standardSlot)))
@@ -82,15 +82,15 @@ export function readStandardSlots(common) {
 export function recordStandardSlot({ cwd = process.cwd(), action, uid, actor, why, slot, at = new Date().toISOString() }) {
   const { common } = canonicalProject(cwd), file = slotReceiptFile(common);
   if (action === 'adopt' && (!slot?.checkout || fs.realpathSync(slot.checkout) !== slot.checkout || canonicalProject(slot.checkout).common !== common)) throw Error('adoption checkout must have the same canonical Git common-directory identity');
-  const before = load(common); validate(before, common);
+  const before = load(common); validateStandardSlots(before, common);
   const directory = path.dirname(file);
   fs.mkdirSync(directory, { recursive: true });
   const lock = path.join(directory, 'standard-slots.lock');
   fs.mkdirSync(lock); // Contention/abandoned locks hold; never guess ownership.
   try {
-    const history = load(common); validate(history, common);
+    const history = load(common); validateStandardSlots(history, common);
     const op = { seq: history.operations.length + 1, action, uid, actor, why, at, ...(slot === undefined ? {} : { slot }) };
-    history.operations.push(op); validate(history, common);
+    history.operations.push(op); validateStandardSlots(history, common);
     writeFileAtomic(file, JSON.stringify(history, null, 2) + '\n');
     // Do not acknowledge adoption/withdrawal until bytes and the renamed entry
     // are durable. An unresolved lock remains a KEEP input after interruption.

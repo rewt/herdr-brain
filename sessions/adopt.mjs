@@ -7,9 +7,10 @@ import { parseUniqueJson } from './json.mjs';
 import { agentBinding, sameBinding } from './observe.mjs';
 import { digest, specDigest, validBinding, validLaunchReceipt } from './lifecycle-evidence.mjs';
 import { SLOT_PANES } from './manifest.mjs';
-import { readStandardSlots, recordStandardSlot, slotReceiptFile } from './receipts.mjs';
+import { readStandardSlots, recordStandardSlot, slotReceiptFile, validateStandardSlots } from './receipts.mjs';
 import { readControllerJournal, runtimePaths, durableWrite, present } from './runtime.mjs';
 import { humanAnswerEvidence } from './authorization.mjs';
+import { validAdoptOperation } from './adoption-evidence.mjs';
 
 function fail(message) { throw Error(`adoption held: ${message}`); }
 export function adoptionScope({ inspection, observation: o, record, identity, selections, caller, requester, expiresAt, facts, now = Date.now }) {
@@ -63,46 +64,72 @@ export function authorizeAdoption(scope, ref, { now = Date.now, expiredReadback 
     if (digest(expected) !== digest(scope)) fail('owner answer does not authorize this exact saved adoption scope');
   } });
 }
-export function enrollObserved({ scope, authorization, adoptionId, actor, afterIntent, afterKeep }) {
+export function prepareObservedEnrollment({ scope, authorization, adoptionId, actor }) {
   const common = scope.common, evidenceFile = path.join(common, 'sessions/adoptions', `${adoptionId}.json`);
   const evidence = { schema: 'observed-adoption/v1', common, scope, authorization, slots: scope.slots };
   if (present(evidenceFile)) {
     if (digest(parseUniqueJson(readPlainFile(evidenceFile))) !== digest(evidence)) fail('frozen native adoption evidence changed');
-  } else durableWrite(evidenceFile, evidence);
+  }
   const journal = readControllerJournal(common), history = readStandardSlots(common);
   if (history.errors.length) fail(history.errors.join('; '));
   if (journal.operations.some(op => op.state !== 'acknowledged' && !(op.kind === 'adopt-standard-slot' && op.adoptionId === adoptionId))) fail('pending controller operation; enrollment cannot clear it');
+  const members = scope.slots.flatMap(s => s.members);
+  if (journal.operations.some(op => op.adoptionId === adoptionId && !members.some(m => op.id === `adopt-${digest([adoptionId, m.uid]).slice(0, 24)}`))) fail('competing controller ownership outside the selected scope');
+  const saved = present(slotReceiptFile(common)) ? parseUniqueJson(readPlainFile(slotReceiptFile(common))) : { schema: 'standard-slot-history/v1', common, operations: [] };
+  const writes = [];
+  const keepWrite = planned => ({ kind: 'keep', apply() {
+    if (digest(recordStandardSlot({ cwd: scope.checkout, ...planned })) !== digest(planned)) fail('KEEP sequence changed; inspect the retained intent');
+  } });
   for (const selected of scope.slots) {
     const receiptUid = `adopt:${digest([common, selected.slot.tab]).slice(0, 24)}`;
-    const saved = present(slotReceiptFile(common)) ? parseUniqueJson(readPlainFile(slotReceiptFile(common))) : { operations: [] };
-    let keep = saved.operations.find(o => o.uid === receiptUid && o.action === 'adopt');
     const conflicting = history.slots.find(s => s.server === selected.slot.server && (s.tab === selected.slot.tab || s.workspace === selected.slot.workspace && s.standardSlot === selected.slot.standardSlot));
     if (conflicting && digest(Object.fromEntries(Object.keys(selected.slot).map(k => [k, conflicting[k]]))) !== digest(selected.slot)) fail('existing KEEP layout conflicts');
-    if (conflicting && !keep) keep = saved.operations.find(o => o.uid === conflicting.uid && o.action === 'adopt');
+    let keep = conflicting && saved.operations.findLast(o => o.uid === conflicting.uid && o.action === 'adopt');
     const pending = journal.operations.find(op => op.kind === 'adopt-standard-slot' && op.adoptionId === adoptionId && op.keep.uid === receiptUid);
     const planned = keep ?? pending?.keep.operation ?? { seq: saved.operations.length + 1, action: 'adopt', uid: receiptUid, actor, why: `Owner-authorized observed adoption ${adoptionId}`, at: new Date().toISOString(), slot: selected.slot };
+    if (!keep) {
+      saved.operations.push(planned);
+      validateStandardSlots(saved, common);
+      history.slots.push({ uid: planned.uid, common, ...planned.slot });
+    }
     for (const member of selected.members) {
       const id = `adopt-${digest([adoptionId, member.uid]).slice(0, 24)}`;
       const prior = journal.operations.filter(op => op.uid === member.uid || ['server', 'workspace', 'tab', 'pane', 'checkout'].every(k => (op.receipt?.binding ?? op.binding ?? op.target)?.[k] === member.binding[k]));
       if (prior.some(op => ['start-standard-slot', 'create-standard-slot'].includes(op.kind) && op.state === 'acknowledged' && validLaunchReceipt(op, op.receipt) && sameBinding(op.receipt.binding, member.binding))) continue;
       if (prior.some(op => op.id !== id)) fail('competing controller ownership at selected standard position');
       let op = journal.operations.find(op => op.id === id);
+      if (op && (op.adoptionId !== adoptionId || op.generation !== member.generation || op.specDigest !== member.specDigest ||
+          digest(op.binding) !== digest(member.binding) || digest(op.authorization) !== digest(authorization) ||
+          op.evidence.file !== evidenceFile || op.evidence.sha256 !== digest(evidence) || op.keep.sha256 !== digest(planned))) fail('frozen native enrollment intent changed');
       if (!op) {
         op = { id, kind: 'adopt-standard-slot', uid: member.uid, generation: member.generation, specDigest: member.specDigest,
           target: Object.fromEntries(['server', 'workspace', 'tab', 'pane', 'checkout'].map(k => [k, member.binding[k]])), standardSlot: selected.slot.standardSlot,
           binding: member.binding, nativeKind: member.kind, origin: 'observed-adoption', state: 'intent', adoptionId,
           keep: { uid: planned.uid, seq: planned.seq, sha256: digest(planned), operation: planned }, authorization, evidence: { file: evidenceFile, sha256: digest(evidence) } };
-        journal.operations.push(op); durableWrite(runtimePaths(common).journal, journal); afterIntent?.();
+        if (!validAdoptOperation(op)) fail('invalid planned native enrollment');
+        journal.operations.push(op);
+        writes.push({ kind: 'intent', apply: () => durableWrite(runtimePaths(common).journal, journal) });
       }
       if (!keep) {
-        keep = recordStandardSlot({ cwd: scope.checkout, ...planned });
-        if (digest(keep) !== op.keep.sha256) fail('KEEP sequence changed; inspect the retained intent');
-        afterKeep?.();
+        if (digest(planned) !== op.keep.sha256) fail('KEEP sequence changed; inspect the retained intent');
+        keep = planned;
+        writes.push(keepWrite(planned));
       }
-      if (op.state !== 'acknowledged') { op.state = 'acknowledged'; durableWrite(runtimePaths(common).journal, journal); }
+      if (op.state !== 'acknowledged') writes.push({ apply: () => { op.state = 'acknowledged'; durableWrite(runtimePaths(common).journal, journal); } });
     }
+    if (!keep) writes.push(keepWrite(planned));
   }
-  const reread = readControllerJournal(common);
-  if (reread.operations.some(op => op.adoptionId === adoptionId && op.state !== 'acknowledged')) fail('native enrollment read-back incomplete');
-  return { operations: reread.operations.filter(op => op.adoptionId === adoptionId).map(op => op.id), evidenceFile };
+  return { enrollment: history, journal: { ...journal, operations: journal.operations.map(op => op.adoptionId === adoptionId ? { ...op, state: 'acknowledged' } : op) },
+    commit({ afterIntent, afterKeep } = {}) {
+      if (!present(evidenceFile)) durableWrite(evidenceFile, evidence);
+      for (const write of writes) {
+        write.apply();
+        if (write.kind === 'intent') afterIntent?.();
+        if (write.kind === 'keep') afterKeep?.();
+      }
+      const reread = readControllerJournal(common);
+      if (reread.operations.some(op => op.adoptionId === adoptionId && op.state !== 'acknowledged')) fail('native enrollment read-back incomplete');
+      return { operations: reread.operations.filter(op => op.adoptionId === adoptionId).map(op => op.id), evidenceFile };
+    } };
 }
+export function enrollObserved(options) { return prepareObservedEnrollment(options).commit(options); }

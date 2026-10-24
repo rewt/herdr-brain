@@ -128,8 +128,8 @@
     {
       "id": "record-events",
       "version": "unversioned",
-      "writer": "lib/store.mjs",
-      "location": "<record>/events.jsonl, including lane/review/closeout events and closeout_targets source bindings",
+      "writer": "lib/store.mjs; lib/config-audit.mjs",
+      "location": "<record>/events.jsonl, including lane/review/closeout events, closeout_targets source bindings and config.baseline-superseded",
       "rule": "additive",
       "probe": "events"
     },

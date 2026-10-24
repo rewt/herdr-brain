@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import childProcess, { spawnSync } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 import { captureCompletionMember, reconcileBatchCompletion } from '../completion.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { digest } from '../../lib/completion.mjs';
@@ -57,6 +58,46 @@ test('prepared completion finishes the original replacement before recording the
   }
   assert.equal(f.events().some(e => e.type === 'closeout.handoff'), false, 'the completion caller still owns its post-return tail');
   assert.equal(f.gates(), 0);
+});
+
+test('drift on an already integrated member leaves completion pending after the other member is replaced, without repeating CAS', t => {
+  const f = checkpoint(t);
+  f.recover(f.first, ['note', f.first.item, 'Independent inspection required']);
+  const events = f.events(), replacements = [], execute = childProcess.spawnSync;
+  const observed = t.mock.method(childProcess, 'spawnSync', function (command, args, options) {
+    if (args?.[0] === path.join(source, 'settle/replace-lane-head.mjs')) replacements.push(JSON.parse(args[1]));
+    return execute.call(this, command, args, options);
+  });
+  syncBuiltinESMExports();
+  try {
+    const result = f.resume();
+    assert.equal(result.pending, true);
+    assert.match(result.reason, /changed since batch preparation/);
+    assert.equal(result.results[1].result.replacement_pending, false);
+    assert.equal(f.git(['rev-parse', 'HEAD'], f.second.workspace), f.train.attempts[0].tip);
+    assert.equal(f.git(['rev-parse', 'HEAD'], f.first.workspace), f.first.head);
+    assert.equal(replacements.length, 1, 'the original authorized CAS ran once');
+    assert.equal(replacements[0].workspace, f.second.workspace);
+    assert.equal(replacements[0].from, f.second.head);
+    assert.equal(replacements[0].to, f.train.attempts[0].tip);
+    const receipt = fs.readFileSync(f.receipt + '.record.json', 'utf8');
+    assert.equal(f.events().some(e => e.type === 'promotion.reconciled' || e.type === 'closeout.handoff'), false);
+    assert.equal(f.gates(), 0);
+
+    // Replay even the original checkpoint's stale replacement_pending flag.
+    const retry = f.resume();
+    assert.equal(retry.pending, true);
+    assert.match(retry.reason, /changed since batch preparation/);
+    assert.equal(retry.results[1].result.replacement_pending, false);
+    assert.equal(replacements.length, 1, 'bookkeeping retry must not invoke the CAS helper again');
+    assert.equal(f.git(['rev-parse', 'HEAD'], f.second.workspace), f.train.attempts[0].tip);
+    assert.equal(fs.readFileSync(f.receipt + '.record.json', 'utf8'), receipt);
+    assert.deepEqual(f.events(), events, 'pending completion writes neither reconciliation nor handoff');
+    assert.equal(f.gates(), 0);
+    for (const member of [f.first, f.second]) {
+      assert.equal(f.show(member.item).closed, null); assert.ok(fs.existsSync(member.workspace));
+    }
+  } finally { observed.mock.restore(); syncBuiltinESMExports(); }
 });
 
 for (const variant of ['legacy', 'changed']) test(`${variant} replacement refusal retains exact coverage for independently inspected recovery`, t => {

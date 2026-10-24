@@ -24,10 +24,10 @@
     {
       "id": "closeout-entry/v1",
       "version": 1,
-      "writer": "historical lib/closeout.mjs; retained by explicit v1 migration",
-      "location": "<common>/closeout/entries/<key>.json",
+      "writer": "lib/closeout.mjs; lib/closeout-handoff.mjs",
+      "location": "<common>/closeout/entries/<key>.json and <common>/closeout/migrations/<key>.v1.json",
       "rule": "additive",
-      "notCovered": "Legacy v1 pending envelopes require named exact-key migration; completed v1 receipts remain pruned. The v2 probe exercises OLD schema rejection/KEEP, not v1 execution or migration."
+      "notCovered": "Historical v1 writer; retained by explicit v1 migration, which preserves exact old bytes in the migration backup. Legacy v1 pending envelopes require named exact-key migration; completed v1 receipts remain pruned. The v2 probe exercises OLD schema rejection/KEEP, not v1 execution or migration."
     },
     {
       "id": "closeout-entry/v2",
@@ -40,10 +40,10 @@
     {
       "id": "closeout-completion/v1",
       "version": 1,
-      "writer": "lib/closeout-handoff.mjs (explicit post-return caller tail)",
+      "writer": "lib/closeout-handoff.mjs",
       "location": "<canonical-git-common-dir>/closeout/completions/<source-sequence>-<receipt-sha256>-<key-set-digest-first-16>.json",
       "rule": "closed",
-      "notCovered": "Exact receipt/source/target completion and caller-tail interruption recovery are exercised by offline closeout/reconcile/train witnesses; the schema-rejection probe does not produce a completed landing."
+      "notCovered": "Written by the explicit post-return caller tail. Exact receipt/source/target completion and caller-tail interruption recovery are exercised by offline closeout/reconcile/train witnesses; the schema-rejection probe does not produce a completed landing."
     },
     {
       "id": "exact-validation/v1",

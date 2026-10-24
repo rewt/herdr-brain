@@ -17,6 +17,7 @@ import { productFiles } from '../../lib/product-files.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { stopGateGroup } from '../../test-slot/watchdog.mjs';
+import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
 
 // A full native snapshot can race a short-lived transport. Retry the refused
 // inspection only; each call still pins ownership and rechecks every signal.
@@ -814,13 +815,31 @@ test('receipts use exclusive create and completed jobs cannot be admitted or exe
   const retry = f.add(); assert.notEqual(retry.job, a.job); assert.notEqual(retry.receipt, a.receipt);
 });
 
-for (const kind of ['wall', 'idle']) test(`${kind} cap ends one job, restores its desk and records watchdog evidence without retry`, async t => {
-  const f = fixture(t), job = f.add({ 'timeout-seconds': kind === 'wall' ? '.8' : '4', 'idle-timeout-seconds': kind === 'idle' ? '.5' : '3' }, node('setInterval(()=>{},1000)'));
+for (const kind of ['wall', 'idle']) test(`a verification job passes its legacy ${kind} cap, restores its desk and never retries`, async t => {
+  const f = fixture(t), job = f.add({ 'timeout-seconds': '.05', 'idle-timeout-seconds': kind === 'idle' ? '.05' : '0' },
+    node(kind === 'idle' ? 'setTimeout(()=>{},250)' : 'const progress=setInterval(()=>console.log("working"),20);setTimeout(()=>clearInterval(progress),250)'));
   await f.run(job); const receipt = read(job.receipt);
-  assert.equal(receipt.outcome, 'error'); assert.equal(receipt.timeout.kind, kind);
+  assert.equal(receipt.outcome, 'pass', receipt.error); assert.equal(receipt.timeout, null);
+  assert.equal(receipt.slot_execution.limits.wall_seconds, 0);
+  assert.equal(receipt.slot_execution.limits.wall_source, 'watch');
+  assert.ok(receipt.command.duration_s >= .25, 'the payload exceeds the legacy cap');
   assert.equal(receipt.slot_execution.attempts, 1); assert.equal(receipt.desk_restored, true);
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
 });
+
+// Explicit cancellation exercises the same final capture and cleanup as the
+// last-resort stop, without restoring a wall or silence cap for working jobs.
+async function cancelJob(f, job, ready) {
+  const running = f.run(job), result = path.join(path.dirname(job.receipt), 'job-result.json');
+  running.catch(() => {});
+  await until(() => fs.existsSync(result) && ready(), 'job did not reach its cancellation boundary');
+  const phase = lookupProcess(read(result).command_pid);
+  assert.ok(phase.ok && phase.value?.command.includes(job.job), 'the admitted phase is still owned');
+  const coordinator = registerProcess(phase.value.ppid);
+  assert.ok(coordinator.command.includes('verify/execute.mjs --hold') && coordinator.command.includes(job.job));
+  assert.equal(killProcess(coordinator, 'SIGTERM').signaled, true);
+  await running;
+}
 
 test('a captured descendant in a separate session is identity-confirmed, reaped and recorded before the next job', async t => {
   const f = fixture(t), pids = path.join(f.root, 'escaped');
@@ -833,12 +852,12 @@ test('a captured descendant in a separate session is identity-confirmed, reaped 
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
 });
 
-test('timeout also records and reaps a captured escaped descendant before releasing the host slot', async t => {
+test('cancellation records and reaps a captured escaped descendant before releasing the host slot', async t => {
   const f = fixture(t), pids = path.join(f.root, 'timed-escape');
   const escaped = `require('fs').writeFileSync(${JSON.stringify(pids)},String(process.pid));setInterval(()=>{},1000);`;
   const job = f.add({ 'timeout-seconds': '1', 'idle-timeout-seconds': '3' }, node(`require('child_process').spawn(process.execPath,['-e',${JSON.stringify(escaped)}],{detached:true,stdio:'ignore'}).unref();setInterval(()=>{},1000);`));
-  await f.run(job); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
-  assert.equal(receipt.timeout.kind, 'wall');
+  await cancelJob(f, job, () => fs.existsSync(pids)); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
+  assert.equal(receipt.timeout, null); assert.equal(receipt.slot_execution.signal, 'SIGTERM');
   assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.identity));
   const captured = read(path.join(path.dirname(job.receipt), 'captured.json'));
   const recorded = receipt.reaped_processes.find(row => row.pid === pid);
@@ -865,7 +884,7 @@ test('the final timeout walk publishes a newly observable escaped identity befor
   assert.equal(published.get(escaped.pid).identity, escaped.identity);
 });
 
-test('timeout captures an escaped descendant while its phase observer is stopped', async t => {
+test('cancellation captures an escaped descendant while its phase observer is stopped', async t => {
   const f = fixture(t), pids = path.join(f.root, 'paused-observer-escape');
   const job = f.add({ 'timeout-seconds': '1', 'idle-timeout-seconds': '3' }, node(`
     const fs=require('fs'), cp=require('child_process');
@@ -878,8 +897,8 @@ test('timeout captures an escaped descendant while its phase observer is stopped
     fs.renameSync(${JSON.stringify(pids + '.tmp')},${JSON.stringify(pids)});
     setInterval(()=>{},1000);
   `));
-  await f.run(job); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
-  assert.equal(receipt.timeout.kind, 'wall');
+  await cancelJob(f, job, () => fs.existsSync(pids)); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
+  assert.equal(receipt.timeout, null); assert.equal(receipt.slot_execution.signal, 'SIGTERM');
   assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.identity));
   const captured = read(path.join(path.dirname(job.receipt), 'captured.json'));
   assert.ok(captured.some(row => row.pid === receipt.slot_execution.command_pid && /^T/.test(row.state)));
@@ -888,13 +907,18 @@ test('timeout captures an escaped descendant while its phase observer is stopped
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
 });
 
-test('a previously observed orphan is reaped inside the host hold after job timeout', async t => {
+test('a previously observed orphan is reaped inside the host hold after job cancellation', async t => {
   const f = fixture(t, { proving: true }), pids = path.join(f.root, 'orphan'), seen = path.join(f.root, 'held-during-cleanup'), slot = process.env.MONITOR_TEST_SLOT_PATH;
   const leaf = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(pids)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(seen)},String(fs.existsSync(${JSON.stringify(slot)})))});setInterval(()=>{},1000);`;
   const middle = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{detached:true,stdio:'ignore'}).unref();setTimeout(()=>{},500);`;
   const job = f.add({ 'timeout-seconds': '1.5', 'idle-timeout-seconds': '5' }, node(`require('child_process').spawn(process.execPath,['-e',${JSON.stringify(middle)}],{detached:true,stdio:'ignore'}).unref();setInterval(()=>{},1000);`));
-  await f.run(job); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
-  assert.equal(receipt.timeout.kind, 'wall'); assert.equal(fs.readFileSync(seen, 'utf8'), 'true');
+  await cancelJob(f, job, () => {
+    if (!fs.existsSync(pids)) return false;
+    const pid = Number(fs.readFileSync(pids)), phase = path.join(path.dirname(job.receipt), 'phases.json');
+    return fs.existsSync(phase) && read(phase).tracked.some(row => row.pid === pid) && lookupProcess(pid).value?.ppid === 1;
+  });
+  const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
+  assert.equal(receipt.timeout, null); assert.equal(receipt.slot_execution.signal, 'SIGTERM'); assert.equal(fs.readFileSync(seen, 'utf8'), 'true');
   assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.signal === 'SIGKILL'));
   const live = lookupProcess(pid, { identityOnly: true }); assert.equal(live.ok, true); assert.ok(!live.value || /^Z/.test(live.value.state));
   assert.equal(fs.existsSync(slot), false);
@@ -997,7 +1021,7 @@ for (const kind of ['after-capture', 'before-capture', 'non-signal', 'wrong-birt
 });
 
 test('a measurement interrupted after the watchdog capture includes its error and both times in the receipt', async t => {
-  const f = fixture(t), preload = path.join(f.root, 'post-capture.mjs');
+  const f = fixture(t), preload = path.join(f.root, 'post-capture.mjs'), ready = path.join(f.root, 'measuring');
   const execute = fileURLToPath(new URL('../execute.mjs', import.meta.url));
   fs.writeFileSync(preload, `
     import fs from 'node:fs';
@@ -1011,6 +1035,7 @@ test('a measurement interrupted after the watchdog capture includes its error an
       const interrupted = () => {
         if (!pending) return false;
         pending = false;
+        fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
         // Keep a source lookup in flight until the real, independent watchdog
         // has completed and preserved its walk. It then returns a signal error.
         const by = Date.now() + 20000;
@@ -1031,7 +1056,7 @@ test('a measurement interrupted after the watchdog capture includes its error an
   `);
   process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}`;
   const job = f.add({ 'timeout-seconds': '1', 'idle-timeout-seconds': '3' }, node('setInterval(()=>{},1000)'));
-  await f.run(job);
+  await cancelJob(f, job, () => fs.existsSync(ready));
   const receipt = read(job.receipt), directory = path.dirname(job.receipt), phases = read(path.join(directory, 'phases.json'));
   const interrupted = receipt.tracking_interrupted;
   assert.ok(interrupted, receipt.error);
@@ -1041,11 +1066,12 @@ test('a measurement interrupted after the watchdog capture includes its error an
   assert.ok(Date.parse(interrupted.seen_at) >= Date.parse(interrupted.captured_at));
   assert.ok(read(path.join(directory, 'captured.json')).some(row => row.pid === receipt.slot_execution.command_pid && row.captured_at === interrupted.captured_at));
   assert.equal(phases.cleanup_error, undefined); assert.equal(phases.cleanup_confirmed, true);
-  assert.equal(receipt.timeout.kind, 'wall'); assert.equal(receipt.halted, false); assert.equal(receipt.desk_restored, true);
+  assert.equal(receipt.timeout, null); assert.equal(receipt.slot_execution.signal, 'SIGTERM');
+  assert.equal(receipt.halted, false); assert.equal(receipt.desk_restored, true);
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
 });
 
-test('a timeout records a captured descendant sharing the stopped phase runner group', async t => {
+test('cancellation records a captured descendant sharing the stopped phase runner group', async t => {
   const f = fixture(t), pids = path.join(f.root, 'shared-group-child');
   const job = f.add({ 'timeout-seconds': '1', 'idle-timeout-seconds': '3' }, node(`
     const fs=require('fs'), cp=require('child_process');
@@ -1057,11 +1083,11 @@ test('a timeout records a captured descendant sharing the stopped phase runner g
     fs.renameSync(${JSON.stringify(pids + '.tmp')},${JSON.stringify(pids)});
     setInterval(()=>{},1000);
   `));
-  await f.run(job);
+  await cancelJob(f, job, () => fs.existsSync(pids));
   const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids)), directory = path.dirname(job.receipt);
   const phases = read(path.join(directory, 'phases.json')), captured = read(path.join(directory, 'captured.json'));
   const saved = captured.find(row => row.pid === pid);
-  assert.equal(receipt.timeout.kind, 'wall');
+  assert.equal(receipt.timeout, null); assert.equal(receipt.slot_execution.signal, 'SIGTERM');
   assert.ok(saved?.identity, 'watchdog captured the child birth');
   assert.equal(saved.pgid, phases.pgid, 'child shares the phase group');
   assert.notEqual(saved.pid, saved.pgid, 'child is not the group leader');

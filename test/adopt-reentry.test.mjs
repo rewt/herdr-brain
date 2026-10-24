@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { configFixture } from './helpers/config-home-fixture.mjs';
-import { contentDigest, policyLocation, projectIdentity } from '../lib/config-home.mjs';
+import { contentDigest, policyLocation, projectIdentity, POLICY_FILES } from '../lib/config-home.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { initOrg, transact } from '../lib/store.mjs';
 import { auditEvents } from '../lib/config-audit.mjs';
@@ -603,3 +603,102 @@ test('adoption release selection and forwarding do not publish a hand-edit audit
     assert.deepEqual(homeSnapshot(f), home, entry); assert.deepEqual(f.events(), events, entry);
   }
 });
+
+for (const publication of ['binding', 'lane']) test(`R-815: an audited hand edit after ${publication} publication holds on deletion across repeated reads`, async t => {
+  const f = configFixture(t);
+  await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === publication) throw Error('manual publication interruption'); } }), /manual publication interruption/);
+  const binding = f.binding(), file = path.join(binding.directory, 'promote.json');
+  assert.equal(binding.adoption.completed, undefined); assert.ok(!binding.published.includes('promote'));
+  fs.writeFileSync(file, '{"max_batch":5}\n');
+  const selected = readProjectPolicy(f.cwd, 'promote', f.env), history = f.events();
+  assert.equal(selected.home, true); assert.equal(selected.config.max_batch, 5);
+  assert.equal(history.at(-1).origin, 'hand-edit');
+  fs.unlinkSync(file);
+  for (let read = 0; read < 3; read++) assert.throws(() => readProjectPolicy(f.cwd, 'promote', f.env), /published home file is missing/);
+  assert.equal(history.at(-1).adoption, binding.adoption.id);
+  assert.equal(f.events().length, history.length + 1, 'repeat holds do not duplicate the missing-file audit');
+  assert.equal(f.events().at(-1).adoption, binding.adoption.id);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.cwd, '.promote.json'))).max_batch, 3);
+});
+
+for (const entry of [...Object.values(POLICY_FILES).map(([name]) => name), 'unrelated.json']) for (const late of [false, true])
+  test(`R-815: conflicting staged ${entry} ${late ? 'under locks' : 'before locks'} refuses without publication or route changes`, async t => {
+    const f = configFixture(t, { routing: true }); f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+    const staging = path.join(f.home, '.herdr-monitor', f.scope.scope.identity, `.project-adopt-${digest(f.scope.scope).slice(0, 32)}`);
+    fs.mkdirSync(staging, { recursive: true });
+    const file = path.join(staging, entry), bytes = '{"main":"staged-conflict","max_batch":99}\n';
+    if (!late) fs.writeFileSync(file, bytes);
+    const home = homeSnapshot(f), events = f.events();
+    const routes = inspect({ cwd: f.cwd, env: f.env });
+    const files = ['.git/info/exclude', '.git/sessions/controller-journal.json', '.git/sessions/standard-slots.json'].map(name => path.join(f.cwd, name));
+    const snapshots = () => files.map(name => fs.existsSync(name) ? fs.readFileSync(name) : null), before = snapshots();
+    const mkdir = fs.mkdirSync; let locks = 0;
+    fs.mkdirSync = function(target, ...args) {
+      const result = mkdir.call(this, target, ...args);
+      if (path.basename(String(target)) === '.config.lock' && ++locks === 2 && late) fs.writeFileSync(file, bytes);
+      return result;
+    };
+    try { await assert.rejects(f.adopt(), /staged.*(conflict|differ|unexpected)|published adoption bytes differ/); }
+    finally { fs.mkdirSync = mkdir; }
+    if (late) {
+      assert.equal(locks, 2, 'the conflicting arrival must occur under both config locks');
+      home.push([path.relative(path.join(f.home, '.herdr-monitor'), file), bytes]);
+    }
+    assert.deepEqual(homeSnapshot(f), home);
+    assert.deepEqual(f.events(), events); assert.deepEqual(snapshots(), before);
+    assert.deepEqual(inspect({ cwd: f.cwd, env: f.env }), routes);
+    assert.equal(policyLocation(f.cwd, 'lane', f.env).home, false);
+    assert.equal(fs.existsSync(path.join(f.cwd, '.brain')), false);
+    assert.equal(fs.existsSync(path.join(f.cwd, '.git/sessions/controller.lock')), false);
+  });
+
+test('R-815: matching selected staging policy can publish normally', async t => {
+  const f = configFixture(t); f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  const staging = path.join(f.home, '.herdr-monitor', f.scope.scope.identity, `.project-adopt-${digest(f.scope.scope).slice(0, 32)}`);
+  fs.mkdirSync(staging, { recursive: true });
+  fs.copyFileSync(path.join(f.cwd, '.lane.json'), path.join(staging, 'lane.json'));
+  await f.adopt(); assert.ok(f.binding().adoption.completed);
+});
+
+test('R-815: resuming a partial adoption preserves an audited policy absent from its original inventory', async t => {
+  const f = configFixture(t); fs.unlinkSync(path.join(f.cwd, '.lane.validation.json'));
+  await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === 'binding') throw Error('inventory interruption'); } }), /inventory interruption/);
+  const saved = setConfig('validation.fast', 'node --version', { cwd: f.cwd, env: f.env });
+  const bytes = fs.readFileSync(saved.file);
+  await f.adopt(); assert.ok(f.binding().adoption.completed);
+  assert.deepEqual(fs.readFileSync(saved.file), bytes);
+  assert.equal(readProjectPolicy(f.cwd, 'validation', f.env).config.fast, 'node --version');
+});
+
+for (const change of ['none', 'conversation', 'terminal', 'KEEP', 'evidence'])
+  test(`R-815: re-adoption with preserved native evidence ${change === 'none' ? 'reuses acknowledged ownership' : `holds on changed ${change}`}`, async t => {
+    const f = configFixture(t); await f.adopt();
+    const old = f.binding(), journal = readControllerJournal(old.common), op = journal.operations[0];
+    const files = [runtimePaths(old.common).journal, path.join(old.common, 'sessions/standard-slots.json'), op.evidence.file];
+    const snapshots = () => files.map(file => fs.readFileSync(file)), original = snapshots();
+    const rollback = path.join(f.scratch, 'rollback-project'); fs.renameSync(old.directory, rollback);
+    fs.unlinkSync(path.join(f.cwd, '.brain'));
+    if (change === 'conversation') f.observation.agents[0].agent_session.value = 'changed-session';
+    if (change === 'terminal') f.observation.agents[0].terminal_id = f.observation.panes[0].terminal_id = 'changed-terminal';
+    if (change === 'KEEP' || change === 'evidence') {
+      const file = files[change === 'KEEP' ? 1 : 2], value = JSON.parse(fs.readFileSync(file));
+      if (change === 'KEEP') value.operations[0].why = 'changed KEEP evidence';
+      else value.scope.requester = 'changed evidence requester';
+      fs.writeFileSync(file, JSON.stringify(value));
+      f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+      const before = snapshots();
+      await refusesWithoutPublication(f, {}, /evidence changed|KEEP evidence changed/);
+      assert.deepEqual(snapshots(), before);
+      return;
+    }
+    f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+    assert.notEqual(digest(f.scope.scope), old.adoption.scope_sha256);
+    if (change !== 'none') await refusesWithoutPublication(f, {}, /competing controller ownership|preflight did not KEEP/);
+    else {
+      const result = await f.adopt(); assert.ok(f.binding().adoption.completed);
+      assert.deepEqual(result.native.operations, [], 'reuse must not invent another ownership operation');
+      assert.equal((await f.adopt()).unchanged, true);
+      assert.deepEqual(readControllerJournal(old.common), journal);
+    }
+    assert.deepEqual(snapshots(), original, 'controller journal, KEEP history and original evidence retain exact bytes');
+  });

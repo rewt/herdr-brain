@@ -10,7 +10,7 @@ import { SLOT_PANES } from './manifest.mjs';
 import { readStandardSlots, recordStandardSlot, slotReceiptFile, validateStandardSlots } from './receipts.mjs';
 import { readControllerJournal, runtimePaths, durableWrite, present } from './runtime.mjs';
 import { humanAnswerEvidence } from './authorization.mjs';
-import { validAdoptOperation } from './adoption-evidence.mjs';
+import { validAdoptOperation, verifyAdoptOperation } from './adoption-evidence.mjs';
 
 function fail(message) { throw Error(`adoption held: ${message}`); }
 export function adoptionScope({ inspection, observation: o, record, identity, selections, caller, requester, expiresAt, facts, now = Date.now }) {
@@ -99,6 +99,13 @@ export function prepareObservedEnrollment({ scope, authorization, adoptionId, ac
       const id = `adopt-${digest([adoptionId, member.uid]).slice(0, 24)}`;
       const prior = journal.operations.filter(op => op.uid === member.uid || ['server', 'workspace', 'tab', 'pane', 'checkout'].every(k => (op.receipt?.binding ?? op.binding ?? op.target)?.[k] === member.binding[k]));
       if (prior.some(op => ['start-standard-slot', 'create-standard-slot'].includes(op.kind) && op.state === 'acknowledged' && validLaunchReceipt(op, op.receipt) && sameBinding(op.receipt.binding, member.binding))) continue;
+      // Re-adopting config does not replace a verified native ownership receipt.
+      // Require one exact acknowledged UID/KEEP/binding and preserve its evidence.
+      const observed = prior.length === 1 && prior[0];
+      if (observed && observed.id !== id && observed.kind === 'adopt-standard-slot' && observed.state === 'acknowledged' &&
+          observed.uid === member.uid && observed.generation === member.generation && observed.specDigest === member.specDigest && observed.nativeKind === member.kind &&
+          observed.standardSlot === selected.slot.standardSlot && digest(observed.binding) === digest(member.binding) &&
+          observed.keep.uid === receiptUid && observed.keep.sha256 === digest(planned) && verifyAdoptOperation(observed, common)) continue;
       if (prior.some(op => op.id !== id)) fail('competing controller ownership at selected standard position');
       let op = journal.operations.find(op => op.id === id);
       if (op && (op.adoptionId !== adoptionId || op.generation !== member.generation || op.specDigest !== member.specDigest ||

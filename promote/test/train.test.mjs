@@ -68,7 +68,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
   const runs = () => fs.existsSync(counts) ? fs.readFileSync(counts, 'utf8').trim().split('\n').length : 0;
   t.after(async () => { await workers.wait(); await waitForInboxIdle(path.join(repo, '.git/supervisor/inbox.log')); fs.rmSync(root, { recursive: true, force: true }); });
   const messages = () => fs.existsSync(path.join(root, 'notices')) ? fs.readFileSync(path.join(root, 'notices'), 'utf8').trim().split('\n').map(JSON.parse) : [];
-  return { root, repo, env, exec, git, queue, lane, add, drain, runs, checker, messages };
+  return { root, repo, env, exec, git, queue, lane, add, drain, runs, checker, messages, wait: () => workers.wait() };
 }
 
 test('three ready lanes stack and fast-forward with one promotion-tier run', t => {
@@ -936,17 +936,47 @@ test('a bare enqueue starts a request-scoped no-retry recipe and its sibling app
 test('bare resume restores the saved no-retry declaration for both steps after a prepared interruption', async t => {
   const f = fixture(t), { validate, appended } = noRetryFixture(f);
   f.lane('first'); f.lane('second'); f.add('first', { validate }); f.add('second', { validate });
+  const jobs = f.queue.load().pending;
+  const delivery = job => ({ herdr: job.herdr, to: job.to, attempts: job.attempts, retry: job.retry });
+  const expectedDelivery = { herdr: path.join(f.root, 'herdr'), to: 'test', attempts: 1, retry: 0 };
+  assert.deepEqual(jobs.map(delivery), [expectedDelivery, expectedDelivery]);
   const before = f.git(['rev-parse', 'main']);
   interruptAt(f, 'prepared'); assert.equal(f.drain().status, 0);
-  assert.ok(f.queue.load().results.every(row => row.outcome === 'interrupted'));
+  const interrupted = f.queue.load();
+  assert.deepEqual(interrupted.results.map(row => row.outcome), ['interrupted', 'interrupted']);
+  assert.deepEqual(interrupted.interrupted[0].jobs.map(delivery), [expectedDelivery, expectedDelivery]);
+  const receipt = interrupted.results[0].receipt;
+  const prepared = JSON.parse(fs.readFileSync(receipt));
+  assert.equal(interrupted.interrupted[0].native_refusal, undefined);
+  assert.equal(prepared.attempts.length, 1); assert.equal(prepared.attempts[0].phase, 'prepared');
+  assert.equal(prepared.attempts[0].gate, undefined);
   assert.equal(f.git(['rev-parse', 'main']), before); assert.equal(f.runs(), 0);
   assert.equal(fs.existsSync(appended), false);
   const resumed = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--resume']);
   assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
   assert.equal(JSON.parse(resumed.stdout).worker.ready, true);
-  await until(() => f.queue.load().results.filter(row => row.outcome === 'promoted').length === 2);
+  // Native guarded cleanup runs before each result is published. Wait for the
+  // acknowledged finite worker, using the same bounded lifetime as teardown,
+  // rather than timing out a healthy resumed train at the notice poll's 10 s.
+  await f.wait();
   assert.equal(f.runs(), 1); assert.equal(fs.readFileSync(appended, 'utf8'), 'append\n');
-  assert.ok(f.queue.load().results.every(row => row.validate === validate));
+  const completed = f.queue.load();
+  assert.equal(completed.current, null); assert.equal(completed.interrupted.length, 0);
+  assert.ok(completed.results.every(row => row.validate === validate));
+  const promoted = completed.results.slice(interrupted.results.length);
+  assert.deepEqual(promoted.map(row => [row.id, row.outcome]), jobs.map(job => [job.id, 'promoted']));
+  assert.deepEqual(promoted.map(delivery), [expectedDelivery, expectedDelivery]);
+  const notices = readInbox(path.join(f.repo, '.git/supervisor/inbox.log'));
+  assert.deepEqual(notices.map(row => [row.herdr, row.to, row.attempts, row.retrySeconds]),
+    Array.from({ length: 4 }, () => [expectedDelivery.herdr, 'test', 1, 0]));
+  assert.deepEqual(notices.map(row => row.state), ['sent', 'sent', 'sent', 'sent']);
+  assert.equal(f.messages().length, 4);
+  const final = JSON.parse(fs.readFileSync(receipt));
+  assert.equal(final.native_context.ok, true); assert.equal(final.phase, 'complete');
+  assert.equal(final.attempts.length, 1); assert.equal(final.attempts[0].phase, 'complete');
+  assert.equal(final.attempts[0].tip, prepared.attempts[0].tip);
+  assert.equal(final.attempts[0].gate.exit_code, 0); assert.equal(final.attempts[0].gate.reused, false);
+  assert.equal(final.attempts[0].gate.executed, true);
   for (const topic of ['first', 'second']) assert.equal(fs.readFileSync(path.join(f.repo, topic), 'utf8'), topic);
 });
 

@@ -21,9 +21,10 @@ import { loadTimeout, admissionDeadline } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
+import { resolveWorktreeRoot } from './worktree-root.mjs';
 import { literalLaunch } from '../lib/owner-launch.mjs';
 import { homeProject, policyLocation } from '../lib/config-home.mjs';
-import { homePolicyLayers, configBase, readPolicyFile, readProjectPolicy, validateLane } from '../lib/config-policy.mjs';
+import { homePolicyLayers, readPolicyFile, readProjectPolicy, validateLane } from '../lib/config-policy.mjs';
 import { resolveArchive, validateArchive } from '../lib/archive.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
 import { hookLaunchArguments } from '../messages/hook-session.mjs';
@@ -362,34 +363,10 @@ const MAIN = CONFIG.main ?? "main";
 const LANE_PREFIX = "lane/";
 const REPO_NAME = basename(REPO_ROOT);
 const ROOT_IDENTITY = HOME_PROJECT?.owner.root ?? realpathSync(PARENT_CONFIG_FILE === undefined ? dirname(REPO_ROOT) : dirname(PARENT_CONFIG_FILE));
-const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE } = (() => {
-  if (process.env.LANE_WORKTREE_ROOT !== undefined) {
-    const path = resolve(CALLER_CWD, process.env.LANE_WORKTREE_ROOT);
-    return { path, base: path, source: "env" };
-  }
-  // A project's own worktree_root wins over the machine fleet map, so a project moves its lanes by
-  // committing its settings. Existing lanes keep their registered paths.
-  if (Object.hasOwn(CONFIG, "worktree_root")) {
-    const source = CONFIG_SOURCES.get("worktree_root");
-    const base = resolve(configBase(source, REPO_ROOT, process.env, 'worktree_root'), CONFIG.worktree_root);
-    return { path: join(base, REPO_NAME), base, source };
-  }
-  if (FLEET.project && !EXPLICIT_CONFIG) return { path: FLEET.project.worktrees, base: FLEET.project.worktrees, source: FLEET.fleet.file };
-  if (!EXPLICIT_CONFIG && PARENT_CONFIG_FILE !== undefined) {
-    const base = join(dirname(PARENT_CONFIG_FILE), ".worktrees");
-    return {
-      path: join(base, REPO_NAME),
-      base,
-      source: PARENT_CONFIG_FILE,
-    };
-  }
-  const base = join(homedir(), ".herdr", "worktrees");
-  return {
-    path: join(base, REPO_NAME),
-    base,
-    source: "default",
-  };
-})();
+const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE } = resolveWorktreeRoot({
+  cwd: CALLER_CWD, repository: REPO_ROOT, config: CONFIG, sources: CONFIG_SOURCES, boundary: FLEET,
+  explicitConfig: EXPLICIT_CONFIG, parentConfig: PARENT_CONFIG_FILE,
+});
 const DEFAULT_VALIDATE = CONFIG.validate ?? "npm test";
 function validationSettings() {
   try { return resolveValidation({ root: REPO_ROOT, config: CONFIG, sources: Object.fromEntries(CONFIG_SOURCES) }); }

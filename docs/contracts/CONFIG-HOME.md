@@ -200,6 +200,11 @@ events, plus its `published` list. An earlier, rolled-back operation's audit
 does not turn an unpublished file in a new binding into a missing published
 file. Completed bindings retain the missing-policy hold. Bare identity or empty
 project directories carry no project policy authority.
+When an incomplete binding reuses files named in its answered supersession scope,
+those retained bytes stay outside effective policy until this operation publishes
+their replacement. Ordinary reads use the validated repo fallback and do not
+audit the superseded bytes, so an interrupted binding can resume with its exact
+original scope and answer.
 
 ## Identity and permissions
 
@@ -415,7 +420,9 @@ detected owner. An unrecorded conflict or a foreign owner root still holds.
 Before publication, check every identity and project baseline and unresolved
 intent, selected source and destination, effective policy reference, compatible
 release, owner answer, fresh native observation, controller ownership and KEEP
-layout. Acquire both config locks and repeat source/baseline checks before the
+layout. Check the prospective binding against the home/legacy fleet union's
+ownership and generated-key rules. Acquire both config locks and repeat that
+union check and every source's presence/digest and baseline checks before the
 first identity record, policy, binding, link or enrollment publication. A refusal
 leaves existing files, audit and enrollment untouched; remove only empty lock
 preparation directories created by this attempt. A directory with no binding may

@@ -7,11 +7,13 @@ import { contentDigest, policyLocation, projectIdentity } from '../lib/config-ho
 import { gitProject } from '../lib/project.mjs';
 import { initOrg, transact } from '../lib/store.mjs';
 import { auditEvents } from '../lib/config-audit.mjs';
+import { readProjectPolicy } from '../lib/config-policy.mjs';
+import { projectFleet, readFleet } from '../lib/fleet.mjs';
 import { digest } from '../lib/digest.mjs';
 import { inspect } from '../sessions/sessions.mjs';
 import { recordStandardSlot } from '../sessions/receipts.mjs';
 import { adopt, adoptCommand } from '../lib/adopt-command.mjs';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { fold } from '../lib/state.mjs';
 
@@ -47,10 +49,13 @@ function homeSnapshot(f) {
 }
 async function refusesWithoutPublication(f, options, message) {
   const home = homeSnapshot(f), events = f.events(), exclude = fs.readFileSync(path.join(f.cwd, '.git/info/exclude'));
+  const files = ['.org/events.jsonl', '.git/sessions/standard-slots.json', '.git/sessions/controller-journal.json'].map(file => path.join(f.cwd, file));
+  const snapshots = files.map(file => fs.existsSync(file) ? fs.readFileSync(file) : null);
   await assert.rejects(f.adopt(options), message);
   assert.deepEqual(homeSnapshot(f), home);
   assert.deepEqual(f.events(), events);
   assert.deepEqual(fs.readFileSync(path.join(f.cwd, '.git/info/exclude')), exclude);
+  assert.deepEqual(files.map(file => fs.existsSync(file) ? fs.readFileSync(file) : null), snapshots);
   assert.equal(fs.existsSync(path.join(f.cwd, '.brain')), false);
   assert.equal(policyLocation(f.cwd, 'lane', f.env).file, path.join(f.cwd, '.lane.json'));
   assert.equal(inspect({ cwd: f.cwd, env: f.env }).valid, true);
@@ -214,6 +219,60 @@ test('a changed second native observation refuses before publication', async t =
   assert.equal(count, 2);
 });
 
+for (const when of ['pre-existing', 'under config locks']) test(`a ${when === 'pre-existing' ? when : 'late'} fleet key collision refuses without changing either project's discovery or publishing config`, async t => {
+  const f = configFixture(t); f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  const other = path.join(f.scratch, 'legacy'); fs.mkdirSync(other);
+  execFileSync('git', ['init', '-qb', 'main', other], { env: f.env });
+  const legacy = { identity: path.join(other, '.git'), checkout: other, record: path.join(other, '.org'), worktrees: path.join(f.scratch, 'legacy-lanes'), layers: [] };
+  initOrg(legacy.record);
+  const file = path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'); fs.mkdirSync(path.dirname(file));
+  const name = `${f.scope.scope.identity}/project`, fleet = { version: 1, session_limit: 6, projects: { [name]: legacy } };
+  const bytes = JSON.stringify(fleet), record = fs.readFileSync(path.join(legacy.record, 'events.jsonl'));
+  const publishCollision = () => fs.writeFileSync(file, bytes);
+  if (when === 'pre-existing') publishCollision();
+  const env = { ...f.env, ORG_DIR: undefined };
+  const routes = ['lane', 'validation', 'housekeeping'].map(kind => readProjectPolicy(f.cwd, kind, f.env));
+  const mkdir = fs.mkdirSync; let locks = 0;
+  fs.mkdirSync = function(target, ...args) {
+    const result = mkdir.call(this, target, ...args);
+    if (path.basename(String(target)) === '.config.lock' && ++locks === 2 && when === 'under config locks') publishCollision();
+    return result;
+  };
+  try { await refusesWithoutPublication(f, {}, /fleet key collision/); }
+  finally { fs.mkdirSync = mkdir; }
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  assert.deepEqual(fs.readFileSync(path.join(legacy.record, 'events.jsonl')), record);
+  assert.deepEqual(readFleet(f.env).projects, fleet.projects);
+  assert.deepEqual(projectFleet(other, env).project, { ...legacy, name });
+  assert.deepEqual(['lane', 'validation', 'housekeeping'].map(kind => readProjectPolicy(f.cwd, kind, f.env)), routes);
+  assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false);
+  if (when === 'under config locks') assert.equal(locks, 2);
+});
+
+for (const kind of ['validation', 'housekeeping']) for (const when of ['second observation', 'under config locks'])
+  test(`an absent ${kind} source arriving ${when === 'second observation' ? 'during the second observation' : when} refuses before publication`, async t => {
+    const f = configFixture(t), file = path.join(f.cwd, kind === 'validation' ? '.lane.validation.json' : '.housekeeping.json');
+    fs.unlinkSync(file);
+    f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+    assert.equal(f.scope.scope.migration.sources[kind].present, false);
+    const arrival = '{"invalid":', mkdir = fs.mkdirSync;
+    let observations = 0, locks = 0;
+    const observer = { observe: async () => {
+      if (++observations === 2 && when === 'second observation') fs.writeFileSync(file, arrival);
+      return structuredClone(f.observation);
+    } };
+    fs.mkdirSync = function(target, ...args) {
+      const result = mkdir.call(this, target, ...args);
+      if (path.basename(String(target)) === '.config.lock' && ++locks === 2 && when === 'under config locks') fs.writeFileSync(file, arrival);
+      return result;
+    };
+    try { await refusesWithoutPublication(f, { observer }, /adoption source changed since frozen inventory/); }
+    finally { fs.mkdirSync = mkdir; }
+    assert.equal(observations, 2); assert.equal(fs.readFileSync(file, 'utf8'), arrival);
+    assert.equal(fs.existsSync(path.join(f.home, '.herdr-monitor')), false);
+    if (when === 'under config locks') assert.equal(locks, 2);
+  });
+
 test('a competing KEEP layout refuses without changing existing enrollment or publishing config', async t => {
   const f = configFixture(t); f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
   const slot = structuredClone(f.scope.scope.slots[0].slot); slot.panes[0].pane = 'other-pane';
@@ -231,6 +290,44 @@ test('an incomplete new binding ignores the old operation audit when selecting u
   assert.equal(policyLocation(f.cwd, 'lane', f.env).file, path.join(f.cwd, '.lane.json'));
   assert.equal(inspect({ cwd: f.cwd, env: f.env }).valid, true);
   await f.adopt(); assert.ok(f.binding().adoption.completed);
+});
+
+for (const malformed of [false, true]) test(`a binding interruption keeps ${malformed ? 'malformed' : 'valid'} superseded retained policy out of ordinary reads and permits the exact retry`, async t => {
+  const f = configFixture(t), old = oldBaseline(f), retained = malformed ? '{"main":' : '{"main":"retained-rollback"}';
+  fs.mkdirSync(path.dirname(old.file), { recursive: true }); fs.writeFileSync(old.file, retained);
+  await assert.rejects(f.adopt({ afterPublish(kind) { if (kind === 'binding') throw Error('binding write interrupted'); } }), /binding write interrupted/);
+  const binding = f.binding(), history = f.events(), identityHistory = auditEvents(path.join(path.dirname(binding.identityFile), '.org'));
+  assert.deepEqual(binding.published, []); assert.equal(binding.adoption.completed, undefined);
+  const selected = readProjectPolicy(f.cwd, 'lane', f.env);
+  assert.equal(selected.home, false); assert.equal(selected.config.main, 'main');
+  assert.equal(inspect({ cwd: f.cwd, env: f.env }).valid, true);
+  assert.deepEqual(f.events(), history, 'ordinary reads must not audit bytes awaiting supersession');
+  assert.deepEqual(auditEvents(path.join(path.dirname(binding.identityFile), '.org')), identityHistory);
+  assert.equal(fs.readFileSync(old.file, 'utf8'), retained);
+  await f.adopt();
+  assert.ok(f.binding().adoption.completed);
+  assert.equal(readProjectPolicy(f.cwd, 'lane', f.env).home, true);
+  assert.equal(contentDigest(fs.readFileSync(old.file)), old.new_digest);
+  const superseded = f.events().filter(e => e.type === 'config.baseline-superseded' && e.file === old.file);
+  assert.equal(superseded.length, 1); assert.equal(superseded[0].previous.seq, old.seq);
+});
+
+test('the replacement audit selects superseded policy before binding progress is saved', async t => {
+  const f = configFixture(t), old = oldBaseline(f), rename = fs.renameSync;
+  fs.mkdirSync(path.dirname(old.file), { recursive: true }); fs.writeFileSync(old.file, '{"main":');
+  let bindings = 0;
+  fs.renameSync = function(from, to) {
+    if (to === path.join(path.dirname(old.file), 'project.json') && ++bindings === 2) throw Error('binding progress interrupted');
+    return rename.call(this, from, to);
+  };
+  try { await assert.rejects(f.adopt(), /binding progress interrupted/); }
+  finally { fs.renameSync = rename; }
+  assert.equal(bindings, 2); assert.deepEqual(f.binding().published, []);
+  const history = f.events(), selected = readProjectPolicy(f.cwd, 'lane', f.env);
+  assert.equal(selected.home, true); assert.equal(selected.config.main, 'main');
+  assert.deepEqual(f.events(), history);
+  await f.adopt(); assert.ok(f.binding().adoption.completed);
+  assert.equal(f.events().filter(e => e.type === 'config.baseline-superseded' && e.file === old.file).length, 1);
 });
 
 test('bare identity and empty project directories never select a home policy without a binding', async t => {

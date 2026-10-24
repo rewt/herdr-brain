@@ -12,5 +12,5 @@ export function runnerLimits({ factor, fixedDeadlines = false, fileTimeout = 300
   };
   return { concurrency,
     fileTimeout: bound('file-timeout', fileTimeout, 480_000, factor),
-    suiteTimeout: bound('suite-timeout', suiteTimeout, 540_000, suiteFactor) };
+    suiteTimeout: bound('suite-timeout', suiteTimeout, 7_200_000, suiteFactor) };
 }

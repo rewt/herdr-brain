@@ -1,22 +1,104 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { plannedCommand } from '../promote/test-plan.mjs';
+import { plannedCommand, noRetryCommand, quote } from '../promote/test-plan.mjs';
 import { releasePhases } from './helpers/release-suites.mjs';
 import { planBootstrap, verifyManifest, failingFiles, runBootstrap, trainSelection, requireNoRetries, RUNNER_OPTIONS } from './helpers/bootstrap-gate.mjs';
+import { spawnScenarioChild, waitForExit } from './helpers/child.mjs';
+import { testSlotEnvironment } from './helpers/test-slot-env.mjs';
+import { resolveGateLimits } from '../test-slot/limits.mjs';
 
 const manifestText = fs.readFileSync(new URL('./helpers/bootstrap-coverage.json', import.meta.url), 'utf8');
 const manifest = JSON.parse(manifestText);
 const digest = text => createHash('sha256').update(text).digest('hex');
 const quiet = { log: () => {}, error: () => {} };
 
-test('empty train append is explicit and appended-suite retries must be disabled upstream', () => {
+test('empty train append is explicit and the recipe requires both declaration and propagated no-retry policy', () => {
   assert.deepEqual(trainSelection({}), []);
   assert.deepEqual(trainSelection({ MONITOR_PROMOTION_TEST_FILES: '["test/one.test.mjs"]' }), ['test/one.test.mjs']);
   assert.throws(() => trainSelection({ MONITOR_PROMOTION_TEST_FILES: 'malformed' }));
-  requireNoRetries({ MONITOR_TEST_SLOT_TIMEOUT_RETRIED: '1' });
-  for (const value of [undefined, '0', 'true']) assert.throws(() => requireNoRetries({ MONITOR_TEST_SLOT_TIMEOUT_RETRIED: value }), /disable appended-suite retries/);
+  const policy = { MONITOR_PROMOTION_NO_RETRIES: '1', MONITOR_TEST_SLOT_TIMEOUT_RETRIED: '1' };
+  requireNoRetries(policy);
+  for (const value of [undefined, '0', 'true']) {
+    assert.throws(() => requireNoRetries({ ...policy, MONITOR_PROMOTION_NO_RETRIES: value }), /declare MONITOR_PROMOTION_NO_RETRIES/);
+    assert.throws(() => requireNoRetries({ ...policy, MONITOR_TEST_SLOT_TIMEOUT_RETRIED: value }), /automatic appended-suite retries remain enabled/);
+  }
+});
+
+test('only a literal leading no-retry declaration changes command policy, including with no append', () => {
+  const declared = 'MONITOR_PROMOTION_NO_RETRIES=1 recipe';
+  assert.equal(noRetryCommand(declared), true);
+  for (const command of ['recipe', 'MONITOR_PROMOTION_NO_RETRIES=10 recipe', 'MONITOR_PROMOTION_NO_RETRIES=0 recipe',
+    'echo MONITOR_PROMOTION_NO_RETRIES=1 recipe', '( MONITOR_PROMOTION_NO_RETRIES=1 recipe )']) {
+    assert.equal(noRetryCommand(command), false);
+    assert.equal(plannedCommand(command, null), command);
+  }
+  assert.match(plannedCommand(declared, null), /^export MONITOR_PROMOTION_NO_RETRIES=1 MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1; \( /);
+  assert.doesNotMatch(plannedCommand(declared, { files: [], command: null }), /&&/);
+});
+
+test('the recipe refuses retry-enabled execution and the actual appended adapter inherits no retries under watch mode', async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-retries-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const attempts = path.join(root, 'attempts.jsonl'), guard = path.join(root, 'guard.mjs');
+  const recipe = fileURLToPath(new URL('./helpers/bootstrap-gate.mjs', import.meta.url));
+  const planner = fileURLToPath(new URL('./helpers/affected-tests.mjs', import.meta.url));
+  fs.writeFileSync(guard, `import {requireNoRetries} from ${JSON.stringify(new URL('./helpers/bootstrap-gate.mjs', import.meta.url).href)};requireNoRetries();`);
+  const preload = path.join(root, 'load.mjs');
+  fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[4,4,4];os.availableParallelism=()=>1;");
+  const files = ['test/red.test.mjs', 'lanes/test/later.test.mjs'];
+  for (const [index, file] of files.entries()) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), `import fs from 'node:fs';
+const log=${JSON.stringify(attempts)},file=${JSON.stringify(file)};
+const before=fs.existsSync(log)?fs.readFileSync(log,'utf8').trim().split('\\n').map(JSON.parse):[];
+fs.appendFileSync(log,JSON.stringify({file,retried:process.env.MONITOR_TEST_SLOT_TIMEOUT_RETRIED})+'\\n');
+${index === 0 ? "if(!before.some(row=>row.file===file)){console.error('testTimeoutFailure');process.exit(124);}" : ''}
+`);
+  }
+  const env = { ...testSlotEnvironment(), MONITOR_PROMOTION_NO_RETRIES: '0', MONITOR_TEST_SLOT_TIMEOUT_RETRIED: '0',
+    MONITOR_TEST_SLOT_PATH: path.join(root, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'slot'),
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` };
+  delete env.NODE_TEST_CONTEXT;
+  const run = command => waitForExit(spawnScenarioChild(t, '/bin/sh', ['-c', command], { cwd: root, env }));
+  const guarded = `${quote(process.execPath)} ${quote(guard)}`;
+  // main() itself must refuse before manifest preflight or any test execution.
+  const refused = await run(`${quote(process.execPath)} ${quote(recipe)} --manifest-sha256=${digest(manifestText)} --recipe-sha256=${digest(fs.readFileSync(recipe))}`);
+  assert.notEqual(refused.code, 0); assert.match(refused.stderr, /declare MONITOR_PROMOTION_NO_RETRIES/);
+  assert.doesNotMatch(refused.stdout, /Bootstrap group/); assert.equal(fs.existsSync(attempts), false);
+  const unpropagated = await run(`MONITOR_PROMOTION_NO_RETRIES=1 ${guarded}`);
+  assert.notEqual(unpropagated.code, 0); assert.match(unpropagated.stderr, /automatic appended-suite retries remain enabled/);
+  assert.equal(fs.existsSync(attempts), false);
+  const noAppend = await run(plannedCommand(`MONITOR_PROMOTION_NO_RETRIES=1 ${guarded}`, null));
+  assert.equal(noAppend.code, 0, noAppend.stdout + noAppend.stderr);
+  const plan = { files, command: `${quote(process.execPath)} ${quote(planner)} --run ${quote(JSON.stringify(files))}` };
+  // Positive control: wall_seconds=0 still permits a diagnostic/exit-124 retry.
+  assert.equal(resolveGateLimits().wall_seconds, 0);
+  const retrying = await run(plannedCommand(':', plan));
+  assert.equal(retrying.code, 0, retrying.stdout + retrying.stderr);
+  assert.match(retrying.stderr, /TEST_SLOT_TIMEOUT_RETRY:/);
+  assert.deepEqual(fs.readFileSync(attempts, 'utf8').trim().split('\n').map(JSON.parse).map(row => row.file), [files[0], files[0], files[1]]);
+  fs.unlinkSync(attempts);
+  const noRetries = await run(plannedCommand(`MONITOR_PROMOTION_NO_RETRIES=1 ${guarded}`, plan));
+  assert.notEqual(noRetries.code, 0, noRetries.stdout + noRetries.stderr);
+  assert.doesNotMatch(noRetries.stderr, /TEST_SLOT_TIMEOUT_RETRY:/);
+  assert.deepEqual(fs.readFileSync(attempts, 'utf8').trim().split('\n').map(JSON.parse), [{ file: files[0], retried: '1' }]);
+});
+
+test('documented bootstrap commands pin the frozen manifest and current recipe with the no-retry declaration', () => {
+  const doc = fs.readFileSync(new URL('./helpers/bootstrap-gate.md', import.meta.url), 'utf8');
+  const recipeDigest = digest(fs.readFileSync(new URL('./helpers/bootstrap-gate.mjs', import.meta.url)));
+  const commands = [...doc.matchAll(/MONITOR_PROMOTION_NO_RETRIES=1 \/Users\/rewt\/[^\n]+bootstrap-gate\.mjs --manifest-sha256=([0-9a-f]{64}) --recipe-sha256=([0-9a-f]{64})/g)];
+  assert.equal(commands.length, 2, 'document both the validate value and bare launch');
+  for (const [, manifestDigest, documentedRecipeDigest] of commands) {
+    assert.equal(manifestDigest, digest(manifestText));
+    assert.equal(documentedRecipeDigest, recipeDigest);
+  }
+  assert.match(doc, /\/Users\/rewt\/\.nvm\/versions\/node\/v20\.19\.4\/bin\/node promote\/promote\.mjs --resume/);
 });
 
 test('recipe partitions the frozen files against the actual train append without overlap', () => {

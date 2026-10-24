@@ -16,7 +16,7 @@ import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-pr
 
 import { probeNativeGate } from './native-context.mjs';
 import { gateHistoryKey } from '../test-slot/limits.mjs';
-import { changedPaths, plannedCommand } from './test-plan.mjs';
+import { changedPaths, plannedCommand, noRetryCommand } from './test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
 import { shadowSelection, completeShadow } from './selector.mjs';
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, exactIdentity, explainMiss, requireExactPlan, selectionUnknown } from '../lanes/exact-validation.mjs';
@@ -312,7 +312,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     }
     if (attempt.phase === 'red') {
       plan.groups.shift();
-      if (attempt.jobs.length === 1) result(attempt.jobs[0], { outcome: 'refused', reason: `batch validation failed (exit ${attempt.gate.exit_code}); lane isolated for correction`, gate: attempt.gate, batch: plan.id });
+      if (noRetryCommand(validation.tiers.promotion.command)) {
+        for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: `batch validation failed (exit ${attempt.gate.exit_code}); no-retry command forbids bisection`, gate: attempt.gate, batch: plan.id });
+      } else if (attempt.jobs.length === 1) result(attempt.jobs[0], { outcome: 'refused', reason: `batch validation failed (exit ${attempt.gate.exit_code}); lane isolated for correction`, gate: attempt.gate, batch: plan.id });
       else {
         const middle = Math.ceil(attempt.ids.length / 2);
         plan.groups.unshift(attempt.ids.slice(0, middle), attempt.ids.slice(middle));

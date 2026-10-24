@@ -898,6 +898,71 @@ test('validation that throws closes its telemetry clock without inventing green 
   assert.equal(f.git(['rev-parse', 'main']), before); assert.ok(fs.existsSync(workspace));
 });
 
+function noRetryFixture(f, redAppend = false) {
+  const recipe = new URL('../../test/helpers/bootstrap-gate.mjs', import.meta.url).href;
+  const appended = path.join(f.root, 'append-runs');
+  f.env.MONITOR_PROMOTION_NO_RETRIES = '0';
+  f.env.MONITOR_TEST_SLOT_TIMEOUT_RETRIED = '0';
+  fs.writeFileSync(f.checker, `const fs=require('fs');
+import(${JSON.stringify(recipe)}).then(({requireNoRetries})=>{
+ requireNoRetries();fs.appendFileSync(${JSON.stringify(path.join(f.root, 'checks'))},'gate\\n');console.log('# tests 1\\n# pass 1');
+});`);
+  fs.writeFileSync(path.join(f.repo, 'planner.mjs'), `import fs from 'node:fs';
+import {requireNoRetries} from ${JSON.stringify(recipe)};
+if(process.argv[2]==='--plan') console.log(JSON.stringify({files:['extra.test.mjs']}));
+else {
+ requireNoRetries();fs.appendFileSync(${JSON.stringify(appended)},'append\\n');
+ ${redAppend ? "console.error('testTimeoutFailure');process.exitCode=124;" : "console.log('# tests 1\\n# pass 1');"}
+}`);
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ promotion: `${process.execPath} ${f.checker}`, promotion_tests: 'planner.mjs' }));
+  f.git(['add', '.']); f.git(['commit', '-qm', 'Declare no-retry planner fixture']);
+  return { validate: `MONITOR_PROMOTION_NO_RETRIES=1 ${process.execPath} ${f.checker}`, appended };
+}
+
+test('a bare enqueue starts a request-scoped no-retry recipe and its sibling append without caller settings', async t => {
+  const f = fixture(t), { validate, appended } = noRetryFixture(f);
+  const workspace = f.lane('bare');
+  const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), 'bare', '--validate', validate,
+    '--expected-head', f.git(['rev-parse', 'HEAD'], workspace), '--lane-cli', path.join(source, 'lanes/lane.mjs'),
+    '--herdr', path.join(f.root, 'herdr'), '--delivery-attempts', '1', '--retry-seconds', '0']);
+  assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(JSON.parse(r.stdout).worker.ready, true);
+  await until(() => f.queue.load().results.some(row => row.outcome === 'promoted'));
+  const result = f.queue.load().results.at(-1);
+  assert.equal(result.validate, validate); assert.equal(f.runs(), 1);
+  assert.equal(fs.readFileSync(appended, 'utf8'), 'append\n');
+  assert.equal(fs.readFileSync(path.join(f.repo, 'bare'), 'utf8'), 'bare');
+});
+
+test('bare resume restores the saved no-retry declaration for both steps after a prepared interruption', async t => {
+  const f = fixture(t), { validate, appended } = noRetryFixture(f);
+  f.lane('first'); f.lane('second'); f.add('first', { validate }); f.add('second', { validate });
+  const before = f.git(['rev-parse', 'main']);
+  interruptAt(f, 'prepared'); assert.equal(f.drain().status, 0);
+  assert.ok(f.queue.load().results.every(row => row.outcome === 'interrupted'));
+  assert.equal(f.git(['rev-parse', 'main']), before); assert.equal(f.runs(), 0);
+  assert.equal(fs.existsSync(appended), false);
+  const resumed = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--resume']);
+  assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+  assert.equal(JSON.parse(resumed.stdout).worker.ready, true);
+  await until(() => f.queue.load().results.filter(row => row.outcome === 'promoted').length === 2);
+  assert.equal(f.runs(), 1); assert.equal(fs.readFileSync(appended, 'utf8'), 'append\n');
+  assert.ok(f.queue.load().results.every(row => row.validate === validate));
+  for (const topic of ['first', 'second']) assert.equal(fs.readFileSync(path.join(f.repo, topic), 'utf8'), topic);
+});
+
+test('a red no-retry append refuses every batch member without bisecting or replaying completed groups', t => {
+  const f = fixture(t), { validate, appended } = noRetryFixture(f, true);
+  const before = f.git(['rev-parse', 'main']);
+  for (const topic of ['first', 'second', 'third']) { f.lane(topic); f.add(topic, { validate }); }
+  assert.equal(f.drain().status, 0);
+  const results = f.queue.load().results;
+  assert.equal(results.length, 3); assert.ok(results.every(row => row.outcome === 'refused' && /no-retry command forbids bisection/.test(row.reason)));
+  assert.equal(f.runs(), 1); assert.equal(fs.readFileSync(appended, 'utf8'), 'append\n');
+  assert.equal(JSON.parse(fs.readFileSync(results[0].receipt)).attempts.length, 1);
+  assert.equal(f.git(['rev-parse', 'main']), before);
+  for (const topic of ['first', 'second', 'third']) assert.ok(fs.existsSync(path.join(f.root, topic)));
+});
+
 test('affected test supplements run once in the batch gate, are recorded and block a red landing', t => {
   const f = fixture(t);
   const planner = `import fs from 'node:fs';

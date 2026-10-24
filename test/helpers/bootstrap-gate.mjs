@@ -16,10 +16,11 @@ export function trainSelection(env = process.env) {
   return JSON.parse(env.MONITOR_PROMOTION_TEST_FILES ?? '[]');
 }
 export function requireNoRetries(env = process.env) {
-  // The appended --run uses release-suites' existing retrying slot adapter.
-  // Reserve no retry budget in the train's environment, including its sibling
-  // append step; setting this only inside the recipe subshell is insufficient.
-  assert.equal(env.MONITOR_TEST_SLOT_TIMEOUT_RETRIED, '1', 'start the bootstrap train with MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1 to disable appended-suite retries');
+  assert.equal(env.MONITOR_PROMOTION_NO_RETRIES, '1', 'declare MONITOR_PROMOTION_NO_RETRIES=1 at the start of --validate to forbid automatic retries');
+  // plannedCommand exports this sentinel outside the recipe subshell, where
+  // the sibling append's release-suites adapter also inherits it. A declaration
+  // executed directly, or by an older composer, must refuse before any group.
+  assert.equal(env.MONITOR_TEST_SLOT_TIMEOUT_RETRIED, '1', 'no-retry declaration did not reach the train append; automatic appended-suite retries remain enabled');
 }
 function uniquePaths(files) {
   assert.ok(Array.isArray(files) && files.every(file => typeof file === 'string' && /^[\w./-]+\.test\.mjs$/.test(file) && !path.isAbsolute(file) && !file.split('/').includes('..')), 'invalid bootstrap file list');

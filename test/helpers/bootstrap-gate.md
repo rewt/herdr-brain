@@ -52,27 +52,46 @@ grouping and containment sources. The command pins the manifest and recipe bytes
 Every stacked request must use this **identical** `--validate` value:
 
 ```text
-/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=a0f33ea19d660ea6bdb9db6496dd2fb89d056aab7a2a800a019a3a994aaff4f5 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa
+MONITOR_PROMOTION_NO_RETRIES=1 /Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=a0f33ea19d660ea6bdb9db6496dd2fb89d056aab7a2a800a019a3a994aaff4f5 --recipe-sha256=915221d28e80ac055722b4513da5c44fc7eefd39e9bba1151820c907b39d64a4
 ```
 
-At R-769's idle train boundary, launch the queue worker/drain with
-`MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1` and Node 20.19.4 first in `PATH`. This existing
-sentinel suppresses the selected-file adapter's loaded-timeout retry as well as
-any nested retry. The recipe refuses before starting files if the sentinel is
-missing. Setting it only inside `--validate` cannot affect the sibling appended
-step, because the train wraps the declared command in a subshell. A worker already
-running without the sentinel must reach the normal idle boundary first.
+The literal leading `MONITOR_PROMOTION_NO_RETRIES=1 ` belongs inside the saved
+`--validate` value. `plannedCommand()` recognizes that declaration and exports it
+and `MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1` **before** the recipe subshell, so the
+recipe, sibling appended step and nested slot adapters all inherit no retry
+budget. The recipe refuses before starting files unless both values are `1`;
+running the declaration directly, or through an older composer, does not suffice.
+The train also refuses every member of a red declared batch without bisection,
+which would otherwise replay completed groups. Commands without the declaration
+keep their existing behavior. No setting is required in the caller's environment.
+
+Watch mode's zero wall cap alone is insufficient: the slot adapter can still
+retry an internal timeout diagnostic or exit 124 under load. The explicit
+declaration disables those paths as well. The pinned Node executable on the bare
+launch and resume commands supplies the planner and adapters' Node version
+without changing `PATH`.
 
 For example, the supervisor's enqueue that starts the worker has this shape
 (repeat the same override for each job, with that job's actual bindings):
 
 ```sh
-MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1 PATH=/Users/rewt/.nvm/versions/node/v20.19.4/bin:$PATH \
-node promote/promote.mjs TOPIC --org /Users/rewt/development/rewt/.org \
+/Users/rewt/.nvm/versions/node/v20.19.4/bin/node promote/promote.mjs TOPIC --org /Users/rewt/development/rewt/.org \
   --expected-head FULL_REVIEWED_HEAD --if-current-run R-NUMBER \
   --required-tests 'JOB_REQUIRED_FILES_JSON' \
-  --validate '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=a0f33ea19d660ea6bdb9db6496dd2fb89d056aab7a2a800a019a3a994aaff4f5 --recipe-sha256=87a8c3731b9c662eedec3abe6026b3821d75850c8d34d5eb8006a7c12a60f6aa'
+  --validate 'MONITOR_PROMOTION_NO_RETRIES=1 /Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/bootstrap-gate.mjs --manifest-sha256=a0f33ea19d660ea6bdb9db6496dd2fb89d056aab7a2a800a019a3a994aaff4f5 --recipe-sha256=915221d28e80ac055722b4513da5c44fc7eefd39e9bba1151820c907b39d64a4'
 ```
+
+At a normal resume boundary, the saved request supplies the same declaration:
+
+```sh
+/Users/rewt/.nvm/versions/node/v20.19.4/bin/node promote/promote.mjs --resume
+```
+
+Use a runtime containing this command composer and train policy. The no-retry
+declaration is request-scoped and restored from the saved job on resume; it does
+not depend on the worker's original environment. Explicitly resuming an
+interrupted attempt may rerun unfinished validation; no automatic timeout retry
+or red-batch replay is allowed.
 
 `promote/promote.mjs` chooses `opt.validate` before `LANE_VALIDATE` and committed
 settings, stores it on each job and passes it into the batch's `LANE_VALIDATE`.
@@ -110,10 +129,10 @@ stack review covers this recipe, all source pins and the candidate `--run` contr
 
 ## Worker proof
 
-Run only these native-free unit files on the clean committed lane candidate:
+Run these groups sequentially on the clean committed lane candidate:
 
 ```sh
-node /Users/rewt/development/rewt/herdr-brain/lanes/lane.mjs check --cmd 'node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/bootstrap-coverage.test.mjs test/bootstrap-gate.test.mjs'
+/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/lanes/lane.mjs check --cmd '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/bootstrap-coverage.test.mjs test/bootstrap-gate.test.mjs && /Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 promote/test/train.test.mjs promote/test/affected-tests.test.mjs'
 ```
 
 Generator tests inject source text and tree fixtures, exercise real registration
@@ -123,6 +142,11 @@ Only the additional `checkout-only: frozen manifest regenerates from pinned Git
 objects and registrations` probe needs history; it reports an explicit named skip
 in release archive snapshots. All injected generator coverage runs there unchanged.
 Recipe tests inject group results, including failure, timeout, signal and launch
-error; they never run the manifest. L-43 files stay deferred to the supervisor's
-bound Phase 1 required tests; do not bind the later ENG-536/ENG-537 lists to this
-bootstrap.
+error; they never run the manifest. A scratch appended-suite fixture exercises
+the actual planner, release-suites and slot adapter: an internal timeout retries
+under load without the declaration, and stops after one attempt with it. Train
+fixtures cover bare enqueue, bare resume and a red batch without bisection.
+These fixtures need native process-source access; if the sandbox refuses a file,
+omit and name it for the supervisor's `--required-tests` (L-43). Phase 1 L-43
+files stay deferred to the supervisor's bound Phase 1 required tests; do not bind
+the later ENG-536/ENG-537 lists to this bootstrap.

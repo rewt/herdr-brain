@@ -32,7 +32,15 @@ export function changedPaths(cwd, base, head) {
   if (r.error || r.status !== 0) throw Error(r.stderr || 'cannot select changed test paths');
   return r.stdout.split('\0').filter(Boolean);
 }
+// A literal leading declaration scopes this policy to the saved command. Do
+// not infer it from shell fragments or from the worker's inherited environment.
+export const noRetryCommand = command => command.startsWith('MONITOR_PROMOTION_NO_RETRIES=1 ');
 export function plannedCommand(command, plan) {
-  if (!plan?.command) return command;
-  return `export MONITOR_PROMOTION_TEST_FILES=${quote(JSON.stringify(plan.files))}; ( ${command} ) && ${plan.command}`;
+  const exports = [];
+  if (noRetryCommand(command)) exports.push('MONITOR_PROMOTION_NO_RETRIES=1', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1');
+  if (plan?.command) exports.push(`MONITOR_PROMOTION_TEST_FILES=${quote(JSON.stringify(plan.files))}`);
+  if (!exports.length) return command;
+  // Export before the subshell so both the recipe and its sibling append (and
+  // their nested slot adapters) receive the same no-retry policy.
+  return `export ${exports.join(' ')}; ( ${command} )${plan?.command ? ` && ${plan.command}` : ''}`;
 }

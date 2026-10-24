@@ -462,7 +462,7 @@ export async function run({ positional, options, child }) {
         // Execution has no wall limit. Keep proving presence for the full
         // contract allowance, independent of its advisory expected end.
         expiresAt: new Date(floor === undefined ? acquired + MAX_RESERVATION_MS : Math.max(acquired, deadline)).toISOString(),
-        ...(floor === undefined ? {} : { now: () => acquired }), reserveGib: options.reserveGib, provers: options.provers });
+        now: () => acquired, reserveGib: options.reserveGib, provers: options.provers });
       const setGroup = slot.setGroup, release = slot.release;
       slot.reservation = reservation;
       slot.setGroup = (...args) => { setGroup(...args); reservation.setGroup(...args); };

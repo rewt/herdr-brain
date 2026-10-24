@@ -642,25 +642,10 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     proc.once("exit", (code, signal) => { leaderExited = true; resolve({ status: exitOf(code, signal), signal }); });
   });
   if (barrier) proc.stdio[3].on('error', () => {}); // A failed barrier may close before the grant.
-  if (proc.pid !== undefined && !barrier) started(proc);
   {
     proc.stdout.on("data", data => { observe(data); process.stdout.write(data); });
     proc.stderr.on("data", data => { observe(data); process.stderr.write(data); });
   }
-  if (proc.pid !== undefined && !process.env.MONITOR_TEST_WATCH_OWNER) watcher = watchRun({ pid: proc.pid, ownsGroup,
-    idleSeconds: limits.idle_seconds, frozen: limits.frozen_seconds, silenceState: watchOptions.silenceState,
-    onSilence: observation => {
-      observation.notice = silenceNotice(observation, watchOptions);
-      watchOptions.persist(observation);
-      process.stderr.write(`TEST_WATCH_SILENCE: no output for ${observation.silence_s.toFixed(3)}s; command continues.\n`);
-    },
-    onFrozen: observation => {
-      gateTimeout = observation;
-      watchOptions.persist(observation);
-      process.stderr.write(`GATE_TIMEOUT: frozen limit ${observation.limit_seconds}s exceeded; elapsed ${observation.elapsed_s.toFixed(3)}s\n`);
-      stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
-    },
-  });
   const forwarded = new Set();
   const forward = (signal) => {
     watcher?.stop();
@@ -672,6 +657,23 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
   };
   for (const signal of SIGNALS) process.on(signal, forward);
   try {
+    if (proc.pid !== undefined && !barrier) started(proc);
+    // The first activity audit is synchronous. Cancellation must already be
+    // handled while it runs, or the wrapper can exit with its payload alive.
+    if (proc.pid !== undefined && !process.env.MONITOR_TEST_WATCH_OWNER) watcher = watchRun({ pid: proc.pid, ownsGroup,
+      idleSeconds: limits.idle_seconds, frozen: limits.frozen_seconds, silenceState: watchOptions.silenceState,
+      onSilence: observation => {
+        observation.notice = silenceNotice(observation, watchOptions);
+        watchOptions.persist(observation);
+        process.stderr.write(`TEST_WATCH_SILENCE: no output for ${observation.silence_s.toFixed(3)}s; command continues.\n`);
+      },
+      onFrozen: observation => {
+        gateTimeout = observation;
+        watchOptions.persist(observation);
+        process.stderr.write(`GATE_TIMEOUT: frozen limit ${observation.limit_seconds}s exceeded; elapsed ${observation.elapsed_s.toFixed(3)}s\n`);
+        stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
+      },
+    });
     if (proc.pid !== undefined) {
       slot.setGroup(proc.pid, null, null, { gate_started_at: new Date().toISOString(), gate_limits: limits });
       let startRecord;

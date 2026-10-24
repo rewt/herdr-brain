@@ -10,6 +10,7 @@ import { resourceStanza } from '../resources.mjs';
 import { run } from '../test-slot.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { MAX_RESERVATION_MS } from '../reservations.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
 function fixture(t) {
@@ -134,28 +135,42 @@ test('the foreground barrier preserves payload signals separately from numeric e
   }
 });
 
-for (const capped of [false, true]) test(`an exclusive timeout retry renews its proving expiry${capped ? ' up to the six-hour cap' : ''}`, t => {
+for (const capped of [false, true]) test(`an exclusive timeout retry keeps continuous proving coverage within its acquisition ceiling${capped ? ' near the six-hour cap' : ''}`, t => {
   const f = fixture(t), clock = path.join(f.root, 'clock'), attempts = path.join(f.root, 'attempts.json'), preload = path.join(f.root, 'clock.mjs');
-  const initial = Date.now(), advance = capped ? 6 * 60 * 60 * 1000 - 1000 : 100000;
+  const publications = path.join(f.root, 'publications.jsonl');
+  const initial = Date.now(), advance = capped ? MAX_RESERVATION_MS - 1000 : 100000;
   fs.writeFileSync(clock, String(initial));
   fs.writeFileSync(preload, `import fs from 'node:fs';import os from 'node:os';
-    Date.now=()=>Number(fs.readFileSync(${JSON.stringify(clock)},'utf8'));os.loadavg=()=>[1000,1000,1000];`);
+    Date.now=()=>Number(fs.readFileSync(${JSON.stringify(clock)},'utf8'));os.loadavg=()=>[1000,1000,1000];
+    const rename=fs.renameSync;fs.renameSync=(from,to)=>{
+      if(String(to).startsWith(${JSON.stringify(f.lock + '.occupancy/')}))fs.appendFileSync(${JSON.stringify(publications)},JSON.stringify({at:Date.now(),record:JSON.parse(fs.readFileSync(from))})+'\\n');
+      return rename(from,to);
+    };`);
   const command = [process.execPath, '-e', `const fs=require('fs'),path=require('path'),assert=require('assert/strict');
     const dir=process.env.MONITOR_TEST_SLOT_COMPAT_PATH+'.occupancy';
     const file=path.join(dir,fs.readdirSync(dir).find(n=>!n.startsWith('.'))),record=JSON.parse(fs.readFileSync(file));
+    const ceiling=Date.parse(record.acquiredAt)+${MAX_RESERVATION_MS};
+    assert.equal(Date.parse(record.expiresAt),ceiling,'execution reserves the full acquisition allowance');
     const evidence=${JSON.stringify(attempts)};
     if(!fs.existsSync(evidence)){
       fs.writeFileSync(evidence,JSON.stringify({file,record}));fs.writeFileSync(${JSON.stringify(clock)},String(Date.now()+${advance}));
       console.error('ETIMEDOUT: first attempt');process.exit(124);
     }
     const first=JSON.parse(fs.readFileSync(evidence));assert.equal(file,first.file);assert.equal(record.acquiredAt,first.record.acquiredAt);
-    assert(Date.parse(first.record.expiresAt)<Date.now(),'the first expiry has elapsed');
-    assert.equal(Date.parse(record.expiresAt),Math.min(Date.now()+40000,Date.parse(record.acquiredAt)+6*60*60*1000));
-    assert(Date.parse(record.expiresAt)>Date.now());assert.equal(process.env.MONITOR_TEST_SLOT_TIMEOUT_RETRIED,'1');console.log('renewed');`];
+    assert.equal(record.expiresAt,first.record.expiresAt,'retry cannot move the acquisition ceiling');
+    assert(Date.parse(first.record.expiresAt)>Date.now(),'the original reservation still covers the retry');
+    assert.equal(process.env.MONITOR_TEST_SLOT_TIMEOUT_RETRIED,'1');console.log('covered');`];
   const result = f.run(command, ['--resource', JSON.stringify(resourceStanza('fixture/proving', command, 'EXCLUSIVE')),
     '--timeout-seconds', '10', '--retry-timeout-under-load'], { NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` });
-  assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'renewed\n');
+  assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'covered\n');
   assert.equal((result.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
+  const rows = fs.readFileSync(publications, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(rows.some(row => row.at === initial + advance), 'retry publication was observed');
+  for (const { at, record } of rows) {
+    assert.equal(Date.parse(record.acquiredAt), initial);
+    assert.equal(Date.parse(record.expiresAt), initial + MAX_RESERVATION_MS, 'no publication exceeds the original six-hour cap');
+    assert.ok(Date.parse(record.expiresAt) > at, 'coverage never lapses during publication or retry');
+  }
   assert.equal(fs.existsSync(f.lock), false); assert.deepEqual(fs.readdirSync(`${f.lock}.occupancy`), []);
 });
 

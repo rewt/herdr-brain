@@ -94,7 +94,11 @@ test('hard interruption preserves a started gate and counts it after resuming th
   assert.deepEqual(b.read().attempts[0].gate_history[0], pending);
   assert.equal(holderState(foreignHolder).state, 'live', 'the foreign slot remains held across interruption and resume');
   assert.deepEqual(fs.readdirSync(foreignHistory).sort().map(name => [name, fs.readFileSync(path.join(foreignHistory, name), 'utf8')]), foreignBefore);
-  assert.equal(JSON.parse(fs.readFileSync(pending.execution_receipt)).limits.wall_source, 'default', 'foreign clocks were not used');
+  const limits = JSON.parse(fs.readFileSync(pending.execution_receipt)).limits;
+  assert.equal(limits.wall_source, 'watch', 'foreign clocks were not used');
+  assert.equal(limits.wall_seconds, 0, 'foreign wall clocks cannot cap the interrupted gate');
+  assert.equal(limits.idle_seconds, 900, 'foreign silence clocks cannot change the observation threshold');
+  assert.equal(limits.idle_source, 'default');
   holder.send('release');
   const released = await waitForExit(holder); assert.equal(released.status, 0, released.stderr);
 });

@@ -408,6 +408,9 @@ answer. Changing a file, audit revision or supersession entry requires a fresh
 scope and answer. Identical bytes under a different operation still require an
 explicit supersession. Existing, unchanged identity defaults can be shared, but
 their baseline under the new adoption operation is explicitly superseded too.
+Retained identity defaults with different bytes may be replaced only by that
+same digest-bound supersession; their `identity_root` must still match the
+detected owner. An unrecorded conflict or a foreign owner root still holds.
 
 Before publication, check every identity and project baseline and unresolved
 intent, selected source and destination, effective policy reference, compatible

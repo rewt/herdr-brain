@@ -90,18 +90,21 @@ test('firing control B: a refused stale-baseline adopt publishes nothing and pre
   assert.equal(policyLocation(f.cwd, 'lane', f.env).file, path.join(f.cwd, '.lane.json'));
 });
 
-test('custom identity re-adoption supersedes missing identity and different-byte project baselines exactly once', async t => {
+for (const retained of [false, true]) test(`custom identity re-adoption supersedes ${retained ? 'retained' : 'missing'} identity and different-byte project baselines exactly once`, async t => {
   const f = configFixture(t, { custom: 'bastian' });
-  const oldIdentity = oldBaseline(f, 'identity', { bytes: Buffer.from(JSON.stringify({ identity_root: f.ownerRoot, main: 'old-main' })) });
+  const identityBytes = Buffer.from(JSON.stringify({ identity_root: f.ownerRoot, main: 'old-main' }));
+  const oldIdentity = oldBaseline(f, 'identity', { bytes: identityBytes });
+  if (retained) fs.writeFileSync(oldIdentity.file, identityBytes);
   const oldProject = oldBaseline(f, 'lane', { bytes: Buffer.from('{"main":"old-main"}') });
   f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
   const entries = f.scope.scope.migration.supersedes;
   for (const old of [oldIdentity, oldProject]) {
     const entry = entries.find(e => e.file === old.file);
     assert.deepEqual({ operation: entry.operation, seq: entry.seq, digest: entry.digest, observed_digest: entry.observed_digest },
-      { operation: old.operation, seq: old.seq, digest: old.new_digest, observed_digest: null });
+      { operation: old.operation, seq: old.seq, digest: old.new_digest, observed_digest: retained && old === oldIdentity ? old.new_digest : null });
   }
   await f.adopt();
+  assert.deepEqual(JSON.parse(fs.readFileSync(oldIdentity.file)), f.binding().defaults);
   const record = path.join(path.dirname(oldIdentity.file), '.org');
   for (const [events, old] of [[auditEvents(record), oldIdentity], [f.events(), oldProject]]) {
     const retired = events.filter(e => e.type === 'config.baseline-superseded' && e.file === old.file);
@@ -114,6 +117,18 @@ test('custom identity re-adoption supersedes missing identity and different-byte
   const projectEvents = f.events(), identityEvents = auditEvents(record);
   await f.adopt();
   assert.deepEqual(f.events(), projectEvents); assert.deepEqual(auditEvents(record), identityEvents);
+});
+
+test('retained identity supersession cannot change the owner root or accept bytes changed after the answer', async t => {
+  const f = configFixture(t, { custom: 'bastian' });
+  const bytes = Buffer.from(JSON.stringify({ identity_root: f.ownerRoot, main: 'old-main' }));
+  const old = oldBaseline(f, 'identity', { bytes }); fs.writeFileSync(old.file, bytes);
+  f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  fs.writeFileSync(old.file, JSON.stringify({ identity_root: f.ownerRoot, main: 'later-edit' }));
+  await refusesWithoutPublication(f, {}, /baseline changed since owner supersession scope capture/);
+  fs.writeFileSync(old.file, JSON.stringify({ identity_root: f.home, main: 'foreign-root' }));
+  f.scope = await f.capture(); f.decision = f.question(f.scope.scope);
+  await refusesWithoutPublication(f, {}, /existing identity defaults differ/);
 });
 
 test('retained unbound policy bytes are digest-bound and replaced only by an answered supersession', async t => {

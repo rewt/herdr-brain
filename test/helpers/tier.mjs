@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isMain } from '../../lib/cli-help.mjs';
-import { main as suite } from './suite.mjs';
+import { releasePhases } from './release-suites.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
+const runner = fileURLToPath(new URL('./run.mjs', import.meta.url));
 const fast = ['test/main-module.test.mjs', 'test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'lanes/test/routes.test.mjs'];
 const completionFiles = ['promote/test/completion.test.mjs', 'promote/test/completion-recovery.test.mjs'];
 // Whole-file promotion coverage stays explicit; future files default to release.
@@ -115,9 +117,22 @@ export function tierFiles(tier, directory = root) {
   return directories[tier].flatMap(dir => testFiles(directory, dir))
     .filter(file => promotion.includes(file));
 }
-if (isMain(import.meta.url)) {
-  const [tier, ...options] = process.argv.slice(2);
+export function main(argv = process.argv.slice(2)) {
+  const [tier, ...options] = argv;
   if (options.some(option => !option.startsWith('--'))) throw Error('expected runner options after tier');
-  process.chdir(root);
-  suite([...options, ...tierFiles(tier)]);
+  const files = tierFiles(tier), groups = releasePhases(files);
+  const started = performance.now();
+  console.log(`Test tier ${tier}: ${files.length} files; ${groups.length} bounded groups`);
+  for (const [name, rows] of groups) {
+    console.log(`Test tier ${tier} group ${name}: ${rows.join(', ')}`);
+    const groupStarted = performance.now();
+    const result = spawnSync(process.execPath, [runner, ...options, ...rows], { cwd: root, stdio: 'inherit' });
+    console.log(`Test tier ${tier} group ${name} finished: duration_ms=${(performance.now() - groupStarted).toFixed(3)} exit=${result.status ?? 1}`);
+    if (result.error) throw result.error;
+    if (result.status !== 0) return result.status ?? 1;
+  }
+  console.log(`Test tier ${tier} passed: ${files.length} files; duration_ms=${(performance.now() - started).toFixed(3)}`);
+  return 0;
 }
+
+if (isMain(import.meta.url)) process.exitCode = main();

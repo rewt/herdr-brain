@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tierFiles } from './helpers/tier.mjs';
 import { releasePhases } from './helpers/release-suites.mjs';
+import { spawnScenarioChild, waitForExit } from './helpers/child.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 test('tier selection covers every current test once in promotion or release and excludes support modules', () => {
@@ -82,4 +83,72 @@ test('a module folder removed from the planned tree contributes no tests instead
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
+});
+
+function tierFixture(t, failure = '') {
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'tier-groups-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(scratch, 'test/helpers'), { recursive: true });
+  fs.mkdirSync(path.join(scratch, 'lib'));
+  // Give the real tier CLI a small inventory without starting repository tests.
+  fs.copyFileSync(path.join(root, 'test/helpers/tier.mjs'), path.join(scratch, 'test/helpers/tier.mjs'));
+  for (const file of ['lib/cli-help.mjs', 'test/helpers/release-suites.mjs', 'test/helpers/run.mjs'])
+    fs.symlinkSync(path.join(root, file), path.join(scratch, file));
+  const files = tierFiles('fast');
+  for (const file of files) {
+    fs.mkdirSync(path.dirname(path.join(scratch, file)), { recursive: true });
+    fs.writeFileSync(path.join(scratch, file), `
+import fs from 'node:fs';
+import test from 'node:test';
+fs.appendFileSync('startups', ${JSON.stringify(file + '\n')});
+test('merge guard', () => { ${file === files[4] ? failure : ''} });
+test('release integration', () => { throw Error('tier name filter was lost'); });
+`);
+  }
+  return { files, scratch,
+    run: options => waitForExit(spawnScenarioChild(t, process.execPath,
+      [path.join(scratch, 'test/helpers/tier.mjs'), 'fast', '--test-name-pattern=^merge guard$', '--load-factor=1', ...options], { cwd: scratch })),
+    startups: () => fs.readFileSync(path.join(scratch, 'startups'), 'utf8').trim().split('\n'),
+  };
+}
+
+test('the tier CLI runs bounded sequential groups, isolates lanes and forwards runner options without losing files', async t => {
+  const f = tierFixture(t);
+  const result = await f.run(['--fixed-deadlines', '--file-timeout=5000', '--suite-timeout=10000']);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual(f.startups().sort(), [...f.files].sort(), 'every selected file starts exactly once');
+  const groups = [...result.stdout.matchAll(/^Test tier fast group (\S+): (.+\.test\.mjs)$/gm)]
+    .map(([, name, files]) => [name, files.split(', ')]);
+  assert.deepEqual(groups, releasePhases(f.files));
+  assert.deepEqual(groups.map(([, rows]) => rows.length), [4, 2, 1]);
+  assert.deepEqual(groups.at(-1)[1], ['lanes/test/routes.test.mjs']);
+  const starts = f.startups();
+  assert.deepEqual(starts.slice(0, 4).sort(), f.files.slice(0, 4).sort(), 'the first group finishes before the next starts');
+  assert.deepEqual(starts.slice(4, 6).sort(), f.files.slice(4, 6).sort());
+  assert.deepEqual([...result.stdout.matchAll(/^# pass (\d+)$/gm)].map(([, count]) => Number(count)), [4, 2, 1], 'the name filter reaches every worker');
+  assert.deepEqual([...result.stdout.matchAll(/^# skipped (\d+)$/gm)].map(([, count]) => Number(count)), [4, 2, 1]);
+  assert.equal((result.stdout.match(/^Test tier fast group .+ finished: duration_ms=\d+\.\d{3} exit=0$/gm) ?? []).length, groups.length);
+  assert.match(result.stdout, /^Test tier fast passed: 7 files; duration_ms=\d+\.\d{3}$/m);
+});
+
+test('a red tier group stops without replaying passed files or starting later groups', async t => {
+  const f = tierFixture(t, "throw Error('injected tier failure');");
+  const result = await f.run([]);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /injected tier failure/);
+  assert.deepEqual(f.startups().sort(), f.files.slice(0, 6).sort());
+  assert.doesNotMatch(result.stdout, /Test tier fast group lanes\//);
+  assert.doesNotMatch(result.stdout, /Test tier fast passed/);
+});
+
+for (const [limit, options, diagnostic] of [
+  ['suite', ['--file-timeout=5000', '--suite-timeout=1000'], /Test suite exceeded 1000ms/],
+  ['file', ['--file-timeout=700', '--suite-timeout=5000'], /(?:Test file exceeded 700ms|test timed out after 700ms)/],
+]) test(`the tier CLI forwards fixed ${limit} deadlines to every group and stops on timeout`, async t => {
+  const f = tierFixture(t, 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);');
+  const result = await f.run(['--fixed-deadlines', ...options]);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, diagnostic);
+  assert.deepEqual(f.startups().sort(), f.files.slice(0, 6).sort());
+  assert.doesNotMatch(result.stdout, /Test tier fast group lanes\//);
 });

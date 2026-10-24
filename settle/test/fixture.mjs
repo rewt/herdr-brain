@@ -161,7 +161,9 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   };
   return { root, repo, workspace, org, env, exec, record, start, show, report, commit, git, settle, retry, calls, concurrent, source, cleanup };
 }
-const fake = `#!/usr/bin/env node
+// The fake and its foreground owner must use the same interpreter, even when
+// PATH selects a different Node in the fixture's scratch directory.
+const fake = `#!${process.execPath}
 import fs from 'node:fs'; import path from 'node:path'; import {execFileSync} from 'node:child_process';
 const {lookupProcess}=await import(path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'../lib/processes.mjs'));
 const root=process.env.SETTLE_TEST_ROOT, repo=path.join(root,'project'), cwd=path.join(root,'lane'), args=process.argv.slice(2);
@@ -169,15 +171,19 @@ const file=path.join(root,'agents.json'); const agents=fs.existsSync(file)?JSON.
 const save=()=>fs.writeFileSync(file,JSON.stringify(agents));
 const out=(result)=>console.log(JSON.stringify({result}));
 const clientOwner=(relative,operation='')=>{
- const tree=lookupProcess(),program=path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'..',relative);
- if(!tree.ok)throw Error('cannot confirm fixture client owner');
+ const program=path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'..',relative);
  const prefix=process.execPath+' '+program+(operation?' '+operation:'')+' ';
- let owner=tree.value.get(process.ppid);const seen=new Set();
- while(owner&&!owner.command.startsWith(prefix)&&!seen.has(owner.pid)){
-  seen.add(owner.pid);owner=tree.value.get(owner.ppid);
+ // Only this client's ancestors can own it; unrelated host processes are not
+ // fixture inputs and must not make its ownership lookup fail.
+ let pid=process.ppid;const seen=new Set();
+ while(pid>1&&!seen.has(pid)){
+  seen.add(pid);const result=lookupProcess(pid);
+  if(!result.ok)throw Error('cannot confirm fixture client owner: '+result.error);
+  const owner=result.value;if(!owner)break;
+  if(owner.command.startsWith(prefix))return {pid:owner.pid,identity:owner.identity};
+  pid=owner.ppid;
  }
- if(!owner||seen.has(owner.pid))throw Error('fixture client has no foreground owner');
- return {pid:owner.pid,identity:owner.identity};
+ throw Error('fixture client has no foreground owner');
 };
 const liveAgents=()=>Object.values(agents).filter(agent=>{
  if(!agent.client_owner)return true;

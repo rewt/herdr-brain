@@ -26,6 +26,24 @@ function selectedConfig(f) {
   return file;
 }
 
+test('settle fixture review uses the suite interpreter with a conflicting node on PATH', t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.root, 'bin', 'node'), '#!/bin/sh\necho "conflicting PATH node was selected" >&2\nexit 73\n', { mode: 0o755 });
+  const conflicting = f.exec('node', ['--version']);
+  assert.equal(conflicting.status, 73);
+  assert.match(conflicting.stderr, /conflicting PATH node was selected/);
+  const unowned = f.exec('herdr', ['agent', 'start', 'unowned-reviewer', '--pane', 'w-lane:p1'], f.repo,
+    { SETTLE_TEST_REVIEW_IDENTITY: '1' });
+  assert.equal(unowned.status, 1);
+  assert.match(unowned.stderr, /fixture client has no foreground owner|cannot confirm fixture client owner:/);
+  assert.equal(fs.existsSync(path.join(f.root, 'agents.json')), false);
+  const run = f.start(); f.commit('correct\n'); f.report(run);
+  const settled = result(f.settle(run));
+  assert.equal(settled.result, 'promotable');
+  assert.equal(settled.review.verdict, 'PASS');
+  assert.equal(settled.validation.executed, false);
+});
+
 test('a project with only settle settings and no parent routes completes independent review', (t) => {
   const f = fixture(t, { actor: 'settle-settings-test' });
   assert.equal(fs.existsSync(path.join(f.root, '.lane.json')), false);

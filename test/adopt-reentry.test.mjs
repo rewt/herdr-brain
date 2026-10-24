@@ -317,7 +317,7 @@ test('the replacement audit selects superseded policy before binding progress is
   fs.mkdirSync(path.dirname(old.file), { recursive: true }); fs.writeFileSync(old.file, '{"main":');
   let bindings = 0;
   fs.renameSync = function(from, to) {
-    if (to === path.join(path.dirname(old.file), 'project.json') && ++bindings === 2) throw Error('binding progress interrupted');
+    if (path.basename(to) === 'project.json' && ++bindings === 2) throw Error('binding progress interrupted');
     return rename.call(this, from, to);
   };
   try { await assert.rejects(f.adopt(), /binding progress interrupted/); }

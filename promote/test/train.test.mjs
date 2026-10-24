@@ -13,7 +13,7 @@ import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
-import { loadTimeout } from '../../lib/deadline.mjs';
+import { loadFactor, loadTimeout } from '../../lib/deadline.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { promotionWorkers } from '../../test/helpers/promotion-worker.mjs';
 import { watchPromotionLock } from '../../test/helpers/promotion-lock.mjs';
@@ -259,11 +259,16 @@ for (const command of ['rev-parse', 'ls-tree', 'show']) test(`a settings git ${c
   for (const topic of ['first', 'second']) f.lane(topic);
   f.add('first');
   const marker = path.join(f.root, 'settings-wait'), preload = path.join(f.root, 'slow-settings.cjs');
-  fs.writeFileSync(preload, `const fs=require('node:fs'),cp=require('node:child_process'),original=cp.spawnSync;
+  // Observe the deadline's actual load inputs without taking another sample or
+  // changing the worker's allowance.
+  fs.writeFileSync(preload, `const fs=require('node:fs'),cp=require('node:child_process'),os=require('node:os'),original=cp.spawnSync;
+const loadavg=os.loadavg,availableParallelism=os.availableParallelism;let load,parallelism;
+os.loadavg=function(){const values=loadavg.apply(this,arguments);load=values[0];return values;};
+os.availableParallelism=function(){parallelism=availableParallelism.apply(this,arguments);return parallelism;};
 cp.spawnSync=function(cmd,args,options){
   if(process.argv[1]===${JSON.stringify(path.join(source, 'promote/promote.mjs'))} && cmd==='git' && args[2]===${JSON.stringify(command)}) {
     const temporary=${JSON.stringify(marker)}+'.'+process.pid+'.'+Math.random().toString(36).slice(2)+'.tmp';
-    fs.writeFileSync(temporary,JSON.stringify({timeout:options.timeout,locked:fs.existsSync(${JSON.stringify(path.join(f.queue.directory, 'queue.lock'))})}));
+    fs.writeFileSync(temporary,JSON.stringify({timeout:options.timeout,load,parallelism,locked:fs.existsSync(${JSON.stringify(path.join(f.queue.directory, 'queue.lock'))})}));
     fs.renameSync(temporary,${JSON.stringify(marker)});
     return original.call(this,process.execPath,['-e','setTimeout(()=>{},60000)'],options);
   }
@@ -278,7 +283,11 @@ cp.spawnSync=function(cmd,args,options){
   await until(() => fs.existsSync(marker));
   const waiting = JSON.parse(fs.readFileSync(marker, 'utf8'));
   assert.equal(waiting.locked, false);
-  assert.ok(Number.isInteger(waiting.timeout) && waiting.timeout > 0 && waiting.timeout <= loadTimeout(2000));
+  // Reuse the inputs sampled for the worker's deadline, including for later Git
+  // reads sharing that deadline. A fresh load sample can fall before we get here.
+  assert.ok(Number.isFinite(waiting.load) && Number.isInteger(waiting.parallelism) && waiting.parallelism > 0);
+  const settingsAllowance = loadTimeout(2000, loadFactor(waiting.load, waiting.parallelism));
+  assert.ok(Number.isInteger(waiting.timeout) && waiting.timeout > 0 && waiting.timeout <= settingsAllowance);
   f.add('second'); // Must succeed while the settings subprocess is still waiting.
   assert.equal(worker.exitCode, null);
   const pending = f.queue.load().pending;

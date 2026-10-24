@@ -6,8 +6,7 @@
     "closeout_queue": true
   },
   "settle": {
-    "review_round_cap": 3,
-    "review_route": "review-codex"
+    "review_round_cap": 3
   },
   "dispatch": {
     "max_sessions": 12

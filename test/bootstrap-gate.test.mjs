@@ -41,7 +41,7 @@ test('only a literal leading no-retry declaration changes command policy, includ
   assert.doesNotMatch(plannedCommand(declared, { files: [], command: null }), /&&/);
 });
 
-test('the recipe refuses retry-enabled execution and the actual appended adapter inherits no retries under watch mode', async t => {
+test('the recipe refuses undeclared execution and both default and declared append stop once under watch mode', async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-retries-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const attempts = path.join(root, 'attempts.jsonl'), guard = path.join(root, 'guard.mjs');
@@ -76,12 +76,13 @@ ${index === 0 ? "if(!before.some(row=>row.file===file)){console.error('testTimeo
   const noAppend = await run(plannedCommand(`MONITOR_PROMOTION_NO_RETRIES=1 ${guarded}`, null));
   assert.equal(noAppend.code, 0, noAppend.stdout + noAppend.stderr);
   const plan = { files, command: `${quote(process.execPath)} ${quote(planner)} --run ${quote(JSON.stringify(files))}` };
-  // Positive control: wall_seconds=0 still permits a diagnostic/exit-124 retry.
+  // The active default never retries a legacy elapsed-only exit. The explicit
+  // declaration additionally propagates its saved no-retry state to the append.
   assert.equal(resolveGateLimits().wall_seconds, 0);
-  const retrying = await run(plannedCommand(':', plan));
-  assert.equal(retrying.code, 0, retrying.stdout + retrying.stderr);
-  assert.match(retrying.stderr, /TEST_SLOT_TIMEOUT_RETRY:/);
-  assert.deepEqual(fs.readFileSync(attempts, 'utf8').trim().split('\n').map(JSON.parse).map(row => row.file), [files[0], files[0], files[1]]);
+  const ordinary = await run(plannedCommand(':', plan));
+  assert.notEqual(ordinary.code, 0, ordinary.stdout + ordinary.stderr);
+  assert.doesNotMatch(ordinary.stderr, /TEST_SLOT_TIMEOUT_RETRY:/);
+  assert.deepEqual(fs.readFileSync(attempts, 'utf8').trim().split('\n').map(JSON.parse), [{ file: files[0], retried: '0' }]);
   fs.unlinkSync(attempts);
   const noRetries = await run(plannedCommand(`MONITOR_PROMOTION_NO_RETRIES=1 ${guarded}`, plan));
   assert.notEqual(noRetries.code, 0, noRetries.stdout + noRetries.stderr);

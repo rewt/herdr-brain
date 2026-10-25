@@ -6,7 +6,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnScenarioChild, spawnChild, waitForExit } from './helpers/child.mjs';
 import { createProcessTracker } from './helpers/processes.mjs';
-import { loadTimeout } from '../lib/deadline.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
@@ -14,8 +13,7 @@ const local = file => fileURLToPath(new URL(file, import.meta.url));
 const tracker = createProcessTracker();
 const pause = () => new Promise(resolve => setTimeout(resolve, 20));
 async function until(fn, message) {
-  const end = Date.now() + loadTimeout(10000);
-  while (!fn()) { assert.ok(Date.now() < end, typeof message === 'function' ? message() : message); await pause(); }
+  while (!fn()) await pause();
 }
 const snapshot = () => {
   const result = tracker.snapshot();
@@ -49,7 +47,7 @@ assert.equal(path.dirname(path.dirname(fifo)),fs.realpathSync(root));
 assert.ok(fs.statSync(fifo).isFIFO());
 assert.ok(fs.statSync(stale).isFIFO());
 assert.equal(fs.statSync(stale).ino,before.ino,'stale evidence must not be replaced');
-const keys=['HERDR_FIXTURE_LIFETIME_EXECUTABLE','HERDR_FIXTURE_LIFETIME_FIFO','HERDR_FIXTURE_LIFETIME_SECONDS'];
+const keys=['HERDR_FIXTURE_LIFETIME_EXECUTABLE','HERDR_FIXTURE_LIFETIME_FIFO'];
 const expected=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
 ownFixtureLifetime();
 assert.equal(process.env.HERDR_FIXTURE_LIFETIME_FIFO,fifo,'ownership stays idempotent in one process');
@@ -116,13 +114,10 @@ static int capture_signal(pid_t pid, int signal) {
 #undef main
 #undef kill
 int main(int argc, char **argv) {
-  if (argc != 6) return 125;
-  receipt = argv[5];
-  pid_t owner = (pid_t)atoi(argv[4]);
-  for (int i = 0; getppid() == owner; i++) {
-    if (i == 10000) return 124;
-    usleep(1000);
-  }
+  if (argc != 5) return 125;
+  receipt = argv[4];
+  pid_t owner = (pid_t)atoi(argv[3]);
+  while (getppid() == owner) usleep(1000);
   int result = lifetime_main(argc, argv);
   FILE *file = fopen(receipt, "w");
   if (!file) return 126;
@@ -137,7 +132,7 @@ int main(int argc, char **argv) {
   // owner as soon as it entered guard(), which the interceptor records safely.
   const parent = spawnChild(t, process.execPath, ['-e', `
 require('child_process').spawn(${JSON.stringify(executable)},
-  ['--watch',${JSON.stringify(fifo)},'1',String(process.pid),${JSON.stringify(receipt)}],
+  ['--watch',${JSON.stringify(fifo)},String(process.pid),${JSON.stringify(receipt)}],
   {stdio:'ignore'}).unref();`]);
   const result = await waitForExit(parent);
   assert.equal(result.code, 0, result.stderr);
@@ -146,22 +141,21 @@ require('child_process').spawn(${JSON.stringify(executable)},
   assert.equal(fs.readFileSync(receipt, 'utf8'), 'exit 0');
 });
 
-test('native lifetime guard observes EOF and its finite deadline with the caller still alive', async t => {
-  for (const eof of [true, false]) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-lifetime-native-'));
-    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-    const fifo = path.join(root, 'alive');
-    assert.equal(spawnSync('/usr/bin/mkfifo', [fifo]).status, 0);
-    const writer = fs.openSync(fifo, fs.constants.O_RDWR | fs.constants.O_NONBLOCK);
-    let closed = false;
-    t.after(() => { if (!closed) fs.closeSync(writer); });
-    const child = spawnChild(t, process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
-      ['--exec', fifo, eof ? '10' : '1', process.execPath, '-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)']);
-    const started = Date.now();
-    if (eof) { await new Promise(resolve => setTimeout(resolve, 100)); fs.closeSync(writer); closed = true; }
-    assert.equal((await waitForExit(child)).signal, 'SIGKILL');
-    if (eof) assert.ok(Date.now() - started < loadTimeout(3000), 'EOF must stop the child before its ten-second fallback');
-  }
+test('native lifetime guard observes owner EOF with the caller still alive', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-lifetime-native-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const fifo = path.join(root, 'alive');
+  assert.equal(spawnSync('/usr/bin/mkfifo', [fifo]).status, 0);
+  const writer = fs.openSync(fifo, fs.constants.O_RDWR | fs.constants.O_NONBLOCK);
+  let closed = false;
+  t.after(() => { if (!closed) fs.closeSync(writer); });
+  const child = spawnChild(t, process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
+    ['--exec', fifo, process.execPath, '-e', "process.send('ready',()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0))"],
+    { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+  const ready = new Promise(resolve => child.once('message', resolve));
+  assert.equal(await Promise.race([ready, waitForExit(child).then(result => { throw Error(JSON.stringify(result)); })]), 'ready');
+  fs.closeSync(writer); closed = true;
+  assert.equal((await waitForExit(child)).signal, 'SIGKILL');
 });
 
 for (const cancellation of ['SIGKILL', 'SIGTERM']) {

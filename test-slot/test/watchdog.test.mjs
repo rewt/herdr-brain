@@ -180,6 +180,29 @@ test('a throwing capture callback reports its error only after explicitly reques
   assert.deepEqual(events, ['capture', [root.pid, 'SIGKILL'], [escaped.pid, 'SIGKILL']]);
 });
 
+test('requested cancellation continues only the same stopped birth without an elapsed escalation', async () => {
+  for (const mode of ['stopped', 'running', 'replacement', 'unknown', 'force', 'natural']) {
+    const saved = { pid: 101, ppid: 100, pgid: 100, identity: 'captured-birth', state: mode === 'running' ? 'S' : 'T' };
+    const rows = new Map([[saved.pid, { ...saved }]]), signals = [];
+    let requested = false;
+    const operation = stopGateGroup(99999999, { ownsGroup: false, tracked: new Map([[saved.pid, saved]]),
+      firstSignal: mode === 'force' ? 'SIGKILL' : mode === 'natural' ? null : 'SIGTERM',
+      lookup: pid => mode === 'unknown' && requested && pid !== undefined ? { ok: false, error: 'native identity unavailable' }
+        : { ok: true, value: pid === undefined ? new Map(rows) : rows.get(pid) ?? null },
+      signal: (pid, kind) => {
+        signals.push([pid, kind]); requested = true;
+        if (kind === 'SIGTERM' && mode === 'replacement') rows.set(pid, { ...saved, identity: 'replacement-birth' });
+        else if (kind === 'SIGCONT' || kind === 'SIGKILL' || (kind === 'SIGTERM' && mode === 'running')) rows.delete(pid);
+      } });
+    if (mode === 'natural') setImmediate(() => rows.delete(saved.pid));
+    if (mode === 'unknown') await assert.rejects(operation, /native identity unavailable/);
+    else await operation;
+    assert.deepEqual(signals, mode === 'stopped' ? [[101, 'SIGTERM'], [101, 'SIGCONT']]
+      : mode === 'force' ? [[101, 'SIGKILL']] : mode === 'natural' ? [] : [[101, 'SIGTERM']], mode);
+    if (mode === 'replacement') assert.equal(rows.get(101).identity, 'replacement-birth');
+  }
+});
+
 for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records timeout, isolates correction and leaves main unchanged`, t => {
   const f = fixture(t); fixtureFleet(t, f.root); f.env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
   f.env.MONITOR_TEST_SLOT_FROZEN_SECONDS = '.4';

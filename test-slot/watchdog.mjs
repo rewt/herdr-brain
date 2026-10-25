@@ -72,7 +72,20 @@ export async function stopGateGroup(pgid, { tracked = new Map(), rootIdentity, o
     }
   };
   // Null joins observed completion without selecting any signal.
-  if (firstSignal !== null) send(firstSignal);
+  if (firstSignal !== null) {
+    send(firstSignal);
+    if (['SIGTERM', 'SIGINT', 'SIGHUP'].includes(firstSignal)) {
+      // A stopped process cannot handle the requested stop until continued.
+      // This is state-driven cancellation, never an elapsed escalation. Resume
+      // only a freshly birth-confirmed participant that is actually stopped.
+      for (const saved of tracked.values()) {
+        const now = lookup(saved.pid, { identityOnly: true });
+        if (!now.ok) { uncertain(`cannot confirm stopped gate descendant ${saved.pid}: ${now.error}`); continue; }
+        if (now.value?.identity !== saved.identity || !/^T/.test(now.value.state ?? '')) continue;
+        try { signal(saved.pid, 'SIGCONT'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+      }
+    }
+  }
   // Keep the slot until the kernel confirms both the group and escaped children
   // have gone. Unknown identity/probe state cannot authorize slot release.
   while ((ownsGroup && groupLive()) || live().length) await sleep(25);

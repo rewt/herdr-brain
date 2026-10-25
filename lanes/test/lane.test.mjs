@@ -1950,7 +1950,7 @@ test("review renders OpenSpec, supplemental literal input, gate, and captured co
     assert.match(prompt, new RegExp(`Reviewed commit: ${head}`));
     assert.match(prompt, /Gate at captured HEAD: exit=0/);
     assert.match(prompt, /Route: alternate/);
-    assert.match(prompt, /Timeout seconds: 5/);
+    assert.match(prompt, /Planning target seconds \(not an elapsed stop\): 5/);
     negativeControl("review source and captured metadata rendering");
   } finally {
     review.fixture.cleanup();
@@ -2131,7 +2131,7 @@ test("review refuses malformed evidence and lane mutation while incomplete evide
       ];
       let run;
       if (["incomplete", "missing"].includes(mode)) {
-        const child = laneProcess(review.fixture, args), done = waitForExit(child);
+        const pending = laneProcess(review.fixture, args), child = pending.child, done = pending.completed;
         const { loadRegistry } = await registryApi();
         // Observe actual fresh-session publication before a real operator-style
         // interruption. No elapsed target is a malformed/incomplete verdict.
@@ -2294,7 +2294,7 @@ test("review interruption exits 2 without a verdict or follow-up lifecycle actio
 test("review reference describes the shipped public path and protected-location policy", () => {
   const reference = readFileSync(join(HERE, "..", "docs", "REFERENCE.md"), "utf8");
   assert.doesNotMatch(reference, /even though this first slice does not write it/);
-  assert.match(reference, /same command creates the public record after the\s+unchanged-lane check/);
+  assert.match(reference, /same command creates the public record after\s+captured-source validation \(the unchanged-lane check for legacy live review\)/);
   assert.match(reference, /reserved placeholders[^.]*finding locations/iu);
   negativeControl("review reference publication and location wording");
 });

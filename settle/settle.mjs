@@ -176,7 +176,8 @@ function reviewPolicy(item, settings, identity) {
     item.meta = { ...item.meta, settle_review_round_cap: cap };
   }
   const override = item.meta?.settle_review_round_cap;
-  const cap = resolveValidation({ root: path.resolve(opt.repo) }).landing_waiver ? 1 : roundCap(override ?? settings.review_round_cap ?? DESK_DEFAULTS.review_round_cap, 'review round cap');
+  const waiver = resolveValidation({ root: path.resolve(opt.repo) }).landing_waiver;
+  const cap = waiver ? 1 : roundCap(override ?? settings.review_round_cap ?? DESK_DEFAULTS.review_round_cap, 'review round cap');
   // Count completed independent reviews, once per reported run, across correction
   // runs on this item. Worker starts and uncertain reviewer retries are not rounds.
   const prior = [];
@@ -189,7 +190,7 @@ function reviewPolicy(item, settings, identity) {
         receipt.review && ['PASS', 'NEEDS-WORK', 'FAIL'].includes(receipt.review.verdict) &&
         receipt.reportHash === run.report?.sha256 && hash(receipt.review.text) === receipt.review.sha256) prior.push(runId);
   }
-  return { cap, source: override != null ? 'item' : settings.review_round_cap !== undefined ? 'project' : 'default',
+  return { cap, source: waiver ? 'operator-landing-waiver' : override != null ? 'item' : settings.review_round_cap !== undefined ? 'project' : 'default',
     round: prior.length + 1, prior_runs: prior };
 }
 function reviewFindings() {
@@ -911,7 +912,7 @@ function settlePending() {
     const current = recordState();
     const invalid = recordedReportProblem(current);
     if (invalid) return escalate(invalid);
-    const stale = superseded(current);
+    const stale = job.postCodePolicy ? null : superseded(current);
     if (stale) return escalate(stale);
     job.reportIngest = reportIngestReceipt({ ...job, runId: id, run: current.runs.get(id) }); save();
     const policy = job.reviewPolicy;

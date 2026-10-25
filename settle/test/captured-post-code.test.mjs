@@ -12,7 +12,7 @@ for (const change of ['engineer-head', 'newer-run']) test(`post-code review comp
   fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ landing_waiver: OPERATOR_LANDING_WAIVER, review: 'parallel' }));
   f.git(['add', '.lane.validation.json']); f.git(['commit', '-qm', 'Current operator policy']);
   const run = f.start(); f.commit('correct\n'); f.report(run);
-  fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ verdict: 'PASS', findings: 'None' }));
+  f.env.SETTLE_TEST_REVIEW_IDENTITY = '1';
   const captured = result(f.settle(run, ['--defer-review']));
   assert.equal(captured.result, 'review_pending');
   const journal = path.join(f.org, 'settle', `${run}.json`);
@@ -26,7 +26,10 @@ for (const change of ['engineer-head', 'newer-run']) test(`post-code review comp
     f.record(['ingest', f.show(newer).report_path]);
   }
   const itemBefore = f.show(saved.item), newerBefore = newer && f.show(newer);
-  const reviewed = result(f.retry(run));
+  const attempt = f.retry(run);
+  const log = path.join(f.org, 'settle', `${run}.review-r1.log`);
+  assert.equal(attempt.status, 0, `${attempt.stderr}\n${fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : 'No review log'}`);
+  const reviewed = JSON.parse(attempt.stdout);
   assert.equal(reviewed.result, 'reviewed');
   assert.equal(reviewed.blocks_landing, false);
   assert.equal(reviewed.reviewed_commit, saved.head);

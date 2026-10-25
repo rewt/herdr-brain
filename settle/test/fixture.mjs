@@ -176,6 +176,7 @@ const {lookupProcess}=await import(path.join(path.dirname(process.env.SETTLE_TES
 const root=process.env.SETTLE_TEST_ROOT, repo=path.join(root,'project'), cwd=path.join(root,'lane'), args=process.argv.slice(2);
 const file=path.join(root,'agents.json'); const agents=fs.existsSync(file)?JSON.parse(fs.readFileSync(file)):{};
 const save=()=>fs.writeFileSync(file,JSON.stringify(agents));
+const paneFile=path.join(root,'panes.json'); const panes=fs.existsSync(paneFile)?JSON.parse(fs.readFileSync(paneFile)):{};
 const out=(result)=>console.log(JSON.stringify({result}));
 const clientOwner=(relative,operation='')=>{
  const program=path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'..',relative);
@@ -201,21 +202,21 @@ fs.appendFileSync(path.join(root,'calls'),JSON.stringify(args)+'\\n');
 const ws={workspace_id:'w-lane',label:'topic',worktree:{checkout_path:cwd,is_linked_worktree:true,repo_key:path.join(repo,'.git'),repo_root:repo}};
 if(args[0]==='workspace'&&args[1]==='list') out({workspaces:[ws,{workspace_id:'w-parent',label:'project',worktree:{checkout_path:repo,repo_key:path.join(repo,'.git'),repo_root:repo}}]});
 else if(args[0]==='worktree'&&args[1]==='list') out({source:{repo_key:path.join(repo,'.git'),repo_root:repo,source_checkout_path:repo},worktrees:[{path:cwd,branch:'lane/topic',open_workspace_id:'w-lane'},{path:repo,branch:'main',open_workspace_id:'w-parent'}]});
-else if(args[0]==='tab'&&args[1]==='create') {const n=Object.keys(agents).length+1;out({root_pane:{pane_id:'w-lane:p'+n},tab:{tab_id:'w-lane:t'+n}});}
+else if(args[0]==='tab'&&args[1]==='create') {const n=Object.keys(agents).length+1,w=args.includes('--workspace')?args[args.indexOf('--workspace')+1]:'w-lane',p=w+':p'+n;panes[p]={cwd:args.includes('--cwd')?args[args.indexOf('--cwd')+1]:cwd,workspace_id:w};fs.writeFileSync(paneFile,JSON.stringify(panes));out({root_pane:{pane_id:p},tab:{tab_id:w+':t'+n}});}
 // Scripted clients belong to their real foreground review/dispatch process.
 // Keep their registrations through delivery verification, then report vacancy
 // only after that process has exited or its kernel birth has changed.
-else if(args[0]==='tab'&&args[1]==='list') out({tabs:process.env.SETTLE_TEST_REVIEW_IDENTITY&&args.at(-1)==='w-lane'?liveAgents().map(a=>({tab_id:a.pane_id.replace(':p',':t'),workspace_id:'w-lane'})):[]});
-else if(args[0]==='pane'&&args[1]==='list') out({panes:process.env.SETTLE_TEST_REVIEW_IDENTITY&&args.at(-1)==='w-lane'?liveAgents().map(a=>({pane_id:a.pane_id,tab_id:a.pane_id.replace(':p',':t'),workspace_id:'w-lane'})):[]});
+else if(args[0]==='tab'&&args[1]==='list') out({tabs:process.env.SETTLE_TEST_REVIEW_IDENTITY?liveAgents().filter(a=>a.workspace_id===args.at(-1)).map(a=>({tab_id:a.pane_id.replace(':p',':t'),workspace_id:a.workspace_id})):[]});
+else if(args[0]==='pane'&&args[1]==='list') out({panes:process.env.SETTLE_TEST_REVIEW_IDENTITY?liveAgents().filter(a=>a.workspace_id===args.at(-1)).map(a=>({pane_id:a.pane_id,tab_id:a.pane_id.replace(':p',':t'),workspace_id:a.workspace_id})):[]});
 else if(args[0]==='pane'&&args[1]==='process-info') {
  const agent=liveAgents().find(a=>a.pane_id===args.at(-1)),owner=lookupProcess(agent?.client_owner?.pid,{identityOnly:true});
  if(!owner.ok||!owner.value)throw Error('fixture reviewer owner unavailable');
  out({process_info:{shell_pid:123456789,foreground_processes:[{pid:owner.value.pid,name:'native'}],process_tree_complete:true,
   process_tree:[{pid:123456789,identity:'fixture-shell',command:'[zsh]',state:'S'},owner.value]}});
 }
-else if(args[0]==='pane'&&args[1]==='get') out({pane:{pane_id:args[2],foreground_cwd:cwd}});
+else if(args[0]==='pane'&&args[1]==='get') out({pane:{pane_id:args[2],foreground_cwd:panes[args[2]]?.cwd??cwd}});
 else if(args[0]==='pane'&&args[1]==='read') console.log(fs.existsSync(path.join(root,'supervisor-composer'))?fs.readFileSync(path.join(root,'supervisor-composer'),'utf8'):'────────────────────\\n❯ \\n────────────────────');
-else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:'w-lane',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle',...(process.env.SETTLE_TEST_REVIEW_IDENTITY?{client_owner:clientOwner('lanes/lane.mjs','review')}:{})};save();out({name:n,pane_id:pane});}
+else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:panes[pane]?.workspace_id??'w-lane',cwd:panes[pane]?.cwd??cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle',...(process.env.SETTLE_TEST_REVIEW_IDENTITY?{client_owner:clientOwner('lanes/lane.mjs','review')}:{})};save();out({name:n,pane_id:pane});}
 else if(args[0]==='agent'&&args[1]==='list') out({agents:liveAgents().map(a=>{
  if(!process.env.SETTLE_TEST_REVIEW_IDENTITY)return a;
  const {agent_session,...summary}=a;return summary;
@@ -229,7 +230,7 @@ else if(args[0]==='agent'&&args[1]==='prompt') {
   fs.writeFileSync(path.join(root,'review-prompt'),prompt);
   if(fs.existsSync(path.join(root,'review-fail'))) {console.error('injected uncertain review');process.exit(1);}
   const field=(label)=>prompt.split('\\n').find(x=>x.startsWith(label+': '))?.slice(label.length+2);
-  const correct=fs.readFileSync(path.join(cwd,'work.txt'),'utf8').trim()==='correct';
+  const correct=execFileSync('git',['-C',repo,'show',field('Reviewed commit')+':work.txt'],{encoding:'utf8'}).trim()==='correct';
   const override=path.join(root,'review-result.json');
   const review=fs.existsSync(override)?JSON.parse(fs.readFileSync(override,'utf8')):{};
   const verdict=review.verdict??(correct?'PASS':'NEEDS-WORK');

@@ -271,7 +271,7 @@ test('an item dropped or blocked during NEEDS-WORK review cannot launch a correc
     const blocker = change === 'block' ? f.record(['add', 'Resolve scope first', '--role', 'architect']).split(' ')[0] : null;
     const action = change === 'drop' ? ['close', item, '--dropped'] : ['block', item, '--by', blocker];
     fs.writeFileSync(path.join(f.root, 'review-record-action.json'), JSON.stringify(action));
-    const r = result(f.settle(run)); assert.equal(r.result, 'escalate');
+    const r = result(f.requestCorrection(run)); assert.equal(r.result, 'escalate');
     assert.equal(r.review.verdict, 'NEEDS-WORK'); assert.match(r.reason, /supervisor judgment/);
     assert.equal(f.show(item).status, change === 'drop' ? 'dropped' : 'blocked');
     assert.deepEqual(f.show(item).runs, [run], 'no correction run was recorded');

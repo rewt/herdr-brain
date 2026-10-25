@@ -64,7 +64,11 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     const watched = f.exec(process.execPath, [path.join(candidate, 'watch/watch.mjs'), run, '--org', f.org, '--to', 'supervisor-test', '--start-grace', '0']);
     assert.equal(watched.status, 0, watched.stderr);
     assert.ok(watchNotice(run), 'actual watch delivered the original final notice');
-    const handled = command(['handle', '--notice', watchNotice(run), '--role', 'supervisor', '--brief', path.join(f.root, 'ask with spaces.md'), '--to', 'supervisor-test']);
+    let handled = command(['handle', '--notice', watchNotice(run), '--role', 'supervisor', '--brief', path.join(f.root, 'ask with spaces.md'), '--to', 'supervisor-test']);
+    if (handled.code === 'REVIEW_CAP_REACHED') {
+      assert.equal(handled.review_policy.cap, 1);
+      handled = command(['handle', run, '--retry', '--fix-findings', '--role', 'supervisor']);
+    }
     assert.equal(handled.result, 'fix_round'); receipts.push(handled);
     await until(() => watchNotice(handled.fix.run), 'actual watch delivered correction notice', 10000);
     const settled = command(['handle', '--notice', watchNotice(handled.fix.run), '--role', 'supervisor']);

@@ -19,7 +19,9 @@ export async function settleCase(candidate, { load, execute = spawnSync,
     const f = fixture({ after: (fn) => cleanup.push(fn) }, { source: candidate,
       actor: 'settle-acceptance-worker', execute: scratchFixtureCommand(loadAwareCommand(execute, load)) });
     const run = f.start(); f.commit('wrong\n'); f.report(run);
-    const first = f.settle(run); assert.equal(first.status, 0, first.stderr);
+    // The scripted supervisor explicitly requests the one formal correction;
+    // cap1 must never be bypassed by expecting an automatic fix chain.
+    const first = f.requestCorrection(run); assert.equal(first.status, 0, first.stderr);
     const fix = JSON.parse(first.stdout); receipts.push(fix);
     assert.equal(fix.result, 'fix_round');
     assert.notEqual(fix.fix.run, run); assert.equal(f.show(fix.fix.run).item, f.show(run).item);

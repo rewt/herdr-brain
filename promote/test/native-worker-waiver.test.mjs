@@ -94,8 +94,12 @@ test('actual waived native drain accepts an existing-worker admission and closes
   assert.equal(reply.code, 0, reply.stderr || reply.stdout);
   assert.equal(f.gates(), 0);
   for (const member of [first, second]) {
-    assert.equal(f.show(member.item).closed.as, 'done');
-    assert.equal(fs.existsSync(member.workspace), false, 'actual supported closeout completed');
+    const row = f.queue.load().results.findLast(result => result.id === member.job.id);
+    const evidence = JSON.stringify({ item: member.item, run: member.run,
+      outcome: row?.outcome, code: row?.code, reason: row?.reason, gate: row?.gate,
+      reconciliation: row?.reconciliation, cleanup: row?.cleanup, warnings: row?.warnings });
+    assert.equal(f.show(member.item).closed?.as, 'done', evidence);
+    assert.equal(fs.existsSync(member.workspace), false, `actual supported closeout completed: ${evidence}`);
   }
   assert.ok(f.queue.load().results.every(row => row.reconciliation.state === 'complete'));
 });

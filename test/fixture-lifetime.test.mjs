@@ -9,6 +9,7 @@ import { createProcessTracker } from './helpers/processes.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { spawnFixtureExec } from './helpers/fixture-lifetime.mjs';
 
 const local = file => fileURLToPath(new URL(file, import.meta.url));
 const tracker = createProcessTracker();
@@ -154,10 +155,16 @@ test('native lifetime guard observes EOF with the caller still alive', async t =
   const writer = fs.openSync(fifo, fs.constants.O_RDWR | fs.constants.O_NONBLOCK);
   let closed = false;
   t.after(() => { if (!closed) fs.closeSync(writer); });
-  const child = spawnChild(t, process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
+  const run = await spawnFixtureExec(process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
     ['--exec', fifo, '10', process.execPath, '-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)']);
+  t.after(async () => {
+    const pending = run.child.exitCode === null && run.child.signalCode === null;
+    if (pending) run.child.kill('SIGKILL');
+    await run.complete;
+    assert.equal(pending, false, 'test left an owned child pending');
+  });
   await new Promise(resolve => setTimeout(resolve, 100)); fs.closeSync(writer); closed = true;
-  assert.equal((await waitForExit(child)).signal, 'SIGKILL');
+  assert.equal((await run.complete).signal, 'SIGKILL');
 });
 
 for (const cancellation of ['SIGKILL', 'SIGTERM']) {

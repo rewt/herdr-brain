@@ -1,3 +1,5 @@
+import { operatorWaivedGate } from '../lib/validation-declaration.mjs';
+
 // Read-only proof of the exact reviewed diff and successful integration.
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -18,7 +20,7 @@ export function verifyTrainResult(result, { project, saved }) {
     // evidence. Older requests stored only the latter.
     const required = saved.requiredTests ?? (saved.test_evidence && !saved.test_evidence.reexecuted ? saved.test_evidence.files : undefined);
     if (required !== undefined && JSON.stringify(job.requiredTests ?? []) !== JSON.stringify(required)) return false;
-    if (captured?.sourceHead !== saved.head || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) return false;
+    if (captured?.sourceHead !== saved.head || (!operatorWaivedGate(attempt.gate) && attempt.gate?.exit_code !== 0) || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) return false;
     const git = args => {
       const r = spawnSync('git', ['-C', project.canonical, ...args], { encoding: 'utf8' });
       if (r.error || r.status !== 0) throw new Error('train Git proof refused');

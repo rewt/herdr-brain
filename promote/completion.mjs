@@ -1,3 +1,6 @@
+import { operatorWaivedGate, OPERATOR_LANDING_WAIVER } from '../lib/validation-declaration.mjs';
+import { resolveValidation } from '../lanes/validation.mjs';
+
 // Native queue completion uses the existing guarded record transaction. No
 // model, event-log append, validation, integration or lane cleanup happens here.
 import fs from 'node:fs';
@@ -49,8 +52,8 @@ export function captureCompletionMember({ canonical, identity, job, prepared, ex
   // opaque to the core; original fingerprints are never refreshed on retry.
   completionEvents(state, events, { version: 1, batch: `native-prepare-${job.id}`, org, identity,
     base: prepared.base, tip: job.expectedHead,
-    gate: { exit_code: 0, log: path.join(canonical, '.lane/native-preparation.log'), sha256: '0'.repeat(64) },
-    items: [{ ...binding, head: job.expectedHead, why: `Queue-bound reviewed head for ${job.id}.` }], excluded }, org);
+    gate: { exit_code: resolveValidation({ root: canonical }).landing_waiver ? null : 0, ...(resolveValidation({ root: canonical }).landing_waiver ? { operator_waiver: OPERATOR_LANDING_WAIVER, executed: false } : {}), log: path.join(canonical, '.lane/native-preparation.log'), sha256: '0'.repeat(64) },
+    items: [{ ...binding, head: job.expectedHead, why: `Queue-bound source head for ${job.id}.`, ...(resolveValidation({ root: canonical }).landing_waiver ? { resolution: 'Operator explicitly waived pre-main test/review readiness; real failures retained for fix forward and final release checks.' } : {}) }], excluded }, org);
   return binding;
 }
 
@@ -114,7 +117,7 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
     try {
       if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw Error('supervisor STOP prevents completion');
       if (git(project.canonical, ['status', '--porcelain'])) throw Error('canonical checkout is dirty');
-      const integrated = train.attempts.filter(a => ['integrated', 'complete'].includes(a.phase) && a.gate?.exit_code === 0);
+      const integrated = train.attempts.filter(a => ['integrated', 'complete'].includes(a.phase) && (a.gate?.exit_code === 0 || operatorWaivedGate(a.gate)));
       const tip = integrated.at(-1)?.tip;
       if (!tip) throw Error('no integrated green attempt');
       git(project.canonical, ['merge-base', '--is-ancestor', prepared.base, tip]);
@@ -132,12 +135,12 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
         if (result.receipt !== file || !verifyTrainResult({ ...result, id: job.id }, { project, saved: { head: job.expectedHead, run: job.run, org: job.org, lane: job.topic } })) throw Error(`integrated proof differs for ${job.topic}`);
         git(project.canonical, ['merge-base', '--is-ancestor', result.tip, tip]);
         included.push({ item: binding.item, run: binding.run, expected: binding.expected, superseded: binding.superseded,
-          head: result.tip, why: `Native queue ${job.id}: queue-bound head ${job.expectedHead}; preserved diff and successful gate in train ${train.id}.` });
+          head: result.tip, why: `Native queue ${job.id}: queue-bound head ${job.expectedHead}; preserved diff in train ${train.id}; ${operatorWaivedGate(result.gate) ? 'operator-waived checks, unrun tests are not passed' : 'successful gate'}.`, ...(operatorWaivedGate(result.gate) ? { resolution: 'Operator directed immediate source landing; test/review readiness waived until final stable release checks. Real failures remain recorded.' } : {}) });
       }
       const bytes = fs.readFileSync(promoted[0].result.log);
       if (!bytes.length) throw Error('train log is empty');
       const payload = { version: 1, batch: train.id, org, identity: project.identity, base: prepared.base, tip,
-        gate: { exit_code: 0, log: promoted[0].result.log, sha256: createHash('sha256').update(bytes).digest('hex'),
+        gate: { exit_code: integrated.some(a => operatorWaivedGate(a.gate)) ? null : 0, ...(integrated.some(a => operatorWaivedGate(a.gate)) ? { operator_waiver: OPERATOR_LANDING_WAIVER, executed: false } : {}), log: promoted[0].result.log, sha256: createHash('sha256').update(bytes).digest('hex'),
           attempts: integrated.map(a => ({ base: a.base, tip: a.tip, gate: a.gate, jobs: a.ids })) },
         items: included, excluded,
         ...(legacy ? { recovery_only: true, recovery_after: integrated.at(-1).integrated_at } : {}) };

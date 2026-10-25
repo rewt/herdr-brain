@@ -12,6 +12,8 @@ import { loadEvents, withLock } from '../lib/store.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { fold, children, laterRuns, openRuns, blockersOf, releases, itemStatus, reviewsWithoutPass, openQuestionsFor } from '../lib/state.mjs';
 
+import { resolveValidation } from '../lanes/validation.mjs';
+
 const require = createRequire(import.meta.url);
 
 export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, admittedSeq, completionExpected, existingWorker = false, superseded = [] }, operation = () => {}, recordLocked = false) {
@@ -22,6 +24,7 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8'))?.autopilot : undefined;
     if (settings?.enabled !== true || !['clean-pass', 'green-pass'].includes(settings.cohort)) throw Error('AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged');
   }
+  const waived = !existingWorker && Boolean(resolveValidation({ root: canonical }).landing_waiver);
   const checkGit = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
     if (expectedHead !== undefined) {
@@ -39,7 +42,7 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (item.kind !== 'work' || item.role === 'human' || item.meta.operator_reserved) throw new Error(`${run} is not ordinary authorized work; nothing merged`);
     if (completionExpected !== undefined && completionFingerprint(state, item.id) !== completionExpected) throw new Error(`${run} changed since batch preparation; nothing merged`);
     if (superseded.some(id => { const old = state.runs.get(id); return !old || old.item !== item.id || old.started.seq >= current.started.seq || old.report || old.abandoned; })) throw new Error('invalid superseded runs; nothing merged');
-    if (current.abandoned || current.report?.outcome !== 'done') throw new Error(`${run} requires a recorded done report; nothing merged`);
+    if (current.abandoned || !(waived ? ['done', 'blocked'].includes(current.report?.outcome) : current.report?.outcome === 'done')) throw new Error(`${run} requires a recorded done report; nothing merged`);
     if (laterRuns(state, run).length) throw new Error(`${run} is superseded; nothing merged`);
     if (!current.workspace || fs.realpathSync(current.workspace) !== fs.realpathSync(workspace) || (current.meta.lane && current.meta.lane !== topic)) throw new Error(`${run} does not belong to this lane workspace; nothing merged`);
     const common = execFileSync('git', ['-C', current.workspace, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
@@ -50,7 +53,7 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (question) throw new Error(`${run} has an open operator question ${question.id}; nothing merged`);
     // Batch completion relies on this: its fingerprint already covers every blocker item.
     const unpassed = reviewsWithoutPass(state, item.id);
-    if (unpassed.length) throw new Error(`${run} review ${unpassed.join(', ')} has no recorded PASS verdict; record one or drop the review; nothing merged`);
+    if (!waived && unpassed.length) throw new Error(`${run} review ${unpassed.join(', ')} has no recorded PASS verdict; record one or drop the review; nothing merged`);
     const blockers = blockersOf(state, item.id);
     // Ordinary enqueues use admission as the supervisor's snapshot. Autopilot
     // and legacy/direct requests use report intake, excluding that report's
@@ -59,14 +62,14 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     const unfinished = children(state, item.id).filter(child => roleIs(child, 'ENG') && !child.closed &&
       child.created.seq > (useReport ? current.report.seq : admittedSeq) &&
       !(useReport && child.created.run === run));
-    if (unfinished.length) throw new Error(`${run} has open engineer children ${unfinished.map(child => child.id).join(', ')}; nothing merged`);
+    if (!waived && unfinished.length) throw new Error(`${run} has open engineer children ${unfinished.map(child => child.id).join(', ')}; nothing merged`);
     // Pre-existing blocking children use the ordinary dependency release rules.
     const blocked = blockers.some((id) => !releases(state, id, itemStatus(state, id, new Set(), item.id)));
     const overlapping = [...state.runs.values()].some((r) => {
       if (r.id === run || superseded.includes(r.id) || r.report || r.abandoned || !r.workspace) return false;
       try { return fs.realpathSync(r.workspace) === fs.realpathSync(workspace); } catch { return r.workspace === current.workspace; }
     });
-    if (item.closed || blocked || overlapping || openRuns(state, item.id).some(r => !superseded.includes(r.id)) || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(state, item.id))) throw new Error(`${run} record readiness changed: work, closure, blockers or outcome; nothing merged`);
+    if (item.closed || (!waived && blocked) || overlapping || openRuns(state, item.id).some(r => !superseded.includes(r.id)) || (!waived && ['blocked', 'needs_human', 'dropped'].includes(itemStatus(state, item.id)))) throw new Error(`${run} record readiness changed: work, closure, blockers or outcome; nothing merged`);
     if (existingWorker) {
       const settings = JSON.parse(fs.readFileSync(path.join(canonical, '.supervisor.json'), 'utf8'))?.autopilot;
       if (settings?.enabled !== true || !['clean-pass', 'green-pass'].includes(settings.cohort)) throw Error('AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged');

@@ -1,3 +1,11 @@
+# Current operator exception through stable release
+
+The latest operator decision supersedes pre-main tests, affected-file admission, review readiness and earlier syntax-only final-release policy. Finished existing work lands immediately with explicit `operator-20261025-until-stable-release` waiver receipts, no preparation/planner/test/review command before main, and no assertion that unrun tests passed. Red main is accepted; preserve and fix actual failures forward. Native binding, claims, source/head/clean Git/CAS/FF safety, reserved questions and recoverable archives remain enforced. Ordinary Brain review is nonblocking and unnecessary for admission.
+
+Run full checks once on the final exact source immediately before FINAL RELEASE, then real live acceptance, seal, activation and installed-current consumer checks. The rc-20261025T1752Z-af6014d759 run is retained immutable nonfinal diagnostic evidence and must not be activated/called stable. A new final immutable candidate is necessary because final source and governing full-check boundary changed; reuse applicable green evidence truthfully without replaying it. Private rehearsal fresh-clone pre/post and Chipnet run/funds checks remain unchanged. This additive gating hotfix retains the original archive/gating-hotfix-pre-20261025T1737Z-1a6111a4 and a one-command revert for the complete range. No new item/worker/program, approval round or amended receipt.
+
+The earlier protocol below applies only where consistent with this current exception.
+
 > Operator gating hotfix, 2026-10-25 12:27 CDT: the current committed validation declaration selects a single deduplicated affected-file check, parallel zero-suite review, and reduced release entry. This supersedes the serial-review/full-offline-tail requirements below for this gating fix and the replacement carrying it. Preserve all native/source/claim/lock/FF and real-error/acceptance guards. The hotfix alone may commit directly to canonical main after an exact annotated archive; its changed-only proof runs once and its revert is one `git revert --no-edit HOTFIX_COMMIT` command. No synthetic validation-done or full-gate receipts, unrelated repair, publishing/push/secrets/permission change, or alteration/replay of an admitted immutable batch.
 
 # Supervisor protocol

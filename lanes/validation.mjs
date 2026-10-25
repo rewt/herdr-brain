@@ -60,7 +60,7 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
     tiers[tier] = { command, timeoutSeconds: typeof declared.timeout_seconds === 'object' ? declared.timeout_seconds[tier] : declared.timeout_seconds,
       idleTimeoutSeconds: typeof declared.idle_timeout_seconds === 'object' ? declared.idle_timeout_seconds[tier] : declared.idle_timeout_seconds, source: env.LANE_VALIDATE !== undefined ? 'env' : declarationSources[tier] ?? (config.validate !== undefined ? sources.validate ?? source : 'default') };
   }
-  return { tiers, review: declared.review ?? 'serial', promotion_tests: declared.promotion_tests, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
+  return { tiers, landing_waiver: declared.landing_waiver, review: declared.review ?? 'serial', promotion_tests: declared.promotion_tests, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
 }
 
 // Ask the lane CLI for its canonical, layered configuration. This keeps host

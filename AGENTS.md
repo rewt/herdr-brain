@@ -14,8 +14,8 @@
   owner. Never machine-wide, never in another identity's config, and never in human-typed chat panes.
 - Follow [decision routing policy v2](supervisor/DECISION-ROUTING.md) for authority and review defaults;
   project-specific constraints and standing directions belong in its appendix.
-- Gate policy is the committed `.lane.validation.json`: one unique affected-file check for an assembled change; no broad promotion tier plus repeated full-file tail. Independent reviews overlap integration and run no suites. Preserve actual source/head/claim/lock/FF and real-error guards. Release uses the declared reduced entry and real acceptance; never label entry smoke a full suite.
-- Operator direct hotfix exception 2026-10-25 12:27 CDT authorizes this gating-only hotfix directly on canonical main after an exact annotated pre-main archive, with changed-only focused proof once and a recorded one-command revert. This is not authority for unrelated repairs, publishing, push, secrets or permission changes. Never modify/cancel/replay an already admitted immutable batch.
+- UNTIL the stable version release, the operator directs NO test/review/readiness gate before main. Finished existing engineering work lands immediately under the explicit committed operator waiver; red main is accepted and actual failures are fixed forward. Unrun checks are never PASS. Preserve native identity/claims/ownership, source/head/clean Git/CAS/FF safety and recoverable archives. Brain ordinary reviews are not blocking. No new items/workers/programs are implied.
+- Full checks run once on the final exact source immediately BEFORE FINAL RELEASE, followed by real live acceptance, seal/activation and current-consumer checks. Syntax-only/reduced candidates are nonfinal diagnostics. Private fresh-clone rehearsal pre/post and Chipnet/funds boundaries are unchanged. The gating hotfix is additive under archive/gating-hotfix-pre-20261025T1737Z-1a6111a4; never amend/relabel immutable receipts or claim unrun validation.
 - Only the project supervisor, from the canonical checkout, starts the default
   project-wide housekeeping schedule with
   `node housekeeping/housekeeping.mjs --start` ([module guide](housekeeping/README.md)).
@@ -52,7 +52,7 @@ Contract:
 
 - `lanes/lane.mjs` and its tests stay dependency-free; Herdr-only checks skip explicitly when Herdr is absent.
 - A lane is owned by its canonical Git common-directory identity, never a basename, remote or workspace label.
-- Promotion requires clean worktrees, a clean rebase, green validation and a fast-forward; it never pushes or creates merge commits.
+- Promotion requires clean worktrees, a clean rebase, actual validation or the explicit current operator waiver, and a fast-forward; it never pushes or creates merge commits.
 - Keep lifecycle safety checks intact. Unmerged work closed through the CLI remains recoverable through an archive tag.
 - Session metadata is display-only and must never authorize, schedule, retry, validate, promote, push or delete work.
 

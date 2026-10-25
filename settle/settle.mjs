@@ -751,7 +751,7 @@ function settlePending() {
     if (show(job.item).closed?.as === 'dropped') return escalate('The item was dropped; the supervisor must decide whether this late report changes the plan');
     const stale = superseded(recorded);
     if (stale) return escalate(stale);
-    if (job.outcome === 'done') {
+    if (job.outcome === 'done' && !resolveValidation({ root: repo }).landing_waiver) {
       // Ownership and latest-run checks are atomic with this record mutation.
       try { record(['reopen', job.item, '--if-current-run', id, '--note', 'Report recorded; independent settle review pending']); }
       catch (error) { return escalate(`Conditional reopen refused: ${error.message}`); }
@@ -764,6 +764,10 @@ function settlePending() {
     job.diff = evidence('diff.patch', git(['diff', '--no-ext-diff', '--no-textconv', `${job.mainHead}...${job.head}`], workspace));
     const open = activeWork();
     if (open.length) return escalate(`Another run is open: ${open.map((r) => r.id).join(', ')}`);
+    if (resolveValidation({ root: repo }).landing_waiver) {
+      job.stage = 'complete'; job.finalHead = job.head;
+      job.result = { result: 'operator_waived', run: id, item: job.item, lane, head: job.head, reviewed_commit: null, tests_executed: false, review: 'not required before main', authority: resolveValidation({ root: repo }).landing_waiver }; save(); print(); return;
+    }
     if (job.outcome !== 'done') return escalate(`Worker reported ${job.outcome}: ${job.summary}. Read the report's blockers, proposals and questions`);
     const scopeProblem = reviewScopeProblem();
     if (scopeProblem) return escalate(scopeProblem);

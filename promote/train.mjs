@@ -9,6 +9,8 @@ import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { captureCompletionMember, accountUncapturedMember, recordFor } from './completion.mjs';
+import { operatorWaivedGate } from '../lib/validation-declaration.mjs';
+import { createHash } from 'node:crypto';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { guardPromotionJob } from '../lib/run-owner-guard.mjs';
@@ -128,14 +130,14 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       const integratedAt = attempt.integrated_at;
       result(job, { outcome: 'promoted', tip, source_head: job.sourceHead, workspace: job.workspace, warnings,
         ...(warnings.length ? { replacement_pending: true } : {}),
-        reason: warnings.length ? warnings.join('; ') : 'green batch fast-forward', batch: plan.id,
+        reason: warnings.length ? warnings.join('; ') : (operatorWaivedGate(attempt.gate) ? 'operator-waived fast-forward; checks deferred to final release' : 'green batch fast-forward'), batch: plan.id,
         gate: attempt.gate, integrated_at: integratedAt, report_at: job.report_at ?? null,
         report_to_main_s: job.report_at ? Math.max(0, (Date.parse(integratedAt) - Date.parse(job.report_at)) / 1000) : null });
     }
     attempt.phase = 'complete'; save();
   };
   for (const attempt of plan.attempts) {
-    if (attempt.phase === 'validated') {
+    if (['validated', 'waived'].includes(attempt.phase)) {
       const integrated = run(['merge-base', '--is-ancestor', attempt.tip, main]);
       if (integrated.error || ![0, 1].includes(integrated.status)) throw new Error(integrated.stderr || integrated.error?.message || 'train ancestry proof failed');
       if (integrated.status === 0) {
@@ -148,7 +150,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   const prepareAttempt = ids => {
     phase('preparing');
     if (!canonicalReady()) return null;
-    let attempt = plan.attempts.findLast(a => ['prepared', 'validated'].includes(a.phase) && JSON.stringify(a.ids) === JSON.stringify(ids));
+    let attempt = plan.attempts.findLast(a => ['prepared', 'validated', 'waived'].includes(a.phase) && JSON.stringify(a.ids) === JSON.stringify(ids));
     if (attempt && git(['rev-parse', main]) !== attempt.base) {
       attempt.phase = 'stale'; attempt.error = 'main moved; replan from the current integration branch'; save();
       attempt = null;
@@ -224,6 +226,19 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     try {
       plan.native_context = probeNativeGate(); save();
       if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
+      if (validation.landing_waiver) {
+        clean(attempt.scratch);
+        if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip) throw Error('waived train tip changed');
+        const log = file + `.${attempt.ids.join('-')}.waiver.log`;
+        const text = `Operator waiver ${validation.landing_waiver}: no preparation, planner, tests or review gate executed before main. Full checks deferred to final release.\n`;
+        if (!fs.existsSync(log)) fs.writeFileSync(log, text, { flag: 'wx', mode: 0o600 });
+        if (fs.readFileSync(log, 'utf8') !== text) throw Error('operator waiver evidence changed');
+        attempt.gate = { schema: 'operator-landing-waiver/v1', authority: validation.landing_waiver,
+          outcome: 'waived', executed: false, exit_code: null, signal: null, head: attempt.tip,
+          tree: git(['rev-parse', 'HEAD^{tree}'], attempt.scratch), log,
+          log_hash: createHash('sha256').update(JSON.stringify(text)).digest('hex') };
+        attempt.phase = 'waived'; save(); return true;
+      }
       const declaration = readReceiptDeclaration({ repo: canonical, base: attempt.base });
       const exact = declaration ? { base: attempt.base, declaration } : undefined;
       const gateEnv = declaration ? restrictEnvironment(env, declaration) : env;
@@ -336,7 +351,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     }
   }
   const integrateAttempt = attempt => {
-    if (attempt.phase !== 'validated' || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) throw new Error('train integration requires exact-commit green evidence');
+    if ((!operatorWaivedGate(attempt.gate) && (attempt.phase !== 'validated' || attempt.gate?.exit_code !== 0)) || (operatorWaivedGate(attempt.gate) && attempt.phase !== 'waived') || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) throw new Error('train integration requires exact-commit green evidence');
     if (!canonicalReady()) return false;
     if (profile) checkCompetingProcesses(profile);
     if (git(['rev-parse', main]) !== attempt.base) {

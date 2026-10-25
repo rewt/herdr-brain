@@ -2635,19 +2635,19 @@ function promoteLocked(topic, root, options) {
     process.stdout.write(`rebased ${branch} onto ${MAIN} (${before} -> ${git(["rev-parse", "--short", branch])}, clean replay)\n`);
     mainHead = git(["rev-parse", MAIN]);
   }
-  prepareWorktree(path);
-  guard();
   const settings = validationSettings();
+  if (!settings.landing_waiver) prepareWorktree(path);
+  guard();
   let validate = settings.tiers.promotion.command;
   const validatedHead = git(["rev-parse", branch]);
-  if (validate === "node test/helpers/affected-tests.mjs --promotion") {
+  if (!settings.landing_waiver && validate === "node test/helpers/affected-tests.mjs --promotion") {
     const plan = canonicalTestPlan({ repo: root, base: mainHead, cwd: path, planner: settings.promotion_tests,
       changed: changedPaths(path, mainHead, validatedHead), baseCommand: validate });
     validate = plannedCommand(validate, plan);
   }
   process.stdout.write(`validating in ${path}: ${validate}\n`);
   let gate;
-  try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', timeoutSeconds: settings.tiers.promotion.timeoutSeconds, idleTimeoutSeconds: settings.tiers.promotion.idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
+  try { gate = settings.landing_waiver ? { schema: 'operator-landing-waiver/v1', authority: settings.landing_waiver, outcome: 'waived', executed: false, exit_code: null } : validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', timeoutSeconds: settings.tiers.promotion.timeoutSeconds, idleTimeoutSeconds: settings.tiers.promotion.idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75);
     fail(error.message);
@@ -2661,7 +2661,7 @@ function promoteLocked(topic, root, options) {
     process.stderr.write(`GATE_TIMEOUT: ${gate.gate_timeout?.kind ?? 'wall'} gate limit exceeded; lane retained for correction; nothing merged\n`);
     process.exit(124);
   }
-  if (gate.exit_code !== 0) fail(`validation failed (exit ${gate.exit_code}); nothing merged`);
+  if (!settings.landing_waiver && gate.exit_code !== 0) fail(`validation failed (exit ${gate.exit_code}); nothing merged`);
   // Validation was gated before acquiring the promotion lock. Finish this
   // cheap integration under the lock without waiting on unrelated memory pressure.
   if (git(["rev-parse", MAIN]) !== mainHead) {

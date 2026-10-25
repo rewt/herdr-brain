@@ -2,8 +2,9 @@
   "fast": "npm run test:fast",
   "promotion_tests": "test/helpers/affected-tests.mjs",
   "promotion": "node test/helpers/affected-tests.mjs --promotion",
-  "release": "node --check bin/org.mjs && node --check lanes/lane.mjs && node --check supervisor/reconcile.mjs && node --check contrib/settle-watch.mjs",
+  "release": "npm run test:release",
   "timeout_seconds": 0,
   "idle_timeout_seconds": 900,
-  "review": "parallel"
+  "review": "parallel",
+  "landing_waiver": "operator-20261025-until-stable-release"
 }

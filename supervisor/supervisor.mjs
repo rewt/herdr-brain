@@ -295,23 +295,36 @@ export function main(argv = process.argv.slice(2)) {
     const settledFile = path.join(project.org, 'settle', `${id}.json`);
     const settled = fs.existsSync(settledFile) ? JSON.parse(fs.readFileSync(settledFile, 'utf8')) : null;
     const testEscalation = settled?.result?.result === 'escalate' && settled.result.reason === TEST_ESCALATION && settled.review?.verdict === 'PASS';
-    const parallel = !opt['existing-worker'] && resolveValidation({ root: project.canonical }).review === 'parallel'
+    const waived = !opt['existing-worker'] && resolveValidation({ root: project.canonical }).landing_waiver;
+    const ownedRun = readOwnedRun(project.org, id);
+    let waivedResult = null;
+    if (waived && settled?.common === project.identity && settled.reportHash === ownedRun.report?.sha256 && ['done', 'blocked'].includes(ownedRun.report?.outcome)) {
+      const read = args => {
+        const actual = spawnSync('git', ['-C', settled.workspace, ...args], { encoding: 'utf8' });
+        if (actual.error || actual.status !== 0) throw Error(actual.error?.message || actual.stderr || 'operator-waived source read failed');
+        return actual.stdout.trim();
+      };
+      if (settled.run !== id || settled.item !== ownedRun.item || !/^[a-f0-9]{64}$/.test(settled.reportHash) ||
+          read(['rev-parse', 'HEAD']) !== settled.head || read(['status', '--porcelain=v1', '--untracked-files=all'])) throw Error('operator-waived immutable report/source binding changed');
+      waivedResult = { result: 'operator_waived', run: id, item: settled.item, lane: settled.lane, head: settled.head, reviewed_commit: null, tests_executed: false, authority: waived };
+    }
+    const parallel = !waived && !opt['existing-worker'] && resolveValidation({ root: project.canonical }).review === 'parallel'
       ? parallelPromotionSourceResult(settled, readOwnedRun(project.org, id)) : null;
-    if (settled?.common !== project.identity || (!parallel && (settled.stage !== 'complete' || (!testEscalation && !['promotable', 'promotable_with_findings'].includes(settled.result?.result))))) throw new Error('handle the final report first; promotion requires saved settlement evidence');
+    if (settled?.common !== project.identity || (!waivedResult && !parallel && (settled.stage !== 'complete' || (!testEscalation && !['promotable', 'promotable_with_findings'].includes(settled.result?.result))))) throw new Error('handle the final report first; promotion requires saved settlement evidence');
     if (settled.result?.result === 'promotable_with_findings' && !opt['accept-findings']) throw new Error('capped findings require --accept-findings and --why before promotion');
     if (testEscalation) settleArgs.push('--retry', '--resolve-tests');
-    const result = parallel ? { ...parallel, journal: settledFile } : JSON.parse(call(settle, settleArgs));
-    if (!['promotable', 'promotable_with_findings', 'review_pending'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
+    const result = waivedResult ? { ...waivedResult, journal: settledFile } : parallel ? { ...parallel, journal: settledFile } : JSON.parse(call(settle, settleArgs));
+    if (!['promotable', 'promotable_with_findings', 'review_pending', 'operator_waived'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
-    const tests = [...new Set([...requiredTests, ...(!parallel && result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : [])])].sort();
+    const tests = waivedResult ? [] : [...new Set([...requiredTests, ...(!parallel && result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : [])])].sort();
     if (parallel && !parallelPromotionSourceResult(settled, readOwnedRun(project.org, id))) throw Error('parallel review source changed; nothing queued');
     const saved = { identity: project.identity, org: project.org, run: id, ownership, requiredTests: tests, lane: result.lane, release: bundleRelease(),
-      reviewed_commit: result.reviewed_commit, head: result.head, ...(parallel ? { review_state: 'pending' } : {}),
+      reviewed_commit: result.reviewed_commit, head: result.head, ...(waivedResult ? { operator_waiver: waived, tests_executed: false, review_state: 'waived' } : parallel ? { review_state: 'pending' } : {}),
       ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',
       ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),
       ...(prior ? { prior_attempts: prior } : {}) };
     fenceOwner(project.org, id, ownership, () => writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n'));
-    call(local('../bin/org.mjs'), ['note', id, `Request queue admission for ${result.lane} at ${result.head}: ${saved.why}. Review ${parallel ? 'pending in parallel' : result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion requested: ${saved.why}`]);
+    call(local('../bin/org.mjs'), ['note', id, `Request queue admission for ${result.lane} at ${result.head}: ${saved.why}. Review ${waivedResult ? 'operator-waived; unrun tests are not passed; final release checks pending' : parallel ? 'pending in parallel' : result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion requested: ${saved.why}`]);
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
     try {
       saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,

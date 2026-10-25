@@ -14,8 +14,10 @@
   owner. Never machine-wide, never in another identity's config, and never in human-typed chat panes.
 - Follow [decision routing policy v2](supervisor/DECISION-ROUTING.md) for authority and review defaults;
   project-specific constraints and standing directions belong in its appendix.
-- UNTIL the stable version release, the operator directs NO test/review/readiness gate before main. Finished existing engineering work lands immediately under the explicit committed operator waiver; red main is accepted and actual failures are fixed forward. Unrun checks are never PASS. Preserve native identity/claims/ownership, source/head/clean Git/CAS/FF safety and recoverable archives. Brain ordinary reviews are not blocking. No new items/workers/programs are implied.
-- Full checks run once on the final exact source immediately BEFORE FINAL RELEASE, followed by real live acceptance, seal/activation and current-consumer checks. Syntax-only/reduced candidates are nonfinal diagnostics. Private fresh-clone rehearsal pre/post and Chipnet/funds boundaries are unchanged. The gating hotfix is additive under archive/gating-hotfix-pre-20261025T1737Z-1a6111a4; never amend/relabel immutable receipts or claim unrun validation.
+- Until the stable release, Brain and BCH use the same policy in their separate tooling; BCH switches to Brain tooling after adoption. No pre-main test, merge, affected-file admission or review readiness gate. Finished existing source lands immediately; red main is accepted and real failures are fixed forward. Preserve actual native identity/claims/ownership, source/head/clean Git/CAS/FF safety, recoverable archives and reserved operator authority. Unrun checks are never PASS.
+- Every item receives ONE independent post-code review of diff and evidence, async/nonblocking for engineers and landing, with zero reviewer suites. The 30-minute target is advisory, not an elapsed stop; review-round cap is 1 and supported timeout 0 disables the review deadline. No pre-code, plan, contract or concurrence reviews. At most one formal fix round; no automatic second full review/re-review chain. Later findings fix forward. Majors must actually be fixed and their specific correction/evidence checked before final release. Preserve historical verdicts/caps.
+- Run ONE FULL release test immediately before final release/adoption. Preserve completed evidence; do not repeat the full run. After a real correction, run only failing, actually affected or previously unrun checks, with truthful coverage bound to source. Then real live acceptance, sealing, activation and current-consumer readback. Rehearsal remains PRIVATE with fresh-clone checks pre/post; Chipnet/run/funds boundaries stay unchanged. Zero elapsed-only test/helper/runner/gate failures; the sole forced freeze remains measured no-output AND confirmed-no-activity, unknown held.
+- This additive gating hotfix retains archive/gating-hotfix-pre-20261025T1737Z-1a6111a4 and a one-command revert for its actual commits. Do not amend/relabel immutable evidence or create a new program/approval round.
 - Only the project supervisor, from the canonical checkout, starts the default
   project-wide housekeeping schedule with
   `node housekeeping/housekeeping.mjs --start` ([module guide](housekeeping/README.md)).
@@ -23,8 +25,8 @@
   It discovers the project and record; no housekeeping config is required. For
   worker checks or tasks that forbid live pane mutations, use `--once --dry-run`
   with `--state-dir "$PWD/.lane/housekeeping-preview"` instead.
-- Releases: the project supervisor tags `main` and runs `bash herdr/release.sh ship TAG` as one bare
-  command (build with the release gate, activate, check, roll back on failure); see supervisor/PROTOCOL.md.
+- Releases: the project supervisor tags final `main`, runs `bash herdr/release.sh build TAG --live` as one bare
+  command, then activates only after full-check coverage, live acceptance and Major corrections are proved; see supervisor/PROTOCOL.md.
   Lanes never run it. The release acceptance harness (`acceptance/run.mjs`) runs only with `build TAG --live`,
   never in a lane. A lane that changes `acceptance/` itself runs its offline tests and at most
   one `--skip-live` pass.

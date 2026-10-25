@@ -1,7 +1,7 @@
 // Project desk settings; runtime flags and item overrides are applied at intake.
 import { resolveLaunchRoute } from '../lanes/routes.mjs';
 export const DESK_FIELDS = ['review_route', 'fix_route', 'review_round_cap', 'timeout', 'reuse', 'to'];
-export const DESK_DEFAULTS = { review_round_cap: 3, timeout: 1800, reuse: false, to: 'supervisor-herdr' };
+export const DESK_DEFAULTS = { review_round_cap: 1, timeout: 0, reuse: false, to: 'supervisor-herdr' };
 export function deskFallback(key, config) {
   if (key === 'fix_route') return 'worker route, otherwise engineer';
   const choice = config.selection_policy?.by_task_class?.review;
@@ -17,7 +17,7 @@ export function validateDeskSettings(settings, routes) {
   }
   if (settings.reuse !== undefined && typeof settings.reuse !== 'boolean') throw new Error('settle.reuse must be boolean');
   if (settings.review_round_cap !== undefined && (!Number.isSafeInteger(settings.review_round_cap) || settings.review_round_cap < 0)) throw new Error('settle.review_round_cap must be a nonnegative safe integer (0 disables the cap)');
-  if (settings.timeout !== undefined && (!Number.isInteger(Number(settings.timeout)) || Number(settings.timeout) < 3 || Number(settings.timeout) > 7200)) throw new Error('review timeout must be 3 through 7200 seconds');
+  if (settings.timeout !== undefined && (!Number.isInteger(Number(settings.timeout)) || (Number(settings.timeout) !== 0 && (Number(settings.timeout) < 3 || Number(settings.timeout) > 7200)))) throw new Error('review timeout must be 0 (no elapsed stop) or 3 through 7200 seconds');
   if (routes) for (const key of ['review_route', 'fix_route']) if (settings[key] !== undefined) resolveLaunchRoute(routes, { route: settings[key] });
   return settings;
 }

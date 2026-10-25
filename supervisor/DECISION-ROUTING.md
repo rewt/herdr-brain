@@ -87,8 +87,7 @@ Adopted review defaults:
 
 - One risk-directed independent review at ready/done; the same reviewer/session
   checks the delta after findings and newly affected paths, preserving old witnesses.
-- Pre-code threat/contract review for new or changed protocol, privacy or security
-  boundaries, including custody and authority. Reuse approved contracts for slices.
+- Current operator disposition through stable release: ONE independent POST-CODE diff/evidence review per item for ALL changes, async/nonblocking for engineers and landing, zero reviewer suites, cap1 and approximately30-minute advisory target with no elapsed stop. No pre-code/plan/contract/concurrence stage. At most one formal fix round; no automatic second full review. Later findings fix forward; Majors need actual specific correction/evidence checks before release. Reserved native/operator authority and historical verdicts/caps remain intact.
 - No reviews during ordinary engineer fix iterations or known-red evidence handoffs.
   No default blanket suite replay, three-probe quota, or requirement that every
   syntactic guard mutation fail. Exercise the protected property and actual changed

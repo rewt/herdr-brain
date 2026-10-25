@@ -742,7 +742,7 @@ function assertSafeNewWorktreePathAfterCreation(path) {
 function herdrJson(args, { deadline } = {}) {
   const run = spawnSync("herdr", args, {
     encoding: "utf8",
-    ...(deadline === undefined ? {} : { timeout: Math.max(1, deadline - Date.now()) }),
+    ...(deadline === undefined ? {} : { timeout: Math.max(1, Math.min(60_000, deadline - Date.now())) }),
   });
   if (run.status !== 0) return undefined;
   try {
@@ -1186,7 +1186,7 @@ function supportsInitialEnvironment(pane, deadline) {
   if (!shell && Number.isSafeInteger(info?.shell_pid) && info.shell_pid > 0) {
     const result = spawnSync("/bin/ps", ["-p", String(info.shell_pid), "-o", "comm="], {
       encoding: "utf8",
-      ...(deadline === undefined ? {} : { timeout: Math.max(1, deadline - Date.now()) }),
+      ...(deadline === undefined ? {} : { timeout: Math.max(1, Math.min(60_000, deadline - Date.now())) }),
     });
     if (result.status === 0) shell = result.stdout.trim();
   }
@@ -1258,7 +1258,7 @@ function dispatch(topic, promptText, options = {}) {
     for (const pair of resolved.env) tabArgs.push("--env", pair);
     const created = JSON.parse(execFileSync("herdr", tabArgs, {
       encoding: "utf8",
-      ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
+      ...(options.deadline === undefined ? {} : { timeout: Math.max(1, Math.min(60_000, options.deadline - Date.now())) }),
     }));
     pane = created.result.root_pane.pane_id;
     tabId = created.result.tab.tab_id;
@@ -1307,12 +1307,12 @@ function dispatch(topic, promptText, options = {}) {
       // offending assignment. Only the non-secret path enters shell history.
       const prepared = spawnSync("herdr", ["pane", "run", pane,
         ` . ${quote(file)} 2>/dev/null; command rm -f -- ${quote(file)} ${quote(verifier)}`], {
-        encoding: "utf8", timeout: Math.max(1, deadline - Date.now()),
+        encoding: "utf8", timeout: Math.max(1, Math.min(60_000, deadline - Date.now())),
       });
       if (prepared.status === 0) {
         while (Date.now() < deadline) {
           const read = spawnSync("herdr", ["pane", "read", pane, "--source", "recent-unwrapped", "--format", "text"], {
-            encoding: "utf8", timeout: Math.max(1, deadline - Date.now()),
+            encoding: "utf8", timeout: Math.max(1, Math.min(60_000, deadline - Date.now())),
           });
           if (read.status === 0 && read.stdout.split(/\r?\n/u).includes(nonce)) {
             verified = true;
@@ -1352,7 +1352,7 @@ function dispatch(topic, promptText, options = {}) {
       cwd: path,
       encoding: "utf8",
       env: process.env,
-      ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
+      ...(options.deadline === undefined ? {} : { timeout: Math.max(1, Math.min(60_000, options.deadline - Date.now())) }),
     });
     if (run.status === 0 && !`${run.stdout}${run.stderr}`.includes('"error"')) {
       started = true;
@@ -1429,7 +1429,7 @@ function dispatch(topic, promptText, options = {}) {
     if (resolved.kind === "codex") {
       const screen = spawnSync("herdr", ["pane", "read", pane, "--source", "visible", "--format", "text"], {
         encoding: "utf8",
-        ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
+        ...(options.deadline === undefined ? {} : { timeout: Math.max(1, Math.min(60_000, options.deadline - Date.now())) }),
       });
       if (screen.status !== 0) {
         fail(`could not read visible screen for live agent '${agentName}' in pane ${pane}; agent retained, brief not sent; inspect the worker before delivering the brief`);
@@ -1445,7 +1445,7 @@ function dispatch(topic, promptText, options = {}) {
     try {
       execFileSync("herdr", ["agent", "prompt", agentName, promptText], {
         stdio: options.silent ? ["ignore", "ignore", "pipe"] : "inherit",
-        ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
+        ...(options.deadline === undefined ? {} : { timeout: Math.max(1, Math.min(60_000, options.deadline - Date.now())) }),
       });
     } catch {
       fail(
@@ -1566,7 +1566,7 @@ const REVIEW_SECTIONS = [
 ];
 
 function parseReviewOptions(args) {
-  const options = { route: "review", timeout: 1800 };
+  const options = { route: "review", timeout: 0 };
   const seen = new Set();
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
@@ -2366,9 +2366,10 @@ async function review(topic, args, memoryChecked = false) {
   const privateRelative = join(".lane", "reviews", topic, `${head7}-r${options.round}.md`);
   const publicRelative = join(...(options.parallelReview ? [".lane", "public-reviews"] : ["docs", "reviews"]), topic, `${head7}-r${options.round}.md`);
   assertUnambiguousReviewPrefix(join(REPO_ROOT, ".lane", "reviews", topic), head7, head);
-  assertUnambiguousReviewPrefix(dirname(join(path, publicRelative)), head7, head);
+  assertUnambiguousReviewPrefix(dirname(join(options.parallelReview ? REPO_ROOT : path, publicRelative)), head7, head);
   const privatePath = assertReviewOutputPath(REPO_ROOT, privateRelative, { ignored: true, label: "private review output" });
-  const publicPath = assertReviewOutputPath(path, publicRelative, { ignored: Boolean(options.parallelReview), label: "public review output" });
+  const publicRoot = options.parallelReview ? REPO_ROOT : path;
+  const publicPath = assertReviewOutputPath(publicRoot, publicRelative, { ignored: Boolean(options.parallelReview), label: "public review output" });
   const sourceText = reviewSources(path, topic, options);
   let supplement = "No supplemental brief was supplied. Review run budget: zero build/test/prepare/install/check commands.";
   if (options.brief !== undefined) supplement = regularTextFile(resolve(process.cwd(), options.brief), "review brief");
@@ -2388,13 +2389,13 @@ async function review(topic, args, memoryChecked = false) {
     PRIVATE_RECORD_FILE: deliveryPath,
     PUBLIC_RECORD_FILE: publicPath,
     ROUTE: options.route,
-    TIMEOUT_SECONDS: String(options.timeout),
+    TIMEOUT_SECONDS: String(options.timeout || 1800),
     GATE: gate.prompt,
     INHERITED_GATE_NON_CLAIM,
     SOURCE_MATERIAL: sourceText,
-    SUPPLEMENTAL_BRIEF: supplement.trimEnd(),
+    SUPPLEMENTAL_BRIEF: `${options.parallelReview ? `Read only immutable captured commit ${head} via git -C ${REPO_ROOT} show/diff and supplied evidence. The live lane/main can advance or retire; never use its live files as the reviewed version. Review target ${options.timeout || 1800}s is advisory, not an elapsed stop. No tests/build/install/prepare/check/probes or source mutations. ` : ''}${supplement.trimEnd()}`,
   });
-  const deadline = Date.now() + options.timeout * 1000;
+  const deadline = options.parallelReview || options.timeout === 0 ? Infinity : Date.now() + options.timeout * 1000;
   const interrupted = { value: false };
   const onInterrupt = () => { interrupted.value = true; };
   process.once("SIGINT", onInterrupt);
@@ -2410,10 +2411,11 @@ async function review(topic, args, memoryChecked = false) {
     const parsed = validateReviewRecord(record, {
       head, topic, round: options.round, reviewId, baseBranch: MAIN, baseCommit,
     });
-    const currentHead = git(["rev-parse", "HEAD"], { cwd: path, silent: true });
-    const afterBranch = tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path, silent: true });
-    if (currentHead !== head || afterBranch !== branch) fail("review target HEAD or branch moved; private evidence was retained");
-    if (git(["status", "--porcelain=v1"], { cwd: path, silent: true }) !== "") {
+    if (options.parallelReview) git(['cat-file', '-e', `${head}^{commit}`], { cwd: REPO_ROOT, silent: true });
+    const currentHead = options.parallelReview ? head : git(["rev-parse", "HEAD"], { cwd: path, silent: true });
+    const afterBranch = options.parallelReview ? branch : tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path, silent: true });
+    if (!options.parallelReview && (currentHead !== head || afterBranch !== branch)) fail("review target HEAD or branch moved; private evidence was retained");
+    if (!options.parallelReview && git(["status", "--porcelain=v1"], { cwd: path, silent: true }) !== "") {
       fail("review target worktree changed; private evidence and work were retained");
     }
     if (Date.now() > deadline) fail("review timed out before public projection; private evidence was retained");
@@ -2424,7 +2426,7 @@ async function review(topic, args, memoryChecked = false) {
     if (Date.now() > deadline) fail("review timed out before public review creation; private evidence was retained");
     try {
       mkdirSync(dirname(publicPath), { recursive: true });
-      assertReviewOutputPath(path, publicRelative, { ignored: Boolean(options.parallelReview), label: "public review output" });
+      assertReviewOutputPath(publicRoot, publicRelative, { ignored: Boolean(options.parallelReview), label: "public review output" });
       writeFileSync(publicPath, publicRecord, { encoding: "utf8", flag: "wx", mode: 0o644 });
     } catch (error) {
       if (error?.code === "EEXIST") fail("public review output appeared concurrently; evidence was retained");
@@ -2433,10 +2435,10 @@ async function review(topic, args, memoryChecked = false) {
     // Yield once so a concurrent filesystem mutation that races publication can
     // become visible before the final Git integrity check.
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
-    const finalHead = git(["rev-parse", "HEAD"], { cwd: path, silent: true });
-    const finalBranch = tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path, silent: true });
-    const finalStatus = git(["status", "--porcelain=v1", "--untracked-files=all"], { cwd: path, silent: true });
-    if (finalHead !== head || finalBranch !== branch || finalStatus !== (options.parallelReview ? "" : `?? ${publicRelative.split(sep).join("/")}`)) {
+    const finalHead = options.parallelReview ? head : git(["rev-parse", "HEAD"], { cwd: path, silent: true });
+    const finalBranch = options.parallelReview ? branch : tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path, silent: true });
+    const finalStatus = options.parallelReview ? '' : git(["status", "--porcelain=v1", "--untracked-files=all"], { cwd: path, silent: true });
+    if (!options.parallelReview && (finalHead !== head || finalBranch !== branch || finalStatus !== `?? ${publicRelative.split(sep).join("/")}`)) {
       fail("mutation after public review creation caused late publication failure; inspect retained evidence before recovery");
     }
     if (Date.now() > deadline) fail("review timed out after public review creation; inspect retained evidence before recovery");

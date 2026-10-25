@@ -1,13 +1,19 @@
 {
   "archive": {
-    "dirs": ["docs/reports", "docs/archive", "../.org/evidence", "../.org/proposals"]
+    "dirs": [
+      "docs/reports",
+      "docs/archive",
+      "../.org/evidence",
+      "../.org/proposals"
+    ]
   },
   "retirement": {
     "closeout_queue": true
   },
   "settle": {
-    "review_route": "review-codex",
-    "review_round_cap": 3
+    "review_route": "review-sol-max",
+    "review_round_cap": 1,
+    "timeout": 0
   },
   "dispatch": {
     "max_sessions": 12

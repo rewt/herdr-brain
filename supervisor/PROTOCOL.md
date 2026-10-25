@@ -1,101 +1,32 @@
-# Current operator exception through stable release
-
-The latest operator decision supersedes pre-main tests, affected-file admission, review readiness and earlier syntax-only final-release policy. Finished existing work lands immediately with explicit `operator-20261025-until-stable-release` waiver receipts, no preparation/planner/test/review command before main, and no assertion that unrun tests passed. Red main is accepted; preserve and fix actual failures forward. Native binding, claims, source/head/clean Git/CAS/FF safety, reserved questions and recoverable archives remain enforced. Ordinary Brain review is nonblocking and unnecessary for admission.
-
-Run full checks once on the final exact source immediately before FINAL RELEASE, then real live acceptance, seal, activation and installed-current consumer checks. The rc-20261025T1752Z-af6014d759 run is retained immutable nonfinal diagnostic evidence and must not be activated/called stable. A new final immutable candidate is necessary because final source and governing full-check boundary changed; reuse applicable green evidence truthfully without replaying it. Private rehearsal fresh-clone pre/post and Chipnet run/funds checks remain unchanged. This additive gating hotfix retains the original archive/gating-hotfix-pre-20261025T1737Z-1a6111a4 and a one-command revert for the complete range. No new item/worker/program, approval round or amended receipt.
-
-The earlier protocol below applies only where consistent with this current exception.
-
-> Operator gating hotfix, 2026-10-25 12:27 CDT: the current committed validation declaration selects a single deduplicated affected-file check, parallel zero-suite review, and reduced release entry. This supersedes the serial-review/full-offline-tail requirements below for this gating fix and the replacement carrying it. Preserve all native/source/claim/lock/FF and real-error/acceptance guards. The hotfix alone may commit directly to canonical main after an exact annotated archive; its changed-only proof runs once and its revert is one `git revert --no-edit HOTFIX_COMMIT` command. No synthetic validation-done or full-gate receipts, unrelated repair, publishing/push/secrets/permission change, or alteration/replay of an admitted immutable batch.
-
 # Supervisor protocol
 
-You coordinate the project through its durable record. The operator steers;
-ordinary reversible decisions are yours within the project's recorded authority.
-Read applicable project instructions. This protocol supplies defaults and yields
-to them. No resident model or growing history is needed to keep the cycle moving.
+Until the stable release, Brain and BCH implement the same rules in separate tooling; BCH switches to Brain tooling after adopting the next release. The operator steers and routine reversible work remains delegated.
 
-Apply [decision routing policy v2](DECISION-ROUTING.md) for authority and review defaults;
-its appendix records project-specific constraints and standing directions.
+Finished source lands immediately. No pre-main test, merge, affected-file admission or review readiness gate. Red main is accepted and actual failures are fixed forward. The explicit committed landing waiver records executed:false and exit_code:null; unrun tests are never PASS. Preserve native binding, claims, source/head/clean Git/CAS/FF safety, reserved questions and recoverable archives. Real source conflicts and unknown/foreign ownership remain real issues to resolve.
 
-Run foreground `supervisor.mjs entry` from the canonical checkout to refresh context and recover enabled housekeeping and watchers.
-Retrieve `record show ID` only as needed; use `supervisor.mjs brief --json` when
-the preview truncates. `supervisor.mjs checkpoint --through N --role supervisor`
-is a reading bookmark, never work status or authority.
+Every item receives exactly ONE independent review AFTER CODE, of immutable diff and evidence only, ASYNC/NONBLOCKING alongside engineers and landing. Cap1 applies prospectively; the approximately30-minute target is planning, never an elapsed stop. Timeout0 is supported and disables the review deadline. Zero reviewer tests/build/install/prepare/check/probe/mutation suites. No pre-code, plan, contract or concurrence stage. At most ONE formal fix round after the review; no automatic second full review or re-review chain. Later findings fix forward. Majors must actually be corrected and their specific correction/evidence checked before FINAL RELEASE. Preserve historical verdicts/caps/receipts.
 
-Record plans, instructions, holds and decisions with `record note ID TEXT
---decision --summary SENTENCE`. Questions and their answers belong in the record.
-Use `record ask` with the action's category, recommendation, rationale and exact
-yes/no consequences when the operator's authority is required. Changes to the
-operator's priorities are theirs alone; ask with `record ask --category priorities`.
-Don't open blocking questions; use `record ask` with a safe default and continue.
-Funds, publishing, credentials and permission changes default to no.
+## Existing delivery and landing
 
-Use dispatch/dispatch.mjs for a selected item, lane, named route and ask, with
-`--to YOUR-SUPERVISOR`. It records the run and arms watch before sending work.
-Here YOUR-SUPERVISOR means the project's ops recipient in
-`MONITOR_SUPERVISOR_AGENT` (default `supervisor-herdr`), not the current chat's
-agent name. Operator project chats have `chat-` names and never enroll as notice
-recipients, including for awaited landings. Keep dispatch/watch/handle/promotion
-notices addressed to ops; pull record context when the operator asks in a chat.
-Skip work already running and honor record blockers and project authority.
-Unaligned work and exceeded advisory budgets remain visible and may proceed.
-When the next plan step depends on an item landing, add `--awaited` and optionally
-`--awaited-step 'PLAN STEP'` to dispatch, or set the item's `meta.notify=supervisor`
-and `meta.notify_step` through `record set`. Autopilot completes verified promotion
-and closes the item, then sends one short landing line so you can resume the plan.
+Use existing dispatch/owner/lane/route flows and one normal watcher per run. Do not duplicate workers/watchers or restart schedules. Notices go to the ops supervisor. Autopilot remains disabled unless independently enabled under its existing authority.
 
-The inbox applies `notice-autopilot/v1` before automatic delivery. Under the
-project's auto tooling authority it handles recorded done reports, promotes
-a clean independent PASS in the explicit `clean-pass` cohort into an already-live
-native promote worker, leaves watched fixes in flight and retries the exact
-base-moved escalation once. Findings and unknown/protected scope use the ordinary
-path with a named exception. Autopilot is off by default. A promoted queue notice
-closes its bound item. These routine notices
-do not reach chat unless the item is marked awaited. Notices bound to abandoned
-runs are journaled and dropped. The action receipts retain commands and acknowledgements;
-`supervisor.mjs status [--json]` reads lane stages and the last policy actions
-without model calls or writes. See [README.md](README.md) for the kill switch and
-receipt paths. STOP or paused housekeeping disables automatic actions.
+Handle every final org-report once through supervisor.mjs handle RUN --role supervisor. Immutable intake verifies report bytes and owner binding. Its independent post-code review runs in parallel and produces durable findings without granting or delaying landing. It reads captured commit/diff/evidence, never a moving live version. Start promotion of finished source immediately with supervisor.mjs promote RUN --why REASON --role supervisor. The native queue skips pre-main preparation/planner/tests under the waiver, preserves source/claim/Git/FF/CAS and record safety, fast-forwards and records the actual outcome. No synthetic validation-done or full-suite receipt. Correct a real conflict in the same existing owner and continue the supported request. Never bypass a native harness refusal.
 
-Exceptions wake with the complete original notice unchanged, followed by the
-autopilot reason and receipt path on their own line: FAIL, capped Major, refusals,
-train/release failures or gate results, non-done/no-report workers, questions,
-unknown or uncertain results, and operator-reserved categories. Read the receipt
-before choosing a recovery command. An
-interrupted policy command is never automatically replayed. The policy does not
-answer operator questions, publish, rank priorities, or start housekeeping.
+Completion/closeout retain exact native receipts and callback identity. Retry only failed bookkeeping/cleanup after its actual cause is fixed; never repeat successful integration/checks. One requested formal correction may follow the review. An uncertain review is inspected in its existing session, never automatically re-launched. Historical source, failed gates and review verdicts remain immutable.
 
-Every final `[org-report]` notice takes one path through settle and guarded
-promotion. Autopilot uses this path for routine notices. For exceptions or manual
-handling, the supervisor follows these steps:
+## Final release/adoption
 
-1. Run `handle --notice 'THE COMPLETE NOTICE' --role supervisor`, optionally
-   `--to YOUR-SUPERVISOR` and `--brief FILE` for a manual run. This invokes settle
-   once: immutable intake, mechanical validation, independent review on the
-   project's review route, and an automatic correction when settle permits it.
-   The review is the model judgment step. The command never evaluates report
-   commands, launches an executive model, or promotes by assuming authority.
-2. A `fix_round` is already dispatched and watched. Leave it in flight; its final
-   notice returns to step 1. An `escalate` or interrupted result names compact
-   handoff evidence. Decide scope, blockers, recovery or operator escalation from
-   that evidence. Incomplete/uncertain review or dispatch requires inspection and
-   settle's explicit recovery commands; never automatically replay a model call.
-3. For `promotable`, judge current project promotion authority using the exact
-   reviewed head, review-record commit and evidence. If authorized, run
-   `promote RUN --why 'authority and why the evidence meets it' --to YOUR-SUPERVISOR
-   --role supervisor`. It rechecks settle readiness, records the decision, enqueues
-   the exact settled head and authorized run and returns. The queue refuses a
-   changed tip, required rebase or changed record readiness before integrating.
-   The finite promote worker gates, fast-forwards, closes
-   the merged lane and delivers `[promote-queue]`. It never pushes. Pass that
-   notice to `handle --notice TEXT --role supervisor`: it reads the actual queue
-   receipt and integrated tip, then closes the item through the record CLI with
-   a current-run guard. A newer run, blocker or changed outcome receives inspection
-instead of being overwritten. Failed promotions receive a judgment handoff.
-   After a confirmed refusal, resolve the cause and explicitly use
-   `promote RUN --retry --why REASON --role supervisor` to recheck readiness and
-   bind a new attempt while retaining the previous receipt.
+ONE FULL release test is PER RELEASE and shared by all fixes, immediately before final release/adoption. It is FULL, never reduced, and is not repeated. Preserve completed receipts/greens; after a real correction execute only failing, actually affected or previously unrun checks, binding inherited and fresh coverage honestly to source. Passive step timing measures the next actual final candidate; do not run a separate whole-suite benchmark. Deduplicate executions and parallelize only genuinely independent suites while retaining native/Herdr/focus/shared-state/slot/memory/ownership constraints. Light CPU alone proves no independence.
+
+Zero elapsed-only test/helper/runner/gate failure. The sole forced freeze is the exact measured no-output AND confirmed-no-activity condition; unknown activity stays held. Semantic native leases/claims and ownership/source safety remain enforced.
+
+After source assembly, full coverage and actual Major correction checks, tag main and run bash herdr/release.sh build TAG --live as one bare command. Genuine source, package/seal and real live acceptance must pass before bash herdr/release.sh activate TAG and actual installed org/lane/contrib/reconcile readback. Workers never release. A failed immutable candidate is retained, not rebuilt/relabelled. A new candidate after a real correction records why, carries completed evidence and executes only necessary remaining checks. Publishing/push/funds/adoption scope retain reserved authority.
+
+rc-20261025T1752Z-af6014d759 is immutable NONFINAL diagnostic evidence: reduced entry exit0, live17pass/2fail/NOT READY in825seconds. It is not activated or stable. Those failures and all R840/ENG629 evidence stay preserved. The same additive hotfix retains archive/gating-hotfix-pre-20261025T1737Z-1a6111a4 and one exact revert command for its committed changes.
+
+Rehearsal progresses in parallel and remains PRIVATE with fresh-clone checks pre/post; Chipnet/run/funds safeguards are unchanged. No new program/item/approval round. The sole operator-authorized cross-project policy advisory is R849, in native read-only mode; no second or per-stage advisor.
+
+## Ownership and lifecycle
 
 Before activating run ownership, inventory in-flight work. Old Brain operations
 can drain on their saved release. To continue them through the new entry points,
@@ -118,70 +49,7 @@ is Brain's worker. This admits its own worker callback but refuses operation
 receipts or other pending effects. Then re-run `supervisor entry` or arm watch.
 See [run ownership](../docs/contracts/RUN-OWNERSHIP.md) for the full contract.
 
-For a manually assembled or legacy promotion batch, use the shared
-[batch completion protocol](PROMOTION-COMPLETION.md). Bind every included item,
-excluded item and superseded open run before the gate; a green fast-forward is
-not complete until the whole batch has a reconciliation receipt. Cleanup follows
-record reconciliation. An exclusion needs a reason, next action and any real
-blocking links. A stale record stops completion for inspection; never silently
-close only the top lane's item or overwrite a newer attempt. Keep the successful
-Git/gate evidence and retry bookkeeping without repeating a successful gate.
-
-For `promotable_with_findings`, settle reached the configured review-round cap
-with Moderate/Minor findings and current clean/green readiness evidence. Inspect
-the findings and exact reviewed/head commits. Decide whether to accept them and
-file follow-ups, then `promote RUN --accept-findings --why REASON --role supervisor`,
-or send one more correction with `handle RUN --retry --fix-findings --role supervisor`.
-Both manual choices are recorded. The clean-PASS autopilot pilot never accepts
-findings automatically. Set a recorded per-item
-cap with `record set ITEM meta.settle_review_round_cap=N`, or supply
-`--review-round-cap N` to the initial `handle`. The project default is tracked
-`settle.review_round_cap`; an item override wins, and 0 disables the cap.
-Completed reviews count across fix runs; Major findings, FAIL, red validation and
-unresolved evidence keep their correction or judgment path.
-
-Intermediate watch notices (blocked, invalid, no-report, unavailable, long-running)
-require inspection or continued observation; they never authorize settle. A
-promotion notice is an outcome, never a new report or another promotion request.
-Duplicate final notices reuse settle receipts, or completed promotion receipts
-after lane closure, with the same integrated-head and current-run checks as queue
-notices. The record lock also checks prior closure against the report-ingestion
-sequence: replay after explicit reopening requires supervisor judgment and leaves
-the item open, even when the old done report and promotion receipts remain.
-A superseded run with a missing checkout returns the record's current
-run without settling or closing anything; inspect that run's receipts for its
-actual disposition. Duplicate promotion commands reuse
-their queue receipt even after the lane is closed. Uncertain enqueue acknowledges
-nothing and requires inspection; it never blindly enqueues again.
-
-Only an explicitly entered supervisor in the canonical checkout may mutate this
-cycle or start the default housekeeping schedule with housekeeping/housekeeping.mjs
---start. Entry resumes only the existing housekeeping schedule and open-run watchers;
-it never dispatches, settles or promotes work. Workers receive their
-own bounded policy and never supervisor actions. The canonical
-`.lane/supervisor/STOP` prevents cycle mutations. Lanes, models, accounts, desks
-and validation come from their modules/configuration, never this protocol.
-STOP appearing during review prevents correction dispatch and returns a resumable
-`stopped` handoff. After clearing STOP, resume with `handle RUN --retry`; review
-and correction evidence are retained. Pending or uncertain promotions still need
-inspection rather than a retry.
-
-Releases are the project supervisor's job, with no operator step. When promotions
-have landed, tag `main` as `rc-<UTC yyyymmddThhmmss000Z>-<10-char sha>` and run
-`bash herdr/release.sh ship TAG` as one bare command. Ship builds the tag (the release
-gate runs once in the git-archive snapshot), activates it, checks that the installed
-`org`, `lane` and `settle-watch` start, and rolls back to the previous release if they
-don't. Record the result on the goal. A failed gate leaves the current release
-untouched: fix it in a lane and cut a new tag. A built tag is never rebuilt, so after a
-rolled-back ship cut a new tag; if a build succeeded but activation never ran, run
-`bash herdr/release.sh activate TAG`. Workers never run the release gate. The default
-`ship TAG` path runs the offline release tier and records **acceptance did not run**;
-that release cannot be pinned. For a pin candidate, the supervisor instead runs
-`bash herdr/release.sh build TAG --live`, then `bash herdr/release.sh activate TAG`
-after the live acceptance passes. The build retains READY evidence for that exact
-commit before sealing the bundle. See [release pins](../herdr/RELEASE-PINS.md) for
-acceptance, canonical adoption and read-back.
-Historical candidates remain readable with `record releases`.
+Only the canonical supervisor starts housekeeping. Resume existing schedules/watchers without duplicates. STOP prevents cycle mutations. A native sandbox/permission refusal stops that affected action; preserve it, never retry/relay/alternate-execute, and batch unresolved security requests narrowly. Never fabricate native/caller/claim IDs or borrow another identity. Preserve replacement-release, drained-ownership and exact-human-scope prerequisites before adoption inspect/mutation.
 
 ## Identity desks
 

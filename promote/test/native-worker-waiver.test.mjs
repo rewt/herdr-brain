@@ -7,7 +7,6 @@ import { OPERATOR_LANDING_WAIVER } from '../../lib/validation-declaration.mjs';
 import { fixture as completionFixture, source } from './completion-fixture.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
-import { waitForFile } from '../../test/helpers/file-wait.mjs';
 import { liveNativeWorker } from '../native-context.mjs';
 
 // Link the actual module with controlled native reads. These are refusal and
@@ -78,8 +77,14 @@ test('actual waived native drain accepts an existing-worker admission and closes
   const done = waitForExit(child); let second;
   try {
     const ownerFile = path.join(f.queue.directory, 'worker.lock/owner.json');
-    await waitForFile(ownerFile);
-    const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+    let owner;
+    while (child.exitCode === null && !t.signal.aborted) {
+      try { owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8')); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (owner?.native_gate && owner?.native_process) break;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.ok(owner?.native_gate && owner?.native_process, 'actual native owner evidence or real child exit, without an elapsed cutoff');
     assert.deepEqual(owner.native_gate, { outcome: 'not-required', executed: false, authority: OPERATOR_LANDING_WAIVER });
     assert.equal(liveNativeWorker(f.queue.project.identity, waiver)?.pid, child.pid, 'fresh actual native process binding');
     second = f.lane('second', false, { existingWorker: true });

@@ -75,8 +75,11 @@ if (mode === 'floor-cancellation') test('cancellation retains a granted proving 
   owner.kill('SIGTERM'); await until(() => fs.existsSync(term));
   assert.equal(readProvingReservations(lock)[0].state, 'live'); assert.ok(fs.existsSync(row.path)); assert.ok(fs.existsSync(lock));
   assert.equal(JSON.parse(fs.readFileSync(lock)).pgid, group.pid);
+  // Force is an explicit fixture action after the original TERM/held-slot proof.
+  assert.equal(killProcess(group, 'SIGKILL').signaled, true);
   const result = await waitForExit(owner); assert.equal(result.code, 137, result.stderr);
   assert.equal(fs.existsSync(lock), false); assert.equal(fs.existsSync(row.path), false);
+  assert.equal(lookupProcess(group.pid, { identityOnly: true }).value, null);
 });
 
 if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid after both wrappers die', { timeout: 10000 }, async t => {
@@ -102,17 +105,36 @@ if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid aft
 
 if (['gate-leftover-pipes', 'gate-leftover-ignore'].includes(mode)) {
   const inheritedPipes = mode === 'gate-leftover-pipes';
-  test(`leftover group fails distinctly after bounded grace (inherited pipes=${inheritedPipes})`, { timeout: 10000 }, () => {
-    const ready = path.join(root, 'leftover.pid');
-    const script = `const cp=require('child_process');const child=cp.spawn(process.execPath,['-e',"setInterval(()=>{},1000)"],{stdio:${inheritedPipes ? "'inherit'" : "'ignore'"}});require('fs').writeFileSync(${JSON.stringify(ready)},String(child.pid));child.unref();setTimeout(()=>process.exit(0),250);`;
-    const outcome = run(['--timeout-seconds', '60', '--retry-timeout-under-load'], [process.execPath, '-e', script]);
-    assert.equal(outcome.status, 123, outcome.stderr); assert.match(outcome.stderr, /GATE_LEFTOVER_GROUP:/);
-    assert.doesNotMatch(outcome.stderr, /GATE_TIMEOUT:|TEST_SLOT_TIMEOUT_RETRY/);
-    const receipt = JSON.parse(fs.readFileSync(result));
-    assert.equal(receipt.gate_timeout, null); assert.equal(receipt.attempts, 1); assert.ok(receipt.duration_s < 5);
+  test(`owned descendants remain pending until completion (inherited pipes=${inheritedPipes})`, { timeout: 10000 }, async t => {
+    const ready = path.join(root, 'leftover.pid'), release = path.join(root, 'release');
+    const leaf = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));
+      setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)}))process.exit(0);},25);
+      process.send('ready');`;
+    const script = `const cp=require('child_process');const child=cp.spawn(process.execPath,['-e',${JSON.stringify(leaf)}],
+      {stdio:['ignore',${inheritedPipes ? "'inherit','inherit'" : "'ignore','ignore'"},'ipc']});
+      child.once('message',()=>{child.disconnect();child.unref();process.exit(0);});`;
+    const command = [process.execPath, '-e', script];
+    const owner = spawnChild(t, process.execPath, provingRun([cli, 'run', 'fake', '--project-common', root,
+      '--tier', 'promotion', '--result-path', result, '--retry-timeout-under-load', '--', ...command]), { cwd: root, env });
+    let receipt, outcome;
+    try {
+      await until(() => {
+        if (!fs.existsSync(ready) || !fs.existsSync(result)) return false;
+        receipt = JSON.parse(fs.readFileSync(result));
+        const leader = lookupProcess(receipt.command_pid, { identityOnly: true });
+        return leader.ok && leader.value === null;
+      });
+      assert.equal(owner.exitCode, null, 'leader exit does not complete the wrapper');
+      assert.ok(fs.existsSync(lock), 'the live descendant retains admission');
+      assert.ok(lookupProcess(Number(fs.readFileSync(ready)), { identityOnly: true }).value);
+    } finally { fs.writeFileSync(release, 'complete'); outcome = await waitForExit(owner); }
+    assert.equal(outcome.code, 0, outcome.stderr);
+    assert.doesNotMatch(outcome.stderr, /GATE_LEFTOVER_GROUP:|GATE_TIMEOUT:|TEST_SLOT_TIMEOUT_RETRY/);
+    receipt = JSON.parse(fs.readFileSync(result));
+    assert.equal(receipt.gate_timeout, null); assert.equal(receipt.attempts, 1);
     assert.equal(fs.existsSync(lock), false);
     assert.equal(lookupProcess(Number(fs.readFileSync(ready)), { identityOnly: true }).value, null);
-    assert.equal(healthyHistory(root, 'promotion', [process.execPath, '-e', script]).length, 0);
+    assert.equal(healthyHistory(root, 'promotion', command).length, 1);
   });
 }
 

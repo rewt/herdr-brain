@@ -2105,7 +2105,7 @@ test("review accepts negated test-pass limits but still refuses affirmative pros
   }
 });
 
-test("review refuses malformed private evidence, incomplete output, timeout, and lane mutation", () => {
+test("review refuses malformed evidence and lane mutation while incomplete evidence awaits actual interruption", async () => {
   const cases = [
     ["sha-mismatch", "PASS", 2],
     ["review-id-mismatch", "PASS", 2],
@@ -2126,16 +2126,32 @@ test("review refuses malformed private evidence, incomplete output, timeout, and
       fixtures.push(review.fixture);
       const capturedHead = git(review.path, ["rev-parse", "HEAD"]);
       const timeout = ["incomplete", "missing"].includes(mode) ? "3" : "4";
-      const run = lane(review.fixture, [
+      const args = [
         "review", topic, "--round", "1", "--brief", review.brief, "--timeout", timeout,
-      ]);
+      ];
+      let run;
+      if (["incomplete", "missing"].includes(mode)) {
+        const child = laneProcess(review.fixture, args), done = waitForExit(child);
+        const { loadRegistry } = await registryApi();
+        // Observe actual fresh-session publication before a real operator-style
+        // interruption. No elapsed target is a malformed/incomplete verdict.
+        while (!loadRegistry(review.fixture.repo).sessions.length) {
+          const observed = await Promise.race([done.then(result => ({ result })),
+            new Promise(resolve => setTimeout(() => resolve({}), 25))]);
+          assert.equal(observed.result, undefined, `review exited before native metadata: ${JSON.stringify(observed.result)}`);
+        }
+        assert.equal(child.kill('SIGINT'), true);
+        const result = await done;
+        run = { ...result, status: result.code };
+      } else run = lane(review.fixture, args);
       assert.equal(run.status, exit, `${mode}\n${run.stderr}`);
       assert.equal(run.stdout, "");
       const privatePath = privateReviewDelivery(review);
       if (verdict !== undefined) assert.ok(existsSync(privatePath), `${mode}: private delivery evidence retained`);
       assert.ok(!existsSync(join(review.fixture.repo, ".lane", "reviews", topic, `${capturedHead.slice(0, 7)}-r1.md`)));
-      if (mode === "missing") {
-        assert.match(run.stderr, /review timed out; reviewer agent '[a-z0-9_-]+' in tab w-lane:t2/);
+      if (["incomplete", "missing"].includes(mode)) {
+        assert.match(run.stderr, /review interrupted; reviewer agent '[a-z0-9_-]+' in tab w-lane:t2/);
+        assert.doesNotMatch(run.stderr, /review timed out/);
       }
       assert.ok(review.fake.calls().filter((args) => args[0] === "agent" && args[1] === "prompt").length === 1);
     }

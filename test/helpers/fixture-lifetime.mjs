@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import cp, { ChildProcess } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { loadTimeout } from '../../lib/deadline.mjs';
 
 const preload = fileURLToPath(import.meta.url);
 const source = fileURLToPath(new URL('./fixture-lifetime.c', import.meta.url));
@@ -27,8 +28,7 @@ function nativeGuard(root) {
     try {
       const built = nativeSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', temporary, source],
         { env: { PATH: '/usr/bin:/bin', TMPDIR: cache }, encoding: 'utf8' });
-      if (built.error || built.status !== 0)
-        throw Error(built.error?.message ?? (built.stderr || `fixture lifetime compiler exited ${built.status ?? built.signal}`));
+      if (built.error || built.status) throw Error(built.error?.message ?? built.stderr);
       try { fs.linkSync(temporary, executable); }
       catch (error) { if (error.code !== 'EEXIST') throw error; }
     } finally { fs.rmSync(temporary, { force: true }); }
@@ -48,14 +48,14 @@ export function ownFixtureLifetime() {
   const fifo = path.join(root, 'alive');
   const env = { PATH: '/usr/bin:/bin', TMPDIR: root };
   const made = nativeSync('/usr/bin/mkfifo', [fifo], { env, encoding: 'utf8' });
-  if (made.error || made.status !== 0)
-    throw Error(made.error?.message ?? (made.stderr || `fixture lifetime FIFO creation exited ${made.status ?? made.signal}`));
+  if (made.error || made.status) throw Error(made.error?.message ?? made.stderr);
   // O_RDWR avoids a blocking open. The descriptor is deliberately retained
   // until process exit, and Node does not inherit it into children.
   fs.openSync(fifo, fs.constants.O_RDWR | fs.constants.O_NONBLOCK);
-  lifetime = { executable, fifo };
+  lifetime = { executable, fifo, seconds: String(Math.ceil(loadTimeout(60000) / 1000)) };
   process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE = executable;
   process.env.HERDR_FIXTURE_LIFETIME_FIFO = fifo;
+  process.env.HERDR_FIXTURE_LIFETIME_SECONDS = lifetime.seconds;
   if (standalone) process.once('exit', () => fs.rmSync(root, { recursive: true, force: true }));
 }
 
@@ -65,17 +65,20 @@ function inherited(env = process.env) {
   const owner = lifetime ?? {
     executable: process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
     fifo: process.env.HERDR_FIXTURE_LIFETIME_FIFO,
+    seconds: process.env.HERDR_FIXTURE_LIFETIME_SECONDS,
   };
   if (!owner.executable) return result;
   result.HERDR_FIXTURE_LIFETIME_EXECUTABLE = owner.executable;
   result.HERDR_FIXTURE_LIFETIME_FIFO = owner.fifo;
+  result.HERDR_FIXTURE_LIFETIME_SECONDS = owner.seconds;
   result.HERDR_FIXTURE_GATE_LIFETIME ??= process.env.HERDR_FIXTURE_GATE_LIFETIME;
   if (!result.NODE_OPTIONS?.includes(preload)) result.NODE_OPTIONS = `--import=${JSON.stringify(preload)} ${result.NODE_OPTIONS ?? ''}`;
   return result;
 }
 const guarded = (args, env) => env.HERDR_FIXTURE_LIFETIME_EXECUTABLE &&
   (args.includes('--owner-worker') || env.HERDR_FIXTURE_GATE_LIFETIME === '1');
-const launcherArgs = (command, args, env) => ['--exec', env.HERDR_FIXTURE_LIFETIME_FIFO, command, ...args];
+const launcherArgs = (command, args, env) => ['--exec', env.HERDR_FIXTURE_LIFETIME_FIFO,
+  env.HERDR_FIXTURE_LIFETIME_SECONDS, command, ...args];
 const exempt = command => /(?:sandbox-exec|\/codex)$/.test(command) || command === process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE;
 
 for (const name of ['spawnSync', 'execFileSync', 'execSync']) {
@@ -126,7 +129,7 @@ ChildProcess.prototype.spawn = function (options) {
 if ((process.env.HERDR_FIXTURE_GATE_LIFETIME === '1' || process.argv.includes('--owner-worker')) &&
     process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE) {
   const guard = cp.spawn(process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
-    ['--watch', process.env.HERDR_FIXTURE_LIFETIME_FIFO, String(process.pid)],
+    ['--watch', process.env.HERDR_FIXTURE_LIFETIME_FIFO, process.env.HERDR_FIXTURE_LIFETIME_SECONDS, String(process.pid)],
     { stdio: 'ignore' });
   guard.unref();
 }

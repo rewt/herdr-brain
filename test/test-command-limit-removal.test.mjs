@@ -72,8 +72,11 @@ fs.writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({ slot: path.dirname
   fifo: process.env.HERDR_FIXTURE_LIFETIME_FIFO, token: process.env.MONITOR_TEST_SLOT_TOKEN ?? null }));
 test.after(() => fs.appendFileSync(${JSON.stringify(cleanup)}, 'after\\n'));
 ${body(cleanup)}`);
-  const result = cp.spawnSync(process.execPath, ['--test', '--test-reporter=tap', file], { encoding: 'utf8' });
+  // A fresh Node runner must not inherit its parent's test-worker sentinel.
+  const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
+  const result = cp.spawnSync(process.execPath, ['--test', '--test-reporter=tap', file], { encoding: 'utf8', env });
   assert.equal(result.error, undefined);
+  assert.ok(fs.existsSync(receipt), result.stdout + result.stderr);
   const state = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   assert.notEqual(state.slot, path.dirname(process.env.MONITOR_TEST_SLOT_PATH));
   assert.equal(fs.existsSync(state.slot), false, 'child exit removed its own slot scratch');

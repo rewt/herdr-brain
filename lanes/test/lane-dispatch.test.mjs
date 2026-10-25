@@ -1193,14 +1193,14 @@ test("review planning target accepts one late delivery and preserves duplicate-r
   const review = makeReviewFixture(topic, { verdict: 'PASS', mode: 'late-complete' });
   try {
     const head = git(review.path, ['rev-parse', 'HEAD']);
-    const first = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '3']);
+    const first = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '3', '--parallel-review']);
     assert.equal(first.status, 0, first.stderr);
     assert.equal(first.stdout, 'PASS\n');
     const delivery = privateReviewDelivery(review);
     assert.equal(existsSync(delivery), false, 'completed evidence was published, not left as a timed-out delivery');
     assert.match(readFileSync(join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r1.md`), 'utf8'), /^Round: 1$/mu);
     const prompts = () => review.fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt');
-    const repeat = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief]);
+    const repeat = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--parallel-review']);
     assert.equal(repeat.status, 2, repeat.stderr);
     assert.match(repeat.stderr, /already exists; refusing to overwrite round output/);
     assert.equal(prompts().length, 1);

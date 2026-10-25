@@ -156,7 +156,10 @@ export function enqueue(queue, topics, options) {
   if (options.superseded !== undefined && (!Array.isArray(options.superseded) || (options.superseded.length && !options.run) || new Set(options.superseded).size !== options.superseded.length || options.superseded.some(id => !/^R-\d+$/.test(id)))) throw Error('invalid explicit superseded runs');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
   const admit = () => queue.transaction((data) => {
-    if (options.existingWorker && !liveNativeWorker(queue.project.identity)) throw settingsRefusal('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
+    if (options.existingWorker) {
+      const authority = resolveValidation({ root: queue.project.canonical }).landing_waiver;
+      if (!liveNativeWorker(queue.project.identity, { gateRequired: !authority, authority })) throw settingsRefusal('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
+    }
     return topics.map((topic) => {
       const owned = options.run ? readOwnedRun(options.org, options.run) : null;
       if (owned) {

@@ -1,0 +1,64 @@
+import test from '../../test/helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { OPERATOR_LANDING_WAIVER } from '../../lib/validation-declaration.mjs';
+
+// Link the actual module with controlled native reads. These are refusal and
+// binding controls, not a claim of native process or permission execution.
+const moduleURL = new URL('../native-context.mjs', import.meta.url).href;
+const original = fs.readFileSync(new URL(moduleURL), 'utf8');
+const body = original.replace(/^import .*;\n/gm, '').replaceAll('import.meta.url', 'moduleURL').replace(/^export /gm, '');
+assert.doesNotMatch(body, /^import /m);
+const link = new Function('fs', 'path', 'spawnSync', 'fileURLToPath', 'lookupProcess', 'OPERATOR_LANDING_WAIVER', 'moduleURL',
+  `${body}\nreturn {nativeWorkerEvidence,liveNativeWorker};`);
+const workerCLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
+const waiver = { gateRequired: false, authority: OPERATOR_LANDING_WAIVER };
+
+function fixture() {
+  const process = { pid: 42, identity: 'actual-birth', command: `node ${workerCLI} --drain`, state: 'S' };
+  const owner = { pid: 42, argv: ['node', workerCLI, '--drain'], native_process: { ...process },
+    native_gate: { outcome: 'not-required', executed: false, authority: OPERATOR_LANDING_WAIVER } };
+  let current = { ok: true, value: { ...process } };
+  const reads = [];
+  const api = link({ readFileSync(file) { assert.equal(file, path.join('/owned', 'promote/worker.lock/owner.json')); return JSON.stringify(owner); },
+    openSync() { assert.fail('unused PTY probe'); } }, path,
+    () => assert.fail('unused loopback probe'), fileURLToPath,
+    pid => { reads.push(pid); return current; }, OPERATOR_LANDING_WAIVER, moduleURL);
+  return { api, owner, reads, current: value => { current = value; } };
+}
+
+test('existing-worker reuse requires the exact canonical waiver and never upgrades a refusal', () => {
+  const f = fixture();
+  assert.equal(f.api.liveNativeWorker('/owned'), null);
+  assert.equal(f.api.liveNativeWorker('/owned', { gateRequired: false }), null);
+  assert.equal(f.api.liveNativeWorker('/owned', { ...waiver, authority: 'foreign' }), null);
+  assert.deepEqual(f.reads, []);
+  assert.equal(f.api.liveNativeWorker('/owned', waiver)?.pid, 42);
+  for (const gate of [undefined, { ok: false }, { ...f.owner.native_gate, ok: false },
+    { ...f.owner.native_gate, executed: true }, { ...f.owner.native_gate, authority: 'foreign' }]) {
+    f.owner.native_gate = gate;
+    assert.equal(f.api.liveNativeWorker('/owned', waiver), null);
+  }
+  f.owner.native_gate = { ok: true };
+  assert.equal(f.api.liveNativeWorker('/owned')?.pid, 42, 'legacy genuinely probed worker remains supported');
+});
+
+test('waived unused probes preserve fresh native process birth, command, live state and drain path guards', () => {
+  for (const current of [{ ok: false, error: 'native refusal' }, { ok: true, value: null },
+    { ok: true, value: { pid: 42, identity: 'foreign', command: `node ${workerCLI} --drain`, state: 'S' } },
+    { ok: true, value: { pid: 42, identity: 'actual-birth', command: 'foreign', state: 'S' } },
+    { ok: true, value: { pid: 42, identity: 'actual-birth', command: `node ${workerCLI} --drain`, state: 'Z' } }]) {
+    const f = fixture(); f.current(current);
+    assert.equal(f.api.liveNativeWorker('/owned', waiver), null);
+    assert.deepEqual(f.reads, [42]);
+  }
+  for (const mutate of [f => { f.owner.argv[1] = '/foreign/promote.mjs'; },
+    f => { f.owner.argv.pop(); }, f => { f.owner.native_process.pid = 99; },
+    f => { f.owner.native_process.command = 'foreign'; }]) {
+    const f = fixture(); mutate(f);
+    assert.equal(f.api.liveNativeWorker('/owned', waiver), null);
+    assert.deepEqual(f.reads, [], 'invalid owner never reaches the native read');
+  }
+});

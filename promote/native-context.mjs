@@ -2,9 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { loadTimeout } from '../lib/deadline.mjs';
 import { fileURLToPath } from 'node:url';
 import { lookupProcess } from '../lib/processes.mjs';
+import { OPERATOR_LANDING_WAIVER } from '../lib/validation-declaration.mjs';
 
 const workerCLI = fileURLToPath(new URL('./promote.mjs', import.meta.url));
 export function probeNativeGate({ open = fs.openSync, close = fs.closeSync } = {}) {
@@ -21,7 +21,7 @@ export function probeNativeGate({ open = fs.openSync, close = fs.closeSync } = {
   // its ephemeral listener and cannot change permissions or retry a refusal.
   const result = spawnSync(process.execPath, ['--input-type=module', '-e',
     "import net from 'node:net';const s=net.createServer();s.once('error',e=>{console.error(e.code);process.exitCode=1;});s.listen(0,'127.0.0.1',()=>s.close());"],
-    { encoding: 'utf8', timeout: loadTimeout(3000) });
+    { encoding: 'utf8' });
   if (result.error || result.status !== 0 || result.signal) return { ok: false, code: 'PROMOTE_NATIVE_LOOPBACK_REFUSED',
     capability: 'listen 127.0.0.1:0', at, error: result.error?.code ?? result.stderr?.trim() ?? result.signal ?? 'unknown',
     reason: `PROMOTE_NATIVE_LOOPBACK_REFUSED: ${result.stderr?.trim() || result.error?.code || result.signal || `exit ${result.status}`}; native permissions remain authoritative; no relaunch` };
@@ -41,10 +41,16 @@ export function nativeWorkerEvidence({ gateRequired = true, authority } = {}) {
   const current = lookupProcess(process.pid);
   return { native_gate, ...(current.ok && current.value ? { native_process: current.value } : {}) };
 }
-export function liveNativeWorker(identity) {
+export function liveNativeWorker(identity, { gateRequired = true, authority } = {}) {
   try {
     const owner = JSON.parse(fs.readFileSync(path.join(identity, 'promote/worker.lock/owner.json'), 'utf8'));
-    if (!owner.native_gate?.ok || owner.argv?.[1] !== workerCLI || !owner.argv.includes('--drain') || owner.native_process?.pid !== owner.pid || !owner.native_process.command?.includes(`${workerCLI} --drain`)) return null;
+    const gate = owner.native_gate;
+    // Only the canonical caller's actual waiver can match a drain that recorded
+    // this probe as unused. A refused probe is never converted into permission.
+    const waived = !gateRequired && authority === OPERATOR_LANDING_WAIVER &&
+      gate?.outcome === 'not-required' && gate.executed === false &&
+      gate.authority === authority && gate.ok === undefined;
+    if ((!gate?.ok && !waived) || owner.argv?.[1] !== workerCLI || !owner.argv.includes('--drain') || owner.native_process?.pid !== owner.pid || !owner.native_process.command?.includes(`${workerCLI} --drain`)) return null;
     const current = lookupProcess(owner.pid);
     if (!current.ok || !current.value || /^Z/.test(current.value.state) || current.value.identity !== owner.native_process.identity || current.value.command !== owner.native_process.command) return null;
     return { pid: owner.pid, identity: current.value.identity, capability: owner.native_gate };

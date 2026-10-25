@@ -5,7 +5,10 @@ import path from 'node:path';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
+import vm from 'node:vm';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+
+const { createContext, SourceTextModule, SyntheticModule } = vm;
 
 // Whole actual modules, with no source rewriting or exported test hook. Every
 // other import is closed below; physical spawn/ps/kernel/lock/storage/notice and
@@ -143,6 +146,21 @@ async function harness({ failedSpawn = false } = {}) {
   return h;
 }
 
+if (typeof SourceTextModule !== 'function') {
+  test('ordinary suite selection executes every execution-limit witness with its VM capability', async t => {
+    const env = { ...process.env };
+    delete env.NODE_TEST_CONTEXT;
+    const child = spawnChild(t, process.execPath,
+      ['--experimental-vm-modules', '--test', fileURLToPath(import.meta.url)], { env });
+    const result = await waitForExit(child);
+    assert.equal(result.signal, null, result.stderr);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /# tests 22\b/);
+    assert.match(result.stdout, /# pass 22\b/);
+    assert.match(result.stdout, /# fail 0\b/);
+    assert.match(result.stdout, /# skipped 0\b/);
+  });
+} else {
 for (const code of [0, 7]) test(`actual controller awaits close and trailing output after exit ${code}`, async () => {
   const h = await harness(); h.start();
   const spawn = h.events.find(e => e[0] === 'spawn');
@@ -380,3 +398,4 @@ test('actual cleanup lookup error stays held until known termination and stream 
   h.child.emit('close', 0, null); assert.match((await failed).message, /cannot confirm gate descendant/);
   assert.ok(h.rows.has(93)); assert.equal(h.healthy, 0);
 });
+}

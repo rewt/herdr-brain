@@ -82,22 +82,40 @@ fs.writeFileSync(${JSON.stringify(result)},JSON.stringify({error:r.error?.code,s
   assert.ok(timed.signal === 'SIGTERM' || timed.status === 143, JSON.stringify(timed));
 });
 
-test('the live synchronous caller watch spawns and hashes nothing after gate startup', { timeout: loadTimeout(10000) }, t => {
+test('the live synchronous caller watch spawns and hashes nothing after gate startup', { timeout: 0 }, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-poll-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const started = path.join(root, 'started'), calls = path.join(root, 'calls'), adapter = path.join(root, 'adapter.mjs'), preload = path.join(root, 'count.mjs'), lock = path.join(root, 'lock');
   fs.writeFileSync(calls, '');
   fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import crypto from 'node:crypto';import {syncBuiltinESMExports} from 'node:module';
-const execute=cp.spawnSync,hash=crypto.createHash;
-const count=kind=>{if(fs.existsSync(${JSON.stringify(started)}))fs.appendFileSync(${JSON.stringify(calls)},kind+'\\n');};
+const execute=cp.spawnSync,hash=crypto.createHash,interval=globalThis.setInterval;
+let callerPoll=false;
+const append=kind=>{if(fs.existsSync(${JSON.stringify(started)}))fs.appendFileSync(${JSON.stringify(calls)},kind+'\\n');};
+const count=kind=>append((callerPoll?'caller:':'activity-or-other:')+kind);
+globalThis.setInterval=(callback,...args)=>interval(callback.name==='checkCaller'?function(...values){
+  append('caller-poll');callerPoll=true;
+  try {if(process.env.SLOT_CALLER_POLL_NEGATIVE_CONTROL==='1')crypto.createHash('sha256');return callback(...values);}
+  finally {callerPoll=false;}
+}:callback,...args);
 cp.spawnSync=(...args)=>{count('spawn');return execute(...args);};crypto.createHash=(...args)=>{count('hash');return hash(...args);};syncBuiltinESMExports();`);
   // Readiness follows the recorded group identity, even on a loaded host.
   fs.writeFileSync(adapter, `import {runTestSlotSync} from ${JSON.stringify(new URL('../run.mjs', import.meta.url).href)};
-const command=[process.execPath,'-e',${JSON.stringify(`const fs=require('fs');const timer=setInterval(()=>{if(JSON.parse(fs.readFileSync(require('path').join(${JSON.stringify(lock + '.occupancy')},fs.readdirSync(${JSON.stringify(lock + '.occupancy')}).find(n=>!n.startsWith('.'))),'utf8')).groupBirth){clearInterval(timer);fs.writeFileSync(${JSON.stringify(started)},'ready');setTimeout(()=>process.exit(0),1000);}},20);`)}];const r=runTestSlotSync('poll-proof',command,{retryTimeout:false,encoding:'utf8',timeout:4000});if(r.status!==0)throw Error(r.stderr);`);
+const command=[process.execPath,'-e',${JSON.stringify(`const fs=require('fs');const timer=setInterval(()=>{if(JSON.parse(fs.readFileSync(require('path').join(${JSON.stringify(lock + '.occupancy')},fs.readdirSync(${JSON.stringify(lock + '.occupancy')}).find(n=>!n.startsWith('.'))),'utf8')).groupBirth){clearInterval(timer);fs.writeFileSync(${JSON.stringify(started)},'ready');setTimeout(()=>process.exit(0),1000);}},20);`)}];const r=runTestSlotSync('poll-proof',command,{retryTimeout:false,encoding:'utf8'});if(r.status!==0)throw Error(r.stderr);`);
   const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, NODE_OPTIONS: `--import=${preload}` };
-  const r = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
-  assert.equal(r.status, 0, r.stderr); assert.ok(fs.existsSync(started));
-  assert.equal(fs.readFileSync(calls, 'utf8'), '', 'polling does not execute a source or hash its bundled helper');
+  for (const injected of [false, true]) {
+    fs.rmSync(started, { force: true }); fs.writeFileSync(calls, '');
+    const r = spawnSync(process.execPath, [adapter], { env: { ...env,
+      SLOT_CALLER_POLL_NEGATIVE_CONTROL: injected ? '1' : '0' }, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr); assert.ok(fs.existsSync(started));
+    const observed = fs.readFileSync(calls, 'utf8').trim().split('\n');
+    assert.ok(observed.includes('caller-poll'), 'the actual named caller polling callback was observed');
+    // The measured AND-freeze activity sampler has its own required source
+    // queries. Attribute operations to the caller callback instead of counting
+    // unrelated sampling or teardown as a polling regression.
+    const expensive = observed.filter(line => /^caller:(spawn|hash)$/.test(line));
+    assert.equal(expensive.length > 0, injected,
+      injected ? 'negative control must detect a caller-side hash' : 'caller polling must not spawn or hash');
+  }
 });
 
 for (const nested of [false, true]) test(`stopping the synchronous gate caller signals its ${nested ? 'nested' : 'top-level'} compound gate group`, { timeout: loadTimeout(10000) }, async t => {

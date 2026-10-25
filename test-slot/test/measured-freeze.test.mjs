@@ -4,7 +4,7 @@ import { FROZEN_SECONDS, FROZEN_SECONDS_ENV, frozenSeconds, resolveGateLimits } 
 import { watchRun } from '../watch.mjs';
 
 test('measured freeze resolves the observed precision and explicit project settings', () => {
-  assert.equal(FROZEN_SECONDS, 199580.020875 / 1000);
+  assert.equal(String(FROZEN_SECONDS), '199.580020875');
   assert.equal(frozenSeconds({}), 199.580020875);
   for (const tier of ['gate', 'fast', 'promotion', 'promotion-host', 'release', 'suite']) {
     const limits = resolveGateLimits({ tier, env: {} });

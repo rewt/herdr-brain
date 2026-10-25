@@ -196,7 +196,9 @@ each TSV record remains one line with three fields.
 
 `lane check [--cmd <validate command>] [--tier fast|promotion]` validates the current
 clean worktree and records the result against its exact tree and current commit.
-The worker default is fast; settle and promote use promotion. The canonical
+The worker default is fast. Settle runs no suite. Under the current canonical
+operator waiver, promotion runs no pre-main preparation/planner/test/review
+readiness gate; full coverage belongs to the one final-release obligation. The canonical
 checkout's tracked `.lane.validation.json` overrides individual commands from
 `.lane.json` `validation`. Undeclared tiers use legacy `validate`, otherwise
 `npm test` (or `node --test` with `test/` and no declared npm test script).
@@ -388,17 +390,20 @@ the project's lifecycle configuration and its original source-file provenance.
 Settle uses this to share its discovered portable defaults with review when a
 project config contains only lifecycle or settle preferences.
 
-Review locates `lane/<topic>` through Git worktree metadata from any checkout of the
-same repository and verifies its branch and canonical common-directory identity. It
-captures the full HEAD, configured base HEAD and merge base, requires a completely
-clean target, and passes source text as literal data. A matching `.lane/gate.json` is
+Current asynchronous settle supplies `--parallel-review --run R-n` and full
+`--captured-head SHA --captured-base SHA`. These commit objects and the canonical
+Git common-directory identity bind the review even after the engineer moves or
+the original lane retires. Standalone legacy review without a captured source
+locates the registered clean `lane/<topic>` and captures its HEAD/base instead.
+Source text is literal data. A matching `.lane/gate.json` is
 disclosed as inherited evidence. A missing, malformed, or mismatched gate is reported
 as unavailable at this HEAD and review continues; the command never runs prepare,
 check, validation, or a framework executable and never turns a gate into a verdict.
 
 The installed [review template](REVIEW_TEMPLATE.md) overrides generic engineering
 instructions with a review-only role. The reviewer may write exactly the designated
-private delivery file inside its lane worktree:
+private delivery file in the captured-source canonical checkout (the live lane
+worktree for standalone legacy review):
 
 ```text
 .lane-review-<full-head>-r<N>/record.md
@@ -415,20 +420,19 @@ validated bytes in the canonical checkout and removes the delivered file:
 
 The archive path must be gitignored, untracked, absent, and free of symlink escapes. The
 corresponding `docs/reviews/<topic>/<head7>-r<N>.md` path must be absent, untracked,
-trackable, and not ignored; the same command creates the public record after the
-unchanged-lane check. Matching abbreviations tied to another full SHA refuse as
+trackable, and not ignored; the same command creates the public record after
+captured-source validation (the unchanged-lane check for legacy live review).
+Matching abbreviations tied to another full SHA refuse as
 ambiguous. The CLI never overwrites, stages, commits, resets, cleans, fixes, retries,
 or selects another round.
 
-The reviewer cannot write other files in the lane worktree, including ignored scratch,
-cache, dependency, or build paths. Test and mutation copies belong in its private run
-temporary directory and must be cleaned afterward. The only repository write it may
-make is the required private delivery record. Without an unambiguous supplemental
-`Review run budget`, the budget is zero build/test/prepare/install/check commands.
-An authorized budget names exact commands
-and a finite count for each command and witness. Every authorized build or test waits
-for a clear machine-load probe and runs alone; the CLI passes the budget but executes
-none of it.
+The reviewer cannot write other files, including ignored scratch, cache,
+dependency or build paths. Its only designated write is the private delivery
+record, subject to its actual native sandbox. Current Brain/BCH review budgets
+are zero build/test/prepare/install/check/probe commands everywhere, including
+temporary copies. No legacy supplemental budget overrides the current operator
+policy or grants native permissions. Functional execution belongs to the shared
+final-release obligation and its coordinator, never the reviewer.
 
 The private record is valid UTF-8 with LF line endings only, at most 1 MiB, ends
 with `<!-- lane-review-complete -->`, and has exactly `**PASS**`, `**NEEDS-WORK**`,

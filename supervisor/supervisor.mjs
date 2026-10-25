@@ -2,7 +2,7 @@
 // Foreground glue. No model, timer, event-log writes or new scheduler.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { bundleRelease, forwardRelease, releaseProject } from '../lib/releases.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
@@ -249,7 +249,30 @@ export function main(argv = process.argv.slice(2)) {
     }
     for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout', 'review-round-cap']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
     for (const name of ['retry', 'review-again', 'fix-findings']) if (opt[name]) settleArgs.push(`--${name}`);
-    const result = JSON.parse(call(settle, settleArgs, { stdio: ['ignore', 'pipe', 'inherit'] }));
+    const asyncReview = Boolean(resolveValidation({ root: project.canonical }).landing_waiver) && !opt['fix-findings'];
+    const result = JSON.parse(call(settle, [...settleArgs, ...(asyncReview ? ['--defer-review'] : [])], { stdio: ['ignore', 'pipe', 'inherit'] }));
+    if (asyncReview && result.result === 'review_pending') {
+      const launchFile = path.join(project.org, 'settle', `${id}.review-launch.json`);
+      const launchLock = acquireLock(launchFile + '.lock');
+      try {
+        if (fs.existsSync(launchFile)) result.review_delivery = JSON.parse(fs.readFileSync(launchFile, 'utf8'));
+        else {
+          const log = path.join(project.org, 'settle', `${id}.review-delivery.log`);
+          const receipt = { run: id, head: result.head, ownership, phase: 'starting', log,
+            asynchronous: true, blocks_landing: false, at: new Date().toISOString() };
+          writeFileAtomic(launchFile, JSON.stringify(receipt) + '\n');
+          const fd = fs.openSync(log, 'a', 0o600);
+          try {
+            const args = [settle, ...settleArgs.filter(arg => arg !== '--retry'), '--retry'];
+            const child = spawn(process.execPath, args, { cwd: project.canonical, env, detached: true,
+              stdio: ['ignore', fd, fd] });
+            child.on('error', error => { receipt.phase = 'launch-error'; receipt.error = error.message; writeFileAtomic(launchFile, JSON.stringify(receipt) + '\n'); });
+            receipt.pid = child.pid; receipt.phase = 'launched'; child.unref();
+            writeFileAtomic(launchFile, JSON.stringify(receipt) + '\n'); result.review_delivery = receipt;
+          } finally { fs.closeSync(fd); }
+        }
+      } finally { launchLock(); }
+    }
     print({ ...result, next: result.result === 'promotable_with_findings' ? 'judge findings and file follow-ups; promote RUN --accept-findings --why REASON, or handle RUN --retry --fix-findings' : result.result === 'promotable' ? 'judge project authority, then supervisor promote RUN --why REASON' : result.result === 'fix_round' ? 'leave watched correction in flight' : result.result === 'stopped' ? 'inspect retained handoff; after STOP is cleared, handle RUN --retry' : 'judge compact handoff' });
     return;
   }
@@ -267,7 +290,7 @@ export function main(argv = process.argv.slice(2)) {
       if (opt['required-tests'] !== undefined && inheritedTests.some(file => !requiredTests.includes(file))) throw Error('required tests cannot be removed from an earlier promotion attempt');
       requiredTests = [...new Set([...inheritedTests, ...requiredTests])].sort();
       const unadmittedWaiverRetry = saved.phase === 'enqueuing' && !saved.queue && opt.retry &&
-        saved.operator_waiver === resolveValidation({ root: project.canonical }).landing_waiver &&
+        saved.operator_waiver && saved.operator_waiver === resolveValidation({ root: project.canonical }).landing_waiver &&
         !queueJobs(loadQueue()).some(job => job.run === id || (job.topic === saved.lane && job.expectedHead === saved.head));
       if (unadmittedWaiverRetry || (saved.phase === 'not-queued' && saved.refusal?.code === 'AUTOPILOT_NO_NATIVE_WORKER' && !saved.queue)) {
         const { prior_attempts, ...attempt } = saved;

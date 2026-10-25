@@ -1591,8 +1591,8 @@ function parseReviewOptions(args) {
   if (!Number.isSafeInteger(options.round) || options.round < 1) fail("--round must be a positive safe integer");
   if (options.run !== undefined && !/^R-[1-9]\d*$/u.test(options.run)) fail("--run must be a run id (R-n)");
   if (options.followupExpected && !options.run) fail('--followup-expected requires --run R-n');
-  if (!Number.isInteger(options.timeout) || options.timeout < REVIEW_MIN_TIMEOUT_SECONDS || options.timeout > 7200) {
-    fail(`--timeout must be an integer from ${REVIEW_MIN_TIMEOUT_SECONDS} through 7200 seconds`);
+  if (!Number.isInteger(options.timeout) || (options.timeout !== 0 && (options.timeout < REVIEW_MIN_TIMEOUT_SECONDS || options.timeout > 7200))) {
+    fail(`--timeout must be 0 (no elapsed stop) or an integer from ${REVIEW_MIN_TIMEOUT_SECONDS} through 7200 seconds`);
   }
   if (options.change === undefined && options.brief === undefined) fail("review requires --change or --brief");
   if (typeof options.route !== "string" || options.route === "") fail("--route must not be empty");

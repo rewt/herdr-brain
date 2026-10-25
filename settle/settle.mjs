@@ -35,7 +35,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node settle/sett
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   brief: { type: 'string' }, 'review-route': { type: 'string' }, 'fix-route': { type: 'string' },
   to: { type: 'string' }, reuse: { type: 'boolean' }, retry: { type: 'boolean' },
-  'resolve-tests': { type: 'boolean' }, status: { type: 'boolean' }, 'review-again': { type: 'boolean' }, timeout: { type: 'string' },
+  'defer-review': { type: 'boolean' }, 'resolve-tests': { type: 'boolean' }, status: { type: 'boolean' }, 'review-again': { type: 'boolean' }, timeout: { type: 'string' },
   'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'followup-expected': { type: 'boolean' },
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'dispatch-cli': { type: 'string' },
   'watch-cli': { type: 'string' },
@@ -228,7 +228,20 @@ function finish(result, reason, extra = {}) {
   const policy = job.result.review_policy;
   job.settleDecision = `Settle: ${result}. ${reason}. Review round cap: ${policy.cap} (${policy.source}); round: ${policy.round ?? 'unknown'}. Reviewed ${job.result.reviewed_commit}; head ${job.result.head}. Evidence: ${journal}`;
   job.stage = 'complete'; save();
-  if (!job.parallelReview || result !== 'promotable' || job.postCodePolicy) recordSettlementDecision();
+  if (!job.parallelReview || result !== 'promotable' || job.postCodePolicy) {
+    try { recordSettlementDecision(); }
+    catch (error) { if (!job.postCodePolicy) throw error; job.reviewRecordDeferred = error.message; save(); }
+  }
+  if (job.postCodePolicy && job.review && !job.reviewNotice) {
+    const noticeId = `review:${id}:${job.review.sha256}`;
+    const message = `[org-review] run=${id} item=${job.item} verdict=${job.review.verdict} head=${job.head} majors=${job.result.major_findings ?? 'unknown'} evidence=${job.review.path}`;
+    const delivery = call([process.execPath, local('../supervisor/prompt-supervisor.mjs')],
+      [job.to, message, '--org', job.org, '--id', noticeId], job.repo,
+      { env: { ...process.env, SUPERVISOR_INPUT_WAIT_SECONDS: '0' } });
+    if (!delivery.error && [0, 3].includes(delivery.status)) {
+      job.reviewNotice = { id: noticeId, message, receipt: JSON.parse(delivery.stdout) }; save();
+    } else { job.reviewDeliveryError = delivery.error?.message || delivery.stderr || `exit ${delivery.status}`; save(); }
+  }
   try {
     if (closeoutPolicy(job.repo) && readCloseoutEntries(job.common).some(e => e.branch === `lane/${job.lane}`))
       retryCloseout({ cwd: job.repo, org: opt.org, topic: job.lane, why: 'settle callback ended; verdict recorded' });
@@ -673,6 +686,7 @@ function main() {
       job.cappedResult = job.result; job.findingsCorrection = true;
       delete job.result; job.stage = 'fix'; save();
     }
+    if (opt['defer-review'] && ['review', 'reviewing', 'commit-review', 'decide'].includes(job.stage)) { process.stdout.write(JSON.stringify({ result: 'review_pending', run: id, item: job.item, head: job.head, journal, stage: job.stage }) + '\n'); return; }
     if (!opt.retry && !resumedRefusal) throw new Error('settle is incomplete; inspect --status, then use --retry');
   } else {
     if (opt.retry) throw new Error('no settle receipt to retry');
@@ -800,6 +814,12 @@ function settlePending() {
     if (job.postCodePolicy) return escalate('Independent review outcome is uncertain; inspect the existing reviewer and retained delivery, never launch a second review');
     if (!opt['review-again']) throw new Error('review outcome is uncertain; inspect reviewer and retained evidence, then --retry --review-again after it stops');
     unchanged(); job.round++; job.stage = 'review'; save();
+  }
+  if (job.stage === 'review' && opt['defer-review'] && job.postCodePolicy) {
+    job.reviewDelivery = { state: 'pending', head: job.head, reportHash: job.reportHash,
+      authority: job.postCodePolicy.authority, blocks_landing: false }; save();
+    process.stdout.write(JSON.stringify({ result: 'review_pending', run: id, item: job.item,
+      lane, head: job.head, journal, stage: job.stage, post_code_policy: job.postCodePolicy }) + '\n'); return;
   }
   if (job.stage === 'review') {
     // Preserve a captured scope across settle's proved rebases. Only journals

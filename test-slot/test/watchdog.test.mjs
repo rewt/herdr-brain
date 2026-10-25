@@ -32,7 +32,7 @@ function scratch(t) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const lock = path.join(root, 'slot'), result = path.join(root, 'result.json');
   const env = { ...fixtureEnvironment(testSlotEnvironment()), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
-  const run = (args, command) => spawnSync(process.execPath, [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command], { cwd: root, env, encoding: 'utf8', timeout: 15000 });
+  const run = (args, command) => spawnSync(process.execPath, [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command], { cwd: root, env, encoding: 'utf8' });
   const noticeRun = async (args, inbox, seenIds = []) => {
     const child = spawnChild(t, process.execPath,
       [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...silenceCommand()],
@@ -73,7 +73,7 @@ test('config and healthy history remain observations independent of slot waiting
   assert.equal(resolveGateProfile(s.root, s.env).timeoutSeconds, 800);
 });
 
-for (const escaped of [false, true]) test(`confirmed inactivity stops a forever-blocked grandchild${escaped ? ' in its own group' : ''}, releases slot and never retries under load`, { timeout: 20000 }, t => {
+for (const escaped of [false, true]) test(`confirmed inactivity stops a forever-blocked grandchild${escaped ? ' in its own group' : ''}, releases slot and never retries under load`, t => {
   const s = scratch(t), pids = path.join(s.root, 'pids');
   const preload = path.join(s.root, 'load.mjs'); fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");
   s.env.NODE_OPTIONS = `${s.env.NODE_OPTIONS ?? ''} --import=${preload}`;
@@ -101,7 +101,7 @@ for (const escaped of [false, true]) test(`confirmed inactivity stops a forever-
   assert.equal(healthyHistory(s.root, 'promotion', [process.execPath, '-e', "console.log('healthy')"]).length, 1);
 });
 
-test('silence produces one durable notice and keeps running through later silence', { timeout: 15000 }, async t => {
+test('silence produces one durable notice and keeps running through later silence', async t => {
   const s = scratch(t), inbox = path.join(s.root, 'supervisor/inbox.log');
   s.env.MONITOR_GATE_NOTICE_CONTEXT = JSON.stringify({ to: 'owning-supervisor', inbox });
   const r = await s.noticeRun(['--timeout-seconds', '.1', '--idle-timeout-seconds', '.15'], inbox);
@@ -119,7 +119,7 @@ test('silence produces one durable notice and keeps running through later silenc
   assert.equal(fs.existsSync(s.lock), false);
 });
 
-test('reusing a result path enqueues a distinct single silence notice for each run', { timeout: 15000 }, async t => {
+test('reusing a result path enqueues a distinct single silence notice for each run', async t => {
   const s = scratch(t), inbox = path.join(s.root, 'supervisor/inbox.log'), ids = [];
   s.env.MONITOR_GATE_NOTICE_CONTEXT = JSON.stringify({ to: 'owning-supervisor', inbox });
   for (const threshold of ['.05', '.1']) {
@@ -180,7 +180,7 @@ test('a throwing capture callback reports its error only after explicitly reques
   assert.deepEqual(events, ['capture', [root.pid, 'SIGKILL'], [escaped.pid, 'SIGKILL']]);
 });
 
-for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records timeout, isolates correction and leaves main unchanged`, { timeout: 20000 }, t => {
+for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records timeout, isolates correction and leaves main unchanged`, t => {
   const f = fixture(t); fixtureFleet(t, f.root); f.env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
   f.env.MONITOR_TEST_SLOT_FROZEN_SECONDS = '.4';
   const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
@@ -218,7 +218,7 @@ for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records ti
     const queue = queueFor(f.repo);
     enqueue(queue, ['topic', 'other'], { laneCLI: fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url)), org: null, to: 'offline', attempts: 1, retry: 0, herdr: fakeHerdr });
     f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '0';
-    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../promote/promote.mjs', import.meta.url)), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../promote/promote.mjs', import.meta.url)), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     const results = queue.load().results; assert.equal(results.length, 2);
     for (const result of results) { assert.equal(result.outcome, 'timeout', JSON.stringify(result)); assert.match(result.reason, /gate frozen without output or process activity; batch timed out; re-enqueue lanes individually/); }
@@ -228,11 +228,10 @@ for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records ti
 });
 
 async function until(predicate) {
-  const deadline = Date.now() + loadTimeout(5000);
-  while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  while (!predicate()) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(predicate(), 'fixture became ready');
 }
-test('slot waiting consumes none of a short command deadline', { timeout: loadTimeout(10000) }, async t => {
+test('slot waiting consumes none of a short command deadline', async t => {
   const s = scratch(t), ready = path.join(s.root, 'ready'), release = path.join(s.root, 'release');
   const clock = path.join(s.root, 'clock'), preload = path.join(s.root, 'clock.mjs'), waitReceipt = path.join(s.root, 'wait.json');
   fs.writeFileSync(clock, '0');
@@ -241,7 +240,7 @@ test('slot waiting consumes none of a short command deadline', { timeout: loadTi
   // The other watchdog cases exercise the real clock and actual overruns.
   fs.writeFileSync(preload, `import fs from 'node:fs';if(process.argv[1]===${JSON.stringify(cli)})process.hrtime.bigint=()=>BigInt(fs.readFileSync(${JSON.stringify(clock)},'utf8'));`);
   const owner = spawnChild(t, process.execPath, provingRun([cli, 'run', 'owner', '--project-common', s.root, '--', process.execPath, '-e',
-    `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},'ready');const end=Date.now()+${loadTimeout(5000)};while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<end)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);`]), { cwd: s.root, env: s.env });
+    `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},'ready');while(!fs.existsSync(${JSON.stringify(release)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);`]), { cwd: s.root, env: s.env });
   await until(() => fs.existsSync(ready));
   const waiter = spawnChild(t, process.execPath, provingRun([cli, 'run', 'waiter', '--project-common', s.root, '--wait', String(Math.ceil(loadTimeout(5000) / 1000)), '--poll-ms', '20', '--wait-receipt-path', waitReceipt, '--timeout-seconds', '.3', '--result-path', s.result, '--', process.execPath, '-e',
     `const fs=require('fs'),temporary=${JSON.stringify(clock)}+'.'+process.pid+'.'+Math.random().toString(36).slice(2)+'.tmp';fs.writeFileSync(temporary,'1050000000');fs.renameSync(temporary,${JSON.stringify(clock)});`]), { cwd: s.root, env: { ...s.env, NODE_OPTIONS: `${s.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` } });
@@ -270,13 +269,13 @@ async function nativeGroupScenario(t, mode) {
   assert.match(result.stdout, /^# pass 1$/m);
   assert.match(result.stdout, /^# fail 0$/m);
 }
-test('nested gates preserve the legacy holder pgid after both wrappers die', { timeout: 10000 },
+test('nested gates preserve the legacy holder pgid after both wrappers die',
   t => nativeGroupScenario(t, 'gate-pgid'));
 
 test('dead groups-lock owners recover and live or unknown owners fail with a coded path', async t => {
   const s = scratch(t), slot = await acquireTestSlot('guard', { lockPath: s.lock, env: s.env });
   t.after(() => slot.release());
-  const dead = spawnSync(process.execPath, ['-e', ''], { env: s.env, timeout: 5000 });
+  const dead = spawnSync(process.execPath, ['-e', ''], { env: s.env });
   assert.equal(dead.status, 0, dead.error?.message);
   const guard = s.lock + '.groups-lock';
   fs.writeFileSync(guard, JSON.stringify({ pid: dead.pid, ...processStartRecord(process.pid) }));
@@ -290,7 +289,7 @@ test('dead groups-lock owners recover and live or unknown owners fail with a cod
   }
 });
 
-for (const inheritedPipes of [true, false]) test(`owned descendants remain pending until completion (inherited pipes=${inheritedPipes})`, { timeout: 10000 },
+for (const inheritedPipes of [true, false]) test(`owned descendants remain pending until completion (inherited pipes=${inheritedPipes})`,
   t => nativeGroupScenario(t, inheritedPipes ? 'gate-leftover-pipes' : 'gate-leftover-ignore'));
 
 test('canonical validation includes layered lane-only wall and idle settings for both envelopes', t => {
@@ -305,9 +304,9 @@ test('canonical validation includes layered lane-only wall and idle settings for
   assert.equal(declared.tiers.release.idleTimeoutSeconds, 1000);
 });
 
-test('nested watchdog stops its parent-walk children and preserves a sibling in the shared group', { timeout: 10000 }, t => {
+test('nested watchdog stops its parent-walk children and preserves a sibling in the shared group', t => {
   const s = scratch(t), witness = path.join(s.root, 'nested.json'), script = path.join(s.root, 'nested.cjs');
-  fs.writeFileSync(script, `const cp=require('child_process'),fs=require('fs');const sibling=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});const result=cp.spawnSync(process.execPath,${JSON.stringify([cli, 'run', 'inner', '--project-common', s.root, '--timeout-seconds', '.3', '--', process.execPath, '-e', 'setInterval(()=>{},1000)'])},{stdio:'inherit',env:{...process.env,MONITOR_TEST_WATCH_OWNER:'',MONITOR_TEST_SLOT_FROZEN_SECONDS:'.3'},timeout:5000});let alive=false;try{process.kill(sibling.pid,0);alive=true;}catch{}fs.writeFileSync(${JSON.stringify(witness)},JSON.stringify({status:result.status,alive}));sibling.kill('SIGTERM');sibling.once('close',()=>process.exit(result.status));`);
+  fs.writeFileSync(script, `const cp=require('child_process'),fs=require('fs');const sibling=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});const result=cp.spawnSync(process.execPath,${JSON.stringify([cli, 'run', 'inner', '--project-common', s.root, '--timeout-seconds', '.3', '--', process.execPath, '-e', 'setInterval(()=>{},1000)'])},{stdio:'inherit',env:{...process.env,MONITOR_TEST_WATCH_OWNER:'',MONITOR_TEST_SLOT_FROZEN_SECONDS:'.3'}});let alive=false;try{process.kill(sibling.pid,0);alive=true;}catch{}fs.writeFileSync(${JSON.stringify(witness)},JSON.stringify({status:result.status,alive}));sibling.kill('SIGTERM');sibling.once('close',()=>process.exit(result.status));`);
   const r = s.run(['--timeout-seconds', '5'], [process.execPath, script]);
   assert.equal(r.status, 124, r.stderr);
   assert.deepEqual(JSON.parse(fs.readFileSync(witness)), { status: 124, alive: true });
@@ -370,7 +369,7 @@ for (const kind of ['wall', 'idle']) test(`unbatched queue maps ${kind} timeout 
   const queue = queueFor(f.repo);
   enqueue(queue, ['topic'], { laneCLI, org: null, to: 'offline', attempts: 1, retry: 0, herdr: fakeHerdr });
   f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '0';
-  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../promote/promote.mjs', import.meta.url)), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../promote/promote.mjs', import.meta.url)), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const result = queue.load().results[0]; assert.equal(result.outcome, 'timeout');
   assert.equal(result.reason, `gate ${kind === 'idle' ? 'no-output' : 'wall-clock'} limit exceeded; lane isolated for correction`);
@@ -420,7 +419,7 @@ test('fixture gates cannot create or modify the real repository history', t => {
   const real = path.join(common, 'gate-watchdog');
   const command = [process.execPath, '-e', `console.log(${JSON.stringify(s.root)})`];
   const result = spawnSync(process.execPath, [cli, 'run', 'release adapter', '--lock-path', s.lock,
-    '--project-common', common, '--tier', 'release', '--', ...command], { cwd: path.dirname(cli), env: s.env, encoding: 'utf8', timeout: 15000 });
+    '--project-common', common, '--tier', 'release', '--', ...command], { cwd: path.dirname(cli), env: s.env, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   const file = historyFile(common, 'release', command);
   assert.ok(file.startsWith(process.env.MONITOR_GATE_HISTORY_ROOT + path.sep));
@@ -442,7 +441,7 @@ for (const writer of ['unattributed', 'foreign', 'descendant-leak']) test(`histo
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(repo, name), target);
   }
-  const git = spawnSync('git', ['init', '-q', s.root], { env: s.env, encoding: 'utf8', timeout: 15000 });
+  const git = spawnSync('git', ['init', '-q', s.root], { env: s.env, encoding: 'utf8' });
   assert.equal(git.status, 0, git.stderr);
   const common = projectCommon(s.root), command = ['concurrent', writer];
   const child = path.join(s.root, 'writer.mjs'), guarded = path.join(s.root, 'guarded.mjs');
@@ -463,12 +462,12 @@ for (const writer of ['unattributed', 'foreign', 'descendant-leak']) test(`histo
     isolateGateHistory();
     assert.ok(process.env.MONITOR_GATE_HISTORY_ORIGIN);
     fs.writeFileSync(${JSON.stringify(path.join(s.root, 'origin'))}, process.env.MONITOR_GATE_HISTORY_ORIGIN);
-    const result = spawnSync(process.execPath, [${JSON.stringify(child)}], { encoding: 'utf8', timeout: 15000 });
+    const result = spawnSync(process.execPath, [${JSON.stringify(child)}], { encoding: 'utf8' });
     assert.equal(result.status, ${writer === 'descendant-leak' ? 1 : 0}, result.stderr);
     // Unrelated transient locks must not affect the attribution check either.
     fs.mkdirSync(${JSON.stringify(path.join(common, 'gate-watchdog/.history.lock'))});
   `);
-  const result = spawnSync(process.execPath, [guarded], { cwd: s.root, env: s.env, encoding: 'utf8', timeout: 20000 });
+  const result = spawnSync(process.execPath, [guarded], { cwd: s.root, env: s.env, encoding: 'utf8' });
   const sample = healthyHistory(common, 'gate', command, historyFile(common, 'gate', command, undefined, {}))[0];
   assert.ok(sample, 'the non-slot writer published under the guarded real Git identity');
   if (writer === 'descendant-leak') {

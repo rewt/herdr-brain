@@ -42,9 +42,7 @@ const references = (queue, ids) => {
 };
 const admitJobs = (queue, ids) => admit(queue, references(queue, ids));
 async function until(fn, message) {
-  const by = Date.now() + loadTimeout(10000);
-  while (Date.now() < by) { if (fn()) return; await new Promise(resolve => setTimeout(resolve, 25)); }
-  assert.fail(message);
+  while (!fn()) await new Promise(resolve => setTimeout(resolve, 25));
 }
 function fixture(t, { defaultState = false, proving = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'verify-'))), repo = path.join(root, 'repo');

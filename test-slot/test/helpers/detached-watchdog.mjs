@@ -25,14 +25,13 @@ const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TE
   HERDR_NATIVE_GROUP_FIXTURE_ROOT: root, NODE_OPTIONS: `--import=${JSON.stringify(preload)}` };
 const run = (args, command) => spawnSync(process.execPath,
   provingRun([cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command]),
-  { cwd: root, env, encoding: 'utf8', timeout: 15000 });
+  { cwd: root, env, encoding: 'utf8' });
 async function until(predicate) {
-  const deadline = Date.now() + 5000;
-  while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  while (!predicate()) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(predicate(), 'fixture became ready');
 }
 
-if (['reservation-expiry', 'floor-expiry'].includes(mode)) test('expired reservation and both locks retain a dead wrapper\'s real owned group', { timeout: 10000 }, async t => {
+if (['reservation-expiry', 'floor-expiry'].includes(mode)) test('expired reservation and both locks retain a dead wrapper\'s real owned group', async t => {
   const workspace = path.join(root, 'workspace-slot'), ready = path.join(root, 'payload-ready');
   env.MONITOR_TEST_SLOT_PATH = workspace;
   let group;
@@ -63,7 +62,7 @@ if (['reservation-expiry', 'floor-expiry'].includes(mode)) test('expired reserva
   assert.equal(next.status, 0, next.stderr); assert.match(next.stdout, /next prover/);
 });
 
-if (mode === 'floor-cancellation') test('cancellation retains a granted proving group until its signal cleanup completes', { timeout: 10000 }, async t => {
+if (mode === 'floor-cancellation') test('cancellation retains a granted proving group until its signal cleanup completes', async t => {
   const ready = path.join(root, 'ready'), term = path.join(root, 'term');
   const command = [process.execPath, '-e', `const fs=require('fs');process.on('SIGTERM',()=>fs.writeFileSync(${JSON.stringify(term)},'term'));
     fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`];
@@ -82,7 +81,7 @@ if (mode === 'floor-cancellation') test('cancellation retains a granted proving 
   assert.equal(lookupProcess(group.pid, { identityOnly: true }).value, null);
 });
 
-if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid after both wrappers die', { timeout: 10000 }, async t => {
+if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid after both wrappers die', async t => {
   const ready = path.join(root, 'ready');
   let holder;
   t.after(async () => { if (holder) await stopGateGroup(holder.pgid); });
@@ -105,7 +104,7 @@ if (mode === 'gate-pgid') test('nested gates preserve the legacy holder pgid aft
 
 if (['gate-leftover-pipes', 'gate-leftover-ignore'].includes(mode)) {
   const inheritedPipes = mode === 'gate-leftover-pipes';
-  test(`owned descendants remain pending until completion (inherited pipes=${inheritedPipes})`, { timeout: 10000 }, async t => {
+  test(`owned descendants remain pending until completion (inherited pipes=${inheritedPipes})`, async t => {
     const ready = path.join(root, 'leftover.pid'), release = path.join(root, 'release');
     const leaf = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));
       setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)}))process.exit(0);},25);

@@ -648,7 +648,6 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
   }
   const forwarded = new Set();
   const forward = (signal) => {
-    watcher?.stop();
     received(signal);
     // Nested gates share the holder group; cancel only their descendants.
     if (forwarded.has(signal)) return;
@@ -671,7 +670,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
         gateTimeout = observation;
         watchOptions.persist(observation);
         process.stderr.write(`GATE_TIMEOUT: frozen limit ${observation.limit_seconds}s exceeded; elapsed ${observation.elapsed_s.toFixed(3)}s\n`);
-        stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
+        stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, firstSignal: 'SIGKILL', onCapture }).catch(error => { stopError = error; failWatchdog(error); });
       },
     });
     if (proc.pid !== undefined) {

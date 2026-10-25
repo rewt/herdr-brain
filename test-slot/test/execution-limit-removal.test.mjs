@@ -4,19 +4,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
+import { fileURLToPath } from 'node:url';
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
 
 // Whole actual modules, with no source rewriting or exported test hook. Every
 // other import is closed below; physical spawn/ps/kernel/lock/storage/notice and
 // telemetry edges are controlled interfaces, not native completion evidence.
 const root = new URL('../', import.meta.url);
-const sources = new Set(['test-slot.mjs', 'watch.mjs', 'watchdog.mjs']);
+const sources = new Set(['test-slot.mjs', 'watch.mjs', 'watchdog.mjs', 'execute.mjs']);
+const sourceURL = name => name === 'execute.mjs' ? new URL('../../verify/execute.mjs', import.meta.url) : new URL(name, root);
 const plain = value => JSON.parse(JSON.stringify(value));
 const turn = () => new Promise(resolve => setImmediate(resolve)); // Event turn, no elapsed trigger.
 const row = (pid, ppid, pgid, identity) => ({ pid, ppid, pgid, identity });
 
 async function harness({ failedSpawn = false } = {}) {
-  const h = { at: 0, timers: [], intervals: [], events: [], receipts: [], queries: [], healthy: 0 };
+  const h = { at: 0, timers: [], intervals: [], events: [], receipts: [], queries: [], healthy: 0, files: new Map() };
   h.rows = new Map([row(91, 5, 91, 'a'), row(92, 91, 92, 'b'), row(93, 5, 93, 'other')].map(r => [r.pid, r]));
   const lookup = pid => ({ ok: true, value: pid === undefined ? new Map(h.rows) : h.rows.get(pid) ?? null });
   const probe = pid => pid < 0 ? [...h.rows.values()].some(r => r.pgid === -pid) : h.rows.has(pid);
@@ -26,6 +28,7 @@ async function harness({ failedSpawn = false } = {}) {
     stderr: { write: data => h.events.push(['stderr', String(data)]) },
     kill(pid, signal) {
       h.events.push(['signal', pid, signal]);
+      if (h.deferSignals && signal !== 'SIGKILL') return;
       for (const [id, r] of h.rows) if (pid < 0 ? r.pgid === -pid : id === pid) h.rows.delete(id);
     } });
   const stream = name => Object.assign(new EventEmitter(), { destroy: () => h.events.push(['destroy', name]) });
@@ -38,13 +41,19 @@ async function harness({ failedSpawn = false } = {}) {
   const missing = () => { throw Object.assign(Error('absent'), { code: 'ENOENT' }); };
   const limits = { wall_seconds: 0, idle_seconds: 9, frozen_seconds: 199.580020875 };
   const edges = {
-    'node:child_process': { spawn: (file, args, options) => { h.events.push(['spawn', file, args, options]); return h.child; },
+    'node:child_process': { execFileSync: never, spawn: (file, args, options) => { h.events.push(['spawn', file, args, options]); return h.child; },
       spawnSync: (file, args, options) => {
         h.queries.push({ file, args, options });
         return { status: 0, stderr: '', stdout: args.at(-1).split(',').map(pid => `${pid} 00:00.00 S`).join('\n') };
       } },
     'node:path': { default: path }, 'node:os': { default: os },
-    'node:fs': { default: { readFileSync: missing } },
+    'node:url': { fileURLToPath },
+    'node:fs': { default: {
+      readFileSync: file => h.files.get(file) ?? missing(), existsSync: file => h.files.has(file),
+      openSync: file => { h.events.push(['open', file]); return 4; },
+      writeSync: (_fd, bytes) => h.events.push(['log', String(bytes)]),
+      closeSync: fd => h.events.push(['close-fd', fd]),
+    } },
     'node:crypto': { randomBytes: never, randomUUID: () => 'controlled-run' },
     'node:timers/promises': { setTimeout: never },
     './limits.mjs': { resolveGateLimits: () => limits, projectCommon: () => null,
@@ -68,32 +77,38 @@ async function harness({ failedSpawn = false } = {}) {
       COMPAT_PATH_ENV: 'MONITOR_TEST_SLOT_COMPAT_PATH', LOCK_PATH_INVALID_CODE: 'INVALID',
       slotPathOf: () => '/slot', validateSlotPath: () => {} },
     '../lib/processes.mjs': { lookupProcess: lookup },
-    '../lib/files.mjs': { writeFileAtomic: (file, text) => { if (file === '/receipt') h.receipts.push(JSON.parse(text)); } },
+    '../lib/files.mjs': { writeFileAtomic: (file, text) => { h.files.set(file, text); if (file === '/receipt') h.receipts.push(JSON.parse(text)); } },
     '../lib/cli-help.mjs': { cliHelp: () => {}, isMain: () => false },
   };
-  const context = createContext({ process: proc, AbortController, Error,
+  const context = createContext({ process: proc, AbortController, Error, Map,
+    Date: class extends Date { static now() { return h.at * 1000; } },
     setTimeout: (callback, ms) => { const timer = { callback, ms }; h.timers.push(timer); return timer; },
     clearTimeout: never,
     setInterval: (callback, ms) => { const timer = { callback, ms }; h.intervals.push(timer); return timer; },
     clearInterval: timer => { if (timer) timer.stopped = true; } });
   const cache = new Map();
   const load = name => {
-    if (!cache.has(name)) cache.set(name, new SourceTextModule(fs.readFileSync(new URL(name, root), 'utf8'), {
-      context, identifier: new URL(name, root).href, initializeImportMeta: meta => { meta.url = new URL(name, root).href; },
+    if (!cache.has(name)) cache.set(name, new SourceTextModule(fs.readFileSync(sourceURL(name), 'utf8'), {
+      context, identifier: sourceURL(name).href, initializeImportMeta: meta => { meta.url = sourceURL(name).href; },
     }));
     return cache.get(name);
   };
   const controller = load('test-slot.mjs');
-  await controller.link(specifier => {
+  const link = specifier => {
     const name = path.basename(specifier);
-    if (sources.has(name) && specifier.startsWith('./')) return load(name);
+    if (sources.has(name) && specifier.startsWith('.')) return load(name);
     assert.ok(Object.hasOwn(edges, specifier), `unbound import ${specifier}`);
     const exports = edges[specifier];
     return new SyntheticModule(Object.keys(exports), function () {
       for (const [key, value] of Object.entries(exports)) this.setExport(key, value);
     }, { context });
-  });
+  };
+  await controller.link(link);
   await controller.evaluate();
+  const verify = load('execute.mjs');
+  await verify.link(link); await verify.evaluate();
+  h.execute = () => verify.namespace.execute({ desk: '/fixture', argv: ['/payload', 'argument'] }, '/work');
+  h.poll = async () => { const timer = h.timers.find(t => !t.fired); assert.ok(timer); timer.fired = true; timer.callback(); await turn(); };
   h.watch = cache.get('watch.mjs').namespace; h.dog = cache.get('watchdog.mjs').namespace;
   h.start = () => {
     h.pending = true;
@@ -205,4 +220,47 @@ test('actual watch preserves measured AND semantics, notices and unknown/runnabl
   at += frozen + 1; watch.tick(); watch.tick(); assert.equal(stops.length, 1);
   assert.equal(stops[0].limit_seconds, frozen); assert.equal(notices.length, 1);
   assert.equal(watch.snapshot().activity_audits.unavailable, 1); watch.stop();
+});
+
+
+test('actual watchdog keeps TERM pending across elapsed observations until explicit force', async () => {
+  const h = await harness(); h.deferSignals = true;
+  let finished = false;
+  const pending = h.dog.stopGateGroup(91, { ownedChild: true }).then(() => { finished = true; });
+  await turn(); h.at = 10000; await h.poll();
+  assert.equal(finished, false);
+  assert.ok(h.timers.every(t => t.ms === 25), 'poll cadence only, no grace/deadline timer');
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), [['signal', -91, 'SIGTERM'], ['signal', 92, 'SIGTERM']]);
+  await h.dog.stopGateGroup(91, { ownedChild: true, firstSignal: 'SIGKILL' });
+  await h.poll(); await pending;
+  assert.ok(h.rows.has(93)); assert.equal(h.rows.has(91), false); assert.equal(h.rows.has(92), false);
+});
+
+test('actual verify consumer joins a surviving descendant and drains streams without signalling', async () => {
+  const h = await harness(); let finished = false;
+  const done = h.execute().then(() => { finished = true; });
+  h.rows.delete(91); h.child.emit('exit', 0, null); await turn();
+  assert.equal(finished, false); assert.deepEqual(h.events.filter(e => e[0] === 'signal'), []);
+  h.at = 10000; await h.poll(); assert.equal(finished, false);
+  assert.ok(h.intervals.some(t => t.ms === 50 && !t.stopped), 'observation survives leader exit');
+  h.rows.delete(92); await h.poll(); assert.equal(finished, false, 'stream completion is still required');
+  h.child.stdout.emit('data', 'trailing'); h.child.emit('close', 0, null); await done;
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), []);
+  assert.ok(h.events.findIndex(e => e[0] === 'log') < h.events.findIndex(e => e[0] === 'close-fd'));
+  const state = JSON.parse(h.files.get('/work/phases.json'));
+  assert.equal(state.command.exit, 0); assert.equal(state.command.error, undefined);
+  assert.ok(state.tracked.some(r => r.pid === 92 && r.identity === 'b'));
+});
+
+test('actual verify cancellation preserves first SIGINT and waits for actual owned termination', async () => {
+  const h = await harness(); h.deferSignals = true;
+  const done = h.execute(); h.process.emit('SIGINT', 'SIGINT');
+  h.intervals.find(t => t.ms === 50).callback(); await turn();
+  h.at = 10000; await h.poll();
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), [['signal', 91, 'SIGINT'], ['signal', 92, 'SIGINT']]);
+  h.rows.delete(91); h.rows.delete(92); h.child.emit('exit', null, 'SIGINT'); await h.poll();
+  h.child.emit('close', null, 'SIGINT'); await done;
+  const state = JSON.parse(h.files.get('/work/phases.json'));
+  assert.equal(state.signal, 'SIGINT'); assert.equal(state.command.signal, 'SIGINT');
+  assert.equal(h.process.listenerCount('SIGINT'), 0); assert.ok(h.rows.has(93));
 });

@@ -266,7 +266,10 @@ export function main(argv = process.argv.slice(2)) {
         attempt.requiredTests ?? (attempt.test_evidence && !attempt.test_evidence.reexecuted ? attempt.test_evidence.files : [])))].sort();
       if (opt['required-tests'] !== undefined && inheritedTests.some(file => !requiredTests.includes(file))) throw Error('required tests cannot be removed from an earlier promotion attempt');
       requiredTests = [...new Set([...inheritedTests, ...requiredTests])].sort();
-      if (saved.phase === 'not-queued' && saved.refusal?.code === 'AUTOPILOT_NO_NATIVE_WORKER' && !saved.queue) {
+      const unadmittedWaiverRetry = saved.phase === 'enqueuing' && !saved.queue && opt.retry &&
+        saved.operator_waiver === resolveValidation({ root: project.canonical }).landing_waiver &&
+        !queueJobs(loadQueue()).some(job => job.run === id || (job.topic === saved.lane && job.expectedHead === saved.head));
+      if (unadmittedWaiverRetry || (saved.phase === 'not-queued' && saved.refusal?.code === 'AUTOPILOT_NO_NATIVE_WORKER' && !saved.queue)) {
         const { prior_attempts, ...attempt } = saved;
         prior = [...(prior_attempts ?? []), attempt];
       } else {

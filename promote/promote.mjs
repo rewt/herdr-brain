@@ -343,7 +343,7 @@ function cleanupRevision(job, queue) {
 
 export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
   const delegated = () => ({ ...result, cleanup: { state: 'pending', owner: 'closeout-queue' },
-    reason: 'green fast-forward; awaiting post-reconcile closeout handoff and joined attempt' });
+    reason: result.gate?.outcome === 'waived' ? 'operator-waived fast-forward; awaiting exact closeout handoff' : 'green fast-forward; awaiting post-reconcile closeout handoff and joined attempt' });
   // Git-only trains have no run/source to bind in the record queue. Keep their
   // existing guarded foreground cleanup rather than delegating to no request.
   const queueOwnsJob = () => closeoutPolicy(queue.project.canonical) && Boolean(job.run && job.org);
@@ -379,7 +379,7 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
             log: row => fs.appendFileSync(path.join(queue.directory, `${job.id}-cleanup.jsonl`), JSON.stringify(row) + '\n') });
           for (const ws of retirement.observe(workspace).workspaces.filter(w => w.worktree.checkout_path === workspace)) retirement.closeEmptyWorkspace(ws.workspace_id, workspace);
         }
-        return { ...result, warnings: diagnostics, cleanup: { state: 'complete' }, reason: 'green fast-forward; cleanup complete' };
+        return { ...result, warnings: diagnostics, cleanup: { state: 'complete' }, reason: result.gate?.outcome === 'waived' ? 'operator-waived fast-forward; cleanup complete' : 'green fast-forward; cleanup complete' };
       }
       throw Error('lane branch remains without its worktree; inspect before cleanup');
     }
@@ -404,7 +404,7 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
     ...(held ? { outcome: 'held' } : {}),
     revision, attempts, attempted_at: now, next_attempt_at: now + Math.min(3600000, 60000 * 2 ** (attempts - 1)),
     last_refusal: warnings.length ? warnings.join('; ') : null },
-    reason: warnings.length ? `integrated-but-cleanup-pending: ${warnings.join('; ')}` : 'green fast-forward; cleanup complete' };
+    reason: warnings.length ? `integrated-but-cleanup-pending: ${warnings.join('; ')}` : result.gate?.outcome === 'waived' ? 'operator-waived fast-forward; cleanup complete' : 'green fast-forward; cleanup complete' };
 }
 
 // Restart/reconciliation retries only the cleanup checkpoint, never the gate.
@@ -427,7 +427,7 @@ function retryCleanupLocked(queue, { now = Date.now() } = {}) {
         if (!current?.complete) return;
         row.cleanup = { state: 'complete', owner: 'closeout-queue', keys: current.keys, source: current.source,
           outcomes: current.outcomes.map(e => e.seq) };
-        row.reason = 'green fast-forward; closeout complete';
+        row.reason = row.gate?.outcome === 'waived' ? 'operator-waived fast-forward; closeout complete' : 'green fast-forward; closeout complete';
       });
       continue;
     }

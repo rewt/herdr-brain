@@ -4,6 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OPERATOR_LANDING_WAIVER } from '../../lib/validation-declaration.mjs';
+import { fixture as completionFixture, source } from './completion-fixture.mjs';
+import { acquireLock } from '../../lanes/promotion-lock.mjs';
+import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
+import { waitForFile } from '../../test/helpers/file-wait.mjs';
+import { liveNativeWorker } from '../native-context.mjs';
 
 // Link the actual module with controlled native reads. These are refusal and
 // binding controls, not a claim of native process or permission execution.
@@ -61,4 +66,31 @@ test('waived unused probes preserve fresh native process birth, command, live st
     assert.equal(f.api.liveNativeWorker('/owned', waiver), null);
     assert.deepEqual(f.reads, [], 'invalid owner never reaches the native read');
   }
+});
+
+test('actual waived native drain accepts an existing-worker admission and closes both owned items without a gate', async t => {
+  const f = completionFixture(t), declaration = path.join(f.repo, '.lane.validation.json');
+  fs.writeFileSync(declaration, JSON.stringify({ promotion: `${process.execPath} ${f.checker}`, landing_waiver: OPERATOR_LANDING_WAIVER, review: 'parallel' }));
+  f.git(['add', '.lane.validation.json']); f.git(['commit', '-qm', 'Actual operator landing waiver']);
+  const first = f.lane('first');
+  const release = acquireLock(path.join(f.queue.project.identity, 'lane-promote.lock'));
+  const child = spawnScenarioChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain', '--repo', f.repo], { cwd: f.repo, env: f.env });
+  const done = waitForExit(child); let second;
+  try {
+    const ownerFile = path.join(f.queue.directory, 'worker.lock/owner.json');
+    await waitForFile(ownerFile);
+    const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+    assert.deepEqual(owner.native_gate, { outcome: 'not-required', executed: false, authority: OPERATOR_LANDING_WAIVER });
+    assert.equal(liveNativeWorker(f.queue.project.identity, waiver)?.pid, child.pid, 'fresh actual native process binding');
+    second = f.lane('second', false, { existingWorker: true });
+    assert.equal(f.queue.load().pending.find(job => job.id === second.job.id)?.existingWorker, true);
+  } finally { release(); }
+  const reply = await done;
+  assert.equal(reply.code, 0, reply.stderr || reply.stdout);
+  assert.equal(f.gates(), 0);
+  for (const member of [first, second]) {
+    assert.equal(f.show(member.item).closed.as, 'done');
+    assert.equal(fs.existsSync(member.workspace), false, 'actual supported closeout completed');
+  }
+  assert.ok(f.queue.load().results.every(row => row.reconciliation.state === 'complete'));
 });

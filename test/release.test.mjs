@@ -11,9 +11,13 @@ import { configFixture } from './helpers/config-home-fixture.mjs';
 import { policyLocation, contentDigest } from '../lib/config-home.mjs';
 
 const SCRIPT = path.resolve(import.meta.dirname, '../herdr/release.sh');
-function scratch(t) {
+function scratch(t, beforeCleanup = () => {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bare-release-')));
-  t.after(() => { execFileSync('chmod', ['-R', 'u+w', root]); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(() => {
+    beforeCleanup(root);
+    execFileSync('chmod', ['-R', 'u+w', root]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   const repo = path.join(root, 'repo'), home = path.join(root, 'releases-home'), bin = path.join(root, 'bin');
   copyProduct(path.resolve(import.meta.dirname, '..'), repo); fs.mkdirSync(bin);
   const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', timeout: 10000 });
@@ -344,7 +348,32 @@ test('interrupted sealed partial cannot activate or change service and links', t
 });
 
 test('genuine source and completed sealed package execute real consumer removal, owner claim and bound continuation', t => {
-  const f = scratch(t), source = path.resolve(import.meta.dirname, '..');
+  const source = path.resolve(import.meta.dirname, '..'), stages = [];
+  const evidenceRoot = process.env.MONITOR_TEST_TIMINGS_PATH ? path.dirname(process.env.MONITOR_TEST_TIMINGS_PATH) : path.join(source, '.lane');
+  fs.mkdirSync(evidenceRoot, { recursive: true });
+  const evidence = fs.mkdtempSync(path.join(evidenceRoot, 'release-consumer-'));
+  t.diagnostic(`release consumer evidence: ${evidence}`);
+  const f = scratch(t, root => {
+    fs.writeFileSync(path.join(evidence, 'stages.json'), JSON.stringify(stages, null, 2) + '\n');
+    for (const name of ['validation.json', 'identity.json', 'execution.json']) {
+      const file = path.join(root, 'releases-home/builds/consumer', name);
+      if (fs.existsSync(file)) fs.copyFileSync(file, path.join(evidence, name));
+    }
+    for (const name of ['.release-validation.json', '.release-manifest.json', '.release-commit']) {
+      const file = path.join(root, 'releases-home/releases/consumer', name);
+      if (fs.existsSync(file)) fs.copyFileSync(file, path.join(evidence, `sealed${name}`));
+    }
+    const execution = path.join(evidence, 'execution.json');
+    if (fs.existsSync(execution)) {
+      const { receipt } = JSON.parse(fs.readFileSync(execution));
+      fs.copyFileSync(receipt, path.join(evidence, 'execution-receipt.json'));
+      const timings = JSON.parse(fs.readFileSync(receipt)).timings_path;
+      if (timings && fs.existsSync(timings)) fs.copyFileSync(timings, path.join(evidence, 'execution.timings.jsonl'));
+    }
+    if (fs.existsSync(f.gateLog)) fs.copyFileSync(f.gateLog, path.join(evidence, 'gates'));
+  });
+  // Independent nested Node runners must not inherit the enclosing test-worker sentinel.
+  delete f.env.NODE_TEST_CONTEXT;
   const commit = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   fs.rmSync(f.repo, { recursive: true, force: true });
   createProductCheckout({ source, commit, destination: f.repo, ownedRoot: f.root });
@@ -354,6 +383,9 @@ test('genuine source and completed sealed package execute real consumer removal,
 const root=process.cwd(), load=file=>import(pathToFileURL(path.join(root,file)).href);
 const {default:test}=await load('test/helpers/bounded-test.mjs'); const {fixture}=await load('settle/test/fixture.mjs');
 const {readOwnedRun,continueOwnerRelease}=await load('lib/run-owner.mjs'); const {bundleRelease,operationFile}=await load('lib/releases.mjs');
+if (!fs.existsSync(path.join(root, '.release-commit'))) {
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, '..', 'validation.json'))), JSON.parse(fs.readFileSync(${JSON.stringify(path.join(evidence, 'frozen-before-build.json'))})));
+}
 fs.appendFileSync(${JSON.stringify(f.gateLog)},root+'\\n');
 test('actual executing root retains its real owner and continuation',t=>{
  const f=fixture(t,{source:root}), run=f.start(), owned=readOwnedRun(f.org,run), release=bundleRelease();
@@ -361,15 +393,33 @@ test('actual executing root retains its real owner and continuation',t=>{
  if(!release.commit)assert.equal(owned.owner.release.identity,fs.realpathSync(path.join(root,'.git')));
  assert.equal(operationFile('bin/org.mjs',release),path.join(root,'bin/org.mjs'));
  assert.equal(continueOwnerRelease('bin/org.mjs',owned),null);
+ fs.appendFileSync(${JSON.stringify(path.join(evidence, 'owner-claims.jsonl'))},JSON.stringify({root,run,owner:owned.owner,release})+'\\n');
 });\n`);
   const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
   const command = `${quote(process.execPath)} --test ${quote(probe)} && ${quote(process.execPath)} --test ${quote('--test-name-pattern=^herdr-brain: a landed event immediately releases and removes its exact lane, branch and empty workspace$')} test/closeout.test.mjs`;
-  f.write('.lane.validation.json', JSON.stringify({ release: command }));
+  const input = JSON.stringify({ release: command });
+  f.write('.lane.validation.json', input);
   f.git('add', '.lane.validation.json'); f.git('commit', '-qm', 'Focused real consumer declaration'); f.git('tag', 'consumer');
-  f.ok(['build', 'consumer']);
+  const capturedCommit = f.git('rev-parse', 'consumer^{commit}').trim();
+  const frozen = freezeReleaseValidation(f.repo, 'consumer', path.join(evidence, 'frozen-before-build.json'), f.env, { commit: capturedCommit });
+  assert.equal(frozen.payloadCommit, capturedCommit);
+  assert.equal(frozen.declaration.release, command);
+  assert.deepEqual(Buffer.from(frozen.inputBase64, 'base64'), Buffer.from(input));
+  const build = f.run(['build', 'consumer']);
+  stages.push({ stage: 'source-build', argv: ['bash', SCRIPT, 'build', 'consumer'], cwd: source, command, ...build, error: build.error?.message });
+  assert.equal(build.status, 0, build.stdout + build.stderr);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.home, 'builds/consumer/validation.json'))), frozen);
+  const identity = JSON.parse(fs.readFileSync(path.join(f.home, 'builds/consumer/identity.json'))).identity;
+  assert.equal(identity.root, f.checkout('consumer'));
+  assert.equal(identity.commit, capturedCommit);
   assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.checkout('consumer')}\n`);
   const sealed = f.release('consumer'), result = spawnSync('/bin/sh', ['-c', command], { cwd: sealed, env: f.env, encoding: 'utf8' });
+  stages.push({ stage: 'sealed-consumer', argv: ['/bin/sh', '-c', command], cwd: sealed, ...result, error: result.error?.message });
   assert.equal(result.status, 0, result.stdout + result.stderr);
+  for (const output of [build.stdout, result.stdout]) {
+    assert.match(output, /ok \d+ - actual executing root retains its real owner and continuation\n/);
+    assert.match(output, /ok \d+ - herdr-brain: a landed event immediately releases and removes its exact lane, branch and empty workspace\n/);
+  }
   assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.checkout('consumer')}\n${sealed}\n`);
   assert.ok(fs.existsSync(path.join(f.checkout('consumer'), '.git')), 'sealing retains source origin');
   assert.equal(fs.existsSync(path.join(sealed, '.git')), false);

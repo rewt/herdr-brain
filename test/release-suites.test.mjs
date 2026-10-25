@@ -51,7 +51,9 @@ test('the fresh snapshot gate passes its declared timeout through every nested r
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   // Exercise the exact build adapter without invoking release.sh or a test tier.
   const source = fs.readFileSync(new URL('../herdr/release.sh', import.meta.url), 'utf8');
-  const adapter = source.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\nNODE/)[1];
+  const adapter = source.match(/node --input-type=module - "\$work" <<'NODE'\n([\s\S]*?)\nNODE/)[1];
+  const work = path.join(root, 'build');
+  fs.mkdirSync(work);
   for (const file of ['lanes/validation.mjs', 'test-slot/run.mjs']) {
     const target = path.join(root, file);
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -89,14 +91,24 @@ for (const args of ${JSON.stringify(commands)}) {
   git('init', '-qb', 'main');
   git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.invalid');
   git('add', '.lane.validation.json'); git('commit', '-qm', 'Release validation fixture'); git('tag', 'snapshot');
+  const commit = git('rev-parse', 'snapshot^{commit}').toString().trim();
   const tools = fileURLToPath(new URL('../herdr/releases.mjs', import.meta.url));
   const frozen = await waitForExit(spawnScenarioChild(t, process.execPath,
-    [tools, 'freeze-validation', root, 'snapshot', path.join(root, '.release-validation.json')], { cwd: root, env }));
+    [tools, 'freeze-validation', root, 'snapshot', path.join(work, 'validation.json'), commit], { cwd: root, env }));
   assert.equal(frozen.code, 0, frozen.stdout + frozen.stderr);
+  const input = JSON.parse(fs.readFileSync(path.join(work, 'validation.json')));
+  assert.equal(input.payloadCommit, commit);
+  assert.equal(input.declaration.release, command);
   assert.equal(env[RELEASE_TIMEOUT_ENV], undefined);
   assert.equal(fs.existsSync(env.MONITOR_GATE_HISTORY_ROOT), false, 'fresh bundle has no gate history');
-  const result = await waitForExit(spawnScenarioChild(t, process.execPath, ['--input-type=module', '-e', adapter], { cwd: root, env }));
+  const child = spawnScenarioChild(t, process.execPath, ['--input-type=module', '-', work], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  child.stdin.end(adapter);
+  const result = await waitForExit(child);
   assert.equal(result.code, 0, result.stdout + result.stderr);
+  const executed = JSON.parse(fs.readFileSync(path.join(work, 'execution.json')));
+  assert.equal(executed.cwd, root);
+  assert.equal(executed.commit, commit);
+  assert.equal(JSON.parse(fs.readFileSync(executed.receipt)).exit_code, 0);
   const topReceipt = JSON.parse(fs.readFileSync(path.join(root, 'top.json')));
   assert.equal(topReceipt.limits.wall_seconds, seconds);
   assert.equal(topReceipt.limits.wall_source, 'watch');

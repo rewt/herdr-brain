@@ -1188,34 +1188,22 @@ test("review archival preserves accepted raw UTF-8 bytes", () => {
   } finally { review.fixture.cleanup(); }
 });
 
-test("review timeout retains late delivery and reserves the round before the file arrives", async () => {
+test("review planning target accepts one late delivery and preserves duplicate-round refusal", async () => {
   const topic = 'review-late-delivery';
   const review = makeReviewFixture(topic, { verdict: 'PASS', mode: 'late-complete' });
   try {
     const head = git(review.path, ['rev-parse', 'HEAD']);
     const first = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '3']);
-    assert.equal(first.status, 2, first.stderr);
-    assert.equal(first.stdout, '');
-    assert.match(first.stderr, /may still write late evidence/);
+    assert.equal(first.status, 0, first.stderr);
+    assert.equal(first.stdout, 'PASS\n');
     const delivery = privateReviewDelivery(review);
-    assert.ok(first.stderr.includes(delivery));
+    assert.equal(existsSync(delivery), false, 'completed evidence was published, not left as a timed-out delivery');
+    assert.match(readFileSync(join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r1.md`), 'utf8'), /^Round: 1$/mu);
     const prompts = () => review.fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt');
     const repeat = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief]);
     assert.equal(repeat.status, 2, repeat.stderr);
-    assert.match(repeat.stderr, /private review delivery directory already exists/);
+    assert.match(repeat.stderr, /already exists; refusing to overwrite round output/);
     assert.equal(prompts().length, 1);
-    await waitForCondition(() => existsSync(delivery) && readFileSync(delivery, 'utf8').includes('<!-- lane-review-complete -->'),
-      'late review delivery', 8000);
-    const late = readFileSync(delivery, 'utf8');
-    assert.equal(git(review.path, ['status', '--porcelain']), '', 'late delivery stays private and ignored');
-    assert.ok(!existsSync(join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r1.md`)));
-    delete review.fixture.env.FAKE_REVIEW_MODE;
-    const second = lane(review.fixture, ['review', topic, '--round', '2', '--brief', review.brief]);
-    assert.equal(second.status, 0, second.stderr);
-    assert.equal(second.stdout, 'PASS\n');
-    assert.equal(readFileSync(delivery, 'utf8'), late, 'later round leaves late evidence intact');
-    assert.match(readFileSync(join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r2.md`), 'utf8'), /^Round: 2$/mu);
-    assert.equal(prompts().length, 2);
   } finally { review.fixture.cleanup(); }
 });
 
@@ -1256,14 +1244,14 @@ test("review preflight preserves abbreviation collision safety for pending deliv
   } finally { review.fixture.cleanup(); }
 });
 
-test("review requires explicit source, round, route, and bounded unique flags with exit 2", () => {
+test("review requires explicit source, round, route, and valid unique flags with exit 2", () => {
   const { fixture, brief } = makeReviewFixture("review-flags");
   try {
     const cases = [
       ["review-flags", "--brief", brief],
       ["review-flags", "--round", "1"],
       ["review-flags", "--round", "0", "--brief", brief],
-      ["review-flags", "--round", "1", "--brief", brief, "--timeout", "0"],
+      ["review-flags", "--round", "1", "--brief", brief, "--timeout", "-1"],
       ["review-flags", "--round", "1", "--brief", brief, "--route", "missing"],
       ["review-flags", "--round", "1", "--round", "2", "--brief", brief],
       ["review-flags", "--round", "1", "--brief", brief, "--unknown", "value"],
@@ -1282,7 +1270,7 @@ test("review requires explicit source, round, route, and bounded unique flags wi
       ]);
       assert.equal(run.status, 2, run.stderr);
       assert.equal(run.stdout, "");
-      assert.match(run.stderr, /--timeout must be an integer from 3 through 7200 seconds/);
+      assert.match(run.stderr, /--timeout must be 0 or an integer from 3 through 7200 seconds/);
     }
     negativeControl("review flag refusals use exit 2");
   } finally {

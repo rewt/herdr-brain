@@ -158,7 +158,7 @@ if(r.status===0&&a[0]==='update-ref'&&a.includes('--stdin')&&!fs.existsSync(${JS
 test('dispatching recovery after main moves exempts only its existing correction run and changed head', t => {
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   fs.writeFileSync(path.join(f.root, 'prompt-fail'), 'fail');
-  assert.equal(f.settle(run).status, 1); const before = receipt(f, run); assert.equal(before.stage, 'dispatching');
+  assert.equal(f.requestCorrection(run).status, 1); const before = receipt(f, run); assert.equal(before.stage, 'dispatching');
   const launches = f.calls().filter(a => a[1] === 'start').length; advance(f);
   const uncertain = f.retry(run); assert.equal(uncertain.status, 1); assert.match(uncertain.stderr, /delivery outcome is unknown/);
   assert.equal(f.calls().filter(a => a[1] === 'start').length, launches);
@@ -174,7 +174,7 @@ test('dispatching recovery after main moves exempts only its existing correction
 test('a stopped fix tolerates main moving and dispatches one correction after STOP clears', t => {
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   fs.writeFileSync(path.join(f.root, 'review-stop'), 'stop');
-  assert.equal(result(f.settle(run)).result, 'stopped'); const before = receipt(f, run); assert.equal(before.stage, 'fix');
+  assert.equal(result(f.requestCorrection(run)).result, 'stopped'); const before = receipt(f, run); assert.equal(before.stage, 'fix');
   advance(f); assert.equal(result(f.retry(run)).result, 'stopped');
   assert.equal(f.show(f.show(run).item).runs.length, 1);
   fs.unlinkSync(path.join(f.repo, '.lane/supervisor/STOP'));

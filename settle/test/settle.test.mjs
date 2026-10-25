@@ -161,7 +161,7 @@ test('unconfigured project: report, independent claim finding, fresh fix run, re
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   assert.ok(!fs.existsSync(path.join(f.repo, '.lane.json')));
   fs.writeFileSync(path.join(f.root, 'supervisor-composer'), fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url)));
-  const first = result(f.settle(run)); assert.equal(first.result, 'fix_round');
+  const first = result(f.requestCorrection(run)); assert.equal(first.result, 'fix_round');
   assert.notEqual(first.fix.run, run); assert.equal(f.show(first.fix.run).item, f.show(run).item);
   assert.equal(f.show(first.fix.run).workspace, f.workspace);
   assert.ok(f.show(run).report); assert.match(fs.readFileSync(first.review.path, 'utf8'), /Report claims correct/);
@@ -243,7 +243,7 @@ test('discovered project settings override parent settle values and inherit a no
   f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Configure project settlement']);
   f.git(['rebase', 'develop'], f.workspace);
   const run = f.start(); f.commit('wrong\n'); f.report(run);
-  const r = result(f.settle(run)); assert.equal(r.result, 'fix_round');
+  const r = result(f.requestCorrection(run)); assert.equal(r.result, 'fix_round');
   const saved = journal(f, run);
   assert.equal(saved.main, 'develop'); assert.equal(saved.mainHead, f.git(['rev-parse', 'develop']));
   assert.equal(saved.reviewRoute, 'review'); assert.equal(saved.fixRoute, 'engineer-xhigh');
@@ -319,7 +319,7 @@ test('malformed reviews never silently retry models; inspected uncertain launche
 test('uncertain fix delivery recovers the dispatch journal and never starts a second correction', (t) => {
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   fs.writeFileSync(path.join(f.root, 'prompt-fail'), '');
-  const failed = f.settle(run); assert.equal(failed.status, 1); assert.match(failed.stderr, /uncertain delivery/);
+  const failed = f.requestCorrection(run); assert.equal(failed.status, 1); assert.match(failed.stderr, /uncertain delivery/);
   const assertHandoff = (response, reason) => {
     const job = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
     const receipt = JSON.parse(response.stdout);

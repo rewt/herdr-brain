@@ -31,7 +31,7 @@ if (args[0] === 'start' && fs.existsSync(${JSON.stringify(marker)})) {
   if (r.status === 0) { console.error('injected lost successful start response'); process.exit(1); }
   forward(r);
 }`);
-  const first = f.settle(run, options);
+  const first = f.requestCorrection(run, options);
   assert.equal(first.status, 1); assert.match(first.stderr, /lost successful start response/);
   const directory = path.join(f.org, 'dispatch');
   const file = path.join(directory, fs.readdirSync(directory).find((x) => x.endsWith('.json') && !x.endsWith('.routes.json')));

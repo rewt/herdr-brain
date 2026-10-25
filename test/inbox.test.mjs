@@ -116,8 +116,46 @@ for (const detached of [true, false]) test(`teardown confirms the ${detached ? '
   f.rows.set(303, f.row(303, { ppid: 202, pgid: f.owner.pgid, command: 'slow fixture transport' }));
   f.rows.set(404, f.row(404, { command: 'unrelated same-test process' }));
   await f.stop();
-  assert.deepEqual(f.signals, [{ pid: 202, signal: 'SIGSTOP' }, { pid: 303, signal: 'SIGKILL' }, { pid: 202, signal: 'SIGKILL' }]);
+  assert.deepEqual(f.signals, [{ pid: 202, signal: 'SIGSTOP' }, { pid: 303, signal: 'SIGSTOP' }, { pid: 303, signal: 'SIGKILL' }, { pid: 202, signal: 'SIGKILL' }]);
   assert.ok(f.rows.has(404));
+});
+
+test('owned inbox teardown captures late transport grandchildren before killing the producer tree', async t => {
+  const f = fixture(t), snapshot = f.hooks.snapshot;
+  f.rows.set(303, f.row(303, { ppid: 202, pgid: f.owner.pgid, command: 'fixture transport' }));
+  f.rows.set(404, f.row(404, { ppid: 303, pgid: f.owner.pgid, command: 'fixture Git child' }));
+  f.rows.set(909, f.row(909, { pgid: f.owner.pgid, command: 'unrelated same-group process' }));
+  let late = false;
+  f.hooks.snapshot = () => {
+    if (!late && f.rows.get(303)?.state === 'T') {
+      f.rows.set(505, f.row(505, { ppid: 404, pgid: f.owner.pgid, command: 'last captured child' })); late = true;
+    }
+    return snapshot();
+  };
+  await f.stop();
+  assert.equal(late, true);
+  assert.deepEqual(f.signals.filter(r => r.signal === 'SIGKILL').map(r => r.pid), [505, 404, 303, 202]);
+  assert.ok(f.rows.has(909), 'same group alone is never signal authority');
+  assert.deepEqual(f.signals.filter(r => r.signal === 'SIGSTOP').map(r => r.pid), [202, 303, 404, 505]);
+});
+
+for (const mode of ['unknown', 'replacement']) test(`owned inbox tree retains ${mode} descendants without a forced cleanup verdict`, async t => {
+  const f = fixture(t), snapshot = f.hooks.snapshot;
+  f.rows.set(303, f.row(303, { ppid: 202, pgid: f.owner.pgid, command: 'fixture transport' }));
+  let changed = false;
+  f.hooks.snapshot = () => {
+    if (!changed && f.rows.get(303)?.state === 'T') {
+      changed = true;
+      if (mode === 'unknown') return { ok: false, error: 'native source unavailable' };
+      f.rows.set(303, { ...f.rows.get(303), identity: 'replacement birth', command: 'foreign replacement' });
+    }
+    return snapshot();
+  };
+  await assert.rejects(f.stop(), mode === 'unknown' ? /Cannot confirm fixture inbox children/ : /child identity changed/);
+  assert.equal(f.signals.some(r => r.signal === 'SIGKILL'), false);
+  assert.equal(f.rows.get(202).state, 'S', 'confirmed owner is resumed after an uncertain capture');
+  assert.equal(f.rows.get(303).state, mode === 'unknown' ? 'S' : 'T');
+  assert.ok(fs.existsSync(path.dirname(f.metadata)), 'uncertain fixture evidence is retained');
 });
 
 for (const gone of ['absent', 'zombie', 'foreign command']) test(`a ${gone} owner candidate never authorizes a signal`, async t => {

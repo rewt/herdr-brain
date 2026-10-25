@@ -3,12 +3,12 @@
 import fs from 'node:fs';
 import { repositorySeed } from '../../test/helpers/git-seed.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
-import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+import { stopFixtureInbox, stopFixtureProcessTree } from '../../test/helpers/inbox.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { spawnChild, spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
-import { createProcessTracker, killProcess } from '../../test/helpers/processes.mjs';
+import { createProcessTracker } from '../../test/helpers/processes.mjs';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const rootTool = fileURLToPath(new URL('../../', import.meta.url));
@@ -58,7 +58,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
         console.error(`Fixture watcher PID ${row.pid} already changed after acknowledgment; no signal sent`);
         continue;
       }
-      watchers.set(file, { pid: row.pid, identity: row.identity, command: row.command, group: false });
+      watchers.set(file, { pid: row.pid, identity: row.identity, command: row.command, pgid: row.pgid, group: false });
     }
   };
   // Register ownership cleanup before any setup command can time out.
@@ -83,7 +83,8 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
       if (!queueWorkers.size) break;
       await new Promise(resolve => setTimeout(resolve, 20));
     }
-    for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
+    for (const entry of watchers.values()) await stopFixtureProcessTree(entry, { tracker, ownerGroup: entry.pgid,
+      description: `settle watcher ${entry.pid}` });
     while (watchers.size) {
       const current = tracker.snapshot();
       if (!current.ok) throw Error('Cannot confirm watcher shutdown');

@@ -80,6 +80,7 @@ if (worker) {
       const result = auditGroup(owner);
       if (!result.ok) code = 1;
       for (const row of result.survivors ?? []) {
+        timing({ kind: 'fixture-survivor', depth: 0, fixture: row, files });
         console.error(`Surviving fixture: PID ${row.pid}, command ${row.command}. Files: ${files.join(', ')}`);
         code = 1;
       }

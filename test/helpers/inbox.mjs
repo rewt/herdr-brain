@@ -36,13 +36,21 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
   if (!caller || (row.pgid !== row.pid && row.pgid !== caller.pgid))
     throw Error(`Cannot confirm fixture inbox owner identity: ${file}`);
   const entry = { pid: row.pid, identity: row.identity, command: row.command, group: false };
+  return stopFixtureProcessTree(entry, { tracker, ownerGroup: row.pgid, description: file });
+}
+
+// The caller supplies its already captured owned birth/command and group.
+// Every signal is independently confirmed again by the native tracker.
+export async function stopFixtureProcessTree(entry, { tracker = createProcessTracker(), ownerGroup, description }) {
+  const file = description ?? `owned producer ${entry.pid}`;
+  if (!Number.isInteger(ownerGroup) || ownerGroup <= 1) throw Error(`Cannot confirm fixture producer group: ${file}`);
   const signal = (target, name) => {
     const result = tracker.killProcess(target, name);
     if (!result.ok) throw Error(`Cannot stop fixture inbox process ${target.pid}`);
     return result.signaled;
   };
-  // Freeze only this confirmed producer while capturing its current transport
-  // children. This closes the spawn/removal race without signaling the test's
+  // Freeze this confirmed producer and its captured descendants. This closes
+  // the spawn/removal race without signaling the test's
   // entire group or leaving a slow fake Herdr command writing into deleted files.
   if (!signal(entry, 'SIGSTOP')) return;
   const owned = new Map([[entry.pid, entry]]);
@@ -52,24 +60,40 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
       current = tracker.snapshot();
       if (!current.ok) throw Error(`Cannot confirm fixture inbox children: ${file}`);
       const ownerRow = current.value.get(entry.pid);
-      if (!ownerRow || /^Z/.test(ownerRow.state)) return;
-      if (ownerRow.identity !== entry.identity || ownerRow.command !== entry.command) return;
-      if (ownerRow.pgid !== row.pgid) throw Error(`Fixture inbox owner group changed: ${file}`);
-      if (/^T/.test(ownerRow.state)) break;
+      if (!ownerRow || /^Z/.test(ownerRow.state)) break;
+      if (ownerRow.identity !== entry.identity || ownerRow.command !== entry.command) break;
+      if (ownerRow.pgid !== ownerGroup) throw Error(`Fixture inbox owner group changed: ${file}`);
+      if (!/^T/.test(ownerRow.state)) { await new Promise(resolve => setTimeout(resolve, 20)); continue; }
+      // Freeze the whole observed producer tree before removal. Killing only a
+      // direct transport can orphan its still-running Git/measurement child.
+      // Repeat after suspension so a last fork is captured, without a timer or
+      // granting ownership to unrelated members of the test's process group.
+      const family = new Set([entry.pid]);
+      let changed;
+      do {
+        changed = false;
+        for (const child of current.value.values()) if (family.has(child.ppid) && !family.has(child.pid) && !/^Z/.test(child.state)) {
+          family.add(child.pid); changed = true;
+        }
+      } while (changed);
+      let waiting = false;
+      for (const pid of family) {
+        if (pid === entry.pid) continue;
+        const child = current.value.get(pid), prior = owned.get(pid);
+        if (child.pgid !== ownerGroup) throw Error(`Fixture inbox child escaped its owner group: ${pid}`);
+        if (prior && (prior.identity !== child.identity || prior.command !== child.command)) throw Error(`Fixture inbox child identity changed: ${pid}`);
+        const target = prior ?? { pid, identity: child.identity, command: child.command, group: false };
+        owned.set(pid, target);
+        if (!/^T/.test(child.state)) { signal(target, 'SIGSTOP'); waiting = true; }
+      }
+      if (!waiting) break;
       await new Promise(resolve => setTimeout(resolve, 20));
     }
-    for (const child of current.value.values()) {
-      if (child.ppid !== entry.pid || /^Z/.test(child.state)) continue;
-      if (child.pgid !== row.pgid) throw Error(`Fixture inbox child escaped its owner group: ${child.pid}`);
-      const target = { pid: child.pid, identity: child.identity, command: child.command, group: false };
-      owned.set(child.pid, target);
-      signal(target, 'SIGKILL');
-    }
-    signal(entry, 'SIGKILL');
+    for (const target of [...owned.values()].reverse()) signal(target, 'SIGKILL');
   } catch (error) {
     // Preserve the directory and never leave a confirmed owner suspended when
     // a lookup refuses cleanup. Never signal an unconfirmed process group.
-    signal(entry, 'SIGCONT');
+    for (const target of owned.values()) signal(target, 'SIGCONT');
     throw error;
   }
   while (owned.size) {

@@ -51,6 +51,24 @@ function controlled() {
 }
 const launch = (f, name = 'spawnChild', legacy) => f.api[name](f.context, 'fixture', ['--work'], {}, legacy);
 
+test('IPC drain requires actual exit, observed disconnect and both readable ends without a close notification', async () => {
+  const f = controlled(), child = launch(f);
+  let settled = false;
+  const result = f.api.waitForExit(child); result.then(() => { settled = true; });
+  f.exit(7); child.emit('disconnect');
+  child.stdout.write('trailing output'); child.stderr.write('trailing error');
+  await Promise.resolve(); assert.equal(settled, false, 'exit plus IPC disconnect cannot discard open streams');
+  const stdoutEnded = new Promise(resolve => child.stdout.once('end', resolve));
+  child.stdout.end(); await stdoutEnded;
+  assert.equal(settled, false, 'stderr is still open');
+  const stderrEnded = new Promise(resolve => child.stderr.once('end', resolve));
+  child.stderr.end(); await stderrEnded;
+  assert.deepEqual(await result, { code: 7, status: 7, signal: null,
+    stdout: 'trailing output', stderr: 'trailing error' });
+  await f.hooks[0]();
+  assert.equal(f.timers.size, 0); assert.deepEqual(f.signals, []);
+});
+
 test('actual child helpers accept legacy allowances without arming an execution timer', async t => {
   t.diagnostic(`child.mjs SHA256 ${createHash('sha256').update(source).digest('hex')}; controlled linkage, not native execution`);
   for (const name of ['spawnChild', 'spawnScenarioChild']) for (const legacy of [undefined, 1, 55001]) {

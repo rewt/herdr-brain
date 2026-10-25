@@ -147,6 +147,17 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   fs.writeFileSync(path.join(bin, 'herdr'), fake, { mode: 0o755 });
   const settle = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--brief', brief, ...args]);
   const retry = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--retry', ...args]);
+  // Recovery witnesses request their ONE formal fix explicitly after the
+  // default cap1 review. They must not depend on an automatic review/fix chain.
+  const requestCorrection = (id, args = []) => {
+    const first = settle(id, args);
+    if (first.status !== 0) return first;
+    const saved = JSON.parse(first.stdout);
+    if (saved.code !== 'REVIEW_CAP_REACHED') return first;
+    assert.equal(saved.review_policy.cap, 1);
+    assert.equal(saved.review_policy.round, 1);
+    return retry(id, [...args, '--fix-findings']);
+  };
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
   const concurrent = (id, executable = path.join(source, 'settle/settle.mjs'), args = ['--brief', brief], { scenario = false } = {}) => {
     const child = (scenario ? spawnScenarioChild : spawnChild)(t, process.execPath, [executable, id, ...args], { cwd: repo, env });
@@ -155,7 +166,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
     pending.push(done);
     return { child, done };
   };
-  return { root, repo, workspace, org, env, exec, record, start, show, report, commit, git, settle, retry, calls, concurrent, source, cleanup };
+  return { root, repo, workspace, org, env, exec, record, start, show, report, commit, git, settle, retry, requestCorrection, calls, concurrent, source, cleanup };
 }
 // The fake and its foreground owner must use the same interpreter, even when
 // PATH selects a different Node in the fixture's scratch directory.

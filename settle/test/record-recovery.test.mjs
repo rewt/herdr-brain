@@ -102,7 +102,7 @@ test('a legacy correction refusal resumes the fix stage after blockers clear and
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   const item = f.show(run).item, blocker = f.record(['add', 'Resolve scope', '--role', 'architect']).split(' ')[0];
   fs.writeFileSync(path.join(f.root, 'review-record-action.json'), JSON.stringify(['block', item, '--by', blocker]));
-  const refused = result(f.settle(run)); assert.equal(refused.result, 'escalate');
+  const refused = result(f.requestCorrection(run)); assert.equal(refused.result, 'escalate');
   assert.match(refused.reason, /Correction needs supervisor judgment/); legacy(f, run);
   assert.equal(result(f.retry(run)).result, 'escalate'); assert.equal(workers(f).length, 0);
   f.record(['close', blocker]); advance(f);
@@ -120,7 +120,7 @@ import fs from 'node:fs'; import { spawnSync } from 'node:child_process';
 if(fs.existsSync(${JSON.stringify(marker)})){console.error('injected watcher startup failure');process.exit(1);}
 const r=spawnSync(process.execPath,[${JSON.stringify(path.join(f.source, 'watch/watch.mjs'))},...process.argv.slice(2)],{stdio:'inherit'});process.exit(r.status??1);
 `, { mode: 0o755 });
-  const options = ['--watch-cli', adapter], first = f.settle(run, options);
+  const options = ['--watch-cli', adapter], first = f.requestCorrection(run, options);
   assert.equal(first.status, 1); assert.match(first.stderr, /injected watcher startup failure/);
   const item = f.show(run).item, correction = f.show(item).runs.at(-1);
   assert.notEqual(correction, run);

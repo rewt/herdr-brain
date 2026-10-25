@@ -115,7 +115,7 @@ test('conditional reopen accepts no-op retries and a late older report cannot bl
 test('incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt', (t) => {
   for (const kind of ['open', 'declined']) {
     const f = fixture(t), old = f.start(); f.commit('wrong\n'); f.report(old);
-    const options = watcherFailure(f), first = f.settle(old, options);
+    const options = watcherFailure(f), first = f.requestCorrection(old, options);
     assert.equal(first.status, 1); assert.match(first.stderr, /injected watcher startup failure/);
     const dispatch = dispatchJob(f), item = f.show(old).item;
     assert.equal(dispatch.stage, 'watch'); assert.notEqual(dispatch.run, old); assert.equal(workerPrompts(f).length, 0);
@@ -138,7 +138,7 @@ test('incomplete correction retry respects unresolved links hidden by active sta
 });
 test('resolved blocker links allow recovery of only the recorded correction run', (t) => {
   const f = fixture(t), old = f.start(); f.commit('wrong\n'); f.report(old);
-  const options = watcherFailure(f); assert.equal(f.settle(old, options).status, 1);
+  const options = watcherFailure(f); assert.equal(f.requestCorrection(old, options).status, 1);
   const dispatch = dispatchJob(f), item = f.show(old).item;
   const blocker = f.record(['add', 'Resolved scope decision', '--role', 'architect']).split(' ')[0];
   f.record(['block', item, '--by', blocker]); f.record(['close', blocker]);
@@ -163,7 +163,7 @@ const r = spawnSync(process.execPath, [${JSON.stringify(path.join(f.source, 'dis
 fs.writeFileSync(${JSON.stringify(path.join(f.root, 'race-dispatch-result.json'))}, r.stdout ?? '');
 process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1);
 `, { mode: 0o755 });
-  const refused = f.settle(old, ['--dispatch-cli', adapter]); assert.equal(refused.status, 1);
+  const refused = f.requestCorrection(old, ['--dispatch-cli', adapter]); assert.equal(refused.status, 1);
   assert.match(refused.stderr, /superseded/); assert.equal(JSON.parse(refused.stdout).result, 'escalate');
   const before = JSON.parse(fs.readFileSync(path.join(f.root, 'race-item.json'), 'utf8')), after = f.show(item);
   assert.deepEqual(after.outcome, before.outcome); assert.deepEqual(after.closed, before.closed);
@@ -200,7 +200,7 @@ const r = spawnSync(process.execPath, [${JSON.stringify(path.join(f.source, 'dis
 fs.writeFileSync(${JSON.stringify(captured)}, r.stdout);
 process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1);
 `, { mode: 0o755 });
-  const refused = f.settle(old, ['--org-cli', adapter, '--dispatch-cli', capture]); assert.equal(refused.status, 1);
+  const refused = f.requestCorrection(old, ['--org-cli', adapter, '--dispatch-cli', capture]); assert.equal(refused.status, 1);
   assert.match(refused.stderr, /superseded/); assert.equal(JSON.parse(refused.stdout).result, 'escalate');
   assert.equal(JSON.parse(fs.readFileSync(captured, 'utf8')).code, 'FROM_RUN_SUPERSEDED');
   const before = JSON.parse(fs.readFileSync(path.join(f.root, 'race-item.json'), 'utf8')), after = f.show(item);
@@ -234,7 +234,7 @@ if (args[0] === 'start') {
 const r = spawnSync(process.execPath, [cli, ...args], { env: process.env, encoding: 'utf8' });
 process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1);
 `, { mode: 0o755 });
-  const options = ['--org-cli', adapter], first = f.settle(old, options);
+  const options = ['--org-cli', adapter], first = f.requestCorrection(old, options);
   assert.equal(first.status, 1); assert.match(first.stderr, /injected start refusal/);
   const saved = dispatchJob(f); assert.equal(saved.stage, 'starting'); assert.equal(saved.run, null);
   delete saved.fromRun;

@@ -7,13 +7,10 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
-static void guard(const char *fifo, int seconds, pid_t owner) {
+static void guard(const char *fifo, pid_t owner) {
   int fd = open(fifo, O_RDONLY | O_NONBLOCK);
-  struct timespec start, now;
-  if (clock_gettime(CLOCK_MONOTONIC, &start)) _exit(125);
   for (;;) {
     if (getppid() != owner) _exit(0);
     struct pollfd pipe = { .fd = fd, .events = POLLIN };
@@ -23,9 +20,7 @@ static void guard(const char *fifo, int seconds, pid_t owner) {
     // Do not depend on platform-specific FIFO readiness notifications.
     char byte;
     int eof = fd >= 0 && read(fd, &byte, 1) == 0;
-    if (clock_gettime(CLOCK_MONOTONIC, &now)) _exit(125);
-    if (result < 0 || eof || (result && (pipe.revents & (POLLHUP | POLLERR | POLLNVAL))) ||
-        now.tv_sec - start.tv_sec >= seconds) {
+    if (result < 0 || eof || (result && (pipe.revents & (POLLHUP | POLLERR | POLLNVAL)))) {
       if (getppid() == owner) kill(owner, SIGKILL);
       _exit(0);
     }
@@ -34,26 +29,23 @@ static void guard(const char *fifo, int seconds, pid_t owner) {
 
 int main(int argc, char **argv) {
   if (argc < 4) return 125;
-  int seconds = atoi(argv[3]);
-  if (seconds < 1) return 125;
   if (!strcmp(argv[1], "--watch")) {
-    if (argc < 5) return 125;
     char *end;
-    long pid = strtol(argv[4], &end, 10);
-    if (end == argv[4] || *end || pid <= 1 || (long)(pid_t)pid != pid) return 125;
+    long pid = strtol(argv[3], &end, 10);
+    if (end == argv[3] || *end || pid <= 1 || (long)(pid_t)pid != pid) return 125;
     pid_t owner = (pid_t)pid;
     if (getppid() != owner) return 0;
-    guard(argv[2], seconds, owner);
+    guard(argv[2], owner);
   }
-  if (strcmp(argv[1], "--exec") || argc < 5) return 125;
+  if (strcmp(argv[1], "--exec")) return 125;
   pid_t owner = getpid(), child = fork();
   if (child < 0) return 125;
   if (!child) {
     // A guard must never retain the target's IPC or output pipes.
     long maximum = sysconf(_SC_OPEN_MAX);
     for (int fd = 0; fd < maximum; fd++) close(fd);
-    guard(argv[2], seconds, owner);
+    guard(argv[2], owner);
   }
-  execvp(argv[4], &argv[4]);
+  execvp(argv[3], &argv[3]);
   return 125;
 }

@@ -459,7 +459,7 @@ fs.rmdirSync=function(directory,...args){
  return result;
 };`);
   const worker = spawnChild(t, process.execPath, ['--require', preload, path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
-  const done = waitForExit(worker); let resumedDone;
+  const done = waitForExit(worker); let resumed, resumedDone;
   try {
     await until(() => fs.existsSync(parked));
     assert.equal(readInbox(inbox).length, 1);
@@ -473,19 +473,26 @@ fs.rmdirSync=function(directory,...args){
     t.diagnostic('queued-notice recovery: parked owner close observed');
     const lock = path.join(f.queue.directory, 'worker.lock'), owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json')));
     assert.equal(owner.pid, worker.pid); assert.throws(() => process.kill(owner.pid, 0)); fs.rmSync(lock, { recursive: true });
-    const resumed = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    resumed = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
     t.diagnostic('queued-notice recovery: replacement owner spawned');
+    resumed.once('exit', (code, signal) => t.diagnostic(`queued-notice recovery: replacement exit ${code}/${signal}; stdoutEnded=${resumed.stdout.readableEnded}; stderrEnded=${resumed.stderr.readableEnded}`));
+    resumed.once('close', () => t.diagnostic('queued-notice recovery: replacement stream close emitted'));
     resumedDone = waitForExit(resumed);
     // An actual early exit/error is evidence, not an indefinitely pending
     // readiness promise that cancels the remainder of this test file.
     const ready = Promise.race([
-      new Promise((resolve, reject) => { resumed.once('message', resolve); resumed.once('error', reject); }),
+      new Promise((resolve, reject) => {
+        const message = value => { if (typeof value?.ready === 'boolean') { resumed.off('message', message); resolve(value); } };
+        resumed.on('message', message); resumed.once('error', reject);
+      }),
       resumedDone.then(result => { throw Error(`resumed train exited before readiness: ${JSON.stringify(result)}`); }),
     ]);
     assert.equal((await ready).ready, true);
     t.diagnostic('queued-notice recovery: replacement readiness observed');
     resumed.disconnect();
+    t.diagnostic('queued-notice recovery: replacement IPC disconnected');
     fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer);
+    t.diagnostic('queued-notice recovery: empty composer published');
     const result = await resumedDone; assert.equal(result.code, 0, result.stderr);
     t.diagnostic('queued-notice recovery: replacement close observed');
     const results = f.queue.load().results;
@@ -494,7 +501,11 @@ fs.rmdirSync=function(directory,...args){
     assert.equal(f.messages().length, 2); assert.equal(f.messages()[0][3], `${queued.message} notice-id=${queued.id}`);
     assert.equal(readInbox(inbox).length, 2); assert.ok(readInbox(inbox).every(entry => entry.state === 'sent'));
     assert.equal(f.runs(), 1); assert.equal(f.git(['rev-parse', 'main']), integrated);
-  } finally { fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer); worker.kill('SIGKILL'); await done; if (resumedDone) await resumedDone; }
+  } catch (error) { t.diagnostic(`queued-notice recovery error: ${error.stack}`); throw error; }
+  finally { fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer); worker.kill('SIGKILL'); await done;
+    if (resumed?.connected) resumed.disconnect();
+    if (resumedDone) await resumedDone;
+  }
 });
 
 test('interrupted validation preserves main and drain resumes the batch', async t => {

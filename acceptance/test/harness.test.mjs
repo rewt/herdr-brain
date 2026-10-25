@@ -94,12 +94,17 @@ test('scratch promotion inherits the actual gate slot while project and session 
   assert.ok(fs.existsSync(inherited.MONITOR_TEST_SLOT_PATH));
 });
 
-for (const late of [false, true]) test(`native polling bounds each call and rejects ${late ? 'late success' : 'nonresponse'} at the real deadline`, async () => {
+for (const failure of [false, true]) test(`native polling preserves ${failure ? 'actual read errors' : 'late completion'} beyond its former allowance`, async () => {
   let now = 0; const deadlines = [];
-  await assert.rejects(pollNative(async deadline => {
-    deadlines.push(deadline); now += 80; return late && now >= 100;
-  }, 'stand-in did not register', 100, { now: () => now, allowance: ms => ms, sleep: async ms => { now += ms; }, intervalMs: 10 }), /stand-in did not register/);
-  assert.deepEqual(deadlines, [100, 100]); assert.equal(now, 170);
+  const pending = pollNative(async deadline => {
+    deadlines.push(deadline); now += 80;
+    if (deadlines.length < 3) return false;
+    if (failure) throw Error('actual native read refused');
+    return true;
+  }, 'stand-in did not register', 100, { now: () => now, allowance: ms => ms, sleep: async ms => { now += ms; }, intervalMs: 10 });
+  if (failure) await assert.rejects(pending, /actual native read refused/);
+  else assert.equal(await pending, true);
+  assert.deepEqual(deadlines, [undefined, undefined, undefined]); assert.equal(now, 260);
 });
 
 test('harness cleanup stops only verified inbox owners under its scratch root and retains receipts', async t => {
@@ -149,7 +154,7 @@ test('product tidy preserves a focused finished tab while closing the same tab i
   assert.deepEqual(planTidy(snapshot).close, [], 'the legacy name set never substitutes for ingestion');
 });
 
-for (const phase of ['cwd', 'registration']) test(`the real adapter bounds a slow ${phase} native read by the polling deadline`, t => {
+for (const phase of ['cwd', 'registration']) test(`the real adapter accepts a productive slow ${phase} native read beyond its planning allowance`, t => {
   const root = scratch(t), binary = path.join(root, 'native.mjs');
   for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'environment.mjs', 'poll.mjs'])
     fs.copyFileSync(path.join(source, 'acceptance', file), path.join(root, file));
@@ -162,10 +167,9 @@ for (const phase of ['cwd', 'registration']) test(`the real adapter bounds a slo
     console.log(JSON.stringify({result:a[0]==='pane'&&a[1]==='get'?{pane:{foreground_cwd:${JSON.stringify(root)}}}:a[0]==='agent'?{agent:{agent_status:'idle',pane_id:'owned:pane'}}:{}}));`, { mode: 0o755 });
   const result = spawnSync(process.execPath, [path.join(root, 'herdr.mjs'), 'agent', 'start', 'offline', '--pane', 'owned:pane'],
     { env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8', timeout: 12000 });
-  assert.notEqual(result.status, 0, 'late idle must not start/rename the stand-in');
-  assert.match(result.stderr, /native poll deadline expired/);
+  assert.equal(result.status, 0, result.stderr);
   const calls = fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(!calls.some(a => a[0]==='agent'&&a[1]==='rename'));
+  assert.ok(calls.some(a => a[0]==='agent'&&a[1]==='rename'));
   assert.equal(calls.filter(a => a[0]===(phase==='cwd'?'pane':'agent')&&a[1]==='get').length, 1);
 });
 

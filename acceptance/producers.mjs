@@ -1,4 +1,3 @@
-import { loadTimeout } from './deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -52,9 +51,8 @@ export function stopProducers(root) {
   const fd = fs.openSync(marker(root), 'a');
   try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
 }
-export async function awaitProducers(root, { timeoutMs = 120_000 } = {}) {
+export async function awaitProducers(root, _legacyPlanningOptions = {}) {
   const directory = path.join(root, 'producers');
-  const deadline = Date.now() + loadTimeout(timeoutMs);
   for (;;) {
     const pending = [];
     for (const entry of fs.existsSync(directory) ? fs.readdirSync(directory) : []) {
@@ -69,7 +67,6 @@ export async function awaitProducers(root, { timeoutMs = 120_000 } = {}) {
       else fs.rmSync(file, { force: true });
     }
     if (!pending.length) return;
-    if (Date.now() >= deadline) throw new Error(`acceptance producers did not stop: ${JSON.stringify(pending)}`);
     await new Promise(resolve => setTimeout(resolve, 25));
   }
 }

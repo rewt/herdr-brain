@@ -104,12 +104,18 @@ for (const signal of ['SIGINT', 'SIGTERM']) for (const form of ['workspace', 'cr
 
 test('cleanup refuses snapshots until every registered producer acknowledges stop', async t => {
   const root = scratch(t), producer = registerProducer(root, 'held-fixture');
+  fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ workspaces: [], panes: [], tabs: [] }));
   let calls = 0;
   try {
-    const result = await cleanupWorkspaces({ root, evidence: path.join(root, 'evidence'), native: () => { calls++; }, producerTimeoutMs: 50 });
+    let finished = false;
+    const pending = cleanupWorkspaces({ root, evidence: path.join(root, 'evidence'), native: () => { calls++; return { workspaces: [] }; }, producerTimeoutMs: 1 }).then(r => { finished = true; return r; });
+    await new Promise(resolve => setTimeout(resolve, 75));
     assert.equal(calls, 0);
-    assert.match(result.errors[0], /producer drain/);
+    assert.equal(finished, false, 'an elapsed allowance cannot admit snapshots before actual producer drain');
     assert.throws(() => registerProducer(root, 'late'), /producers stopped/);
+    producer.release();
+    const result = await pending;
+    assert.deepEqual(result.errors, []); assert.ok(calls > 0);
   } finally { producer.release(); }
 });
 

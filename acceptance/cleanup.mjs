@@ -7,7 +7,8 @@ import { stopFixtureInbox } from '../test/helpers/inbox.mjs';
 export async function cleanupWorkspaces({ root, evidence, native, producerTimeoutMs }) {
   fs.mkdirSync(evidence, { recursive: true });
   // No inventory, ledger or receipt snapshot is valid while a producer can
-  // still create or finish journaling a native call. Refuse cleanup on timeout.
+  // still create or finish journaling a native call. Wait for actual drain;
+  // malformed receipts and native ownership refusals remain real errors.
   try { await stopAndAwaitProducers(root, { timeoutMs: producerTimeoutMs }); }
   catch (error) {
     const result = { remaining: [], errors: [`producer drain: ${error.message}`] };

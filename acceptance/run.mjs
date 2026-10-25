@@ -24,7 +24,7 @@ import { cleanupWorkspaces, cleanupInboxes } from './cleanup.mjs';
 import { testSlotEnvironment, scratchProductHomes, assertScratchHomes, enterScratchHomes } from './environment.mjs';
 import { fleetPath } from '../lib/fleet.mjs';
 import { loadAwareCommand } from './commands.mjs';
-import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
+import { createLoadMonitor, waitUntil } from './load.mjs';
 import { noticeDeliveryBudgetMs } from './notice-budget.mjs';
 import { matchingRun } from '../supervisor/tidy-tabs.mjs';
 import { ownerAlive } from '../lib/process-owner.mjs';
@@ -281,10 +281,8 @@ async function closeScope() {
       }
     }
     for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') errors.push(e.message); } }
-    const deadline = Date.now() + responseAllowance(15_000, load);
     const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { if (e.code === 'ESRCH') return false; throw e; } };
     while ([...pids].some(alive)) {
-      if (Date.now() >= deadline) throw new HarnessLimit('owned watchers did not stop; cleanup snapshots refused');
       await new Promise(resolve => setTimeout(resolve, 25));
     }
     try { await cleanupInboxes({ root, candidate, evidence }); }

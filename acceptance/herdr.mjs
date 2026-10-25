@@ -61,8 +61,7 @@ for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   // Let the close handler persist any creation reply already in the pipe.
   child?.kill(signal);
 });
-async function real(args, { deadline } = {}) {
-  if (deadline !== undefined && Date.now() >= deadline) throw new ReceiptLimit('native poll deadline expired');
+async function real(args) {
   assertProducing(root);
   if (interrupted) throw new ReceiptLimit('adapter interrupted; no further native commands allowed');
   const mutating = !['list', 'get', 'read', 'wait', 'process-info'].includes(args[1]);
@@ -83,14 +82,9 @@ async function real(args, { deadline } = {}) {
     child.stdout.on('data', (v) => { stdout += v; });
     child.stderr.on('data', (v) => { stderr += v; });
     const active = child;
-    let killTimer;
-    const timer = setTimeout(() => {
-      if (deadline !== undefined) active.kill('SIGKILL'); // These polling calls are read-only.
-      else { active.kill('SIGTERM'); killTimer = setTimeout(() => active.kill('SIGKILL'), loadTimeout(1000)); }
-    }, Math.min(loadTimeout(35_000), deadline === undefined ? Infinity : Math.max(1, deadline - Date.now())));
-    child.on('error', error => { clearTimeout(timer); reject(error); });
+    child.on('error', error => { reject(error); });
     child.on('close', (code) => {
-      clearTimeout(timer); clearTimeout(killTimer); producer.child(active.pid, false);
+      producer.child(active.pid, false);
       let created;
       if (['workspace', 'worktree', 'tab'].includes(args[0]) && ['create', 'open'].includes(args[1])) {
         let result;
@@ -104,8 +98,7 @@ async function real(args, { deadline } = {}) {
       }
       traceCall('end', created ? { created } : {});
       fs.appendFileSync(path.join(root, 'herdr.jsonl'), JSON.stringify({ args, code, stdout, stderr }) + '\n');
-      if (deadline !== undefined && Date.now() >= deadline) reject(new ReceiptLimit('native poll deadline expired'));
-      else resolve({ code, stdout, stderr });
+      resolve({ code, stdout, stderr });
     });
   });
 }

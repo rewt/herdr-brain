@@ -829,7 +829,7 @@ for (const kind of ['wall', 'idle']) test(`a verification job passes its legacy 
 
 // Explicit cancellation exercises the same final capture and cleanup as the
 // last-resort stop, without restoring a wall or silence cap for working jobs.
-async function cancelJob(f, job, ready) {
+async function cancelJob(f, job, ready, afterSignal = async () => {}) {
   const running = f.run(job), result = path.join(path.dirname(job.receipt), 'job-result.json');
   running.catch(() => {});
   await until(() => fs.existsSync(result) && ready(), 'job did not reach its cancellation boundary');
@@ -838,16 +838,35 @@ async function cancelJob(f, job, ready) {
   const coordinator = registerProcess(phase.value.ppid);
   assert.ok(coordinator.command.includes('verify/execute.mjs --hold') && coordinator.command.includes(job.job));
   assert.equal(killProcess(coordinator, 'SIGTERM').signaled, true);
+  await afterSignal(phase.value);
   await running;
 }
 
-test('a captured descendant in a separate session is identity-confirmed, reaped and recorded before the next job', async t => {
-  const f = fixture(t), pids = path.join(f.root, 'escaped');
-  const escaped = `require('fs').writeFileSync(${JSON.stringify(pids)},String(process.pid));setInterval(()=>{},1000);`;
-  const job = f.add({}, node(`const c=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(escaped)}],{detached:true,stdio:'ignore'});c.unref();setTimeout(()=>{},500);`));
-  await f.run(job); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
+test('a captured descendant completes naturally before the host slot is released', async t => {
+  const f = fixture(t), pids = path.join(f.root, 'escaped'), parent = path.join(f.root, 'parent');
+  const parentExit = path.join(f.root, 'parent-exit'), release = path.join(f.root, 'release');
+  const escaped = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(pids)},String(process.pid));
+    setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)}))process.exit(0);},25);`;
+  const job = f.add({}, node(`const fs=require('fs');require('child_process').spawn(process.execPath,
+    ['-e',${JSON.stringify(escaped)}],{detached:true,stdio:'ignore'}).unref();
+    fs.writeFileSync(${JSON.stringify(parent)},String(process.pid));
+    setInterval(()=>{if(fs.existsSync(${JSON.stringify(parentExit)}))process.exit(0);},25);`));
+  let finished = false;
+  const running = f.run(job).then(() => { finished = true; }); running.catch(() => {});
+  try {
+    const phase = path.join(path.dirname(job.receipt), 'phases.json');
+    await until(() => fs.existsSync(pids) && fs.existsSync(parent) && fs.existsSync(phase) &&
+      read(phase).tracked.some(row => row.pid === Number(fs.readFileSync(pids))), 'escaped birth was not captured');
+    fs.writeFileSync(parentExit, 'complete');
+    await until(() => lookupProcess(Number(fs.readFileSync(parent)), { identityOnly: true }).value === null, 'parent did not complete');
+    assert.equal(finished, false); assert.ok(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH));
+    assert.ok(lookupProcess(Number(fs.readFileSync(pids)), { identityOnly: true }).value);
+  } finally {
+    fs.writeFileSync(parentExit, 'complete'); fs.writeFileSync(release, 'complete'); await running;
+  }
+  const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
   assert.equal(receipt.outcome, 'pass', receipt.error);
-  assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.signal === 'SIGTERM' && row.identity));
+  assert.equal(receipt.reaped_processes.some(row => row.pid === pid && row.signal), false, 'natural completion selects no signal');
   const live = lookupProcess(pid, { identityOnly: true }); assert.equal(live.ok, true); assert.ok(!live.value || /^Z/.test(live.value.state));
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
 });
@@ -897,7 +916,14 @@ test('cancellation captures an escaped descendant while its phase observer is st
     fs.renameSync(${JSON.stringify(pids + '.tmp')},${JSON.stringify(pids)});
     setInterval(()=>{},1000);
   `));
-  await cancelJob(f, job, () => fs.existsSync(pids)); const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
+  await cancelJob(f, job, () => fs.existsSync(pids), async phase => {
+    const captured = path.join(path.dirname(job.receipt), 'captured.json');
+    await until(() => fs.existsSync(captured) && read(captured).some(row => row.pid === phase.pid && /^T/.test(row.state)), 'paused phase was not captured');
+    const owner = registerProcess(phase.pid);
+    assert.equal(owner.identity, phase.identity); assert.equal(owner.command, phase.command);
+    assert.equal(killProcess(owner, 'SIGKILL').signaled, true, 'explicit fixture force follows the original cancellation/capture');
+  });
+  const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
   assert.equal(receipt.timeout, null); assert.equal(receipt.slot_execution.signal, 'SIGTERM');
   assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.identity));
   const captured = read(path.join(path.dirname(job.receipt), 'captured.json'));
@@ -907,19 +933,28 @@ test('cancellation captures an escaped descendant while its phase observer is st
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
 });
 
-test('a previously observed orphan is reaped inside the host hold after job cancellation', async t => {
+test('a previously observed orphan retains the host hold after TERM until explicit owned force', async t => {
   const f = fixture(t, { proving: true }), pids = path.join(f.root, 'orphan'), seen = path.join(f.root, 'held-during-cleanup'), slot = process.env.MONITOR_TEST_SLOT_PATH;
   const leaf = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(pids)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(seen)},String(fs.existsSync(${JSON.stringify(slot)})))});setInterval(()=>{},1000);`;
   const middle = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{detached:true,stdio:'ignore'}).unref();setTimeout(()=>{},500);`;
   const job = f.add({ 'timeout-seconds': '1.5', 'idle-timeout-seconds': '5' }, node(`require('child_process').spawn(process.execPath,['-e',${JSON.stringify(middle)}],{detached:true,stdio:'ignore'}).unref();setInterval(()=>{},1000);`));
+  let forced;
   await cancelJob(f, job, () => {
     if (!fs.existsSync(pids)) return false;
     const pid = Number(fs.readFileSync(pids)), phase = path.join(path.dirname(job.receipt), 'phases.json');
     return fs.existsSync(phase) && read(phase).tracked.some(row => row.pid === pid) && lookupProcess(pid).value?.ppid === 1;
+  }, async () => {
+    await until(() => fs.existsSync(seen), 'the orphan did not handle the original TERM');
+    assert.equal(fs.readFileSync(seen, 'utf8'), 'true'); assert.ok(fs.existsSync(slot));
+    const pid = Number(fs.readFileSync(pids)), owner = registerProcess(pid);
+    const saved = read(path.join(path.dirname(job.receipt), 'phases.json')).tracked.find(row => row.pid === pid);
+    assert.equal(owner.identity, saved.identity);
+    forced = killProcess(owner, 'SIGKILL'); assert.ok(forced.ok && forced.signaled);
   });
   const receipt = read(job.receipt), pid = Number(fs.readFileSync(pids));
   assert.equal(receipt.timeout, null); assert.equal(receipt.slot_execution.signal, 'SIGTERM'); assert.equal(fs.readFileSync(seen, 'utf8'), 'true');
-  assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.signal === 'SIGKILL'));
+  assert.ok(receipt.reaped_processes.some(row => row.pid === pid && row.signal === 'SIGTERM'));
+  assert.ok(forced.ok && forced.signaled, 'the test requested force explicitly; no elapsed escalation is inferred');
   const live = lookupProcess(pid, { identityOnly: true }); assert.equal(live.ok, true); assert.ok(!live.value || /^Z/.test(live.value.state));
   assert.equal(fs.existsSync(slot), false);
 });

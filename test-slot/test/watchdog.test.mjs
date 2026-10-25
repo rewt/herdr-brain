@@ -290,7 +290,7 @@ test('dead groups-lock owners recover and live or unknown owners fail with a cod
   }
 });
 
-for (const inheritedPipes of [true, false]) test(`leftover group fails distinctly after bounded grace (inherited pipes=${inheritedPipes})`, { timeout: 10000 },
+for (const inheritedPipes of [true, false]) test(`owned descendants remain pending until completion (inherited pipes=${inheritedPipes})`, { timeout: 10000 },
   t => nativeGroupScenario(t, inheritedPipes ? 'gate-leftover-pipes' : 'gate-leftover-ignore'));
 
 test('canonical validation includes layered lane-only wall and idle settings for both envelopes', t => {

@@ -48,7 +48,7 @@ test('slow sampling and cleanup can exceed five seconds while freezing at the fi
   assert.equal(stops.length, 1); assert.equal(samples, 2);
   assert.equal(stops[0].limit_seconds, .5);
   assert.ok(stops[0].inactivity_s >= .5); assert.ok(stops[0].silence_s >= .5);
-  at += 1; // The existing TERM grace is additional to inactivity detection.
+  at += 1; // Actual cleanup can continue after the inactivity observation.
   assert.ok(watcher.snapshot().duration_s > 5);
   watcher.tick(); assert.equal(stops.length, 1); assert.equal(samples, 2);
 });

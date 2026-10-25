@@ -14,23 +14,9 @@ import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { productFiles } from '../../lib/product-files.mjs';
-import { loadTimeout } from '../../lib/deadline.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { stopGateGroup } from '../../test-slot/watchdog.mjs';
 import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
-
-// A full native snapshot can race a short-lived transport. Retry the refused
-// inspection only; each call still pins ownership and rechecks every signal.
-async function stopOwnedInbox(file, options) {
-  const deadline = Date.now() + loadTimeout(5000);
-  for (;;) {
-    try { return await stopFixtureInbox(file, options); }
-    catch (e) {
-      if (!/^Cannot confirm fixture inbox (children|owner|shutdown):/.test(e.message) || Date.now() >= deadline) throw e;
-      await new Promise(resolve => setTimeout(resolve, 30));
-    }
-  }
-}
 
 const CLI = fileURLToPath(new URL('../verify.mjs', import.meta.url));
 const inboxCLI = fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url));
@@ -85,7 +71,7 @@ function fixture(t, { defaultState = false, proving = false } = {}) {
     assert.equal(result.code, 0, result.stderr); return JSON.parse(result.stdout);
   };
   t.after(async () => {
-    await stopOwnedInbox(path.join(org, 'supervisor/inbox.log'), { script: inboxCLI });
+    await stopFixtureInbox(path.join(org, 'supervisor/inbox.log'), { script: inboxCLI });
     for (const desk of Object.keys(queue.load().desks)) git('worktree', 'remove', '--force', desk);
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(storeRoot, { recursive: true, force: true });
@@ -1071,9 +1057,7 @@ test('a measurement interrupted after the watchdog capture includes its error an
         fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
         // Keep a source lookup in flight until the real, independent watchdog
         // has completed and preserved its walk. It then returns a signal error.
-        const by = Date.now() + 20000;
-        while (!fs.existsSync(captured) && Date.now() < by) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
-        if (!fs.existsSync(captured)) throw Error('watchdog capture did not arrive');
+        while (!fs.existsSync(captured)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
         return true;
       };
       cp.spawnSync = (file, argv, ...args) => {

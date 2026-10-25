@@ -57,15 +57,15 @@ test('a project with only settle settings and no parent routes completes indepen
   assert.equal(settled.validation.executed, false);
   assert.equal(workerPrompts(f).length, 0);
   const job = receipt(f, run);
-  assert.equal(DESK_DEFAULTS.review_round_cap, 3);
-  assert.deepEqual(job.reviewPolicy, { cap: 3, source: 'default', round: 1, prior_runs: [] });
+  assert.equal(DESK_DEFAULTS.review_round_cap, 1);
+  assert.deepEqual(job.reviewPolicy, { cap: 1, source: 'default', round: 1, prior_runs: [] });
   const routes = JSON.parse(fs.readFileSync(job.routeConfig, 'utf8'));
   assert.ok(routes.routes.review);
   assert.equal(Object.hasOwn(routes, 'settle'), false);
   assert.equal(job.laneConfig, null);
 });
 
-test('a project with an explicit zero review cap keeps unlimited semantics', t => {
+test('legacy explicit zero-cap configuration retains its historical semantics outside the operator waiver', t => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ settle: { review_round_cap: 0 } }));
   f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Explicit unlimited reviews']);

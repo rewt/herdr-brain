@@ -152,18 +152,18 @@ test('parent walk excludes unrelated processes and escaped-child signalling conf
   // The root group is gone; both escaped PIDs were reused before signalling.
   const signals = [];
   await stopGateGroup(99999999, { tracked: new Map([[2,rows.get(2)],[3,rows.get(3)]]),
-    lookup: pid => ({ ok: true, value: pid ? null : new Map() }), signal: (...args) => signals.push(args), graceMs: 1 });
+    lookup: pid => ({ ok: true, value: pid ? null : new Map() }), signal: (...args) => signals.push(args) });
   assert.deepEqual(signals, []);
   await stopGateGroup(99999999, { rootIdentity: 'old-birth', lookup: () => ({ ok: true, value: new Map([[99999999, row(99999999, 0, 99999999, 'new-birth')]]) }), signal: (...args) => signals.push(args) });
   assert.deepEqual(signals, [], 'reused leader never authorizes group signals');
 });
 
-test('a throwing capture callback reports its error only after TERM and KILL stop the job', async () => {
+test('a throwing capture callback reports its error only after explicitly requested force stops the job', async () => {
   const root = { pid: 100, ppid: 1, pgid: 100, identity: '1:1' };
   const escaped = { pid: 101, ppid: 100, pgid: 101, identity: '2:1' };
   const rows = new Map([[root.pid, root], [escaped.pid, escaped]]), events = [];
   const error = Error('capture write refused');
-  await assert.rejects(stopGateGroup(root.pid, { ownsGroup: false, graceMs: 0,
+  await assert.rejects(stopGateGroup(root.pid, { ownsGroup: false, firstSignal: 'SIGKILL',
     lookup: pid => ({ ok: true, value: pid === undefined ? new Map(rows) : rows.get(pid) ?? null }),
     onCapture: captured => {
       assert.equal(captured.get(escaped.pid).identity, escaped.identity);
@@ -177,7 +177,7 @@ test('a throwing capture callback reports its error only after TERM and KILL sto
     assert.equal(rows.size, 0, 'cleanup precedes error delivery');
     return true;
   });
-  assert.deepEqual(events, ['capture', [root.pid, 'SIGTERM'], [escaped.pid, 'SIGTERM'], [root.pid, 'SIGKILL'], [escaped.pid, 'SIGKILL']]);
+  assert.deepEqual(events, ['capture', [root.pid, 'SIGKILL'], [escaped.pid, 'SIGKILL']]);
 });
 
 for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records timeout, isolates correction and leaves main unchanged`, { timeout: 20000 }, t => {
@@ -403,7 +403,7 @@ test('an unknown escaped identity cannot prevent killing the owned group', async
   const actual = lookupProcess(child.pid); assert.equal(actual.ok, true); assert.equal(actual.value.pgid, child.pid);
   const escaped = { pid: 99999999, ppid: child.pid, pgid: 99999999, identity: '1:1' };
   const sent = [];
-  await assert.rejects(stopGateGroup(child.pid, { ownedChild: true, graceMs: 50,
+  await assert.rejects(stopGateGroup(child.pid, { ownedChild: true, firstSignal: 'SIGKILL',
     signal: (pid, kind) => { sent.push([pid, kind]); process.kill(pid, kind); },
     lookup: pid => pid ? { ok: false, error: 'injected escaped identity failure' } : { ok: true, value: new Map([[child.pid, { pid: child.pid, ppid: process.pid, pgid: child.pid, identity: '2:2' }], [escaped.pid, escaped]]) } }), /cannot confirm gate descendant/);
   assert.ok(sent.some(([pid, kind]) => pid === -child.pid && kind === 'SIGKILL'), 'the watchdog, rather than the fixture deadline, kills its owned group');

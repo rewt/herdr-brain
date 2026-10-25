@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { watchRun } from '../watch.mjs';
 import { silenceNotice, NOTICE_ENV } from '../watch-notice.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
@@ -103,12 +104,70 @@ test('the durable-notice handshake survives a delayed audit and a reused receipt
   assert.ok(inboxNotices(inbox).every(row => row.to === 'owning-supervisor' && row.message.includes('test continues')));
 });
 
-test('an earlier durable notice cannot release the next payload and a missing notice has a bounded failure', async t => {
+// Controlled child interfaces exercise the actual imported helper. Physical
+// spawn/ownership/close are still covered by the unchanged real-child case above.
+function controlledChild() {
+  const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+  child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.stdin = new EventEmitter();
+  const commands = [];
+  child.stdin.write = data => { commands.push(data); child.stdout.emit('data', 'still working\n'); };
+  child.stdin.end = data => { commands.push(data); child.exitCode = 0; child.emit('exit', 0, null); };
+  return { child, commands };
+}
+
+function assertListenersRemoved(child) {
+  assert.equal(child.listenerCount('exit'), 0); assert.equal(child.listenerCount('error'), 0);
+  for (const stream of [child.stdin, child.stdout, child.stderr]) assert.equal(stream.listenerCount('error'), 0);
+  assert.equal(child.stdout.listenerCount('data'), 0); assert.equal(child.stderr.listenerCount('data'), 0);
+}
+
+test('a stale durable notice stays pending until a real missing-notice exit', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-silence-negative-')), inbox = path.join(root, 'inbox.log');
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(inbox, JSON.stringify({ type: 'notice', id: 'earlier-run' }) + '\n');
-  const [command, ...args] = silenceCommand(), child = spawnChild(t, command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
-  await assert.rejects(finishAfterSilence(child, { inbox, seenIds: ['earlier-run'], waitMs: 120 }), /no new durable silence notice/);
+  const { child, commands } = controlledChild();
+  const pending = finishAfterSilence(child, { inbox, seenIds: ['earlier-run'], waitMs: 120 });
+  const rejected = assert.rejects(pending, /no new durable silence notice; child exited with code 7/);
+  await new Promise(resolve => setImmediate(resolve)); // Event turn, no elapsed trigger.
+  assert.deepEqual(commands, [], 'a stale notice sends neither progress nor finish');
   assert.equal(child.exitCode, null, 'a stale notice does not finish the payload');
-  child.stdin.end('finish\n'); assert.equal((await waitForExit(child)).code, 0);
+  child.stderr.emit('data', 'controlled worker exit'); child.exitCode = 7; child.emit('exit', 7, null);
+  await rejected; assertListenersRemoved(child);
+});
+
+for (const target of ['child', 'stdin', 'stdout', 'stderr']) test(`actual silence helper preserves ${target} errors without a deadline`, async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-silence-error-')), inbox = path.join(root, 'inbox.log');
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const { child, commands } = controlledChild(), failure = Error(`controlled ${target} failure`);
+  const pending = finishAfterSilence(child, { inbox, waitMs: 120 });
+  const rejected = assert.rejects(pending, error => error === failure);
+  (target === 'child' ? child : child[target]).emit('error', failure);
+  await rejected; assert.deepEqual(commands, []); assertListenersRemoved(child);
+});
+
+test('only a complete new notice releases actual helper progress and explicit finish', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-silence-positive-')), inbox = path.join(root, 'inbox.log');
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const oldNotice = { type: 'notice', id: 'earlier-run' }, next = { type: 'notice', id: 'new-run' };
+  fs.writeFileSync(inbox, JSON.stringify(oldNotice) + '\n' + JSON.stringify(next));
+  const { child, commands } = controlledChild();
+  const pending = finishAfterSilence(child, { inbox, seenIds: [oldNotice.id], waitMs: 120 });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(commands, [], 'an incomplete append is not a durable new notice');
+  fs.appendFileSync(inbox, '\n');
+  assert.deepEqual(await pending, next);
+  assert.deepEqual(commands, ['progress\n', 'finish\n']); assert.equal(child.exitCode, 0);
+  assertListenersRemoved(child);
+});
+
+test('a real error during the substantive quiet interval is preserved before finish', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-silence-quiet-error-')), inbox = path.join(root, 'inbox.log');
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(inbox, JSON.stringify({ type: 'notice', id: 'new-run' }) + '\n');
+  const { child, commands } = controlledChild(), failure = Error('controlled quiet worker error');
+  const pending = finishAfterSilence(child, { inbox });
+  const rejected = assert.rejects(pending, error => error === failure);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(commands, ['progress\n']); child.emit('error', failure);
+  await rejected; assert.deepEqual(commands, ['progress\n']); assertListenersRemoved(child);
 });

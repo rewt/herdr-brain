@@ -486,7 +486,7 @@ function consumeRequests(queue) {
           if (row) Object.assign(row, { cleanup: { state: outcome.complete ? 'complete' : 'pending', owner: 'closeout-queue',
             ...(handed ? { keys, source: job.source } : {}),
             ...(!outcome.complete ? { reason: outcome.reason } : {}) },
-            reason: outcome.complete ? 'green fast-forward; closeout complete' : `integrated-but-cleanup-pending: ${outcome.reason}` });
+            reason: outcome.complete ? (job.gate?.outcome === 'waived' ? 'operator-waived fast-forward; closeout complete' : 'green fast-forward; closeout complete') : `integrated-but-cleanup-pending: ${outcome.reason}` });
         });
       }
       return;

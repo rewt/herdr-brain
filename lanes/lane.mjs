@@ -2583,7 +2583,7 @@ function withPromotionLock(operation) {
 
 function promote(topic, options = {}) {
   const root = repositoryRoot({ requiredBy: "promote" });
-  try { waitForPromotionMemory(root); }
+  try { if (!validationSettings().landing_waiver) waitForPromotionMemory(root); }
   catch (error) {
     if (error.code === RESERVATION_WAIT_EXPIRED_CODE) { deferReservation(error); return; }
     fail(error.message);

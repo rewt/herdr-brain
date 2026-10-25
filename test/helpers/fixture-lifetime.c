@@ -29,15 +29,19 @@ static void guard(const char *fifo, pid_t owner) {
 
 int main(int argc, char **argv) {
   if (argc < 4) return 125;
+  // Preserve the legacy launcher argument; it is no longer an execution limit.
+  int seconds = atoi(argv[3]);
+  if (seconds < 1) return 125;
   if (!strcmp(argv[1], "--watch")) {
+    if (argc < 5) return 125;
     char *end;
-    long pid = strtol(argv[3], &end, 10);
-    if (end == argv[3] || *end || pid <= 1 || (long)(pid_t)pid != pid) return 125;
+    long pid = strtol(argv[4], &end, 10);
+    if (end == argv[4] || *end || pid <= 1 || (long)(pid_t)pid != pid) return 125;
     pid_t owner = (pid_t)pid;
     if (getppid() != owner) return 0;
     guard(argv[2], owner);
   }
-  if (strcmp(argv[1], "--exec")) return 125;
+  if (strcmp(argv[1], "--exec") || argc < 5) return 125;
   pid_t owner = getpid(), child = fork();
   if (child < 0) return 125;
   if (!child) {
@@ -46,6 +50,6 @@ int main(int argc, char **argv) {
     for (int fd = 0; fd < maximum; fd++) close(fd);
     guard(argv[2], owner);
   }
-  execvp(argv[3], &argv[3]);
+  execvp(argv[4], &argv[4]);
   return 125;
 }

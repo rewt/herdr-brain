@@ -87,6 +87,12 @@ for (const fault of ['stripped nested copy', 'dirty', 'hidden index', 'untracked
     checkoutGit(f.source, ['add', '--renormalize', 'lib/probe.mjs']);
     checkoutGit(f.source, ['commit', '-qm', 'Clean conversion']);
     fs.writeFileSync(file, 'export const value=1;\r\n');
+    // Refresh the converted worktree's index stat data; its normalized blob
+    // stays identical, while --no-filters must still expose different bytes.
+    checkoutGit(f.source, ['add', 'lib/probe.mjs']);
+    const blob = checkoutGit(f.source, ['rev-parse', 'HEAD:lib/probe.mjs']);
+    assert.equal(checkoutGit(f.source, ['hash-object', '--path=lib/probe.mjs', 'lib/probe.mjs']), blob);
+    assert.notEqual(checkoutGit(f.source, ['hash-object', '--no-filters', 'lib/probe.mjs']), blob);
     assert.equal(checkoutGit(f.source, ['status', '--porcelain', '--untracked-files=no']), '');
   }
   const destination = path.join(f.root, 'candidate');

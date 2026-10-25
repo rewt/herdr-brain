@@ -120,7 +120,20 @@ test('a covered build retains one full execution, refuses stale or unresolved ev
   fs.writeFileSync(red, JSON.stringify({ ...JSON.parse(fs.readFileSync(execution.receipt)), exit_code: 1 }));
   const redBase = { ...base, evidence: [{ ...base.evidence[0], file: red, sha256: sha(fs.readFileSync(red)) }] };
   await assert.rejects(verify(publish(redBase)), /known-red/);
+  const observed = path.join(f.root, 'partial.execution.json');
+  const observations = [{ id: 'native-suite', kind: 'suite', event: 'start', depth: 0, files: ['command:npm run test:release'] },
+    { id: 'wrong-suite', kind: 'suite', event: 'finish', depth: 0, exit_code: 0 }];
+  const observedBase = { ...base, evidence: [{ ...base.evidence[0], file: observed }] };
+  const observe = () => {
+    fs.writeFileSync(observed, JSON.stringify({ ...JSON.parse(fs.readFileSync(red)), timings: observations }));
+    return publish({ ...observedBase, evidence: [{ ...observedBase.evidence[0], sha256: sha(fs.readFileSync(observed)) }] });
+  };
+  await assert.rejects(verify(observe()), /known-red/, 'an unrelated green finish cannot close an unfinished suite');
+  observations[1].id = 'native-suite';
+  assert.equal((await verify(observe())).kind, 'supervisor-reconciled-full-coverage', 'paired successful native components survive a later failure');
   await assert.rejects(verify(publish({ ...base, evidence: [{ ...base.evidence[0], changedFiles: ['invented.mjs'] }] })), /reconciliation is stale/);
+  await assert.rejects(verify(publish({ ...base, runtime: { ...base.runtime, version: 'unknown' } })), /runtime changed/);
+  await assert.rejects(verify(publish({ ...base, evidence: [{ ...base.evidence[0], sha256: '0'.repeat(64) }] })), /evidence changed/);
   const file = publish(base);
   const proof = await verify(file);
   assert.equal(proof.kind, 'supervisor-reconciled-full-coverage');

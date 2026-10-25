@@ -44,6 +44,9 @@ test('release scripts retain one shared family without retrying the entire relea
   assert.ok(scripts['test:release:steps'].endsWith(' && npm run test:release:only'));
   assert.doesNotMatch(scripts['test:release:steps'], /test-slot\.mjs run test:release:only/);
   assert.equal(scripts['test:release'], 'node test-slot/test-slot.mjs run test:release -- npm run test:release:steps');
+  for (const name of ['test', 'test:promotion:steps', 'test:release:steps']) {
+    assert.doesNotMatch(scripts[name], /--retry-timeout-under-load/, name);
+  }
 });
 
 test('the fresh snapshot gate passes its declared timeout through every nested release wrapper', async t => {
@@ -138,7 +141,7 @@ fs.appendFileSync(log,JSON.stringify({file,occupancy:fs.readdirSync(${JSON.strin
 ${i === 1 ? failure : ''}
 `);
   }
-  // Exercise the same non-retrying outer slot and retrying per-suite adapters
+  // Exercise the same non-retrying outer slot and per-suite adapters
   // as test:release:only, with real bounded runners and scratch test files.
   const child = spawnScenarioChild(t, process.execPath, [slot, 'run', 'release-fixture', '--', process.execPath, helper,
     '--fixed-deadlines', '--file-timeout=5000', '--suite-timeout=1500', ...files], {
@@ -154,20 +157,19 @@ ${i === 1 ? failure : ''}
   return { ...result, attempts: attempts.map(row => row.file), files };
 }
 
-test('an internal test timeout under load retries only that suite and continues once', async t => {
+test('a one-off legacy timeout exit stops once without replaying completed suites', async t => {
   const result = await scenario(t, "if(!before.some(row=>row.file===file)){console.error('testTimeoutFailure');process.exit(124);}");
-  assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.deepEqual(result.attempts, [result.files[0], result.files[1], result.files[1], result.files[2]]);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.deepEqual(result.attempts, result.files.slice(0, 2));
   assert.match(result.stdout + result.stderr, /testTimeoutFailure/);
-  assert.match(result.stderr, /TEST_SLOT_TIMEOUT_RETRY: test:release:lanes\/test\/lane.test.mjs:1/);
-  assert.equal((result.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
+  assert.doesNotMatch(result.stderr, /TEST_SLOT_TIMEOUT_RETRY:/);
 });
 
-test('a repeated internal test timeout stops without replaying completed or later suites', async t => {
+test('a persistent legacy timeout exit stops once without starting later suites', async t => {
   const result = await scenario(t, "console.error('testTimeoutFailure');process.exit(124);");
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.deepEqual(result.attempts, [result.files[0], result.files[1], result.files[1]]);
-  assert.equal((result.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
+  assert.deepEqual(result.attempts, result.files.slice(0, 2));
+  assert.doesNotMatch(result.stderr, /TEST_SLOT_TIMEOUT_RETRY:/);
 });
 
 test('an ordinary failure under load stops without retrying or starting later suites', async t => {

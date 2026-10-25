@@ -1,5 +1,6 @@
 // Release-only suites have a fixed file-count bound as the inventory grows.
-// The host slot spans the command; only an individual suite may retry.
+// The host slot spans the command. A real failure stops once; completed suites
+// remain evidence for the release's failing/affected/unrun continuation.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from '../../lib/cli-help.mjs';
@@ -48,7 +49,8 @@ export function main(argv = process.argv.slice(2)) {
     for (const [name, rows] of groups) {
       console.log(`Release suite ${name}: ${rows.length} files`);
       const result = runTestSlotSync(`test:release:${name}`, [process.execPath, runner, ...options, ...rows], {
-        stdio: 'inherit', env: { ...process.env, MONITOR_TEST_SUITE_NAME: `release:${name}`, MONITOR_TEST_TIER: tier },
+        stdio: 'inherit', retryTimeout: false,
+        env: { ...process.env, MONITOR_TEST_SUITE_NAME: `release:${name}`, MONITOR_TEST_TIER: tier },
       });
       if (result.error) throw result.error;
       if (result.status !== 0) { exitCode = process.exitCode = result.status ?? 1; return; }

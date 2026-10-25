@@ -35,9 +35,9 @@ export function probeNativeGate({ open = fs.openSync, close = fs.closeSync } = {
 
 // Written only by the finite drain while it owns worker.lock. A PID alone is
 // insufficient: compare the kernel birth and command with the probe's owner.
-export function nativeWorkerEvidence() {
-  const native_gate = probeNativeGate();
-  if (!native_gate.ok) return { native_gate };
+export function nativeWorkerEvidence({ gateRequired = true, authority } = {}) {
+  const native_gate = gateRequired ? probeNativeGate() : { outcome: 'not-required', executed: false, authority };
+  if (gateRequired && !native_gate.ok) return { native_gate };
   const current = lookupProcess(process.pid);
   return { native_gate, ...(current.ok && current.value ? { native_process: current.value } : {}) };
 }

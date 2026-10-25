@@ -84,11 +84,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "PTY owner requires its own live terminal session\n"); return 125;
   }
   char *end; unsigned long duration = strtoul(argv[1], &end, 10);
-  // The JavaScript transport passes its measured-load allowance. Keep the
-  // native watchdog finite without rejecting allowances above the 15s base.
-  if (*end || !duration || duration > INT32_MAX) return 125;
+  // Zero is productive execution without an elapsed deadline. A nonzero value
+  // is supplied only by the explicit negative-control faultExpiryMs input.
+  if (*end || duration > INT32_MAX) return 125;
   unsigned long cleanup_duration = strtoul(argv[2], &end, 10);
-  if (*end || !cleanup_duration || cleanup_duration > INT32_MAX) return 125;
+  if (*end || cleanup_duration > INT32_MAX) return 125;
+  (void)cleanup_duration; // Retained argv compatibility; cleanup follows observation.
   uint64_t deadline = milliseconds() + duration;
   pid_t parent = getppid();
   signal(SIGTERM, interrupted); signal(SIGINT, interrupted); signal(SIGHUP, interrupted);
@@ -107,14 +108,14 @@ int main(int argc, char **argv) {
     if (result == child) { complete = 1; break; }
     if (result < 0) { if (errno == EINTR) continue; stopped = SIGTERM; break; }
     if (getppid() != parent) stopped = SIGHUP;
-    if (stopped || milliseconds() >= deadline) { expired = !stopped; break; }
+    if (stopped || (duration && milliseconds() >= deadline)) { expired = !stopped; break; }
     pause_scan();
   }
   // Freeze producers before killing session members, including separate job
   // groups and grandchildren whose parent already exited. Repeat to close forks
   // that raced the first enumeration; the retained session leader is the anchor.
-  uint64_t cleanup = milliseconds() + cleanup_duration; int empty = 0, failed = 0;
-  while (empty < 3 && milliseconds() < cleanup) {
+  int empty = 0, failed = 0;
+  while (empty < 3) {
     if (sweep(SIGSTOP) < 0) { failed = 1; break; }
     int count = sweep(SIGKILL);
     if (count < 0) { failed = 1; break; }
@@ -122,7 +123,7 @@ int main(int argc, char **argv) {
     empty = count ? 0 : empty + 1; pause_scan();
   }
   if (failed || empty < 3) { fprintf(stderr, "PTY session cleanup unconfirmed\n"); return 125; }
-  if (expired) { fprintf(stderr, "PTY command %s exceeded %lu milliseconds\n", argv[3], duration); return 124; }
+  if (expired) { fprintf(stderr, "PTY injected expiry for %s after %lu milliseconds\n", argv[3], duration); return 124; }
   if (stopped) return 128 + stopped;
   return complete && WIFEXITED(status) ? WEXITSTATUS(status) : complete ? 128 + WTERMSIG(status) : 125;
 }

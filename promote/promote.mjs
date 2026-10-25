@@ -1,3 +1,4 @@
+import { resolveValidation } from '../lanes/validation.mjs';
 #!/usr/bin/env node
 // A durable FIFO and one detached, finite drain worker. No model calls.
 import { loadTimeout } from '../lib/deadline.mjs';
@@ -208,8 +209,10 @@ function cleanup(job, queue, workspace) {
 
 function perform(job, queue) {
   guardPromotionJob(job);
-  const native = probeNativeGate();
-  if (!native.ok) return { outcome: 'refused', code: native.code, reason: native.reason, native_context: native };
+  if (!resolveValidation({ root: queue.project.canonical }).landing_waiver) {
+    const native = probeNativeGate();
+    if (!native.ok) return { outcome: 'refused', code: native.code, reason: native.reason, native_context: native };
+  }
   const cwd = queue.project.canonical;
   const env = { ...process.env, ORG_DIR: job.org ?? undefined, HERDR_RETIRE_HERDR: job.herdr, LANE_VALIDATE: job.validate ?? undefined, LANE_CONFIG: job.laneConfig ?? undefined };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
@@ -273,12 +276,13 @@ function performBatch(batch, queue, settings) {
     writeFileAtomic(receipt, JSON.stringify(retained, null, 2) + '\n');
     throw settingsRefusal(native.code, `${native.reason}; prior integration checkpoints retained for inspection`);
   };
-  const native = probeNativeGate();
-  if (!native.ok) return refuseNative(native);
+  const waived = resolveValidation({ root: cwd }).landing_waiver;
+  if (!waived) { const native = probeNativeGate(); if (!native.ok) return refuseNative(native); }
   const output = fs.openSync(log, 'a');
   let r;
-  try { r = runProjectGateSync({ canonical: cwd, receipt, settings,
-    argv: [first.laneCLI, 'promote-batch', receipt], cwd, env, stdio: ['ignore', output, output] }); }
+  try { r = waived
+    ? spawnSync(process.execPath, [first.laneCLI, 'promote-batch', receipt], { cwd, env, stdio: ['ignore', output, output] })
+    : runProjectGateSync({ canonical: cwd, receipt, settings, argv: [first.laneCLI, 'promote-batch', receipt], cwd, env, stdio: ['ignore', output, output] }); }
   finally { fs.closeSync(output); }
   const hostFile = path.join(directory, 'host-gate.json');
   if (r.status !== 0 && fs.existsSync(hostFile)) {
@@ -618,7 +622,7 @@ export async function drain(queue, { attempted = new Set() } = {}) {
     }
     if (release) {
       const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
-      writeFileAtomic(path.join(lock, 'owner.json'), JSON.stringify({ ...owner, ...nativeWorkerEvidence() }) + '\n');
+      writeFileAtomic(path.join(lock, 'owner.json'), JSON.stringify({ ...owner, ...nativeWorkerEvidence({ gateRequired: !resolveValidation({ root: queue.project.canonical }).landing_waiver, authority: resolveValidation({ root: queue.project.canonical }).landing_waiver }) }) + '\n');
     }
   });
   if (!release) { process.send?.({ ready: true, already_running: true }); return; }

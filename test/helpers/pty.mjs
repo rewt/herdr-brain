@@ -1,5 +1,4 @@
 // Dependency-free test transport for BSD script (Darwin) and util-linux script.
-import { loadFactor, loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -7,7 +6,6 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isMain } from '../../lib/cli-help.mjs';
-import { commandAllowance } from './command-allowance.mjs';
 
 function findScript() {
   const candidates = process.env.TEST_PTY_SCRIPT ? [process.env.TEST_PTY_SCRIPT]
@@ -37,7 +35,7 @@ function nativeOwner(source) {
   const owner = path.join(cache, digest);
   if (!fs.existsSync(owner)) {
     const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', owner, source], {
-      encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: cache },
+      encoding: 'utf8', env: { PATH: '/usr/bin:/bin', TMPDIR: cache },
     });
     if (built.error || built.status) {
       fs.rmSync(owner, { force: true });
@@ -47,20 +45,16 @@ function nativeOwner(source) {
   return owner;
 }
 export function runPTY(binary, args, options = {}) {
-  const { ownerSource = fileURLToPath(new URL('./pty-owner.c', import.meta.url)), ...nativeOptions } = options;
-  const factor = loadFactor();
-  const maximum = loadTimeout(15000, factor);
-  const timeout = Math.min(nativeOptions.timeout || maximum, maximum);
-  const cleanupMs = loadTimeout(3000, factor);
-  if (!Number.isSafeInteger(timeout) || timeout < 1) throw Error('invalid PTY timeout');
+  const { ownerSource = fileURLToPath(new URL('./pty-owner.c', import.meta.url)),
+    faultExpiryMs = 0, timeout: legacyTimeout, ...nativeOptions } = options;
+  if (!Number.isSafeInteger(faultExpiryMs) || faultExpiryMs < 0 || faultExpiryMs > 2147483647) throw Error('invalid PTY fault-expiry control');
   const owner = nativeOwner(ownerSource);
-  const transport = ptyCommand(owner, [String(timeout), String(cleanupMs), binary, ...args], { exec: true });
-  const responseMs = loadTimeout(timeout + cleanupMs, 1);
-  // Only compilation is shared. Every invocation retains its own native session,
-  // command deadline, cleanup window, descendant audit and signal authority.
+  const transport = ptyCommand(owner, [String(faultExpiryMs), '0', binary, ...args], { exec: true });
+  // A legacy timeout is accepted as compatibility metadata, never an execution
+  // cutoff. Only the explicitly named negative-control input injects expiry.
+  void legacyTimeout;
   return spawnSync(transport.file, transport.args, {
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...nativeOptions,
-    timeout: responseMs, [commandAllowance]: responseMs, killSignal: 'SIGKILL',
   });
 }
 

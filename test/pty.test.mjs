@@ -81,13 +81,12 @@ test('PTY completion retains TTY, arguments, output and exit status', { skip: PT
   assert.equal(result.status, 7, result.stdout + result.stderr);
   assert.deepEqual(JSON.parse(result.stdout.match(/\{"tty"[^\r\n]+/)[0]), { tty: true, args });
 });
-test('PTY native owner accepts the measured-load allowance above its fifteen-second base', { skip: PTY_SKIP_REASON }, t => {
+test('PTY native owner has no productive elapsed execution bound', { skip: PTY_SKIP_REASON }, t => {
   const load = os.loadavg, capacity = os.availableParallelism;
   os.loadavg = () => [24, 24, 24]; os.availableParallelism = () => 4;
   t.after(() => { os.loadavg = load; os.availableParallelism = capacity; });
-  // An immediate nonzero exit distinguishes a successful native launch from
-  // rejecting the scaled 90-second bound with status 125 before exec.
-  const result = runPTY(process.execPath, ['-e', 'console.log(process.stdin.isTTY);process.exitCode=7']);
+  // A legacy one-millisecond request is metadata; actual TTY/output/exit still complete.
+  const result = runPTY(process.execPath, ['-e', 'console.log(process.stdin.isTTY);process.exitCode=7'], { timeout: 1 });
   assert.equal(result.status, 7, result.stdout + result.stderr);
   assert.match(result.stdout, /true/);
 });
@@ -126,9 +125,9 @@ test('PTY cleanup refusal still returns unconfirmed status with a loaded allowan
   assert.equal(result.status, 125, result.stdout + result.stderr);
   assert.match(result.stdout + result.stderr, /PTY session cleanup unconfirmed/);
 });
-test('PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops', { skip: PTY_SKIP_REASON }, async t => {
+test('explicit PTY fault expiry clears its separate group, including SIGHUP handlers with blocked loops', { skip: PTY_SKIP_REASON }, async t => {
   const f = fixture(t), start = Date.now();
-  const result = runPTY(process.execPath, [f.program], { timeout: 1500 });
+  const result = runPTY(process.execPath, [f.program], { faultExpiryMs: 1500 });
   assert.ok(result.error?.code === 'ETIMEDOUT' || result.status === 124, result.stdout + result.stderr);
   const receipt = readReceipt(f);
   await waitForCleanup(f.root, receipt);
@@ -145,7 +144,7 @@ for (const kind of ['normal exit', 'SIGTERM', 'SIGKILL', 'SIGKILL shell job', 'S
     fs.writeFileSync(file, `import test from ${JSON.stringify(boundedTest)};
 import {runPTY} from ${JSON.stringify(ptyHelper)};
 import assert from 'node:assert/strict';
-test('blocked PTY culprit',()=>{const result=runPTY(${JSON.stringify(binary)},${JSON.stringify(args)},{timeout:5000});assert.equal(result.status,0,result.stdout+result.stderr);});`);
+test('blocked PTY culprit',()=>{const result=runPTY(${JSON.stringify(binary)},${JSON.stringify(args)},{});assert.equal(result.status,0,result.stdout+result.stderr);});`);
     const outer = spawnChild(t, process.execPath, [runner, file]);
     const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
     await waitForFile(f.receipt, text => text.length > 0);

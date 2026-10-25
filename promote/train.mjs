@@ -30,7 +30,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   const save = () => writeFileAtomic(file, JSON.stringify(plan, null, 2) + '\n', 0o600);
-  const profile = resolveGateProfile(canonical);
+  const profile = validation.landing_waiver ? null : resolveGateProfile(canonical);
   if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
   const env = profile?.env ?? validationEnvironment();
   // Unconfigured trains also queue for the slot with a cap. Explicit host
@@ -224,9 +224,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   };
   const validateAttempt = attempt => {
     try {
-      plan.native_context = probeNativeGate(); save();
-      if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
       if (validation.landing_waiver) {
+        plan.native_context = { outcome: 'not-required', executed: false, authority: validation.landing_waiver,
+          reason: 'No test workload; actual Git/source/claim/lock/FF guards authorize integration, not test capabilities' };
         clean(attempt.scratch);
         if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip) throw Error('waived train tip changed');
         const log = file + `.${attempt.ids.join('-')}.waiver.log`;
@@ -240,6 +240,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         process.stdout.write(text);
         attempt.phase = 'waived'; save(); return true;
       }
+      plan.native_context = probeNativeGate(); save();
+      if (!plan.native_context.ok) throw Object.assign(new Error(plan.native_context.reason), { code: plan.native_context.code });
       const declaration = readReceiptDeclaration({ repo: canonical, base: attempt.base });
       const exact = declaration ? { base: attempt.base, declaration } : undefined;
       const gateEnv = declaration ? restrictEnvironment(env, declaration) : env;

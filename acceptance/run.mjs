@@ -257,6 +257,7 @@ async function closeWorker(job) {
   lane(['close', job.lane]);
 }
 
+let cleanupSucceeded = false;
 function cleanupScope() {
   return cleanupPromise ??= closeScope();
 }
@@ -308,17 +309,8 @@ async function closeScope() {
     // session. Remove them after the owned panes/processes have stopped.
     removeCredentials(root);
     if (errors.length) throw new HarnessLimit(`cleanup failed: ${errors.join('; ')}`);
-    await finishFocus();
-    if (results.find(result => result.key === cases.focus.key)?.status !== 'PASS') throw new HarnessLimit('focus completion uncertain; scratch roots retained');
-    if (!candidateSnapshot) throw new HarnessLimit('candidate identity uncertain; source roots retained');
-    if (candidateSnapshot.kind === 'checkout') verifyProductCheckoutIsolation(captureProductCheckout(candidate, candidateCommit, { all: true, git }), git);
-    if (!opt.keep) for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true });
-    // Preserve only evidence unless requested. chmod is limited to this mkdtemp.
-    if (!opt.keep) {
-      run('chmod', ['-R', 'u+w', root], { duringCleanup: true });
-      for (const entry of fs.readdirSync(root)) if (entry !== 'evidence') fs.rmSync(path.join(root, entry), { recursive: true, force: true });
-    }
-    return opt.keep ? `scratch retained: ${root}; all created workspaces closed` : 'all created workspaces closed; only evidence retained';
+    cleanupSucceeded = true;
+    return 'all created workspaces closed; focus and source audit precede scratch disposal';
   } finally { removeCredentials(root); }
 }
 
@@ -348,7 +340,18 @@ async function closeFocus() {
     }
     // Read forbidden attempts even if the monitor failed or a candidate caller
     // swallowed its refusal. A missing focus change cannot green such a call.
-    return assertFocus(summary, { evidence, error });
+    const detail = assertFocus(summary, { evidence, error });
+    // Cleanup's case has completed before this distinct focus case starts.
+    // Keep both evidence streams and ordinals intact; only then discard roots.
+    if (!cleanupSucceeded) throw new HarnessLimit('cleanup completion uncertain; scratch roots retained');
+    if (!candidateSnapshot) throw new HarnessLimit('candidate identity uncertain; source roots retained');
+    if (candidateSnapshot.kind === 'checkout') verifyProductCheckoutIsolation(captureProductCheckout(candidate, candidateCommit, { all: true, git }), git);
+    if (!opt.keep) for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true });
+    if (!opt.keep) {
+      run('chmod', ['-R', 'u+w', root], { duringCleanup: true });
+      for (const entry of fs.readdirSync(root)) if (entry !== 'evidence') fs.rmSync(path.join(root, entry), { recursive: true, force: true });
+    }
+    return detail;
   });
 }
 installSignalCleanup({ root, onSignal: () => { stopping = true; }, cleanup: async () => {

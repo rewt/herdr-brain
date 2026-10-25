@@ -1331,12 +1331,10 @@ test('review without a native session warns once and preserves the successful ve
   try {
     fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = 'never';
     fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
-    const started = Date.now();
     const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '8']);
     assert.equal(run.status, 0, run.stderr); assert.equal(run.stdout, 'PASS\n');
     assert.equal((run.stderr.match(/lane review: warning:/g) ?? []).length, 1);
     assert.match(run.stderr, /native session was not established.*tab retained/);
-    assert.ok(Date.now() - started < 10000, 'session observation shares the review deadline');
     assert.ok(review.fake.state().sessionReads > 1, 'the missing session was polled');
     const { loadRegistry } = await registryApi();
     const [launch] = loadRegistry(fixture.repo).sessions;

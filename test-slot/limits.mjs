@@ -7,7 +7,9 @@ import { createHash } from 'node:crypto';
 import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs';
 
 export const FROZEN_SECONDS_ENV = 'MONITOR_TEST_SLOT_FROZEN_SECONDS';
-export const FROZEN_SECONDS = 4 * 60 * 60;
+// ENG-625 / R-822: longest retained completed case, 199580.020875 ms / 1000.
+// Provenance: .org/evidence/ENG-625/R-822/measurement.md in the owning record.
+export const FROZEN_SECONDS = 199.580020875;
 export const SILENCE_SECONDS = 900;
 export function frozenSeconds(env = process.env) {
   const value = Number(env[FROZEN_SECONDS_ENV] ?? FROZEN_SECONDS);

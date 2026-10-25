@@ -306,7 +306,7 @@ const workspace = (id, label, path, linked, repoKey = process.env.FAKE_HERDR_REP
 });
 const nativeAgent = () => ({
     agent_status: "idle", cwd: process.env.FAKE_HERDR_AGENT_CWD || process.env.FAKE_HERDR_LANE_PATH, name: state.agent,
-    pane_id: state.agentPane || "w-lane:p2", workspace_id: "w-lane", terminal_id: "fixture-terminal-1",
+    pane_id: state.agentPane || "w-lane:p2", workspace_id: (state.agentPane || "w-lane:p2").split(":")[0], terminal_id: "fixture-terminal-1",
     ...(process.env.FAKE_RETIREMENT_OWNER ? { agent: JSON.parse(process.env.FAKE_RETIREMENT_OWNER).command.replace(/^\\[|\\]$/g, ''), tab_id: "w-lane:t2" } : {}),
     ...(!process.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS || (state.prompted &&
       (state.sessionReads || 0) >= Number(process.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS)) ? {
@@ -406,11 +406,12 @@ if (args[0] === "workspace" && args[1] === "list") {
   save();
   result("cli:workspace:close", { type: "workspace_close", workspace_id: args[2] });
 } else if (args[0] === "tab" && args[1] === "create") {
+  const workspaceId = args.includes("--workspace") ? args[args.indexOf("--workspace") + 1] : "w-lane";
   state.tabCount = (state.tabCount || 1) + 1;
   save();
   result("cli:tab:create", {
-    type: "tab_create", tab: { tab_id: "w-lane:t2", workspace_id: "w-lane" },
-    root_pane: { pane_id: "w-lane:p2", tab_id: "w-lane:t2", workspace_id: "w-lane" },
+    type: "tab_create", tab: { tab_id: workspaceId + ":t2", workspace_id: workspaceId },
+    root_pane: { pane_id: workspaceId + ":p2", tab_id: workspaceId + ":t2", workspace_id: workspaceId },
   });
 } else if (args[0] === "pane" && args[1] === "process-info") {
   const shellPid = Number(process.env.FAKE_HERDR_SHELL_PID || 123456789);

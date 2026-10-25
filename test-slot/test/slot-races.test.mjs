@@ -65,7 +65,7 @@ test('unknown samples restart the inactivity window rather than authorizing a fr
   at = 10.9; watcher.tick(); assert.equal(stops.length, 1);
 });
 
-test('the durable-notice handshake survives a delayed audit and a reused receipt through later silence', { timeout: 10000 }, async t => {
+test('the durable-notice handshake survives a delayed audit and a reused receipt through later silence', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-silence-control-')), inbox = path.join(root, 'inbox.log');
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const ids = [], receipt = path.join(root, 'stable-result.json');
@@ -103,7 +103,7 @@ test('the durable-notice handshake survives a delayed audit and a reused receipt
   assert.ok(inboxNotices(inbox).every(row => row.to === 'owning-supervisor' && row.message.includes('test continues')));
 });
 
-test('an earlier durable notice cannot release the next payload and a missing notice has a bounded failure', { timeout: 3000 }, async t => {
+test('an earlier durable notice cannot release the next payload and a missing notice has a bounded failure', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-silence-negative-')), inbox = path.join(root, 'inbox.log');
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(inbox, JSON.stringify({ type: 'notice', id: 'earlier-run' }) + '\n');

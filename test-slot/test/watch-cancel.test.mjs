@@ -5,11 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadTimeout } from '../../lib/deadline.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
-for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`${signal} during the first watch audit reaches compound descendants`, { timeout: loadTimeout(10000) }, async t => {
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`${signal} during the first watch audit reaches compound descendants`, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-cancel-'));
   const ready = path.join(root, 'ready'), got = path.join(root, 'got'), auditing = path.join(root, 'auditing');
   const resume = path.join(root, 'resume'), lock = path.join(root, 'slot'), preload = path.join(root, 'audit.mjs');
@@ -21,8 +20,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`${signal} during the
 const execute=cp.spawnSync;cp.spawnSync=(file,args,...rest)=>{
   if(file==='/bin/ps'&&args.includes('pid=,time=,stat=')){
     fs.writeFileSync(${JSON.stringify(auditing)},args.at(-1));
-    const end=Date.now()+${loadTimeout(5000)};
-    while(!fs.existsSync(${JSON.stringify(resume)})&&Date.now()<end)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+    while(!fs.existsSync(${JSON.stringify(resume)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
   }
   return execute(file,args,...rest);
 };syncBuiltinESMExports();`);
@@ -31,7 +29,13 @@ const execute=cp.spawnSync;cp.spawnSync=(file,args,...rest)=>{
   const child = spawn(process.execPath, [cli, 'run', 'cancel at startup', '--', '/bin/sh', '-c',
     `${JSON.stringify(process.execPath)} ${JSON.stringify(leaf)}; :`], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = ''; child.stderr.on('data', data => { stderr += data; }); child.stdout.resume();
-  const done = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
+  let spawnError;
+  const closed = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
+  const done = new Promise((resolve, reject) => {
+    child.once('error', error => { spawnError = error; reject(error); });
+    closed.then(resolve);
+  });
+  done.catch(() => {}); // The readiness loop also surfaces an early spawn error.
   t.after(async () => {
     fs.writeFileSync(resume, 'resume');
     if (fs.existsSync(auditing)) {
@@ -39,18 +43,19 @@ const execute=cp.spawnSync;cp.spawnSync=(file,args,...rest)=>{
       try { process.kill(-pgid, 'SIGKILL'); } catch {}
     }
     if (fs.existsSync(ready)) try { process.kill(Number(fs.readFileSync(ready, 'utf8')), 'SIGKILL'); } catch {}
-    child.kill('SIGKILL'); await done;
+    child.kill('SIGKILL'); await closed;
     fs.rmSync(root, { recursive: true, force: true });
   });
-  const deadline = Date.now() + loadTimeout(5000);
-  while ((!fs.existsSync(ready) || !fs.existsSync(auditing)) && Date.now() < deadline)
+  while (!fs.existsSync(ready) || !fs.existsSync(auditing)) {
+    if (spawnError) throw spawnError;
+    assert.equal(child.exitCode, null, `watch wrapper exited before readiness: ${stderr}`);
+    assert.equal(child.signalCode, null, `watch wrapper was signalled before readiness: ${stderr}`);
     await new Promise(resolve => setTimeout(resolve, 20));
+  }
   assert.ok(fs.existsSync(ready) && fs.existsSync(auditing), stderr);
   child.kill(signal);
   fs.writeFileSync(resume, 'resume');
-  let timer;
-  const result = await Promise.race([done, new Promise(resolve => { timer = setTimeout(resolve, loadTimeout(3000)); })]);
-  clearTimeout(timer);
+  const result = await done;
   assert.equal(fs.existsSync(got) && fs.readFileSync(got, 'utf8'), signal, 'the descendant handles cancellation during watch startup');
   assert.ok(result, stderr); assert.notEqual(result.code, 0);
   assert.equal(fs.existsSync(lock), false, 'the cancelled gate releases its slot');

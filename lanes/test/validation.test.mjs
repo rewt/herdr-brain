@@ -19,10 +19,16 @@ import { validateValidation as preProfileValidation } from './fixtures/pre-profi
 import { resourceStanza } from '../../test-slot/resources.mjs';
 
 const cli = fileURLToPath(new URL('../lane.mjs', import.meta.url));
-test('the pre-profile main validator accepts the tracked declaration without new fields', () => {
+test('historical validation accepts legacy fields and refuses the current explicit policy extension', () => {
   const declaration = JSON.parse(fs.readFileSync(new URL('../../.lane.validation.json', import.meta.url), 'utf8'));
-  assert.doesNotThrow(() => preProfileValidation(declaration));
-  assert.throws(() => preProfileValidation({ ...declaration, resources: {} }), /unknown validation field: resources/);
+  const { review, landing_waiver, ...legacy } = declaration;
+  assert.doesNotThrow(() => preProfileValidation(legacy));
+  assert.throws(() => preProfileValidation({ ...legacy, review }), /unknown validation field: review/);
+  assert.throws(() => preProfileValidation({ ...legacy, landing_waiver }), /unknown validation field: landing_waiver/);
+  assert.doesNotThrow(() => validateValidation(declaration));
+  assert.equal(review, 'parallel');
+  assert.equal(landing_waiver, 'operator-20261025-until-stable-release');
+  assert.throws(() => preProfileValidation({ ...legacy, resources: {} }), /unknown validation field: resources/);
   assert.equal(Object.hasOwn(declaration, 'resources'), false);
 });
 function fixture(t, declaration = {}) {

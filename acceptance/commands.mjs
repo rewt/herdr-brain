@@ -7,7 +7,9 @@ import { commandFailure } from './limits.mjs';
 export function loadAwareCommand(execute, load, { scratchRoots = [] } = {}) {
   return (file, args, options) => {
     const window = load?.begin();
-    const result = execute(file, args, { ...options, timeout: responseAllowance(options?.timeout ?? 60_000, load),
+    // Ordinary acceptance commands have no elapsed stop. Explicit nonzero
+    // values are retained only for deliberately injected timeout controls.
+    const result = execute(file, args, { ...options, timeout: responseAllowance(options?.timeout ?? 0, load),
       killSignal: options?.killSignal ?? 'SIGKILL' });
     const measured = load?.snapshot(window);
     if (result.error) {

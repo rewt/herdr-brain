@@ -43,13 +43,13 @@ test('report polling observes completion beyond its planning allowance without a
   assert.equal(at, 3_600_000);
 });
 
-test('each command samples current load, preserves zero, and supplies a bounded default', (t) => {
+test('each command samples explicit control load and ordinary commands have no elapsed default', (t) => {
   let value = 24;
   const load = createLoadMonitor({ read: () => [value, value, value], cpus: 18 }); t.after(load.stop);
   const seen = [], command = loadAwareCommand((file, args, options) => { seen.push(options.timeout); return { status: 0 }; }, load);
   command('child', [], { timeout: 10 }); value = 0;
   command('child', [], { timeout: 10 }); command('child', [], { timeout: 0 }); command('child', []);
-  assert.deepEqual(seen, [60, 10, 0, 60_000]);
+  assert.deepEqual(seen, [60, 10, 0, 0]);
 });
 
 // ENG-319: RC-21 case 07 used the runner's 25 s default while the inbox owner

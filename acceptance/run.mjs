@@ -155,10 +155,10 @@ const executeCommand = loadAwareCommand((command, args, options) => {
     status: r.status, error: r.error?.message, stdout: options.encoding ? r.stdout : '(archive)', stderr: String(r.stderr ?? '') }) + '\n');
   return r;
 }, load, { scratchRoots });
-function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false, isolatedEnv, duringCleanup = false } = {}) {
+function run(command, args, { cwd = root, extra = {}, ok = true, input, binary = false, isolatedEnv, duringCleanup = false } = {}) {
   if (stopping && !duringCleanup) throw new Pending('run interrupted; no further candidate commands allowed');
   const r = executeCommand(command, args, { cwd, env: checkHomes(isolatedEnv ?? { ...env, ...extra }), encoding: binary ? undefined : 'utf8',
-    input, maxBuffer: 32 * 1024 * 1024, timeout });
+    input, maxBuffer: 32 * 1024 * 1024 });
   if (ok && r.status !== 0) {
     const diagnostic = ((binary ? '' : String(r.stdout ?? '')) + String(r.stderr ?? '')).trim();
     throw commandFailure(`${path.basename(command)} ${args[0]}: ${diagnostic}`, { scratchRoots });
@@ -232,7 +232,7 @@ async function dispatch(mode, topic, { reuse, item } = {}) {
   const args = [item, '--repo', fixture.repo, '--org', fixture.org, '--lane', topic, '--route', 'scripted',
     '--brief', fixture.brief, '--report', path.join(fixture.org, `${topic}-${Date.now()}.md`), '--to', supervisor.name];
   if (reuse) args.push('--reuse', reuse);
-  const job = json(node(path.join(candidate, 'dispatch/dispatch.mjs'), args, { cwd: fixture.repo, timeout: 90_000 }).stdout);
+  const job = json(node(path.join(candidate, 'dispatch/dispatch.mjs'), args, { cwd: fixture.repo }).stdout);
   pids.add(job.watcher.pid);
   return { ...job, info: json(record(['show', job.run, '--json'])) };
 }
@@ -589,7 +589,7 @@ try {
     let failure;
     try {
       node(script, ['--once', '--cwd', fixture.repo, '--org', fixture.org, '--state-dir', state],
-        { cwd: fixture.repo, extra: { HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' }, timeout: 60_000 });
+        { cwd: fixture.repo, extra: { HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' } });
     } catch (error) { failure = error; }
     if (fs.existsSync(path.join(state, 'actions.jsonl'))) fs.copyFileSync(path.join(state, 'actions.jsonl'), path.join(evidence, 'housekeeping-actions.jsonl'));
     for (const job of [blocked, human]) assert.equal(node(path.join(root, 'herdr.mjs'), ['pane', 'get', job.pane], { ok: false }).status, 0,

@@ -81,7 +81,11 @@ for (const fault of ['stripped nested copy', 'dirty', 'hidden index', 'untracked
   if (fault === 'broken sealed marker') fs.symlinkSync(path.join(f.root, 'absent'), path.join(f.source, '.release-manifest.json'));
   if (fault === 'clean filtered bytes') {
     fs.writeFileSync(path.join(f.source, '.gitattributes'), 'lib/probe.mjs text eol=crlf\n');
-    checkoutGit(f.source, ['add', '.gitattributes']); checkoutGit(f.source, ['commit', '-qm', 'Clean conversion']);
+    checkoutGit(f.source, ['add', '.gitattributes']);
+    // Establish conversion in the index before constructing a Git-clean
+    // worktree whose raw bytes still differ from the committed LF blob.
+    checkoutGit(f.source, ['add', '--renormalize', 'lib/probe.mjs']);
+    checkoutGit(f.source, ['commit', '-qm', 'Clean conversion']);
     fs.writeFileSync(file, 'export const value=1;\r\n');
     assert.equal(checkoutGit(f.source, ['status', '--porcelain', '--untracked-files=no']), '');
   }

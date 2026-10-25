@@ -655,6 +655,13 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     stopping ??= stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, firstSignal: signal, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
   };
   for (const signal of SIGNALS) process.on(signal, forward);
+  const remains = () => {
+    if (proc.pid === undefined) return !spawnFailed;
+    return (ownsGroup && probe(-proc.pid) !== false) || [...tracked.values()].some(saved => {
+      const now = lookupProcess(saved.pid, { identityOnly: true });
+      return !now.ok || now.value?.identity === saved.identity;
+    });
+  };
   try {
     if (proc.pid !== undefined && !barrier) started(proc);
     // The first activity audit is synchronous. Cancellation must already be
@@ -699,13 +706,6 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     timeout ||= status === 124;
     // Leader exit alone neither fails nor stops its descendants. Unknown
     // observations retain the wait; the same watcher stays active through close.
-    const remains = () => {
-      if (proc.pid === undefined) return !spawnFailed;
-      return (ownsGroup && probe(-proc.pid) !== false) || [...tracked.values()].some(saved => {
-        const now = lookupProcess(saved.pid, { identityOnly: true });
-        return !now.ok || now.value?.identity === saved.identity;
-      });
-    };
     while (remains()) {
       if (stopError) throw stopError;
       await sleep(25);
@@ -727,12 +727,17 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     if (barrier) proc.stdio[3].destroy(); // No grant means no payload, including publication failure.
     if (gateTimeout) {
       process.stderr.write(`GATE_TIMEOUT_CLEANUP_FAILED: ${error.message}; slot retained.\n`);
-      proc.stdout.destroy(); proc.stderr.destroy(); proc.unref();
-      return { status: TIMEOUT_EXIT, signal: null, gateTimeout, groupGone: false,
+      while (remains()) await sleep(25);
+      await closed;
+      proc.stdout.destroy(); proc.stderr.destroy();
+      return { status: TIMEOUT_EXIT, signal: null, gateTimeout, groupGone: true,
         duration_s: clock() - commandStart, longest_silence_s: clock() - lastOutput, observations: watcher?.snapshot().observations ?? [],
         activity_audits: watcher?.snapshot().activity_audits, cleanup_error: error.message, measurement: measurement?.finish() };
     }
     forward("SIGTERM");
+    process.stderr.write(`GATE_CLEANUP_PENDING: ${error.message}; awaiting owned completion.\n`);
+    while (remains()) await sleep(25);
+    await closed;
     throw error;
   } finally {
     measurement?.stop?.();

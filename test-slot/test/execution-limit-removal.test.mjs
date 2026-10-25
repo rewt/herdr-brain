@@ -20,7 +20,9 @@ const row = (pid, ppid, pgid, identity) => ({ pid, ppid, pgid, identity });
 async function harness({ failedSpawn = false } = {}) {
   const h = { at: 0, timers: [], intervals: [], events: [], receipts: [], queries: [], healthy: 0, files: new Map() };
   h.rows = new Map([row(91, 5, 91, 'a'), row(92, 91, 92, 'b'), row(93, 5, 93, 'other')].map(r => [r.pid, r]));
-  const lookup = pid => ({ ok: true, value: pid === undefined ? new Map(h.rows) : h.rows.get(pid) ?? null });
+  const lookup = pid => pid !== undefined && pid === h.unavailablePid
+    ? { ok: false, error: 'injected identity unavailable' }
+    : { ok: true, value: pid === undefined ? new Map(h.rows) : h.rows.get(pid) ?? null };
   const probe = pid => h.probeError ?? (pid < 0 ? [...h.rows.values()].some(r => r.pgid === -pid) : h.rows.has(pid));
   const proc = new EventEmitter();
   Object.assign(proc, { pid: 5, execPath: '/node', env: {}, cwd: () => '/fixture', hrtime: { bigint: () => BigInt(Math.round(h.at * 1e9)) },
@@ -180,7 +182,9 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`explicit ${signal} p
 test('controller surfaces actual capture failure after owned watchdog cleanup', async () => {
   const h = await harness(); h.captureError = Error('capture write refused'); h.start();
   const rejected = assert.rejects(h.done, error => error === h.captureError);
-  h.process.emit('SIGTERM', 'SIGTERM'); await rejected;
+  h.process.emit('SIGTERM', 'SIGTERM'); await turn();
+  assert.equal(h.events.some(e => e[0] === 'release'), false);
+  h.exit(); h.child.emit('close', 0, null); await rejected;
   assert.equal(h.rows.has(91), false); assert.equal(h.rows.has(92), false); assert.ok(h.rows.has(93));
   assert.equal(h.healthy, 0); assert.equal(h.process.listenerCount('SIGTERM'), 0);
 });
@@ -352,4 +356,20 @@ test('actual controller keeps an unknown group observation pending without force
   assert.equal(h.events.some(e => e[0] === 'destroy' || e[0] === 'release'), false);
   h.probeError = null; await h.poll(); h.child.emit('close', 0, null);
   assert.equal(await h.done, 0); assert.equal(h.receipts.at(-1).gate_timeout, null);
+});
+
+
+test('actual cleanup lookup error stays held until known termination and stream close, then preserves the error', async () => {
+  const h = await harness(); h.start(); h.unavailablePid = 92;
+  let delivered = false;
+  const failed = h.done.then(() => assert.fail('cleanup error cannot become success'), error => { delivered = true; return error; });
+  h.process.emit('SIGTERM', 'SIGTERM'); await turn();
+  h.at = 10000; await h.poll();
+  assert.equal(delivered, false); assert.equal(h.events.some(e => e[0] === 'release'), false);
+  assert.ok(h.intervals.some(t => !t.stopped));
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), [['signal', -91, 'SIGTERM']]);
+  h.unavailablePid = undefined; h.exit(); await h.poll();
+  assert.equal(delivered, false, 'actual stream close is still required');
+  h.child.emit('close', 0, null); assert.match((await failed).message, /cannot confirm gate descendant/);
+  assert.ok(h.rows.has(93)); assert.equal(h.healthy, 0);
 });

@@ -79,7 +79,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   }
   // This private project owns its policy: live desks, routes and closeout
   // settings must never enter its configuration or reviewed boundary.
-  put('.lane.json', '{}\n');
+  put('.lane.json', '{"retirement":{"closeout_queue":false}}\n');
   put('board/render.mjs', renderer);
   put('docs/guide.md', 'Ordinary documentation outside the reviewed component.\n');
   put('test/board-view.test.mjs', "import assert from 'node:assert/strict';\nimport { render } from '../board/render.mjs';\nassert.ok(render({ memory: null, herdr: 'offline', slot: { state: 'free' }, rows: [] }).includes('Promotion board'));\nconsole.log('# tests 1');\n");
@@ -238,7 +238,7 @@ test('private green fixture never reads or copies the live lane policy', async t
   };
   try {
     const f = await fixture(t);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.repo, '.lane.json'), 'utf8')), {});
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.repo, '.lane.json'), 'utf8')), { retirement: { closeout_queue: false } });
     f.check();
   } finally {
     for (const [name, original] of originals) fs[name] = original;

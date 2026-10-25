@@ -27,18 +27,34 @@ try {
     if (JSON.parse(frozen).payloadCommit !== target) throw Error('frozen payload commit mismatch');
     durableWrite(rest[1], { identity, frozenFile: rest[2], frozenSha256: payloadDigest(frozen) });
     console.log(payloadDigest(readPlainFile(rest[1])));
+  } else if (action === 'coverage') {
+    const bytes = readPlainFile(target);
+    if (payloadDigest(bytes) !== rest[0]) throw Error('captured identity record changed');
+    const record = JSON.parse(bytes), frozen = readPlainFile(record.frozenFile);
+    if (payloadDigest(frozen) !== record.frozenSha256) throw Error('frozen declaration changed');
+    const { verifyReleaseCoverage } = await import('./validation-admission.mjs');
+    await verifyReleaseCoverage(home, { identity: record.identity, frozen: JSON.parse(frozen), canonical: JSON.parse(frozen).canonical });
+    fs.copyFileSync(home, path.join(path.dirname(target), 'coverage.json'), fs.constants.COPYFILE_EXCL);
   } else if (action === 'verify-package') {
     const bytes = readPlainFile(target);
     if (payloadDigest(bytes) !== rest[0]) throw Error('captured identity record changed');
     const record = JSON.parse(bytes), { identity } = record, frozen = readPlainFile(record.frozenFile);
     if (payloadDigest(frozen) !== record.frozenSha256 || JSON.stringify(verifyProductCheckoutIsolation(captureProductCheckout(identity.root, identity.commit, { all: true }))) !== JSON.stringify(identity)) throw Error('validated source or declaration changed');
-    const execution = JSON.parse(readPlainFile(path.join(path.dirname(target), 'execution.json'))), receipt = readPlainFile(execution.receipt);
-    const result = JSON.parse(receipt);
-    if (execution.cwd !== identity.root || execution.commit !== identity.commit || payloadDigest(receipt) !== execution.sha256 || result.exit_code !== 0 || result.signal || result.gate_timeout || result.attempts !== 1) throw Error('release execution is not successful');
+    const coverageFile = path.join(path.dirname(target), 'coverage.json');
+    let completed;
+    if (fs.existsSync(coverageFile)) {
+      const { verifyReleaseCoverage } = await import('./validation-admission.mjs');
+      completed = { coverage: await verifyReleaseCoverage(coverageFile, { identity, frozen: JSON.parse(frozen), canonical: JSON.parse(frozen).canonical }) };
+    } else {
+      const execution = JSON.parse(readPlainFile(path.join(path.dirname(target), 'execution.json'))), receipt = readPlainFile(execution.receipt);
+      const result = JSON.parse(receipt);
+      if (execution.cwd !== identity.root || execution.commit !== identity.commit || payloadDigest(receipt) !== execution.sha256 || result.exit_code !== 0 || result.signal || result.gate_timeout || result.attempts !== 1) throw Error('release execution is not successful');
+      completed = { execution: { ...execution, exit_code: result.exit_code, attempts: result.attempts } };
+    }
     const inventorySha256 = verifyProductPayload(home, identity, { metadata: releaseMetadata, readOnly: rest[1] === '--read-only' });
     console.log(JSON.stringify({ ...JSON.parse(frozen), validation: { cwd: identity.root, common: identity.common, commit: identity.commit, tree: identity.tree,
       inventorySha256, runtimeSha256: payloadDigest(JSON.stringify(Object.fromEntries(identity.runtime.map(file => [file, identity.files[file]])))),
-      execution: { ...execution, exit_code: result.exit_code, attempts: result.attempts } } }));
+      ...completed } }));
   } else if (action === 'verify-bundle') {
     checkBundle(home, { verifyFiles: true });
   } else if (action === 'manifest') {

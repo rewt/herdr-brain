@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Immutable local releases. The project supervisor ships them (see supervisor/PROTOCOL.md).
-# Usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status
+# Usage: release.sh build TAG [--live] [--coverage FILE] | activate TAG | ship TAG | rollback | status
 #        release.sh pin TAG [PROJECT] | unpin [PROJECT] | pin-status [PROJECT] [--json]
 #        release.sh attest TAG SUMMARY.json | exec ENTRY [ARGS...]
 # ship = build (release gate in a genuine checkout) + activate + check the installed launchers; it rolls
@@ -27,7 +27,7 @@ absent_or_link() {
   [ ! -e "$1" ] || [ -L "$1" ] || die "$1 is not a link; refusing to replace it"
 }
 build() {
-  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-} C work identity_hash
+  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-} coverage=${3:-} C work identity_hash
   valid_tag "$tag"
   [ -n "$REPO" ] || REPO=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
   C=$(git -C "$REPO" rev-parse -q --verify "refs/tags/$tag^{commit}") || die "no tag $tag in $REPO"
@@ -47,7 +47,13 @@ build() {
   # project's gate holds it; an explicit setting (0 refuses at once) wins. Agents ship with one bare
   # command, so they cannot set this themselves. This bounds admission, never test execution.
   export MONITOR_TEST_SLOT_WAIT_SECONDS=${MONITOR_TEST_SLOT_WAIT_SECONDS:-${BCH_CLOAK_TEST_SLOT_WAIT_SECONDS:-3600}}
-  (cd "$work/checkout" && node --input-type=module - "$work" <<'NODE'
+  if [ -n "$coverage" ]; then
+    # Full coverage was completed across retained native attempts and specific
+    # corrections. Verify that distinct evidence; do not replay a whole command
+    # or manufacture a successful execution.json for it.
+    node "$TOOLS" coverage "$coverage" "$work/identity.json" "$identity_hash"
+  else
+    (cd "$work/checkout" && node --input-type=module - "$work" <<'NODE'
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -73,7 +79,8 @@ fs.writeFileSync(path.join(work, 'execution.json'), JSON.stringify({ cwd: proces
   receipt: executionReceipt, sha256: createHash('sha256').update(fs.readFileSync(executionReceipt)).digest('hex') }) + '\n');
 process.exitCode = run.status ?? (run.signal ? 128 + (os.constants.signals[run.signal] ?? 0) : 1);
 NODE
-  )
+    )
+  fi
   if [ "$live" = --live ]; then
     (cd "$work/checkout" && node acceptance/run.mjs --candidate "$work/checkout" --summary-file "$work/acceptance.json")
   fi
@@ -172,7 +179,17 @@ status() {
   if [ -d "$HOME_DIR/releases" ]; then ls "$HOME_DIR/releases" | sed 's/^/release:  /'; fi
 }
 case "${1:-}" in
-  build) [ $# -eq 2 ] || { [ $# -eq 3 ] && [ "$3" = --live ]; } || die "usage: release.sh build TAG [--live]"; build "$2" "${3:-}" ;;
+  build)
+    [ $# -ge 2 ] || die "usage: release.sh build TAG [--live] [--coverage FILE]"
+    tag=$2; shift 2; live=; coverage=
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --live) [ -z "$live" ] || die "duplicate --live"; live=--live; shift ;;
+        --coverage) [ $# -ge 2 ] && [ -z "$coverage" ] || die "supply one coverage file"; coverage=$2; shift 2 ;;
+        *) die "usage: release.sh build TAG [--live] [--coverage FILE]" ;;
+      esac
+    done
+    build "$tag" "$live" "$coverage" ;;
   activate) [ $# -eq 2 ] || die "usage: release.sh activate TAG"; activate "$2" ;;
   ship) [ $# -eq 2 ] || die "usage: release.sh ship TAG"; ship "$2" ;;
   rollback) [ $# -eq 1 ] || die "usage: release.sh rollback"; rollback ;;

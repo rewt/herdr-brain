@@ -6,7 +6,8 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
 import { copyProduct, productFiles, captureProductCheckout, createProductCheckout, verifyProductPayload } from '../lib/product-files.mjs';
-import { freezeReleaseValidation } from '../herdr/validation-admission.mjs';
+import { freezeReleaseValidation, verifyReleaseCoverage } from '../herdr/validation-admission.mjs';
+import { createHash } from 'node:crypto';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { policyLocation, contentDigest } from '../lib/config-home.mjs';
 
@@ -81,6 +82,55 @@ test('a failed gate retains partial evidence and never makes an activatable rele
   assert.notEqual(f.run(['activate', 't1']).status, 0);
   assert.match(f.run(['build', 't1']).stderr, /inspect the unfinished build/);
   assert.equal(fs.readFileSync(f.gateLog, 'utf8').trim().split('\n').length, 1);
+});
+test('a covered build retains one full execution, refuses stale or unresolved evidence, and runs actual live acceptance', async t => {
+  const f = scratch(t);
+  f.ok(['build', 't1']);
+  const work = path.join(f.home, 'builds/t1'), identityFile = path.join(work, 'identity.json');
+  const identity = JSON.parse(fs.readFileSync(identityFile)).identity;
+  const frozen = JSON.parse(fs.readFileSync(path.join(work, 'validation.json')));
+  const execution = JSON.parse(fs.readFileSync(path.join(work, 'execution.json')));
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const reconciliation = Object.fromEntries(['source', 'runner', 'environment', 'dependencies', 'cleanup'].map(key =>
+    [key, `The private fixture retains identical ${key} inputs; no source or dependency change occurred.`]));
+  const base = { schema: 'release-full-coverage/v1', commit: identity.commit, tree: identity.tree, common: frozen.common,
+    command: 'npm run test:release', admissionSha256: frozen.sha256, complete: true, unresolved: [],
+    runtime: { executable: process.execPath, version: process.version, sha256: sha(fs.readFileSync(process.execPath)), platform: process.platform, arch: process.arch },
+    evidence: [{ id: 'full', file: execution.receipt, sha256: execution.sha256, source: identity.commit, identityFile,
+      identitySha256: sha(fs.readFileSync(identityFile)), changedFiles: [], reconciliation }],
+    files: [{ file: 'command:npm run test:release', receipts: ['full'], scope: 'The entire custom full release command completed in the genuine private checkout.' }] };
+  const cli = path.resolve(import.meta.dirname, '../bin/org.mjs');
+  const org = path.join(f.repo, '.org'), env = { ...f.env, ORG_DIR: org, ORG_ACTOR: 'fixture-supervisor' };
+  const record = (...args) => execFileSync(process.execPath, [cli, ...args], { cwd: f.repo, env, encoding: 'utf8' });
+  record('init', org); record('add', 'Coverage fixture');
+  const publish = value => {
+    const attestationDigest = sha(JSON.stringify(value));
+    record('note', 'ENG-1', `Release full coverage reconciled: ${attestationDigest}`, '--decision');
+    const events = fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const file = path.join(f.root, 'coverage.json');
+    fs.writeFileSync(file, JSON.stringify({ ...value, attestationDigest, attestationSeq: events.at(-1).seq }) + '\n');
+    return file;
+  };
+  const verify = file => verifyReleaseCoverage(file, { identity, frozen, canonical: f.repo, env });
+  await assert.rejects(verify(publish({ ...base, files: [] })), /full inventory/);
+  await assert.rejects(verify(publish({ ...base, commit: 'f'.repeat(40) })), /mismatched/);
+  await assert.rejects(verify(publish({ ...base, unresolved: ['real failure remains'] })), /incomplete/);
+  const red = path.join(f.root, 'red.execution.json');
+  fs.writeFileSync(red, JSON.stringify({ ...JSON.parse(fs.readFileSync(execution.receipt)), exit_code: 1 }));
+  const redBase = { ...base, evidence: [{ ...base.evidence[0], file: red, sha256: sha(fs.readFileSync(red)) }] };
+  await assert.rejects(verify(publish(redBase)), /known-red/);
+  await assert.rejects(verify(publish({ ...base, evidence: [{ ...base.evidence[0], changedFiles: ['invented.mjs'] }] })), /reconciliation is stale/);
+  const file = publish(base);
+  const proof = await verify(file);
+  assert.equal(proof.kind, 'supervisor-reconciled-full-coverage');
+  f.git('tag', 'covered', identity.commit);
+  f.ok(['build', 'covered', '--live', '--coverage', file]);
+  const validation = JSON.parse(fs.readFileSync(path.join(f.release('covered'), '.release-validation.json'))).validation;
+  assert.equal(validation.execution, undefined, 'a continuation never pretends a whole command executed');
+  assert.equal(validation.coverage.kind, 'supervisor-reconciled-full-coverage');
+  assert.equal(fs.existsSync(path.join(f.home, 'builds/covered/execution.json')), false);
+  assert.deepEqual(fs.readFileSync(f.gateLog, 'utf8').trim().split('\n'), [f.checkout('t1'), `live:${f.checkout('covered')}`]);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.release('covered'), '.release-manifest.json'))).acceptance.ready, true);
 });
 test('the release gate queues for the host test slot by default; an explicit wait wins', t => {
   const f = scratch(t), seen = path.join(f.root, 'slot-wait');

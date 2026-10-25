@@ -97,7 +97,7 @@ test('a covered build retains one full execution, refuses stale or unresolved ev
     command: 'npm run test:release', admissionSha256: frozen.sha256, complete: true, unresolved: [],
     runtime: { executable: process.execPath, version: process.version, sha256: sha(fs.readFileSync(process.execPath)), platform: process.platform, arch: process.arch },
     evidence: [{ id: 'full', file: execution.receipt, sha256: execution.sha256, source: identity.commit, identityFile,
-      identitySha256: sha(fs.readFileSync(identityFile)), changedFiles: [], reconciliation }],
+      identitySha256: sha(fs.readFileSync(identityFile)), executedFiles: ['command:npm run test:release'], changedFiles: [], reconciliation }],
     files: [{ file: 'command:npm run test:release', receipts: ['full'], scope: 'The entire custom full release command completed in the genuine private checkout.' }] };
   const cli = path.resolve(import.meta.dirname, '../bin/org.mjs');
   const org = path.join(f.repo, '.org'), env = { ...f.env, ORG_DIR: org, ORG_ACTOR: 'fixture-supervisor' };
@@ -131,6 +131,10 @@ test('a covered build retains one full execution, refuses stale or unresolved ev
   await assert.rejects(verify(observe()), /known-red/, 'an unrelated green finish cannot close an unfinished suite');
   observations[1].id = 'native-suite';
   assert.equal((await verify(observe())).kind, 'supervisor-reconciled-full-coverage', 'paired successful native components survive a later failure');
+  observations[0] = { id: 'native-file', kind: 'file', name: 'command:npm run test:release', event: 'start', depth: 0 };
+  observations[1] = { id: 'native-file', kind: 'file', name: 'command:npm run test:release', event: 'finish', depth: 0, exit_code: 0 };
+  assert.equal((await verify(observe())).kind, 'supervisor-reconciled-full-coverage', 'a paired completed file is retained while the recorded supervisor reconciles later failure and cleanup');
+  await assert.rejects(verify(publish({ ...base, evidence: [{ ...base.evidence[0], executedFiles: ['unrun-file'] }] })), /known-red|unproved/, 'a green receipt does not execute an unrelated file');
   await assert.rejects(verify(publish({ ...base, evidence: [{ ...base.evidence[0], changedFiles: ['invented.mjs'] }] })), /reconciliation is stale/);
   await assert.rejects(verify(publish({ ...base, runtime: { ...base.runtime, version: 'unknown' } })), /runtime changed/);
   await assert.rejects(verify(publish({ ...base, evidence: [{ ...base.evidence[0], sha256: '0'.repeat(64) }] })), /evidence changed/);

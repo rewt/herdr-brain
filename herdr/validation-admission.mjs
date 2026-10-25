@@ -46,6 +46,7 @@ export async function verifyReleaseCoverage(file, { identity, frozen, canonical,
   const evidence = new Map();
   for (const row of coverage.evidence) {
     if (!row.id || evidence.has(row.id) || digest(plain(row.file)) !== row.sha256) throw Error('release coverage evidence changed or duplicated');
+    if (!Array.isArray(row.executedFiles) || !row.executedFiles.length || new Set(row.executedFiles).size !== row.executedFiles.length) throw Error('release coverage needs the actual executed file scope');
     const receipt = JSON.parse(plain(row.file));
     if (!Number.isInteger(receipt.exit_code) || receipt.attempts !== 1 || receipt.signal || receipt.gate_timeout ||
         !receipt.started_at || !receipt.finished_at) throw Error('release coverage execution is unfinished, repeated or timed out');
@@ -73,10 +74,11 @@ export async function verifyReleaseCoverage(file, { identity, frozen, canonical,
     // Use the paired native suite observations, never a test filename alone.
     const passed = (id, file) => {
       const result = evidence.get(id)?.receipt;
-      if (!result) return false;
+      if (!result || !evidence.get(id).executedFiles.includes(file)) return false;
       if (result.exit_code === 0) return true;
-      return (result.timings ?? []).some(start => start.kind === 'suite' && start.event === 'start' && start.depth === 0 && start.files?.includes(file) &&
-        result.timings.some(end => end.id === start.id && end.kind === 'suite' && end.event === 'finish' && end.exit_code === 0));
+      return (result.timings ?? []).some(start => start.event === 'start' && start.depth === 0 &&
+        ((start.kind === 'suite' && start.files?.includes(file)) || (start.kind === 'file' && start.name === file)) &&
+        result.timings.some(end => end.id === start.id && end.kind === start.kind && end.event === 'finish' && end.exit_code === 0));
     };
     const red = row.receipts.filter(id => !passed(id, row.file));
     if (red.length && (!Array.isArray(row.corrections) || red.some(id => !row.corrections.some(fix => fix.original === id &&

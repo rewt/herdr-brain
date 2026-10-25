@@ -18,7 +18,15 @@ import { scratchFixtureCommand, scratchProductHomes, enterScratchHomes } from '.
 // These are base comparisons: waitUntil applies the shared load factor once.
 // See docs/evidence/BCD-CASE17-20261021/R-700.md; cleanup belongs to ENG-511.
 export function waitForPromotionQueue(queue, until = waitUntil) {
-  return until(() => queue().results.length === 1, 'finite queue completed', 16_000);
+  return until(() => {
+    const results = queue().results;
+    if (results.length !== 1) return false;
+    const cleanup = results[0].cleanup;
+    // Integration is published before its joined closeout attempt. Await that
+    // actual attempt, including an honest terminal refusal, before asserting
+    // lane removal. A result row alone is not a cleanup receipt.
+    return cleanup?.state !== 'pending' || Boolean(cleanup.reason || cleanup.last_refusal);
+  }, 'queue integration and joined closeout completed', 16_000);
 }
 
 export async function supervisorCase(candidate, { load, execute = spawnSync,
@@ -85,6 +93,7 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     const queue = () => JSON.parse(fs.readFileSync(queueFile, 'utf8'));
     await waitForPromotionQueue(queue, until);
     assert.equal(queue().results[0].outcome, 'promoted', JSON.stringify(queue().results));
+    assert.equal(queue().results[0].cleanup?.state, 'complete', JSON.stringify(queue()));
     assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
     assert.ok(!fs.existsSync(f.workspace), 'promoted lane closed');
     assert.equal(f.git(['status', '--porcelain']), '');

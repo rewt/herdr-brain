@@ -15,6 +15,9 @@ function fixture(t, averages = [28, 25, 22], cpus = 18) {
   const load = createLoadMonitor({ cpus, read: () => current, now: () => at, record: (v) => samples.push(v) });
   t.after(load.stop);
   return { load, samples, set: (value) => { current = value; },
+    // Historical/external timeout classification remains a control. Actual
+    // report polling no longer manufactures an elapsed-only failure.
+    failure: () => { const window = load.begin(); return new LoadTimeout('timeout: held worker report', load.snapshot(window)); },
     wait: (fn = () => false) => waitUntil(fn, 'held worker report', 300, {
       load, now: () => at, sleep: async (ms) => { at += ms; },
     }) };
@@ -22,22 +25,22 @@ function fixture(t, averages = [28, 25, 22], cpus = 18) {
 
 test('measured heavy-load report timeout is harness pending and names load on the screen', async (t) => {
   const f = fixture(t);
-  let error; try { await f.wait(); } catch (value) { error = value; }
+  const error = f.failure();
   const result = { id: '19', name: 'Worker report', ...classifyFailure(error) };
   assert.equal(result.status, 'PENDING'); assert.equal(result.origin, 'harness');
   assert.match(resultLine(result), /HARNESS.*28\.00\/25\.00\/22\.00.*18 CPUs.*held worker report/);
-  assert.ok(f.samples.length >= 4);
+  assert.ok(f.samples.length >= 3);
 });
 
 test('candidate that never reports at normal load remains product fail', async (t) => {
   const f = fixture(t, [2, 3, 4]);
-  let error; try { await f.wait(); } catch (value) { error = value; }
+  const error = f.failure();
   assert.deepEqual(classifyFailure(error), { status: 'FAIL', origin: 'product', detail: 'timeout: held worker report' });
 });
 
 test('heavy load is relative to capacity even on a single-CPU host', async (t) => {
   const f = fixture(t, [2, 2, 2], 1);
-  let error; try { await f.wait(); } catch (value) { error = value; }
+  const error = f.failure();
   assert.equal(classifyFailure(error).status, 'PENDING');
   assert.equal(error.load.peak.threshold, 1);
 });
@@ -46,14 +49,15 @@ test('load is scoped to each wait and successful reports pass even under heavy l
   const f = fixture(t);
   await f.wait(() => true);
   f.set([1, 1, 1]);
-  let error; try { await f.wait(); } catch (value) { error = value; }
+  const error = f.failure();
   assert.equal(classifyFailure(error).status, 'FAIL');
   assert.equal(f.load.snapshot().heavy, true, 'run evidence retains the earlier peak');
 });
 
 test('a wait retains measured contention even if load falls before its deadline', async (t) => {
   const f = fixture(t);
-  let error; try { await f.wait(() => { f.set([1, 1, 1]); return false; }); } catch (value) { error = value; }
+  const window = f.load.begin(); f.set([1, 1, 1]);
+  const error = new LoadTimeout('timeout: held worker report', f.load.snapshot(window));
   assert.equal(classifyFailure(error).status, 'PENDING');
 });
 

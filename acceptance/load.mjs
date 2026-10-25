@@ -44,11 +44,13 @@ export function responseAllowance(ms, load) {
 
 export async function waitUntil(fn, label, ms, { load, now = Date.now,
   sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay)) } = {}) {
-  const window = load?.begin(), end = now() + responseAllowance(ms, load);
-  while (now() < end) {
+  // ms is a planning reference retained for callers and historical evidence.
+  // An elapsed allowance cannot reject productive acceptance work. The native
+  // runner owns measured no-output AND confirmed-no-activity freeze handling.
+  load?.begin();
+  for (;;) {
     load?.sample();
     if (fn()) return;
     await sleep(150);
   }
-  throw new LoadTimeout(`timeout: ${label}`, load?.snapshot(window));
 }

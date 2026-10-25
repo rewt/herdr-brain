@@ -85,13 +85,20 @@ for (const stage of ['review', 'correction']) {
       fs.writeFileSync(herdr, fs.readFileSync(herdr, 'utf8').replace("fs.writeFileSync(path.join(root,'review-prompt'),prompt);",
         `fs.writeFileSync(path.join(root,'review-prompt'),prompt); fs.writeFileSync(${JSON.stringify(memory)}, ${JSON.stringify(JSON.stringify(pressure))});`));
     }
-    const pending = f.concurrent('handle', path.join(root, 'supervisor/supervisor.mjs'), [run, '--role', 'supervisor']);
+    if (stage === 'correction') {
+      const reviewed = result(invoke(f, ['handle', run, '--role', 'supervisor']));
+      assert.equal(reviewed.code, 'REVIEW_CAP_REACHED');
+      assert.equal(reviewed.review_policy.cap, 1);
+    }
+    const pending = f.concurrent('handle', path.join(root, 'supervisor/supervisor.mjs'),
+      [run, ...(stage === 'correction' ? ['--retry', '--fix-findings'] : []), '--role', 'supervisor']);
     let stderr = '', stdout = '';
     pending.child.stderr.on('data', data => { stderr += data; });
     pending.child.stdout.on('data', data => { stdout += data; });
     try {
-      const end = Date.now() + 10000;
-      while (!stderr.includes('waiting; memory pressure') && Date.now() < end) await new Promise(r => setTimeout(r, 20));
+      let completed = false;
+      pending.done.finally(() => { completed = true; });
+      while (!stderr.includes('waiting; memory pressure') && !completed) await new Promise(r => setTimeout(r, 20));
       assert.match(stderr, /waiting; memory pressure/);
       assert.equal(pending.child.exitCode, null, 'reason must be visible while handle is still waiting');
     } finally { fs.writeFileSync(memory, JSON.stringify(healthy)); }
@@ -147,7 +154,7 @@ test('handle explicitly resumes a saved Major or FAIL cap escalation once', { ti
     assert.equal(capped.result, 'escalate'); assert.equal(capped.code, 'REVIEW_CAP_REACHED');
     assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the reviewer starts');
     const refused = invoke(f, ['promote', run, '--accept-findings', '--why', 'Attempt capped acceptance', '--role', 'supervisor']);
-    assert.equal(refused.status, 1); assert.match(refused.stderr, /requires saved promotable/);
+    assert.equal(refused.status, 1); assert.match(refused.stderr, /promotion requires saved settlement evidence/);
     const next = result(invoke(f, ['handle', run, '--retry', '--fix-findings', '--role', 'supervisor']));
     assert.equal(next.result, 'fix_round');
     const launches = () => f.calls().filter((a) => a[1] === 'start' ||
@@ -252,15 +259,16 @@ test('STOP arriving during review retains a resumable correction without launchi
   const f = fixture(t, { actor: 'supervisor-review-stop-test' }), run = f.start(); f.commit('wrong\n'); f.report(run);
   fs.writeFileSync(path.join(f.root, 'review-stop'), '');
   const stopped = result(invoke(f, ['handle', run, '--role', 'supervisor']));
-  assert.equal(stopped.result, 'stopped'); assert.match(stopped.next, /--retry/);
-  assert.match(fs.readFileSync(stopped.handoff, 'utf8'), /no new worker launched/);
+  assert.equal(stopped.code, 'REVIEW_CAP_REACHED'); assert.equal(stopped.review_policy.cap, 1);
   const job = JSON.parse(fs.readFileSync(stopped.journal, 'utf8'));
-  assert.equal(job.stage, 'fix'); assert.equal(job.review.verdict, 'NEEDS-WORK'); assert.ok(fs.existsSync(job.fixBrief));
+  assert.equal(job.stage, 'complete'); assert.equal(job.review.verdict, 'NEEDS-WORK');
+  assert.ok(fs.existsSync(job.review.path), 'the single review remains available for an explicit correction');
   assert.equal(f.show(f.show(run).item).runs.length, 1);
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the reviewer launched');
-  assert.equal(invoke(f, ['handle', run, '--retry', '--role', 'supervisor']).status, 1);
+  const refused = invoke(f, ['handle', run, '--retry', '--fix-findings', '--role', 'supervisor']);
+  assert.equal(refused.status, 1); assert.match(refused.stderr, /STOP/);
   fs.unlinkSync(path.join(f.repo, '.lane/supervisor/STOP'));
-  const resumed = result(invoke(f, ['handle', run, '--retry', '--role', 'supervisor']));
+  const resumed = result(invoke(f, ['handle', run, '--retry', '--fix-findings', '--role', 'supervisor']));
   assert.equal(resumed.result, 'fix_round'); assert.equal(f.calls().filter((a) => a[1] === 'start').length, 2);
   assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).fix.run, resumed.fix.run);
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, 2, 'no review or correction replay');
@@ -404,7 +412,9 @@ test('late final reports recover completed promotion after lane closure and reta
 
 test('late original and correction notices after lane removal preserve promotion guards and never replay settlement', { timeout: 25000 }, (t) => {
   const f = fixture(t, { actor: 'supervisor-late-correction-test' }), original = f.start(); f.commit('wrong\n'); f.report(original);
-  const correction = result(invoke(f, ['handle', original, '--role', 'supervisor']));
+  const reviewed = result(invoke(f, ['handle', original, '--role', 'supervisor']));
+  assert.equal(reviewed.code, 'REVIEW_CAP_REACHED'); assert.equal(reviewed.review_policy.cap, 1);
+  const correction = result(invoke(f, ['handle', original, '--retry', '--fix-findings', '--role', 'supervisor']));
   assert.equal(correction.result, 'fix_round');
   const run = correction.fix.run, ready = result(invoke(f, ['handle', run, '--role', 'supervisor']));
   assert.equal(ready.result, 'promotable');

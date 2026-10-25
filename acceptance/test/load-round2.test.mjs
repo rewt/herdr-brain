@@ -43,14 +43,10 @@ test('supervisor queue allows measured compound cleanup beyond ten seconds at no
   assert.equal(clock.reads(), 81);
 });
 
-test('supervisor queue still times out finitely at normal load', async t => {
-  const clock = queueClock(t);
-  await assert.rejects(clock.wait(), error => {
-    assert.ok(error instanceof LoadTimeout);
-    assert.deepEqual(classifyFailure(error), { status: 'FAIL', origin: 'product', detail: 'timeout: finite queue completed' });
-    return true;
-  });
-  assert.equal(clock.now(), 16_050, '16 s allowance rounded to the existing 150 ms polling cadence');
+test('supervisor queue accepts actual completion beyond its former elapsed limit', async t => {
+  const clock = queueClock(t, { completeAt: 3_600_000 });
+  await clock.wait();
+  assert.equal(clock.now(), 3_600_000);
 });
 
 test('supervisor queue scales once using current load and preserves a completed refusal for the case assertion', async t => {
@@ -58,11 +54,11 @@ test('supervisor queue scales once using current load and preserves a completed 
   await clock.wait();
   assert.equal(clock.now(), 70_050, 'the shared factor of six permits a completion beyond 16 s');
   // This wait observes completion only; supervisorCase still asserts promoted.
-  const hung = queueClock(t, { loadValue: 24 });
-  const pending = hung.wait();
-  hung.setLoad(240);
-  await assert.rejects(pending, error => error instanceof LoadTimeout && error.load.heavy);
-  assert.equal(hung.now(), 96_000, 'load changes cannot extend the sampled 16 s x 6 allowance');
+  const later = queueClock(t, { loadValue: 24, completeAt: 3_600_000 });
+  const pending = later.wait();
+  later.setLoad(240);
+  await pending;
+  assert.equal(later.now(), 3_600_000, 'load and an old planning allowance do not reject actual completion');
 });
 
 test('a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure', (t) => {
@@ -115,9 +111,10 @@ for (const spec of delegated) {
 
     test(`${spec.name} report deadline is ${heavy ? 'PENDING' : 'FAIL'} with its own wait samples`, async (t) => {
       const load = monitor(t, heavy);
-      const until = (fn, label, ms) => label === spec.label
-        ? waitUntil(() => false, label, 100, { load }) // Script a lost receipt.
-        : waitUntil(fn, label, ms, { load });
+      const until = (fn, label, ms) => {
+        if (label === spec.label) throw new LoadTimeout(`timeout: ${label}`, load.snapshot());
+        return waitUntil(fn, label, ms, { load });
+      }; // Explicit external-failure control, never a productive elapsed stop.
       const results = [];
       await runCase(results, spec.definition, () => spec.run(candidate, { load, until }));
       assert.equal(results[0].status, heavy ? 'PENDING' : 'FAIL');
@@ -145,13 +142,13 @@ for (const heavy of [true, false]) {
       // Drain the actual scratch queue before scripting a lost completion
       // observation, so the failure leaves no detached queue worker behind.
       await waitUntil(fn, label, ms, { load });
-      if (label === 'finite queue completed') await waitUntil(() => false, label, 100, { load });
+      if (label === 'queue integration and joined closeout completed') throw new LoadTimeout(`timeout: ${label}`, load.snapshot());
     };
     const results = [];
     await runCase(results, cases.supervisor, () => supervisorCase(candidate, { load, until }));
     assert.equal(results[0].status, heavy ? 'PENDING' : 'FAIL');
     assert.equal(results[0].origin, heavy ? 'harness' : 'product');
-    assert.match(results[0].detail, /timeout: finite queue completed/);
+    assert.match(results[0].detail, /timeout: queue integration and joined closeout completed/);
   });
 }
 

@@ -34,13 +34,13 @@ for (const value of [24, 0]) test(`a genuinely hung sandbox-exec reaches its fin
   assert.ok(Date.now() - began < loadTimeout(2000), 'a real non-response remains bounded');
 });
 
-test('report polling scales once from its own operation load and stays bounded', async (t) => {
+test('report polling observes completion beyond its planning allowance without an elapsed failure', async (t) => {
   const load = monitor(t); let at = 0;
   await waitUntil(() => at >= 600, 'delayed report', 150, { load, now: () => at, sleep: async ms => { at += ms; } });
   assert.equal(at, 600);
   at = 0;
-  await assert.rejects(waitUntil(() => false, 'hung report', 150, { load, now: () => at, sleep: async ms => { at += ms; } }), /timeout: hung report/);
-  assert.equal(at, 900);
+  await waitUntil(() => at >= 3_600_000, 'late report', 150, { load, now: () => at, sleep: async ms => { at += ms; } });
+  assert.equal(at, 3_600_000);
 });
 
 test('each command samples current load, preserves zero, and supplies a bounded default', (t) => {

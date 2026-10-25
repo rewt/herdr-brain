@@ -2984,7 +2984,9 @@ switch (command) {
         "                   [--route <name>] [--route-config <path>] [--timeout <seconds>]\n" +
         "                   [--run R-n [--followup-expected]]\n" +
         "                   run one foreground independent review; route defaults to\n" +
-        "                   review and timeout defaults to 1800 seconds\n" +
+        "                   review; timeout defaults to 0 (no elapsed stop)\n" +
+        "                   captured async source: --parallel-review --run R-n\n" +
+        "                   --captured-head SHA --captured-base SHA\n" +
         "  prepare <topic>  run .lane.json prepare steps in the lane worktree; a\n" +
         "                   fresh worktree carries no gitignored state, and validation\n" +
         "                   then fails for environmental reasons that look real\n" +
@@ -2994,7 +2996,7 @@ switch (command) {
         "                   --tier fast (worker default) or promotion (integration CI); reuse exact trees\n" +
         "  check --gate [--required-tests JSON]\n" +
         "                   plan with the queue's bound test list\n" +
-        `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
+        `  promote <topic>  fast-forward ${MAIN} (clean/rebased; validation or current operator waiver)\n` +
         "  ready <topic> [--run R-n]  optionally record the same closeout request as an ingested done report\n" +
         "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",

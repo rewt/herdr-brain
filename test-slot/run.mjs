@@ -25,7 +25,7 @@ function callerRefusal(label, error, options) {
   return { pid: 0, output, stdout: output[1], stderr: output[2], status: REFUSED_EXIT, signal: null };
 }
 
-export function runGateSync(label, argv, { acquireSlot = false, retryTimeout = true, waitSeconds, waitReceipt, executionReceipt, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, resource, measurementNotes, ...options } = {}) {
+export function runGateSync(label, argv, { acquireSlot = false, retryTimeout = false, waitSeconds, waitReceipt, executionReceipt, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, resource, measurementNotes, ...options } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-test-slot-result-'));
   const receipt = executionReceipt ?? path.join(directory, 'result.json');
   try {

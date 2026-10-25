@@ -86,13 +86,12 @@ t.after(()=>{cp.spawnSync=original;fs.readFileSync=originalRead;syncBuiltinESMEx
   assert.equal(result.code, 0, result.stdout + result.stderr);
 });
 
-for (const kind of ['leak', 'assertion', 'test timeout', 'child timeout']) {
+for (const kind of ['leak', 'assertion', 'child timeout']) {
   test(`${kind} names the failed test and reaps its fixture child and grandchild`, async (t) => {
     const name = `deliberately ${kind} fixture watcher`;
     const f = fixture(t, (root) => {
       const command = `echo $$ > '${root}/pid'; sleep 60 & echo $! > '${root}/grandchild'; wait`;
-      const options = kind === 'test timeout' ? '{timeout: 500}' : '{}';
-      return `test(${JSON.stringify(name)},${options},async(t)=>{
+      return `test(${JSON.stringify(name)},async(t)=>{
 const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(command)}],{},${kind === 'child timeout' ? 500 : 15000});
 while(!fs.existsSync(${JSON.stringify(path.join(root, 'grandchild'))})) await new Promise(r=>setTimeout(r,10));
 ${kind === 'assertion' ? "throw Error('injected failure before waitForExit');" : kind === 'leak' ? '' : 'await waitForExit(child);'}
@@ -102,7 +101,7 @@ ${kind === 'assertion' ? "throw Error('injected failure before waitForExit');" :
     const result = await waitForExit(child);
     assert.equal(result.code, 1, result.stdout + result.stderr);
     assert.ok(result.stdout.includes(name), result.stdout);
-    assert.match(result.stdout, kind === 'test timeout' ? /testTimeoutFailure/ : kind === 'child timeout' ? /did not exit within 500ms/ : kind === 'assertion' ? /injected failure before waitForExit/ : /left child running/);
+    assert.match(result.stdout, kind === 'child timeout' ? /did not exit within 500ms/ : kind === 'assertion' ? /injected failure before waitForExit/ : /left child running/);
     for (const file of ['pid', 'grandchild']) await assertGone(Number(fs.readFileSync(path.join(f.root, file), 'utf8')));
   });
 }

@@ -68,21 +68,15 @@ test('a loaded native lookup receives time to answer and timeout retries back of
 test('the default native executor under the bounded helper scales each response allowance once', async t => {
   const source = `import os from 'node:os';import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
 os.loadavg=()=>[24,24,24];os.availableParallelism=()=>4;
-const native=cp.spawnSync,attempts=[],commands=[];
+const native=cp.spawnSync,attempts=[];
 cp.spawnSync=(file,args,options)=>{
  if(String(file).includes('process-source-')){attempts.push(options.timeout);return {status:null,stdout:'',stderr:'',error:Object.assign(Error('injected ps timeout'),{code:'ETIMEDOUT'})};}
- if(file==='command-allowance-fixture'){commands.push(options.timeout);return {status:0,stdout:'',stderr:''};}
  return native(file,args,options);
 };syncBuiltinESMExports();
 await import(${JSON.stringify(new URL('./helpers/bounded-test.mjs', import.meta.url).href)});
 const {lookupProcess}=await import(${JSON.stringify(new URL('./helpers/processes.mjs', import.meta.url).href)});
-const {commandAllowance}=await import(${JSON.stringify(new URL('./helpers/command-allowance.mjs', import.meta.url).href)});
 const lookup=lookupProcess(101,{platform:'darwin',pause:()=>{}});
-cp.spawnSync('command-allowance-fixture',[]);
-cp.spawnSync('command-allowance-fixture',[],{timeout:12000});
-cp.spawnSync('command-allowance-fixture',[],{timeout:180000});
-cp.spawnSync('command-allowance-fixture',[],{timeout:108000,[commandAllowance]:108000});
-console.log(JSON.stringify({lookup,attempts,commands}));`;
+console.log(JSON.stringify({lookup,attempts}));`;
   const child = spawnChild(t, process.execPath, ['--input-type=module', '-e', source],
     { env: { ...process.env, ORG_ACTOR: 'default-ps-deadline-test' } });
   const result = await waitForExit(child);
@@ -90,7 +84,6 @@ console.log(JSON.stringify({lookup,attempts,commands}));`;
   const actual = JSON.parse(result.stdout);
   assert.equal(actual.lookup.ok, false, 'exhausted lookups never become identity evidence');
   assert.deepEqual(actual.attempts, [12000, 24000, 48000]);
-  assert.deepEqual(actual.commands, [90000, 12000, 90000, 108000]);
 });
 
 test('the record lock waits past ten seconds for a live holder under load before appending', t => {

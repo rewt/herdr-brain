@@ -82,7 +82,7 @@ export async function verifyReleaseCoverage(file, { identity, frozen, canonical,
     };
     const red = row.receipts.filter(id => !passed(id, row.file));
     if (red.length && (!Array.isArray(row.corrections) || red.some(id => !row.corrections.some(fix => fix.original === id &&
-        row.receipts.includes(fix.passed) && passed(fix.passed, fix.file ?? row.file) && typeof fix.scope === 'string' && fix.scope.trim().length >= 20)))) {
+        evidence.has(fix.passed) && passed(fix.passed, fix.file ?? row.file) && typeof fix.scope === 'string' && fix.scope.trim().length >= 20)))) {
       throw Error('release coverage retains a known-red component without a passing specific correction');
     }
   }

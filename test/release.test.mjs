@@ -120,6 +120,18 @@ test('a covered build retains one full execution, refuses stale or unresolved ev
   fs.writeFileSync(red, JSON.stringify({ ...JSON.parse(fs.readFileSync(execution.receipt)), exit_code: 1 }));
   const redBase = { ...base, evidence: [{ ...base.evidence[0], file: red, sha256: sha(fs.readFileSync(red)) }] };
   await assert.rejects(verify(publish(redBase)), /known-red/);
+  // A correction is separately executed evidence. Listing it as another
+  // original file run would falsely call a focused cross-file check red for
+  // every file it intentionally did not rerun. Its actual scope is still
+  // required, and the owning disposition binds the semantic relationship.
+  const corrected = { ...redBase, evidence: [...redBase.evidence, { ...base.evidence[0], id: 'specific-fix' }],
+    files: [{ ...base.files[0], corrections: [{ original: 'full', passed: 'specific-fix',
+      file: base.files[0].file, scope: 'The separate successful native correction closes the original failed component; unchanged completed assertions remain retained.' }] }] };
+  assert.equal((await verify(publish(corrected))).kind, 'supervisor-reconciled-full-coverage');
+  await assert.rejects(verify(publish({ ...corrected, files: [{ ...corrected.files[0], corrections: [
+    { ...corrected.files[0].corrections[0], passed: 'unknown-native-proof' }] }] })), /known-red/);
+  await assert.rejects(verify(publish({ ...corrected, files: [{ ...corrected.files[0], corrections: [
+    { ...corrected.files[0].corrections[0], file: 'unrun-file' }] }] })), /known-red/);
   const observed = path.join(f.root, 'partial.execution.json');
   const observations = [{ id: 'native-suite', kind: 'suite', event: 'start', depth: 0, files: ['command:npm run test:release'] },
     { id: 'wrong-suite', kind: 'suite', event: 'finish', depth: 0, exit_code: 0 }];

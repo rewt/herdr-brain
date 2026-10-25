@@ -1,5 +1,5 @@
-import { resolveValidation } from '../lanes/validation.mjs';
 #!/usr/bin/env node
+import { resolveValidation } from '../lanes/validation.mjs';
 // A durable FIFO and one detached, finite drain worker. No model calls.
 import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';

@@ -85,8 +85,7 @@ review can supply both implementation review and security concurrence.
 
 Adopted review defaults:
 
-- One risk-directed independent review at ready/done; the same reviewer/session
-  checks the delta after findings and newly affected paths, preserving old witnesses.
+- One independent review AFTER CODE, using immutable diff and evidence for every item. Engineers and main landing proceed independently. After the one formal fix round, check only the specific Major correction/evidence required before release; do not create a delta-review stage or full re-review chain. Preserve historical witnesses/verdicts.
 - Current operator disposition through stable release: ONE independent POST-CODE diff/evidence review per item for ALL changes, async/nonblocking for engineers and landing, zero reviewer suites, cap1 and approximately30-minute advisory target with no elapsed stop. No pre-code/plan/contract/concurrence stage. At most one formal fix round; no automatic second full review. Later findings fix forward; Majors need actual specific correction/evidence checks before release. Reserved native/operator authority and historical verdicts/caps remain intact.
 - No reviews during ordinary engineer fix iterations or known-red evidence handoffs.
   No default blanket suite replay, three-probe quota, or requirement that every

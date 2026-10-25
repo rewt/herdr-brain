@@ -67,7 +67,7 @@ test('waived unused probes preserve fresh native process birth, command, live st
   }
 });
 
-test('actual waived native drain accepts an existing-worker admission and closes both owned items without a gate', async t => {
+test('actual waived native drain reuses its owner for a second manual admission and closes both owned items without a gate', async t => {
   const f = completionFixture(t), declaration = path.join(f.repo, '.lane.validation.json');
   fs.writeFileSync(declaration, JSON.stringify({ promotion: `${process.execPath} ${f.checker}`, landing_waiver: OPERATOR_LANDING_WAIVER, review: 'parallel' }));
   f.git(['add', '.lane.validation.json']); f.git(['commit', '-qm', 'Actual operator landing waiver']);
@@ -87,8 +87,9 @@ test('actual waived native drain accepts an existing-worker admission and closes
     assert.ok(owner?.native_gate && owner?.native_process, 'actual native owner evidence or real child exit, without an elapsed cutoff');
     assert.deepEqual(owner.native_gate, { outcome: 'not-required', executed: false, authority: OPERATOR_LANDING_WAIVER });
     assert.equal(liveNativeWorker(f.queue.project.identity, waiver)?.pid, child.pid, 'fresh actual native process binding');
-    second = f.lane('second', false, { existingWorker: true });
-    assert.equal(f.queue.load().pending.find(job => job.id === second.job.id)?.existingWorker, true);
+    second = f.lane('second');
+    assert.ok(f.queue.load().pending.some(job => job.id === second.job.id));
+    assert.equal(liveNativeWorker(f.queue.project.identity, waiver)?.pid, child.pid, 'the same actual native owner accepts manual work; autopilot stays disabled');
   } finally { release(); }
   const reply = await done;
   assert.equal(reply.code, 0, reply.stderr || reply.stdout);

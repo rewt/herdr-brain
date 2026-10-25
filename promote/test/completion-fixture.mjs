@@ -73,8 +73,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     if (options.childBeforeAdmission) record(['add', 'New engineering scope', '--role', 'engineer', '--parent', item]);
     const head = git(['rev-parse', 'HEAD'], workspace);
     const job = enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0,
-      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, claimedBy: options.owned === false ? undefined : 'brain', expectedHead: head, superseded,
-      ...(options.existingWorker ? { existingWorker: true } : {}) })[0];
+      laneCLI: path.join(source, 'lanes/lane.mjs'), org, run, claimedBy: options.owned === false ? undefined : 'brain', expectedHead: head, superseded })[0];
     const member = { topic, workspace, item, run, head, job, superseded }; members.push(member); return member;
   };
   const drain = () => {

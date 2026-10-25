@@ -82,10 +82,12 @@ NODE
     )
   fi
   if [ "$live" = --live ]; then
-    local live_args=()
-    [ -z "$live_coverage" ] || live_args=(--continue "$live_coverage")
-    (cd "$work/checkout" && node acceptance/run.mjs --candidate "$work/checkout" --source "$REPO" --summary-file "$work/acceptance.json" "${live_args[@]}")
-    [ -z "$live_coverage" ] || node "$TOOLS" verify-live-summary "$work/acceptance.json" "$live_coverage" "$C"
+    if [ -n "$live_coverage" ]; then
+      (cd "$work/checkout" && node acceptance/run.mjs --candidate "$work/checkout" --source "$REPO" --summary-file "$work/acceptance.json" --continue "$live_coverage")
+      node "$TOOLS" verify-live-summary "$work/acceptance.json" "$live_coverage" "$C"
+    else
+      (cd "$work/checkout" && node acceptance/run.mjs --candidate "$work/checkout" --source "$REPO" --summary-file "$work/acceptance.json")
+    fi
   fi
   git -C "$REPO" archive "$C" | tar -x -C "$dir.partial"
   node "$TOOLS" verify-package "$dir.partial" "$work/identity.json" "$identity_hash" > "$work/validated.json"

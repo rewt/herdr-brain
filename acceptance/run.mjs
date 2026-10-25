@@ -126,6 +126,7 @@ const { values: opt } = parseArgs({ options: {
   'skip-live': { type: 'boolean', default: false },
 } });
 if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--keep] [--summary-file FILE]'); process.exit(2); }
+if (opt.continue && opt['skip-live']) throw Error('live continuation requires actual live scope checks');
 const scratchRoots = [];
 const realHome = os.homedir();
 const root = createOwnedTempRoot(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tmp', 'herdr-acceptance-'), scratchRoots);

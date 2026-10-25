@@ -34,13 +34,15 @@ test('live continuation retains only bound completed passes and requires fresh s
   assert.throws(() => verify({ ...base, prior: { ...base.prior, sha256: '0'.repeat(64) } }), /mismatched/);
   const results = prior.results.map(r => plan.rerun.has(r.key) ? { ...r, status: 'PASS' } :
     { ...r, evidence: path.join(prior.evidence, r.evidence), retained: { sha256: base.prior.sha256, commit: prior.candidateCommit, key: r.key } });
-  const summary = { candidateCommit: base.commit, results, liveCoverage: { kind: 'supervisor-reconciled-live-coverage',
+  const summary = { candidateCommit: base.commit, ready: true, results, liveCoverage: { kind: 'supervisor-reconciled-live-coverage',
     sha256: plan.sha256, inputBase64: plan.inputBase64 } };
   validateLiveSummary(summary);
   const tampered = structuredClone(summary); tampered.results[1].detail = 'Invented replacement';
   assert.throws(() => validateLiveSummary(tampered), /retained result changed/);
   const skipped = structuredClone(summary); skipped.results[12].retained = results[1].retained;
   assert.throws(() => validateLiveSummary(skipped), /fresh required case retained/);
+  const notRun = structuredClone(summary); notRun.results[12].status = 'SKIP';
+  assert.throws(() => validateLiveSummary(notRun), /fresh case is not PASS/);
 });
 
 const source = path.resolve(import.meta.dirname, '../..');

@@ -14,6 +14,7 @@ import { stopProducers, awaitProducers } from './producers.mjs';
 import { retainedRoots, resultLine, gateOutcome, writeSummary } from './results.mjs';
 import { liveSocket } from './probe.mjs';
 import { cases, runCase } from './cases.mjs';
+import { verifyLiveContinuation, retainedLiveEvidence } from '../lib/live-coverage.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
 import { createOwnedTempRoot, createLiveSessionTemp } from './temp.mjs';
 import { settleCase } from './settle.mjs';
@@ -120,6 +121,7 @@ const SOURCE = path.dirname(HERE);
 const { values: opt } = parseArgs({ options: {
   candidate: { type: 'string' }, source: { type: 'string', default: SOURCE },
   'summary-file': { type: 'string' },
+  'continue': { type: 'string' },
   keep: { type: 'boolean', default: false },
   'skip-live': { type: 'boolean', default: false },
 } });
@@ -134,6 +136,7 @@ const load = createLoadMonitor({ record: (sample) => fs.appendFileSync(path.join
 const results = [];
 let logFile, candidateCommit, candidateSnapshot, fixture, supervisor, defaultOrg, record, lane, retire;
 let focusMonitor, focusError;
+let liveContinuation;
 let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
 const discoveryRoots = [];
@@ -174,6 +177,12 @@ const present = (file) => fs.existsSync(path.join(candidate, file));
 const requireCandidate = (file) => { if (!present(file)) pending(`candidate lacks ${file}`); return path.join(candidate, file); };
 async function test(definition, fn) {
   if (stopping && ![cases.cleanup.key, cases.focus.key].includes(definition.key)) throw new Pending('run interrupted');
+  const retained = liveContinuation?.retained.find(r => r.key === definition.key);
+  if (retained) {
+    const result = { ...retained, evidence: retainedLiveEvidence(liveContinuation.prior, retained),
+      retained: { sha256: liveContinuation.certificate.prior.sha256, commit: liveContinuation.certificate.sourceCommit, key: retained.key } };
+    results.push(result); return result;
+  }
   const previousActor = env.ORG_ACTOR;
   checkHomes(env);
   // Some offline cases call product modules in this process. Give them the
@@ -317,6 +326,9 @@ function emitSummary(interruption = {}) {
   const elapsedSeconds = Math.round((Date.now() - started) / 1000);
   const { counts, ready } = gateOutcome(results);
   const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, ready, evidence, results, load: measuredLoad,
+    ...(liveContinuation ? { liveCoverage: { kind: 'supervisor-reconciled-live-coverage',
+      sha256: liveContinuation.sha256, inputBase64: liveContinuation.inputBase64 },
+      freshCases: results.filter(r => !r.retained).map(r => r.key), retainedCases: results.filter(r => r.retained).map(r => r.key) } : {}),
     credentialResidue: credentialResidue(root), retainedDiscoveryRoots: retainedRoots(discoveryRoots), ...interruption };
   // The build requests an exact copy before sealing the immutable bundle.
   writeSummary(summary, opt['summary-file']);
@@ -377,6 +389,10 @@ try {
     assert.ok(present('bin/org.mjs')); return `${opt.candidate}: ${candidateCommit}`;
   });
   if (results.find((v) => v.key === cases.snapshot.key).status !== 'PASS') throw new Error('unsafe or unavailable candidate snapshot; no candidate commands executed');
+  if (opt.continue) {
+    const tree = git(candidate, ['rev-parse', 'HEAD^{tree}']);
+    liveContinuation = verifyLiveContinuation(opt.continue, { commit: candidateCommit, tree, canonical: opt.source });
+  }
   const fresh = path.join(root, 'new-project');
   initRepo(fresh);
   await test(cases.record, () => {
@@ -574,6 +590,15 @@ try {
   });
   await test(cases.housekeeping, async () => {
     const script = requireCandidate('housekeeping/housekeeping.mjs');
+    // This witness exercises supported direct retirement. Default queue-owned
+    // closeout is proved by the queue/supervisor cases; it must not be stolen
+    // by housekeeping. Select legacy mode only in this owned scratch fixture.
+    const configFile = path.join(fixture.repo, '.lane.json'), originalConfig = read(configFile);
+    const legacyConfig = JSON.parse(originalConfig);
+    legacyConfig.retirement = { ...legacyConfig.retirement, closeout_queue: false };
+    write(configFile, JSON.stringify(legacyConfig));
+    git(fixture.repo, ['add', '.lane.json']); git(fixture.repo, ['commit', '-qm', 'Select direct housekeeping witness']);
+    try {
     const done = await dispatch('done', 'housekeeping-done');
     await final(done); lane(['check'], done.info.workspace); promoteAndComplete(done, { lane, record });
     const blocked = await dispatch('blocked-report', 'housekeeping-blocked');
@@ -600,6 +625,10 @@ try {
     fs.appendFileSync(logFile, JSON.stringify({ action: 'scripted-worker-retired', run: done.run, processes: doneProcesses }) + '\n');
     for (const job of [blocked, human]) assertWorkerKept(job, { lane, reason: /awaits correction or disposition/ });
     return 'actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved';
+    } finally {
+      write(configFile, originalConfig);
+      git(fixture.repo, ['add', '.lane.json']); git(fixture.repo, ['commit', '-qm', 'Restore default closeout ownership']);
+    }
   });
   await test(cases.release, () => {
     const script = requireCandidate('herdr/release.sh');

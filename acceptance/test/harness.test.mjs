@@ -12,6 +12,36 @@ import { cleanupInboxes } from '../cleanup.mjs';
 import { acquireHostTestSlot } from '../../test-slot/test-slot.mjs';
 import { createLoadMonitor, LoadTimeout } from '../load.mjs';
 import { cases, runCase } from '../cases.mjs';
+import { createHash } from 'node:crypto';
+import { liveKeys, freshLiveKeys, liveContinuation, validateLiveSummary } from '../../lib/live-coverage.mjs';
+
+test('live continuation retains only bound completed passes and requires fresh scope plus real failed-case proof', () => {
+  assert.deepEqual(liveKeys, Object.values(cases).filter(c => c !== cases.tools).map(c => c.key));
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const prior = { candidateCommit: 'a'.repeat(40), evidence: '/owned/original/evidence', results: liveKeys.map((key, i) =>
+    ({ id: String(i + 1).padStart(2, '0'), key, status: key === 'housekeeping' ? 'FAIL' : 'PASS', evidence: `${i + 1}.jsonl`, detail: 'Actual original observation' })) };
+  const priorBytes = JSON.stringify(prior), base = { schema: 'release-live-coverage/v1', commit: 'b'.repeat(40), tree: 'c'.repeat(40),
+    sourceCommit: prior.candidateCommit, keys: liveKeys, complete: true, unresolved: [], rerun: [...freshLiveKeys, 'housekeeping'],
+    prior: { inputBase64: Buffer.from(priorBytes).toString('base64'), sha256: sha(priorBytes) },
+    reconciliation: Object.fromEntries(['source', 'runner', 'environment', 'dependencies', 'cleanup'].map(k => [k, `Explicit actual ${k} compatibility disposition for the retained cases.`])) };
+  const signed = value => JSON.stringify({ ...value, attestationDigest: sha(JSON.stringify(value)), attestationSeq: 1 });
+  const verify = value => liveContinuation(signed(value), { commit: base.commit, tree: base.tree });
+  const plan = verify(base); assert.equal(plan.retained.length, 13);
+  assert.throws(() => verify({ ...base, rerun: freshLiveKeys }), /red, pending or skipped/);
+  assert.throws(() => verify({ ...base, rerun: base.rerun.filter(k => k !== 'operator-focus') }), /fresh scope/);
+  assert.throws(() => verify({ ...base, sourceCommit: 'd'.repeat(40) }), /source changed/);
+  assert.throws(() => verify({ ...base, unresolved: ['unverified correction'] }), /incomplete/);
+  assert.throws(() => verify({ ...base, prior: { ...base.prior, sha256: '0'.repeat(64) } }), /mismatched/);
+  const results = prior.results.map(r => plan.rerun.has(r.key) ? { ...r, status: 'PASS' } :
+    { ...r, evidence: path.join(prior.evidence, r.evidence), retained: { sha256: base.prior.sha256, commit: prior.candidateCommit, key: r.key } });
+  const summary = { candidateCommit: base.commit, results, liveCoverage: { kind: 'supervisor-reconciled-live-coverage',
+    sha256: plan.sha256, inputBase64: plan.inputBase64 } };
+  validateLiveSummary(summary);
+  const tampered = structuredClone(summary); tampered.results[1].detail = 'Invented replacement';
+  assert.throws(() => validateLiveSummary(tampered), /retained result changed/);
+  const skipped = structuredClone(summary); skipped.results[12].retained = results[1].retained;
+  assert.throws(() => validateLiveSummary(skipped), /fresh required case retained/);
+});
 
 const source = path.resolve(import.meta.dirname, '../..');
 function scratch(t) {

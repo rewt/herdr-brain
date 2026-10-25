@@ -17,7 +17,7 @@ import { isMain } from '../lib/cli-help.mjs';
 const hash = v => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(v ?? '');
 function git(repo, args) {
   const r = spawnSync('git', ['--no-optional-locks', '-C', repo, ...args],
-    { encoding: 'utf8', timeout: 30000 });
+    { encoding: 'utf8' });
   if (r.status !== 0 || r.error) throw Error(r.stderr || r.error?.message || `git ${args[0]} failed`);
   return r.stdout.trim();
 }
@@ -107,7 +107,7 @@ export function reconcile(argv) {
     if (!fs.existsSync(receipt)) writeFileAtomic(receipt, JSON.stringify(payload, null, 2) + '\n');
     const r = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/org.mjs', import.meta.url)), 'complete-batch', '--file', receipt,
       ...(action === 'refresh' ? ['--accept-delta', opt['accept-delta'], '--why', opt.why] : [])],
-      { cwd: project.canonical, env: { ...process.env, ORG_DIR: org, ORG_ACTOR: process.env.ORG_ACTOR || 'supervisor-completion' }, encoding: 'utf8', timeout: 30000 });
+      { cwd: project.canonical, env: { ...process.env, ORG_DIR: org, ORG_ACTOR: process.env.ORG_ACTOR || 'supervisor-completion' }, encoding: 'utf8' });
     if (r.status !== 0 || r.error) throw Error(`Git is integrated but record reconciliation is pending: ${r.stderr || r.error?.message || r.stdout}`);
     // complete-batch writes the hint using its own appended event sequence.
     return { result: action === 'refresh' ? 'refreshed' : 'reconciled', ...JSON.parse(r.stdout), receipt };

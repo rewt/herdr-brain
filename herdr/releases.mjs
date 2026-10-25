@@ -27,6 +27,10 @@ try {
     if (JSON.parse(frozen).payloadCommit !== target) throw Error('frozen payload commit mismatch');
     durableWrite(rest[1], { identity, frozenFile: rest[2], frozenSha256: payloadDigest(frozen) });
     console.log(payloadDigest(readPlainFile(rest[1])));
+  } else if (action === 'verify-live-summary') {
+    const bytes = readPlainFile(home), summary = JSON.parse(bytes);
+    if (summary.liveCoverage?.sha256 !== payloadDigest(readPlainFile(target))) throw Error('live continuation input was not consumed');
+    console.log(JSON.stringify(acceptanceRecord(bytes, rest[0])));
   } else if (action === 'coverage') {
     const bytes = readPlainFile(target);
     if (payloadDigest(bytes) !== rest[0]) throw Error('captured identity record changed');

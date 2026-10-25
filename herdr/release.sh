@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Immutable local releases. The project supervisor ships them (see supervisor/PROTOCOL.md).
-# Usage: release.sh build TAG [--live] [--coverage FILE] | activate TAG | ship TAG | rollback | status
+# Usage: release.sh build TAG [--live] [--coverage FILE] [--live-coverage FILE] | activate TAG | ship TAG | rollback | status
 #        release.sh pin TAG [PROJECT] | unpin [PROJECT] | pin-status [PROJECT] [--json]
 #        release.sh attest TAG SUMMARY.json | exec ENTRY [ARGS...]
 # ship = build (release gate in a genuine checkout) + activate + check the installed launchers; it rolls
@@ -27,7 +27,7 @@ absent_or_link() {
   [ ! -e "$1" ] || [ -L "$1" ] || die "$1 is not a link; refusing to replace it"
 }
 build() {
-  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-} coverage=${3:-} C work identity_hash
+  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-} coverage=${3:-} live_coverage=${4:-} C work identity_hash
   valid_tag "$tag"
   [ -n "$REPO" ] || REPO=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
   C=$(git -C "$REPO" rev-parse -q --verify "refs/tags/$tag^{commit}") || die "no tag $tag in $REPO"
@@ -82,7 +82,10 @@ NODE
     )
   fi
   if [ "$live" = --live ]; then
-    (cd "$work/checkout" && node acceptance/run.mjs --candidate "$work/checkout" --summary-file "$work/acceptance.json")
+    local live_args=()
+    [ -z "$live_coverage" ] || live_args=(--continue "$live_coverage")
+    (cd "$work/checkout" && node acceptance/run.mjs --candidate "$work/checkout" --source "$REPO" --summary-file "$work/acceptance.json" "${live_args[@]}")
+    [ -z "$live_coverage" ] || node "$TOOLS" verify-live-summary "$work/acceptance.json" "$live_coverage" "$C"
   fi
   git -C "$REPO" archive "$C" | tar -x -C "$dir.partial"
   node "$TOOLS" verify-package "$dir.partial" "$work/identity.json" "$identity_hash" > "$work/validated.json"
@@ -180,16 +183,18 @@ status() {
 }
 case "${1:-}" in
   build)
-    [ $# -ge 2 ] || die "usage: release.sh build TAG [--live] [--coverage FILE]"
-    tag=$2; shift 2; live=; coverage=
+    [ $# -ge 2 ] || die "usage: release.sh build TAG [--live] [--coverage FILE] [--live-coverage FILE]"
+    tag=$2; shift 2; live=; coverage=; live_coverage=
     while [ $# -gt 0 ]; do
       case "$1" in
         --live) [ -z "$live" ] || die "duplicate --live"; live=--live; shift ;;
         --coverage) [ $# -ge 2 ] && [ -z "$coverage" ] || die "supply one coverage file"; coverage=$2; shift 2 ;;
-        *) die "usage: release.sh build TAG [--live] [--coverage FILE]" ;;
+        --live-coverage) [ $# -ge 2 ] && [ -z "$live_coverage" ] || die "supply one live coverage file"; live_coverage=$2; shift 2 ;;
+        *) die "usage: release.sh build TAG [--live] [--coverage FILE] [--live-coverage FILE]" ;;
       esac
     done
-    build "$tag" "$live" "$coverage" ;;
+    [ -z "$live_coverage" ] || [ "$live" = --live ] || die "live coverage requires --live"
+    build "$tag" "$live" "$coverage" "$live_coverage" ;;
   activate) [ $# -eq 2 ] || die "usage: release.sh activate TAG"; activate "$2" ;;
   ship) [ $# -eq 2 ] || die "usage: release.sh ship TAG"; ship "$2" ;;
   rollback) [ $# -eq 1 ] || die "usage: release.sh rollback"; rollback ;;

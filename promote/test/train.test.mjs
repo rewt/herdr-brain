@@ -494,7 +494,7 @@ fs.rmdirSync=function(directory,...args){
     fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer);
     t.diagnostic('queued-notice recovery: empty composer published');
     const result = await resumedDone; assert.equal(result.code, 0, result.stderr);
-    t.diagnostic('queued-notice recovery: replacement close observed');
+    t.diagnostic('queued-notice recovery: replacement exit and stream drain confirmed');
     const results = f.queue.load().results;
     assert.deepEqual(results.map(r => [r.id, r.outcome, r.delivered]), saved.jobs.map(job => [job.id, 'promoted', true]));
     assert.deepEqual(results[0].warnings, ['no record discovered; finished tabs preserved']);

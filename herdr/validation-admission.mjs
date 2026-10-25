@@ -69,9 +69,18 @@ export async function verifyReleaseCoverage(file, { identity, frozen, canonical,
   for (const row of coverage.files) {
     if (!Array.isArray(row.receipts) || !row.receipts.length || row.receipts.some(id => !evidence.has(id)) ||
         typeof row.scope !== 'string' || row.scope.trim().length < 20) throw Error('release coverage has an unproved file or case scope');
-    const red = row.receipts.filter(id => evidence.get(id).receipt.exit_code !== 0);
+    // A later suite may fail after an earlier audited suite finished green.
+    // Use the paired native suite observations, never a test filename alone.
+    const passed = (id, file) => {
+      const result = evidence.get(id)?.receipt;
+      if (!result) return false;
+      if (result.exit_code === 0) return true;
+      return (result.timings ?? []).some(start => start.kind === 'suite' && start.event === 'start' && start.depth === 0 && start.files?.includes(file) &&
+        result.timings.some(end => end.id === start.id && end.kind === 'suite' && end.event === 'finish' && end.exit_code === 0));
+    };
+    const red = row.receipts.filter(id => !passed(id, row.file));
     if (red.length && (!Array.isArray(row.corrections) || red.some(id => !row.corrections.some(fix => fix.original === id &&
-        row.receipts.includes(fix.passed) && evidence.get(fix.passed)?.receipt.exit_code === 0 && typeof fix.scope === 'string' && fix.scope.trim().length >= 20)))) {
+        row.receipts.includes(fix.passed) && passed(fix.passed, fix.file ?? row.file) && typeof fix.scope === 'string' && fix.scope.trim().length >= 20)))) {
       throw Error('release coverage retains a known-red component without a passing specific correction');
     }
   }

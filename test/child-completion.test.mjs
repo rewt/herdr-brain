@@ -25,9 +25,9 @@ body = body.replaceAll('import.meta.url', 'moduleURL').replace(/^export /gm, '')
 const link = new Function('loadTimeout', 'spawn', 'fileURLToPath', 'registerProcess', 'killProcess',
   'setTimeout', 'clearTimeout', 'moduleURL', `${body}\nreturn {spawnChild,spawnScenarioChild,waitForExit,killChild,childProcessEntry};`);
 
-function controlled() {
+function controlled({ autoDestroy = true } = {}) {
   const child = Object.assign(new EventEmitter(), { pid: 42, exitCode: null, signalCode: null,
-    stdout: new PassThrough(), stderr: new PassThrough(), unref() { this.unreferenced = true; } });
+    stdout: new PassThrough({ autoDestroy }), stderr: new PassThrough({ autoDestroy }), unref() { this.unreferenced = true; } });
   const row = { pid: 42, ppid: 1, pgid: 17, state: 'S', identity: 'owned birth', command: 'fixture' };
   const reads = [], signals = [], spawns = [], allowances = [], hooks = [], reports = [], timers = new Map();
   let lookup = { ok: true, value: row };
@@ -51,22 +51,33 @@ function controlled() {
 }
 const launch = (f, name = 'spawnChild', legacy) => f.api[name](f.context, 'fixture', ['--work'], {}, legacy);
 
-test('IPC drain requires actual exit, observed disconnect and both readable ends without a close notification', async () => {
-  const f = controlled(), child = launch(f);
+test('IPC drain requires actual exit, observed disconnect and every owned pipe close; EOF is insufficient', async () => {
+  // Include the genuine stdio shape before spawn so the writable input pipe
+  // cannot be overlooked by the actual linked helper.
+  const owned = controlled({ autoDestroy: false });
+  owned.child.stdin = new PassThrough({ autoDestroy: false });
+  owned.child.stdio = [owned.child.stdin, owned.child.stdout, owned.child.stderr, null];
+  const target = launch(owned);
   let settled = false;
-  const result = f.api.waitForExit(child); result.then(() => { settled = true; });
-  f.exit(7); child.emit('disconnect');
-  child.stdout.write('trailing output'); child.stderr.write('trailing error');
+  const result = owned.api.waitForExit(target); result.then(() => { settled = true; });
+  owned.exit(7); target.emit('disconnect');
+  target.stdout.write('trailing output'); target.stderr.write('trailing error');
   await Promise.resolve(); assert.equal(settled, false, 'exit plus IPC disconnect cannot discard open streams');
-  const stdoutEnded = new Promise(resolve => child.stdout.once('end', resolve));
-  child.stdout.end(); await stdoutEnded;
+  const stdoutEnded = new Promise(resolve => target.stdout.once('end', resolve));
+  target.stdout.end(); await stdoutEnded;
   assert.equal(settled, false, 'stderr is still open');
-  const stderrEnded = new Promise(resolve => child.stderr.once('end', resolve));
-  child.stderr.end(); await stderrEnded;
+  const stderrEnded = new Promise(resolve => target.stderr.once('end', resolve));
+  target.stderr.end(); await stderrEnded;
+  await Promise.resolve(); assert.equal(settled, false, 'both EOFs still do not prove pipe closure');
+  for (const pipe of [target.stdout, target.stderr]) {
+    const closed = new Promise(resolve => pipe.once('close', resolve)); pipe.destroy(); await closed;
+  }
+  assert.equal(settled, false, 'the owned writable input pipe is still open');
+  const stdinClosed = new Promise(resolve => target.stdin.once('close', resolve)); target.stdin.destroy(); await stdinClosed;
   assert.deepEqual(await result, { code: 7, status: 7, signal: null,
     stdout: 'trailing output', stderr: 'trailing error' });
-  await f.hooks[0]();
-  assert.equal(f.timers.size, 0); assert.deepEqual(f.signals, []);
+  await owned.hooks[0]();
+  assert.equal(owned.timers.size, 0); assert.deepEqual(owned.signals, []);
 });
 
 test('actual child helpers accept legacy allowances without arming an execution timer', async t => {

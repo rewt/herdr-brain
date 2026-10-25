@@ -35,16 +35,19 @@ function trackedChild(t, command, args, options) {
   let stdout = '', stderr = '';
   const result = new Promise((resolve, reject) => {
     let exited = false, disconnected = false, code, signal;
+    const pipes = [...new Set((child.stdio ?? [child.stdout, child.stderr]).filter(stream => stream?.once))];
+    const closedPipes = new Set();
     const complete = (exitCode, exitSignal) => resolve({ code: exitCode, status: exitCode, signal: exitSignal, stdout, stderr });
     const joinedIPC = () => {
       // A parent-initiated IPC disconnect can lose Node's aggregate close
       // notification. Require the actual exit, observed IPC disconnect and
-      // BOTH readable ends instead; never infer drain from exit or elapsed time.
-      if (exited && disconnected && [child.stdout, child.stderr].every(stream => !stream || stream.readableEnded)) complete(code, signal);
+      // observed close of EVERY owned pipe instead. EOF alone is not physical
+      // pipe closure. Never infer drain from exit, EOF or elapsed time.
+      if (exited && disconnected && pipes.every(stream => closedPipes.has(stream))) complete(code, signal);
     };
     child.stdout?.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
     child.stderr?.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
-    child.stdout?.on('end', joinedIPC); child.stderr?.on('end', joinedIPC);
+    for (const stream of pipes) stream.once('close', () => { closedPipes.add(stream); joinedIPC(); });
     child.once('exit', (exitCode, exitSignal) => { exited = true; code = exitCode; signal = exitSignal; joinedIPC(); });
     child.once('disconnect', () => { disconnected = true; joinedIPC(); });
     child.once('error', reject);

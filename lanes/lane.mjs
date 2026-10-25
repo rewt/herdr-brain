@@ -1255,6 +1255,7 @@ function dispatch(topic, promptText, options = {}) {
   let pane = initial?.pane, tabId = initial?.tabId;
   if (initial === undefined) {
     const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
+    if (options.capturedHead) tabArgs.push('--cwd', path);
     for (const pair of resolved.env) tabArgs.push("--env", pair);
     const created = JSON.parse(execFileSync("herdr", tabArgs, {
       encoding: "utf8",

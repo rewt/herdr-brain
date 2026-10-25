@@ -69,10 +69,17 @@ test('actual child helpers accept legacy allowances without arming an execution 
     await Promise.resolve(); assert.equal(settled, false);
     child.stdout.write('head'); child.stderr.write('error');
     const code = legacy === 55001 ? 7 : 0;
-    f.exit(code); child.stdout.write(' tail');
+    f.exit(code);
+    assert.equal(f.timers.size, 0, 'exit must not install a drain cutoff');
+    assert.deepEqual(f.allowances, []);
+    assert.equal(child.stdout.destroyed, false);
+    assert.equal(child.stderr.destroyed, false);
+    assert.equal(child.unreferenced, undefined);
+    assert.deepEqual(f.signals, []);
+    child.stdout.write(' tail'); child.stderr.write(' tail');
     await Promise.resolve(); assert.equal(settled, false, 'parent exit is not stream close');
     f.close();
-    assert.deepEqual(await result, { code, status: code, signal: null, stdout: 'head tail', stderr: 'error' });
+    assert.deepEqual(await result, { code, status: code, signal: null, stdout: 'head tail', stderr: 'error tail' });
     assert.equal(await f.api.waitForExit(child), await result, 'late waiter retains the original result');
     assert.equal(f.timers.size, 0);
     const reads = f.reads.length;
@@ -143,4 +150,25 @@ test('registration refusal retains rollback and never invents signal authority',
   assert.match(f.reports.join('\n'), /registration refused/);
   await assert.rejects(f.hooks[0](), /child cleanup unconfirmed; no signal sent to 42/);
   f.exit(1); f.close(); assert.equal((await f.api.waitForExit(f.child)).code, 1);
+});
+
+test('a real child error after exit rejects pending output completion', async () => {
+  const f = controlled(), child = launch(f), error = Error('post-exit child failure');
+  f.exit(7);
+  child.emit('error', error);
+  await assert.rejects(f.api.waitForExit(child), value => value === error);
+  await assert.rejects(f.hooks[0](), value => value === error);
+  assert.deepEqual(f.signals, []);
+});
+
+test('real stream errors are surfaced without manufacturing completion', async () => {
+  const f = controlled(), child = launch(f), error = Error('stream failure');
+  for (const stream of [child.stdout, child.stderr])
+    assert.throws(() => stream.emit('error', error), value => value === error);
+  let settled = false;
+  f.api.waitForExit(child).then(() => { settled = true; });
+  await Promise.resolve(); assert.equal(settled, false);
+  f.exit(1); f.close();
+  assert.equal((await f.api.waitForExit(child)).code, 1);
+  await f.hooks[0]();
 });

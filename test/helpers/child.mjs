@@ -1,4 +1,3 @@
-import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawn } from 'node:child_process';
 import { registerProcess, killProcess } from './processes.mjs';
 
@@ -33,23 +32,15 @@ function trackedChild(t, command, args, options) {
     if (sent) child.killed = true;
     return sent;
   };
-  let stdout = '', stderr = '', drainTimer;
+  let stdout = '', stderr = '';
   const result = new Promise((resolve, reject) => {
     child.stdout?.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
     child.stderr?.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
     child.once('close', (code, signal) => {
-      clearTimeout(drainTimer);
       resolve({ code, status: code, signal, stdout, stderr });
     });
-    child.once('exit', (code, signal) => {
-      // A background grandchild can retain these pipes after its parent exits.
-      // Do not let that prevent the report-only suite audit from running.
-      drainTimer = setTimeout(() => {
-        child.stdout?.destroy(); child.stderr?.destroy();
-        resolve({ code, status: code, signal, stdout, stderr });
-      }, loadTimeout(500));
-    });
+
   });
   // Tests sometimes inspect a fixture before awaiting it. Retain an early
   // error/close without an unhandled rejection or a missed close event.

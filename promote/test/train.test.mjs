@@ -473,7 +473,12 @@ fs.rmdirSync=function(directory,...args){
     assert.equal(owner.pid, worker.pid); assert.throws(() => process.kill(owner.pid, 0)); fs.rmSync(lock, { recursive: true });
     const resumed = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
     resumedDone = waitForExit(resumed);
-    const ready = new Promise(resolve => resumed.once('message', resolve));
+    // An actual early exit/error is evidence, not an indefinitely pending
+    // readiness promise that cancels the remainder of this test file.
+    const ready = Promise.race([
+      new Promise((resolve, reject) => { resumed.once('message', resolve); resumed.once('error', reject); }),
+      resumedDone.then(result => { throw Error(`resumed train exited before readiness: ${JSON.stringify(result)}`); }),
+    ]);
     assert.equal((await ready).ready, true);
     resumed.disconnect();
     fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer);

@@ -1270,7 +1270,7 @@ test("review requires explicit source, round, route, and valid unique flags with
       ]);
       assert.equal(run.status, 2, run.stderr);
       assert.equal(run.stdout, "");
-      assert.match(run.stderr, /--timeout must be 0 or an integer from 3 through 7200 seconds/);
+      assert.match(run.stderr, /--timeout must be 0 \(no elapsed stop\) or an integer from 3 through 7200 seconds/);
     }
     negativeControl("review flag refusals use exit 2");
   } finally {

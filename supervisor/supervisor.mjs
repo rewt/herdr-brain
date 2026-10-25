@@ -68,6 +68,19 @@ export function parallelPromotionResult(settled, run, actualHead) {
     review_pending: !settled.review, journal: settled.journal, validation: settled.validation };
 }
 
+
+export function parallelPromotionSourceResult(settled, run) {
+  if (!settled?.workspace) return null;
+  const git = args => {
+    const result = spawnSync('git', ['-C', settled.workspace, ...args], { encoding: 'utf8' });
+    if (result.error || result.status !== 0) throw Error(result.error?.message || result.stderr || 'parallel review Git read failed');
+    return result.stdout.trim();
+  };
+  const result = parallelPromotionResult(settled, run, git(['rev-parse', 'HEAD']));
+  if (result && git(['status', '--porcelain=v1', '--untracked-files=all'])) throw Error('parallel review source changed; nothing queued');
+  return result;
+}
+
 export function main(argv = process.argv.slice(2)) {
   const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|safe-point|status|entry|checkpoint|handle|promote [OPTIONS]", args: argv, allowPositionals: true, options: {
     controller: { type: 'string', default: BRAIN_CONTROLLER },
@@ -283,7 +296,7 @@ export function main(argv = process.argv.slice(2)) {
     const settled = fs.existsSync(settledFile) ? JSON.parse(fs.readFileSync(settledFile, 'utf8')) : null;
     const testEscalation = settled?.result?.result === 'escalate' && settled.result.reason === TEST_ESCALATION && settled.review?.verdict === 'PASS';
     const parallel = !opt['existing-worker'] && resolveValidation({ root: project.canonical }).review === 'parallel'
-      ? parallelPromotionResult(settled, readOwnedRun(project.org, id), call(['git'], ['-C', settled.workspace, 'rev-parse', 'HEAD']).trim()) : null;
+      ? parallelPromotionSourceResult(settled, readOwnedRun(project.org, id)) : null;
     if (settled?.common !== project.identity || (!parallel && (settled.stage !== 'complete' || (!testEscalation && !['promotable', 'promotable_with_findings'].includes(settled.result?.result))))) throw new Error('handle the final report first; promotion requires saved settlement evidence');
     if (settled.result?.result === 'promotable_with_findings' && !opt['accept-findings']) throw new Error('capped findings require --accept-findings and --why before promotion');
     if (testEscalation) settleArgs.push('--retry', '--resolve-tests');
@@ -291,8 +304,7 @@ export function main(argv = process.argv.slice(2)) {
     if (!['promotable', 'promotable_with_findings', 'review_pending'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
     const tests = [...new Set([...requiredTests, ...(!parallel && result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : [])])].sort();
-    if (parallel && (call(['git'], ['-C', settled.workspace, 'rev-parse', 'HEAD']).trim() !== result.head ||
-        call(['git'], ['-C', settled.workspace, 'status', '--porcelain=v1', '--untracked-files=all']).trim())) throw Error('parallel review source changed; nothing queued');
+    if (parallel && !parallelPromotionSourceResult(settled, readOwnedRun(project.org, id))) throw Error('parallel review source changed; nothing queued');
     const saved = { identity: project.identity, org: project.org, run: id, ownership, requiredTests: tests, lane: result.lane, release: bundleRelease(),
       reviewed_commit: result.reviewed_commit, head: result.head, ...(parallel ? { review_state: 'pending' } : {}),
       ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',

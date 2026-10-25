@@ -208,3 +208,28 @@ test('gating hotfix settle fixture preserves real exit errors without command ce
   assert.ok(calls.some(call => call.file === 'git'));
   await f.cleanup();
 });
+
+
+test('gating hotfix reads the actual Git head and refuses changed source during parallel admission', async t => {
+  const { parallelPromotionSourceResult } = await import('../../supervisor/supervisor.mjs');
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'parallel-admission-'));
+  t.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+  const git = args => {
+    const result = spawnSync('git', args, { cwd: workspace, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git(['init', '-b', 'main']); git(['config', 'user.name', 'Fixture']); git(['config', 'user.email', 'fixture@localhost']);
+  fs.writeFileSync(path.join(workspace, 'source'), 'bound source\n');
+  git(['add', '--', 'source']); git(['commit', '-m', 'Bind source']);
+  const head = git(['rev-parse', 'HEAD']), reportHash = 'b'.repeat(64);
+  const job = { workspace, parallelReview: true, stage: 'reviewing', outcome: 'done', reportHash,
+    head, run: 'R-1', item: 'ENG-1', lane: 'fixture', validation: { exit_code: 0 } };
+  const run = { id: 'R-1', item: 'ENG-1', report: { outcome: 'done', sha256: reportHash } };
+  assert.equal(parallelPromotionSourceResult(job, run).head, head);
+  assert.equal(parallelPromotionSourceResult({ ...job, head: 'a'.repeat(40) }, run), null);
+  assert.equal(parallelPromotionSourceResult({ ...job, review: { verdict: 'NEEDS-WORK' } }, run), null);
+  assert.equal(parallelPromotionSourceResult(job, { ...run, report: { outcome: 'done', sha256: 'c'.repeat(64) } }), null);
+  fs.appendFileSync(path.join(workspace, 'source'), 'changed\n');
+  assert.throws(() => parallelPromotionSourceResult(job, run), /source changed/);
+});

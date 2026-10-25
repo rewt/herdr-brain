@@ -372,11 +372,14 @@ change's proposal, design, tasks, every delta spec, and any corresponding curren
 spec. `--brief` names a literal supplemental or standalone source and resolves from
 the invoking directory. At least one source is required and both may be used. The
 route defaults to `review` and must exist in the selected routing configuration.
-`--timeout` is an end-to-end foreground deadline in whole seconds,
-defaults to 1800, and accepts 3 through 7200. The three-second minimum leaves one
-polling interval beyond the mandatory two-second record-settle window; smaller
-values refuse before dispatch. Duplicate, missing, empty, unknown, or invalid
-options refuse before dispatch.
+`--timeout` defaults to **0**, which disables the elapsed review deadline. The
+approximately30-minute review target is advisory. Legacy explicit positive values
+3 through7200 still parse, but the current Brain/BCH process uses timeout0, one
+post-code review per item and cap1, async/nonblocking, with zero reviewer suites.
+No plan/pre-code/contract/concurrence review stage or automatic re-review chain
+is authorized. Duplicate, missing, empty, unknown or invalid options refuse before
+dispatch. Captured immutable source remains reviewable after its engineer moves
+or its lane retires; current live lane HEAD is not the completion authority.
 
 `--route-config` supplies a routing snapshot for the selected review route and
 resolves from the invoking directory, just as for dispatch. It affects launch

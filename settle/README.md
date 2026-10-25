@@ -172,26 +172,24 @@ in the result and remain advisory. There is no automatic loop;
 each command handles one landed report. The correction's watcher delivers the
 next report for the next settle invocation.
 
-A review-round cap pauses automatic correction at every severity.
-Set the project default with `settle.review_round_cap` in tracked `.lane.json`,
-or record a per-item override with
-`record set ENG-123 meta.settle_review_round_cap=3`. `--review-round-cap 3`
-on settle (or supervisor `handle`) records the same item override. Item values
-win over project defaults; 0 disables the cap, including an inherited project
-default. Values must be nonnegative safe integers. With no setting, the default
-is **3 review rounds**: the initial review and at most two automatic fix rounds.
-Reaching the cap hands remaining findings to the supervisor. Explicit project
-values, including 0 for unlimited reviews, retain their meaning. Each intake
-snapshots the effective cap and its source;
-retries use that snapshot, and future correction runs read the item override.
+Until stable release, Brain and BCH use **one post-code independent review per
+item**, async/nonblocking for engineers and landing, with zero reviewer suites.
+The default review-round cap is **1**. The actual committed landing waiver forces
+cap1 for new intake even if an older item/project override differs. The 30-minute
+target is advisory; timeout0 arms no elapsed review stop. There is at most one
+explicit formal fix round and no automatic second review/re-review chain. Later
+findings fix forward; Majors must be corrected and their specific correction and
+evidence checked before the one full final-release obligation. No pre-code,
+plan, contract or concurrence review stage is part of this process.
 
 The current completed review counts toward the cap. Count one completed
 independent review per reported run on this item in this Git common-directory
 identity, using settle receipts bound to the recorded report hash. Worker starts,
 abandoned unreviewed runs and uncertain reviewer retries do not consume rounds.
-The result's `review_policy` names the cap, source, round and prior reviewed runs;
-the existing `rounds` field remains the advisory total run count. Old pending
-receipts without a cap snapshot retain unlimited behaviour.
+The result's `review_policy` names the effective cap and prior reviewed runs;
+the existing `rounds` field remains the advisory total run count. Historical
+receipts retain their recorded cap/verdict; they are not rewritten as cap1.
+Legacy compatibility parsing does not authorize a new current-policy review chain.
 
 At or above the cap, NEEDS-WORK with only parsed Moderate/Minor findings returns
 `promotable_with_findings` without dispatch. It includes the findings, handoff,
@@ -223,9 +221,9 @@ returns `stopped` with a compact handoff and keeps the fix/dispatching stage,
 review and correction brief resumable. After clearing STOP, use `--retry`; no
 review is repeated and a completed dispatch may be adopted without another launch.
 
-BCH's two automatic fix rounds correspond to review cap **3**, since the first
-review counts. Scope continuations and narrow same-session corrections do not
-consume a review round or reset the count. The full rules and BCH cutover fields
+Brain and BCH both use cap **1** now, in their separate tooling until supported
+BCH adoption. Scope continuations and narrow same-session corrections do not
+reset the count. The full rules and historical BCH cutover fields
 are in [the continuation and revision-cap contract](../docs/contracts/CONTINUATION-AND-REVISION-CAP.md).
 
 Flags `--review-route ROUTE`, `--fix-route ROUTE`, `--timeout SECONDS` override
@@ -237,19 +235,18 @@ defaults. Projects may put `settle` settings in their tracked `.lane.json`:
     "review_route": "review-codex",
     "fix_route": "engineer",
     "reuse": false,
-    "timeout": 1800,
-    "review_round_cap": 3,
+    "timeout": 0,
+    "review_round_cap": 1,
     "to": "supervisor-herdr"
   }
 }
 ```
 
-Inspect and edit these settings through the validating record CLI or console's
-Desks screen (`S`):
+Inspect and edit these settings through the validating record CLI:
 
 ```sh
 record desks --json
-record desks set --review-route review-codex --review-round-cap 3 --timeout 1800
+record desks set --review-route review-codex --review-round-cap 1 --timeout 0
 record desks set --unset review_route
 ```
 

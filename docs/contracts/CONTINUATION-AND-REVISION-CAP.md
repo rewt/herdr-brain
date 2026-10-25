@@ -53,29 +53,35 @@ continuations and narrow same-session corrections consume no review round.
 Continuing work never resets earlier completed reviews; reviewing that new run
 later consumes its own round. Continuation chains have no separate length cap.
 
-Precedence is item `meta.settle_review_round_cap`, project `.lane.json`
-`settle.review_round_cap`, then 3 completed review rounds. `--review-round-cap N` persists
-the item override. Each intake snapshots cap/source/round/prior runs as
-`review_policy`; retry uses that snapshot. Total `rounds` and record budgets
-remain advisory. Legacy pending receipts without a cap snapshot remain unlimited.
-The unconfigured default and herdr-brain's project cap are both 3 review rounds;
-explicit project values, including 0 for unlimited reviews, retain their meaning.
+Until stable release, Brain and BCH use **one independent post-code review per
+item**, async/nonblocking for the engineer and landing, with zero reviewer suites.
+The unconfigured default and both projects' saved cap are **1**. The actual
+canonical landing waiver forces cap1 for new intake despite an older item/project
+override. Each intake snapshots effective cap/source/round/prior runs as
+`review_policy`; historical receipts keep their original snapshots and verdicts.
+Total `rounds` and record budgets remain advisory. Legacy compatibility values
+do not authorize a new current-policy review chain.
 
-BCH's **two fix rounds after failed reviews of any severity** correspond to
-**review cap 3**: reviews 1 and 2 may each dispatch a fix; review 3 stops automatic
-correction. At `round >= cap > 0`:
+There is at most **one explicit formal fix round** after that single review.
+No plan/pre-code/contract/concurrence stage, automatic second full review or
+re-review chain applies. Later findings fix forward. Majors must actually be fixed
+and their specific correction/evidence checked before final release; they never
+become resolved by relabelling. The approximately30-minute target is planning,
+not an elapsed stop; timeout0 is the supported active setting. At cap1:
 
 | Review | Settle result | Automatic correction |
 | --- | --- | --- |
-| PASS | Ordinary `promotable`, subject to existing evidence/readiness checks | None |
+| PASS | Review complete; main landing remains independently ungated | None |
 | NEEDS-WORK, only parsed Moderate/Minor findings | `promotable_with_findings`, with findings and handoff | None |
 | Major findings or FAIL | `escalate`, `code: "REVIEW_CAP_REACHED"`, with handoff | None |
 | NEEDS-WORK with unparsed findings or unresolved evidence | Existing supervisor escalation | None |
 
-Moderate/Minor acceptance still requires explicit project authority and
-`promote RUN --accept-findings --why REASON --role supervisor`. Major/FAIL is
-never promotable through findings acceptance. Autopilot wakes on the escalation;
-it does not dispatch a correction or park the lane.
+Findings never create a pre-main test/review readiness gate under the actual
+operator waiver. Major/FAIL still requires real correction and specific evidence
+before final release. The explicit supported `--retry --fix-findings` path may
+request the single formal correction; repeating it adopts its saved dispatch.
+It retains report/source/claim/record/STOP guards. Autopilot does not create
+another review or correction chain from the capped result.
 
 ## Explicit correction and parking
 
@@ -122,20 +128,24 @@ cross-item rule above defines the accepted behavior.
 
 ## BCH parity and cutover record
 
-The project-owned adoption configuration is
-`{"settle":{"review_round_cap":3,"reuse":true}}`. It does not encode a model
-ladder or waive any current review/readiness check.
+Current shared desk policy is cap1, timeout0 and one post-code async review with
+no reviewer suites. BCH currently implements it separately; adoption has its own
+actual replacement/drain/fresh-binding/exact-scope prerequisites. This document
+does not authorize adoption inspection or mutation.
 
 | BCH behavior | Brain mechanism | BCH project data |
 | --- | --- | --- |
 | `cont.sh` → `continue-run.sh`, new run on retained session | Explicit dispatch `--reuse`, continuation metadata, recorded worker and watcher | `settle.reuse: true` for same-route fixes; explicit `--reuse` for scope continuations |
 | Unlimited scope/correction continuations, no cap reset | Completed-review counting by item; no chain-length gate | No continuation cap |
-| Two fix rounds after failed reviews, any severity | Reviews 1/2 auto-fix, review 3 stops; Major/FAIL cap escalation | `settle.review_round_cap: 3` |
-| One supervisor escalation up the local ladder, then park/decision | Explicit correction or new routed dispatch; fresh worker on route change; recoverable lane close | BCH-owned routes/ladder and cap prose remain policy data |
+| One post-code review and at most one formal fix | Async review cap1; explicit single correction; later findings fixed forward; Majors corrected before release | `settle.review_round_cap: 1`, `settle.timeout: 0` |
+| Routine findings remain delegated | Specific correction/evidence checks; no automatic re-review chain or extra operator round | Reserved outward/security/funds/identity authority retained |
 | Every review and route change uses a fresh session | Independent review launch; changed fix route skips reuse | BCH-owned review route/provider policy |
 | Sibling slice or landing repair can retain a session | Explicit cross-item `--reuse` with all identity checks; no cross-item `--from-run` | Supervisor chooses the item/lane |
 
-| Astra R4 row field | Evidence / required completion |
+The following Astra R4 cutover record is historical evidence, not a current
+review/adoption prerequisite or authority to restore the superseded cap3 policy.
+
+| Astra R4 row field | Historical evidence / recorded completion |
 | --- | --- |
 | Owner | herdr implements; opus accepts BCH parity |
 | Contract | This document; acceptance pending Astra review and opus parity ruling |

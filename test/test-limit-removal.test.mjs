@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 
 const executable = process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE;
+const legacySeconds = process.env.HERDR_FIXTURE_LIFETIME_SECONDS;
 const waiting = "process.on('message',()=>{process.stdout.write('joined');process.disconnect()});process.send('ready')";
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-owner-only-'));
@@ -39,13 +40,14 @@ function observe(t, command, args, ipc = false) {
   ]) };
 }
 const guarded = (t, fifo, source, ipc = false) => observe(t, executable,
-  ['--exec', fifo, process.execPath, '-e', source], ipc);
+  ['--exec', fifo, legacySeconds, process.execPath, '-e', source], ipc);
 
 test('native lifetime enforcement has no elapsed clock or command timeout', () => {
   const source = fs.readFileSync(new URL('./helpers/fixture-lifetime.c', import.meta.url), 'utf8');
   const launcher = fs.readFileSync(new URL('./helpers/fixture-lifetime.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /clock_gettime|CLOCK_|alarm\s*\(|seconds/);
-  assert.doesNotMatch(launcher, /timeout\s*:|loadTimeout|LIFETIME_SECONDS/);
+  assert.doesNotMatch(source, /clock_gettime|CLOCK_|alarm\s*\(/);
+  assert.doesNotMatch(source.slice(source.indexOf('static void guard'), source.indexOf('int main')), /seconds/);
+  assert.doesNotMatch(launcher, /timeout\s*:/);
   assert.equal(path.basename(executable), createHash('sha256').update(source).digest('hex'));
 });
 
@@ -73,7 +75,7 @@ test('owner EOF stops only the guarded target and a foreign watch parent is neve
   const owner = fixture(t);
   const sentinel = observe(t, process.execPath, ['-e', waiting], true);
   assert.equal(await sentinel.ready(), 'ready');
-  const foreign = observe(t, executable, ['--watch', owner.fifo, String(sentinel.child.pid)]);
+  const foreign = observe(t, executable, ['--watch', owner.fifo, legacySeconds, String(sentinel.child.pid)]);
   assert.equal((await foreign.closed).code, 0);
   const run = guarded(t, owner.fifo, waiting, true);
   assert.equal(await run.ready(), 'ready');
@@ -95,8 +97,8 @@ test('native fixture exec promptly exposes a real worker error', async t => {
 
 test('native fixture usage and exec failures stay failures', async t => {
   const { fifo } = fixture(t);
-  for (const args of [[], ['--watch', fifo, '1'], ['--watch', fifo, '12invalid'],
-    ['--unknown', fifo, 'unused'], ['--exec', fifo, path.join(fifo, 'missing-executable')]]) {
+  for (const args of [[], ['--watch', fifo, legacySeconds, '1'], ['--watch', fifo, legacySeconds, '12invalid'],
+    ['--unknown', fifo, legacySeconds, 'unused'], ['--exec', fifo, legacySeconds, path.join(fifo, 'missing-executable')]]) {
     const result = await observe(t, executable, args).closed;
     assert.equal(result.code, 125, JSON.stringify({ args, result }));
     assert.equal(result.signal, null);

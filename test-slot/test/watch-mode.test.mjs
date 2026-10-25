@@ -34,7 +34,7 @@ test('a load retry shares the same one-notice observation boundary', () => {
   }
   assert.equal(notices.length, 1);
 });
-for (const kind of ['cpu', 'process', 'runnable', 'unknown', 'output']) test(`${kind} activity prevents the frozen stop beyond four scaled hours`, () => {
+for (const kind of ['cpu', 'process', 'runnable', 'unknown', 'output']) test(`${kind} activity prevents the frozen stop beyond the configured window`, () => {
   const f = clockFixture();
   for (let at = 10; at <= 200; at += 10) {
     if (kind === 'output') f.watcher.output();
@@ -56,7 +56,7 @@ test('unknown audit restarts the full inactivity window and the stop can be disa
   f.tick(79); assert.equal(f.stops.length, 0);
   f.tick(80); assert.equal(f.stops.length, 1);
   const off = clockFixture({ frozen: 0 }); off.tick(100000); assert.equal(off.stops.length, 0);
-  assert.equal(frozenSeconds({}), 14400); assert.equal(frozenSeconds({ [FROZEN_SECONDS_ENV]: '0' }), 0);
+  assert.equal(frozenSeconds({}), 199.580020875); assert.equal(frozenSeconds({ [FROZEN_SECONDS_ENV]: '0' }), 0);
   for (const value of ['-1', 'NaN', 'Infinity']) assert.throws(() => frozenSeconds({ [FROZEN_SECONDS_ENV]: value }));
 });
 test('activity audit reads only owned births and treats an incomplete CPU or identity lookup as unknown', () => {

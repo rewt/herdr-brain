@@ -27,8 +27,17 @@ const references = (queue, ids) => {
   return ids.map(id => `${id}=${inspected.find(job => job.id === id).spec_sha256}`);
 };
 const admitJobs = (queue, ids) => admit(queue, references(queue, ids));
-async function until(fn, message) {
-  while (!fn()) await new Promise(resolve => setTimeout(resolve, 25));
+async function until(fn, message, completion, detail = () => '') {
+  let ended = false, failure;
+  const terminal = completion?.then(() => { ended = true; }, error => { ended = true; failure = error; });
+  while (!fn()) {
+    if (ended) {
+      if (failure) throw failure;
+      throw Error(`${message}; execution ended before readiness${detail()}`);
+    }
+    const poll = new Promise(resolve => setTimeout(resolve, 25));
+    await (terminal ? Promise.race([poll, terminal]) : poll);
+  }
 }
 function fixture(t, { defaultState = false, proving = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'verify-'))), repo = path.join(root, 'repo');
@@ -815,19 +824,20 @@ for (const kind of ['wall', 'idle']) test(`a verification job passes its legacy 
 // last-resort stop, without restoring a wall or silence cap for working jobs.
 async function cancelJob(f, job, ready, afterSignal = async () => {}) {
   const running = f.run(job), result = path.join(path.dirname(job.receipt), 'job-result.json');
-  running.catch(() => {});
-  await until(() => fs.existsSync(result) && ready(), 'job did not reach its cancellation boundary');
+  const wait = (condition, message) => until(condition, message, running,
+    () => fs.existsSync(job.receipt) ? `; ${JSON.stringify(read(job.receipt))}` : '; no final receipt');
+  await wait(() => fs.existsSync(result) && ready(), 'job did not reach its cancellation boundary');
   const phase = lookupProcess(read(result).command_pid);
   assert.ok(phase.ok && phase.value?.command.includes(job.job), 'the admitted phase is still owned');
   const coordinator = registerProcess(phase.value.ppid);
   assert.ok(coordinator.command.includes('verify/execute.mjs --hold') && coordinator.command.includes(job.job));
   assert.equal(killProcess(coordinator, 'SIGTERM').signaled, true);
-  await afterSignal(phase.value);
+  await afterSignal(phase.value, wait);
   await running;
 }
 
 test('a captured descendant completes naturally before the host slot is released', async t => {
-  const f = fixture(t), pids = path.join(f.root, 'escaped'), parent = path.join(f.root, 'parent');
+  const f = fixture(t, { proving: true }), pids = path.join(f.root, 'escaped'), parent = path.join(f.root, 'parent');
   const parentExit = path.join(f.root, 'parent-exit'), release = path.join(f.root, 'release');
   const escaped = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(pids)},String(process.pid));
     setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)}))process.exit(0);},25);`;
@@ -836,13 +846,13 @@ test('a captured descendant completes naturally before the host slot is released
     fs.writeFileSync(${JSON.stringify(parent)},String(process.pid));
     setInterval(()=>{if(fs.existsSync(${JSON.stringify(parentExit)}))process.exit(0);},25);`));
   let finished = false;
-  const running = f.run(job).then(() => { finished = true; }); running.catch(() => {});
+  const running = f.run(job).then(() => { finished = true; });
   try {
     const phase = path.join(path.dirname(job.receipt), 'phases.json');
     await until(() => fs.existsSync(pids) && fs.existsSync(parent) && fs.existsSync(phase) &&
-      read(phase).tracked.some(row => row.pid === Number(fs.readFileSync(pids))), 'escaped birth was not captured');
+      read(phase).tracked.some(row => row.pid === Number(fs.readFileSync(pids))), 'escaped birth was not captured', running, () => fs.existsSync(job.receipt) ? `; ${JSON.stringify(read(job.receipt))}` : '; no final receipt');
     fs.writeFileSync(parentExit, 'complete');
-    await until(() => lookupProcess(Number(fs.readFileSync(parent)), { identityOnly: true }).value === null, 'parent did not complete');
+    await until(() => lookupProcess(Number(fs.readFileSync(parent)), { identityOnly: true }).value === null, 'parent did not complete', running, () => fs.existsSync(job.receipt) ? `; ${JSON.stringify(read(job.receipt))}` : '; no final receipt');
     assert.equal(finished, false); assert.ok(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH));
     assert.ok(lookupProcess(Number(fs.readFileSync(pids)), { identityOnly: true }).value);
   } finally {
@@ -902,7 +912,7 @@ test('cancellation captures an escaped descendant while its phase observer is st
   `));
   await cancelJob(f, job, () => fs.existsSync(pids), async phase => {
     const captured = path.join(path.dirname(job.receipt), 'captured.json');
-    await until(() => fs.existsSync(captured) && read(captured).some(row => row.pid === phase.pid && /^T/.test(row.state)), 'paused phase was not captured');
+    await wait(() => fs.existsSync(captured) && read(captured).some(row => row.pid === phase.pid && /^T/.test(row.state)), 'paused phase was not captured');
     const owner = registerProcess(phase.pid);
     assert.equal(owner.identity, phase.identity); assert.equal(owner.command, phase.command);
     assert.equal(killProcess(owner, 'SIGKILL').signaled, true, 'explicit fixture force follows the original cancellation/capture');
@@ -927,8 +937,8 @@ test('a previously observed orphan retains the host hold after TERM until explic
     if (!fs.existsSync(pids)) return false;
     const pid = Number(fs.readFileSync(pids)), phase = path.join(path.dirname(job.receipt), 'phases.json');
     return fs.existsSync(phase) && read(phase).tracked.some(row => row.pid === pid) && lookupProcess(pid).value?.ppid === 1;
-  }, async () => {
-    await until(() => fs.existsSync(seen), 'the orphan did not handle the original TERM');
+  }, async (_phase, wait) => {
+    await wait(() => fs.existsSync(seen), 'the orphan did not handle the original TERM');
     assert.equal(fs.readFileSync(seen, 'utf8'), 'true'); assert.ok(fs.existsSync(slot));
     const pid = Number(fs.readFileSync(pids)), owner = registerProcess(pid);
     const saved = read(path.join(path.dirname(job.receipt), 'phases.json')).tracked.find(row => row.pid === pid);
@@ -1116,4 +1126,15 @@ test('cancellation records a captured descendant sharing the stopped phase runne
   assert.equal(recorded.source, 'job-watchdog'); assert.equal(recorded.confirmed_gone, true);
   assert.equal(receipt.halted, false); assert.equal(receipt.desk_restored, true);
   assert.equal(fs.existsSync(process.env.MONITOR_TEST_SLOT_PATH), false);
+});
+
+
+test('readiness observation surfaces the associated real execution failure', async t => {
+  const f = fixture(t), job = f.add({}, ['/herdr-fixture-command-that-does-not-exist']);
+  const running = f.run(job);
+  await assert.rejects(until(() => false, 'fixture readiness absent', running,
+    () => fs.existsSync(job.receipt) ? `; ${JSON.stringify(read(job.receipt))}` : ''),
+    /fixture readiness absent|ENOENT|spawn|command/i);
+  await running;
+  assert.equal(read(job.receipt).outcome, 'error');
 });

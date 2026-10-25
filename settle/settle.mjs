@@ -680,7 +680,7 @@ function main() {
         job.result.validation = job.validation; job.result.report_ingest = job.reportIngest; save();
       }
       if (!opt['fix-findings']) { print(); return; }
-      if (job.postCodePolicy && job.findingsCorrection) throw Error('One formal fix round is already used; later findings are fixed forward without a re-review chain');
+      if (job.postCodePolicy && (job.findingsCorrection || Number(show(job.item).meta?.post_code_formal_fix_count ?? 0) >= 1)) throw Error('One formal fix round is already used; later findings are fixed forward without a re-review chain');
       const decision = `Supervisor requested another correction after capped review round ${job.reviewPolicy.round} (cap ${job.reviewPolicy.cap}); findings ${job.review.path}; reviewed ${job.head}`;
       if (!show(id).notes.some((note) => note.decision && note.text === decision)) record(['note', id, decision, '--decision']);
       job.cappedResult = job.result; job.findingsCorrection = true;

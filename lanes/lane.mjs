@@ -783,7 +783,7 @@ function openWorkspaceIdFor(path, { refuseStale = true, onMismatch, workspaces, 
   if (item?.open_workspace_id === undefined) return undefined;
   const availableWorkspaces = workspaces ?? herdrJson(["workspace", "list"], { deadline })?.workspaces;
   const workspace = availableWorkspaces?.find((entry) => entry.workspace_id === item.open_workspace_id);
-  if (!workspaceMatches(workspace, path, true)) {
+  if (!workspaceMatches(workspace, path, !samePath(path, REPO_ROOT))) {
     return mismatch(`Herdr workspace ${item.open_workspace_id} for ${path} has a repository identity mismatch; refusing stale metadata`);
   }
   return item.open_workspace_id;

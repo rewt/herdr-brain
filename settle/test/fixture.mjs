@@ -200,7 +200,7 @@ const liveAgents=()=>Object.values(agents).filter(agent=>{
 });
 fs.appendFileSync(path.join(root,'calls'),JSON.stringify(args)+'\\n');
 const ws={workspace_id:'w-lane',label:'topic',worktree:{checkout_path:cwd,is_linked_worktree:true,repo_key:path.join(repo,'.git'),repo_root:repo}};
-if(args[0]==='workspace'&&args[1]==='list') out({workspaces:[ws,{workspace_id:'w-parent',label:'project',worktree:{checkout_path:repo,repo_key:path.join(repo,'.git'),repo_root:repo}}]});
+if(args[0]==='workspace'&&args[1]==='list') out({workspaces:[ws,{workspace_id:'w-parent',label:'project',worktree:{checkout_path:repo,is_linked_worktree:false,repo_key:path.join(repo,'.git'),repo_root:repo}}]});
 else if(args[0]==='worktree'&&args[1]==='list') out({source:{repo_key:path.join(repo,'.git'),repo_root:repo,source_checkout_path:repo},worktrees:[{path:cwd,branch:'lane/topic',open_workspace_id:'w-lane'},{path:repo,branch:'main',open_workspace_id:'w-parent'}]});
 else if(args[0]==='tab'&&args[1]==='create') {const n=Object.keys(agents).length+1,w=args.includes('--workspace')?args[args.indexOf('--workspace')+1]:'w-lane',p=w+':p'+n;panes[p]={cwd:args.includes('--cwd')?args[args.indexOf('--cwd')+1]:cwd,workspace_id:w};fs.writeFileSync(paneFile,JSON.stringify(panes));out({root_pane:{pane_id:p},tab:{tab_id:w+':t'+n}});}
 // Scripted clients belong to their real foreground review/dispatch process.

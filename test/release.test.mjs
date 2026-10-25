@@ -5,7 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
-import { copyProduct, productFiles } from '../lib/product-files.mjs';
+import { copyProduct, productFiles, captureProductCheckout, createProductCheckout, verifyProductPayload } from '../lib/product-files.mjs';
+import { freezeReleaseValidation } from '../herdr/validation-admission.mjs';
+import { configFixture } from './helpers/config-home-fixture.mjs';
+import { policyLocation, contentDigest } from '../lib/config-home.mjs';
 
 const SCRIPT = path.resolve(import.meta.dirname, '../herdr/release.sh');
 function scratch(t) {
@@ -21,7 +24,7 @@ function scratch(t) {
   write('package.json', JSON.stringify({ scripts: { 'test:release': `node gate.cjs` } }));
   write('gate.cjs', `const fs=require('fs');fs.appendFileSync(${JSON.stringify(gateLog)},process.cwd()+'\\n');if(process.env.FIXTURE_GATE_FAIL)process.exit(7);`);
   write('contrib/settle-watch.mjs', '// compatibility');
-  write('acceptance/run.mjs', `import fs from 'node:fs';fs.appendFileSync(${JSON.stringify(gateLog)},'live:'+process.cwd()+'\\n');if(process.env.FIXTURE_LIVE_FAIL)process.exit(8);fs.writeFileSync(process.argv[process.argv.indexOf('--summary-file')+1],JSON.stringify({ready:true,candidateCommit:fs.readFileSync('.release-commit','utf8').trim(),elapsedSeconds:1,counts:{PASS:1,FAIL:0,PENDING:0,SKIP:0}}));`);
+  write('acceptance/run.mjs', `import fs from 'node:fs';import {execFileSync} from 'node:child_process';fs.appendFileSync(${JSON.stringify(gateLog)},'live:'+process.cwd()+'\\n');if(process.env.FIXTURE_LIVE_FAIL)process.exit(8);fs.writeFileSync(process.argv[process.argv.indexOf('--summary-file')+1],JSON.stringify({ready:true,candidateCommit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),elapsedSeconds:1,counts:{PASS:1,FAIL:0,PENDING:0,SKIP:0}}));`);
   for (const tag of ['t1', 't2']) {
     write('bin/org.mjs', `console.log('${tag}');`); write('lanes/lane.mjs', `console.log('lane ${tag}');`);
     git('add', '.'); git('commit', '-qm', tag); git('tag', tag);
@@ -43,14 +46,19 @@ else if(a[1]==='unlink'){if(process.env.FIXTURE_UNLINK_FAIL)process.exit(9);fs.w
   const run = (a, extra = {}) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 30000 });
   const ok = (a, extra) => { const r = run(a, extra); assert.equal(r.status, 0, r.stdout + r.stderr); return r; };
   const release = tag => path.join(home, 'releases', tag);
-  return { root, repo, home, bin, plist, env, run, ok, release, gateLog, calls, git, write };
+  const checkout = tag => path.join(home, 'builds', tag, 'checkout');
+  return { root, repo, home, bin, plist, env, run, ok, release, checkout, gateLog, calls, git, write };
 }
-test('build gates the tagged partial snapshot once, then publishes a read-only immutable copy', t => {
+test('build gates a genuine tagged checkout once, then publishes an equal read-only archive', t => {
   const f = scratch(t); f.write('bin/org.mjs', "console.log('uncommitted');");
   f.ok(['build', 't1']);
   assert.equal(fs.readFileSync(path.join(f.release('t1'), 'bin/org.mjs'), 'utf8'), "console.log('t1');");
   assert.equal(fs.readFileSync(path.join(f.release('t1'), '.nvmrc'), 'utf8'), '20.19.4\n');
-  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('t1')}.partial\n`);
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.checkout('t1')}\n`);
+  assert.equal(fs.existsSync(path.join(f.checkout('t1'), '.git')), true);
+  assert.equal(fs.existsSync(path.join(f.checkout('t1'), '.release-commit')), false);
+  const proof = JSON.parse(fs.readFileSync(path.join(f.release('t1'), '.release-validation.json'))).validation;
+  assert.equal(proof.cwd, f.checkout('t1')); assert.equal(proof.commit, f.git('rev-parse', 't1').trim());
   assert.equal(fs.statSync(path.join(f.release('t1'), 'bin/org.mjs')).mode & 0o222, 0);
   assert.match(fs.readFileSync(path.join(f.release('t1'), '.release-commit'), 'utf8'), /^[a-f0-9]{40}\n$/);
   const receipts = path.join(f.repo, '.git/lane-validation');
@@ -87,7 +95,7 @@ test('build uses the tagged release declaration instead of the npm fallback or w
   f.git('add', '.'); f.git('commit', '-qm', 'Declared release gate'); f.git('tag', 'declared');
   f.write('.lane.validation.json', JSON.stringify({ release: 'exit 9' }));
   f.ok(['build', 'declared'], { LANE_VALIDATE: 'exit 9' });
-  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('declared')}.partial\ndeclared\n`);
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.checkout('declared')}\ndeclared\n`);
 });
 test('legacy scalar and release-specific wall allowances never stop a progressing gate', t => {
   const f = scratch(t);
@@ -101,7 +109,7 @@ test('legacy scalar and release-specific wall allowances never stop a progressin
     assert.equal(fs.existsSync(f.release(tag)), true);
     assert.equal(fs.existsSync(`${f.release(tag)}.partial`), false);
   }
-  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('scalar')}.partial\n${f.release('tier')}.partial\n`);
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.checkout('scalar')}\n${f.checkout('tier')}\n`);
 });
 test('an invalid release declaration refuses before running a gate', t => {
   const f = scratch(t);
@@ -112,9 +120,11 @@ test('an invalid release declaration refuses before running a gate', t => {
 });
 test('--live is explicit, follows the offline gate, and a live failure prevents completion', t => {
   const f = scratch(t); f.ok(['build', 't1', '--live']);
-  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.release('t1')}.partial\nlive:${f.release('t1')}.partial\n`);
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.checkout('t1')}\nlive:${f.checkout('t1')}\n`);
   assert.notEqual(f.run(['build', 't2', '--live'], { FIXTURE_LIVE_FAIL: '1' }).status, 0);
   assert.equal(fs.existsSync(f.release('t2')), false);
+  assert.ok(fs.existsSync(f.checkout('t2')), 'failed acceptance retains its original source');
+  assert.equal(fs.existsSync(path.join(`${f.release('t2')}.partial`, '.release-manifest.json')), false);
 });
 test('activation switches three launchers, retires the old plugin once, and rollback preserves previous on repeat', t => {
   const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']);
@@ -261,4 +271,106 @@ test('build verifies its full manifest before publishing the immutable directory
   assert.notEqual(failed.status, 0); assert.match(failed.stderr, /incomplete release t1\.partial: lib\/state\.mjs/);
   assert.equal(fs.existsSync(f.release('t1')), false); assert.ok(fs.existsSync(`${f.release('t1')}.partial`));
   f.ok(['build', 't2']); assert.ok(fs.existsSync(path.join(f.release('t2'), '.release-manifest.json')));
+});
+
+function archiveCommit(f, commit, destination) {
+  fs.mkdirSync(destination);
+  const bytes = execFileSync('git', ['-C', f.repo, 'archive', commit], { env: f.env, maxBuffer: 64 * 1024 * 1024 });
+  execFileSync('tar', ['-x', '-C', destination], { input: bytes, env: f.env });
+}
+test('captured C survives tag movement through checkout, freezing and archive; home input keeps its exact bytes', async t => {
+  const f = scratch(t);
+  f.write('bin/org.mjs', "console.log('t1');"); f.write('.lane.validation.json', '{"release":"node gate.cjs"}\n');
+  f.git('add', '.'); f.git('commit', '-qm', 'Captured payload and declaration'); const commit = f.git('rev-parse', 'HEAD').trim();
+  f.write('bin/org.mjs', "console.log('late');"); f.write('.lane.validation.json', '{"release":"exit 19"}\n');
+  f.git('add', '.'); f.git('commit', '-qm', 'Moved payload and declaration'); f.git('tag', '-f', 't1', 'HEAD');
+  const frozen = freezeReleaseValidation(f.repo, 't1', path.join(f.root, 'frozen.json'), f.env, { commit });
+  const identity = createProductCheckout({ source: f.repo, commit, destination: path.join(f.root, 'checkout'), ownedRoot: f.root });
+  const packaged = path.join(f.root, 'package'); archiveCommit(f, commit, packaged);
+  verifyProductPayload(packaged, identity);
+  assert.equal(frozen.payloadCommit, commit); assert.equal(identity.commit, commit);
+  assert.equal(frozen.declaration.release, 'node gate.cjs');
+  assert.equal(fs.readFileSync(path.join(packaged, 'bin/org.mjs'), 'utf8'), "console.log('t1');");
+  const previousOrg = process.env.ORG_DIR;
+  t.after(() => { if (previousOrg === undefined) delete process.env.ORG_DIR; else process.env.ORG_DIR = previousOrg; });
+  const h = configFixture(t); await h.adopt(); h.git('tag', 'home-input');
+  const selected = policyLocation(h.cwd, 'validation', h.env), original = fs.readFileSync(selected.file);
+  assert.equal(selected.home, true);
+  const home = freezeReleaseValidation(h.cwd, 'home-input', path.join(h.scratch, 'frozen.json'), h.env, { commit: h.git('rev-parse', 'HEAD').trim() });
+  assert.equal(home.source, selected.file); assert.equal(home.sha256, contentDigest(original));
+  assert.deepEqual(Buffer.from(home.inputBase64, 'base64'), original);
+});
+
+for (const mutation of ['omission', 'extra', 'tamper', 'redirect', 'root redirect', 'mode']) test(`committed package equality refuses ${mutation}`, t => {
+  const f = scratch(t), commit = f.git('rev-parse', 'HEAD').trim(), identity = captureProductCheckout(f.repo, commit, { all: true });
+  const packaged = path.join(f.root, 'package'); archiveCommit(f, commit, packaged); verifyProductPayload(packaged, identity);
+  const file = path.join(packaged, 'lib/state.mjs');
+  if (mutation === 'omission') fs.unlinkSync(file);
+  if (mutation === 'extra') fs.writeFileSync(path.join(packaged, 'lib/untracked.mjs'), 'untracked');
+  if (mutation === 'tamper') fs.appendFileSync(file, '\n// tampered\n');
+  if (mutation === 'redirect') { const foreign = path.join(f.root, 'foreign'); fs.renameSync(path.dirname(file), foreign); fs.symlinkSync(foreign, path.dirname(file)); }
+  if (mutation === 'root redirect') { const foreign = path.join(f.root, 'foreign'); fs.renameSync(packaged, foreign); fs.symlinkSync(foreign, packaged); }
+  if (mutation === 'mode') fs.chmodSync(file, 0o755);
+  assert.throws(() => verifyProductPayload(packaged, identity), /payload|inventory/);
+});
+for (const stage of ['source mutation', 'archive omission']) test(`${stage} after successful validation never publishes`, t => {
+  const f = scratch(t);
+  if (stage === 'source mutation') f.write('gate.cjs', "require('fs').appendFileSync('lib/state.mjs','\\n// changed after validation started\\n');");
+  else f.write('.gitattributes', 'lib/state.mjs export-ignore\n');
+  f.git('add', '.'); f.git('commit', '-qm', stage); f.git('tag', 'refused');
+  const result = f.run(['build', 'refused']); assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.existsSync(f.release('refused')), false);
+  assert.equal(fs.existsSync(path.join(`${f.release('refused')}.partial`, '.release-manifest.json')), false);
+  assert.ok(fs.existsSync(f.checkout('refused')), 'original executing source and evidence retained');
+});
+for (const mutation of ['manifest', 'inventory', 'mode', 'validation']) test(`activation preflight refuses ${mutation} before all effects`, t => {
+  const f = scratch(t); f.ok(['build', 't1']); fs.writeFileSync(f.plist, 'keep service');
+  const root = f.release('t1'); execFileSync('chmod', ['-R', 'u+w', root]);
+  const manifest = path.join(root, '.release-manifest.json');
+  if (mutation === 'manifest') fs.unlinkSync(manifest);
+  if (mutation === 'inventory') { const value = JSON.parse(fs.readFileSync(manifest)); delete value.files['lib/state.mjs']; fs.writeFileSync(manifest, JSON.stringify(value)); }
+  if (mutation === 'mode') fs.chmodSync(path.join(root, 'lib/state.mjs'), 0o755);
+  if (mutation === 'validation') fs.appendFileSync(path.join(root, '.release-validation.json'), 'tampered');
+  assert.notEqual(f.run(['activate', 't1']).status, 0);
+  assert.equal(fs.readFileSync(f.plist, 'utf8'), 'keep service');
+  assert.equal(fs.existsSync(path.join(f.home, 'current')), false); assert.equal(fs.existsSync(f.calls), false);
+});
+test('interrupted sealed partial cannot activate or change service and links', t => {
+  const f = scratch(t); f.ok(['build', 't1']); fs.writeFileSync(f.plist, 'keep service');
+  fs.renameSync(f.release('t1'), `${f.release('t1')}.partial`);
+  assert.notEqual(f.run(['activate', 't1.partial']).status, 0);
+  assert.equal(fs.readFileSync(f.plist, 'utf8'), 'keep service');
+  assert.equal(fs.existsSync(path.join(f.home, 'current')), false); assert.equal(fs.existsSync(f.calls), false);
+});
+
+test('genuine source and completed sealed package execute real consumer removal, owner claim and bound continuation', t => {
+  const f = scratch(t), source = path.resolve(import.meta.dirname, '..');
+  const commit = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  fs.rmSync(f.repo, { recursive: true, force: true });
+  createProductCheckout({ source, commit, destination: f.repo, ownedRoot: f.root });
+  f.git('config', 'user.name', 'Fixture'); f.git('config', 'user.email', 'fixture@example.invalid');
+  const probe = path.join(f.root, 'actual-owner.test.mjs');
+  fs.writeFileSync(probe, `import path from 'node:path';import fs from 'node:fs';import assert from 'node:assert/strict';import {pathToFileURL} from 'node:url';
+const root=process.cwd(), load=file=>import(pathToFileURL(path.join(root,file)).href);
+const {default:test}=await load('test/helpers/bounded-test.mjs'); const {fixture}=await load('settle/test/fixture.mjs');
+const {readOwnedRun,continueOwnerRelease}=await load('lib/run-owner.mjs'); const {bundleRelease,operationFile}=await load('lib/releases.mjs');
+fs.appendFileSync(${JSON.stringify(f.gateLog)},root+'\\n');
+test('actual executing root retains its real owner and continuation',t=>{
+ const f=fixture(t,{source:root}), run=f.start(), owned=readOwnedRun(f.org,run), release=bundleRelease();
+ assert.equal(owned.owner.release.root,root); assert.equal(owned.owner.release.commit,release.commit);
+ if(!release.commit)assert.equal(owned.owner.release.identity,fs.realpathSync(path.join(root,'.git')));
+ assert.equal(operationFile('bin/org.mjs',release),path.join(root,'bin/org.mjs'));
+ assert.equal(continueOwnerRelease('bin/org.mjs',owned),null);
+});\n`);
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+  const command = `${quote(process.execPath)} --test ${quote(probe)} && ${quote(process.execPath)} --test ${quote('--test-name-pattern=^herdr-brain: a landed event immediately releases and removes its exact lane, branch and empty workspace$')} test/closeout.test.mjs`;
+  f.write('.lane.validation.json', JSON.stringify({ release: command }));
+  f.git('add', '.lane.validation.json'); f.git('commit', '-qm', 'Focused real consumer declaration'); f.git('tag', 'consumer');
+  f.ok(['build', 'consumer']);
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.checkout('consumer')}\n`);
+  const sealed = f.release('consumer'), result = spawnSync('/bin/sh', ['-c', command], { cwd: sealed, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.readFileSync(f.gateLog, 'utf8'), `${f.checkout('consumer')}\n${sealed}\n`);
+  assert.ok(fs.existsSync(path.join(f.checkout('consumer'), '.git')), 'sealing retains source origin');
+  assert.equal(fs.existsSync(path.join(sealed, '.git')), false);
 });

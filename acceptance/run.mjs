@@ -29,6 +29,27 @@ import { noticeDeliveryBudgetMs } from './notice-budget.mjs';
 import { matchingRun } from '../supervisor/tidy-tabs.mjs';
 import { ownerAlive } from '../lib/process-owner.mjs';
 import { scriptedProcesses, awaitScriptedExit, retireScriptedWorker } from './retirement.mjs';
+import { captureProductCheckout, createProductCheckout, verifyProductCheckoutIsolation, checkoutGit, releaseMetadata, productFiles, payloadEntry } from '../lib/product-files.mjs';
+import { checkBundle } from '../lib/releases.mjs';
+
+// The actual snapshot case and offline witnesses share this input boundary.
+export function snapshotCandidate({ input, source, destination, ownedRoot, git = checkoutGit }) {
+  let commit;
+  if (fs.existsSync(input) && fs.statSync(input).isDirectory()) {
+    source = fs.realpathSync(input);
+    if (releaseMetadata.some(file => fs.lstatSync(path.join(source, file), { throwIfNoEntry: false }))) {
+      const bundle = checkBundle(source, { verifyFiles: true }), offset = path.relative(fs.realpathSync(ownedRoot), destination);
+      if (!offset || offset.startsWith('..') || path.isAbsolute(offset) || fs.realpathSync(path.dirname(destination)) !== path.dirname(destination) ||
+          fs.lstatSync(destination, { throwIfNoEntry: false })) throw Error('sealed copy requires new owned scratch');
+      fs.cpSync(source, destination, { recursive: true, dereference: false, filter: file => !['.git', '.org', '.lane', 'node_modules'].includes(path.basename(file)) });
+      checkBundle(destination, { verifyFiles: true });
+      return { kind: 'release', commit: bundle.commit };
+    }
+    commit = captureProductCheckout(source, undefined, { git }).commit;
+  } else commit = git(source, ['rev-parse', '--verify', '--end-of-options', `${input}^{commit}`]).trim();
+  const identity = createProductCheckout({ source, commit, destination, ownedRoot, git });
+  return { kind: 'checkout', commit: identity.commit };
+}
 
 // The configured fixture keeps its record outside the checkout. Both command
 // paths must select it; lane retirement otherwise observes an empty record.
@@ -69,7 +90,7 @@ export async function awaitWatcherExit(job, { until, alive = ownerAlive }) {
 
 export function harnessEnvironment(input, root) {
   const env = { ...input };
-  for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_|SE_|NW_)/.test(key)) delete env[key];
+  for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_|SE_|NW_)/.test(key) || key.startsWith('GIT_')) delete env[key];
   Object.assign(env, testSlotEnvironment(input), scratchProductHomes(root), { ACCEPTANCE_ROOT: root, TMPDIR: root, TMP: root, TEMP: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     ORG_ACTOR: 'release-acceptance-setup', npm_config_cache: path.join(root, 'npm-cache'), npm_config_update_notifier: 'false' });
   return assertScratchHomes(env, [root], { realHome: input.HOME, fleetFile: fleetPath(env) });
@@ -111,7 +132,7 @@ fs.mkdirSync(evidence);
 const started = Date.now();
 const load = createLoadMonitor({ record: (sample) => fs.appendFileSync(path.join(evidence, 'load.jsonl'), JSON.stringify(sample) + '\n') });
 const results = [];
-let logFile, candidateCommit, fixture, supervisor, defaultOrg, record, lane, retire;
+let logFile, candidateCommit, candidateSnapshot, fixture, supervisor, defaultOrg, record, lane, retire;
 let focusMonitor, focusError;
 let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
@@ -287,6 +308,10 @@ async function closeScope() {
     // session. Remove them after the owned panes/processes have stopped.
     removeCredentials(root);
     if (errors.length) throw new HarnessLimit(`cleanup failed: ${errors.join('; ')}`);
+    await finishFocus();
+    if (results.find(result => result.key === cases.focus.key)?.status !== 'PASS') throw new HarnessLimit('focus completion uncertain; scratch roots retained');
+    if (!candidateSnapshot) throw new HarnessLimit('candidate identity uncertain; source roots retained');
+    if (candidateSnapshot.kind === 'checkout') verifyProductCheckoutIsolation(captureProductCheckout(candidate, candidateCommit, { all: true, git }), git);
     if (!opt.keep) for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true });
     // Preserve only evidence unless requested. chmod is limited to this mkdtemp.
     if (!opt.keep) {
@@ -344,16 +369,8 @@ try {
     catch (error) { focusError = error; }
   }
   await test(cases.snapshot, () => {
-    fs.mkdirSync(candidate);
-    if (fs.existsSync(opt.candidate) && fs.statSync(opt.candidate).isDirectory()) {
-      const sourceDir = fs.realpathSync(opt.candidate);
-      fs.cpSync(sourceDir, candidate, { recursive: true, dereference: true, filter: (p) => !['.git', 'node_modules', '.org', '.lane'].includes(path.basename(p)) });
-      candidateCommit = fs.existsSync(path.join(sourceDir, '.release-commit')) ? read(path.join(sourceDir, '.release-commit')).trim() : 'directory snapshot';
-    } else {
-      candidateCommit = git(opt.source, ['rev-parse', '--verify', `${opt.candidate}^{commit}`]);
-      const archive = run('git', ['-C', opt.source, 'archive', candidateCommit], { binary: true }).stdout;
-      run('tar', ['-x', '-C', candidate], { input: archive });
-    }
+    candidateSnapshot = snapshotCandidate({ input: opt.candidate, source: opt.source, destination: candidate, ownedRoot: root, git });
+    candidateCommit = candidateSnapshot.commit;
     auditSnapshot(candidate);
     makeSnapshotWritable(candidate, root);
     assert.ok(present('bin/org.mjs')); return `${opt.candidate}: ${candidateCommit}`;
@@ -585,7 +602,9 @@ try {
   });
   await test(cases.release, () => {
     const script = requireCandidate('herdr/release.sh');
-    const repo = path.join(root, 'release-source'); fs.cpSync(candidate, repo, { recursive: true });
+    const repo = path.join(root, 'release-source');
+    createProductCheckout({ source: candidateSnapshot.kind === 'checkout' ? candidate : opt.source, commit: candidateCommit, destination: repo, ownedRoot: root, git });
+    assert.deepEqual(productFiles(repo).sort().map(file => [file, payloadEntry(repo, file)]), productFiles(candidate).sort().map(file => [file, payloadEntry(candidate, file)]));
     // The enclosing candidate already passed its full offline gate. These tagged
     // switch fixtures run a small gate rather than replaying that whole suite.
     const packageFile = path.join(repo, 'package.json');

@@ -4,7 +4,9 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { cliHelp } from '../lib/cli-help.mjs';
-import { productFiles } from '../lib/product-files.mjs';
+import { productFiles, createProductCheckout, captureProductCheckout, verifyProductCheckoutIsolation, verifyProductPayload, payloadEntry, payloadDigest, releaseMetadata } from '../lib/product-files.mjs';
+import { readPlainFile } from '../lib/files.mjs';
+import { durableWrite } from '../lib/durable-json.mjs';
 import { PIN_FILE, acceptanceRecord, checkBundle, checkRelease, releaseAcceptance, requireReadyAcceptance,
   releaseProject, releaseHome, runRelease, pinStatus } from '../lib/releases.mjs';
 import { requireHomeRelease } from '../lib/releases.mjs';
@@ -18,7 +20,27 @@ const [action, home, target, ...rest] = process.argv.slice(2);
 try {
   if (action === 'freeze-validation') {
     const { freezeReleaseValidation } = await import('./validation-admission.mjs');
-    freezeReleaseValidation(home, target, rest[0]);
+    freezeReleaseValidation(home, target, rest[0], process.env, { commit: rest[1] });
+  } else if (action === 'checkout') {
+    const identity = createProductCheckout({ source: home, commit: target, destination: rest[0], ownedRoot: path.dirname(rest[1]) });
+    const frozen = readPlainFile(rest[2]);
+    if (JSON.parse(frozen).payloadCommit !== target) throw Error('frozen payload commit mismatch');
+    durableWrite(rest[1], { identity, frozenFile: rest[2], frozenSha256: payloadDigest(frozen) });
+    console.log(payloadDigest(readPlainFile(rest[1])));
+  } else if (action === 'verify-package') {
+    const bytes = readPlainFile(target);
+    if (payloadDigest(bytes) !== rest[0]) throw Error('captured identity record changed');
+    const record = JSON.parse(bytes), { identity } = record, frozen = readPlainFile(record.frozenFile);
+    if (payloadDigest(frozen) !== record.frozenSha256 || JSON.stringify(verifyProductCheckoutIsolation(captureProductCheckout(identity.root, identity.commit, { all: true }))) !== JSON.stringify(identity)) throw Error('validated source or declaration changed');
+    const execution = JSON.parse(readPlainFile(path.join(path.dirname(target), 'execution.json'))), receipt = readPlainFile(execution.receipt);
+    const result = JSON.parse(receipt);
+    if (execution.cwd !== identity.root || execution.commit !== identity.commit || payloadDigest(receipt) !== execution.sha256 || result.exit_code !== 0 || result.signal || result.gate_timeout || result.attempts !== 1) throw Error('release execution is not successful');
+    const inventorySha256 = verifyProductPayload(home, identity, { metadata: releaseMetadata, readOnly: rest[1] === '--read-only' });
+    console.log(JSON.stringify({ ...JSON.parse(frozen), validation: { cwd: identity.root, common: identity.common, commit: identity.commit, tree: identity.tree,
+      inventorySha256, runtimeSha256: payloadDigest(JSON.stringify(Object.fromEntries(identity.runtime.map(file => [file, identity.files[file]])))),
+      execution: { ...execution, exit_code: result.exit_code, attempts: result.attempts } } }));
+  } else if (action === 'verify-bundle') {
+    checkBundle(home, { verifyFiles: true });
   } else if (action === 'manifest') {
     const commit = fs.readFileSync(path.join(home, '.release-commit'), 'utf8').trim();
     let acceptance = { ran: false, ready: false };
@@ -27,11 +49,13 @@ try {
       acceptance = acceptanceRecord(bytes, commit);
       fs.writeFileSync(path.join(home, '.release-acceptance.json'), bytes);
     }
-    const files = Object.fromEntries(productFiles(home).map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(home, file))).digest('hex')]));
+    const inventory = [...productFiles(home), ...(fs.existsSync(path.join(home, '.release-validation.json')) ? ['.release-validation.json'] : [])];
+    const entries = inventory.map(file => [file, payloadEntry(path.resolve(home), file)]);
+    const files = Object.fromEntries(entries.map(([file, entry]) => [file, entry.sha256])), modes = Object.fromEntries(entries.map(([file, entry]) => [file, entry.mode]));
     // The shared home-aware policy reader was introduced with config-home.
     // Only the archived payload can claim it; newer tooling also builds legacy tags.
     const capability = Object.hasOwn(files, 'lib/config-policy.mjs') ? { config_home: 1 } : {};
-    fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, ...capability, commit, files, acceptance }, null, 2) + '\n');
+    fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, ...capability, commit, files, modes, acceptance }, null, 2) + '\n');
     const bundle = checkBundle(home, { verifyFiles: true });
     if (target && !releaseAcceptance(bundle).ready) throw Error('acceptance-invalid: manifest does not retain its READY summary');
   } else if (action === 'install') {

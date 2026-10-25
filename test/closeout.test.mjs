@@ -388,6 +388,13 @@ for (const project of ['bch-cloak', 'herdr-brain']) test(`${project}: a landed e
   assert.equal(landed.source.type, 'promotion.reconciled');
   f.drain(); assertRemoved(f);
   assert.deepEqual(readCloseoutEntries(f.common), [], 'only durable record evidence remains after completion');
+  const evaluated = evaluations(f).findLast(event => event.completed && event.source.type === 'promotion.reconciled');
+  const codeRoot = fs.realpathSync(path.resolve(import.meta.dirname, '..')), marker = path.join(codeRoot, '.release-commit');
+  assert.ok(evaluated, 'real consumer completed its bound source');
+  assert.equal(evaluated.code.code.root, codeRoot);
+  assert.equal(evaluated.code.code.kind, fs.existsSync(marker) ? 'release' : 'checkout');
+  assert.equal(evaluated.code.code.commit, fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : f.git(['rev-parse', 'HEAD'], codeRoot));
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), false, 'completed removal releases its consumer claim');
   const actions = effects(f).map(e => e.action);
   for (const action of ['exit-observed', 'closed', 'lane-preflight', 'worktree-removed', 'branch-removed', 'lane-removed']) assert.ok(actions.includes(action), action);
   const proof = effects(f).find(e => e.action === 'lane-preflight');

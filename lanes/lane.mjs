@@ -2298,10 +2298,10 @@ function sanitizeReviewProjection(parsed, expected) {
   return record;
 }
 
-async function waitForPrivateReview(path, deadline, interrupted, session) {
+async function waitForPrivateReview(path, interrupted, session) {
   let completedSignature;
   let unchangedSince;
-  while (Date.now() <= deadline) {
+  for (;;) {
     if (interrupted.value) {
       fail(
         `review interrupted; reviewer agent '${session.agentName}' in tab ${session.tabId} ` +
@@ -2350,12 +2350,8 @@ async function waitForPrivateReview(path, deadline, interrupted, session) {
         unchangedSince = undefined;
       }
     }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, Math.min(250, Math.max(1, deadline - Date.now()))));
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
   }
-  fail(
-    `review timed out; reviewer agent '${session.agentName}' in tab ${session.tabId} ` +
-    `may still write late evidence to ${path}`,
-  );
 }
 
 async function review(topic, args, memoryChecked = false) {
@@ -2420,7 +2416,9 @@ async function review(topic, args, memoryChecked = false) {
     SOURCE_MATERIAL: sourceText,
     SUPPLEMENTAL_BRIEF: `${options.parallelReview ? `Read only immutable captured commit ${head} via git -C ${REPO_ROOT} show/diff and supplied evidence. The live lane/main can advance or retire; never use its live files as the reviewed version. Review target ${options.timeout || 1800}s is advisory, not an elapsed stop. No tests/build/install/prepare/check/probes or source mutations. ` : ''}${supplement.trimEnd()}`,
   });
-  const deadline = options.parallelReview || options.timeout === 0 ? Infinity : Date.now() + options.timeout * 1000;
+  // Legacy --timeout is retained as the review's planning target. It must
+  // never reject productive dispatch, evidence completion or publication.
+  const deadline = Infinity;
   const interrupted = { value: false };
   const onInterrupt = () => { interrupted.value = true; };
   process.once("SIGINT", onInterrupt);
@@ -2432,7 +2430,7 @@ async function review(topic, args, memoryChecked = false) {
     } catch (error) {
       fail(`review dispatch failed: ${error.code === "ETIMEDOUT" ? "timeout" : "Herdr command error"}`);
     }
-    const { text: record, bytes } = await waitForPrivateReview(deliveryPath, deadline, interrupted, session);
+    const { text: record, bytes } = await waitForPrivateReview(deliveryPath, interrupted, session);
     const parsed = validateReviewRecord(record, {
       head, topic, round: options.round, reviewId, baseBranch: MAIN, baseCommit,
     });
@@ -2443,12 +2441,10 @@ async function review(topic, args, memoryChecked = false) {
     if (!options.parallelReview && git(["status", "--porcelain=v1"], { cwd: path, silent: true }) !== "") {
       fail("review target worktree changed; private evidence and work were retained");
     }
-    if (Date.now() > deadline) fail("review timed out before public projection; private evidence was retained");
     const publicRecord = sanitizeReviewProjection(parsed, {
       head, topic, round: options.round, reviewId, baseBranch: MAIN, baseCommit, path,
     });
     archivePrivateReview(bytes, deliveryPath, privatePath, privateRelative);
-    if (Date.now() > deadline) fail("review timed out before public review creation; private evidence was retained");
     try {
       mkdirSync(dirname(publicPath), { recursive: true });
       assertReviewOutputPath(publicRoot, publicRelative, { ignored: Boolean(options.parallelReview), label: "public review output" });
@@ -2466,7 +2462,6 @@ async function review(topic, args, memoryChecked = false) {
     if (!options.parallelReview && (finalHead !== head || finalBranch !== branch || finalStatus !== `?? ${publicRelative.split(sep).join("/")}`)) {
       fail("mutation after public review creation caused late publication failure; inspect retained evidence before recovery");
     }
-    if (Date.now() > deadline) fail("review timed out after public review creation; inspect retained evidence before recovery");
     if (options.run && session.reviewReceipt) try {
       createRetirement({ cwd: REPO_ROOT, main: MAIN, deadline: Math.min(deadline, Date.now() + 10000) }).recordReviewVerdict({
         pane: session.pane, run: options.run, verdict: parsed.verdict, head, evidence: publicPath,

@@ -171,6 +171,7 @@ or has exactly `kind` (`negative-control` or `mutation`), `command`, `cwd`, inte
 
 Finish only by completing the designated private record, with the completion marker
 written last. Do not send a follow-up action, change other files, or substitute chat
-output. If the deadline or budget prevents a check, record that limit; do not overrun
-it. The foreground command
-observes only this private file and may stop while the Herdr session continues.
+output. The planning target is advisory and never ends productive review. Record
+unavailable evidence explicitly. Native permission, ownership and interruption
+refusals remain binding. The foreground command observes this private file;
+an interrupted foreground does not prove that the Herdr session stopped.

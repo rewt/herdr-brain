@@ -153,17 +153,17 @@ for (const race of [false, true]) test(`review pins its first readiness occupant
   } finally { fixture.cleanup(); }
 });
 
-test('review records a fresh session with the minimum timeout before waiting for evidence', async () => {
-  // No verdict is supplied: the timeout must occur in the evidence wait after a
-  // healthy delivery and metadata write, even though the session-poll bound expired.
-  const topic = 'review-minimum-delivery', review = makeReviewFixture(topic);
+test('review retains fresh session evidence after an explicit planning target is exceeded', async () => {
+  const topic = 'review-minimum-delivery', review = makeReviewFixture(topic, { verdict: 'PASS' });
   const { fixture, fake } = review;
   try {
     fixture.env.FAKE_HERDR_SESSION_DETAIL_ONLY = '1';
     fixture.env.FAKE_HERDR_SESSION_AFTER_PROMPT_READS = '0';
+    advanceDeliveryClock(fixture, 3_600_000);
     const run = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '3']);
-    assert.equal(run.status, 2, run.stderr);
-    assert.match(run.stderr, /lane review: review timed out; reviewer agent/u);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout, 'PASS\n');
+    assert.doesNotMatch(run.stderr, /review timed out/u);
     assert.doesNotMatch(run.stderr, /partial success|metadata could not be written|Herdr command error/u);
     assert.equal(fake.calls().filter(args => args[1] === 'prompt').length, 1);
     assert.equal(fake.state().detailReads.after, 1);

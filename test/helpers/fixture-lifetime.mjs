@@ -15,6 +15,54 @@ const nativeSync = cp.spawnSync;
 const nativeSpawn = ChildProcess.prototype.spawn;
 let lifetime;
 
+function closed(child) {
+  let stdout = '', stderr = '', error;
+  child.stdout?.setEncoding('utf8').on('data', bytes => { stdout += bytes; });
+  child.stderr?.setEncoding('utf8').on('data', bytes => { stderr += bytes; });
+  child.on('error', value => { error = value; });
+  return new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal, error, stdout, stderr })));
+}
+
+// Explicit async --exec only. Legacy spawn/close and preload/watch stay unjoined.
+export async function spawnFixtureExec(executable, args, options = {}) {
+  if (process.platform !== 'darwin') throw Error('fixture guard completion requires Darwin NOTE_REAP');
+  const stdio = options.stdio ?? ['ignore', 'pipe', 'pipe'];
+  if (args[0] !== '--exec' || !Array.isArray(stdio) || stdio.length < 3 || options.shell || options.detached)
+    throw Error('fixture completion requires direct --exec and explicit contained stdio');
+  const join = cp.spawn(executable, ['--join'], { cwd: options.cwd, env: options.env,
+    stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
+  const joinClosed = closed(join);
+  let child;
+  try {
+    await new Promise((resolve, reject) => { join.once('spawn', resolve); join.once('error', reject); });
+    child = cp.spawn(executable, args, { ...options, stdio: [...stdio, join.stdin, join.stdio[3]],
+      env: { ...(options.env ?? process.env), HERDR_FIXTURE_COMPLETION_FD: String(stdio.length) } });
+  } catch (error) {
+    join.stdin?.destroy(); join.stdio[3]?.destroy();
+    await joinClosed;
+    throw error;
+  }
+  // Only G keeps these endpoints; T closes its copies before exec.
+  join.stdin.destroy(); join.stdio[3].destroy();
+  const targetClosed = closed(child);
+  const complete = (async () => {
+    const joined = await joinClosed;
+    const failed = joined.error || joined.signal || (joined.code !== 0 && joined.code !== 126);
+    let cleanupError;
+    try {
+      if (failed && child.pid && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    } catch (error) { cleanupError = error; }
+    const target = await targetClosed;
+    if (cleanupError) throw Object.assign(cleanupError, { target, join: joined });
+    if (target.error) throw Object.assign(target.error, { target, join: joined });
+    if (failed || (joined.code === 126 && target.code !== 125))
+      throw Object.assign(Error(`fixture guard join failed: ${JSON.stringify(joined)}`), { target, join: joined });
+    return target;
+  })();
+  complete.catch(() => {}); // Retain early failures until the fixture awaits them.
+  return { child, targetClosed, joinClosed, complete };
+}
+
 function nativeGuard(root) {
   const digest = createHash('sha256').update(fs.readFileSync(source)).digest('hex');
   const cache = path.join(root, 'fixture-lifetime-cache');

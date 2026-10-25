@@ -14,7 +14,7 @@ export function activitySnapshot(pid, { ownsGroup = true, lookup = lookupProcess
   const family = descendants(before.value, pid);
   if (ownsGroup) for (const row of before.value.values()) if (row.pgid === pid) family.set(row.pid, row);
   const result = execute('/bin/ps', ['-o', 'pid=,time=,stat=', '-p', [...family.keys()].join(',')], {
-    encoding: 'utf8', timeout: 1000, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' },
+    encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' },
   });
   if (result.error || result.signal || result.status !== 0 || result.stderr?.trim()) return null;
   const cpu = new Map();

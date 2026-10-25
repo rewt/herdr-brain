@@ -718,11 +718,8 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
       groupGone = !remains();
     }
     watcher?.stop();
-    // Cleanup is confirmed; close inherited pipes even if an unobserved daemon
-    // retained them outside the supported parent-walk boundary.
-    let drainTimer;
-    await Promise.race([closed, new Promise(resolve => { drainTimer = setTimeout(resolve, 1000); })]);
-    clearTimeout(drainTimer);
+    // Await inherited pipe closure before destroying the output streams.
+    await closed;
     proc.stdout.destroy(); proc.stderr.destroy();
     const ended = clock(), duration_s = ended - commandStart;
     longestSilence = Math.max(longestSilence, ended - lastOutput);

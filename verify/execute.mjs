@@ -59,10 +59,12 @@ async function hold(spec, directory) {
     const tracked = new Map((phases.tracked ?? []).map(row => [row.pid, row]));
     for (const row of read(captured) ?? []) tracked.set(row.pid, row);
     phases.tracked = [...tracked.values()]; save();
-    await stopTracked(tracked, phases.reaped, save);
+    const frozen = execution?.gate_timeout?.kind === 'frozen' && !execution.gate_timeout.descendant;
+    const firstSignal = frozen ? 'SIGKILL' : ['SIGINT', 'SIGTERM', 'SIGHUP'].includes(execution?.signal) ? execution.signal : null;
+    await stopTracked(tracked, phases.reaped, save, firstSignal);
     // Explicit cancellation preserves the same captured-birth cleanup evidence
     // as an inactivity stop, including children killed in the final walk.
-    if (execution?.gate_timeout || execution?.signal) for (const row of tracked.values()) {
+    if (frozen || firstSignal) for (const row of tracked.values()) {
       // A descendant may share the phase's group. Group membership does not
       // replace evidence that this captured birth was stopped by the watchdog.
       if (phases.reaped.some(entry => entry.pid === row.pid && entry.identity === row.identity)) continue;

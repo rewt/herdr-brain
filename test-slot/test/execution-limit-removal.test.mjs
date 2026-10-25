@@ -12,7 +12,7 @@ import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
 // telemetry edges are controlled interfaces, not native completion evidence.
 const root = new URL('../', import.meta.url);
 const sources = new Set(['test-slot.mjs', 'watch.mjs', 'watchdog.mjs', 'execute.mjs']);
-const sourceURL = name => name === 'execute.mjs' ? new URL('../../verify/execute.mjs', import.meta.url) : new URL(name, root);
+const sourceURL = name => ['execute.mjs', 'hold.mjs'].includes(name) ? new URL('../../verify/execute.mjs', import.meta.url) : new URL(name, root);
 const plain = value => JSON.parse(JSON.stringify(value));
 const turn = () => new Promise(resolve => setImmediate(resolve)); // Event turn, no elapsed trigger.
 const row = (pid, ppid, pgid, identity) => ({ pid, ppid, pgid, identity });
@@ -21,9 +21,9 @@ async function harness({ failedSpawn = false } = {}) {
   const h = { at: 0, timers: [], intervals: [], events: [], receipts: [], queries: [], healthy: 0, files: new Map() };
   h.rows = new Map([row(91, 5, 91, 'a'), row(92, 91, 92, 'b'), row(93, 5, 93, 'other')].map(r => [r.pid, r]));
   const lookup = pid => ({ ok: true, value: pid === undefined ? new Map(h.rows) : h.rows.get(pid) ?? null });
-  const probe = pid => pid < 0 ? [...h.rows.values()].some(r => r.pgid === -pid) : h.rows.has(pid);
+  const probe = pid => h.probeError ?? (pid < 0 ? [...h.rows.values()].some(r => r.pgid === -pid) : h.rows.has(pid));
   const proc = new EventEmitter();
-  Object.assign(proc, { pid: 5, env: {}, cwd: () => '/fixture', hrtime: { bigint: () => BigInt(Math.round(h.at * 1e9)) },
+  Object.assign(proc, { pid: 5, execPath: '/node', env: {}, cwd: () => '/fixture', hrtime: { bigint: () => BigInt(Math.round(h.at * 1e9)) },
     stdout: { write: data => h.events.push(['stdout', String(data)]) },
     stderr: { write: data => h.events.push(['stderr', String(data)]) },
     kill(pid, signal) {
@@ -41,7 +41,12 @@ async function harness({ failedSpawn = false } = {}) {
   const missing = () => { throw Object.assign(Error('absent'), { code: 'ENOENT' }); };
   const limits = { wall_seconds: 0, idle_seconds: 9, frozen_seconds: 199.580020875 };
   const edges = {
-    'node:child_process': { execFileSync: never, spawn: (file, args, options) => { h.events.push(['spawn', file, args, options]); return h.child; },
+    'node:child_process': { execFileSync: (_file, args) => {
+      if (args.includes('status')) return '';
+      if (args.includes('HEAD')) return 'sha';
+      if (args.includes('HEAD^{tree}')) return 'tree';
+      return never();
+    }, spawn: (file, args, options) => { h.events.push(['spawn', file, args, options]); return h.child; },
       spawnSync: (file, args, options) => {
         h.queries.push({ file, args, options });
         return { status: 0, stderr: '', stdout: args.at(-1).split(',').map(pid => `${pid} 00:00.00 S`).join('\n') };
@@ -78,7 +83,7 @@ async function harness({ failedSpawn = false } = {}) {
       slotPathOf: () => '/slot', validateSlotPath: () => {} },
     '../lib/processes.mjs': { lookupProcess: lookup },
     '../lib/files.mjs': { writeFileAtomic: (file, text) => { h.files.set(file, text); if (file === '/receipt') h.receipts.push(JSON.parse(text)); } },
-    '../lib/cli-help.mjs': { cliHelp: () => {}, isMain: () => false },
+    '../lib/cli-help.mjs': { cliHelp: () => {}, isMain: url => Boolean(h.holdMain && url.endsWith('/verify/execute.mjs')) },
   };
   const context = createContext({ process: proc, AbortController, Error, Map,
     Date: class extends Date { static now() { return h.at * 1000; } },
@@ -108,6 +113,14 @@ async function harness({ failedSpawn = false } = {}) {
   const verify = load('execute.mjs');
   await verify.link(link); await verify.evaluate();
   h.execute = () => verify.namespace.execute({ desk: '/fixture', argv: ['/payload', 'argument'] }, '/work');
+  h.hold = async () => {
+    h.rows.get(92).ppid = 1; // Captured by the phase, outside the current outer walk.
+    h.files.set('/work/phases.json', JSON.stringify({ tracked: [h.rows.get(92)], reaped: [] }));
+    h.holdMain = true;
+    const job = { label: 'held', desk: '/fixture', sha: 'sha', tree: 'tree', identity: '/common' };
+    proc.argv = ['/node', '/verify/execute.mjs', '--hold', JSON.stringify(job), '/work'];
+    const hold = load('hold.mjs'); await hold.link(link); await hold.evaluate();
+  };
   h.poll = async () => { const timer = h.timers.find(t => !t.fired); assert.ok(timer); timer.fired = true; timer.callback(); await turn(); };
   h.watch = cache.get('watch.mjs').namespace; h.dog = cache.get('watchdog.mjs').namespace;
   h.start = () => {
@@ -263,4 +276,80 @@ test('actual verify cancellation preserves first SIGINT and waits for actual own
   const state = JSON.parse(h.files.get('/work/phases.json'));
   assert.equal(state.signal, 'SIGINT'); assert.equal(state.command.signal, 'SIGINT');
   assert.equal(h.process.listenerCount('SIGINT'), 0); assert.ok(h.rows.has(93));
+});
+
+
+test('actual controller keeps descendants and streams pending without elapsed failure or signal', async () => {
+  const h = await harness(); h.start();
+  h.rows.delete(91); h.child.emit('exit', 0, null); await turn();
+  h.at = 10000; await h.poll();
+  h.intervals.find(t => !t.stopped).callback();
+  assert.equal(h.pending, true); assert.deepEqual(h.events.filter(e => e[0] === 'signal'), []);
+  assert.equal(h.events.some(e => e[0] === 'destroy' || e[0] === 'release'), false);
+  assert.ok(h.intervals.some(t => !t.stopped), 'the watcher survives leader exit');
+  h.rows.delete(92); await h.poll(); assert.equal(h.pending, true);
+  assert.ok(h.intervals.some(t => !t.stopped), 'the watcher survives until stream close');
+  h.child.stdout.emit('data', 'after descendants'); h.child.emit('close', 0, null);
+  assert.equal(await h.done, 0); assert.equal(h.receipts.at(-1).gate_timeout, null);
+  assert.equal(h.events.some(e => e[0] === 'stderr' && /GATE_LEFTOVER_GROUP/.test(e[1])), false);
+});
+
+test('independent actual AND-freeze can force a pending TERM while preserving its first signal', async () => {
+  const h = await harness(); h.deferSignals = true; h.start(); h.process.emit('SIGTERM', 'SIGTERM'); await turn();
+  assert.ok(h.intervals.some(t => !t.stopped));
+  h.at = 200.580020875; h.intervals.find(t => !t.stopped).callback(); await turn();
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), [
+    ['signal', -91, 'SIGTERM'], ['signal', 92, 'SIGTERM'], ['signal', -91, 'SIGKILL'], ['signal', 92, 'SIGKILL'],
+  ]);
+  h.exit(); await h.poll(); h.child.emit('close', 0, null);
+  assert.equal(await h.done, 124); assert.equal(h.receipts.at(-1).signal, 'SIGTERM');
+  assert.equal(h.receipts.at(-1).gate_timeout.kind, 'frozen'); assert.ok(h.rows.has(93));
+});
+
+test('actual activity audit follows captured escaped births but missing/reused participants remain unknown', async () => {
+  const h = await harness(), tracked = new Map();
+  assert.equal(h.watch.activitySnapshot(91, { tracked }).length, 2);
+  h.rows.get(92).ppid = 1;
+  assert.deepEqual(plain(h.watch.activitySnapshot(91, { tracked })).map(r => r.pid), [91, 92]);
+  h.rows.set(92, { ...h.rows.get(92), identity: 'replacement' });
+  assert.equal(h.watch.activitySnapshot(91, { tracked }), null);
+  h.rows.delete(91); assert.equal(h.watch.activitySnapshot(91, { tracked }), null);
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), []);
+});
+
+
+for (const marker of [false, true]) test(`actual verify hold does not force an orphan from normal exit or descendant marker=${marker}`, async () => {
+  const h = await harness(); let finished = false;
+  const done = h.hold().then(() => { finished = true; }); await turn();
+  if (marker) h.child.stderr.emit('data', 'GATE_TIMEOUT: frozen limit 1s exceeded; elapsed 1.001s');
+  h.rows.delete(91); h.child.emit('exit', marker ? 124 : 0, null); h.child.emit('close', marker ? 124 : 0, null);
+  await turn(); assert.equal(finished, false);
+  h.at = 10000; await h.poll();
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), []);
+  h.rows.delete(92); await h.poll(); await done;
+  const state = JSON.parse(h.files.get('/work/phases.json'));
+  assert.equal(state.cleanup_confirmed, true); assert.equal(state.wrapper.exit, marker ? 124 : 0);
+  assert.deepEqual(state.reaped, [], 'a descendant marker is not watchdog force evidence');
+});
+
+test('actual verify hold uses the guarded force path only after its local confirmed AND-freeze', async () => {
+  const h = await harness(); const done = h.hold(); await turn();
+  h.at = 200.580020875; h.intervals.find(t => !t.stopped).callback(); await turn();
+  h.rows.delete(91); h.child.emit('exit', null, 'SIGKILL'); h.child.emit('close', null, 'SIGKILL');
+  await done;
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), [['signal', -91, 'SIGKILL'], ['signal', 92, 'SIGKILL']]);
+  const state = JSON.parse(h.files.get('/work/phases.json'));
+  assert.equal(state.cleanup_confirmed, true); assert.equal(state.wrapper.exit, 124);
+  assert.ok(state.reaped.some(r => r.pid === 92 && r.identity === 'b' && r.signal === 'SIGKILL'));
+  assert.ok(h.rows.has(93));
+});
+
+
+test('actual controller keeps an unknown group observation pending without force or a false result', async () => {
+  const h = await harness(); h.start(); h.probeError = Error('probe unavailable'); h.exit(); await turn();
+  h.at = 10000; await h.poll(); h.intervals.find(t => !t.stopped).callback();
+  assert.equal(h.pending, true); assert.deepEqual(h.events.filter(e => e[0] === 'signal'), []);
+  assert.equal(h.events.some(e => e[0] === 'destroy' || e[0] === 'release'), false);
+  h.probeError = null; await h.poll(); h.child.emit('close', 0, null);
+  assert.equal(await h.done, 0); assert.equal(h.receipts.at(-1).gate_timeout, null);
 });

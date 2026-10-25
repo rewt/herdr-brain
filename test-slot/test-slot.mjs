@@ -608,7 +608,6 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
   let lastOutput = commandStart, longestSilence = 0;
   let stopping, stopError, failWatchdog, rootIdentity, measurement, watcher;
   const ownsGroup = !slot.nested;
-  let leftover = false;
   const failure = new Promise(resolve => { failWatchdog = error => resolve({ error }); });
   const tracked = new Map();
   let tail = "";
@@ -636,9 +635,9 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
       ...(slot.occupancyPath ? { [OCCUPANCY_ENV]: slot.occupancyPath } : {}),
       ...(retried ? { [RETRIED_ENV]: "1" } : {}) } });
   const closed = new Promise(resolve => proc.once("close", resolve));
-  let leaderExited = false;
+  let leaderExited = false, spawnFailed = false;
   const completion = new Promise((resolve) => {
-    proc.once("error", (error) => { process.stderr.write(`test-slot: ${error.message}\n`); resolve({ status: 127, signal: null }); });
+    proc.once("error", (error) => { spawnFailed = true; process.stderr.write(`test-slot: ${error.message}\n`); resolve({ status: 127, signal: null }); });
     proc.once("exit", (code, signal) => { leaderExited = true; resolve({ status: exitOf(code, signal), signal }); });
   });
   if (barrier) proc.stdio[3].on('error', () => {}); // A failed barrier may close before the grant.
@@ -652,6 +651,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     // Nested gates share the holder group; cancel only their descendants.
     if (forwarded.has(signal)) return;
     forwarded.add(signal);
+    if (proc.pid === undefined) return; // An unknown PID never authorizes a signal.
     stopping ??= stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, firstSignal: signal, onCapture }).catch(error => { stopError = error; failWatchdog(error); });
   };
   for (const signal of SIGNALS) process.on(signal, forward);
@@ -659,7 +659,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     if (proc.pid !== undefined && !barrier) started(proc);
     // The first activity audit is synchronous. Cancellation must already be
     // handled while it runs, or the wrapper can exit with its payload alive.
-    if (proc.pid !== undefined && !process.env.MONITOR_TEST_WATCH_OWNER) watcher = watchRun({ pid: proc.pid, ownsGroup,
+    if (proc.pid !== undefined && !process.env.MONITOR_TEST_WATCH_OWNER) watcher = watchRun({ pid: proc.pid, ownsGroup, tracked,
       idleSeconds: limits.idle_seconds, frozen: limits.frozen_seconds, silenceState: watchOptions.silenceState,
       onSilence: observation => {
         observation.notice = silenceNotice(observation, watchOptions);
@@ -670,7 +670,8 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
         gateTimeout = observation;
         watchOptions.persist(observation);
         process.stderr.write(`GATE_TIMEOUT: frozen limit ${observation.limit_seconds}s exceeded; elapsed ${observation.elapsed_s.toFixed(3)}s\n`);
-        stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, firstSignal: 'SIGKILL', onCapture }).catch(error => { stopError = error; failWatchdog(error); });
+        const forced = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, firstSignal: 'SIGKILL', onCapture }).catch(error => { stopError = error; failWatchdog(error); });
+        stopping = Promise.all([stopping, forced]); // Observe the original signal join and its errors too.
       },
     });
     if (proc.pid !== undefined) {
@@ -696,27 +697,22 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     if (stopError) throw stopError;
     load = Math.max(load, testLoadFactor());
     timeout ||= status === 124;
-    // A successful leader can leave pipes/group members alive. Give them a
-    // short grace, then clean up as a distinct failure rather than an overrun.
-    watcher?.stop();
-    let groupGone = true;
-    if (proc.pid !== undefined) {
-      const remains = () => ownsGroup ? probe(-proc.pid) !== false : [...tracked.values()].some(saved => {
+    // Leader exit alone neither fails nor stops its descendants. Unknown
+    // observations retain the wait; the same watcher stays active through close.
+    const remains = () => {
+      if (proc.pid === undefined) return !spawnFailed;
+      return (ownsGroup && probe(-proc.pid) !== false) || [...tracked.values()].some(saved => {
         const now = lookupProcess(saved.pid, { identityOnly: true });
         return !now.ok || now.value?.identity === saved.identity;
       });
-      const deadline = Date.now() + 1000;
-      while (remains() && !stopping && Date.now() < deadline) await sleep(25);
-      if (remains() && !stopping) {
-        leftover = true;
-        process.stderr.write('GATE_LEFTOVER_GROUP: command exited with background descendants; stopping owned processes.\n');
-        await stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, onCapture });
-      }
-      if (stopping) await stopping;
+    };
+    while (remains()) {
       if (stopError) throw stopError;
-      groupGone = !remains();
+      await sleep(25);
     }
-    watcher?.stop();
+    if (stopping) await stopping;
+    if (stopError) throw stopError;
+    const groupGone = !remains();
     // Await inherited pipe closure before destroying the output streams.
     await closed;
     proc.stdout.destroy(); proc.stderr.destroy();
@@ -724,15 +720,15 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     longestSilence = Math.max(longestSilence, ended - lastOutput);
     if (status === TIMEOUT_EXIT) gateTimeout ??= descendantTimeout;
     // Signals are never retryable, including commands that swallow a signal.
-    return { status: gateTimeout ? TIMEOUT_EXIT : leftover ? LEFTOVER_EXIT : status, signal: gateTimeout ? null : signal, gateTimeout, duration_s, longest_silence_s: longestSilence,
+    return { status: gateTimeout ? TIMEOUT_EXIT : status, signal: gateTimeout ? null : signal, gateTimeout, duration_s, longest_silence_s: longestSilence,
       observations: watcher?.snapshot().observations ?? [], activity_audits: watcher?.snapshot().activity_audits,
       timeout: signal ? false : timeout, load, childRetried, groupGone, measurement: measurement?.finish() };
   } catch (error) {
     if (barrier) proc.stdio[3].destroy(); // No grant means no payload, including publication failure.
-    if (gateTimeout || leftover) {
-      process.stderr.write(`${gateTimeout ? 'GATE_TIMEOUT_CLEANUP_FAILED' : 'GATE_LEFTOVER_GROUP_CLEANUP_FAILED'}: ${error.message}; slot retained.\n`);
+    if (gateTimeout) {
+      process.stderr.write(`GATE_TIMEOUT_CLEANUP_FAILED: ${error.message}; slot retained.\n`);
       proc.stdout.destroy(); proc.stderr.destroy(); proc.unref();
-      return { status: gateTimeout ? TIMEOUT_EXIT : LEFTOVER_EXIT, signal: null, gateTimeout, groupGone: false,
+      return { status: TIMEOUT_EXIT, signal: null, gateTimeout, groupGone: false,
         duration_s: clock() - commandStart, longest_silence_s: clock() - lastOutput, observations: watcher?.snapshot().observations ?? [],
         activity_audits: watcher?.snapshot().activity_audits, cleanup_error: error.message, measurement: measurement?.finish() };
     }

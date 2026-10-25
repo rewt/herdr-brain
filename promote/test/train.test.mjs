@@ -468,10 +468,13 @@ fs.rmdirSync=function(directory,...args){
     const queued = readInbox(inbox)[0], saved = f.queue.load().current, integrated = f.git(['rev-parse', 'main']);
     assert.deepEqual(f.messages(), []); assert.equal(f.runs(), 1);
     assert.equal(fs.existsSync(path.join(f.root, 'first')), false, 'cleanup completed before the notice was queued');
+    t.diagnostic('queued-notice recovery: killing the parked owner');
     assert.equal(worker.kill('SIGKILL'), true); await done;
+    t.diagnostic('queued-notice recovery: parked owner close observed');
     const lock = path.join(f.queue.directory, 'worker.lock'), owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json')));
     assert.equal(owner.pid, worker.pid); assert.throws(() => process.kill(owner.pid, 0)); fs.rmSync(lock, { recursive: true });
     const resumed = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    t.diagnostic('queued-notice recovery: replacement owner spawned');
     resumedDone = waitForExit(resumed);
     // An actual early exit/error is evidence, not an indefinitely pending
     // readiness promise that cancels the remainder of this test file.
@@ -480,9 +483,11 @@ fs.rmdirSync=function(directory,...args){
       resumedDone.then(result => { throw Error(`resumed train exited before readiness: ${JSON.stringify(result)}`); }),
     ]);
     assert.equal((await ready).ready, true);
+    t.diagnostic('queued-notice recovery: replacement readiness observed');
     resumed.disconnect();
     fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer);
     const result = await resumedDone; assert.equal(result.code, 0, result.stderr);
+    t.diagnostic('queued-notice recovery: replacement close observed');
     const results = f.queue.load().results;
     assert.deepEqual(results.map(r => [r.id, r.outcome, r.delivered]), saved.jobs.map(job => [job.id, 'promoted', true]));
     assert.deepEqual(results[0].warnings, ['no record discovered; finished tabs preserved']);

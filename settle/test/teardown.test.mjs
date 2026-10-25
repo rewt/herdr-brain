@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fixture } from './fixture.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
-import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { pathToFileURL } from 'node:url';
 import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
 
@@ -35,7 +34,6 @@ for (const slow of [false, true]) test(`teardown stops a ${slow ? 'slow transpor
   assert.ok(owner > 1);
   if (slow) await until(() => fs.existsSync(ready));
   const transport = slow ? Number(fs.readFileSync(ready, 'utf8')) : null;
-  if (!slow) await assert.rejects(waitForInboxIdle(inbox), /fixture inbox owner did not exit/);
   await f.cleanup();
   assert.equal(fs.existsSync(f.root), false);
   for (const pid of [owner, transport].filter(Boolean)) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });

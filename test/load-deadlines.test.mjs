@@ -212,40 +212,38 @@ test('queue and notice locks wait through loaded contention and never remove a l
   } finally { Date.now = now; Atomics.wait = wait; }
 });
 
-test('inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner', async t => {
-  withLoad(t);
+test('inbox fixture teardown keeps its idle wait pending until the actual owner lock is removed', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'loaded-inbox-shutdown-'));
   const inbox = path.join(root, 'inbox.log'), lock = `${inbox}.owner.lock`;
-  const now = Date.now, started = now();
-  // Advance wall time 100x: the old 5s wait lasts 50ms, the load-24 wait
-  // lasts 300ms. The actual owner receipt disappears after 80ms.
-  Date.now = () => started + (now() - started) * 100;
-  let timer;
-  t.after(() => { clearTimeout(timer); Date.now = now; fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(lock);
-  timer = setTimeout(() => fs.rmdirSync(lock), 80);
-  await waitForInboxIdle(inbox);
-  fs.mkdirSync(lock);
-  await assert.rejects(waitForInboxIdle(inbox), /fixture inbox owner did not exit/);
-  assert.equal(fs.existsSync(lock), true, 'an unconfirmed owner is never removed or signalled');
+  let settled = false;
+  const pending = waitForInboxIdle(inbox);
+  pending.then(() => { settled = true; }, () => { settled = true; });
+  try {
+    await new Promise(setImmediate);
+    assert.equal(settled, false, 'a live owner lock keeps the idle wait pending');
+    assert.equal(fs.existsSync(lock), true, 'an unconfirmed owner is never removed or signalled');
+  } finally {
+    fs.rmdirSync(lock);
+    await pending;
+  }
+  assert.equal(fs.existsSync(lock), false);
 });
 
-for (const delayed of ['stop', 'shutdown']) test(`owned inbox teardown allows loaded ${delayed} confirmation before clearing its processes`, async t => {
-  withLoad(t);
+for (const delayed of ['stop', 'shutdown']) test(`owned inbox teardown awaits observed ${delayed} confirmation before clearing its processes`, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'loaded-owned-inbox-'));
   const inbox = path.join(root, 'inbox.log'), lock = `${inbox}.owner.lock`, script = path.join(root, 'owner.mjs');
   const argv = [process.execPath, script, '--inbox', inbox, '--owner-worker'];
   fs.mkdirSync(lock);
   fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: 101, argv }));
-  const now = Date.now;
-  let elapsed = 0, phase = 'initial', reads = 0;
-  Date.now = () => elapsed;
-  t.after(() => { Date.now = now; fs.rmSync(root, { recursive: true, force: true }); });
-  const signals = [];
+  let phase = 'initial', reads = 0;
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const signals = [], observations = [];
   const tracker = {
     snapshot() {
-      if (phase === delayed) elapsed += 6000;
       reads++;
+      observations.push({ phase, reads });
       const rows = new Map([[process.pid, { pid: process.pid, pgid: 7 }]]);
       if (phase !== 'shutdown' || (delayed === 'shutdown' && reads < 2)) {
         rows.set(101, { pid: 101, pgid: 7, identity: 'owner-birth', command: argv.join(' '),
@@ -262,7 +260,7 @@ for (const delayed of ['stop', 'shutdown']) test(`owned inbox teardown allows lo
     },
   };
   await stopFixtureInbox(inbox, { script, tracker });
-  assert.equal(elapsed, 12000, 'confirmation outlasted the former five-second window');
+  assert.ok(observations.some(row => row.phase === delayed && row.reads === 2), 'await the actual confirmation sample');
   assert.deepEqual(signals, [
     [101, 'owner-birth', argv.join(' '), false, 'SIGSTOP'],
     [102, 'child-birth', 'fixture transport', false, 'SIGKILL'],

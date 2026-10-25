@@ -5,7 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { createProcessTracker } from './helpers/processes.mjs';
-import { loadTimeout } from '../lib/deadline.mjs';
 
 function fixture(t, { detached = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-inbox-identity-'));
@@ -65,44 +64,50 @@ for (const receipt of ['missing', 'partial']) {
     });
   }
 
-  test(`inbox fixture teardown bounds a persistent ${receipt} receipt without signalling`, async t => {
+  for (const ending of ['lock removal', 'read error']) test(`inbox fixture teardown keeps ${receipt} metadata pending until ${ending}`, async t => {
     const f = fixture(t);
     if (receipt === 'missing') fs.unlinkSync(f.metadata);
     else fs.writeFileSync(f.metadata, '{"pid":');
-    const read = fs.readFileSync;
-    t.mock.method(os, 'loadavg', () => [24, 24, 24]);
-    t.mock.method(os, 'availableParallelism', () => 4);
-    let elapsed = 0;
-    const allowance = loadTimeout(1000);
-    t.mock.method(Date, 'now', () => elapsed);
+    const read = fs.readFileSync, failure = Object.assign(Error('metadata read refused'), { code: 'EACCES' });
+    let reads = 0, failRead = false, settled = false;
     t.mock.method(fs, 'readFileSync', function (file, ...args) {
-      if (file === f.metadata) elapsed = allowance;
+      if (file === f.metadata) { reads++; if (failRead) throw failure; }
       return read.call(this, file, ...args);
     });
     f.hooks.snapshot = () => assert.fail('unreadable metadata must not reach process lookup');
-    await assert.rejects(f.stop(), /Cannot confirm fixture inbox owner metadata after bounded handoff wait/);
+    const pending = f.stop();
+    pending.then(() => { settled = true; }, () => { settled = true; });
+    try {
+      await new Promise(setImmediate);
+      assert.equal(settled, false, 'missing metadata remains pending');
+      assert.ok(reads >= 1);
+      assert.deepEqual(f.signals, []);
+      assert.ok(fs.existsSync(path.dirname(f.metadata)), 'retain unidentified lock evidence');
+    } finally {
+      if (ending === 'read error') failRead = true;
+      else fs.rmSync(path.dirname(f.metadata), { recursive: true });
+      if (ending === 'read error') await assert.rejects(pending, error => error === failure);
+      else await pending;
+    }
     assert.deepEqual(f.signals, []);
-    assert.ok(fs.existsSync(path.dirname(f.metadata)), 'retain unidentified lock evidence');
+    assert.equal(fs.existsSync(path.dirname(f.metadata)), ending === 'read error');
   });
 }
 
-test('inbox fixture teardown scales its metadata handoff allowance with load', async t => {
+test('inbox fixture teardown resumes only after an actual valid receipt', async t => {
   const f = fixture(t), metadata = fs.readFileSync(f.metadata, 'utf8');
   fs.unlinkSync(f.metadata);
-  t.mock.method(os, 'loadavg', () => [24, 24, 24]);
-  t.mock.method(os, 'availableParallelism', () => 4);
-  let elapsed = 0;
-  t.mock.method(Date, 'now', () => elapsed);
-  const read = fs.readFileSync;
-  t.mock.method(fs, 'readFileSync', function (file, ...args) {
-    if (file === f.metadata && !fs.existsSync(file)) {
-      elapsed = 1001;
-      setImmediate(() => fs.writeFileSync(f.metadata, metadata));
-    }
-    return read.call(this, file, ...args);
-  });
-  await f.stop();
-  assert.equal(elapsed, 1001, 'handoff outlasted the unloaded one-second allowance');
+  let settled = false;
+  const pending = f.stop();
+  pending.then(() => { settled = true; }, () => { settled = true; });
+  try {
+    await new Promise(setImmediate);
+    assert.equal(settled, false, 'a pending handoff does not authorize cleanup');
+    assert.deepEqual(f.signals, []);
+  } finally {
+    fs.writeFileSync(f.metadata, metadata);
+    await pending;
+  }
   assert.deepEqual(f.signals, [{ pid: 202, signal: 'SIGSTOP' }, { pid: 202, signal: 'SIGKILL' }]);
 });
 

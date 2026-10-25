@@ -1,12 +1,15 @@
 // Source-bound coordinator evidence; native descendant reaping is separate.
-// Direct selection requires Node's --experimental-vm-modules capability.
+// Ordinary selection owns its VM capability; no caller flag is required.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { spawnChild, waitForExit } from './helpers/child.mjs';
+
+const { createContext, SourceTextModule, SyntheticModule } = vm;
 
 const runner = new URL('./helpers/run.mjs', import.meta.url);
 const source = readFileSync(runner, 'utf8');
@@ -110,6 +113,20 @@ async function coordinator() {
   return { child, proc, state, trace, exits, errors, signals, timings, ready, complete, pending, exit, finished, watch: () => watch };
 }
 
+if (typeof SourceTextModule !== 'function') {
+  test('ordinary suite selection executes every runner witness with its VM capability', async t => {
+    const env = { ...process.env };
+    delete env.NODE_TEST_CONTEXT;
+    const child = spawnChild(t, process.execPath,
+      ['--experimental-vm-modules', '--test', fileURLToPath(import.meta.url)], { env });
+    const result = await waitForExit(child);
+    assert.equal(result.signal, null, result.stderr);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /# tests 8\b/);
+    assert.match(result.stdout, /# pass 8\b/);
+    assert.match(result.stdout, /# fail 0\b/);
+  });
+} else {
 test('actual runner source removes only the elapsed exit fallback boundary', () => {
   assert.doesNotMatch(source, /loadTimeout|setTimeout/);
   assert.match(source, /child\.exitCode !== null \|\| child\.signalCode !== null/);
@@ -191,3 +208,4 @@ test('explicit cancellation preserves owned teardown and waits for actual exit',
     assert.ok(!h.trace.includes('audit')); h.exit(); h.finished(1);
   }
 });
+}

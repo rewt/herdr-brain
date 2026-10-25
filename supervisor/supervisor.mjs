@@ -263,7 +263,10 @@ export function main(argv = process.argv.slice(2)) {
           writeFileAtomic(launchFile, JSON.stringify(receipt) + '\n');
           const fd = fs.openSync(log, 'a', 0o600);
           try {
-            const args = [settle, ...settleArgs.filter(arg => arg !== '--retry'), '--retry'];
+            // Intake options are already captured in the journal. A retry must
+            // use only its owner/project binding, never repeat that intake.
+            const args = [settle, id, '--controller', opt.controller,
+              '--repo', project.canonical, '--org', project.org, '--retry'];
             const child = spawn(process.execPath, args, { cwd: project.canonical, env, detached: true,
               stdio: ['ignore', fd, fd] });
             child.on('error', error => { receipt.phase = 'launch-error'; receipt.error = error.message; writeFileAtomic(launchFile, JSON.stringify(receipt) + '\n'); });

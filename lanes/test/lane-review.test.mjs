@@ -25,6 +25,25 @@ import {
 assert.equal(LANE, resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs")));
 assert.equal(HERDR_CLIENT, resolve(HERE, "..", "board", "herdr-client.mjs"));
 
+test('captured parallel review survives retirement of the engineer worktree', () => {
+  const topic = 'review-retired-source', review = makeReviewFixture(topic, { verdict: 'PASS' });
+  const { fixture, fake } = review;
+  try {
+    const head = git(review.path, ['rev-parse', 'HEAD']);
+    const base = git(fixture.repo, ['rev-parse', 'main']);
+    git(fixture.repo, ['worktree', 'remove', review.path]);
+    fixture.env.FAKE_HERDR_LANE_PATH = fixture.repo;
+    const result = lane(fixture, ['review', topic, '--round', '1', '--brief', review.brief,
+      '--parallel-review', '--run', 'R-1', '--captured-head', head, '--captured-base', base]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'PASS\n');
+    const record = readFileSync(join(fixture.repo, '.lane', 'public-reviews', topic, `${head.slice(0, 7)}-r1.md`), 'utf8');
+    assert.match(record, new RegExp(`Reviewed commit: ${head}`));
+    assert.equal(existsSync(review.path), false, 'review never recreates the retired lane');
+    assert.equal(fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, 1);
+  } finally { fixture.cleanup(); }
+});
+
 for (const [stage, phase, at] of [['ready', 'before', 1], ['cwd', 'before', 2],
   ['delivery', 'after', 1], ['session-poll', 'after', 2]]) {
   test(`review proceeds after one inconsistent list/get pair during ${stage}`, async () => {

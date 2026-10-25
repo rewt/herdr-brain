@@ -346,6 +346,7 @@ function reviewCommitHead() {
   return current;
 }
 function recaptureMain(expectedMain) {
+  if (job.postCodePolicy && !opt['fix-findings']) return;
   // The correction owns the lane now and is settled under its own run. Its
   // dispatch journal, rather than the old review, authorizes recovery.
   if (['fix', 'dispatching'].includes(job.stage)) return;
@@ -629,14 +630,21 @@ function main() {
   if (run.abandoned) throw new Error('abandoned runs cannot be settled');
   const project = gitProject(opt.repo);
   const repo = project.canonical;
-  const workspace = fs.realpathSync(run.workspace);
   const identity = common(repo);
-  if (common(workspace) !== identity) throw new Error('run workspace belongs to another Git common directory');
-  const branch = git(['branch', '--show-current'], workspace);
+  const capturedReview = Boolean(previous.postCodePolicy && !opt['fix-findings']);
+  const workspace = capturedReview ? previous.workspace : fs.realpathSync(run.workspace);
+  const branch = capturedReview ? `lane/${previous.lane}` : git(['branch', '--show-current'], workspace);
   const lane = branch.startsWith('lane/') ? branch.slice(5) : null;
   if (!lane || !/^[a-z0-9][a-z0-9-]{1,60}$/.test(lane) || (run.meta?.lane && run.meta.lane !== lane)) throw new Error('run must name its current registered lane branch');
-  const entries = git(['worktree', 'list', '--porcelain'], repo).split('\n\n');
-  if (!entries.some((e) => e.split('\n').includes(`worktree ${workspace}`) && e.split('\n').includes(`branch ${'refs/heads/'}${branch}`))) throw new Error('lane workspace is not registered in this repository');
+  if (capturedReview) {
+    if (previous.common !== identity || previous.run !== id || previous.item !== run.item) throw Error('captured review identity changed');
+    git(['cat-file', '-e', `${previous.head}^{commit}`], repo);
+    git(['cat-file', '-e', `${previous.mainHead}^{commit}`], repo);
+  } else {
+    if (common(workspace) !== identity) throw new Error('run workspace belongs to another Git common directory');
+    const entries = git(['worktree', 'list', '--porcelain'], repo).split('\n\n');
+    if (!entries.some((e) => e.split('\n').includes(`worktree ${workspace}`) && e.split('\n').includes(`branch ${'refs/heads/'}${branch}`))) throw new Error('lane workspace is not registered in this repository');
+  }
   release = acquire(path.join(opt.org, 'settle', `${hash(identity).slice(0, 20)}-${lane}.locks`));
   ignoreRuntime(project);
   if (fs.existsSync(journal)) {
@@ -724,6 +732,11 @@ function main() {
       ownership, ownerActive: true, stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
       blockers: parsed.report.blockers, proposals: parsed.report.proposals, questions: parsed.report.extra?.questions ?? [],
       outcome: parsed.report.outcome, round: 1, reviewPolicy: policy };
+    if (resolveValidation({ root: repo }).landing_waiver) {
+      job.postCodePolicy = { authority: 'operator-20261025-1308', cap: 1, formal_fix_limit: 1,
+        target_seconds: 1800, elapsed_stop: false, asynchronous: true, blocks_landing: false };
+      job.parallelReview = true;
+    }
     job.deliveryRange = { base: job.mainHead, head: job.head };
     // Only routing fields enter this snapshot. Lifecycle settings keep their
     // original source files, including relative worktree-root provenance.
@@ -763,7 +776,7 @@ function settlePending() {
   }
   // Completed newer runs remain authoritative even though they are no longer
   // active. Dispatch recovery separately exempts only its own correction run.
-  if (job.stage !== 'dispatching') {
+  if (job.stage !== 'dispatching' && !job.postCodePolicy) {
     const stale = superseded(state);
     if (stale) return escalate(stale);
   }
@@ -779,7 +792,7 @@ function settlePending() {
     job.reportIngest = reportIngestReceipt({ ...job, runId: id, run: recorded.runs.get(id) }); save();
     // Keep worker-done visible as reported while review is pending.
     if (show(job.item).closed?.as === 'dropped') return escalate('The item was dropped; the supervisor must decide whether this late report changes the plan');
-    const stale = superseded(recorded);
+    const stale = job.postCodePolicy ? null : superseded(recorded);
     if (stale) return escalate(stale);
     if (job.outcome === 'done' && !resolveValidation({ root: repo }).landing_waiver) {
       // Ownership and latest-run checks are atomic with this record mutation.
@@ -791,8 +804,8 @@ function settlePending() {
   }
   if (job.stage === 'validate') {
     unchanged();
-    job.diff = evidence('diff.patch', git(['diff', '--no-ext-diff', '--no-textconv', `${job.mainHead}...${job.head}`], workspace));
-    const open = activeWork();
+    job.diff = evidence('diff.patch', git(['diff', '--no-ext-diff', '--no-textconv', `${job.mainHead}...${job.head}`], job.postCodePolicy ? repo : workspace));
+    const open = job.postCodePolicy ? [] : activeWork();
     if (open.length) return escalate(`Another run is open: ${open.map((r) => r.id).join(', ')}`);
     if (resolveValidation({ root: repo }).landing_waiver) {
       job.postCodePolicy ??= { authority: 'operator-20261025-1308', cap: 1, formal_fix_limit: 1,
@@ -832,7 +845,7 @@ function settlePending() {
       return stopCorrection(error.message);
     }
     unchanged();
-    const stale = superseded(recordState());
+    const stale = job.postCodePolicy ? null : superseded(recordState());
     if (stale) return escalate(stale);
     job.reportIngest = reportIngestReceipt({ ...job, runId: id, run: show(id) }); save();
     if (!job.routeConfig) {
@@ -847,7 +860,9 @@ function settlePending() {
     job.stage = 'reviewing'; save();
     const r = call(cli('lane', '../lanes/lane.mjs'), ['review', lane, '--round', String(job.round), '--brief', supplement,
       '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--run', id, '--memory-checked', '--settle-commits-review',
-      ...((job.followupExpected || job.postCodePolicy) ? ['--followup-expected'] : []), ...(job.parallelReview ? ['--parallel-review'] : [])]);
+      ...((job.followupExpected || job.postCodePolicy) ? ['--followup-expected'] : []),
+      ...(job.parallelReview ? ['--parallel-review'] : []),
+      ...(job.postCodePolicy ? ['--captured-head', job.head, '--captured-base', job.mainHead] : [])]);
     job.review_finished_at = new Date().toISOString();
     job.reviewLog = evidence(`review-r${job.round}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`); save();
     if (!r.error && r.status === 3 && r.stdout?.trim().startsWith('{')) {

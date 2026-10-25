@@ -910,7 +910,7 @@ test('cancellation captures an escaped descendant while its phase observer is st
     fs.renameSync(${JSON.stringify(pids + '.tmp')},${JSON.stringify(pids)});
     setInterval(()=>{},1000);
   `));
-  await cancelJob(f, job, () => fs.existsSync(pids), async phase => {
+  await cancelJob(f, job, () => fs.existsSync(pids), async (phase, wait) => {
     const captured = path.join(path.dirname(job.receipt), 'captured.json');
     await wait(() => fs.existsSync(captured) && read(captured).some(row => row.pid === phase.pid && /^T/.test(row.state)), 'paused phase was not captured');
     const owner = registerProcess(phase.pid);

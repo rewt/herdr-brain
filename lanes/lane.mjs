@@ -1198,7 +1198,7 @@ function dispatch(topic, promptText, options = {}) {
   repositoryRoot({ requiredBy: "dispatch" });
   const branch = laneBranch(topic);
   const resolved = resolveDispatch(options);
-  const path = worktreeFor(branch);
+  const path = IS_REVIEW_COMMAND && options.capturedHead ? REPO_ROOT : worktreeFor(branch);
   if (path === undefined) fail(`lane ${branch} has no worktree; open it first`);
   // Dispatch is model-agnostic: the tier policy is the operator's, and the
   // operator-owned role->agent mappings live in .lane.json "routes". A named
@@ -1576,7 +1576,7 @@ function parseReviewOptions(args) {
       options[flag === '--settle-commits-review' ? 'deferCloseout' : flag === '--parallel-review' ? 'parallelReview' : 'followupExpected'] = true;
       continue;
     }
-    if (!["--round", "--brief", "--change", "--route", "--route-config", "--timeout", "--run"].includes(flag)) {
+    if (!["--round", "--brief", "--change", "--route", "--route-config", "--timeout", "--run", "--captured-head", "--captured-base"].includes(flag)) {
       fail(`usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n [--followup-expected]] (unknown operand: ${flag})`);
     }
     if (seen.has(flag)) fail(`duplicate review option: ${flag}`);
@@ -1591,6 +1591,11 @@ function parseReviewOptions(args) {
   if (!Number.isSafeInteger(options.round) || options.round < 1) fail("--round must be a positive safe integer");
   if (options.run !== undefined && !/^R-[1-9]\d*$/u.test(options.run)) fail("--run must be a run id (R-n)");
   if (options.followupExpected && !options.run) fail('--followup-expected requires --run R-n');
+  if (options['captured-head'] !== undefined || options['captured-base'] !== undefined) {
+    if (!options.parallelReview || !options.run || ![options['captured-head'], options['captured-base']].every(value => /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u.test(value ?? ''))) {
+      fail('captured review requires --parallel-review, --run and full --captured-head/--captured-base commit hashes');
+    }
+  }
   if (!Number.isInteger(options.timeout) || (options.timeout !== 0 && (options.timeout < REVIEW_MIN_TIMEOUT_SECONDS || options.timeout > 7200))) {
     fail(`--timeout must be 0 (no elapsed stop) or an integer from ${REVIEW_MIN_TIMEOUT_SECONDS} through 7200 seconds`);
   }
@@ -1716,6 +1721,21 @@ function collectMarkdownFiles(root) {
 }
 
 function reviewSources(path, topic, options) {
+  if (options['captured-head']) {
+    const head = options['captured-head'];
+    const files = ['AGENTS.md', 'openspec/README.md', `docs/reports/${topic}.md`, 'HANDOFF.md'];
+    if (options.change !== undefined) {
+      if (!/^[a-z0-9][a-z0-9-]{0,60}$/u.test(options.change)) fail(`invalid OpenSpec change name: ${options.change}`);
+      const root = `openspec/changes/${options.change}/`;
+      const names = git(['ls-tree', '-r', '--name-only', head, '--', root], { cwd: REPO_ROOT, silent: true }).split('\n').filter(name => name.endsWith('.md'));
+      if (!names.length) fail(`OpenSpec change does not exist at captured commit: ${options.change}`);
+      files.push(...names);
+    }
+    return [...new Set(files)].map(file => {
+      const content = tryGit(['show', `${head}:${file}`], { cwd: REPO_ROOT, silent: true });
+      return `### Immutable source: ${file} at ${head}\n${content === undefined ? 'Absent.' : content.trimEnd()}`;
+    }).join('\n\n');
+  }
   const sources = [];
   const add = (file, label = relative(path, file)) => {
     const content = regularTextFile(file, `review source ${label}`);
@@ -2352,14 +2372,16 @@ async function review(topic, args, memoryChecked = false) {
     process.exitCode ??= 3;
     return;
   }
-  const path = worktreeFor(branch);
+  const capturedHead = options['captured-head'];
+  const path = capturedHead ? REPO_ROOT : worktreeFor(branch);
   if (path === undefined) fail(`lane ${branch} has no worktree; open it first`);
-  requireClean(path, "lane worktree");
-  const head = git(["rev-parse", "HEAD"], { cwd: path });
+  if (!capturedHead) requireClean(path, "lane worktree");
+  const head = capturedHead ?? git(["rev-parse", "HEAD"], { cwd: path });
+  if (capturedHead) git(['cat-file', '-e', `${head}^{commit}`], { cwd: REPO_ROOT, silent: true });
   const head7 = head.slice(0, 7);
-  const currentBranch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path });
+  const currentBranch = capturedHead ? branch : git(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path });
   if (currentBranch !== branch) fail(`review target branch is ${currentBranch}, expected ${branch}`);
-  const baseHead = tryGit(["rev-parse", "--verify", `${MAIN}^{commit}`]);
+  const baseHead = tryGit(["rev-parse", "--verify", `${options['captured-base'] ?? MAIN}^{commit}`]);
   if (baseHead === undefined) fail(`configured base branch does not resolve: ${MAIN}`);
   const baseCommit = tryGit(["merge-base", head, baseHead]);
   if (baseCommit === undefined) fail(`review target has no merge base with ${MAIN}`);
@@ -2373,7 +2395,9 @@ async function review(topic, args, memoryChecked = false) {
   const sourceText = reviewSources(path, topic, options);
   let supplement = "No supplemental brief was supplied. Review run budget: zero build/test/prepare/install/check commands.";
   if (options.brief !== undefined) supplement = regularTextFile(resolve(process.cwd(), options.brief), "review brief");
-  const gate = reviewGate(path, head, branch);
+  const gate = capturedHead
+    ? { prompt: 'Immutable captured source and supplied evidence only; live lane gate not read.', diagnostic: 'captured source' }
+    : reviewGate(path, head, branch);
   process.stderr.write(`lane review: gate ${gate.diagnostic} at ${head}\n`);
   const reviewId = `lr-${randomBytes(16).toString("hex")}`;
   const template = regularTextFile(join(TOOL_ROOT, "docs", "REVIEW_TEMPLATE.md"), "review template");
@@ -2403,7 +2427,7 @@ async function review(topic, args, memoryChecked = false) {
   let session;
   try {
     try {
-      session = dispatch(topic, prompt, { route: options.route, routeConfig: options.routeConfig, run: options.run, silent: true, deadline });
+      session = dispatch(topic, prompt, { route: options.route, routeConfig: options.routeConfig, run: options.run, silent: true, deadline, capturedHead });
     } catch (error) {
       fail(`review dispatch failed: ${error.code === "ETIMEDOUT" ? "timeout" : "Herdr command error"}`);
     }

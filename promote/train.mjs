@@ -237,6 +237,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
           outcome: 'waived', executed: false, exit_code: null, signal: null, head: attempt.tip,
           tree: git(['rev-parse', 'HEAD^{tree}'], attempt.scratch), log,
           log_hash: createHash('sha256').update(JSON.stringify(text)).digest('hex') };
+        process.stdout.write(text);
         attempt.phase = 'waived'; save(); return true;
       }
       const declaration = readReceiptDeclaration({ repo: canonical, base: attempt.base });

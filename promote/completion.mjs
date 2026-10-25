@@ -137,10 +137,11 @@ export function reconcileBatchCompletion({ project, jobs, results }) {
         included.push({ item: binding.item, run: binding.run, expected: binding.expected, superseded: binding.superseded,
           head: result.tip, why: `Native queue ${job.id}: queue-bound head ${job.expectedHead}; preserved diff in train ${train.id}; ${operatorWaivedGate(result.gate) ? 'operator-waived checks, unrun tests are not passed' : 'successful gate'}.`, ...(operatorWaivedGate(result.gate) ? { resolution: 'Operator directed immediate source landing; test/review readiness waived until final stable release checks. Real failures remain recorded.' } : {}) });
       }
-      const bytes = fs.readFileSync(promoted[0].result.log);
+      const evidenceLog = integrated.every(a => operatorWaivedGate(a.gate)) ? integrated[0].gate.log : promoted[0].result.log;
+      const bytes = fs.readFileSync(evidenceLog);
       if (!bytes.length) throw Error('train log is empty');
       const payload = { version: 1, batch: train.id, org, identity: project.identity, base: prepared.base, tip,
-        gate: { exit_code: integrated.some(a => operatorWaivedGate(a.gate)) ? null : 0, ...(integrated.some(a => operatorWaivedGate(a.gate)) ? { operator_waiver: OPERATOR_LANDING_WAIVER, executed: false } : {}), log: promoted[0].result.log, sha256: createHash('sha256').update(bytes).digest('hex'),
+        gate: { exit_code: integrated.some(a => operatorWaivedGate(a.gate)) ? null : 0, ...(integrated.some(a => operatorWaivedGate(a.gate)) ? { operator_waiver: OPERATOR_LANDING_WAIVER, executed: false } : {}), log: evidenceLog, sha256: createHash('sha256').update(bytes).digest('hex'),
           attempts: integrated.map(a => ({ base: a.base, tip: a.tip, gate: a.gate, jobs: a.ids })) },
         items: included, excluded,
         ...(legacy ? { recovery_only: true, recovery_after: integrated.at(-1).integrated_at } : {}) };

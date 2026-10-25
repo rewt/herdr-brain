@@ -173,6 +173,7 @@ try {
     try {
       await pollNative(async deadline => {
         pane = body(await real(['pane', 'get', id], { deadline })).pane;
+        if (pane?.foreground_cwd && !inside(pane.foreground_cwd)) throw new CapabilityRefusal('pane cwd left scratch');
         return pane.foreground_cwd && inside(pane.foreground_cwd);
       }, 'pane cwd did not become ready', 5000);
     } catch (error) {
@@ -200,8 +201,8 @@ try {
     body(await real(['pane', 'run', pane, command]));
     try {
       await pollNative(async deadline => {
-        const r = await real(['agent', 'get', pane], { deadline });
-        return r.code === 0 && body(r).agent?.agent_status === 'idle';
+        const observed = body(await real(['agent', 'get', pane], { deadline })).agent;
+        return observed?.agent_status === 'idle';
       }, 'stand-in did not register', 6000);
     } catch (error) { throw new ReceiptLimit(`stand-in did not register: ${error.message}`); }
     const r = await real(['agent', 'rename', pane, target]);

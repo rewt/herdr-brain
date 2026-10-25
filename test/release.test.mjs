@@ -103,9 +103,10 @@ test('a covered build retains one full execution, refuses stale or unresolved ev
   const org = path.join(f.repo, '.org'), env = { ...f.env, ORG_DIR: org, ORG_ACTOR: 'fixture-supervisor' };
   const record = (...args) => execFileSync(process.execPath, [cli, ...args], { cwd: f.repo, env, encoding: 'utf8' });
   record('init', org); record('add', 'Coverage fixture');
+  const item = fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line)).find(row => row.type === 'item.created').id;
   const publish = value => {
     const attestationDigest = sha(JSON.stringify(value));
-    record('note', 'ENG-1', `Release full coverage reconciled: ${attestationDigest}`, '--decision');
+    record('note', item, `Release full coverage reconciled: ${attestationDigest}`, '--decision');
     const events = fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
     const file = path.join(f.root, 'coverage.json');
     fs.writeFileSync(file, JSON.stringify({ ...value, attestationDigest, attestationSeq: events.at(-1).seq }) + '\n');

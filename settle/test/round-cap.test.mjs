@@ -130,7 +130,7 @@ test('cap reached with Major or FAIL escalates without dispatch; supervisor corr
   }
 });
 
-test('BCH cap three allows two automatic fix rounds then stops at Major findings', { timeout: 60000 }, (t) => {
+test('historical explicit cap3 control allows two automatic fix rounds then stops at Major findings', { timeout: 60000 }, (t) => {
   const f = fixture(t, { actor: 'settle-cap-bch-test' }); config(f, 3);
   review(f, 'NEEDS-WORK', moderate.replace('Moderate', 'Major'));
   let run = landed(f);
@@ -149,7 +149,12 @@ test('settle reuses the same route with continuation metadata and starts fresh w
     const f = fixture(t, { actor: 'settle-reuse-route-test' }); review(f);
     const item = JSON.parse(f.record(['status', '--json'])).items[0].id;
     const first = dispatchWorker(f, item), prior = f.show(first.run);
-    const r = result(f.settle(first.run, ['--reuse', ...(changed ? ['--fix-route', 'engineer-max'] : [])]));
+    const reviewed = result(f.settle(first.run, ['--reuse', ...(changed ? ['--fix-route', 'engineer-max'] : [])]));
+    assert.equal(reviewed.review_policy.cap, 1);
+    assert.equal(reviewed.result, 'promotable_with_findings');
+    // Intake has captured the reuse/route choice. Request the one formal fix
+    // from that receipt; retry must not replace those saved settings.
+    const r = result(f.retry(first.run, ['--fix-findings']));
     assert.equal(r.result, 'fix_round');
     const next = f.show(r.fix.run);
     if (changed) {

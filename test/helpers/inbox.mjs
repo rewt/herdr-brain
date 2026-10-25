@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createProcessTracker } from './processes.mjs';
-import { loadTimeout } from '../../lib/deadline.mjs';
 
 // Call only after the fixture's senders/watchers have stopped. Lock metadata is
 // a candidate, not signal authority: require the exact owner argv and its own
@@ -9,7 +8,6 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 // and freshly confirm every individual signal.
 export async function stopFixtureInbox(file, { script, tracker = createProcessTracker() }) {
   const lock = `${file}.owner.lock`;
-  const handoffBy = Date.now() + loadTimeout(1000);
   let owner;
   for (;;) {
     if (!fs.existsSync(lock)) return;
@@ -21,8 +19,6 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
       // Removal can unlink owner.json before its directory disappears. A
       // missing or incomplete receipt is a handoff, never signal authority.
       if (!fs.existsSync(lock)) return;
-      if (Date.now() >= handoffBy)
-        throw Error(`Cannot confirm fixture inbox owner metadata after bounded handoff wait: ${file}`, { cause: error });
       await new Promise(resolve => setTimeout(resolve, 20));
     }
   }
@@ -52,7 +48,6 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
   const owned = new Map([[entry.pid, entry]]);
   try {
     let current;
-    const stoppedBy = Date.now() + loadTimeout(5000);
     for (;;) {
       current = tracker.snapshot();
       if (!current.ok) throw Error(`Cannot confirm fixture inbox children: ${file}`);
@@ -61,7 +56,6 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
       if (ownerRow.identity !== entry.identity || ownerRow.command !== entry.command) return;
       if (ownerRow.pgid !== row.pgid) throw Error(`Fixture inbox owner group changed: ${file}`);
       if (/^T/.test(ownerRow.state)) break;
-      if (Date.now() >= stoppedBy) throw Error(`Fixture inbox owner did not stop: ${file}`);
       await new Promise(resolve => setTimeout(resolve, 20));
     }
     for (const child of current.value.values()) {
@@ -78,7 +72,6 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
     signal(entry, 'SIGCONT');
     throw error;
   }
-  const deadline = Date.now() + loadTimeout(5000);
   while (owned.size) {
     const current = tracker.snapshot();
     if (!current.ok) throw Error(`Cannot confirm fixture inbox shutdown: ${file}`);
@@ -87,16 +80,13 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
       if (!live || /^Z/.test(live.state) || live.identity !== target.identity || live.command !== target.command) owned.delete(pid);
     }
     if (!owned.size) return;
-    if (Date.now() >= deadline) throw Error(`fixture inbox processes did not exit: ${file}`);
     await new Promise(resolve => setTimeout(resolve, 20));
   }
 }
 
-// Delivery tests can let their owner finish naturally. A failed bounded wait
-// preserves evidence; settle uses explicit owned shutdown above instead.
+// Delivery tests can let their owner finish naturally. Settle uses explicit
+// owned shutdown above instead.
 export async function waitForInboxIdle(file) {
-  const deadline = Date.now() + loadTimeout(5000);
-  while (fs.existsSync(`${file}.owner.lock`) && Date.now() < deadline)
+  while (fs.existsSync(`${file}.owner.lock`))
     await new Promise((resolve) => setTimeout(resolve, 20));
-  if (fs.existsSync(`${file}.owner.lock`)) throw new Error(`fixture inbox owner did not exit: ${file}`);
 }

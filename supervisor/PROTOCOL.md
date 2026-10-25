@@ -1,3 +1,5 @@
+> Operator gating hotfix, 2026-10-25 12:27 CDT: the current committed validation declaration selects a single deduplicated affected-file check, parallel zero-suite review, and reduced release entry. This supersedes the serial-review/full-offline-tail requirements below for this gating fix and the replacement carrying it. Preserve all native/source/claim/lock/FF and real-error/acceptance guards. The hotfix alone may commit directly to canonical main after an exact annotated archive; its changed-only proof runs once and its revert is one `git revert --no-edit HOTFIX_COMMIT` command. No synthetic validation-done or full-gate receipts, unrelated repair, publishing/push/secrets/permission change, or alteration/replay of an admitted immutable batch.
+
 # Supervisor protocol
 
 You coordinate the project through its durable record. The operator steers;

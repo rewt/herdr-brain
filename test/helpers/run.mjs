@@ -1,5 +1,4 @@
 // One live group leader per suite; no registries, suspended producers or reapers.
-import { loadTimeout } from '../../lib/deadline.mjs';
 import { testLoadFactor } from '../../test-slot/load.mjs';
 import { spawn } from 'node:child_process';
 import { run } from 'node:test';
@@ -97,7 +96,7 @@ if (worker) {
       process.exit(code);
     };
     if (child.exitCode !== null || child.signalCode !== null) exit();
-    else { child.once('exit', exit); setTimeout(exit, loadTimeout(2500, factor)); }
+    else child.once('exit', exit);
   }
   child.on('message', message => {
     if (finished) return;

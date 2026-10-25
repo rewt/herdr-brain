@@ -8,13 +8,21 @@ export { frozenSeconds, FROZEN_SECONDS_ENV, FROZEN_SECONDS, SILENCE_SECONDS } fr
 
 // CPU time is queried only for birth-confirmed owned processes, then identities
 // are checked again. An incomplete audit never supplies proof of inactivity.
-export function activitySnapshot(pid, { ownsGroup = true, lookup = lookupProcess, execute = spawnSync } = {}) {
+export function activitySnapshot(pid, { ownsGroup = true, tracked = new Map(), lookup = lookupProcess, execute = spawnSync } = {}) {
   const before = lookup(undefined, { identityOnly: true });
   if (!before.ok || !before.value.has(pid)) return null;
+  if (tracked.has(pid) && tracked.get(pid).identity !== before.value.get(pid).identity) return null;
   const family = descendants(before.value, pid);
   if (ownsGroup) for (const row of before.value.values()) if (row.pgid === pid) family.set(row.pid, row);
+  // Reuse only births captured by an earlier successful parent/group audit.
+  // A missing or replaced participant cannot prove inactivity.
+  for (const saved of tracked.values()) {
+    const current = before.value.get(saved.pid);
+    if (current?.identity !== saved.identity) return null;
+    family.set(saved.pid, current);
+  }
   const result = execute('/bin/ps', ['-o', 'pid=,time=,stat=', '-p', [...family.keys()].join(',')], {
-    encoding: 'utf8', timeout: 1000, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' },
+    encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' },
   });
   if (result.error || result.signal || result.status !== 0 || result.stderr?.trim()) return null;
   const cpu = new Map();
@@ -33,14 +41,15 @@ export function activitySnapshot(pid, { ownsGroup = true, lookup = lookupProcess
     // actual thread scheduling state alongside its cumulative CPU time.
     rows.push({ pid: row.pid, identity: row.identity, ppid: current.ppid, pgid: current.pgid, state: cpu.get(row.pid).state, cpu: cpu.get(row.pid).time });
   }
+  for (const row of family.values()) tracked.set(row.pid, after.value.get(row.pid));
   return rows.sort((a, b) => a.pid - b.pid);
 }
 
 // Injectable monotonic clock/audit keep frozen, busy and unknown cases testable
 // without waiting real minutes. Runnable processes always count as activity.
-export function watchRun({ pid, ownsGroup = true, idleSeconds = SILENCE_SECONDS, frozen = frozenSeconds(),
+export function watchRun({ pid, ownsGroup = true, tracked = new Map(), idleSeconds = SILENCE_SECONDS, frozen = frozenSeconds(),
   silenceState = { notified: false },
-  now = () => Number(process.hrtime.bigint()) / 1e9, sample = () => activitySnapshot(pid, { ownsGroup }),
+  now = () => Number(process.hrtime.bigint()) / 1e9, sample = () => activitySnapshot(pid, { ownsGroup, tracked }),
   onSilence = () => {}, onFrozen = () => {}, intervalMs = Math.min(30000, Math.max(50, frozen * 250 || 30000), Math.max(50, idleSeconds * 250 || 30000)), startTimer = true }) {
   const start = now();
   let outputAt = start, activityAt = start, longest = 0, previous, stopped = false;

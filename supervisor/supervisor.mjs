@@ -15,6 +15,7 @@ import { queueJobs } from '../promote/promote.mjs';
 import { verifyTrainResult } from '../promote/train.mjs';
 import { recordedBatchCompletion } from '../promote/completion.mjs';
 import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
+import { resolveValidation } from '../lanes/validation.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
 import { safePoint } from './safe-point.mjs';
 import { renderSafePoint } from '../lib/render.mjs';
@@ -56,6 +57,17 @@ function requestRelease(action, requested, opt) {
   if (saved.identity !== project.identity || saved.org !== org || (run && saved.run !== run)) throw Error('promotion receipt identity changed');
   return requireController(readOwnedRun(org, saved.run), opt.controller);
 }
+export function parallelPromotionResult(settled, run, actualHead) {
+  if (!settled?.parallelReview || !['review', 'reviewing', 'commit-review', 'decide', 'rebase', 'ready'].includes(settled.stage) ||
+      settled.outcome !== 'done' || run?.report?.outcome !== 'done' || settled.run !== run.id || settled.item !== run.item ||
+      !/^[a-f0-9]{64}$/.test(settled.reportHash ?? '') || settled.reportHash !== run.report.sha256 ||
+      !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(settled.head ?? '') || actualHead !== settled.head ||
+      settled.validation?.exit_code !== 0 || (settled.review && settled.review.verdict !== 'PASS')) return null;
+  return { result: 'review_pending', run: settled.run, item: settled.item, lane: settled.lane,
+    head: settled.head, reviewed_commit: settled.review?.verdict === 'PASS' ? settled.head : null,
+    review_pending: !settled.review, journal: settled.journal, validation: settled.validation };
+}
+
 export function main(argv = process.argv.slice(2)) {
   const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|safe-point|status|entry|checkpoint|handle|promote [OPTIONS]", args: argv, allowPositionals: true, options: {
     controller: { type: 'string', default: BRAIN_CONTROLLER },
@@ -270,20 +282,24 @@ export function main(argv = process.argv.slice(2)) {
     const settledFile = path.join(project.org, 'settle', `${id}.json`);
     const settled = fs.existsSync(settledFile) ? JSON.parse(fs.readFileSync(settledFile, 'utf8')) : null;
     const testEscalation = settled?.result?.result === 'escalate' && settled.result.reason === TEST_ESCALATION && settled.review?.verdict === 'PASS';
-    if (settled?.common !== project.identity || settled.stage !== 'complete' || (!testEscalation && !['promotable', 'promotable_with_findings'].includes(settled.result?.result))) throw new Error('handle the final report first; promotion requires saved promotable settlement evidence');
-    if (settled.result.result === 'promotable_with_findings' && !opt['accept-findings']) throw new Error('capped findings require --accept-findings and --why before promotion');
+    const parallel = !opt['existing-worker'] && resolveValidation({ root: project.canonical }).review === 'parallel'
+      ? parallelPromotionResult(settled, readOwnedRun(project.org, id), call(['git'], ['-C', settled.workspace, 'rev-parse', 'HEAD']).trim()) : null;
+    if (settled?.common !== project.identity || (!parallel && (settled.stage !== 'complete' || (!testEscalation && !['promotable', 'promotable_with_findings'].includes(settled.result?.result))))) throw new Error('handle the final report first; promotion requires saved settlement evidence');
+    if (settled.result?.result === 'promotable_with_findings' && !opt['accept-findings']) throw new Error('capped findings require --accept-findings and --why before promotion');
     if (testEscalation) settleArgs.push('--retry', '--resolve-tests');
-    const result = JSON.parse(call(settle, settleArgs));
-    if (!['promotable', 'promotable_with_findings'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
+    const result = parallel ? { ...parallel, journal: settledFile } : JSON.parse(call(settle, settleArgs));
+    if (!['promotable', 'promotable_with_findings', 'review_pending'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
-    const tests = [...new Set([...requiredTests, ...(result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : [])])].sort();
+    const tests = [...new Set([...requiredTests, ...(!parallel && result.test_evidence && !result.test_evidence.reexecuted ? result.test_evidence.files : [])])].sort();
+    if (parallel && (call(['git'], ['-C', settled.workspace, 'rev-parse', 'HEAD']).trim() !== result.head ||
+        call(['git'], ['-C', settled.workspace, 'status', '--porcelain=v1', '--untracked-files=all']).trim())) throw Error('parallel review source changed; nothing queued');
     const saved = { identity: project.identity, org: project.org, run: id, ownership, requiredTests: tests, lane: result.lane, release: bundleRelease(),
-      reviewed_commit: result.reviewed_commit, head: result.head,
+      reviewed_commit: result.reviewed_commit, head: result.head, ...(parallel ? { review_state: 'pending' } : {}),
       ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',
       ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),
       ...(prior ? { prior_attempts: prior } : {}) };
     fenceOwner(project.org, id, ownership, () => writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n'));
-    call(local('../bin/org.mjs'), ['note', id, `Request queue admission for ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion requested: ${saved.why}`]);
+    call(local('../bin/org.mjs'), ['note', id, `Request queue admission for ${result.lane} at ${result.head}: ${saved.why}. Review ${parallel ? 'pending in parallel' : result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion requested: ${saved.why}`]);
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
     try {
       saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,

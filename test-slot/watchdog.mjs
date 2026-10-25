@@ -15,7 +15,7 @@ export function descendants(rows, root) {
   }
   return found;
 }
-export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(), rootIdentity, ownsGroup = true, ownedChild = false, firstSignal = 'SIGTERM', lookup = lookupProcess, signal = process.kill.bind(process), onCapture } = {}) {
+export async function stopGateGroup(pgid, { tracked = new Map(), rootIdentity, ownsGroup = true, ownedChild = false, firstSignal = 'SIGTERM', lookup = lookupProcess, signal = process.kill.bind(process), onCapture } = {}) {
   // A detached leader that is still our unreaped child cannot have its PID or
   // PGID reused. Establish this ownership before any identity lookup or signal.
   const owned = ownsGroup && ownedChild;
@@ -71,14 +71,12 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
       try { signal(row.pid, kind); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     }
   };
-  send(firstSignal);
-  const deadline = Date.now() + graceMs;
-  while (((ownsGroup && groupLive()) || live().length) && Date.now() < deadline) await sleep(25);
-  send('SIGKILL');
+  // Null joins observed completion without selecting any signal.
+  if (firstSignal !== null) send(firstSignal);
   // Keep the slot until the kernel confirms both the group and escaped children
   // have gone. Unknown identity/probe state cannot authorize slot release.
   while ((ownsGroup && groupLive()) || live().length) await sleep(25);
-  // Unknown escaped identities retain the slot, but must not prevent KILL of
+  // Unknown escaped identities retain the slot, but must not prevent the requested stop of
   // the group whose ownership was established while its leader was our child.
   if (identityError) throw identityError;
   if (captureError) throw captureError;

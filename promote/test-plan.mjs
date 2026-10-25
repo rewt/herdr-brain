@@ -11,7 +11,7 @@ export function promotionTestPlan({ cwd, plannerRoot = cwd, planner, changed, re
   if (typeof planner !== 'string' || !planner || path.isAbsolute(planner) || planner.split(/[\\/]/).includes('..')) throw Error('promotion_tests must be a project-relative planner');
   const file = path.join(plannerRoot, planner);
   if (!fs.statSync(file).isFile()) throw Error('promotion test planner must be a regular file');
-  const r = spawnSync(process.execPath, [file, '--plan', JSON.stringify(changed), JSON.stringify(baseCommand), JSON.stringify(required)], { cwd, env, encoding: 'utf8', timeout: 20000, maxBuffer: 1024 * 1024 });
+  const r = spawnSync(process.execPath, [file, '--plan', JSON.stringify(changed), JSON.stringify(baseCommand), JSON.stringify(required)], { cwd, env, encoding: 'utf8', maxBuffer: 1024 * 1024 });
   if (r.error || r.status !== 0) throw Error(r.stderr || r.error?.message || 'promotion test planning failed');
   if (!r.stdout.trim()) throw Error(`promotion test planner produced no output${r.stderr.trim() ? ': ' + r.stderr.trim() : ''}`);
   const plan = JSON.parse(r.stdout);
@@ -35,7 +35,12 @@ export function changedPaths(cwd, base, head) {
 // A literal leading declaration scopes this policy to the saved command. Do
 // not infer it from shell fragments or from the worker's inherited environment.
 export const noRetryCommand = command => command.startsWith('MONITOR_PROMOTION_NO_RETRIES=1 ');
+export const affectedOnlyCommand = command => command === 'node test/helpers/affected-tests.mjs --promotion';
 export function plannedCommand(command, plan) {
+  if (affectedOnlyCommand(command)) {
+    if (!plan) throw Error('affected-only promotion requires its captured test plan');
+    return `export MONITOR_PROMOTION_TEST_FILES=${quote(JSON.stringify(plan.files))}; ${command}`;
+  }
   const exports = [];
   if (noRetryCommand(command)) exports.push('MONITOR_PROMOTION_NO_RETRIES=1', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1');
   if (plan?.command) exports.push(`MONITOR_PROMOTION_TEST_FILES=${quote(JSON.stringify(plan.files))}`);

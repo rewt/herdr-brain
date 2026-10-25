@@ -1570,10 +1570,10 @@ function parseReviewOptions(args) {
   const seen = new Set();
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
-    if (['--settle-commits-review', '--followup-expected'].includes(flag)) {
+    if (['--settle-commits-review', '--followup-expected', '--parallel-review'].includes(flag)) {
       if (seen.has(flag)) fail(`duplicate review option: ${flag}`);
       seen.add(flag);
-      options[flag === '--settle-commits-review' ? 'deferCloseout' : 'followupExpected'] = true;
+      options[flag === '--settle-commits-review' ? 'deferCloseout' : flag === '--parallel-review' ? 'parallelReview' : 'followupExpected'] = true;
       continue;
     }
     if (!["--round", "--brief", "--change", "--route", "--route-config", "--timeout", "--run"].includes(flag)) {
@@ -2364,11 +2364,11 @@ async function review(topic, args, memoryChecked = false) {
   const baseCommit = tryGit(["merge-base", head, baseHead]);
   if (baseCommit === undefined) fail(`review target has no merge base with ${MAIN}`);
   const privateRelative = join(".lane", "reviews", topic, `${head7}-r${options.round}.md`);
-  const publicRelative = join("docs", "reviews", topic, `${head7}-r${options.round}.md`);
+  const publicRelative = join(...(options.parallelReview ? [".lane", "public-reviews"] : ["docs", "reviews"]), topic, `${head7}-r${options.round}.md`);
   assertUnambiguousReviewPrefix(join(REPO_ROOT, ".lane", "reviews", topic), head7, head);
-  assertUnambiguousReviewPrefix(join(path, "docs", "reviews", topic), head7, head);
+  assertUnambiguousReviewPrefix(dirname(join(path, publicRelative)), head7, head);
   const privatePath = assertReviewOutputPath(REPO_ROOT, privateRelative, { ignored: true, label: "private review output" });
-  const publicPath = assertReviewOutputPath(path, publicRelative, { ignored: false, label: "public review output" });
+  const publicPath = assertReviewOutputPath(path, publicRelative, { ignored: Boolean(options.parallelReview), label: "public review output" });
   const sourceText = reviewSources(path, topic, options);
   let supplement = "No supplemental brief was supplied. Review run budget: zero build/test/prepare/install/check commands.";
   if (options.brief !== undefined) supplement = regularTextFile(resolve(process.cwd(), options.brief), "review brief");
@@ -2424,7 +2424,7 @@ async function review(topic, args, memoryChecked = false) {
     if (Date.now() > deadline) fail("review timed out before public review creation; private evidence was retained");
     try {
       mkdirSync(dirname(publicPath), { recursive: true });
-      assertReviewOutputPath(path, publicRelative, { ignored: false, label: "public review output" });
+      assertReviewOutputPath(path, publicRelative, { ignored: Boolean(options.parallelReview), label: "public review output" });
       writeFileSync(publicPath, publicRecord, { encoding: "utf8", flag: "wx", mode: 0o644 });
     } catch (error) {
       if (error?.code === "EEXIST") fail("public review output appeared concurrently; evidence was retained");
@@ -2436,7 +2436,7 @@ async function review(topic, args, memoryChecked = false) {
     const finalHead = git(["rev-parse", "HEAD"], { cwd: path, silent: true });
     const finalBranch = tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path, silent: true });
     const finalStatus = git(["status", "--porcelain=v1", "--untracked-files=all"], { cwd: path, silent: true });
-    if (finalHead !== head || finalBranch !== branch || finalStatus !== `?? ${publicRelative.split(sep).join("/")}`) {
+    if (finalHead !== head || finalBranch !== branch || finalStatus !== (options.parallelReview ? "" : `?? ${publicRelative.split(sep).join("/")}`)) {
       fail("mutation after public review creation caused late publication failure; inspect retained evidence before recovery");
     }
     if (Date.now() > deadline) fail("review timed out after public review creation; inspect retained evidence before recovery");
@@ -2638,9 +2638,14 @@ function promoteLocked(topic, root, options) {
   prepareWorktree(path);
   guard();
   const settings = validationSettings();
-  const validate = settings.tiers.promotion.command;
-  process.stdout.write(`validating in ${path}: ${validate}\n`);
+  let validate = settings.tiers.promotion.command;
   const validatedHead = git(["rev-parse", branch]);
+  if (validate === "node test/helpers/affected-tests.mjs --promotion") {
+    const plan = canonicalTestPlan({ repo: root, base: mainHead, cwd: path, planner: settings.promotion_tests,
+      changed: changedPaths(path, mainHead, validatedHead), baseCommand: validate });
+    validate = plannedCommand(validate, plan);
+  }
+  process.stdout.write(`validating in ${path}: ${validate}\n`);
   let gate;
   try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', timeoutSeconds: settings.tiers.promotion.timeoutSeconds, idleTimeoutSeconds: settings.tiers.promotion.idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
   catch (error) {

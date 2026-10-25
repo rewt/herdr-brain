@@ -57,6 +57,14 @@ export function affectedTests({ root, changed, files, tests }) {
 }
 export function main(argv = process.argv.slice(2)) {
   const [mode, json, commandJson, requiredJson] = argv;
+  if (mode === '--promotion') {
+    const selected = JSON.parse(process.env.MONITOR_PROMOTION_TEST_FILES ?? 'null');
+    if (!Array.isArray(selected) || selected.some(file => typeof file !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file))) throw Error('promotion requires a bound test-file selection');
+    const files = [...new Set(selected)].sort();
+    if (files.length) runRelease(files);
+    else console.log('Affected-file check: no selected files; no tests executed.');
+    return;
+  }
   const values = JSON.parse(json);
   if (!Array.isArray(values) || values.some(v => typeof v !== 'string')) throw Error('expected a path array');
   if (mode === '--run') {
@@ -70,8 +78,11 @@ export function main(argv = process.argv.slice(2)) {
     const tests = [...new Set([...tierFiles('release', root), ...values.filter(file => file.endsWith('.test.mjs') && files.includes(file))])].filter(file => !promotion.includes(file));
     const required = requiredJson ? JSON.parse(requiredJson) : [];
     if (!Array.isArray(required) || required.some(file => typeof file !== 'string' || !file.endsWith('.test.mjs') || !files.includes(file))) throw Error('required test file is missing from candidate');
-    const bound = boundAffectedTests({ candidates: affectedTests({ root, changed: values, files, tests }), changed: values,
-      required: required.filter(file => !promotion.includes(file)),
+    const candidates = affectedTests({ root, changed: values, files, tests });
+    // Reduced gates execute the unique affected union once; estimates remain advisory.
+    const reduced = command === 'node test/helpers/affected-tests.mjs --promotion';
+    const bound = boundAffectedTests({ candidates, changed: values,
+      required: [...new Set([...required.filter(file => !promotion.includes(file)), ...(reduced ? candidates : [])])],
       budgetMs: Number(process.env.MONITOR_PROMOTION_EXTRA_BUDGET_MS ?? DEFAULT_BUDGET_MS),
       maxFiles: Number(process.env.MONITOR_PROMOTION_EXTRA_MAX_FILES ?? DEFAULT_MAX_FILES) });
     // The validator already on main accepts only the legacy fields. Callers

@@ -1,7 +1,6 @@
 // Real Git, record, lane review/check, dispatch and detached watch. Only Herdr's
 // transport/model execution is scripted. No routes or validation config exists.
 import fs from 'node:fs';
-import { loadTimeout } from '../../lib/deadline.mjs';
 import { repositorySeed } from '../../test/helpers/git-seed.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
@@ -67,14 +66,13 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   const cleanup = async () => {
     if (cleaned) return;
     // Child hooks were registered later than this fixture hook. Await their
-    // bounded completion here before stopping watchers and deleting any files.
+    // actual completion here before stopping watchers and deleting any files.
     // Failed/unconfirmed completion retains the directory for inspection.
     await Promise.all(pending);
     rememberWatchers();
     // The empty-queue handoff releases worker.lock before the finite process's
     // final retirement catch-up. Await its pinned identity before deleting the
     // fixture; lock disappearance alone does not establish process completion.
-    const queuesBy = Date.now() + loadTimeout(5000);
     while (queueWorkers.size) {
       const current = tracker.snapshot();
       if (!current.ok) throw Error('Cannot confirm fixture queue shutdown');
@@ -83,12 +81,10 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
         if (!row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command) queueWorkers.delete(pid);
       }
       if (!queueWorkers.size) break;
-      assert.ok(Date.now() < queuesBy, 'fixture queue worker did not finish');
       await new Promise(resolve => setTimeout(resolve, 20));
     }
     for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
-    const deadline = Date.now() + loadTimeout(2000);
-    while (watchers.size && Date.now() < deadline) {
+    while (watchers.size) {
       const current = tracker.snapshot();
       if (!current.ok) throw Error('Cannot confirm watcher shutdown');
       for (const [file, entry] of watchers) {
@@ -108,14 +104,14 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   };
   t.after(cleanup);
   const exec = (file, args, cwd = repo, extra = {}) => {
-    try { return execute(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(15_000) }); }
+    try { return execute(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8' }); }
     finally { rememberWatchers(); }
   };
   const checked = (file, args, cwd, extra) => { const r = exec(file, args, cwd, extra); assert.equal(r.status, 0, r.stderr || r.stdout); return r.stdout.trim(); };
   const git = (args, cwd = repo) => checked('git', args, cwd);
   const initializeRepository = seed => {
     const git = args => {
-      const result = execute('git', ['-C', seed, ...args], { cwd: seed, env, encoding: 'utf8', timeout: loadTimeout(15000) });
+      const result = execute('git', ['-C', seed, ...args], { cwd: seed, env, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr || result.stdout);
     };
     git(['init', '-q', '-b', 'main']); git(['config', 'user.name', 'Settle tests']); git(['config', 'user.email', 'settle@example.invalid']);

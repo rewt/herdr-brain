@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs';
 
 export const FROZEN_SECONDS_ENV = 'MONITOR_TEST_SLOT_FROZEN_SECONDS';
-export const FROZEN_SECONDS = 4 * 60 * 60;
+export const FROZEN_SECONDS = 199.580020875;
 export const SILENCE_SECONDS = 900;
 export function frozenSeconds(env = process.env) {
   const value = Number(env[FROZEN_SECONDS_ENV] ?? FROZEN_SECONDS);

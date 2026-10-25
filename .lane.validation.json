@@ -1,8 +1,9 @@
 {
   "fast": "npm run test:fast",
   "promotion_tests": "test/helpers/affected-tests.mjs",
-  "promotion": "npm run test:promotion",
-  "release": "npm run test:release",
+  "promotion": "node test/helpers/affected-tests.mjs --promotion",
+  "release": "node --check bin/org.mjs && node --check lanes/lane.mjs && node --check supervisor/reconcile.mjs && node --check contrib/settle-watch.mjs",
   "timeout_seconds": 0,
-  "idle_timeout_seconds": 900
+  "idle_timeout_seconds": 900,
+  "review": "parallel"
 }

@@ -14,11 +14,8 @@
   owner. Never machine-wide, never in another identity's config, and never in human-typed chat panes.
 - Follow [decision routing policy v2](supervisor/DECISION-ROUTING.md) for authority and review defaults;
   project-specific constraints and standing directions belong in its appendix.
-- Tests run once, before code merges into main: the promotion batch runs the merge checks, like CI on a
-  pull request. Release preparation runs the full offline suites once per candidate. In a lane, ship
-  the change with the tests that prove it and run them
-  while developing as you see fit; do not run a baseline, `npm test`, `test:promotion` or `test:lanes`.
-  Settle reviews code and runs no suite. Tests are offline and never call a model.
+- Gate policy is the committed `.lane.validation.json`: one unique affected-file check for an assembled change; no broad promotion tier plus repeated full-file tail. Independent reviews overlap integration and run no suites. Preserve actual source/head/claim/lock/FF and real-error guards. Release uses the declared reduced entry and real acceptance; never label entry smoke a full suite.
+- Operator direct hotfix exception 2026-10-25 12:27 CDT authorizes this gating-only hotfix directly on canonical main after an exact annotated pre-main archive, with changed-only focused proof once and a recorded one-command revert. This is not authority for unrelated repairs, publishing, push, secrets or permission changes. Never modify/cancel/replay an already admitted immutable batch.
 - Only the project supervisor, from the canonical checkout, starts the default
   project-wide housekeeping schedule with
   `node housekeeping/housekeeping.mjs --start` ([module guide](housekeeping/README.md)).

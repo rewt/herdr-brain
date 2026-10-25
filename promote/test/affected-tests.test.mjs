@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { affectedTests, boundAffectedTests, DEFAULT_BUDGET_MS, DEFAULT_MAX_FILES } from '../../test/helpers/affected-tests.mjs';
 import { releasePhases } from '../../test/helpers/release-suites.mjs';
-import { plannedCommand, promotionTestPlan } from '../test-plan.mjs';
+import { affectedOnlyCommand, plannedCommand, promotionTestPlan } from '../test-plan.mjs';
 const root = fs.realpathSync(new URL('../../', import.meta.url));
 // The planner reads git ls-files of the product tree; a release build's git-archive snapshot has none.
 const gitTree = spawnSync('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' }).stdout.trim() === 'true';
@@ -159,4 +159,52 @@ test('the real planner forces required evidence beyond both caps and refuses mis
   assert.ok(!plan.deferred.some(row => options.required.includes(row.file)));
   assert.deepEqual(plan.required, [...options.required].sort());
   assert.throws(() => promotionTestPlan({ ...options, required: ['missing.test.mjs'] }), /required test file is missing/);
+});
+
+
+test('gating hotfix runs a unique affected selection once without a full-tier append', () => {
+  const command = 'node test/helpers/affected-tests.mjs --promotion';
+  const plan = { files: ['one.test.mjs', 'two.test.mjs'], command: 'must-not-run-again' };
+  const actual = plannedCommand(command, plan);
+  assert.equal(affectedOnlyCommand(command), true);
+  assert.match(actual, /MONITOR_PROMOTION_TEST_FILES=/);
+  assert.equal(actual.split('--promotion').length - 1, 1);
+  assert.doesNotMatch(actual, /must-not-run-again|npm run test:promotion|&&/);
+  assert.throws(() => plannedCommand(command, null), /captured test plan/);
+});
+
+test('gating hotfix validates parallel review and never promotes red or unauthenticated evidence', async () => {
+  const { validateValidation } = await import('../../lib/validation-declaration.mjs');
+  const { parallelPromotionResult } = await import('../../supervisor/supervisor.mjs');
+  assert.equal(validateValidation({ review: 'parallel' }).review, 'parallel');
+  assert.throws(() => validateValidation({ review: 'unknown' }), /serial or parallel/);
+  const job = { parallelReview: true, stage: 'reviewing', outcome: 'done', reportHash: 'b'.repeat(64),
+    head: 'a'.repeat(40), run: 'R-1', item: 'ENG-1', lane: 'fixture', validation: { exit_code: 0 } };
+  const run = { id: 'R-1', item: 'ENG-1', report: { outcome: 'done', sha256: 'b'.repeat(64) } };
+  assert.equal(parallelPromotionResult(job, run, job.head).result, 'review_pending');
+  assert.equal(parallelPromotionResult(job, run, job.head).reviewed_commit, null);
+  assert.equal(parallelPromotionResult({ ...job, validation: { exit_code: 1 } }, run, job.head), null);
+  assert.equal(parallelPromotionResult({ ...job, review: { verdict: 'FAIL' } }, run, job.head), null);
+  assert.equal(parallelPromotionResult(job, { ...run, report: { outcome: 'done', sha256: 'changed' } }, job.head), null);
+  assert.equal(parallelPromotionResult({ ...job, outcome: 'blocked' }, run, job.head), null);
+  assert.equal(parallelPromotionResult({ ...job, reportHash: undefined }, { ...run, report: { outcome: 'done' } }, job.head), null);
+  assert.equal(parallelPromotionResult(job, { ...run, id: 'R-2' }, job.head), null);
+  assert.equal(parallelPromotionResult(job, run, 'c'.repeat(40)), null);
+  assert.equal(parallelPromotionResult({ ...job, review: { verdict: 'NEEDS-WORK' } }, run, job.head), null);
+});
+
+
+test('gating hotfix settle fixture preserves real exit errors without command ceilings', async t => {
+  const { fixture } = await import('../../settle/test/fixture.mjs');
+  const calls = [];
+  const f = fixture(t, { execute(file, args, options) {
+    calls.push({ file, args, options });
+    assert.equal(Object.hasOwn(options, 'timeout'), false);
+    return spawnSync(file, args, options);
+  } });
+  const result = f.exec(process.execPath, ['-e', 'process.stdout.write("actual-output");process.exit(7)']);
+  assert.equal(result.status, 7);
+  assert.equal(result.stdout, 'actual-output');
+  assert.ok(calls.some(call => call.file === 'git'));
+  await f.cleanup();
 });

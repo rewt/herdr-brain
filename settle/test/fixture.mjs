@@ -214,7 +214,7 @@ else if(args[0]==='pane'&&args[1]==='process-info') {
  out({process_info:{shell_pid:123456789,foreground_processes:[{pid:owner.value.pid,name:'native'}],process_tree_complete:true,
   process_tree:[{pid:123456789,identity:'fixture-shell',command:'[zsh]',state:'S'},owner.value]}});
 }
-else if(args[0]==='pane'&&args[1]==='get') out({pane:{pane_id:args[2],foreground_cwd:panes[args[2]]?.cwd??cwd}});
+else if(args[0]==='pane'&&args[1]==='get') {const pane=args.at(-1);out({pane:{pane_id:pane,foreground_cwd:panes[pane]?.cwd??cwd}});}
 else if(args[0]==='pane'&&args[1]==='read') console.log(fs.existsSync(path.join(root,'supervisor-composer'))?fs.readFileSync(path.join(root,'supervisor-composer'),'utf8'):'────────────────────\\n❯ \\n────────────────────');
 else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:panes[pane]?.workspace_id??'w-lane',cwd:panes[pane]?.cwd??cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle',...(process.env.SETTLE_TEST_REVIEW_IDENTITY?{client_owner:clientOwner('lanes/lane.mjs','review')}:{})};save();out({name:n,pane_id:pane});}
 else if(args[0]==='agent'&&args[1]==='list') out({agents:liveAgents().map(a=>{

@@ -3,7 +3,7 @@
 # Usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status
 #        release.sh pin TAG [PROJECT] | unpin [PROJECT] | pin-status [PROJECT] [--json]
 #        release.sh attest TAG SUMMARY.json | exec ENTRY [ARGS...]
-# ship = build (release gate in the archive) + activate + check the installed launchers; it rolls
+# ship = build (release gate in a genuine checkout) + activate + check the installed launchers; it rolls
 # back to the previous release if that check fails. Agents run it as one bare command. A built tag is
 # never rebuilt: after a failed ship cut a new tag; if a build succeeded but activation never ran,
 # run activate TAG.
@@ -27,31 +27,34 @@ absent_or_link() {
   [ ! -e "$1" ] || [ -L "$1" ] || die "$1 is not a link; refusing to replace it"
 }
 build() {
-  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-}
+  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-} C work identity_hash
   valid_tag "$tag"
   [ -n "$REPO" ] || REPO=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
-  git -C "$REPO" rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null || die "no tag $tag in $REPO"
+  C=$(git -C "$REPO" rev-parse -q --verify "refs/tags/$tag^{commit}") || die "no tag $tag in $REPO"
   [ ! -e "$dir" ] && [ ! -L "$dir" ] || die "$dir already exists; a release is never rebuilt in place"
   mkdir -p "$HOME_DIR/releases"
+  dir="$(cd "$HOME_DIR/releases" && pwd -P)/$tag"
   mkdir "$dir.partial" || die "$dir.partial already exists; inspect the unfinished build"
-  git -C "$REPO" archive "refs/tags/$tag" | tar -x -C "$dir.partial"
-  git -C "$REPO" rev-parse "refs/tags/$tag^{commit}" > "$dir.partial/.release-commit"
-  node "$TOOLS" freeze-validation "$REPO" "$tag" "$dir.partial/.release-validation.json"
+  mkdir -p "$HOME_DIR/builds"
+  work="$(cd "$HOME_DIR/builds" && pwd -P)/$tag"
+  mkdir "$work" || die "$work already exists; inspect the unfinished build"
+  node "$TOOLS" freeze-validation "$REPO" "$tag" "$work/validation.json" "$C"
+  identity_hash=$(node "$TOOLS" checkout "$REPO" "$C" "$work/checkout" "$work/identity.json" "$work/validation.json")
   for file in bin/org.mjs lanes/lane.mjs contrib/settle-watch.mjs lib/cli-help.mjs verify/verify.mjs verify/execute.mjs verify/expectations.mjs; do
-    [ -f "$dir.partial/$file" ] || die "release is missing $file"
+    [ -f "$work/checkout/$file" ] || die "release is missing $file"
   done
   # Like the promotion train, queue for the shared host test slot instead of refusing while another
   # project's gate holds it; an explicit setting (0 refuses at once) wins. Agents ship with one bare
   # command, so they cannot set this themselves. This bounds admission, never test execution.
   export MONITOR_TEST_SLOT_WAIT_SECONDS=${MONITOR_TEST_SLOT_WAIT_SECONDS:-${BCH_CLOAK_TEST_SLOT_WAIT_SECONDS:-3600}}
-  (cd "$dir.partial" && node --input-type=module <<'NODE'
+  (cd "$work/checkout" && node --input-type=module - "$work" <<'NODE'
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { validateValidation } from './lanes/validation.mjs';
 import { runGateSync } from './test-slot/run.mjs';
-const frozen = JSON.parse(fs.readFileSync('.release-validation.json', 'utf8'));
+const work = process.argv[2], frozen = JSON.parse(fs.readFileSync(path.join(work, 'validation.json'), 'utf8'));
 if (frozen.schema !== 'release-validation-admission/v1') throw Error('invalid frozen release validation admission');
 const declared = validateValidation(frozen.declaration);
 const timeoutSeconds = typeof declared.timeout_seconds === 'object'
@@ -62,21 +65,30 @@ const directory = path.join(frozen.common, 'lane-validation');
 fs.mkdirSync(directory, { recursive: true });
 const executionReceipt = path.join(directory, `release-${randomUUID()}.execution.json`);
 console.error(`release gate receipt: ${executionReceipt}`);
-const run = runGateSync('release snapshot', ['/bin/sh', '-c', declared.release ?? 'npm run test:release'], {
+const run = runGateSync('release checkout', ['/bin/sh', '-c', declared.release ?? 'npm run test:release'], {
   common: frozen.common, executionReceipt, tier: 'release', timeoutSeconds, idleTimeoutSeconds, retryTimeout: false, stdio: 'inherit',
 });
 if (run.error) console.error(run.error.message);
+fs.writeFileSync(path.join(work, 'execution.json'), JSON.stringify({ cwd: process.cwd(), commit: frozen.payloadCommit,
+  receipt: executionReceipt, sha256: createHash('sha256').update(fs.readFileSync(executionReceipt)).digest('hex') }) + '\n');
 process.exitCode = run.status ?? (run.signal ? 128 + (os.constants.signals[run.signal] ?? 0) : 1);
 NODE
   )
   if [ "$live" = --live ]; then
-    (cd "$dir.partial" && node acceptance/run.mjs --candidate "$dir.partial" --summary-file "$dir.partial/.release-acceptance.json")
-    node "$TOOLS" manifest "$dir.partial" "$dir.partial/.release-acceptance.json"
-  else
-    node "$TOOLS" manifest "$dir.partial"
+    (cd "$work/checkout" && node acceptance/run.mjs --candidate "$work/checkout" --summary-file "$work/acceptance.json")
   fi
+  git -C "$REPO" archive "$C" | tar -x -C "$dir.partial"
+  node "$TOOLS" verify-package "$dir.partial" "$work/identity.json" "$identity_hash" > "$work/validated.json"
+  cp "$work/validated.json" "$dir.partial/.release-validation.json"
+  printf '%s\n' "$C" > "$dir.partial/.release-commit"
+  node "$TOOLS" manifest "$dir.partial" ${live:+"$work/acceptance.json"}
+  node "$TOOLS" verify-package "$dir.partial" "$work/identity.json" "$identity_hash" >/dev/null
+  chmod -R a-w "$dir.partial"
+  node "$TOOLS" verify-package "$dir.partial" "$work/identity.json" "$identity_hash" --read-only >/dev/null
+  node "$TOOLS" verify-bundle "$dir.partial"
+  [ ! -e "$dir" ] && [ ! -L "$dir" ] || die "$dir appeared during the build; publication refused"
   mv "$dir.partial" "$dir"
-  chmod -R a-w "$dir"
+  # Keep the original source root and evidence: publication transfers no claims.
   say "built $tag at $dir ($(cut -c1-8 "$dir/.release-commit"))"
 }
 retire_plugin() {
@@ -130,9 +142,11 @@ ship() {
 activate() {
   local tag=$1 dir="$HOME_DIR/releases/$1"
   valid_tag "$tag"
+  [[ "$tag" != *.partial ]] || die "unfinished release cannot activate: $tag"
   [ -d "$dir" ] && [ ! -L "$dir" ] && [ -f "$dir/.release-commit" ] || die "no built release $tag; run: release.sh build $tag"
   for l in $LAUNCHERS; do absent_or_link "$BIN_DIR/${l%%:*}"; [ -f "$dir/${l#*:}" ] || die "release is missing ${l#*:}"; done
   absent_or_link "$HOME_DIR/current"; absent_or_link "$HOME_DIR/previous"
+  node "$TOOLS" verify-bundle "$dir"
   retire_brain_service
   mkdir -p "$BIN_DIR"
   if [ -L "$HOME_DIR/current" ] && [ "$(readlink "$HOME_DIR/current")" != "$dir" ]; then

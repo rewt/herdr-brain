@@ -9,6 +9,8 @@ import { commandFailure, classifyFailure } from '../limits.mjs';
 import { cases, runCase } from '../cases.mjs';
 import { resultLine } from '../results.mjs';
 import { createOwnedTempRoot } from '../temp.mjs';
+import { snapshotCandidate } from '../run.mjs';
+import { captureProductCheckout, verifyProductCheckoutIsolation, checkoutGit, copyProduct } from '../../lib/product-files.mjs';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-snapshot-')));
@@ -21,6 +23,85 @@ function fixture(t) {
   });
   return root;
 }
+
+function sourceFixture(t) {
+  const root = fixture(t), source = path.join(root, 'source'); fs.mkdirSync(source);
+  checkoutGit(source, ['init', '-qb', 'main']);
+  checkoutGit(source, ['config', 'user.name', 'Snapshot']); checkoutGit(source, ['config', 'user.email', 'snapshot@example.invalid']);
+  fs.mkdirSync(path.join(source, 'lib')); fs.writeFileSync(path.join(source, 'lib/probe.mjs'), 'export const value=1;\n');
+  checkoutGit(source, ['add', '.']); checkoutGit(source, ['commit', '-qm', 'Committed source']); checkoutGit(source, ['tag', 'snapshot']);
+  return { root, source, commit: checkoutGit(source, ['rev-parse', 'HEAD']) };
+}
+test('actual source and ref snapshot dispatcher creates isolated genuine detached checkouts of C', t => {
+  const f = sourceFixture(t), original = fs.readFileSync(path.join(f.source, 'lib/probe.mjs'));
+  for (const [index, input] of [f.source, 'snapshot'].entries()) {
+    const destination = path.join(f.root, `candidate-${index}`);
+    const result = snapshotCandidate({ input, source: f.source, destination, ownedRoot: f.root });
+    const identity = captureProductCheckout(destination, f.commit, { all: true });
+    assert.deepEqual(result, { kind: 'checkout', commit: f.commit });
+    assert.equal(identity.common, path.join(destination, '.git')); assert.notEqual(identity.common, path.join(f.source, '.git'));
+    assert.equal(checkoutGit(destination, ['branch', '--show-current']), '');
+    assert.equal(fs.existsSync(path.join(destination, '.git/objects/info/alternates')), false);
+    for (const file of ['lib/probe.mjs', '.git/config']) {
+      const copied = fs.statSync(path.join(destination, file)), source = fs.statSync(path.join(f.source, file));
+      assert.equal(copied.nlink, 1); assert.notEqual(copied.ino, source.ino);
+    }
+    fs.writeFileSync(path.join(destination, 'lib/probe.mjs'), 'isolated mutation');
+    checkoutGit(destination, ['update-ref', 'refs/heads/owned', f.commit]);
+    assert.equal(checkoutGit(f.source, ['branch', '--list', 'owned']), '');
+    assert.deepEqual(fs.readFileSync(path.join(f.source, 'lib/probe.mjs')), original);
+  }
+  assert.throws(() => snapshotCandidate({ input: f.source, destination: path.join(path.dirname(f.root), 'foreign'), ownedRoot: f.root }), /owned scratch/);
+});
+test('generic canonical, linked and shared source proofs retain their own common identity', t => {
+  const f = sourceFixture(t), linked = path.join(f.root, 'linked'), shared = path.join(f.root, 'shared');
+  checkoutGit(f.source, ['worktree', 'add', '--detach', linked, f.commit]);
+  checkoutGit(f.source, ['clone', '--quiet', '--shared', f.source, shared]);
+  assert.equal(captureProductCheckout(f.source).common, path.join(f.source, '.git'));
+  assert.equal(captureProductCheckout(linked).common, path.join(f.source, '.git'));
+  assert.equal(captureProductCheckout(shared).common, path.join(shared, '.git'));
+  assert.ok(fs.existsSync(path.join(shared, '.git/objects/info/alternates')));
+});
+test('constructed clone isolation is rechecked before its source root can retire', t => {
+  const f = sourceFixture(t), destination = path.join(f.root, 'candidate');
+  snapshotCandidate({ input: f.source, destination, ownedRoot: f.root });
+  const identity = captureProductCheckout(destination, f.commit, { all: true }); verifyProductCheckoutIsolation(identity);
+  fs.writeFileSync(path.join(destination, '.git/objects/info/alternates'), path.join(f.source, '.git/objects') + '\n');
+  assert.throws(() => verifyProductCheckoutIsolation(identity), /not private/);
+  assert.equal(fs.readFileSync(path.join(f.source, 'lib/probe.mjs'), 'utf8'), 'export const value=1;\n');
+});
+for (const fault of ['stripped nested copy', 'dirty', 'hidden index', 'untracked runtime', 'redirected runtime', 'broken sealed marker', 'clean filtered bytes']) test(`actual snapshot dispatcher refuses ${fault}`, t => {
+  const f = sourceFixture(t); let input = f.source;
+  const file = path.join(f.source, 'lib/probe.mjs');
+  if (fault === 'stripped nested copy') { input = path.join(f.source, 'renamed'); copyProduct(f.source, input); }
+  if (fault === 'dirty') fs.appendFileSync(file, '// dirty');
+  if (fault === 'hidden index') checkoutGit(f.source, ['update-index', '--assume-unchanged', 'lib/probe.mjs']);
+  if (fault === 'untracked runtime') fs.writeFileSync(path.join(f.source, 'lib/extra.mjs'), 'extra');
+  if (fault === 'redirected runtime') { fs.renameSync(file, path.join(f.root, 'outside')); fs.symlinkSync(path.join(f.root, 'outside'), file); }
+  if (fault === 'broken sealed marker') fs.symlinkSync(path.join(f.root, 'absent'), path.join(f.source, '.release-manifest.json'));
+  if (fault === 'clean filtered bytes') {
+    fs.writeFileSync(path.join(f.source, '.gitattributes'), 'lib/probe.mjs text eol=crlf\n');
+    checkoutGit(f.source, ['add', '.gitattributes']); checkoutGit(f.source, ['commit', '-qm', 'Clean conversion']);
+    fs.writeFileSync(file, 'export const value=1;\r\n');
+    assert.equal(checkoutGit(f.source, ['status', '--porcelain', '--untracked-files=no']), '');
+  }
+  const destination = path.join(f.root, 'candidate');
+  assert.throws(() => snapshotCandidate({ input, destination, ownedRoot: f.root }));
+  assert.equal(fs.existsSync(destination), false, 'refusal precedes candidate execution');
+});
+test('completed sealed directory input stays sealed and isolated; corrupt payload cannot become source', t => {
+  const root = fixture(t), product = path.resolve(import.meta.dirname, '../..'), source = path.join(root, 'sealed');
+  copyProduct(product, source); const commit = checkoutGit(product, ['rev-parse', 'HEAD']);
+  fs.writeFileSync(path.join(source, '.release-commit'), commit + '\n');
+  const manifest = spawnSync(process.execPath, [path.join(product, 'herdr/releases.mjs'), 'manifest', source], { encoding: 'utf8' });
+  assert.equal(manifest.status, 0, manifest.stdout + manifest.stderr);
+  const destination = path.join(root, 'candidate');
+  assert.deepEqual(snapshotCandidate({ input: source, destination, ownedRoot: root }), { kind: 'release', commit });
+  assert.equal(fs.existsSync(path.join(destination, '.git')), false);
+  assert.equal(fs.readFileSync(path.join(destination, '.release-commit'), 'utf8'), commit + '\n');
+  fs.appendFileSync(path.join(source, 'lib/state.mjs'), '\n// corrupt');
+  assert.throws(() => snapshotCandidate({ input: source, destination: path.join(root, 'refused'), ownedRoot: root }), /incomplete release/);
+});
 
 test('immutable release copy supports a scratch dependency build and contrib retirement without changing source', (t) => {
   const root = fixture(t), source = path.join(root, 'release'), scratch = path.join(root, 'scratch');

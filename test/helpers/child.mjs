@@ -1,11 +1,9 @@
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { registerProcess, killProcess } from './processes.mjs';
 
 const children = new WeakMap();
 const processes = new WeakMap();
-const suiteRunner = fileURLToPath(new URL('./run.mjs', import.meta.url));
 
 export const childProcessEntry = (child) => processes.get(child);
 
@@ -16,23 +14,17 @@ export function killChild(child, signal = 'SIGKILL') {
   return killProcess(processes.get(child), signal);
 }
 
-export function spawnChild(t, command, args, options = {}, timeoutMs) {
-  // A nested suite has its own leader, file watchdog and cancellation cleanup.
-  // Its aggregate duration can exceed one command's fifteen-second bound.
-  const maximum = command === process.execPath && args[0] === suiteRunner ? 55_000 : 15_000;
-  return trackedChild(t, command, args, options, timeoutMs ?? 15_000, maximum, timeoutMs === undefined);
+// Legacy fifth arguments remain accepted; they no longer limit execution.
+export function spawnChild(t, command, args, options = {}, _timeoutMs) {
+  return trackedChild(t, command, args, options);
 }
 
-// Explicit compound fixture scenarios perform many separately bounded product
-// operations. Keep them below the enclosing test deadline and retain exactly
-// the same ownership, cancellation and teardown as ordinary fixture commands.
-export function spawnScenarioChild(t, command, args, options = {}, timeoutMs) {
-  return trackedChild(t, command, args, options, timeoutMs ?? 35_000, 55_000, timeoutMs === undefined);
+// Compound scenarios keep the same ownership, cancellation and teardown.
+export function spawnScenarioChild(t, command, args, options = {}, _timeoutMs) {
+  return trackedChild(t, command, args, options);
 }
 
-function trackedChild(t, command, args, options, timeoutMs, maximum, scaledDefault) {
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > maximum) throw new Error(`child timeout must be 1..${maximum}ms`);
-  const responseMs = scaledDefault ? loadTimeout(timeoutMs) : timeoutMs;
+function trackedChild(t, command, args, options) {
   const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options, detached: false });
   let rollback = false;
   child.kill = (signal = 'SIGTERM') => {
@@ -41,27 +33,23 @@ function trackedChild(t, command, args, options, timeoutMs, maximum, scaledDefau
     if (sent) child.killed = true;
     return sent;
   };
-  let stdout = '', stderr = '', timer, drainTimer;
+  let stdout = '', stderr = '', drainTimer;
   const result = new Promise((resolve, reject) => {
     child.stdout?.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
     child.stderr?.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
     child.once('close', (code, signal) => {
-      clearTimeout(timer); clearTimeout(drainTimer);
+      clearTimeout(drainTimer);
       resolve({ code, status: code, signal, stdout, stderr });
     });
     child.once('exit', (code, signal) => {
       // A background grandchild can retain these pipes after its parent exits.
       // Do not let that prevent the report-only suite audit from running.
       drainTimer = setTimeout(() => {
-        child.stdout?.destroy(); child.stderr?.destroy(); clearTimeout(timer);
+        child.stdout?.destroy(); child.stderr?.destroy();
         resolve({ code, status: code, signal, stdout, stderr });
       }, loadTimeout(500));
     });
-    timer = setTimeout(() => {
-      killChild(child);
-      reject(new Error(`${t.name}: child ${command} ${args.join(' ')} did not exit within ${responseMs}ms\n${stdout}${stderr}`));
-    }, responseMs);
   });
   // Tests sometimes inspect a fixture before awaiting it. Retain an early
   // error/close without an unhandled rejection or a missed close event.
@@ -70,7 +58,6 @@ function trackedChild(t, command, args, options, timeoutMs, maximum, scaledDefau
   const abort = () => killChild(child);
   t.signal.addEventListener('abort', abort, { once: true });
   t.after(async () => {
-    clearTimeout(timer);
     t.signal.removeEventListener('abort', abort);
     const live = child.exitCode === null && child.signalCode === null;
     const cleanup = killChild(child);

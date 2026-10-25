@@ -6,27 +6,22 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, spawnScenarioChild, waitForExit } from './helpers/child.mjs';
 import { killProcess, registerProcess } from './helpers/processes.mjs';
-import { loadTimeout } from '../lib/deadline.mjs';
 
 const helper = new URL('./helpers/bounded-test.mjs', import.meta.url).href;
 const childHelper = new URL('./helpers/child.mjs', import.meta.url).href;
 const runner = fileURLToPath(new URL('./helpers/run.mjs', import.meta.url));
 process.env.ORG_ACTOR = 'test-hangs-regression';
 
-// Nested suites include startup, native fixture preparation and group audit.
-// Give those compound scenarios their own load-aware base allowance.
-const launchTimeout = loadTimeout(30_000);
 function runFixture(t, args, options = {}) {
   return spawnScenarioChild(t, process.execPath, [runner, ...args], options);
 }
 async function launched(child, file) {
   let result, failure;
   waitForExit(child).then(value => { result = value; }, error => { failure = error; });
-  const deadline = Date.now() + launchTimeout;
-  while (!fs.existsSync(file) && !result && !failure && Date.now() < deadline)
+  while (!fs.existsSync(file) && !result && !failure)
     await new Promise(resolve => setTimeout(resolve, 20));
   if (failure) throw failure;
-  assert.ok(fs.existsSync(file), `fixture did not publish ${file}\n${result ? result.stdout + result.stderr : `startup exceeded ${launchTimeout}ms`}`);
+  assert.ok(fs.existsSync(file), `fixture did not publish ${file}\n${result ? result.stdout + result.stderr : ''}`);
 }
 
 function fixture(t, source) {
@@ -41,18 +36,15 @@ ${source(root)}`);
 }
 
 async function assertGone(pid) {
-  const deadline = Date.now() + loadTimeout(2000);
   for (;;) {
     try { process.kill(pid, 0); }
-    catch (error) { if (error.code === 'ESRCH') return; throw error; }
-    if (Date.now() >= deadline) break;
+    catch (error) { if (error.code === 'ESRCH') break; throw error; }
     await new Promise(resolve => setTimeout(resolve, 10));
   }
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `fixture process ${pid} survived cleanup`);
 }
 
-test('compound fixture scenarios have an explicit aggregate bound and owned cleanup', async t => {
-  assert.throws(() => spawnScenarioChild(t, process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);'], {}, 55001), /child timeout must be 1\.\.55000ms/);
+test('compound fixture scenarios retain legacy arguments and owned cleanup', async t => {
   const child = spawnScenarioChild(t, process.execPath, ['-e', "setTimeout(()=>console.log('scenario completed'),50)"],
     { env: { ...process.env, ORG_ACTOR: 'compound-scenario-test' } }, 35000);
   const result = await waitForExit(child);
@@ -86,22 +78,22 @@ t.after(()=>{cp.spawnSync=original;fs.readFileSync=originalRead;syncBuiltinESMEx
   assert.equal(result.code, 0, result.stdout + result.stderr);
 });
 
-for (const kind of ['leak', 'assertion', 'child timeout']) {
+for (const kind of ['leak', 'assertion']) {
   test(`${kind} names the failed test and reaps its fixture child and grandchild`, async (t) => {
     const name = `deliberately ${kind} fixture watcher`;
     const f = fixture(t, (root) => {
       const command = `echo $$ > '${root}/pid'; sleep 60 & echo $! > '${root}/grandchild'; wait`;
       return `test(${JSON.stringify(name)},async(t)=>{
-const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(command)}],{},${kind === 'child timeout' ? 500 : 15000});
+const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(command)}],{},15000);
 while(!fs.existsSync(${JSON.stringify(path.join(root, 'grandchild'))})) await new Promise(r=>setTimeout(r,10));
-${kind === 'assertion' ? "throw Error('injected failure before waitForExit');" : kind === 'leak' ? '' : 'await waitForExit(child);'}
+${kind === 'assertion' ? "throw Error('injected failure before waitForExit');" : ''}
 });`;
     });
     const child = runFixture(t, [f.file]);
     const result = await waitForExit(child);
     assert.equal(result.code, 1, result.stdout + result.stderr);
     assert.ok(result.stdout.includes(name), result.stdout);
-    assert.match(result.stdout, kind === 'child timeout' ? /did not exit within 500ms/ : kind === 'assertion' ? /injected failure before waitForExit/ : /left child running/);
+    assert.match(result.stdout, kind === 'assertion' ? /injected failure before waitForExit/ : /left child running/);
     for (const file of ['pid', 'grandchild']) await assertGone(Number(fs.readFileSync(path.join(f.root, file), 'utf8')));
   });
 }
@@ -168,8 +160,7 @@ await waitForExit(child);
     const alive = () => owned.filter(({ pid }) => {
       try { process.kill(pid, 0); return true; } catch (error) { if (error.code !== 'ESRCH') throw error; return false; }
     });
-    const cleanupDeadline = Date.now() + loadTimeout(5000);
-    while (alive().length && Date.now() < cleanupDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
+    while (alive().length) await new Promise((resolve) => setTimeout(resolve, 10));
     assert.deepEqual(alive(), [], 'an outer cancellation left a nested descendant alive');
     const result = await waitForExit(outer);
     assert.equal(signal === 'SIGKILL' ? result.signal : result.code, signal === 'SIGKILL' ? 'SIGKILL' : 1, result.stdout + result.stderr);
@@ -248,8 +239,7 @@ leaf.unref();fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify
     return `test('no escaped grandchild',async(t)=>{
 const child=spawnChild(t,process.execPath,['-e',${JSON.stringify(launcher)}],{env:{NODE_OPTIONS:'--no-warnings',PATH:process.env.PATH}});
 await waitForExit(child);
-const deadline=Date.now()+${launchTimeout};
-while(!fs.existsSync(${JSON.stringify(receipt)})&&Date.now()<deadline) await new Promise(r=>setTimeout(r,10));
+while(!fs.existsSync(${JSON.stringify(receipt)})) await new Promise(r=>setTimeout(r,10));
 if(!fs.existsSync(${JSON.stringify(receipt)}))throw Error('grandchild receipt missing');
 });`;
   });

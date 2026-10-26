@@ -14,7 +14,7 @@ import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/
 import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { checkUnlandedCap } from '../dispatch/unlanded-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { enqueueSupervisor, resumeInbox } from '../supervisor/prompt-supervisor.mjs';
+import { enqueueSupervisor } from '../supervisor/prompt-supervisor.mjs';
 import { readCloseoutEntries } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 
@@ -51,7 +51,7 @@ export function reviewAttempt(item, { org, identity, events }) {
 }
 
 export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = spawnSync,
-  notify = enqueueSupervisor, resume = resumeInbox, capacity, now = () => new Date().toISOString() }) {
+  notify = enqueueSupervisor, capacity, now = () => new Date().toISOString() }) {
   const project = gitProject(repo);
   if (project.checkout !== project.canonical) throw Error('line service requires the canonical project checkout');
   repo = project.canonical;
@@ -124,6 +124,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if (['escalate', 'failed', 'stopped', 'judge_promotion'].includes(entry.result?.result)) {
             entry.state = 'held'; entry.error = entry.result.reason ?? entry.result.result;
           }
+          const deferred = entry.result?.evaluated?.filter(row => !row.completed);
+          if (deferred?.length) { entry.state = 'held'; entry.error = deferred.map(row => `${row.run}: ${row.reason}`).join('; '); }
         }
         catch (e) { entry.state = 'held'; entry.error = e.message; entry.receipt = e.receipt; }
         entry.finished_at = now(); save(); log({ action: 'effect', key, ...entry });
@@ -209,7 +211,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       return { result: 'pass-complete', directory };
     } finally { release(); }
   }
-  return { pass, directory, log, resume: () => resume(path.join(org, 'supervisor/inbox.log'), { cwd: repo, org, herdr, waitSeconds: 0 }) };
+  return { pass, directory, log };
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -221,7 +223,6 @@ export async function main(argv = process.argv.slice(2)) {
   if (source.checkout !== source.canonical) throw Error('live line service must use the canonical development source');
   const service = createLineService(values);
   const result = service.pass();
-  if (!result.held) await service.resume();
   process.stdout.write(JSON.stringify(result) + '\n');
 }
 if (isMain(import.meta.url)) main().catch(e => { process.stderr.write(`line-service: ${e.message}\n`); process.exitCode = 1; });

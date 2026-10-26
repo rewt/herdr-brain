@@ -46,7 +46,9 @@ native reviewer callbacks and verdict receipts all prevent another launch.
 Review never waits for a verdict here; zero reviewer suites applies.
 
 Judgment is enqueued once per unchanged boundary through the existing native
-inbox. Failed review/cleanup branches leave unrelated dispatch eligible. STOP,
+inbox. The service never resumes, probes or restarts the inbox owner; native
+inbox delivery/pull remains with its existing owner. Failed review/cleanup
+branches leave unrelated dispatch eligible. STOP,
 project HOLD and incomplete record tails prevent further effects; the closer
 also preserves its specific worker-tab HOLD, lifecycle locks and archive guards.
 Removing a hold does not replay a refused effect: use the existing command's

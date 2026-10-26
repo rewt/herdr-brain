@@ -57,7 +57,9 @@ metadata, are cached per process and cwd. This discovery starts no subprocess.
 
 No command text or token is recorded. Publication writes complete bytes to a
 hidden temporary file in the same directory, then renames it atomically; group
-updates also use atomic rename. The owner removes its record after its group is confirmed gone on success,
+updates also use atomic rename. Top-level shared payloads wait behind a start
+barrier until their group is published in that record; publication failure
+prevents the payload from starting. The owner removes its record after its group is confirmed gone on success,
 failure, forwarded INT/TERM/HUP, timeout, spawn failure and exception. A surviving
 group retains its record. SIGKILL
 cannot run cleanup, so readers apply the stale rule instead. Status is read-only

@@ -171,6 +171,9 @@ A declared EXCLUSIVE runner first acquires the unchanged legacy and workspace
 locks and publishes its reservation. The payload starts behind a dedicated fd 3
 foreground shell read barrier. Only after its group is atomically recorded in both locks and
 the reservation does the parent grant the barrier and exec the payload in that same PID/group.
+Top-level shared commands use the same barrier, publishing their group in the
+compat occupancy record before the payload starts. Shared work still takes no
+lock or ticket and never waits for proving; nested commands keep the outer group.
 The barrier uses the host's `/bin/bash` in POSIX `sh` mode with startup files
 disabled and `execfail` enabled: exec failures return 127, while a successful exec
 preserves payload exits (including 126) and signals. Any

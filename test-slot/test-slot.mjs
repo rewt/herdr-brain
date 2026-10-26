@@ -625,7 +625,9 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     childRetried ||= text.includes("TEST_SLOT_TIMEOUT_RETRY:");
     tail = text.slice(-1024);
   };
-  const barrier = Boolean(slot.reservation);
+  // A top-level shared payload must not outrun its occupancy publication:
+  // if the owner dies, readers still need its surviving command group.
+  const barrier = Boolean(slot.reservation || slot.occupancyPath);
   // execfail lets a failed exec return 127 even on macOS, while a successful
   // exec preserves the command PID, signals and numeric payload exits.
   const proc = spawn(barrier ? '/bin/bash' : argv[0], barrier ? ['--noprofile', '--norc', '--posix', '-c',

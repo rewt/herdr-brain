@@ -121,7 +121,7 @@ test('review queue dispatch uses normal native route and immutable lane with zer
 test('review queue current default refuses a parallel legacy lane-review before native effects', t => {
   const f=fixture(t), file=path.join(f.cwd,'.lane.validation.json'), policy=JSON.parse(fs.readFileSync(file));
   fs.writeFileSync(file,JSON.stringify({...policy,landing_waiver:'operator-20261025-until-stable-release'}));
-  const result=spawnSync(process.execPath,[path.join(root,'lanes/lane.mjs'),'review','implementation','--round','1','--run','R-1','--parallel-review','--captured-head',f.head,'--captured-base',f.base],{cwd:f.cwd,env:f.env,encoding:'utf8'});
+  const result=spawnSync(process.execPath,[path.join(root,'lanes/lane.mjs'),'review','implementation','--round','1','--run','R-1','--brief',path.join(f.org,'reports/R-1.md'),'--parallel-review','--captured-head',f.head,'--captured-base',f.base],{cwd:f.cwd,env:f.env,encoding:'utf8'});
   assert.notEqual(result.status,0); assert.match(result.stderr,/no new legacy lane-review launch/);
   assert.equal(fs.existsSync(path.join(f.org,'settle/R-1.review-launch.json')),false);
 });

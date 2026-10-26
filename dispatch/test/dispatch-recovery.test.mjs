@@ -266,6 +266,7 @@ test('dispatch owner delivery refuses a replaced occupant before watcher recover
 test('source-selected cold dispatch preserves home policy and saved-operation roots', async t => {
   const project = configFixture(t); await project.adopt();
   const f = fixture(t, { project, sourceEntry: true });
+  f.env.HERDR_MONITOR_HOME = project.installationHome;
   const source = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
   const first = f.start(['--to', 'ops-project']); assert.equal(first.status, 0, first.stderr);
   const savedFile = f.jobs()[0], saved = JSON.parse(fs.readFileSync(savedFile));

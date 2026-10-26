@@ -15,7 +15,7 @@ import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { checkUnlandedCap } from '../dispatch/unlanded-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { enqueueSupervisor } from '../supervisor/prompt-supervisor.mjs';
-import { readCloseoutEntries } from '../lib/closeout.mjs';
+import { readCloseoutEntries, closeoutEvaluation } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -43,6 +43,9 @@ export function routeFor(item, config) {
 // Any attempt, including an uncertain one, spends the automatic review launch.
 export function reviewAttempt(item, { org, identity, events }) {
   const runs = new Set(item.runs);
+  const held = events.find(e => e.type === 'note.added' && e.decision && (e.id === item.id || runs.has(e.id)) &&
+    /\bindependent post-code review\b.*\b(?:attempt|held|refused|started|completed)\b/i.test(e.text ?? ''));
+  if (held) return `recorded independent review attempt/hold at event ${held.seq}`;
   if (events.some(e => e.type === 'review.verdict' && e.common === identity && runs.has(e.run))) return 'recorded verdict';
   for (const id of runs) if (read(path.join(org, 'settle', `${id}.json`)) || read(path.join(org, 'settle', `${id}.review-launch.json`))) return `existing settle ${id}`;
   if (files(path.join(org, 'retirement/occupants')).some(r => r?.kind === 'settle' && r.common === identity && runs.has(r.run))) return 'existing native reviewer';
@@ -138,7 +141,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       for (const run of snapshot.state.runs.values()) {
         if (run.abandoned || run.report || !run.workspace || !run.report_path || !fs.existsSync(run.report_path)) continue;
         const item = snapshot.state.items.get(run.item);
-        if (item?.runs.at(-1) !== run.id) continue;
+        if (!item || item.closed || item.runs.at(-1) !== run.id || !fs.existsSync(run.workspace)) {
+          log({ action: 'historical-intake-skipped', run: run.id }); continue;
+        }
         try {
           if (gitProject(run.workspace).identity !== project.identity) continue;
           if (effects.actions[`ingest:${run.id}`]) continue;
@@ -155,11 +160,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       for (const item of snapshot.state.items.values()) {
         const run = snapshot.state.runs.get(item.runs.at(-1));
         if (!run?.report || run.abandoned || !run.workspace) continue;
+        if (item.closed || !fs.existsSync(run.workspace) || !run.owner || run.owner.legacy || run.owner.controller !== 'brain') {
+          log({ action: 'historical-review-skipped', run: run.id, item: item.id }); continue;
+        }
         try {
-          if (gitProject(run.workspace).identity !== project.identity) continue;
-          if (run.report.outcome !== 'done' || run.report.blockers?.length || (run.report.questions ?? run.report.extra?.questions)?.length) note(`report:${run.id}:${run.report.sha256}`, 'worker report needs supervisor judgment');
           const attempt = reviewAttempt(item, { org, identity: project.identity, events: snapshot.events });
           if (attempt) { log({ action: 'review-retained', item: item.id, reason: attempt }); continue; }
+          if (gitProject(run.workspace).identity !== project.identity) continue;
+          if (run.report.outcome !== 'done' || run.report.blockers?.length || (run.report.questions ?? run.report.extra?.questions)?.length) note(`report:${run.id}:${run.report.sha256}`, 'worker report needs supervisor judgment');
           if (reserved(item) || item.meta.hold || item.meta.held) { note(`review:${item.id}`, 'held or reserved item needs judgment'); continue; }
           effect(`review:${item.id}`, () => {
             guardRun(run.id);
@@ -171,10 +179,16 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         } catch (e) { note(`review:${item.id}`, e.message); }
       }
       try {
-        const entries = readCloseoutEntries(project.identity).filter(e => e.org === org && e.project === repo);
+        const current = observe();
+        const entries = readCloseoutEntries(project.identity).filter(e => {
+          if (e.org !== org || e.project !== repo || !fs.existsSync(e.cwd)) return false;
+          const prior = closeoutEvaluation(e, current.events);
+          if (prior) log({ action: 'closeout-retained', key: e.key, run: e.run, completed: prior.completed, reason: prior.reason });
+          return !prior; // Never automatically retry a named failed/native effect.
+        });
         if (entries.length) {
           const revisions = observe().events.filter(e => ['closeout.retry', 'closeout.handoff', 'closeout.code-handoff', 'closeout.migrated'].includes(e.type)).at(-1)?.seq;
-          effect(`closeout:${digest([entries, revisions])}`, () => JSON.parse(cli('supervisor/closeout.mjs', ['drain', '--repo', repo, '--org', org, '--no-restart'])));
+          effect(`closeout:${digest([entries, revisions])}`, () => JSON.parse(cli('supervisor/closeout.mjs', ['drain', '--repo', repo, '--org', org, '--keys', JSON.stringify(entries.map(e => e.key)), '--no-restart'])));
         }
       } catch (e) { note('closeout', e.message); }
       // Failed cleanup/review never prevents considering independent ready work.
@@ -203,7 +217,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           // performs the authoritative, locked applicable-cap admission itself.
           if (dispatched?.state === 'complete') break;
         } catch (e) {
-          if (['DISPATCH_SESSION_CAP', 'DISPATCH_UNLANDED_CAP'].includes(e.code)) { log({ action: 'capacity-held', reason: e.message }); break; }
+          if (['DISPATCH_SESSION_CAP', 'DISPATCH_UNLANDED_CAP'].includes(e.code)) { log({ action: 'capacity-held', code: e.code, reason: e.message }); note(`capacity:${e.code}`, e.message); break; }
           note(`dispatch:${item.id}`, e.message);
         }
       }

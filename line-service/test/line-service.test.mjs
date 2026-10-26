@@ -10,6 +10,7 @@ import { noticeLock } from '../../supervisor/notice-lock.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { loadEvents } from '../../lib/store.mjs';
 import { fold } from '../../lib/state.mjs';
+import { captureProductCheckout } from '../../lib/product-files.mjs';
 
 function fixture(t) {
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), org = path.join(repo, '.org');
@@ -35,7 +36,7 @@ function fixture(t) {
   };
   const service = (overrides = {}) => createLineService({ repo, org, to: 'supervisor-test', env, command,
     capacity: () => ({ count: 0, cap: 2 }), notify: (to, text, options) => { notes.push({ to, text, options }); return { id: options.id, inbox: 'fixture' }; }, resume: () => {}, ...overrides });
-  return { repo, org, env, record, add, show, calls, notes, service, setFailure: value => { fail = value; } };
+  return { repo, org, env, record, git, add, show, calls, notes, service, setFailure: value => { fail = value; } };
 }
 
 test('priority READY dispatch uses existing admission and retains its one effect across restart', t => {
@@ -89,4 +90,40 @@ test('launchd uses only actual transport paths, an explicit project and no calle
   assert.match(plist, /--once/); assert.match(plist, /StartInterval.*30/); assert.match(plist, /HERDR_SOCKET_PATH/);
   assert.doesNotMatch(plist, /HERDR_ENV|PANE_ID|SESSION_ID|THREAD_ID/);
   assert.ok(!plist.includes('KeepAlive')); assert.match(plist, /<string>\/project<\/string>/);
+});
+
+test('historical closed, retired and unclaimed reports do not recreate review debt or disturb a held review', t => {
+  const f = fixture(t);
+  const reported = (title, workspace, owned = false) => {
+    const item = f.add(title), run = f.record(['start', item, '--workspace', workspace]).match(/R-\d+/)[0];
+    if (owned) f.record(['claim', run, '--controller', 'brain']);
+    const file = f.show(run).report_path;
+    fs.writeFileSync(file, `---\nrun: ${run}\noutcome: done\nsummary: Historical completed work.\nheadline: Historical work finished\nblockers: []\nproposals: []\nartifacts: []\n---\n`);
+    f.record(['ingest', file]); return { item, run };
+  };
+  const old = reported('Old closed work', f.repo); f.record(['close', old.item]);
+  const retired = path.join(f.repo, 'retired'); fs.mkdirSync(retired);
+  const missing = reported('Retired work', retired, true); fs.rmSync(retired, { recursive: true });
+  reported('Old unclaimed work', f.repo);
+  const held = reported('Recent held async review', f.repo, true), saved = path.join(f.org, 'settle', `${held.run}.json`);
+  fs.mkdirSync(path.dirname(saved), { recursive: true }); const receipt = '{"stage":"reviewing","reason":"native refusal; preserve original attempt"}\n'; fs.writeFileSync(saved, receipt);
+  const ready = f.add('Independent ready work', 9);
+  f.service().pass(); f.service().pass();
+  assert.equal(f.calls.length, 1); assert.equal(f.calls[0].args[1], ready);
+  assert.equal(f.notes.length, 0); assert.equal(fs.readFileSync(saved, 'utf8'), receipt);
+  assert.equal(f.show(missing.run).abandoned, null); assert.equal(f.show(held.item).closed, null);
+});
+
+test('source inventory includes line-service, omits only Finder metadata and retains runtime parity guard', t => {
+  const f = fixture(t);
+  for (const name of ['line-service', 'lib']) fs.mkdirSync(path.join(f.repo, name));
+  fs.writeFileSync(path.join(f.repo, 'line-service/line-service.mjs'), 'export const service = true;\n');
+  fs.writeFileSync(path.join(f.repo, 'lib/module.mjs'), 'export const guard = true;\n');
+  f.git(['add', 'line-service', 'lib']); f.git(['commit', '-qm', 'Runtime fixture']);
+  fs.writeFileSync(path.join(f.repo, 'lib/.DS_Store'), 'Finder metadata');
+  const captured = captureProductCheckout(f.repo);
+  assert.ok(captured.runtime.includes('line-service/line-service.mjs'));
+  assert.ok(!captured.runtime.some(file => file.endsWith('.DS_Store')));
+  fs.writeFileSync(path.join(f.repo, 'lib/untracked-runtime.mjs'), 'export const extra = true;\n');
+  assert.throws(() => captureProductCheckout(f.repo), /source runtime inventory mismatch/);
 });

@@ -27,13 +27,21 @@ it at installation.
 ```sh
 node line-service/launchd.mjs status --repo /CANONICAL/PROJECT
 node line-service/launchd.mjs stop --repo /CANONICAL/PROJECT
+node line-service/launchd.mjs restart --repo /CANONICAL/PROJECT
 node line-service/launchd.mjs revert --repo /CANONICAL/PROJECT --commit FULL_HOTFIX_SHA
 ```
 
 Stop writes a durable service STOP then boots out only this exact launchd job.
+Restart verifies that the saved job is absent, archives this service's own STOP,
+and bootstraps the saved plist once. It preserves the original installation and
+effect receipts; control attempts append to `controls.jsonl`. Native refusal or
+uncertainty restores STOP and retains its exact diagnostic. A still-loaded job
+is held, never duplicated. Project STOP/HOLD is never cleared by restart.
 Revert stops it first and uses ordinary Git revert on an explicit newest-first
 list of this hotfix's commits (repeat `--commit`). It refuses a dirty source,
-foreign paths or commits outside `line-service/`; it never resets history.
+foreign paths or commits outside `line-service/` and its narrow
+`lib/product-files.mjs` inventory declaration; it never resets history. Only the
+source project's owner reverts shared source; another project's stop is local.
 Keep the pre-hotfix archive tag and record the actual committed SHA list.
 
 The per-project directory under `RECORD/line-service/` contains `passes.jsonl`,
@@ -44,6 +52,12 @@ command's receipt. The service never automatically retries an ambiguous launch,
 native refusal or completed validation. Review attempts across an item's runs,
 native reviewer callbacks and verdict receipts all prevent another launch.
 Review never waits for a verdict here; zero reviewer suites applies.
+Historical closed, retired, missing and unclaimed work does not regenerate
+review debt. Existing settle/native attempts and explicit independent post-code
+review attempt/hold decision notes are retained. Closeout receives only explicit
+unattempted keys; previously evaluated failures/native holds stay with their
+existing owner and supported recovery. Actual cap holds are durable judgment
+notices; no cap is widened and no completion or unblocks link is invented.
 
 Judgment is enqueued once per unchanged boundary through the existing native
 inbox. The service never resumes, probes or restarts the inbox owner; native
@@ -61,3 +75,5 @@ source. These controls stub native effects while using real Git, record/fold and
 the real command argv. Actual installation and a real effect/readback belong to
 each project's supervisor; a process heartbeat is not acceptance. The full
 release test remains the release coordinator's next-release obligation.
+The runtime distribution includes `line-service/`. Finder `.DS_Store` metadata
+is excluded narrowly; untracked runtime code still fails the source parity guard.

@@ -236,14 +236,20 @@ tab or workspace ID. Without `--to`, dispatch selects the recorded worker agent
 after `record worker` and fresh live occupant verification, before arming the
 watcher. `--to AGENT` explicitly selects another recipient. The selected recipient
 is saved in the request; retries retain it, including older bootstrap watchers
-already targeting `supervisor-herdr`. Never replace or duplicate that watcher.
+historically targeting `supervisor-herdr`. Never replace or duplicate that watcher.
 The generated worker prompt names both its own recorded agent and the actual
 watcher recipient. Use that worker's `--to` for ordinary settle/queued-promotion
 notices, and existing prompt delivery for its independent review completion.
 The worker handles routine follow-up and sends actual unsafe/native/identity/
-ownership/reserved/failed exceptions to the adapter's `MONITOR_SUPERVISOR_AGENT`,
-then `supervisor-herdr`. This variable supplies the exception address, not the
-new dispatch's ordinary report destination. A bootstrap supervisor forwards
+ownership/reserved/failed exceptions to its PROJECT SUPERVISOR at the supported
+project-specific address supplied by `MONITOR_SUPERVISOR_AGENT` in generated
+dispatch briefs. When that variable is unset or empty, the current runtime still
+falls back to `supervisor-herdr`. That is a Brain-specific legacy fallback, not
+a generic address for other identities. Each identity's owner must supply its
+actual project supervisor address through the supported configuration. This
+docs-only correction changes no binary/config/pin, saved job, watcher recipient
+or claim. The variable supplies the exception address, not the new dispatch's
+ordinary report destination. A bootstrap supervisor forwards
 ordinary follow-up to the existing owner; it does not repeat intake or review.
 The core stays foreground and never calls a model.
 

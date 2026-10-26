@@ -97,7 +97,11 @@ The independent reviewer judges immutable diff/evidence and findings, with ZERO
 producer suites. Brain Chat spot-checks reserved/outward permissions, publishing,
 funds and operator-command boundaries or a concrete contested exception. Ordinary
 notices return to the owning worker through existing supported mechanisms; actual
-unsafe/native/identity/ownership/reserved/failed exceptions go to supervisor-herdr.
+unsafe/native/identity/ownership/reserved/failed exceptions go to that worker's
+PROJECT SUPERVISOR at its supported project-specific address. Generated dispatch
+briefs use `MONITOR_SUPERVISOR_AGENT`; the unset Brain-specific legacy fallback
+is runtime behavior, not a generic exception address. Each identity's owner
+configures its own actual address; see [dispatch routing](../dispatch/README.md).
 BCH's supervisor-opus/original owners apply the same direction to BCH's own files;
 Brain workers never write across identities. See the small
 [verification and measurement reference](../docs/reference/VERIFY-ONCE.md).

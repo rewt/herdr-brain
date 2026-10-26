@@ -4,7 +4,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { gitProject } from '../lib/project.mjs';
-import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
+import { findOrgDir, writeFileAtomic,loadEvents } from '../lib/store.mjs';
+import { serviceCutoff } from './cutoff.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { sourceRoot, serviceDirectory } from './line-service.mjs';
 
@@ -55,6 +56,8 @@ export function main(argv = process.argv.slice(2), { command = spawnSync } = {})
     if (process.version !== 'v20.19.4') throw Error('use the project-pinned Node 20.19.4');
     if (gitProject(sourceRoot).checkout !== gitProject(sourceRoot).canonical) throw Error('launch from canonical development source');
     if (fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('project STOP/HOLD prevents launch');
+    const record=loadEvents(org);if(record.tornTail)throw Error('incomplete record prevents launch');
+    serviceCutoff(record.events,{repo,org,identity:project.identity});
   }
   if (action === 'restart') {
     const receipt = readInstallation();
@@ -106,7 +109,7 @@ export function main(argv = process.argv.slice(2), { command = spawnSync } = {})
     for (const commit of commits) {
       git(['merge-base', '--is-ancestor', commit, 'HEAD']);
       const changed = git(['diff-tree', '--no-commit-id', '--name-only', '-r', commit]).split('\n');
-      if (!changed.length || changed.some(f => !f.startsWith('line-service/') && !['lib/product-files.mjs', 'lib/store.mjs', 'test/line-service.test.mjs', 'test/line-service-review.test.mjs', 'test/line-service-queue.test.mjs', 'test/line-service-backlog.test.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs', 'supervisor/PROTOCOL.md', 'supervisor/prompt-supervisor.mjs', 'supervisor/notice-lock.mjs', 'supervisor/line-notice-aggregate.mjs', 'lanes/lane.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs', 'dispatch/unlanded-cap.mjs', 'AGENTS.md'].includes(f))) throw Error('revert commit contains files outside this hotfix; inspect exact source scope');
+      if (!changed.length || changed.some(f => !f.startsWith('line-service/') && !['lib/product-files.mjs', 'lib/store.mjs', 'test/line-service.test.mjs', 'test/line-service-review.test.mjs', 'test/line-service-queue.test.mjs', 'test/line-service-backlog.test.mjs', 'test/line-service-producer.test.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs', 'supervisor/PROTOCOL.md', 'supervisor/prompt-supervisor.mjs', 'supervisor/notice-lock.mjs', 'supervisor/line-notice-aggregate.mjs', 'lanes/lane.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs', 'dispatch/unlanded-cap.mjs', 'AGENTS.md'].includes(f))) throw Error('revert commit contains files outside this hotfix; inspect exact source scope');
     }
     return { target, stopped: true, revert: git(['revert', '--no-edit', ...commits]) };
   }

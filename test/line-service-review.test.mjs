@@ -19,7 +19,7 @@ function fixture(t, { admission = false } = {}) {
   fs.writeFileSync(path.join(repo, 'code.mjs'), 'export const value = 0;\n'); git(['add', '.']); git(['commit', '-qm', 'Baseline']);
   const base = git(['rev-parse', 'HEAD']); git(['worktree', 'add', '-qb', 'lane/topic', workspace]);
   const commit = value => { fs.writeFileSync(path.join(workspace, 'code.mjs'), `export const value = ${value};\n`); git(['add', 'code.mjs'], workspace); git(['commit', '-qm', 'Implementation'], workspace); return git(['rev-parse', 'HEAD'], workspace); };
-  const head = admission ? base : commit(1), org = path.join(repo, '.org'); fs.mkdirSync(path.join(org, 'reports'), { recursive: true }); fs.mkdirSync(path.join(org, 'dispatch'));
+  const head = admission ? base : commit(1), org = path.join(repo, '.org'); if(!admission)git(['merge','--ff-only',head]); fs.mkdirSync(path.join(org, 'reports'), { recursive: true }); fs.mkdirSync(path.join(org, 'dispatch'));
   fs.appendFileSync(path.join(repo, '.git/info/exclude'), '\n.org/\n.lane/\n'); fs.writeFileSync(path.join(org, 'config.json'), JSON.stringify(DEFAULT_CONFIG));
   const identity = gitProject(repo).identity, owner = { controller: 'brain', legacy: false, release: { id: 'source', commit: null, root: fs.realpathSync(sourceRoot), identity: gitProject(sourceRoot).identity } };
   const journal = path.join(org, 'dispatch', 'fixture.json'), artifacts = [`Commit: ${head}`, 'code.mjs'];
@@ -27,16 +27,17 @@ function fixture(t, { admission = false } = {}) {
   fs.writeFileSync(path.join(org, 'reports/R-1.md'), text);
   const hash = createHash('sha256').update(text).digest('hex');
   const events = [
+    {type:'line-service.cutover',id:'fixture-cutover',project:identity,repo,org,source:fs.realpathSync(sourceRoot),main:'main',canonical_head:base,seq:1},
     { type: 'item.added', id: 'ENG-1', role: 'engineer', title: 'Implement', meta: {}, seq: 1 },
     { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'topic', dispatch_journal: journal, dispatch_attempt: 'fixture' }, seq: 2 },
     { type: 'run.claimed', run: 'R-1', owner, record: org, project: identity, seq: 3 },
     { type: 'report.ingested', run: 'R-1', item: 'ENG-1', sha256: hash, file: 'reports/R-1.md', report: { outcome: 'blocked', summary: 'Committed code, tests red', artifacts, blockers: [], extra: { validation: { exit_code: 1 } } }, seq: 4 },
   ];
-  const write = () => fs.writeFileSync(path.join(org, 'events.jsonl'), events.map(e => JSON.stringify({ at: '2026-10-26T18:00:00Z', by: 'fixture', ...e })).join('\n') + '\n');
+  const write = () => fs.writeFileSync(path.join(org, 'events.jsonl'), events.map((e,i) => {e.seq=i+1;return JSON.stringify({ at: '2026-10-26T18:00:00Z', by: 'fixture', ...e });}).join('\n') + '\n');
   write(); fs.writeFileSync(journal, JSON.stringify({ token: 'fixture', stage: 'complete', run: 'R-1', item: 'ENG-1', org, common: identity, workspace, base }));
   const context = () => { const state = fold(events); return { repo, org, identity, events, state, item: state.items.get('ENG-1'), run: state.runs.get('R-1') }; };
   const calls = [], notices = [];
-  const service = options => createLineService({ repo, org, to: 'test-supervisor', command: (exe, args) => { calls.push({ exe, args }); return { status: 0, stdout: JSON.stringify({ result: 'review_pending', item: 'ENG-1', run: 'R-1', head: args[args.indexOf('--captured-head') + 1] }), stderr: '' }; }, notify: (to, message, options) => { notices.push(message); return { id: options.id }; }, ...options });
+  const service = options => createLineService({ repo, org, to: 'test-supervisor', command: (exe, args) => { calls.push({ exe, args }); return { status: 0, stdout: JSON.stringify({ result: 'review_pending', item: 'ENG-1', run: 'R-1', head: args[args.indexOf('--head') + 1] }), stderr: '' }; }, recordNotice: data => { notices.push(data.reason); return { id:data.id,state:'record-only' }; }, ...options });
   return { root, repo, org, workspace, base, head, events, write, context, service, calls, notices, git, commit };
 }
 
@@ -56,7 +57,7 @@ test('automatic review binds committed changed evidence despite blocked outcome 
 test('automatic review holds blocked uncommitted admission source before any helper launch', t => {
   const f = fixture(t, { admission: true }); fs.writeFileSync(path.join(f.workspace, 'code.mjs'), 'draft\n'.repeat(187));
   assert.throws(() => bindReviewTarget(f.context()), /admission HEAD/);
-  f.service().pass(); assert.equal(f.calls.length, 0); assert.ok(f.notices.some(n => /admission HEAD/.test(n)));
+  f.service().pass(); assert.equal(f.calls.length, 0); assert.equal(f.notices.length,0);
 });
 
 test('automatic review retains pending manual ambiguous and UNKNOWN item attempts across heads runs and restarts', t => {
@@ -72,7 +73,7 @@ test('automatic review retains pending manual ambiguous and UNKNOWN item attempt
       fs.mkdirSync(path.join(f.org, 'evidence/ENG-1/owner'), { recursive: true }); fs.writeFileSync(path.join(f.org, 'evidence/ENG-1/owner/review-launch.json'), JSON.stringify({ item: 'ENG-1', native_qualification: 'UNKNOWN' }));
     } else if (kind === 'decision') f.events.push({ type: 'note.added', id: 'ENG-1', seq: 5, decision: true, text: 'C1 retained reviewer; qualification UNKNOWN; do not replace' });
     else if (kind === 'unknown') { fs.mkdirSync(path.join(f.org, 'retirement/reviews'), { recursive: true }); fs.writeFileSync(path.join(f.org, 'retirement/reviews/unmapped.json'), '{"qualification":"UNKNOWN"}'); }
-    else { f.events[2].owner = { ...f.events[2].owner, legacy: true }; }
+    else { const claim=f.events.find(e=>e.type==='run.claimed');claim.owner = { ...claim.owner, legacy: true }; }
     f.write(); const next = f.context();
     try { assert.ok(reviewAttempt(next.item, next)); } catch (e) { assert.match(e.message, /UNKNOWN|unmapped/); }
     f.service().pass(); f.service().pass(); assert.equal(f.calls.length, 0, kind);

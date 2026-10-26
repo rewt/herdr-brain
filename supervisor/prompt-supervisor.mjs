@@ -383,7 +383,7 @@ export function enqueueSupervisor(to, message, options = {}) {
     observed = append({ type: 'notice', id, to, message, correlation: ordering, project, owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
       title: options.title ?? 'Supervisor notice queued', sound: options.sound ?? 'request' });
     sequence = entries.length + 1;
-  });
+  }, options.lockOptions);
   bestEffort(() => (options.mirror ?? mirrorNotice)({ ...observed, sequence, inbox: file, cwd: options.cwd, evidence: options.shadowEvidence }, options.shadow), options.shadow);
   return { id, inbox: file };
 }

@@ -97,15 +97,53 @@ review/callback/HOLD/archive/final-release obligations and does not wait for
 physical cleanup. The service attributes these record writes to `line-service`
 and never inherits `ORG_GUARD_OVERRIDE`.
 
-Judgment is enqueued once per unchanged boundary through the existing native
-inbox. The service never resumes, probes or restarts the inbox owner; native
-inbox delivery/pull remains with its existing owner. Failed review/cleanup
+Routine status, error and hold messages go ONLY to the existing record inbox as
+`session.message.v1`. The producer is a service role bound to the actual
+canonical project, saved installation and owned pass lock, with no fabricated
+session UID/SID. Stable message keys normalize volatile timestamps, stack frames
+and PIDs while retaining source scope. Raw occurrences stay in `passes.jsonl`;
+`effects.json#record_notices` keeps counts referenced by one immutable envelope.
+Lost record replies recover the same ID; record failure never falls back to a
+native notice. Old native notices/receipts remain retained unchanged.
+
+An error string never creates a decision item. Only an actual post-cutover,
+pending, explicitly reserved human decision naming `meta.decider: brain-chat`
+may enqueue the existing reserved-question pointer. Durable per-item intent and
+a persistent 60-second per-decider limit precede effect. An attempted/unknown
+decision is never retried automatically. This native-input branch retains its
+session proof requirement; the record-only recipient exception does not apply.
+Other/unknown decision routes remain record-only. The service never resumes,
+probes or restarts the inbox owner. Existing delivery stays with its owner.
+Failed review/cleanup
 branches leave unrelated dispatch eligible. STOP,
 project HOLD and incomplete record tails prevent further effects; the closer
 also preserves its specific worker-tab HOLD, lifecycle locks and archive guards.
 Removing a hold does not replay a refused effect: use the existing command's
 supported recovery after inspecting its evidence. No second transport or approval
 schema is introduced.
+
+Before any proposed restart, the owning native supervisor establishes ONE
+explicit recorded cutover while its own service STOP remains present:
+
+```sh
+HERDR_BRAIN_ROOT=/Users/rewt/development/rewt/herdr-brain /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/line-service/cutoff.mjs --repo /OWN/CANONICAL --org /OWN/RECORD --id STABLE_CUTOVER_ID --cutover
+```
+
+This records canonical main under the existing promotion/pass/record locks and
+actual native/project/source guards. It does not start a runtime or clear STOP.
+A new installation uses explicit `--initialize` instead; no existing job may be
+relabelled as new. Restart retains the original record boundary and refuses a
+missing/ambiguous cutoff. A different ID cannot silently reset it.
+
+Review creation AND dispatch require an immutable delivered target strictly
+descending from that recorded canonical head and actually contained in current
+canonical main. This proves later landing under the FF contract; admission HEAD,
+mtime, report time, old unresolved IDs and display metadata do not prove it.
+Old/manual queues predating the boundary remain retained without dispatch or
+fresh debt. Closed/retired/missing history stays cheaply skipped. Existing OPEN
+READY build authority and independent ingest/source completion remain intact.
+These commands are restart PREPARATION; source/proof does not authorize an early
+restart or resolve another owner's native boundary.
 
 The notice `--to` recipient does not override `MONITOR_SUPERVISOR_AGENT` in
 child commands. Dispatch retains its existing parent/launch/project-policy

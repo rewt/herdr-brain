@@ -28,6 +28,7 @@ function fixture(t, { outcome = 'blocked' } = {}) {
   const report = `---\nrun: R-1\noutcome: ${outcome}\nsummary: Landed code with red producer evidence.\nartifacts:\n  - "Commit: ${head}"\n  - code.mjs\n---\n`, reportHash = createHash('sha256').update(report).digest('hex');
   fs.mkdirSync(path.join(org, 'reports'), { recursive: true }); fs.writeFileSync(path.join(org, 'reports', 'R-1.md'), report);
   transact(org, () => ({ add: [
+    {type:'line-service.cutover',id:'fixture-cutover',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
     { type: 'item.added', id: 'ENG-1', title: 'Build', role: 'engineer', meta: {} },
     { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'implementation', dispatch_journal: dispatch, dispatch_attempt: 'fixture' } },
     { type: 'run.claimed', run: 'R-1', record: org, project: identity, owner: { controller: 'brain', legacy: false, release: { id: 'source', commit: null, root, identity: gitProject(root).identity } } },
@@ -97,7 +98,7 @@ test('line service creates a record review item then normal review-lane dispatch
     if(args[0]===path.join(root,'supervisor/closeout.mjs')) return {status:0,stdout:'{"evaluated":[]}',stderr:''};
     assert.equal(args[0],path.join(root,'dispatch/dispatch.mjs')); return {status:0,stdout:'{"run":"R-2","item":"REV-1"}',stderr:''};
   };
-  const service=()=>createLineService({repo:f.cwd,org:f.org,to:'test-supervisor',env:f.env,capacity:()=>({cap:7,count:0}),command,notify:(_to,text,o)=>{notices.push(text);return{id:o.id};}});
+  const service=()=>createLineService({repo:f.cwd,org:f.org,to:'test-supervisor',env:f.env,capacity:()=>({cap:7,count:0}),command,recordNotice:data=>{notices.push(data.reason);return{id:data.id,state:'record-only'};}});
   service().pass(); service().pass();
   assert.equal(calls.filter(a=>a[0]===entry&&a[1]==='queue-review').length,1);
   const dispatched=calls.filter(a=>a[0]===path.join(root,'dispatch/dispatch.mjs')); assert.equal(dispatched.length,1,notices.join('\n'));

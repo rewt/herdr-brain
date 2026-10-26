@@ -1,4 +1,8 @@
-# Session messages (shadow only)
+# Session messages
+
+The [operator record inbox](#operator-record-inbox) is a foreground record command
+using the existing native inbox. The staged shadow and offline fixture modules
+described below retain their original boundaries.
 
 ARCH-33 stage 7 implements the adopted RES-3 report, sections 4 and 7, locked at
 `a28bf36d`. Node built-ins only. This module records **what would happen**; it
@@ -458,3 +462,52 @@ and enrolled session paths in that project's committed `.codex/hooks.json`, then
 have its owner review and trust those two entries in Codex's native review UI.
 A changed source/path/entry needs owner review again. This is a proposal, not an
 instruction to enable lanes; per-worktree trust remains a separate adoption issue.
+# Operator record inbox
+
+`record messages` is a foreground record command. It does not activate the
+offline receiver/transfer below, install a controller, or call a model. Ordinary
+status, fyi, done and needs-decision messages addressed to the operator stay as
+`session.message.v1` envelopes in the owning record's existing event log. They
+never produce pane input. Status/done use `notice`, fyi uses `fyi`, and a request
+for judgment uses `question` or `request` from the existing envelope kinds.
+
+From a natively bound Herdr session in the owning project:
+
+```sh
+record messages send --id R-856:status:1 --kind notice --summary 'Source is committed' --run R-856 --item ENG-285
+record messages send --id R-856:question:1 --kind question --summary 'A technical decision is needed' --run R-856 --item ENG-285 --correlation decision-thread
+record messages digest
+record messages digest --after 18599 --limit 5 --json
+```
+
+`send --file /absolute/envelope.json` consumes an existing envelope. Native
+sender session/terminal, run claim when present, canonical Git common directory,
+owning identity, record and qualified references must match. The operator role
+address uses that identity/project and `bindingRef: brain-chat`. A role/session
+address, decision reference, priority, report prose or claimed tier supplies no
+authority. Bodies remain referenced data and are never executed or opened by
+this command. Repeating an exact ID/content/target returns its original record
+entry; changed content, target or conflicting producer sequence is refused.
+
+Only a `question`/`request` referencing a **pending human item already explicitly
+marked `meta.operator_reserved: true` in the owning record** can enqueue a push.
+The existing record decision/authority policy determines that mark; this command
+does not create it, ask a question, authorize an action, or turn ordinary T2
+judgment into operator work. Routine needs-decision remains with its named
+supervisor/Brain Chat. An actual reserved ask adds `--question HUM-n` to `send`.
+It sends a stable record pointer once per reserved question (also across different
+envelope IDs) to the actual native `brain-chat` binding through
+the existing inbox and Brain Chat filtering path, never directly to an operator
+pane. That inbox retains the once-only ID, exact target/binding, correlation and
+delivery receipt. Its original native named-role resolution, quiet-input checks
+and ambiguous-delivery recovery remain authoritative. Missing or foreign native
+bindings hold initial push. `record messages push --id ID` resumes that existing pointer,
+without a second notice or an uncertain-input replay. Native failures leave the
+envelope durable and report the actual held/pending/error state.
+
+The digest defaults to the latest five one-line summaries with stable event IDs,
+record sequences, qualified references, thread/reply IDs and current push state.
+`--after SEQ` pages forward; limits are 1..20. Pulling a digest neither acknowledges
+messages nor produces input. The source command is usable immediately; an
+installed release must load this source separately; the native inbox adapter is
+unchanged and keeps its existing long-lived owner.

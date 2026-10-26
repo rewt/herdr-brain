@@ -46,6 +46,10 @@ Setup
   record adopt PROJECT --scope FILE --decision ID:SEQ
 
 Work
+  record messages send --id ID --summary TEXT [--kind KIND --run R-n --item ID --question HUM-n]
+  record messages send --file ENVELOPE    store an existing session.message.v1 envelope
+  record messages digest [--limit 5 --after SEQ --json]  pull a short operator digest
+  record messages push --id ID            resume an existing reserved ask through Brain Chat
   record add <title> [--goal] [--role R] [--capability C] [--parent ID]
           [--blocked-by ID]... [--accept TEXT]... [--priority N] [--budget key=N]...
   record block <ID> --by <ID>             record that --by blocks ID
@@ -1015,6 +1019,7 @@ function log(argv) {
 const lazy = (file, name) => async (argv) => (await import(file))[name](argv);
 
 const COMMANDS = {
+  messages: async argv => (await import('../messages/record-command.mjs')).messagesCommand(argv, { openOrg, mutate, out }),
   lesson, lessons,
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
   releases: argv => releasesCommand(argv, { openOrg, out }),

@@ -17,7 +17,10 @@ test('review worktree opens its own captured source with null chat anchor and un
   assert.equal(worker.cwd,path);assert.equal(worker.workspaceId,'w-lane');assert.notEqual(worker.workspaceId,'w3PD');
   const calls=fake.calls(),open=calls.find(a=>a[0]==='worktree'&&a[1]==='open');
   assert.equal(open[open.indexOf('--cwd')+1],f.repo);assert.equal(open[open.indexOf('--path')+1],path);assert.equal(open.includes('--workspace'),false);
-  const tab=calls.find(a=>a[0]==='tab'&&a[1]==='create');assert.equal(tab[tab.indexOf('--cwd')+1],path);
+  const tab=calls.find(a=>a[0]==='tab'&&a[1]==='create');
+  if(tab)assert.equal(tab[tab.indexOf('--cwd')+1],path);
+  else{assert.equal(worker.tabId,'w-lane:t1');assert.equal(worker.pane,'w-lane:p1');}
+  const start=calls.find(a=>a[0]==='agent'&&a[1]==='start');assert.equal(start[start.indexOf('--pane')+1],worker.pane);
   assert.equal(calls.filter(a=>a[0]==='agent'&&a[1]==='start').length,1);assert.equal(calls.some(a=>a[1]==='prompt'),false);
 });
 

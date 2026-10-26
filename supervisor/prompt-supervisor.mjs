@@ -4,7 +4,7 @@
 import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
@@ -106,7 +106,19 @@ function applyPolicy(file, id, options) {
   });
   if (!entry) return false;
   if (entry.autopilot || !entry.project || entry.state !== 'pending') return true;
-  const policy = autopilotNotice(entry, { execute: options.executeAutopilot, nativeWorker: options.nativeAutopilotWorker });
+  // A queue or inbox owner can outlive a fast-forward of this product. Load
+  // the policy and its transitive imports in a fresh process for each notice.
+  // Function adapters are used only by foreground offline fixtures.
+  let policy;
+  if (options.executeAutopilot || options.nativeAutopilotWorker) {
+    policy = autopilotNotice(entry, { execute: options.executeAutopilot, nativeWorker: options.nativeAutopilotWorker });
+  } else {
+    const reply = spawnSync(process.execPath, [path.join(path.dirname(SELF), 'autopilot.mjs'), '--notice'], {
+      input: JSON.stringify(entry), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+    });
+    if (reply.error || reply.status !== 0) throw new Error(`notice policy failed: ${reply.error?.message ?? reply.stderr ?? reply.signal ?? reply.status}`);
+    policy = JSON.parse(reply.stdout);
+  }
   if (policy) record(file, { type: 'autopilot', id, result: policy });
   return true;
 }

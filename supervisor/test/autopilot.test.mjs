@@ -17,6 +17,7 @@ import { promptSupervisor, readInbox } from '../prompt-supervisor.mjs';
 import { noticeLock } from '../notice-lock.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { RECORD_CHECK_CLAIM, LEGACY_RECORD_CHECK_CLAIM } from '../../settle/report-evidence.mjs';
+import { copyProduct } from '../../lib/product-files.mjs';
 
 function setup(t, results = [], { ingest = true } = {}) {
   const f = fixture(t);
@@ -385,6 +386,59 @@ test('awaited promotion closes before waking with one short plan line and later 
   assert.equal(autopilotNotice(f.entry, { execute }).summary, result.summary); assert.equal(f.calls.length, 1);
   f.entry.id = 'promote:job:late';
   assert.equal(autopilotNotice(f.entry, { execute }).disposition, 'handled'); assert.equal(f.calls.length, 1);
+});
+test('one drain reloads policy after a fast-forward and wakes for the later awaited landing', t => {
+  const f = setup(t);
+  f.record(['set', f.item, 'meta.notify=supervisor', 'meta.notify_step=Cut RC-11']);
+  promotedQueue(f);
+  const product = path.join(f.root, 'product');
+  copyProduct(f.source, product);
+  f.git(['init', '-b', 'main'], product);
+  f.git(['config', 'user.name', 'Policy test'], product);
+  f.git(['config', 'user.email', 'policy@example.invalid'], product);
+  const policyFile = path.join(product, 'supervisor/autopilot.mjs');
+  const current = fs.readFileSync(policyFile, 'utf8');
+  // The first notice represents the self-changing batch. The old policy would
+  // silently consume every later notice if this drain kept its module cache.
+  const old = current.replace('  if (!entry.project) return null;', `
+  if (entry.id === 'policy-update') {
+    const merged = spawnSync('git', ['-C', ${JSON.stringify(product)}, 'merge', '--ff-only', 'updated-policy'], {encoding:'utf8'});
+    if (merged.status !== 0) throw Error(merged.stderr);
+  }
+  return {disposition:'handled', summary:entry.message};
+  if (!entry.project) return null;`);
+  assert.notEqual(old, current, 'old-policy control reached the production entry');
+  fs.writeFileSync(policyFile, old);
+  f.git(['add', '.'], product); f.git(['commit', '-qm', 'Old silent landing policy'], product);
+  const before = f.git(['rev-parse', 'HEAD'], product);
+  f.git(['checkout', '-qb', 'updated-policy'], product);
+  fs.writeFileSync(policyFile, current);
+  f.git(['add', '.'], product); f.git(['commit', '-qm', 'Awaited landing policy'], product);
+  const after = f.git(['rev-parse', 'HEAD'], product);
+  f.git(['checkout', '-q', 'main'], product);
+  const inbox = path.join(f.org, 'supervisor/inbox.log');
+  const driver = path.join(f.root, 'fresh-policy.mjs');
+  fs.writeFileSync(driver, `
+import {enqueueSupervisor, drainInbox} from ${JSON.stringify(path.join(product, 'supervisor/prompt-supervisor.mjs'))};
+const options = ${JSON.stringify({ cwd: f.repo, org: f.org, herdr: path.join(f.root, 'bin/herdr'), waitSeconds: loadTimeout(10000) / 1000, confirmSeconds: 0, pollSeconds: 0, owner: true })};
+enqueueSupervisor('supervisor-test', 'self-changing batch landed', {...options, id:'policy-update'});
+enqueueSupervisor('supervisor-test', '[promote-queue] id=job lane=topic outcome=promoted', {...options, id:'promote:job'});
+console.log(JSON.stringify(await drainInbox(${JSON.stringify(inbox)}, {...options, id:'promote:job'})));
+`);
+  const result = f.exec(process.execPath, [driver]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(f.git(['rev-parse', 'HEAD'], product), after);
+  assert.notEqual(before, after);
+  assert.equal(f.show(f.item).closed?.as, 'done');
+  const notices = readInbox(inbox);
+  assert.deepEqual(notices.map(n => n.state), ['handled', 'sent']);
+  assert.equal(JSON.parse(fs.readFileSync(notices[1].autopilot.receipt)).reason, 'awaited item landed');
+  const wakes = f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt');
+  assert.equal(wakes.length, 1);
+  assert.equal(wakes[0][3], `[autopilot] ${f.item} landed; unblocks: Cut RC-11 notice-id=promote:job`);
+  // Re-draining the same immutable notice must not duplicate the wake.
+  assert.equal(f.exec(process.execPath, [driver]).status, 0);
+  assert.equal(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt').length, 1);
 });
 test('awaited PASS queued for promotion stays silent until closure', t => {
   const f = setup(t, [pass, { phase: 'acknowledged' }]);

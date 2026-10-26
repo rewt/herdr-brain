@@ -119,6 +119,10 @@ An explicit value retains a bounded caller wait. The owner uses its existing
 confirmation window and busy-input notification policy; capped messages stay in the inbox
 with an acknowledged delivery owner, and drain before newer notices when input
 clears, even after the queue caller exits. Housekeeping restarts a dead owner.
+Each notice evaluates autopilot policy in a fresh foreground child, including
+its transitive imports. A queue or inbox drain that spans a fast-forward therefore
+uses the updated policy for later notices. The inbox retains election, ordering,
+delivery and retry ownership; existing action receipts still prevent replay.
 The queue records delivery and its inbox/notice ID separately from promotion.
 An interrupted train delivers an `interrupted` notice for every member, naming
 the receipt and log. The queue retains its error and suspended batch for the next

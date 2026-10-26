@@ -18,6 +18,7 @@ import { greenIdentity, greenPassScope, greenEnvironment } from './green-pass.mj
 import { fastPathTiming } from './fast-path-timing.mjs';
 import { liveNativeWorker } from '../promote/native-context.mjs';
 import { queueJobs } from '../promote/promote.mjs';
+import { isMain } from '../lib/cli-help.mjs';
 
 export const POLICY = 'notice-autopilot/v1';
 const liveGreen = { identity: greenIdentity, scope: greenPassScope, environment: greenEnvironment };
@@ -320,4 +321,16 @@ export function autopilotNotice(entry, { execute: call = execute, nativeWorker: 
     if (named) return exception(named[1], error.message.slice(named.index + named[0].length).trim());
     return finish('wake', error.message, true);
   } finally { release?.(); }
+}
+
+// Internal foreground transport: no model or background policy worker. Stdin
+// keeps the original notice out of argv and the parent retains inbox election.
+if (isMain(import.meta.url)) {
+  try {
+    if (process.argv.length !== 3 || process.argv[2] !== '--notice') throw Error('usage: autopilot.mjs --notice < entry.json');
+    console.log(JSON.stringify(autopilotNotice(JSON.parse(fs.readFileSync(0, 'utf8')))));
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
 }

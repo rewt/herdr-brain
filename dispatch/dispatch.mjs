@@ -24,6 +24,7 @@ import { lookupProcess } from '../lib/processes.mjs';
 import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
 import { checkUnlandedCap, matchesDispatchStart } from './unlanded-cap.mjs';
+import { quote } from '../lib/shell.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nUnlanded items: dispatch.max_unlanded defaults to 8 (current project config layers). At the cap, only --from-run R-n fix rounds and --unblocks ITEM landing follow-ups proceed, at most 3 active exception runs combined. --unblocks records that this item blocks the named unlanded landing. DISPATCH_UNLANDED_CAP names the count, cap and items to land or drop first. The independent session cap still applies to new workers.", allowPositionals: true, options: {
@@ -374,7 +375,9 @@ async function main() {
     const directory = path.join(org, 'dispatch');
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
-    job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null, item: positionals[0], lane: opt.lane, route: opt.route,
+    job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null,
+      operatorRecordCommand: [process.execPath, local('../bin/org.mjs')],
+      item: positionals[0], lane: opt.lane, route: opt.route,
       brief, report: opt.report ?? null, to: opt.to ?? null,
       base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress: projectExceptionAddress(repo, config, opt.route),
@@ -596,7 +599,10 @@ async function main() {
       const exception = job.exceptionAddress.to ? `your PROJECT SUPERVISOR at ${JSON.stringify(job.exceptionAddress.to)}`
         : 'your PROJECT SUPERVISOR; its project-specific exception address is UNKNOWN, so report that missing address without inventing a recipient';
       const owner = `Your recorded worker agent is ${job.worker.agentName}; the existing report watcher targets ${job.to}. Retain that watcher. Self-land your own finished committed source through lane promote under the current operator waiver, with clean worktree/rebase/FF and native identity/claim/source/CAS/STOP/HOLD safety. Start ONE independent async post-code review through the existing route, zero reviewer suites; do not wait for its verdict to land. Use --to ${job.worker.agentName} for your ordinary settle/queued-promotion notices and existing prompt delivery for review completion. Own the correction/fix-forward and report actual receipts once. Route actual unsafe/native/identity/ownership/reserved/failed exceptions to ${exception}; never invoke supervisor cycle mutations or borrow supervisor identity.`;
-      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}\n\n${validation}${job.extra ? `\n\n${job.extra}` : ''}`;
+      // New requests pin their producer command. Older saved jobs/prompts retain
+      // their original behavior rather than receiving a retroactive instruction.
+      const producer = job.operatorRecordCommand ? `For OPERATOR-addressed status/fyi/done/questions, store an envelope in the owning record with this explicit source command: ORG_DIR=${quote(job.org)} ORG_ACTOR=${quote(job.worker.agentName)} ${job.operatorRecordCommand.map(quote).join(' ')} messages send --id ${quote(`${job.run}:operator:STABLE_NOTICE_ID`)} --kind notice --run ${quote(job.run)} --item ${quote(job.item)} --summary '<one-line summary>'. Reuse the stable ID for a retry; use kind fyi for fyi and question/request for judgment, with --correlation THREAD and --reply-to ID when applicable. Pull messages digest on demand with the same source command. Ordinary OPERATOR-addressed messages are record-only and never typed into an operator pane. Only an actual pending human question already explicitly operator_reserved in the record, referenced with --question HUM-n, pushes once through the existing native inbox and Brain Chat filtering. Routine T2 questions do not become reserved. Internal owned report/watch callbacks and project T2/BrainChat delivery retain their existing native paths and recipients; retain the watcher. Do not fabricate native bindings or change pins, saved jobs or long-lived sessions.` : '';
+      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.extra ? `\n\n${job.extra}` : ''}`;
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);

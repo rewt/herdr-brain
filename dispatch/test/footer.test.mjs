@@ -111,3 +111,32 @@ test('dispatch footer preserves explicit ask and extra check scope without presc
   assert.match(prompt, /existing project runner and preserving file groups and limits/);
   assert.match(prompt, /one full final-release obligation stays with its release coordinator/);
 });
+
+test('dispatch operator inbox producer guidance pins its source command and preserves internal callbacks', t => {
+  const f = fixture(t), { job, prompt } = delivered(f, f.start(), null);
+  const source = fs.realpathSync(fileURLToPath(new URL('../../', import.meta.url)));
+  assert.deepEqual(job.operatorRecordCommand, [process.execPath, path.join(source, 'bin/org.mjs')]);
+  assert.match(prompt, /For OPERATOR-addressed status\/fyi\/done\/questions/);
+  assert.ok(prompt.includes(`ORG_ACTOR='${job.worker.agentName}'`));
+  assert.ok(prompt.includes(`'${path.join(source, 'bin/org.mjs')}' messages send`));
+  assert.ok(prompt.includes(`--id '${job.run}:operator:STABLE_NOTICE_ID'`));
+  assert.match(prompt, /Pull messages digest on demand/);
+  assert.match(prompt, /record-only and never typed into an operator pane/);
+  assert.match(prompt, /already explicitly operator_reserved/);
+  assert.match(prompt, /Routine T2 questions do not become reserved/);
+  assert.match(prompt, /Internal owned report\/watch callbacks and project T2\/BrainChat delivery retain their existing native paths and recipients; retain the watcher/);
+  assert.equal(promptCalls(f).length, 1);
+  assert.equal(f.calls().filter(call => call.type === 'org' && call.a[0] === 'messages').length, 0, 'guidance never executes producer prose');
+});
+
+test('dispatch operator inbox producer guidance never upgrades an older saved request', t => {
+  const f = fixture(t); f.fail('watch');
+  assert.equal(f.start().status, 1);
+  const file = f.jobs()[0], saved = JSON.parse(fs.readFileSync(file));
+  delete saved.operatorRecordCommand;
+  fs.writeFileSync(file, JSON.stringify(saved)); f.fail('');
+  const { job, prompt } = delivered(f, f.dispatch(['--retry', saved.run]), null);
+  assert.equal(job.operatorRecordCommand, undefined);
+  assert.doesNotMatch(prompt, /For OPERATOR-addressed|messages send|messages digest/);
+  assert.equal(promptCalls(f).length, 1); assert.equal(job.to, job.worker.agentName);
+});

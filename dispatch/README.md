@@ -257,6 +257,19 @@ from the new dispatch's ordinary report destination. A bootstrap supervisor forw
 ordinary follow-up to the existing owner; it does not repeat intake or review.
 The core stays foreground and never calls a model.
 
+New source dispatches also pin their actual Node/record CLI command in the request
+and include operator-record producer guidance in the worker prompt. OPERATOR-addressed
+status/fyi/done/questions use `record messages send` with a stable ID and the actual
+native actor; `messages digest` is pulled on demand. Only a genuinely reserved pending
+record question can push once through the existing native inbox/Brain Chat filter.
+This guidance leaves internal owned report/watch callbacks and project T2/BrainChat
+delivery on their existing paths and recipients. It never types into an operator pane
+or changes a watcher. Older saved requests without that producer command receive no
+retroactive footer; saved commands retain their original source on retry. The source
+AGENTS.md supplies the same instruction to cold-start workers and supervisors. Current
+sessions receive the explicit live instruction through their existing delivery path;
+no installed c160/pin, saved job or long-lived process is edited or restarted.
+
 Under the current operator waiver, the finishing engineer self-lands immediately
 with `lane promote TOPIC --expected-head FULL_COMMIT`, preserving native claims,
 clean worktrees/rebase, exact source/CAS/fast-forward, STOP, HOLD and archives.

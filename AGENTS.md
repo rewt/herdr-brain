@@ -8,6 +8,18 @@
 - `brain/` is the foreground, model-free record signal digest for lesson distillation; it has no
   dependencies, keeps its own state and never writes `events.jsonl`. `supervisor/` supplies the read-only
   cold start and generic protocol and foreground notice/queue glue. Workers never invoke its cycle mutations.
+- Workers and supervisors, including cold starts: OPERATOR-addressed status/fyi/done/questions go to
+  the owning record's `messages send`, never operator-pane input. Until installation use the explicit
+  source command `/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs`
+  with `ORG_DIR` set to the owning record and `ORG_ACTOR` set to your actual native agent name:
+  `messages send --id STABLE_ID --kind notice --item ITEM --summary 'one-line status'`.
+  Use `notice` for status/done, `fyi` for fyi, `question`/`request` for judgment, and retain stable IDs,
+  correlation and reply references. Pull `messages digest` on demand. Only a genuinely reserved pending
+  human question already explicitly `meta.operator_reserved: true`, referenced with `--question HUM-n`,
+  pushes once through the existing native inbox/Brain Chat filtering; ordinary T2 judgment stays T2.
+  Internal owned report/watch callbacks and project T2/BrainChat delivery keep their existing native
+  paths and recipients. Native worker/supervisor replies and milestones go to `brain-chat`, never quiet
+  or the operator pane (including `w3PD:p4`). Do not edit pins/saved jobs or restart sessions to apply this.
 - Native harness settings own sandboxing and permissions; the product installs no wrappers. Hooks are allowed
   for the hook-pull transport only for sessions Herdr Brain launches: Claude through a per-session `--settings`
   file at launch; Codex through each project's committed `.codex/hooks.json`, trusted once by that project's

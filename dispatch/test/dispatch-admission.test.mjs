@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { publishProvingReservation, RESERVATION_WAIT_EXPIRED_CODE } from '../../test-slot/reservations.mjs';
 import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
 import { policyLocation } from '../../lib/config-home.mjs';
+import { transact } from '../../lib/store.mjs';
 import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts } from './dispatch-fixture.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
@@ -44,12 +45,14 @@ async function homeCapFixture(t, cap) {
 
 test('running admission reaches lane preparation despite many unfinished unlanded records', t => {
   const f=fixture(t);unlandedSetting(f,1);
-  const history=Array.from({length:10},()=>pendingItem(f));
+  const common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']);
+  const history=Array.from({length:10},(_,n)=>({item:`ENG-${n+2}`,run:`R-${n+1}`}));
+  transact(f.org,()=>({add:history.flatMap(({item,run})=>[{type:'item.added',id:item,title:'Historical pending landing',role:'engineer'},{type:'run.started',id:run,item,workspace:f.repo,meta:{dispatch_project:common,dispatch_unlanded_admitted:true}}])}),{actor:'dispatch-test-agent'});
   const before=f.state();f.fail('prepare');
   const result=f.start();assert.equal(result.status,1);assert.match(result.stderr,/injected prepare/);assert.notEqual(JSON.parse(result.stdout).code,'DISPATCH_UNLANDED_CAP');
   assert.ok(f.calls().some(c=>c.type==='lane'&&c.a[0]==='open'));
-  for(const {item,run}of history){assert.equal(f.show(item).closed,false);assert.equal(f.show(run).meta.dispatch_unlanded_admitted,true);}
-  assert.equal(f.state().runs.size,before.runs.size,'no false completion or new run at failed preparation');
+  const after=f.state();for(const {item,run}of history){assert.equal(Boolean(after.items.get(item).closed),false);assert.equal(after.runs.get(run).meta.dispatch_unlanded_admitted,true);}
+  assert.equal(after.runs.size,before.runs.size,'no false completion or new run at failed preparation');
 });
 
 test('running admission keeps adopted home history diagnostic rather than freezing new work', async t => {
@@ -62,6 +65,7 @@ test('running admission keeps adopted home history diagnostic rather than freezi
 
 test('running admission retains same-item origin and real unblocks target guards', t => {
   const f=fixture(t);const other=pendingItem(f);f.fail('prepare');
+  f.rec(['claim',other.run,'--controller','brain']);
   const foreign=f.start(['--from-run',other.run]);assert.equal(foreign.status,1);assert.equal(JSON.parse(foreign.stdout).code,'FROM_RUN_OTHER_ITEM');
   const bad=f.start(['--unblocks',f.item]);assert.equal(bad.status,1);assert.equal(JSON.parse(bad.stdout).code,'DISPATCH_UNBLOCKS_INVALID');
   assert.equal(f.calls().some(c=>c.type==='lane'),false);

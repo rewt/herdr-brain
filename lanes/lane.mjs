@@ -762,7 +762,7 @@ function herdrJson(args, { deadline } = {}) {
 
 function workspaceMatches(workspace, path, linked) {
   const worktree = workspace?.worktree;
-  return worktree !== undefined &&
+  return worktree != null &&
     samePath(worktree.repo_key, REPO_IDENTITY) &&
     samePath(worktree.repo_root, REPO_ROOT) &&
     samePath(worktree.checkout_path, path) &&

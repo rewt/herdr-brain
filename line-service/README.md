@@ -70,6 +70,10 @@ Removing a hold does not replay a refused effect: use the existing command's
 supported recovery after inspecting its evidence. No second transport or approval
 schema is introduced.
 
+The notice `--to` recipient does not override `MONITOR_SUPERVISOR_AGENT` in
+child commands. Dispatch retains its existing parent/launch/project-policy
+exception routing, independently of a brain-chat judgment recipient.
+
 The focused offline check is `node test/helpers/run.mjs
 test/line-service.test.mjs`, through `lane check --cmd` on committed
 source. These controls stub native effects while using real Git, record/fold and

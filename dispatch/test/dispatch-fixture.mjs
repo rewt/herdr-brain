@@ -52,7 +52,7 @@ if(type==='org') {
  if(a[0]==='verify-agent') { if(!workers[a[1]] || fs.realpathSync(workers[a[1]].cwd)!==fs.realpathSync(a[2])) process.exit(1); }
 } else if(type==='watch') {
  if(fail==='watch') { console.error('injected watch');process.exit(1); }
- const child=spawn(process.execPath,['-e','setTimeout(()=>{},10000)','--',root],{stdio:'ignore'}); child.unref();
+ const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)','--',root],{stdio:'ignore'}); child.unref();
  fs.appendFileSync(path.join(root,'pids'),child.pid+'\\n');
  const { ownerIdentity } = await import(${JSON.stringify(new URL('../../lib/process-owner.mjs', import.meta.url).href)});
  result({run:a[0],pid:child.pid,identity:ownerIdentity(child.pid),log:path.join(root,a[0]+'.log')});
@@ -90,7 +90,7 @@ if(type==='org') {
 }
 `;
 function rememberProcesses(root, org, realWatch, receipts) {
-  const fakeCommand = [process.execPath, '-e', 'setTimeout(()=>{},10000)', '--', root].join(' ');
+  const fakeCommand = [process.execPath, '-e', 'setInterval(()=>{},1000)', '--', root].join(' ');
   for (const pid of fs.existsSync(path.join(root, 'pids')) ? fs.readFileSync(path.join(root, 'pids'), 'utf8').trim().split('\n').filter(Boolean).map(Number) : []) {
     receipts.remember(pid, fakeCommand);
   }

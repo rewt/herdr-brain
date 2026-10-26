@@ -140,3 +140,26 @@ test('dispatch operator inbox producer guidance never upgrades an older saved re
   assert.doesNotMatch(prompt, /For OPERATOR-addressed|messages send|messages digest/);
   assert.equal(promptCalls(f).length, 1); assert.equal(job.to, job.worker.agentName);
 });
+
+test('dispatch messages source entry guidance includes its actual matching selector for adopted projects', async t => {
+  const project = configFixture(t); await project.adopt();
+  const f = fixture(t, { project, sourceEntry: true });
+  const source = fs.realpathSync(fileURLToPath(new URL('../../', import.meta.url)));
+  f.env.HERDR_BRAIN_ROOT = source;
+  const { job, prompt } = delivered(f, f.start(), null);
+  assert.equal(job.operatorRecordRoot, source);
+  assert.ok(prompt.includes(`HERDR_BRAIN_ROOT='${source}' ORG_DIR='${f.org}'`));
+  assert.deepEqual(job.operatorRecordCommand, [process.execPath, path.join(source, 'bin/org.mjs')]);
+  assert.equal(promptCalls(f).length, 1); assert.equal(job.to, job.worker.agentName);
+});
+
+test('dispatch messages source entry guidance preserves an older saved command without adding a selector', t => {
+  const f = fixture(t); f.fail('watch'); assert.equal(f.start().status, 1);
+  const file = f.jobs()[0], saved = JSON.parse(fs.readFileSync(file)), command = saved.operatorRecordCommand;
+  delete saved.operatorRecordRoot;
+  fs.writeFileSync(file, JSON.stringify(saved)); f.fail('');
+  const { job, prompt } = delivered(f, f.dispatch(['--retry', saved.run]), null);
+  assert.deepEqual(job.operatorRecordCommand, command); assert.equal(job.operatorRecordRoot, undefined);
+  assert.match(prompt, /For OPERATOR-addressed/); assert.doesNotMatch(prompt, /HERDR_BRAIN_ROOT=/);
+  assert.equal(promptCalls(f).length, 1); assert.equal(job.to, job.worker.agentName);
+});

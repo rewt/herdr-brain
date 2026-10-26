@@ -10,9 +10,11 @@
   cold start and generic protocol and foreground notice/queue glue. Workers never invoke its cycle mutations.
 - Workers and supervisors, including cold starts: OPERATOR-addressed status/fyi/done/questions go to
   the owning record's `messages send`, never operator-pane input. Until installation use the explicit
-  source command `/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs`
+  source command `HERDR_BRAIN_ROOT=/Users/rewt/development/rewt/herdr-brain /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs`
   with `ORG_DIR` set to the owning record and `ORG_ACTOR` set to your actual native agent name:
   `messages send --id STABLE_ID --kind notice --item ITEM --summary 'one-line status'`.
+  The selector must match that actual development root, including in adopted projects; omitting it
+  keeps normal pin forwarding. Immutable release continuations and saved jobs keep their runtime.
   Use `notice` for status/done, `fyi` for fyi, `question`/`request` for judgment, and retain stable IDs,
   correlation and reply references. Pull `messages digest` on demand. Only a genuinely reserved pending
   human question already explicitly `meta.operator_reserved: true`, referenced with `--question HUM-n`,

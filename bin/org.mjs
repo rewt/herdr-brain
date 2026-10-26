@@ -7,7 +7,7 @@ import { parseArgs } from 'node:util';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
 import { discoverArchive } from '../lib/archive.mjs';
 import { checkFleetRecord, FleetError } from '../lib/fleet.mjs';
-import { forwardRelease } from '../lib/releases.mjs';
+import { forwardRelease, bundleRelease, projectEnvironment } from '../lib/releases.mjs';
 import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
@@ -1056,7 +1056,15 @@ process.stdout.on('error', (error) => {
 });
 
 try {
-  const forwarded = ['help', '--help', '-h'].includes(process.argv[2]) ? null : forwardRelease('bin/org.mjs', process.cwd());
+  // An explicit messages source entry is scoped to this real development root.
+  // Immutable release continuations and every other record command retain pin
+  // selection. This selector never supplies native, record or run authority.
+  const selected = process.argv[2] === 'messages' && process.env.HERDR_BRAIN_ROOT ? bundleRelease() : null;
+  const sourceMessages = selected && !selected.commit;
+  if (sourceMessages && (fs.realpathSync(process.env.HERDR_BRAIN_ROOT) !== selected.root ||
+      gitProject(selected.root, { env: projectEnvironment() }).checkout !== selected.root))
+    throw new UserError('HERDR_BRAIN_ROOT must match the invoked development source root; no messages action performed');
+  const forwarded = sourceMessages || ['help', '--help', '-h'].includes(process.argv[2]) ? null : forwardRelease('bin/org.mjs', process.cwd());
   process.exitCode = forwarded ?? await main(process.argv.slice(2));
 } catch (error) {
   if (error instanceof UserError || error instanceof FleetError || String(error.code).startsWith('ERR_PARSE_ARGS')) {

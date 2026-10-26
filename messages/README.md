@@ -480,6 +480,20 @@ record messages digest
 record messages digest --after 18599 --limit 5 --json
 ```
 
+Before installation, an adopted/pinned project selects the development entry
+explicitly, preserving its owning record and actual native actor:
+
+```sh
+HERDR_BRAIN_ROOT=/absolute/development/root ORG_DIR=/owning/.org ORG_ACTOR=actual-native-name /PINNED/NODE /absolute/development/root/bin/org.mjs messages send --id STABLE_ID --kind notice --item ITEM --summary 'one-line status'
+```
+
+The selector must resolve to the invoked real Git development root. A mismatch
+refuses before a messages action. This opt-in applies only to `messages`: omitted
+selection and other record commands retain default project/home pin forwarding,
+and immutable installed release continuations retain their original runtime.
+Native/record/run guards still apply; selection supplies no authority. No pin,
+installed bundle or saved job is changed.
+
 `send --file /absolute/envelope.json` consumes an existing envelope. Native
 sender session/terminal, run claim when present, canonical Git common directory,
 owning identity, record and qualified references must match. The operator role

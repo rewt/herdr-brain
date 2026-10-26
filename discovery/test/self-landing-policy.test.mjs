@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { entryPolicy } from '../policy.mjs';
 import { fixture } from '../../dispatch/test/dispatch-fixture.mjs';
 
-const root = fileURLToPath(new URL('../../', import.meta.url));
+const root = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
 
 test('entry policies keep ordinary landing with workers and supervisor authority at exceptions', t => {
   const f = fixture(t), priorFleet = process.env.HERDR_MONITOR_FLEET;
@@ -17,7 +17,7 @@ test('entry policies keep ordinary landing with workers and supervisor authority
   });
   const context = { canonical: f.repo, org: f.org };
   const worker = entryPolicy({ ...context, role: 'worker' }, root);
-  assert.ok(worker.includes(`${root}lanes/lane.mjs`));
+  assert.ok(worker.includes(`${root}/lanes/lane.mjs`));
   assert.match(worker, /promote TOPIC --expected-head FULL_COMMIT/);
   assert.match(worker, /--parallel-review --run RUN --captured-head FULL_COMMIT --captured-base BASE_COMMIT --round 1 --timeout 0/);
   assert.match(worker, /zero reviewer suites/);

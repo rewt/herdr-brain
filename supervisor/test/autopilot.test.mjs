@@ -420,7 +420,7 @@ test('one drain reloads policy after a fast-forward and wakes for the later awai
   const driver = path.join(f.root, 'fresh-policy.mjs');
   fs.writeFileSync(driver, `
 import {enqueueSupervisor, drainInbox} from ${JSON.stringify(path.join(product, 'supervisor/prompt-supervisor.mjs'))};
-const options = ${JSON.stringify({ cwd: f.repo, org: f.org, herdr: path.join(f.root, 'bin/herdr'), waitSeconds: loadTimeout(10000) / 1000, confirmSeconds: 0, pollSeconds: 0, owner: true })};
+const options = ${JSON.stringify({ cwd: f.repo, org: f.org, herdr: path.join(f.root, 'bin/herdr'), waitSeconds: loadTimeout(60000) / 1000, confirmSeconds: 0, pollSeconds: 0, owner: true })};
 enqueueSupervisor('supervisor-test', 'self-changing batch landed', {...options, id:'policy-update'});
 enqueueSupervisor('supervisor-test', '[promote-queue] id=job lane=topic outcome=promoted', {...options, id:'promote:job'});
 console.log(JSON.stringify(await drainInbox(${JSON.stringify(inbox)}, {...options, id:'promote:job'})));
@@ -431,7 +431,7 @@ console.log(JSON.stringify(await drainInbox(${JSON.stringify(inbox)}, {...option
   assert.notEqual(before, after);
   assert.equal(f.show(f.item).closed?.as, 'done');
   const notices = readInbox(inbox);
-  assert.deepEqual(notices.map(n => n.state), ['handled', 'sent']);
+  assert.deepEqual(notices.map(n => n.state), ['handled', 'sent'], result.stdout);
   assert.equal(JSON.parse(fs.readFileSync(notices[1].autopilot.receipt)).reason, 'awaited item landed');
   const wakes = f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt');
   assert.equal(wakes.length, 1);

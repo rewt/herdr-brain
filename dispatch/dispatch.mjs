@@ -30,7 +30,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
   awaited: { type: 'boolean' }, 'awaited-step': { type: 'string' },
-  to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr' }, base: { type: 'string' }, extra: { type: 'string' },
+  to: { type: 'string' }, base: { type: 'string' }, extra: { type: 'string' },
   reuse: { type: 'string' }, retry: { type: 'string' }, status: { type: 'string' },
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
   'accept-delivered': { type: 'boolean' }, 'recover-run': { type: 'string' },
@@ -262,7 +262,7 @@ function lockJob() {
 }
 async function main() {
   if (!positionals.length && !opt.retry && !opt.status) {
-    process.stdout.write(`dispatch ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE [--org DIR] [--awaited [--awaited-step TEXT]]\nRecord is discovered from the canonical project. Routes carry a suggested preset; ask the operator before adopting it.\nStart the native harness through Herdr; workers report, watch validates and ingests, then lane check/promote fast-forward without push. Only the canonical supervisor starts housekeeping.\n`);
+    process.stdout.write(`dispatch ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE [--org DIR] [--to AGENT] [--awaited [--awaited-step TEXT]]\nRecord is discovered from the canonical project. Routes carry a suggested preset; ask the operator before adopting it.\nStart the native harness through Herdr; ordinary report notices default to the recorded worker. Workers self-land finished source under the current operator waiver, start one async post-code review and report focused checks once. Only the canonical supervisor starts housekeeping.\n`);
     return;
   }
   opt.org ??= findOrgDir({ cwd: opt.repo });
@@ -333,7 +333,7 @@ async function main() {
     if (opt['from-run'] !== undefined) {
       checkOrigin(opt['from-run'], item);
     }
-    herdr(['agent', 'get', opt.to]);
+    if (opt.to !== undefined) herdr(['agent', 'get', opt.to]);
     const { config } = loadDiscoveredRoutes({ cwd: repo });
     const declared = resolveRoute(config, { route: opt.route });
     resolveLaunchRoute(config, { route: opt.route });
@@ -347,7 +347,7 @@ async function main() {
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
     job = { token, repo, org, common, predecessor, release: bundleRelease(), item: positionals[0], lane: opt.lane, route: opt.route,
-      brief, report: opt.report ?? null, to: opt.to,
+      brief, report: opt.report ?? null, to: opt.to ?? null,
       base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields,
       stage: 'open', run: null };
@@ -522,6 +522,10 @@ async function main() {
     liveWorker(job.worker);
     // Re-arm only through watch's exclusive per-run lock. It refuses duplicates.
     if (!job.watcher) {
+      // Choose the ordinary recipient only after immutable worker recording and
+      // live occupant verification. Saved/explicit recipients remain unchanged.
+      job.to ??= job.worker.agentName;
+      save();
       job.watcher = json(command(watchCLI, [job.run, '--controller', opt.controller, '--org', job.org, '--to', job.to,
         '--cwd', job.repo, '--detach', '--log', path.join(job.org, 'dispatch', `${job.run}.watch.log`),
         ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : [])]));
@@ -560,7 +564,8 @@ async function main() {
       }
       if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
       const validation = `Run the ask's final test selection once through ${JSON.stringify(process.execPath)} ${JSON.stringify(local('../lanes/lane.mjs'))} check --cmd 'COMMAND' on the clean committed candidate before reporting, preserving the ask's file groups and limits. Only when the ask names no test selection, use check without --cmd for the project's declared fast command or default test command without configuration. This writes .lane/gate.json and the shared lane-validation receipt with command, exit status, TAP totals and Node version for settle to inherit. Do not add a tier run or repeat tests solely to create a receipt.`;
-      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${validation}${job.extra ? `\n\n${job.extra}` : ''}`;
+      const owner = `Your recorded worker agent is ${job.worker.agentName}; the existing report watcher targets ${job.to}. Retain that watcher. Self-land your own finished committed source through lane promote under the current operator waiver, with clean worktree/rebase/FF and native identity/claim/source/CAS/STOP/HOLD safety. Start ONE independent async post-code review through the existing route, zero reviewer suites; do not wait for its verdict to land. Use --to ${job.worker.agentName} for your ordinary settle/queued-promotion notices and existing prompt delivery for review completion. Own the correction/fix-forward and report actual receipts once. Route actual unsafe/native/identity/ownership/reserved/failed exceptions to ${process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr'}; never invoke supervisor cycle mutations or borrow supervisor identity.`;
+      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}\n\n${validation}${job.extra ? `\n\n${job.extra}` : ''}`;
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);

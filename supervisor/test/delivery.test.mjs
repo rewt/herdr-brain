@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from '../../test/helpers/bounded-test.mjs';
 import { composerEmpty } from '../composer.mjs';
-import { promptSupervisor, readInbox, resumeInbox } from '../prompt-supervisor.mjs';
+import { promptSupervisor, readInbox, resumeInbox, resolveNotice } from '../prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
@@ -163,17 +163,23 @@ test('a definite pre-input refusal retries through the empty-composer gate', asy
   const f = fixture(t); f.clear(); fs.writeFileSync(path.join(f.root, 'reject'), '1');
   assert.equal((await promptSupervisor('supervisor', 'notice', f.options)).delivered, true);
   assert.deepEqual(f.sent(), ['notice']);
-  assert.equal(f.calls().filter((args) => args[0] === 'pane').length, 6);
+  assert.equal(f.calls().filter((args) => args[0] === 'agent' && args[1] === 'prompt').length, 2);
+  assert.ok(f.calls().filter((args) => args[0] === 'pane').length >= 6, 'each attempt confirms quiet input and checks again immediately before input');
 });
-test('lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate', async (t) => {
+test('lost acknowledgement holds the visible notice ID and dependent delivery until inspected recovery', async (t) => {
   const f = fixture(t); f.clear(); fs.writeFileSync(path.join(f.root, 'lost-ack'), '1');
-  const first = await promptSupervisor('supervisor', 'first', { ...f.options, id: 'first' });
-  assert.equal(first.delivered, true);
+  const first = await promptSupervisor('supervisor', 'first', { ...f.options, waitSeconds: 0, id: 'first' });
+  assert.equal(first.delivered, false);
+  await until(() => readInbox(f.inbox)[0].state === 'uncertain' && f.transmitted().length === 1);
+  assert.deepEqual(f.transmitted(), ['first notice-id=first']);
+  // The fake's sent file proves that input happened; acknowledge that exact
+  // inspected attempt without manufacturing another prompt/model effect.
+  resolveNotice(f.inbox, 'first', true);
   assert.equal((await promptSupervisor('supervisor', 'second', { ...f.options, id: 'second' })).delivered, true);
-  assert.deepEqual(f.transmitted(), ['first notice-id=first', 'first notice-id=first', 'second notice-id=second']);
+  assert.deepEqual(f.transmitted(), ['first notice-id=first', 'second notice-id=second']);
   const events = fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(events.some((event) => event.id === 'first' && event.type === 'retry' && event.may_have_delivered));
-  assert.ok(events.filter((event) => event.type === 'sending' || event.type === 'sent').every((event) => event.delivered_text.endsWith(`notice-id=${event.id}`)));
+  assert.ok(events.some((event) => event.id === 'first' && event.type === 'attempt-error' && event.may_have_delivered));
+  assert.ok(events.filter((event) => event.delivered_text).every((event) => event.delivered_text.endsWith(`notice-id=${event.id}`)));
 });
 test('a lone capped notice delivers after its caller exits, without another enqueue or manual drain', async (t) => {
   const f = fixture(t);
@@ -190,7 +196,7 @@ test('a lone capped notice delivers after its caller exits, without another enqu
   await until(() => readInbox(f.inbox)[0].state === 'sent');
   assert.deepEqual(f.transmitted(), ['lone-final notice-id=lone']);
 });
-for (const boundary of ['before', 'after']) test(`a dead sender ${boundary} the prompt side effect replays pending intent with the same ID`, async (t) => {
+for (const boundary of ['before', 'after']) test(`a dead sender ${boundary} the prompt side effect holds intent for inspected recovery`, async (t) => {
   const f = fixture(t); f.clear(); fs.writeFileSync(path.join(f.root, `hold-${boundary}`), '1');
   const prior = spawnChild(t, process.execPath, ['-e', 'process.exit(0)']);
   assert.equal((await waitForExit(prior)).code, 0);
@@ -210,8 +216,12 @@ for (const boundary of ['before', 'after']) test(`a dead sender ${boundary} the 
   await until(() => { try { process.kill(entry.pid, 0); return false; } catch (error) { return error.code === 'ESRCH'; } });
   fs.unlinkSync(path.join(f.root, `hold-${boundary}`));
   await resumeInbox(f.inbox, f.options);
+  assert.equal(readInbox(f.inbox)[0].state, 'uncertain');
+  // Recovery is based on this fake's actual side-effect evidence, never death
+  // or an acknowledgement timeout. A before-input attempt is explicitly resent.
+  resolveNotice(f.inbox, 'crash', boundary === 'after');
   await until(() => readInbox(f.inbox)[0].state === 'sent');
-  assert.deepEqual(f.transmitted(), Array(boundary === 'after' ? 2 : 1).fill('crash-notice notice-id=crash'));
+  assert.deepEqual(f.transmitted(), ['crash-notice notice-id=crash']);
   await until(() => { try { process.kill(promptPid, 0); return false; } catch (error) { return error.code === 'ESRCH'; } });
 });
 test('torn inbox tails fail closed and preserve their bytes', async (t) => {

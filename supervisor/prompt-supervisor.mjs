@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One durable, serialized delivery path for every supervisor notice. The inbox
+// One durable delivery path with independent recipient heads. The inbox
 // is a transport journal; it never stores record status or writes record events.
 import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
@@ -47,7 +47,11 @@ export function readInbox(file) {
     } else {
       const entry = entries.get(event.id);
       if (!entry) throw new Error(`unknown inbox id: ${event.id}`);
-      if (event.type === 'sending') entry.state = 'uncertain';
+      if (event.type === 'sending') {
+        entry.state = 'uncertain';
+        entry.attempt_occupant = event.occupant;
+        entry.attempt_generation = (entry.attempt_generation ?? 0) + 1;
+      }
       if (event.type === 'sent') entry.state = 'sent';
       if (event.type === 'autopilot') {
         entry.autopilot = event.result;
@@ -56,7 +60,8 @@ export function readInbox(file) {
         else entry.delivery_message = event.result.summary;
       }
       if (event.type === 'autopilot-started') entry.autopilot_owner = event.pid;
-      if (event.type === 'retry') entry.state = 'pending';
+      if (event.type === 'retry') entry.state = event.recovery || event.may_have_delivered === false ? 'pending'
+        : entry.state === 'uncertain' || event.may_have_delivered ? 'uncertain' : 'pending';
       if (event.type === 'notified') entry.notified = true;
       if (event.type === 'owned') entry.owner_pid = event.pid;
       if (event.type === 'waited') entry.waited_seconds = event.waited_seconds;
@@ -106,19 +111,40 @@ function applyPolicy(file, id, options) {
   return true;
 }
 
-function quiet(entry, binding, call = invoke) {
+const occupant = agent => agent?.pane_id && agent?.terminal_id ? JSON.stringify([
+  agent.pane_id, agent.terminal_id, agent.agent_session?.value ?? null, agent.workspace_id, agent.cwd,
+]) : null;
+function occupantIdentity(value) {
   try {
-    const occupant = (agent) => JSON.stringify([agent.pane_id, agent.terminal_id, agent.agent_session]);
+    const tuple = JSON.parse(value);
+    return Array.isArray(tuple) && typeof tuple[0] === 'string' && tuple[0] && typeof tuple[1] === 'string' && tuple[1] &&
+      (tuple[2] === null || typeof tuple[2] === 'string') ? tuple : null;
+  } catch { return null; }
+}
+function sameOccupant(a, b) {
+  const x = occupantIdentity(a), y = occupantIdentity(b);
+  // Pane movement/cwd changes do not erase a terminal/session dependency.
+  return Boolean(x && y && x[1] === y[1] && (!x[2] || !y[2] || x[2] === y[2]));
+}
+function recipient(entry, call = invoke) {
+  try {
     const agent = JSON.parse(call(entry.herdr, ['agent', 'get', entry.to])).result?.agent;
-    if (!agent?.pane_id || agent.interactive_ready === false || !['idle', 'done'].includes(agent.agent_status)) return null;
+    return { agent, occupant: occupant(agent), error: agent ? undefined : 'recipient binding missing' };
+  } catch (error) { return { error: `${error.code ?? 'UNKNOWN'}: ${error.message}` }; }
+}
+function quiet(entry, binding, call = invoke, failed = () => {}) {
+  try {
+    const { agent, occupant: current, error } = recipient(entry, call);
+    if (!current) { if (error) failed(error); return null; }
+    if (agent.interactive_ready === false || !['idle', 'done'].includes(agent.agent_status)) return null;
     if (binding && (agent.name !== binding.name || agent.pane_id !== binding.pane || agent.terminal_id !== binding.terminal ||
         agent.agent_session?.value !== binding.nativeSession || agent.workspace_id !== binding.workspace || agent.cwd !== binding.cwd)) return null;
     const screen = call(entry.herdr, ['pane', 'read', agent.pane_id, '--lines', '14', '--format', 'ansi']);
     if (!composerEmpty(screen, agent.agent)) return null;
     // Keep pane read last: on the final check, prompt follows immediately.
     // Screen-based gating still has an inherent read-to-input race.
-    return occupant(agent);
-  } catch { return null; }
+    return current;
+  } catch (error) { failed(`${error.code ?? 'UNKNOWN'}: ${error.message}`); return null; }
 }
 
 // Single attempt, shared quiet gate. Intent is durable before the final read.
@@ -160,117 +186,153 @@ function seconds(value, fallback, name) {
   return number;
 }
 
+// Correlation orders transport only; it grants no record or native authority.
+function correlation(value) {
+  if (value == null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      Object.keys(value).some(key => !['run', 'record', 'project'].includes(key)) ||
+      !/^R-\d+$/.test(value.run ?? '') ||
+      ![value.record, value.project].every(v => typeof v === 'string' && path.isAbsolute(v)))
+    throw new Error('notice correlation needs run, absolute record and project');
+  return { run: value.run, record: fs.realpathSync(value.record), project: fs.realpathSync(value.project) };
+}
+const runKey = entry => /^R-\d+$/.test(entry.correlation?.run ?? '') &&
+  [entry.correlation?.project, entry.correlation?.record].every(v => typeof v === 'string' && path.isAbsolute(v))
+  ? JSON.stringify([entry.correlation.project, entry.correlation.record, entry.correlation.run]) : null;
+function dependent(prior, entry, current, lookup) {
+  // Unknown legacy order is a barrier in BOTH directions. In particular, an
+  // old ambiguous attempt without a saved occupant cannot be bypassed safely.
+  return !runKey(prior) || !runKey(entry) ||
+    prior.to === entry.to || runKey(prior) === runKey(entry) ||
+    prior.state === 'uncertain' && !occupantIdentity(prior.attempt_occupant) ||
+    Boolean(current && (sameOccupant(lookup(prior).occupant, current) ||
+      prior.state === 'uncertain' && sameOccupant(prior.attempt_occupant, current)));
+}
+
 export async function drainInbox(file, options = {}) {
   if (fixtureInboxEnrolled(file)) return { delivered: false, queued: true, id: options.id, inbox: file, delivery_error: 'offline fixture intake is fenced; use its foreground transport owner' };
   const cap = seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'SUPERVISOR_INPUT_WAIT_SECONDS') * 1000;
   const confirm = seconds(options.confirmSeconds ?? process.env.SUPERVISOR_INPUT_CONFIRM_SECONDS, 3, 'SUPERVISOR_INPUT_CONFIRM_SECONDS') * 1000;
   const retry = seconds(options.pollSeconds ?? process.env.SUPERVISOR_INPUT_POLL_SECONDS, 10, 'SUPERVISOR_INPUT_POLL_SECONDS') * 1000;
-  const started = Date.now(), deadline = started + cap;
-  const own = () => options.id && snapshot(file).find((entry) => entry.id === options.id);
-  const result = (error) => ({ delivered: complete(own()), ...(own()?.state === 'handled' ? { handled: true, autopilot: own().autopilot } : {}), id: options.id, inbox: file,
-    delivery_error: error, queued: !complete(own()), owner_pid: ownerPid(`${file}.owner.lock`) });
-  const retained = async (error) => {
+  const started = Date.now(), deadline = started + cap, confirmations = new Map(), attempts = new Map();
+  const own = () => options.id && snapshot(file).find(entry => entry.id === options.id);
+  const result = error => {
+    const entry = own(), delivered = complete(entry);
+    return { delivered, ...(entry?.state === 'handled' ? { handled: true, autopilot: entry.autopilot } : {}),
+      id: options.id, inbox: file, delivery_error: error, queued: !delivered, owner_pid: ownerPid(`${file}.owner.lock`) };
+  };
+  const retained = async error => {
     if (!options.owner) await resumeInbox(file, options);
     return result(error);
   };
-  let release;
+  let reason = 'notices awaiting eligible quiet recipients';
   for (;;) {
     if (complete(own())) return result();
-    try { release = noticeLock(`${file}.drain.lock`); break; }
+    let release;
+    try { release = noticeLock(`${file}.drain.lock`); }
     catch (error) {
       if (!error.message.startsWith('locked:')) throw error;
+      reason = error.message; // Also honours an old owner's long-held lock.
       const entry = own();
-      if (entry) notify(file, entry, 'another sender is draining the inbox');
-      if (Date.now() >= deadline) return retained(error.message);
-      await delay(Math.min(Math.max(retry, 10), deadline - Date.now()));
+      if (entry) notify(file, entry, reason);
     }
-  }
-  try {
-    // Enrollment may have won while this caller waited for the drain lock.
-    if (fixtureInboxEnrolled(file)) return result('offline fixture intake is fenced; use its foreground transport owner');
-    for (;;) {
-      const entry = snapshot(file).find((candidate) => !complete(candidate));
-      if (!entry) return { ...result(), delivered: options.id ? complete(own()) : true, queued: false };
-      if (!entry.autopilot && entry.state === 'pending') {
-        if (!applyPolicy(file, entry.id, options)) {
-          if (Date.now() >= deadline) return await retained('notice policy is still running; retained');
-          await delay(Math.min(Math.max(retry, 10), deadline - Date.now()));
+    if (release) try {
+      if (fixtureInboxEnrolled(file)) return result('offline fixture intake is fenced; use its foreground transport owner');
+      const entries = snapshot(file).filter(entry => !complete(entry));
+      if (!entries.length) return { ...result(), delivered: true, queued: false };
+      const resolved = new Map();
+      const lookup = entry => {
+        const key = JSON.stringify([entry.herdr, entry.to]);
+        if (!resolved.has(key)) resolved.set(key, recipient(entry));
+        return resolved.get(key);
+      };
+      const earlier = [];
+      for (const entry of entries) {
+        const current = lookup(entry);
+        const predecessors = earlier.filter(prior => !complete(prior));
+        earlier.push(entry);
+        if (predecessors.some(prior => dependent(prior, entry, current.occupant, lookup))) {
+          confirmations.delete(entry.id);
+          notify(file, entry, 'older dependent notice awaiting delivery or explicit recovery');
           continue;
         }
-        const current = snapshot(file).find(candidate => candidate.id === entry.id);
-        if (current.autopilot) {
-          entry.autopilot = current.autopilot;
-          const policy = current.autopilot;
-          if (policy.disposition === 'handled') {
-            if (entry.id === options.id) return result();
-            continue;
-          }
-          entry.delivery_message = policy.summary;
+        if (entry.state === 'uncertain') {
+          reason = `notice ${entry.id} uncertain: ${entry.error ?? 'unacknowledged input'}; inspect and --resolve before dependent delivery`;
+          notify(file, entry, reason);
+          continue;
         }
-      }
-      const waiting = own();
-      if (waiting && waiting.id !== entry.id && (waiting.autopilot || !waiting.project)) notify(file, waiting, 'older supervisor notices are awaiting delivery');
-      if (entry.state === 'uncertain') {
-        record(file, { type: 'retry', id: entry.id, error: 'unacknowledged attempt; replaying the same notice ID' });
-      }
-      let waited = Boolean(entry.notified), ready = false, readyOccupant;
-      for (;;) {
-        const first = quiet(entry);
-        if (first && Date.now() + confirm <= deadline) {
-          await delay(confirm);
-          if (quiet(entry) === first) { ready = true; readyOccupant = first; break; }
+        if (!applyPolicy(file, entry.id, options)) { reason = `notice ${entry.id} policy still running`; continue; }
+        Object.assign(entry, snapshot(file).find(candidate => candidate.id === entry.id));
+        if (complete(entry)) continue;
+        const tried = attempts.get(entry.id);
+        if (tried && (tried.count >= (entry.attempts ?? 5) || Date.now() < tried.after)) continue;
+        let prior = confirmations.get(entry.id);
+        if (prior && prior.generation !== (entry.attempt_generation ?? 0)) {
+          confirmations.delete(entry.id); prior = undefined;
         }
-        waited = true;
-        notify(file, entry, 'supervisor input is busy or unreadable; notice queued');
-        if (Date.now() >= deadline) break;
-        await delay(Math.min(Math.max(retry, 10), deadline - Date.now()));
-      }
-      if (!ready) {
-        record(file, { type: 'capped', id: entry.id, waited_seconds: (Date.now() - started) / 1000 });
-        return await retained(`input wait cap reached; notice ${entry.id} stays in ${file}`);
-      }
-      if (waited || snapshot(file).find((candidate) => candidate.id === entry.id)?.notified) {
-        const waitedSeconds = (Date.now() - (Date.parse(entry.at) || started)) / 1000;
-        record(file, { type: 'waited', id: entry.id, waited_seconds: waitedSeconds,
-          message: `delivered after waiting ${waitedSeconds.toFixed(1)} s for an empty input box` });
-      }
-      const attempts = entry.attempts ?? 5;
-      let sent = false;
-      for (let attempt = 1; attempt <= attempts; attempt++) {
-        // Recheck after each refused prompt, rather than typing into a changed
-        // composer merely because a previous attempt had a quiet window.
-        if (attempt > 1) {
-          const first = quiet(entry);
-          if (!first || Date.now() + confirm > deadline) break;
-          await delay(confirm);
-          if (quiet(entry) !== first) break;
-          readyOccupant = first;
+        if (prior && prior.occupant === current.occupant && Date.now() < prior.at + confirm) continue;
+        let quietError;
+        const first = quiet(entry, undefined, invoke, error => { quietError = error; });
+        if (!first || first !== current.occupant) {
+          confirmations.delete(entry.id);
+          reason = quietError ?? current.error ?? `notice ${entry.id}: recipient busy, changed, unreadable or composer nonempty`;
+          notify(file, entry, reason);
+          continue;
+        }
+        if (!prior || prior.occupant !== first) {
+          confirmations.set(entry.id, { occupant: first, at: Date.now(), generation: entry.attempt_generation ?? 0 });
+          if (confirm > 0) continue;
+        }
+        if (Date.now() - confirmations.get(entry.id).at < confirm || Date.now() > deadline) continue;
+        // Re-resolve older aliases at the input boundary, under the SAME lock
+        // all old/new senders use. No wait or confirmation delay holds it.
+        if (predecessors.some(prior => dependent(prior, entry, first, candidate => recipient(candidate)))) {
+          confirmations.delete(entry.id); continue;
+        }
+        if (entry.notified) {
+          const waitedSeconds = (Date.now() - (Date.parse(entry.at) || started)) / 1000;
+          record(file, { type: 'waited', id: entry.id, waited_seconds: waitedSeconds,
+            message: `delivered after waiting ${waitedSeconds.toFixed(1)} s for an empty input box` });
         }
         const deliveredText = `${entry.delivery_message ?? entry.message} notice-id=${entry.id}`;
-        // Persist intent before the FINAL check, leaving no journal write or
-        // agent lookup between the final pane read and prompt invocation.
-        record(file, { type: 'sending', id: entry.id, delivered_text: deliveredText });
-        if (quiet(entry) !== readyOccupant) {
-          record(file, { type: 'retry', id: entry.id, error: 'input changed before sending' });
-          break;
+        record(file, { type: 'sending', id: entry.id, delivered_text: deliveredText, occupant: first });
+        // Intent precedes the FINAL binding/status/composer read. Nothing is
+        // written or looked up between that pane read and native input.
+        if (quiet(entry, undefined, invoke, error => { quietError = error; }) !== first) {
+          record(file, { type: 'retry', id: entry.id, may_have_delivered: false,
+            error: `${quietError ?? 'input changed before sending'}; no input attempted` });
+          confirmations.delete(entry.id); continue;
         }
+        attempts.set(entry.id, { count: (tried?.count ?? 0) + 1, after: Date.now() + entry.retrySeconds * 1000 });
+        confirmations.delete(entry.id);
         try {
-          invoke(entry.herdr, ['agent', 'prompt', entry.to, deliveredText]);
+          const reply = JSON.parse(invoke(entry.herdr, ['agent', 'prompt', entry.to, deliveredText]));
+          if (reply.error || reply.ok === false) throw Object.assign(new Error(JSON.stringify(reply.error ?? reply)), { code: reply.error?.code });
           record(file, { type: 'sent', id: entry.id, delivered_text: deliveredText });
-          sent = true; break;
+          entry.state = 'sent';
+          if (entry.id === options.id) return result();
         } catch (error) {
-          record(file, { type: 'retry', id: entry.id, error: error.message,
-            may_have_delivered: !['agent_blocked', 'agent_not_found'].includes(error.code) });
-          if (attempt < attempts && Date.now() < deadline) await delay(Math.min(entry.retrySeconds * 1000, deadline - Date.now()));
+          const refused = ['agent_blocked', 'agent_not_found'].includes(error.code);
+          reason = `notice ${entry.id}: ${error.code ?? 'UNKNOWN'}: ${error.message}`;
+          record(file, { type: refused ? 'retry' : 'attempt-error', id: entry.id,
+            error: reason, may_have_delivered: !refused });
+          entry.state = refused ? 'pending' : 'uncertain';
+          entry.attempt_occupant = first;
+          notify(file, entry, reason);
         }
       }
-      if (!sent) {
-        notify(file, entry, 'prompt refused; notice retained');
-        return await retained(`notice ${entry.id} undelivered; retained in ${file}`);
-      }
-      if (entry.id === options.id) return result();
+    } finally { release(); }
+    // Busy A never owns the global lock while waiting for its next quiet read.
+    if (complete(own())) return result();
+    const pending = snapshot(file).filter(entry => !complete(entry));
+    if (!pending.length) return { ...result(), delivered: true, queued: false };
+    if (Date.now() >= deadline) {
+      record(file, { type: 'capped', id: own()?.id ?? pending[0].id, waited_seconds: (Date.now() - started) / 1000 });
+      return retained(reason);
     }
-  } finally { release(); }
+    const nextConfirmation = Math.min(...[...confirmations.values()].map(value => Math.max(10, value.at + confirm - Date.now())));
+    await delay(Math.min(Math.max(retry, 10), nextConfirmation, Math.max(1, deadline - Date.now())));
+  }
 }
 
 // Durable enqueue only; fleet routing must not wait behind a busy composer.
@@ -278,6 +340,10 @@ export async function drainInbox(file, options = {}) {
 export function enqueueSupervisor(to, message, options = {}) {
   const file = path.resolve(options.inbox ?? inboxPath(options));
   const id = options.id ?? randomUUID();
+  const ordering = correlation(options.correlation);
+  const project = noticeProject(file, options);
+  if (ordering && project && (ordering.record !== project.org || ordering.project !== project.identity))
+    throw new Error('notice correlation differs from actual project/record binding');
   if (typeof id !== 'string' || !id || /\s|[\x00-\x1f\x7f]/.test(id)) throw new Error('notice id must be nonempty without whitespace or control characters');
   const attempts = options.attempts ?? 5;
   if (!Number.isInteger(attempts) || attempts < 1) throw new Error('delivery attempts must be a positive integer');
@@ -291,10 +357,15 @@ export function enqueueSupervisor(to, message, options = {}) {
     const prior = entries.find((entry) => entry.id === id);
     if (prior) {
       if (prior.to !== to || prior.message !== message) throw new Error(`notice ${id} has different content or target`);
+      if (ordering && prior.correlation && runKey({ correlation: ordering }) !== runKey(prior) ||
+          options.herdr !== undefined && prior.herdr !== options.herdr)
+        throw new Error(`notice ${id} has different correlation or transport`);
+      // Old callers adopt new metadata; new callers adopt legacy barriers.
+      // Never rewrite an already journalled notice to invent independence.
       observed = prior; sequence = entries.indexOf(prior) + 1;
       return;
     }
-    observed = append({ type: 'notice', id, to, message, project: noticeProject(file, options), owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
+    observed = append({ type: 'notice', id, to, message, correlation: ordering, project, owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
       title: options.title ?? 'Supervisor notice queued', sound: options.sound ?? 'request' });
     sequence = entries.length + 1;
   });
@@ -308,8 +379,7 @@ export async function promptSupervisor(to, message, options = {}) {
   const retrySeconds = seconds(options.retrySeconds, 10, 'retry seconds');
   // Acknowledged ownership precedes input. The worker survives this caller,
   // including a crash between the prompt side effect and its acknowledgement.
-  // Routine policy never waits behind older exception delivery or busy input.
-  applyPolicy(file, id, options);
+  // Policy is applied by eligible heads, preserving recipient/run ordering.
   const owner = await resumeInbox(file, options);
   // A zero-wait caller hands delivery to the acknowledged owner. Racing that
   // owner with an already-expired drain deadline would create a false alert.
@@ -399,7 +469,7 @@ async function ownInbox(file, options) {
 
 export function resolveNotice(file, id, sent) {
   // Explicit recovery after inspecting the target. Never infer prompt outcome.
-  const release = noticeLock(`${file}.drain.lock`);
+  const release = noticeLock(`${file}.drain.lock`, { waitMs: 5000 });
   try {
     transaction(file, (entries, append) => {
       if (entries.find((entry) => entry.id === id)?.state !== 'uncertain') throw new Error(`notice ${id} is not uncertain`);
@@ -410,11 +480,16 @@ export function resolveNotice(file, id, sent) {
 
 async function main() {
   const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
-    inbox: { type: 'string' }, org: { type: 'string' }, herdr: { type: 'string' }, id: { type: 'string' },
+    inbox: { type: 'string' }, org: { type: 'string' }, herdr: { type: 'string' }, id: { type: 'string' }, run: { type: 'string' },
     drain: { type: 'boolean' }, resolve: { type: 'string' }, sent: { type: 'boolean' }, resend: { type: 'boolean' },
     'owner-worker': { type: 'boolean' }, settings: { type: 'string' },
   } });
   const file = path.resolve(opt.inbox ?? inboxPath(opt));
+  if (opt.run) {
+    const project = noticeProject(file, opt);
+    if (!project) throw new Error('--run needs an actual project/record binding');
+    opt.correlation = { run: opt.run, record: project.org, project: project.identity };
+  }
   if (opt['owner-worker']) { await ownInbox(file, JSON.parse(opt.settings ?? '{}')); return; }
   if (opt.resolve) {
     if (Boolean(opt.sent) === Boolean(opt.resend)) throw new Error('--resolve ID needs exactly one of --sent or --resend');

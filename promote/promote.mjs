@@ -578,6 +578,7 @@ async function deliver(job, result, queue) {
   const suffix = nativeRefusal ? `:native-refusal:${createHash('sha256').update(message).digest('hex').slice(0, 16)}` : result.reconciliation?.state === 'pending' ? `:reconciliation-pending:${createHash('sha256').update(message).digest('hex').slice(0, 16)}` : reconciled ? ':reconciled' : resumed ? ':complete' : '';
   const { id: deliveryId, ...delivery } = await promptSupervisor(job.to, message, {
     inbox: inboxPath({ org: job.org, cwd: queue.project.canonical }),
+    correlation: job.run && job.org ? { run: job.run, record: job.org, project: queue.project.identity } : undefined,
     herdr: job.herdr, attempts: job.attempts, retrySeconds: job.retry,
     // Durable inbox ownership lets queue accounting finish without waiting for
     // a busy composer. An explicitly configured caller wait remains supported.

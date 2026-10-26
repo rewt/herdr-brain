@@ -267,8 +267,12 @@ async function deliver(message, sound = 'request', id, { allowQueued = false, sh
   log(message);
   if (dry) return true;
   reserveWatch('delivery', id);
+  let correlation;
+  try { correlation = { run: runId, record: opt.org, project: gitProject(opt.cwd).identity }; }
+  catch { /* Standalone/legacy records retain the conservative transport barrier. */ }
   const result = await promptSupervisor(opt.to, message, {
     org: opt.org, cwd: opt.cwd, inbox: opt.inbox, herdr: opt.herdr, attempts: deliveryAttempts,
+    correlation,
     retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log, shadowEvidence,
   });
   if (result.delivered) { finishWatch(); return true; }

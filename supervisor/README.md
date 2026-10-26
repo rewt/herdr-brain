@@ -647,20 +647,41 @@ The inbox is an append-only, fsynced JSONL transport journal at
 `ORG/supervisor/inbox.log`, or `GIT_COMMON_DIR/supervisor/inbox.log` without a
 record. Watch and promotion discover the same record; linked checkouts share
 the journal. `--inbox FILE` selects another journal explicitly. This adds no
-record events or stored item status. Enqueue and drain locks serialize writers
-and prompts in FIFO order. Stable watch/promotion IDs adopt existing notices
+record events or stored item status. Enqueue locks serialize writers. Short
+drain passes select independent eligible heads, release the drain lock before
+quiet confirmation/poll waits, and retain it across the final checks and input.
+A busy, missing, blocked or unreadable A does not hold up an independent ready B.
+Stable watch/promotion IDs adopt existing notices
 on retries, including final watch notices after a process restart.
 
 ```sh
 node supervisor/prompt-supervisor.mjs supervisor-herdr 'NOTICE' --org /record --id stable-notice-id
+node supervisor/prompt-supervisor.mjs worker-name 'NOTICE' --org /record --run R-123 --id stable-notice-id
 node supervisor/prompt-supervisor.mjs --org /record --drain
 ```
 
 Every prompt ends with `notice-id=ID`. The journal records that same ID and
 complete delivered text before the attempt and after its acknowledgement.
-Delivery is at-least-once: a crash or lost acknowledgement replays that ID through
-the input gate, so the supervisor can recognise a duplicate. Acknowledged notices
-are not replayed, and newer notices wait for the oldest notice's acknowledgement.
+FIFO applies within each target and across targets for the same explicit
+`correlation: { run, record, project }`. Record/project are canonical absolute
+paths; `project` is the Git common directory. Watch and record-bound promotion
+supply these from their actual run and namespace. IDs and prose never supply
+ordering authority. Conflicting known correlation or an explicitly changed Herdr
+transport for the same ID refuses. A missing correlation on either side is a
+conservative compatibility barrier: it waits for earlier notices, and newer
+notices wait for it. Saved callers adopt existing metadata without rewriting it;
+new callers cannot retroactively make old notices independent. Other legacy
+producers keep this barrier until they provide authoritative correlation.
+
+Live aliases resolving to the same native occupant share ordering. The same
+global drain lock serializes input even across processes, with fresh alias and
+recipient checks before input. Missing binding cannot authorize input. A crash
+or lost/negative/invalid acknowledgement leaves `sending` uncertain, with its
+attempted occupant durably recorded. It blocks its target, actual aliases and
+same-run successors; proven independent runs may progress. Legacy ambiguous
+retries without definite no-input or inspected recovery remain uncertain too.
+Acknowledged notices are not replayed. No prompt acknowledgement proves model
+consumption or exactly-once model effects.
 The helper exits 0 for acknowledged delivery or a handled policy result, 3 when pending with an owner, and
 1 for a journal or startup failure. Its JSON receipt includes `owner_pid` while
 pending. Delivery that waited is logged in the journal and caller output; the
@@ -675,8 +696,13 @@ reference; atomic input remains a separate Herdr capability.
 Notice locks recover confirmed dead PIDs automatically, including a crash after
 the prompt effect. Live or unidentified owners and torn journal tails still fail
 closed for inspection; promotion locks retain their existing safety policy.
-The legacy `--resolve ID --sent|--resend` remains available for old uncertain
-entries, but delivery no longer requires manual resolution after a lost reply.
+Use `--resolve ID --sent|--resend` only after inspecting the actual input outcome;
+an uncertain attempt is never automatically replayed. `--resend` retains its
+visible ID and returns it to the quiet gate. Unknown outcome stays held.
+`EPERM` is never proof of a dead owner. New source callers honour an old owner's
+existing owner/drain locks; an old owner may retain global waiting/replay
+behaviour until its normal exit/load/handoff. Source landing does not reload
+that process, update saved jobs, or activate an installed immutable release.
 Do not reuse bch-cloak's existing plain-text inbox as this JSONL journal; select
 a new file when switching and retain the old inbox as evidence.
 

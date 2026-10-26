@@ -2355,6 +2355,7 @@ async function review(topic, args, memoryChecked = false) {
   repositoryRoot({ requiredBy: "review" });
   if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] [--run R-n [--followup-expected]]");
   const options = parseReviewOptions(args);
+  if (validationSettings().landing_waiver) fail('Current source review uses record queue-review RUN and normal reviewer-item dispatch; no new legacy lane-review launch. Retain every existing saved/native/UNKNOWN attempt.');
   const branch = laneBranch(topic);
   // Explicit route choices must fail before a memory wait. Resolve the implicit
   // default inside dispatch as before, after reading the bundled template, using

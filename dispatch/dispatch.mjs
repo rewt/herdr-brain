@@ -25,6 +25,7 @@ import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
 import { checkUnlandedCap, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
+import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from '../line-service/review-queue.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nUnlanded items: dispatch.max_unlanded defaults to 8 (current project config layers). At the cap, only --from-run R-n fix rounds and --unblocks ITEM landing follow-ups proceed, at most 3 active exception runs combined. --unblocks records that this item blocks the named unlanded landing. DISPATCH_UNLANDED_CAP names the count, cap and items to land or drop first. The independent session cap still applies to new workers.", allowPositionals: true, options: {
@@ -359,11 +360,19 @@ async function main() {
     // Validate item, target and launch route before opening a lane or starting a run.
     const item = json(record(['show', positionals[0], '--json']));
     if (Object.hasOwn(item, 'item') || !Array.isArray(item.runs)) throw new Error('dispatch ITEM must be an item, not a run');
+    let reviewQueue;
+    if (isQueueReview(item)) {
+      if (opt.reuse || opt['from-run'] || opt.unblocks) throw Error('queued review cannot replace/reuse a source item review');
+      const events = loadEvents(org).events;
+      reviewQueue = validateQueuedReview({ item, state: fold(events), events, org, repo });
+      if (opt.base !== reviewQueue.head || !opt.lane.startsWith('review-')) throw Error('queued review requires its exact captured head in a genuine review lane');
+    }
     if (opt['from-run'] !== undefined) {
       checkOrigin(opt['from-run'], item);
     }
     if (opt.to !== undefined) herdr(['agent', 'get', opt.to]);
     const { config } = loadDiscoveredRoutes({ cwd: repo });
+    if (reviewQueue && opt.route !== reviewQueueRoute(config)) throw Error('queued review must use the normal reviewer route');
     const declared = resolveRoute(config, { route: opt.route });
     resolveLaunchRoute(config, { route: opt.route });
     const declaredFields = { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null };
@@ -379,9 +388,10 @@ async function main() {
       operatorRecordCommand: [process.execPath, local('../bin/org.mjs')],
       operatorRecordRoot: bundleRelease().root,
       operatorPlainText: true,
-      item: positionals[0], lane: opt.lane, route: opt.route,
+      item: positionals[0], lane: opt.lane, route: opt.route, reviewQueueProtocol: 1,
+      ...(reviewQueue ? { reviewQueue, reviewQueueBrief: reviewQueueBrief(item) } : {}),
       brief, report: opt.report ?? null, to: opt.to ?? null,
-      base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
+      base: git(['rev-parse', `${opt.base ?? 'HEAD'}^{commit}`], repo), extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress: projectExceptionAddress(repo, config, opt.route),
       stage: 'open', run: null };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
@@ -397,10 +407,17 @@ async function main() {
       (job.stage === 'launching' && opt.fresh))) admission(job.repo, job.org, common);
   const stop = path.join(gitProject(job.repo).canonical, '.lane/supervisor/STOP');
   const checkStop = () => {
-    if (fs.existsSync(stop)) {
+    if (fs.existsSync(stop) || fs.existsSync(path.join(path.dirname(stop), 'HOLD'))) {
       const error = new Error('Supervisor STOP appeared before dispatch; no new worker launched');
       error.code = 'DISPATCH_STOPPED';
       throw error;
+    }
+    if (job.reviewQueue) {
+      const events = loadEvents(job.org).events, state = fold(events), item = state.items.get(job.item);
+      if (!item || item.closed || item.meta.hold || item.meta.held) throw Error('queued review item closed/held before native effect');
+      const target = validateQueuedReview({ item, state, events, org: job.org, repo: job.repo, allowRun: job.run, allowJournal: journal });
+      if (JSON.stringify(target) !== JSON.stringify(job.reviewQueue)) throw Error('saved review dispatch target/evidence changed');
+      if (job.workspace && git(['rev-parse', 'HEAD'], job.workspace) !== target.head) throw Error('review lane no longer has the immutable captured source');
     }
   };
   if (opt['recover-run']) {
@@ -451,10 +468,11 @@ async function main() {
     try { output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
       '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`,
-      '--meta', 'dispatch_unlanded_admitted=true',
+      '--meta', `dispatch_unlanded_admitted=${job.unlandedCap.admission.admitted}`,
+      ...(job.unlandedCap.admission.kind === 'review' ? ['--meta', 'dispatch_role=review'] : []),
       ...(job.fromRun ? ['--meta', `dispatch_from_run=${job.fromRun}`] : []),
       ...(job.unblocks ? ['--meta', `dispatch_unblocks=${job.unblocks}`] : []),
-      ...(job.unlandedCap.admission.kind !== 'regular' ? ['--meta', `dispatch_unlanded_exception=${job.unlandedCap.admission.kind}`] : []),
+      ...(!['regular', 'review'].includes(job.unlandedCap.admission.kind) ? ['--meta', `dispatch_unlanded_exception=${job.unlandedCap.admission.kind}`] : []),
       ...(job.fromRun ? ['--if-current-run', job.fromRun] : []),
       ...(job.reuse ? ['--meta', `continuation_of=${job.reuse}`, '--meta', 'same_session=true'] : []),
       ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
@@ -523,6 +541,7 @@ async function main() {
       releaseAdmission = timedMemoryWait({ journal, run: job.run, item: job.item, lane: job.lane, kind: 'admission_lock',
         wait: () => acquireSessionCapLock(common, { check: checkStop }), persist: syncTiming, onError: timingFailure });
       admission(job.repo, job.org, common);
+      checkStop();
       job.stage = 'launching'; save();
       const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked']);
       const launched = JSON.parse(output);
@@ -596,17 +615,19 @@ async function main() {
         }
       }
       if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
-      const validation = `Run only the ask's or explicit --extra scope's focused check selection once through ${JSON.stringify(process.execPath)} ${JSON.stringify(local('../lanes/lane.mjs'))} check --cmd 'COMMAND' on the clean committed candidate before reporting, using the existing project runner and preserving file groups and limits. When checks run, this writes .lane/gate.json and the shared lane-validation receipt with command, exit status, TAP totals and Node version for settle to inherit. If no check is selected or applicable, report the selection/scope and unrun truth; do not substitute a blanket default/fast/npm suite or label unrun checks PASS. Do not add a tier run or repeat tests solely to create a receipt. Self-land finished source without a test/review readiness gate; the one full final-release obligation stays with its release coordinator.`;
+      const validation = job.reviewQueue ? 'Independent code/evidence review: zero build, test, prepare, install or check commands; zero reviewer suites. Preserve inherited producer evidence and never label an unrun check PASS.' : `Run only the ask's or explicit --extra scope's focused check selection once through ${JSON.stringify(process.execPath)} ${JSON.stringify(local('../lanes/lane.mjs'))} check --cmd 'COMMAND' on the clean committed candidate before reporting, using the existing project runner and preserving file groups and limits. When checks run, this writes .lane/gate.json and the shared lane-validation receipt with command, exit status, TAP totals and Node version for settle to inherit. If no check is selected or applicable, report the selection/scope and unrun truth; do not substitute a blanket default/fast/npm suite or label unrun checks PASS. Do not add a tier run or repeat tests solely to create a receipt. Self-land finished source without a test/review readiness gate; the one full final-release obligation stays with its release coordinator.`;
       job.exceptionAddress ??= projectExceptionAddress(job.repo, JSON.parse(fs.readFileSync(job.routeConfig, 'utf8')), job.route);
       const exception = job.exceptionAddress.to ? `your PROJECT SUPERVISOR at ${JSON.stringify(job.exceptionAddress.to)}`
         : 'your PROJECT SUPERVISOR; its project-specific exception address is UNKNOWN, so report that missing address without inventing a recipient';
-      const owner = `Your recorded worker agent is ${job.worker.agentName}; the existing report watcher targets ${job.to}. Retain that watcher. Self-land your own finished committed source through lane promote under the current operator waiver, with clean worktree/rebase/FF and native identity/claim/source/CAS/STOP/HOLD safety. Start ONE independent async post-code review through the existing route, zero reviewer suites; do not wait for its verdict to land. Use --to ${job.worker.agentName} for your ordinary settle/queued-promotion notices and existing prompt delivery for review completion. Own the correction/fix-forward and report actual receipts once. Route actual unsafe/native/identity/ownership/reserved/failed exceptions to ${exception}; never invoke supervisor cycle mutations or borrow supervisor identity.`;
+      const reviewDirection = job.reviewQueue ? 'Review only the captured immutable diff/evidence; no source edits, landing, tests or second review.' : job.reviewQueueProtocol ? 'Hand the immutable landed base/head and producer evidence through your report to the single record queue-review path; the line service creates/dispatches the one review item. Never start a parallel settle/lane review, wait for a verdict to land, or replace an existing/UNKNOWN attempt.' : 'Start ONE independent async post-code review through the existing route, zero reviewer suites; do not wait for its verdict to land.';
+      const owner = `Your recorded worker agent is ${job.worker.agentName}; the existing report watcher targets ${job.to}. Retain that watcher. ${job.reviewQueue ? '' : 'Self-land your own finished committed source through lane promote under the current operator waiver, with clean worktree/rebase/FF and native identity/claim/source/CAS/STOP/HOLD safety. '}${reviewDirection} Use --to ${job.worker.agentName} for your ordinary settle/queued-promotion notices and existing prompt delivery for review completion. Own the correction/fix-forward and report actual receipts once. Route actual unsafe/native/identity/ownership/reserved/failed exceptions to ${exception}; never invoke supervisor cycle mutations or borrow supervisor identity.`;
       // New requests pin their producer command. Older saved jobs/prompts retain
       // their original behavior rather than receiving a retroactive instruction.
       const wording = job.operatorPlainText ? ` --happened '<what happened in plain words>' --action '<what you need to do, usually Nothing needed.>' --details ${quote(`${job.item}; ${job.run}; technical references`)}` : '';
       const composition = job.operatorPlainText ? ' EVERY message addressed to the operator must read naturally: one-line headline, what happened, whether you need to do anything, then ONE trailing Details line. Author the main text for a non-agent reader; bare item/run IDs, hashes, receipt/source jargon and shorthand such as bootstrap5 or record-only belong only in Details. A pending reserved decision must say a decision is needed, never Nothing needed. Internal agent coordination and owned callbacks keep their technical contracts.' : '';
       const producer = job.operatorRecordCommand ? `For OPERATOR-addressed status/fyi/done/questions, store an envelope in the owning record with this explicit source command: ${job.operatorRecordRoot ? `HERDR_BRAIN_ROOT=${quote(job.operatorRecordRoot)} ` : ''}ORG_DIR=${quote(job.org)} ORG_ACTOR=${quote(job.worker.agentName)} ${job.operatorRecordCommand.map(quote).join(' ')} messages send --id ${quote(`${job.run}:operator:STABLE_NOTICE_ID`)} --kind notice --run ${quote(job.run)} --item ${quote(job.item)} --summary '<one-line summary>'${wording}. Reuse the stable ID for a retry; use kind fyi for fyi and question/request for judgment, with --correlation THREAD and --reply-to ID when applicable. Pull messages digest on demand with the same source command. Ordinary OPERATOR-addressed messages are record-only and never typed into an operator pane. Only an actual pending human question already explicitly operator_reserved in the record, referenced with --question HUM-n, pushes once through the existing native inbox and Brain Chat filtering. Routine T2 questions do not become reserved. Internal owned report/watch callbacks and project T2/BrainChat delivery retain their existing native paths and recipients; retain the watcher. Do not fabricate native bindings or change pins, saved jobs or long-lived sessions.${composition}` : '';
-      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.extra ? `\n\n${job.extra}` : ''}`;
+      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.reviewQueueBrief ? `\n\n${job.reviewQueueBrief}` : ''}${job.extra ? `\n\n${job.extra}` : ''}`;
+      if (job.reviewQueue) checkStop();
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);

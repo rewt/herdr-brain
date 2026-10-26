@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fold } from '../lib/state.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { roleIs } from '../lib/roles.mjs';
 
 export const DEFAULT_UNLANDED_CAP = 8;
 export const UNLANDED_EXCEPTION_CAP = 3;
@@ -20,7 +21,8 @@ export function matchesDispatchStart(start, job) {
   return Boolean(meta.dispatch_project) && Boolean(job.token) && canonical(meta.dispatch_project) === canonical(job.common) &&
     start.item === job.item && meta.dispatch_journal === job.journal && meta.dispatch_attempt === job.token &&
     meta.dispatch_unlanded_admitted === job.unlandedCap?.admission?.admitted &&
-    meta.dispatch_unlanded_exception === (kind === 'regular' ? undefined : kind);
+    meta.dispatch_unlanded_exception === (['regular', 'review'].includes(kind) ? undefined : kind) &&
+    (kind !== 'review' || meta.dispatch_role === 'review');
 }
 
 export function countUnlanded({ events, common, journals = [], projectIdentity = cwd => gitProject(cwd).identity }) {
@@ -57,6 +59,7 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
     if (!run || !belongs()) continue;
     const start = { run, meta: event.meta ?? {}, order };
     starts.set(run.id, start);
+    if (start.meta.dispatch_role === 'review' && start.meta.dispatch_unlanded_admitted === false) continue;
     if (!projects.has(run.item)) projects.set(run.item, []);
     projects.get(run.item).push(start);
   }
@@ -81,7 +84,7 @@ export function countUnlanded({ events, common, journals = [], projectIdentity =
   // its child can still append. A matching start replaces it exactly once;
   // only a definitive record refusal makes an unmatched start safe to retry.
   const matchesStart = j => [...starts.values()].some(s => matchesDispatchStart({ item: s.run.item, meta: s.meta }, j));
-  const reservations = journals.filter(j => j.stage === 'starting' && !j.startRefused && j.common &&
+  const reservations = journals.filter(j => j.stage === 'starting' && j.unlandedCap?.admission?.kind !== 'review' && !j.startRefused && j.common &&
     canonical(j.common) === common && !matchesStart(j));
   for (const j of reservations) {
     let item = items.find(i => i.item === j.item);
@@ -118,6 +121,13 @@ export function checkUnlandedCap({ config, org, events, journals, request, requi
   // could miss both the reservation and the run during that transition.
   journals ??= startJournals(org);
   events ??= loadEvents(org).events;
+  // New review work is not a pending build landing. Total native-session
+  // admission is still performed independently by the normal dispatcher.
+  if (roleIs(fold(events).items.get(request.item), 'REV')) {
+    if (request.fromRun || request.unblocks) throw refusal('DISPATCH_REVIEW_REPLACEMENT', 'review admission cannot claim a build fix/unblocks slot');
+    return { cap, count: null, items: [], accounting: 'review', pending_starts: [],
+      admission: { kind: 'review', admitted: false, from_run: null, unblocks: null } };
+  }
   const { state, starts, items, legacy, exceptions, reservations } = countUnlanded({ events, journals, ...options });
   if (request.fromRun) {
     const origin = starts.get(request.fromRun);

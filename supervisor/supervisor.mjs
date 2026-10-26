@@ -223,6 +223,11 @@ export function main(argv = process.argv.slice(2)) {
   ownership ??= requireController(readOwnedRun(project.org, id), opt.controller);
   const settleArgs = [id, '--controller', opt.controller, '--repo', project.canonical, '--org', project.org];
   if (action === 'handle') {
+    if (resolveValidation({ root: project.canonical }).landing_waiver &&
+        !fs.existsSync(path.join(project.org, 'settle', `${id}.json`)) && !fs.existsSync(path.join(project.org, 'settle', `${id}.review-launch.json`))) {
+      print({ result: 'review_queue_required', run: id, blocks_landing: false,
+        next: 'Current source uses record queue-review RUN with immutable landed evidence; the line service owns normal reviewer dispatch. No new settle-review driver started.' }); return;
+    }
     // Promotion may have removed the checkout before a delayed report notice.
     // Recover from both receipts, using the same guards as the queue notice.
     const file = path.join(directory, `${id}.json`);

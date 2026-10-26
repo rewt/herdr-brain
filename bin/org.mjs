@@ -52,6 +52,7 @@ Work
   record messages push --id ID            resume an existing reserved ask through Brain Chat
   record add <title> [--goal] [--role R] [--capability C] [--parent ID]
           [--blocked-by ID]... [--accept TEXT]... [--priority N] [--budget key=N]...
+  record queue-review R-n [--head SHA --base SHA]  idempotent landed-source review item
   record block <ID> --by <ID>             record that --by blocks ID
   record unblock <ID> --by <ID>           remove that blocking link
   record note <ID> <text> [--decision [--summary TEXT]]
@@ -358,6 +359,16 @@ function add(argv) {
     return { add: events, result: id };
   });
   out(`${result}\n`);
+  return 0;
+}
+
+async function queueReview(argv) {
+  const { values, positionals } = args(argv, { head: { type: 'string' }, base: { type: 'string' } }, { min: 1, max: 1, usage: 'record queue-review R-n [--head SHA --base SHA]' });
+  const { queueReviewMutation } = await import('../line-service/review-queue.mjs');
+  const ctx = openOrg(), repo = gitProject(process.cwd()).canonical;
+  if (loadEvents(ctx.dir).tornTail) throw new UserError('incomplete record tail prevents review queue creation');
+  const { result } = mutate(ctx, (state, events) => queueReviewMutation({ state, events, org: ctx.dir, repo, runId: positionals[0], head: values.head, base: values.base }));
+  out(JSON.stringify(result) + '\n');
   return 0;
 }
 
@@ -1024,7 +1035,7 @@ const COMMANDS = {
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
   releases: argv => releasesCommand(argv, { openOrg, out }),
   handoffs: argv => handoffsCommand(argv, { openOrg, mutate, out }),
-  init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
+  init, add, 'queue-review': queueReview, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
   start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.
   claim: lazy('../lib/run-owner.mjs', 'claimCommand'),
@@ -1056,15 +1067,15 @@ process.stdout.on('error', (error) => {
 });
 
 try {
-  // An explicit messages source entry is scoped to this real development root.
+  // Explicit messages/queue-review source entries are scoped to this real root.
   // Immutable release continuations and every other record command retain pin
   // selection. This selector never supplies native, record or run authority.
-  const selected = process.argv[2] === 'messages' && process.env.HERDR_BRAIN_ROOT ? bundleRelease() : null;
-  const sourceMessages = selected && !selected.commit;
-  if (sourceMessages && (fs.realpathSync(process.env.HERDR_BRAIN_ROOT) !== selected.root ||
+  const selected = ['messages', 'queue-review'].includes(process.argv[2]) && process.env.HERDR_BRAIN_ROOT ? bundleRelease() : null;
+  const sourceEntry = selected && !selected.commit;
+  if (sourceEntry && (fs.realpathSync(process.env.HERDR_BRAIN_ROOT) !== selected.root ||
       gitProject(selected.root, { env: projectEnvironment() }).checkout !== selected.root))
-    throw new UserError('HERDR_BRAIN_ROOT must match the invoked development source root; no messages action performed');
-  const forwarded = sourceMessages || ['help', '--help', '-h'].includes(process.argv[2]) ? null : forwardRelease('bin/org.mjs', process.cwd());
+    throw new UserError('HERDR_BRAIN_ROOT must match the invoked development source root; no source action performed');
+  const forwarded = sourceEntry || ['help', '--help', '-h'].includes(process.argv[2]) ? null : forwardRelease('bin/org.mjs', process.cwd());
   process.exitCode = forwarded ?? await main(process.argv.slice(2));
 } catch (error) {
   if (error instanceof UserError || error instanceof FleetError || String(error.code).startsWith('ERR_PARSE_ARGS')) {

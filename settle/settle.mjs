@@ -634,6 +634,12 @@ function main() {
   const project = gitProject(opt.repo);
   const repo = project.canonical;
   const identity = common(repo);
+  if (!fs.existsSync(journal) && resolveValidation({ root: repo }).landing_waiver) {
+    const queued = checked(cli('org', '../bin/org.mjs'), ['queue-review', id,
+      ...(opt['captured-head'] ? ['--head', opt['captured-head']] : []), ...(opt['captured-base'] ? ['--base', opt['captured-base']] : [])], process.cwd(),
+      { env: { HERDR_BRAIN_ROOT: bundleRelease().root } });
+    process.stdout.write(queued + '\n'); return;
+  }
   const capturedReview = Boolean(previous.postCodePolicy && !opt['fix-findings']);
   const workspace = capturedReview ? previous.workspace : fs.realpathSync(run.workspace);
   const branch = capturedReview ? `lane/${previous.lane}` : git(['branch', '--show-current'], workspace);

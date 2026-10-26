@@ -7,6 +7,7 @@ import { reviewScope } from '../settle/review-range.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { fileURLToPath } from 'node:url';
 import { projectPin, selectRelease } from '../lib/releases.mjs';
+import { roleIs } from '../lib/roles.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const capabilityFiles = ['line-service/review.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
@@ -32,16 +33,19 @@ const contains = (value, tokens) => {
   return value && typeof value === 'object' && Object.values(value).some(v => contains(v, tokens));
 };
 
-export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService }) {
+export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun }) {
   const cached = (kind, file, fn) => { const key = `${kind}:${file}`; if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); };
   const readFile = file => cached('file', file, () => read(file));
   const list = file => cached('directory', file, () => entries(file));
   const runs = new Set(item.runs), tokens = new Set([item.id, ...runs]);
+  if (state && [...state.items.values()].some(candidate => candidate.id !== ignoreQueue && roleIs(candidate, 'REV') &&
+      (candidate.parent === item.id || candidate.meta.review_source_item === item.id))) return 'existing item-wide record review';
   // Decision holds need no particular prose formula or native qualification.
   if (events.some(e => e.type === 'note.added' && e.decision && tokens.has(e.id) && /review/i.test(e.text ?? ''))) return 'recorded independent review attempt/hold';
   if (events.some(e => e.type === 'review.verdict' && runs.has(e.run))) return 'recorded verdict';
   const pending = (actions, file) => Object.entries(actions ?? {}).some(([key, value]) => {
-    if (ignoreService && ignoreService.file === file && ignoreService.key === key && value.state === 'started' && JSON.stringify(value.review_target) === JSON.stringify(ignoreService.target)) return false;
+    if (ignoreService && ignoreService.file === file && ignoreService.key === key && value.review_operation === ignoreService.operation && JSON.stringify(value.review_target) === JSON.stringify(ignoreService.target) &&
+        (value.state === 'started' && !ignoreQueue || value.state === 'complete' && value.result?.review_item === ignoreQueue)) return false;
     return key === `review:${item.id}` ||
     (/review/i.test(key) && contains(value, tokens)) || (value?.result?.result === 'review_pending' && contains(value, tokens));
   });
@@ -55,11 +59,16 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
       if (contains(value, tokens)) return reason;
       // Unknown native/review records cannot prove absence. Auxiliary routing
       // snapshots and positively foreign run receipts are not review attempts.
-      if (relative !== 'settle' && value && !value.run && !value.item) throw Error(`unmapped review inventory: ${relative}/${entry.name}`);
+      if (value && !value.run && !value.item) {
+        const named = /^(R-\d+)(?:\.|$)/.exec(entry.name)?.[1];
+        if (named && runs.has(named)) return reason;
+        if (!named || !state?.runs.has(named)) throw Error(`unmapped review inventory: ${relative}/${entry.name}`);
+      }
     }
   }
   for (const entry of list(path.join(org, 'line-service'))) if (entry.isDirectory()) {
     const file = path.join(org, 'line-service', entry.name, 'effects.json'), saved = readFile(file);
+    if (saved && (!saved.actions || typeof saved.actions !== 'object' || Array.isArray(saved.actions))) throw Error(`unrecognized service review inventory; absence UNKNOWN: ${file}`);
     if (pending(saved?.actions, file)) return 'existing service review intent/result';
   }
   const scanEvidence = directory => {
@@ -70,7 +79,7 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
       else if (/review|settle/i.test(entry.name) && !/\.(?:mjs|js|cjs)$/.test(entry.name)) return `source-owner/direct review evidence retained: ${file}`;
       else if (entry.name.endsWith('.json')) {
         const value = readFile(file);
-        if (contains(value, tokens) && /review|reviewer|qualification/i.test(JSON.stringify(value))) return `source-owner review receipt/uncertainty retained: ${file}`;
+        if (/review|reviewer|qualification/i.test(JSON.stringify(value))) return `source-owner review receipt/uncertainty retained: ${file}`;
       }
     }
     return null;
@@ -84,13 +93,16 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
     if (Object.keys(run.report?.extra ?? {}).some(key => /review|verdict|qualification/i.test(key))) return `report retains review/qualification uncertainty for ${id}`;
     const artifacts = run.report?.artifacts ?? [];
     for (const artifact of artifacts) if (typeof artifact === 'string' && path.isAbsolute(artifact) && /review|settle/i.test(path.basename(artifact))) {
-      const stat = fs.lstatSync(artifact, { throwIfNoEntry: false });
-      if (!stat) throw Error(`source-owner review evidence missing: ${artifact}`);
-      return `source-owner review evidence retained: ${artifact}`;
+      return `bound source-owner review reference retained without probing another owner: ${artifact}`;
+    } else if (typeof artifact === 'string' && path.isAbsolute(artifact) && artifact.endsWith('.json') && !path.resolve(artifact).startsWith(path.resolve(org) + path.sep)) {
+      throw Error(`outside-record producer inventory is UNKNOWN; retain its owner, no external probe: ${artifact}`);
     }
     const roots = new Set([repo, run.workspace].filter(Boolean));
     for (const root of roots) {
-      if (!fs.existsSync(root)) throw Error(`review consumer inventory unavailable: ${root}`);
+      if (!fs.existsSync(root)) {
+        if (id === capturedRun && root === run.workspace && root !== repo) continue;
+        throw Error(`review consumer inventory unavailable: ${root}`);
+      }
       for (const entry of list(root)) if (entry.name.startsWith('.lane-review-')) throw Error(`unmapped native/direct review delivery retained: ${path.join(root, entry.name)}`);
       const topic = run.meta?.lane;
       if (topic) for (const relative of ['.lane/reviews', '.lane/public-reviews', 'docs/reviews']) {

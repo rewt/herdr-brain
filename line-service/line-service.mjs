@@ -18,7 +18,9 @@ import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { enqueueSupervisor } from '../supervisor/prompt-supervisor.mjs';
 import { readCloseoutEntries } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
-import { reviewAttempt, bindReviewTarget, selectedReviewConsumer } from './review.mjs';
+import { reviewAttempt, bindReviewTarget } from './review.mjs';
+import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
+import { roleIs } from '../lib/roles.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -115,7 +117,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             `[line-service] ${boundary}: ${reason}. Evidence ${journal}`, { cwd: repo, org, herdr, id: `line-${key}` }) }; save();
         } catch (e) { effects.notices[key].error = e.message; save(); log({ action: 'notice-failed', error: e.message }); }
       };
-      const effect = (key, run, binding) => {
+      const effect = (key, run, binding, operation) => {
         if (effects.actions[key]) {
           const prior = effects.actions[key];
           log({ action: 'effect-retained', key, state: prior.state });
@@ -124,7 +126,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
         observe();
         stale = true;
-        const entry = effects.actions[key] = { state: 'started', at: now(), ...(binding ? { review_target: binding } : {}) }; save();
+        const entry = effects.actions[key] = { state: 'started', at: now(), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
         try {
           entry.result = run(); entry.state = 'complete';
           if (['escalate', 'failed', 'stopped', 'judge_promotion'].includes(entry.result?.result)) {
@@ -162,6 +164,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (!run?.report || run.abandoned || !run.workspace) continue;
         if (item.closed || !run.owner || run.owner.legacy || run.owner.controller !== 'brain') { timings.historical_review_skipped++; continue; }
         if (!fs.existsSync(run.workspace)) { timings.historical_review_skipped++; continue; }
+        if (!roleIs(item, 'ENG')) continue; // Reviews never generate their own review.
+        if (roleIs(snapshot.state.items.get(item.parent), 'REV')) continue; // Linked formal correction, no re-review chain.
         let reviewLock;
         try {
           reviewLock = noticeLock(path.join(directory, `review-item-${digest(item.id)}.lock`));
@@ -170,19 +174,19 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if (identify(run.workspace).identity !== project.identity) continue;
           if (run.report.outcome !== 'done' || run.report.blockers?.length || (run.report.questions ?? run.report.extra?.questions)?.length) note(`report:${run.id}:${run.report.sha256}`, 'worker report needs supervisor judgment');
           if (reserved(item) || item.meta.hold || item.meta.held) { note(`review:${item.id}`, 'held or reserved item needs judgment'); continue; }
-          const consumer = selectedReviewConsumer({ run, repo });
+          const consumer = queueConsumer({ run, env: childEnv });
           const target = bindReviewTarget({ item, run, events: snapshot.events, repo, org, identity: project.identity });
           effect(`review:${item.id}`, () => {
             guardRun(run.id);
             const fresh = observe();
             const changed = reviewAttempt(fresh.state.items.get(item.id), { org, identity: project.identity, events: fresh.events, state: fresh.state, repo, effects,
-              ignoreService: { file: journal, key: `review:${item.id}`, target } });
+              ignoreService: { file: journal, key: `review:${item.id}`, target, operation: 'record-queue' } });
             if (changed) throw Error(`review inventory changed before launch: ${changed}`);
-            if (JSON.stringify(selectedReviewConsumer({ run: fresh.state.runs.get(run.id), repo })) !== JSON.stringify(consumer)) throw Error('actual selected review consumer changed before launch');
+            if (queueConsumer({ run: fresh.state.runs.get(run.id), env: childEnv }) !== consumer) throw Error('actual queue consumer changed before creation');
             const checked = bindReviewTarget({ item: fresh.state.items.get(item.id), run: fresh.state.runs.get(run.id), events: fresh.events, repo, org, identity: project.identity });
             if (JSON.stringify(checked) !== JSON.stringify(target)) throw Error('immutable review target/evidence changed before capture');
-            return JSON.parse(cli('supervisor/supervisor.mjs', ['handle', run.id, '--repo', repo, '--org', org, '--role', 'supervisor', '--to', run.meta.agent ?? to, '--timeout', '0', '--captured-head', target.head, '--captured-base', target.base]));
-          }, target);
+            return JSON.parse(cli('bin/org.mjs', ['queue-review', run.id, '--head', target.head, '--base', target.base]));
+          }, target, 'record-queue');
         } catch (e) { note(`review:${item.id}`, `T2 automatic review held: ${e.message}`); }
         finally { reviewLock?.(); }
       }
@@ -235,13 +239,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Failed cleanup/review never prevents considering independent ready work.
       snapshot = current();
       const { config } = loadDiscoveredRoutes({ cwd: repo, env: childEnv });
-      for (const item of sortItems([...snapshot.state.items.values()].filter(item => !item.closed && item.kind !== 'goal'))) {
+      for (const item of sortItems([...snapshot.state.items.values()].filter(item => !item.closed && item.kind !== 'goal')).sort((a, b) => Number(isQueueReview(b)) - Number(isQueueReview(a)))) {
         if (item.kind === 'goal' || item.closed || itemStatus(snapshot.state, item.id) !== 'ready') continue;
+        if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); continue; }
         if (reserved(item) || item.meta.hold || item.meta.held) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment'); continue; }
         try {
           const key = `dispatch:${item.id}:${item.runs.at(-1) ?? item.created.seq}`;
           if (effects.actions[key]) { log({ action: 'dispatch-retained', key, state: effects.actions[key].state }); continue; }
-          const route = routeFor(item, config);
+          const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo }) : null;
+          const route = reviewTarget ? reviewQueueRoute(config) : routeFor(item, config);
           const count = capacity ?? (() => checkSessionCap({ config, org, common: project.identity,
             agent: name => native(['agent', 'get', name]).agent,
             processInfo: pane => native(['pane', 'process-info', '--pane', pane]).process_info }));
@@ -249,10 +255,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           checkUnlandedCap({ config, org, common: project.identity, request: { item: item.id } });
           const dispatched = effect(key, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
-            if (!current || current.closed || itemStatus(fresh.state, item.id) !== 'ready' || reserved(current) || current.meta.hold || current.meta.held || routeFor(current, config) !== route) throw Error('dispatch readiness or route changed');
+            if (!current || current.closed || itemStatus(fresh.state, item.id) !== 'ready' || reserved(current) || current.meta.hold || current.meta.held || (reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route) throw Error('dispatch readiness or route changed');
             const brief = path.join(directory, `${digest(key)}.ask.md`);
-            writeFileAtomic(brief, `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item/run brief and accepted directions. Self-land OWN source; one async independent post-code review, zero reviewer suites. Preserve STOP/HOLD, claims and native guards. Escalate judgment to ${to} through the existing native inbox.\n`, 0o600);
-            return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `line-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief]));
+            const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
+            writeFileAtomic(brief, target ? reviewQueueBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item/run brief and accepted directions. Self-land OWN source and hand its immutable landed tuple/evidence to record queue-review; never start a parallel settle/lane review. Preserve STOP/HOLD, claims and native guards. Escalate judgment to ${to} through the existing native inbox.\n`, 0o600);
+            return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : [])]));
           });
           // Fresh occupancy and readiness on the next scheduled pass. Dispatch
           // performs the authoritative, locked applicable-cap admission itself.

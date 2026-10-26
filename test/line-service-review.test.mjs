@@ -46,8 +46,9 @@ test('automatic review binds committed changed evidence despite blocked outcome 
   assert.equal(reviewAttempt(f.context().item, f.context()), null);
   const s = f.service(); s.pass(); s.pass();
   assert.equal(f.calls.length, 1); const args = f.calls[0].args;
-  assert.equal(args[args.indexOf('--captured-head') + 1], f.head);
-  assert.equal(args[args.indexOf('--captured-base') + 1], f.base);
+  assert.equal(args[1], 'queue-review');
+  assert.equal(args[args.indexOf('--head') + 1], f.head);
+  assert.equal(args[args.indexOf('--base') + 1], f.base);
   const effects = JSON.parse(fs.readFileSync(path.join(s.directory, 'effects.json')));
   assert.equal(effects.actions['review:ENG-1'].review_target.reportHash, target.reportHash);
 });

@@ -145,3 +145,20 @@ test('pending backlog waits for a healthy journal writer release without owner p
   const result=await done;assert.equal(result.status,0,result.stderr);assert.equal(JSON.parse(result.stdout).handled,1);
   assert.equal(f.messages().length,1);assert.equal(readInbox(f.file)[0].state,'handled');
 });
+
+test('pending backlog waits for healthy drain release without probing or stealing its owner',async t=>{
+  const f=fixture(t);f.put([{id:'pending'}]);const bin=path.join(f.scratch,'drain-bin');fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin,'herdr'),`#!${process.execPath}\nconst a=process.argv.slice(2);if(a[0]!=='agent'||a[1]!=='get')process.exit(93);const v=a[2]===${JSON.stringify(f.actor.pane_id)}?${JSON.stringify(f.actor)}:a[2]==='brain-chat'?${JSON.stringify(f.recipient)}:null;if(!v)process.exit(94);console.log(JSON.stringify({result:{agent:v}}));\n`,{mode:0o755});
+  const marker=path.join(f.scratch,'drain-wait-observed'),hook=path.join(f.scratch,'drain-wait-hook.mjs');
+  fs.writeFileSync(hook,`import fs from 'node:fs';import{syncBuiltinESMExports}from'node:module';const exists=fs.existsSync;fs.existsSync=function(file){const found=exists(file);if(String(file)===${JSON.stringify(f.file+'.drain.lock')}&&found)fs.writeFileSync(${JSON.stringify(marker)},'waiting');return found;};process.kill=()=>{throw Error('native owner probe forbidden');};syncBuiltinESMExports();`);
+  const release=noticeLock(f.file+'.drain.lock',{recover:false});let finished;
+  const child=spawn(process.execPath,[path.join(source,'supervisor/prompt-supervisor.mjs'),'--handle-pending-line','--org',f.org,'--id','healthy-drain'],{cwd:f.cwd,env:{...f.env,PATH:`${bin}:${f.env.PATH}`,NODE_OPTIONS:`${f.env.NODE_OPTIONS??''} --import=${JSON.stringify(hook)}`}});
+  let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);
+  const done=new Promise(resolve=>child.on('exit',status=>{finished={status,stdout,stderr};resolve(finished);}));
+  try{
+    while(!fs.existsSync(marker)&&!finished)await new Promise(resolve=>setTimeout(resolve,10));
+    assert.ok(fs.existsSync(marker),JSON.stringify(finished));assert.equal(JSON.parse(fs.readFileSync(f.file+'.drain.lock/owner.json')).pid,process.pid,'healthy owner retains its lock until natural release');
+  }finally{release();}
+  const result=await done;assert.equal(result.status,0,result.stderr);assert.equal(JSON.parse(result.stdout).handled,1);
+  assert.equal(f.messages().length,1);assert.equal(readInbox(f.file)[0].state,'handled');
+});

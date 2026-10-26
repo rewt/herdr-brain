@@ -58,7 +58,7 @@ export function handlePendingLineNotices({org, inbox, id, herdr='herdr', cwd=pro
   const manifestFile=path.join(directory,`${id}.json`), messageId=`line-service-aggregate:${id}`;
   // Never kill(0), resume, recover or replace an existing owner. A busy old
   // drain can already hold a final-input intent; only its natural release helps.
-  const release=noticeLock(`${file}.drain.lock`,{recover:false});
+  const release=noticeLock(`${file}.drain.lock`,{recover:false,waitMs:5000});
   try { return inboxTransaction(file,(entries,append)=>{
     let manifest=plain(manifestFile); manifest=manifest===null?null:JSON.parse(manifest);
     const current=bind();

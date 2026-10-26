@@ -11,7 +11,7 @@ import { initOrg, transact, loadEvents } from '../../lib/store.mjs';
 import { enqueueSupervisor, readInbox as snapshot } from '../../supervisor/prompt-supervisor.mjs';
 import { acquireTestSlot } from '../../test-slot/test-slot.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
-import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+import { stopOwnedInbox } from '../../test/helpers/inbox.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { productFiles } from '../../lib/product-files.mjs';
 import { acquireLock } from '../../lanes/promotion-lock.mjs';
@@ -80,7 +80,7 @@ function fixture(t, { defaultState = false, proving = false } = {}) {
     assert.equal(result.code, 0, result.stderr); return JSON.parse(result.stdout);
   };
   t.after(async () => {
-    await stopFixtureInbox(path.join(org, 'supervisor/inbox.log'), { script: inboxCLI });
+    await stopOwnedInbox(path.join(org, 'supervisor/inbox.log'), { script: inboxCLI });
     for (const desk of Object.keys(queue.load().desks)) git('worktree', 'remove', '--force', desk);
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(storeRoot, { recursive: true, force: true });

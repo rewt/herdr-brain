@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
 import { resolveGateProfile } from '../gate-profile.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
-import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+import { stopOwnedInbox } from '../../test/helpers/inbox.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { validateSlotPath } from '../../test-slot/paths.mjs';
@@ -27,20 +27,6 @@ async function waitForChange(files, predicate, { timeoutMs = 10000 } = {}) {
 }
 async function waitForFile(file, predicate = () => true, options) {
   return waitForChange([file], () => { let text; try { text = fs.readFileSync(file, 'utf8'); } catch(e) { if(e.code === 'ENOENT') return false; throw e; } return predicate(text) ? text || true : false; }, options);
-}
-
-// Native full snapshots can race a short-lived transport. Retry only the
-// ownership read; the shared helper still revalidates every signal and resumes
-// a confirmed stopped owner before returning a refused inspection.
-async function stopOwnedInbox(file, options) {
-  const deadline = Date.now() + loadTimeout(5000);
-  for (;;) {
-    try { return await stopFixtureInbox(file, options); }
-    catch (e) {
-      if (!/^Cannot confirm fixture inbox (children|owner):/.test(e.message) || Date.now() >= deadline) throw e;
-      await new Promise(resolve => setTimeout(resolve, 30));
-    }
-  }
 }
 
 const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));

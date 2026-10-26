@@ -1,6 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createProcessTracker } from './processes.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
+
+// Native snapshots can race short-lived transports. Retry only refused
+// inspections; stopFixtureInbox still confirms ownership before every signal
+// and resumes confirmed suspended processes before refusing an inspection.
+export async function stopOwnedInbox(file, options) {
+  const deadline = Date.now() + loadTimeout(5000);
+  for (;;) {
+    try { return await stopFixtureInbox(file, options); }
+    catch (error) {
+      if (!/^Cannot confirm fixture inbox (children|owner|shutdown):/.test(error.message) || Date.now() >= deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+  }
+}
 
 // Call only after the fixture's senders/watchers have stopped. Lock metadata is
 // a candidate, not signal authority: require the exact owner argv and its own

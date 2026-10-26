@@ -1,16 +1,17 @@
-import test from '../../test/helpers/bounded-test.mjs';
+import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createLineService, sourceRoot, reviewAttempt } from '../line-service.mjs';
-import { launchPlist } from '../launchd.mjs';
-import { noticeLock } from '../../supervisor/notice-lock.mjs';
-import { gitProject } from '../../lib/project.mjs';
-import { loadEvents } from '../../lib/store.mjs';
-import { fold } from '../../lib/state.mjs';
-import { captureProductCheckout } from '../../lib/product-files.mjs';
+import { createLineService, sourceRoot, reviewAttempt } from '../line-service/line-service.mjs';
+import { launchPlist } from '../line-service/launchd.mjs';
+import { noticeLock } from '../supervisor/notice-lock.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { loadEvents } from '../lib/store.mjs';
+import { fold } from '../lib/state.mjs';
+import { captureProductCheckout } from '../lib/product-files.mjs';
+import { tierFiles } from './helpers/tier.mjs';
 
 function fixture(t) {
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), org = path.join(repo, '.org');
@@ -114,16 +115,18 @@ test('historical closed, retired and unclaimed reports do not recreate review de
   assert.equal(f.show(missing.run).abandoned, null); assert.equal(f.show(held.item).closed, null);
 });
 
-test('source inventory includes line-service, omits only Finder metadata and retains runtime parity guard', t => {
+test('source inventory includes line-service and its release controls while retaining runtime parity guard', t => {
   const f = fixture(t);
   for (const name of ['line-service', 'lib']) fs.mkdirSync(path.join(f.repo, name));
   fs.writeFileSync(path.join(f.repo, 'line-service/line-service.mjs'), 'export const service = true;\n');
   fs.writeFileSync(path.join(f.repo, 'lib/module.mjs'), 'export const guard = true;\n');
   f.git(['add', 'line-service', 'lib']); f.git(['commit', '-qm', 'Runtime fixture']);
-  fs.writeFileSync(path.join(f.repo, 'lib/.DS_Store'), 'Finder metadata');
   const captured = captureProductCheckout(f.repo);
   assert.ok(captured.runtime.includes('line-service/line-service.mjs'));
-  assert.ok(!captured.runtime.some(file => file.endsWith('.DS_Store')));
+  assert.ok(tierFiles('release').includes('test/line-service.test.mjs'));
+  fs.writeFileSync(path.join(f.repo, 'lib/.DS_Store'), 'Finder metadata');
+  assert.throws(() => captureProductCheckout(f.repo), /source runtime inventory mismatch/);
+  fs.unlinkSync(path.join(f.repo, 'lib/.DS_Store'));
   fs.writeFileSync(path.join(f.repo, 'lib/untracked-runtime.mjs'), 'export const extra = true;\n');
   assert.throws(() => captureProductCheckout(f.repo), /source runtime inventory mismatch/);
 });

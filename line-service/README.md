@@ -40,7 +40,8 @@ is held, never duplicated. Project STOP/HOLD is never cleared by restart.
 Revert stops it first and uses ordinary Git revert on an explicit newest-first
 list of this hotfix's commits (repeat `--commit`). It refuses a dirty source,
 foreign paths or commits outside `line-service/` and its narrow
-`lib/product-files.mjs` inventory declaration; it never resets history. Only the
+`lib/product-files.mjs` inventory declaration and `test/line-service.test.mjs`
+release controls; it never resets history. Only the
 source project's owner reverts shared source; another project's stop is local.
 Keep the pre-hotfix archive tag and record the actual committed SHA list.
 
@@ -70,10 +71,12 @@ supported recovery after inspecting its evidence. No second transport or approva
 schema is introduced.
 
 The focused offline check is `node test/helpers/run.mjs
-line-service/test/line-service.test.mjs`, through `lane check --cmd` on committed
+test/line-service.test.mjs`, through `lane check --cmd` on committed
 source. These controls stub native effects while using real Git, record/fold and
 the real command argv. Actual installation and a real effect/readback belong to
 each project's supervisor; a process heartbeat is not acceptance. The full
 release test remains the release coordinator's next-release obligation.
-The runtime distribution includes `line-service/`. Finder `.DS_Store` metadata
-is excluded narrowly; untracked runtime code still fails the source parity guard.
+The runtime distribution includes `line-service/`. The release discovers its
+controls in `test/`. Untracked Finder metadata and runtime code still fail the
+source parity guard; the owning supervisor archives stray artifacts through the
+supported source recovery rather than weakening that guard.

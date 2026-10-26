@@ -242,14 +242,18 @@ watcher recipient. Use that worker's `--to` for ordinary settle/queued-promotion
 notices, and existing prompt delivery for its independent review completion.
 The worker handles routine follow-up and sends actual unsafe/native/identity/
 ownership/reserved/failed exceptions to its PROJECT SUPERVISOR at the supported
-project-specific address supplied by `MONITOR_SUPERVISOR_AGENT` in generated
-dispatch briefs. When that variable is unset or empty, the current runtime still
-falls back to `supervisor-herdr`. That is a Brain-specific legacy fallback, not
-a generic address for other identities. Each identity's owner must supply its
-actual project supervisor address through the supported configuration. This
-docs-only correction changes no binary/config/pin, saved job, watcher recipient
-or claim. The variable supplies the exception address, not the new dispatch's
-ordinary report destination. A bootstrap supervisor forwards
+project-specific address. Current-source generated briefs resolve a nonempty
+parent `MONITOR_SUPERVISOR_AGENT` first, then its effective dispatch/route launch
+env value (later route entries win), then the target project's effective
+`promote.to` through supported policy discovery. Child-only launcher env does
+not mutate the parent environment. Missing/unreadable address policy yields an
+UNKNOWN address in the footer, with no invented recipient or new readiness gate.
+New requests save this address decision for retries; already-delivered prompts,
+saved ordinary recipients and runtime/claim bindings remain unchanged. Older
+installed entries or saved prompts may retain the legacy `supervisor-herdr`
+fallback; this source correction does not edit them or change config/pins. Each
+identity's owner supplies its actual address. The exception address is separate
+from the new dispatch's ordinary report destination. A bootstrap supervisor forwards
 ordinary follow-up to the existing owner; it does not repeat intake or review.
 The core stays foreground and never calls a model.
 
@@ -259,9 +263,12 @@ clean worktrees/rebase, exact source/CAS/fast-forward, STOP, HOLD and archives.
 It starts ONE async independent post-code review through the existing review
 route, with zero reviewer suites, and owns one formal correction/fix-forward.
 Final report intake records the existing review binding and owner evidence once;
-it must not launch a duplicate review. Run the ask's focused changed checks once
-through `lane check --cmd COMMAND` on the clean committed candidate before the
-final report; no pre-main or generic/full-suite gate is added. Unrun is never PASS.
+it must not launch a duplicate review. Run only the ask's or explicit `--extra`
+focused check selection once through `lane check --cmd COMMAND` with the existing
+project runner on clean committed source, preserving file groups/limits. If none
+is selected/applicable, report the selection/scope and unrun truth; do not
+substitute a default/fast/npm blanket suite. No pre-main or generic/full-suite
+gate is added. Unrun is never PASS; the one full final-release obligation remains.
 
 Until a future release, select the changed source explicitly, for example
 `HERDR_BRAIN_ROOT=/CANONICAL /PINNED/NODE /CANONICAL/dispatch/dispatch.mjs ...`.

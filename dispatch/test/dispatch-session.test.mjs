@@ -296,9 +296,9 @@ for (const configured of [false, true]) test(`worker prompt preserves the final 
   assert.deepEqual(calls.find(x=>x.type==='lane'&&x.a[0]==='open').a, ['open','topic','--git-only']);
   assert.match(promptCalls(f)[0].a[3],new RegExp(result.run));assert.ok(promptCalls(f)[0].a[3].includes(run.brief_path));
   assert.ok(promptCalls(f)[0].a[3].includes(run.report_path));assert.match(promptCalls(f)[0].a[3],/Fix round/);
-  assert.match(promptCalls(f)[0].a[3], /Run the ask's final test selection once through.*check --cmd 'COMMAND' on the clean committed candidate/);
-  assert.match(promptCalls(f)[0].a[3], /Only when the ask names no test selection, use check without --cmd/);
-  assert.match(promptCalls(f)[0].a[3], /default test command without configuration/);
+  assert.match(promptCalls(f)[0].a[3], /Run only the ask's or explicit --extra scope's focused check selection once through.*check --cmd 'COMMAND' on the clean committed candidate/);
+  assert.match(promptCalls(f)[0].a[3], /If no check is selected or applicable, report the selection\/scope and unrun truth/);
+  assert.doesNotMatch(promptCalls(f)[0].a[3], /use check without --cmd|default test command without configuration|npm run test:fast/);
   assert.match(promptCalls(f)[0].a[3], /Do not add a tier run or repeat tests/);
   assert.match(promptCalls(f)[0].a[3], /\.lane\/gate\.json.*TAP totals and Node version/);
   assert.equal(fs.readFileSync(f.brief,'utf8'),before);

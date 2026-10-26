@@ -16,6 +16,7 @@ import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/
 import { admissionDeadline } from '../lib/deadline.mjs';
 import { readTiming, timedMemoryWait, timingMetadata, readAdmissionTiming, admissionTimingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { readProjectPolicy } from '../lib/config-policy.mjs';
 import { bundleRelease, forwardRelease, continueRelease, operationFile } from '../lib/releases.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/worker-identity.mjs';
@@ -80,6 +81,24 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
 const record = (args) => command(recordCLI, args);
 const identityState = () => fold(loadEvents(job?.org ?? opt.org).events);
 const lane = (args) => command(laneCLI, args);
+function projectExceptionAddress(repo, config, route) {
+  const explicit = process.env.MONITOR_SUPERVISOR_AGENT?.trim();
+  if (explicit) return { to: explicit, source: 'parent MONITOR_SUPERVISOR_AGENT' };
+  // Launch env is child-only; resolve its effective value without mutating the
+  // dispatcher's environment. Later route entries override dispatch defaults.
+  const launch = resolveLaunchRoute(config, { route });
+  const setting = launch.env.filter(pair => pair.startsWith('MONITOR_SUPERVISOR_AGENT=')).at(-1);
+  const configured = setting?.slice('MONITOR_SUPERVISOR_AGENT='.length).trim();
+  if (configured) return { to: configured, source: 'effective launch MONITOR_SUPERVISOR_AGENT' };
+  try {
+    const policy = readProjectPolicy(repo, 'promote', process.env, { canonical: gitProject(repo).canonical });
+    if (policy.config.to) return { to: policy.config.to.trim(), source: 'project promote.to', file: policy.file };
+    return { to: null, source: 'unknown', reason: 'No project-specific exception address is configured.' };
+  } catch (error) {
+    // Address discovery supplies guidance, never a new dispatch readiness gate.
+    return { to: null, source: 'unknown', reason: error.message };
+  }
+}
 const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
 const refusal = (code, message) => Object.assign(new Error(message), { code });
@@ -358,7 +377,7 @@ async function main() {
     job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null, item: positionals[0], lane: opt.lane, route: opt.route,
       brief, report: opt.report ?? null, to: opt.to ?? null,
       base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
-      declared: declaredFields,
+      declared: declaredFields, exceptionAddress: projectExceptionAddress(repo, config, opt.route),
       stage: 'open', run: null };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
     job.routeConfig = path.join(directory, `${token}.routes.json`);
@@ -572,8 +591,11 @@ async function main() {
         }
       }
       if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
-      const validation = `Run the ask's final test selection once through ${JSON.stringify(process.execPath)} ${JSON.stringify(local('../lanes/lane.mjs'))} check --cmd 'COMMAND' on the clean committed candidate before reporting, preserving the ask's file groups and limits. Only when the ask names no test selection, use check without --cmd for the project's declared fast command or default test command without configuration. This writes .lane/gate.json and the shared lane-validation receipt with command, exit status, TAP totals and Node version for settle to inherit. Do not add a tier run or repeat tests solely to create a receipt.`;
-      const owner = `Your recorded worker agent is ${job.worker.agentName}; the existing report watcher targets ${job.to}. Retain that watcher. Self-land your own finished committed source through lane promote under the current operator waiver, with clean worktree/rebase/FF and native identity/claim/source/CAS/STOP/HOLD safety. Start ONE independent async post-code review through the existing route, zero reviewer suites; do not wait for its verdict to land. Use --to ${job.worker.agentName} for your ordinary settle/queued-promotion notices and existing prompt delivery for review completion. Own the correction/fix-forward and report actual receipts once. Route actual unsafe/native/identity/ownership/reserved/failed exceptions to ${process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr'}; never invoke supervisor cycle mutations or borrow supervisor identity.`;
+      const validation = `Run only the ask's or explicit --extra scope's focused check selection once through ${JSON.stringify(process.execPath)} ${JSON.stringify(local('../lanes/lane.mjs'))} check --cmd 'COMMAND' on the clean committed candidate before reporting, using the existing project runner and preserving file groups and limits. When checks run, this writes .lane/gate.json and the shared lane-validation receipt with command, exit status, TAP totals and Node version for settle to inherit. If no check is selected or applicable, report the selection/scope and unrun truth; do not substitute a blanket default/fast/npm suite or label unrun checks PASS. Do not add a tier run or repeat tests solely to create a receipt. Self-land finished source without a test/review readiness gate; the one full final-release obligation stays with its release coordinator.`;
+      job.exceptionAddress ??= projectExceptionAddress(job.repo, JSON.parse(fs.readFileSync(job.routeConfig, 'utf8')), job.route);
+      const exception = job.exceptionAddress.to ? `your PROJECT SUPERVISOR at ${JSON.stringify(job.exceptionAddress.to)}`
+        : 'your PROJECT SUPERVISOR; its project-specific exception address is UNKNOWN, so report that missing address without inventing a recipient';
+      const owner = `Your recorded worker agent is ${job.worker.agentName}; the existing report watcher targets ${job.to}. Retain that watcher. Self-land your own finished committed source through lane promote under the current operator waiver, with clean worktree/rebase/FF and native identity/claim/source/CAS/STOP/HOLD safety. Start ONE independent async post-code review through the existing route, zero reviewer suites; do not wait for its verdict to land. Use --to ${job.worker.agentName} for your ordinary settle/queued-promotion notices and existing prompt delivery for review completion. Own the correction/fix-forward and report actual receipts once. Route actual unsafe/native/identity/ownership/reserved/failed exceptions to ${exception}; never invoke supervisor cycle mutations or borrow supervisor identity.`;
       const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}\n\n${validation}${job.extra ? `\n\n${job.extra}` : ''}`;
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();

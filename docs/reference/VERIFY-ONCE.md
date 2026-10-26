@@ -47,11 +47,13 @@ ownership/reserved/failed exceptions go to that worker's PROJECT SUPERVISOR at
 its supported project-specific address. Existing bootstrap watchers retain their
 recorded recipient; do not duplicate or restart them.
 
-Generated dispatch briefs use `MONITOR_SUPERVISOR_AGENT` for this exception
-address. The current runtime's unset or empty fallback remains `supervisor-herdr`,
-a Brain-specific legacy address, not a generic recipient for other identities.
-Each identity's owner sets its actual project supervisor address. This docs-only
-wording changes no binary/config/pin, saved job, watcher recipient or claim.
+Current-source dispatch briefs resolve the explicit parent
+`MONITOR_SUPERVISOR_AGENT`, then effective project launch env, then the target
+project's effective `promote.to`. Missing addresses remain UNKNOWN; dispatch does
+not invent a recipient or add an address readiness gate. Each identity's owner
+sets its actual project address. Older installed/saved prompts may retain their
+legacy fallback; source edits change no installed binary/config/pin, saved job,
+watcher recipient or claim.
 
 Use the prescribed native protected execution from the outset for Git/control/
 record/dispatch/settle/promote mutations. A native refusal stops the affected action;

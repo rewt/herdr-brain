@@ -40,7 +40,8 @@ independent judgment or functional evidence.
 The asynchronous review reads its captured commit objects. An engineer's later
 HEAD, a newer run or supported lane retirement cannot replace that source or erase
 its review. Completing the old review never clears the newer run's outcome or
-borrows its claim. Delivery binds the matching full source/head/review receipt;
+borrows its claim. A late older report never restores an outcome cleared by
+`item.reopened`. Delivery binds the matching full source/head/review receipt;
 uncertain launch or delivery requires inspection of the existing session/evidence,
 not a second automatic review. Historical verdicts/caps/receipts remain unchanged.
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
 import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
@@ -73,6 +73,10 @@ test('purpose-label source entry reaches pinned projects without changing their 
   const sourceRoot = realpathSync(fileURLToPath(new URL('../../', import.meta.url)));
   const sourceCLI = join(sourceRoot, 'lanes/lane.mjs');
   const pinnedCLI = join(f.bundle, 'lanes/lane.mjs');
+  const savedCLI = join(f.release('retained'), 'lanes/lane.mjs');
+  const account = join(f.scratch, 'account.mjs');
+  writeFileSync(account, `import os from 'node:os';import {syncBuiltinESMExports} from 'node:module';
+    const original=os.userInfo;os.userInfo=(...args)=>({...original(...args),homedir:${JSON.stringify(f.home)}});syncBuiltinESMExports();`);
   // Seal a distinguishable scratch fixture entry, never the installed bundle.
   writeFileSync(pinnedCLI, "process.stdout.write('pinned lane entry\\n');\n");
   const manifest = spawnSync(process.execPath, [join(sourceRoot, 'herdr/releases.mjs'), 'manifest', f.bundle,
@@ -80,7 +84,8 @@ test('purpose-label source entry reaches pinned projects without changing their 
   assert.equal(manifest.status, 0, manifest.stderr);
   const pin = policyLocation(f.cwd, 'pin', f.env).file, before = readFileSync(pin);
   const run = (entry, selected) => spawnSync(process.execPath, [entry, 'config'], {
-    cwd: f.cwd, env: { ...f.env, HERDR_BRAIN_ROOT: selected }, encoding: 'utf8',
+    cwd: f.cwd, env: { ...f.env, HERDR_BRAIN_ROOT: selected,
+      NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(account).href}` }, encoding: 'utf8',
   });
   const normal = run(sourceCLI, '');
   assert.equal(normal.status, 0, normal.stderr); assert.equal(normal.stdout, 'pinned lane entry\n');
@@ -88,7 +93,7 @@ test('purpose-label source entry reaches pinned projects without changing their 
   assert.equal(selected.status, 0, selected.stderr); assert.match(selected.stdout, /^main\t/m);
   const mismatch = run(sourceCLI, f.cwd);
   assert.notEqual(mismatch.status, 0); assert.match(mismatch.stderr, /must match the invoked development source root/);
-  const saved = run(pinnedCLI, sourceRoot);
-  assert.equal(saved.status, 0, saved.stderr); assert.equal(saved.stdout, 'pinned lane entry\n');
+  const saved = run(savedCLI, f.cwd);
+  assert.equal(saved.status, 0, saved.stderr); assert.match(saved.stdout, /^main\t/m);
   assert.deepEqual(readFileSync(pin), before);
 });

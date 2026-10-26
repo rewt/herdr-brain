@@ -138,21 +138,8 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       }
     }
 
-    // Resolve only this project's settings. Inherited worker/other-project
-    // LANE_CONFIG and notice recipients must not select its launch account.
-    const { config } = loadDiscoveredRoutes({ cwd: project.checkout, env: { ...env, LANE_CONFIG: undefined } });
-    const harness = kind || env.HERDR_MONITOR_SUPERVISOR_HARNESS || 'codex';
-    const launch = resolveLaunchRoute(config, { ...(route ? { route } : { kind: harness }), args });
-    if (!['codex', 'claude'].includes(launch.kind)) throw new Error('project chats require codex or claude');
     const chat = agentName(project.identity);
     if (agents(herdr).some(a => a.name === chat)) throw new Error('project chat exists outside its recorded tab; inspect before opening another');
-    const environmentPairs = launch => new Map(launch.env.map(pair => {
-      if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0')) throw new Error('invalid chat launch environment');
-      const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
-    }));
-    const pairs = environmentPairs(launch);
-    const ops = to || pairs.get('MONITOR_SUPERVISOR_AGENT') || 'supervisor-herdr';
-    if (!/^[a-z][a-z0-9_-]{0,31}$/u.test(ops) || ops.startsWith('chat-')) throw new Error('notice recipient must be an ops agent, never a project chat');
     // Adopt the operator's prototype without restarting it or changing its
     // account or conversation. Labels alone never bind a chat.
     const prototypes = agents(herdr).filter(a => a.name === `chat-${name}`);
@@ -164,12 +151,25 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       if (pane?.workspace_id !== control.workspace_id || !Array.isArray(tabs) ||
         !tabs.some(t => t.tab_id === pane.tab_id) || !inCheckout(pane.foreground_cwd, project)) throw new Error('prototype chat is outside the control workspace or checkout; inspect before adopting');
       const receipt = { workspace: control.workspace_id, tab: pane.tab_id, pane: prototype.pane_id,
-        name: prototype.name, checkout: project.checkout, record: project.record, kind: prototype.agent, to: ops };
+        name: prototype.name, checkout: project.checkout, record: project.record, kind: prototype.agent };
       state.workspace = receipt.workspace; state.projects[project.identity] = receipt;
       writeFileAtomic(file, JSON.stringify(state, null, 2) + '\n', 0o600);
       if (focus) herdr(['tab', 'focus', receipt.tab]);
       return { ...receipt, project: name, reused: true, available: true };
     }
+    // Resolve launch settings only when creating a chat. An adopted chat keeps
+    // its existing harness and environment; routes cannot describe that session.
+    // Inherited worker/other-project settings must not select a launch account.
+    const { config } = loadDiscoveredRoutes({ cwd: project.checkout, env: { ...env, LANE_CONFIG: undefined } });
+    const harness = kind || env.HERDR_MONITOR_SUPERVISOR_HARNESS || 'codex';
+    const launch = resolveLaunchRoute(config, { ...(route ? { route } : { kind: harness }), args });
+    if (!['codex', 'claude'].includes(launch.kind)) throw new Error('project chats require codex or claude');
+    const pairs = new Map(launch.env.map(pair => {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0')) throw new Error('invalid chat launch environment');
+      const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
+    }));
+    const ops = to || pairs.get('MONITOR_SUPERVISOR_AGENT') || 'supervisor-herdr';
+    if (!/^[a-z][a-z0-9_-]{0,31}$/u.test(ops) || ops.startsWith('chat-')) throw new Error('notice recipient must be an ops agent, never a project chat');
     const root = fileURLToPath(new URL('../', import.meta.url));
     const policy = entryPolicy({ canonical: project.checkout, org: project.record, role: 'chat' }, root);
     const instructionsFile = path.join(home, 'sessions/contexts', `${randomUUID()}.instructions.md`);

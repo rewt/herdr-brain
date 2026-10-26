@@ -289,6 +289,7 @@ test('the named prototype in chats is adopted unchanged and other projects join 
   assert.equal(receipt.reused, true); assert.equal(receipt.kind, 'claude');
   assert.equal(receipt.workspace, 'w2XS'); assert.equal(receipt.pane, 'w2XS:chat');
   assert.equal(receipt.name, `chat-${f.projects[0].name}`);
+  assert.equal(Object.hasOwn(receipt, 'to'), false, 'adoption cannot infer the running recipient from routes');
   assert.equal(f.state().focus, 'w2XS:prototype');
   assert.deepEqual(f.state().env[receipt.pane], {CLAUDE_CONFIG_DIR: '/personal/config', LEGACY_RECEIPT: 'unchanged'});
   assert.equal(f.state().calls.some(a => ['create', 'run', 'rename'].includes(a[1])), false);
@@ -298,6 +299,26 @@ test('the named prototype in chats is adopted unchanged and other projects join 
   assert.equal(second.workspace, 'w2XS'); assert.equal(f.state().spaces.length, 1);
   assert.equal(f.state().tabs.length, 2); assert.equal(f.state().launches.length, 1);
   assert.equal(f.state().focus, receipt.tab);
+});
+
+test('prototype adoption and reopening ignore unusable launch configuration and selectors', t => {
+  const f = fixture(t), p = f.projects[0]; prototype(f);
+  fs.writeFileSync(p.layers[0], '{broken');
+  f.env.HERDR_MONITOR_SUPERVISOR_HARNESS = 'unsupported';
+  const before = f.snapshot(p.checkout);
+  const receipt = f.open(p, {route: 'missing', kind: 'unsupported', to: 'chat-other', args: ['\0'], focus: false});
+  assert.equal(receipt.kind, 'claude'); assert.equal(receipt.available, true);
+  assert.equal(Object.hasOwn(receipt, 'to'), false);
+  const saved = JSON.parse(fs.readFileSync(path.join(f.env.HERDR_MONITOR_FLEET, 'chats.json'))).projects[p.identity];
+  assert.deepEqual(saved, {workspace: 'w2XS', tab: 'w2XS:prototype', pane: 'w2XS:chat',
+    name: `chat-${p.name}`, checkout: p.checkout, record: p.record, kind: 'claude'});
+  assert.equal(f.open(p, {route: 'missing', focus: false}).pane, receipt.pane);
+  assert.deepEqual(f.snapshot(p.checkout), before);
+  assert.deepEqual(f.state().env[receipt.pane], {CLAUDE_CONFIG_DIR: '/personal/config', LEGACY_RECEIPT: 'unchanged'});
+  assert.equal(f.state().focus, 'operator-work');
+  assert.equal(f.state().calls.some(a => ['create', 'run', 'rename', 'start'].includes(a[1])), false);
+  // A different project still needs valid routes to launch a new chat.
+  assert.throws(() => f.open(f.projects[1], {route: 'missing', focus: false}), /route/);
 });
 
 test('prototype adoption refuses a foreign checkout or a pane outside the chats workspace', t => {

@@ -234,7 +234,7 @@ export async function drainInbox(file, options = {}) {
       if (!error.message.startsWith('locked:')) throw error;
       reason = error.message; // Also honours an old owner's long-held lock.
       const entry = own();
-      if (entry) notify(file, entry, reason);
+      if (entry?.state === 'pending') notify(file, entry, reason);
     }
     if (release) try {
       if (fixtureInboxEnrolled(file)) return result('offline fixture intake is fenced; use its foreground transport owner');
@@ -321,15 +321,17 @@ export async function drainInbox(file, options = {}) {
           notify(file, entry, reason);
         }
       }
+      // Cap evidence belongs to this drain pass too. A losing/capped caller
+      // must not append over another sender's durable final-input intent.
+      const pending = snapshot(file).filter(entry => !complete(entry));
+      if (pending.length && Date.now() >= deadline)
+        record(file, { type: 'capped', id: own()?.id ?? pending[0].id, waited_seconds: (Date.now() - started) / 1000 });
     } finally { release(); }
     // Busy A never owns the global lock while waiting for its next quiet read.
     if (complete(own())) return result();
     const pending = snapshot(file).filter(entry => !complete(entry));
     if (!pending.length) return { ...result(), delivered: true, queued: false };
-    if (Date.now() >= deadline) {
-      record(file, { type: 'capped', id: own()?.id ?? pending[0].id, waited_seconds: (Date.now() - started) / 1000 });
-      return retained(reason);
-    }
+    if (Date.now() >= deadline) return retained(reason);
     const nextConfirmation = Math.min(...[...confirmations.values()].map(value => Math.max(10, value.at + confirm - Date.now())));
     await delay(Math.min(Math.max(retry, 10), nextConfirmation, Math.max(1, deadline - Date.now())));
   }

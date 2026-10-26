@@ -18,7 +18,7 @@ function fixture(t) {
   const target = name => ({ name, agent: 'claude', pane_id: `fake:${name}`, terminal_id: `terminal-${name}`,
     agent_session: { value: `session-${name}` }, workspace_id: 'fake', cwd: root, interactive_ready: true, agent_status: 'idle' });
   const write = (name, value) => fs.writeFileSync(path.join(root, name), JSON.stringify(value));
-  const reset = () => { write('targets', { A: target('A'), B: target('B'), C: target('C') }); write('modes', {}); };
+  const reset = () => { write('targets', { A: target('A'), alias: target('A'), B: target('B'), C: target('C') }); write('modes', {}); };
   reset();
   fs.writeFileSync(herdr, `#!${process.execPath}
 import fs from 'node:fs'; import path from 'node:path';
@@ -195,4 +195,17 @@ test('EPERM is an owner hold, never dead-owner recovery or permission to replace
   assert.deepEqual(f.calls(), []);
   // This was a test-only inert fixture, never an actual native owner.
   fs.rmSync(`${f.inbox}.owner.lock`, { recursive: true });
+});
+
+test('a capped contender cannot append over another sender final-input intent', async t => {
+  const f = fixture(t); f.add('a', 'A', 'R-1');
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'sending', id: 'a',
+    occupant: JSON.stringify(['fake:A', 'terminal-A', 'session-A', 'fake', f.root]) }) + '\n');
+  const release = noticeLock(`${f.inbox}.drain.lock`);
+  try {
+    const bytes = fs.readFileSync(f.inbox, 'utf8');
+    assert.equal((await f.drain('a', { waitSeconds: 0 })).delivered, false);
+    assert.equal(fs.readFileSync(f.inbox, 'utf8'), bytes);
+    assert.deepEqual(f.calls(), []);
+  } finally { release(); }
 });

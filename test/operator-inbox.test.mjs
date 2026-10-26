@@ -1,14 +1,14 @@
-import test from '../test/helpers/bounded-test.mjs';
+import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { fixtureFleet } from '../test/helpers/offline-herdr.mjs';
+import { fixtureFleet } from './helpers/offline-herdr.mjs';
 import { initOrg, loadEvents, transact } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
-import { nativeSender, makeEnvelope, prepareEnvelope, pushReserved, operatorDigest, recordMessages, pushId } from './operator-inbox.mjs';
+import { nativeSender, makeEnvelope, prepareEnvelope, pushReserved, operatorDigest, recordMessages, pushId } from '../messages/operator-inbox.mjs';
 import { enqueueSupervisor, readInbox, drainInbox, resolveNotice } from '../supervisor/prompt-supervisor.mjs';
 import { renderOperatorDigest } from '../lib/render.mjs';
 

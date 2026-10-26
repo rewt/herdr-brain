@@ -7,6 +7,7 @@ import { gitProject } from '../lib/project.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
 import { findOrgDir, loadEvents, readConfig, now } from '../lib/store.mjs';
 import { fold, itemStatus, openRuns, isResolved, attention } from '../lib/state.mjs';
+import { roleIs } from '../lib/roles.mjs';
 import { lessonsJson } from '../lib/lessons.mjs';
 import { describeEvent, approxTokens, renderLessonClaim, renderHandoff } from '../lib/render.mjs';
 import { readHandoff, recordedHandoffs } from '../lib/handoffs.mjs';
@@ -145,9 +146,14 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, workspace, env =
   try { housekeeping = housekeepingSnapshot({ cwd, org, env, readProcess }); }
   catch (e) { recovery.push({ file: path.join(project.canonical, '.housekeeping.json'), reason: `Housekeeping: ${e.message}` }); }
   const config = readConfig(org), clock = now(env);
+  const unlandedItems = [...new Set([...running, ...reports].filter(r => {
+    const item = state.items.get(r.item);
+    return r.workspace && !r.checkout_missing && !item.closed && !roleIs(item, 'HUM') && !roleIs(item, 'REV');
+  }).map(r => r.item))];
+  const unlanded = { count: unlandedItems.length, cap: config.budget.max_unlanded, items: unlandedItems };
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));
   return { project: { ...project, org, release: bundleRelease(), as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
-    lessons, handoffs, goals, running, reports, waiting, held, ready, decisions, next, recovery,
+    lessons, handoffs, goals, running, reports, waiting, held, ready, decisions, next, recovery, unlanded,
     approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, housekeeping,
     host: { memory, reason: memoryReason(memory) } };
 }
@@ -171,6 +177,10 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
     const { memory, reason } = doc.host;
     const mib = value => value == null ? 'unknown' : `${Math.floor(value / 1024 ** 2)} MiB`;
     out.push(`Host memory: available ${mib(memory.available)} / ${mib(memory.total)}; swap ${mib(memory.swap_used)}; ${reason ?? 'no measured pressure'}.`);
+  }
+  if (doc.unlanded) out.push(`Unlanded work: ${doc.unlanded.count} items in live lanes (advisory cap ${doc.unlanded.cap}); order: land, unblock, review, dispatch.`);
+  if (doc.host) {
+    const { memory, reason } = doc.host;
     if (reason) out.push('Wait before dispatch, review, promotion or release; recheck when memory clears.');
     if (memory.warning) out.push(`Memory probe advisory: ${line(memory.warning)}`);
   }

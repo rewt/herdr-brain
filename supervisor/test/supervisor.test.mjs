@@ -9,6 +9,8 @@ import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { entryPolicy } from '../../discovery/policy.mjs';
 import { supervisorCase } from '../../acceptance/supervisor.mjs';
 import { queueFor } from '../../promote/promote.mjs';
+import { transact } from '../../lib/store.mjs';
+import { fold, nextRunId } from '../../lib/state.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 process.env.ORG_ACTOR = 'supervisor-test-reader';
 const invoke = (f, args, cwd = f.repo) => f.exec(process.execPath, [path.join(root, 'supervisor/supervisor.mjs'), ...args], cwd, { ORG_DIR: f.org });
@@ -70,6 +72,62 @@ test('cold start surfaces host memory pressure without process rows, storage adv
   assert.match(text, /Memory probe advisory: probe detail/);
   assert.doesNotMatch(text, /Largest (?:memory|CPU) consumers|Storage advisory|PID \d+ parent/);
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+});
+
+test('cold start unlanded count defaults to eight and counts an item once across running and reports', t => {
+  const f = fixture(t), run = f.start(), item = f.show(run).item;
+  // A final file awaits ingestion in both views; another open run is still the same item.
+  const latest = f.start(); f.report(latest);
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env });
+  assert.equal(doc.running.length, 2); assert.equal(doc.reports.length, 1);
+  assert.deepEqual(doc.unlanded, { count: 1, cap: 8, items: [item] });
+  assert.match(renderColdStart(doc), /Host memory:[^\n]+\nUnlanded work: 1 items in live lanes \(advisory cap 8\); order: land, unblock, review, dispatch\./);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  assert.equal(f.calls().length, 0);
+});
+
+test('cold start unlanded advisory excludes review, human, closed, foreign and legacy checkouts without changing next actions', t => {
+  const f = fixture(t), running = f.start(), runningItem = f.show(running).item;
+  const start = (title, { role = 'engineer', workspace = f.workspace } = {}) => {
+    const item = f.record(['add', title, '--role', role]).split(' ')[0];
+    let run;
+    if (workspace) run = f.record(['start', item, '--workspace', workspace]).match(/R-\d+/)[0];
+    else transact(f.org, events => {
+      run = nextRunId(fold(events));
+      return { add: [{ type: 'run.started', id: run, item, meta: {}, workspace: null,
+        report_path: path.join(f.org, `${run}.md`) }] };
+    }); // Historical record-only runs predate the CLI's workspace default.
+    return { item, run };
+  };
+  const reported = start('Reported build'); f.report(reported.run);
+  f.record(['ingest', f.show(reported.run).report_path]);
+  const closed = start('Closed build'); f.report(closed.run);
+  f.record(['ingest', f.show(closed.run).report_path]); f.record(['close', closed.item]);
+  start('Review', { role: 'review' }); start('Human decision', { role: 'human' });
+  const legacy = start('Legacy without a checkout', { workspace: null });
+  const missingWorkspace = path.join(f.root, 'missing-lane');
+  f.git(['worktree', 'add', '-q', '-b', 'lane/missing', missingWorkspace]);
+  const missing = start('Missing checkout', { workspace: missingWorkspace }); f.report(missing.run);
+  f.record(['ingest', f.show(missing.run).report_path]);
+  f.git(['worktree', 'remove', missingWorkspace]);
+  const other = fixture(t);
+  const foreign = start('Foreign checkout', { workspace: other.workspace });
+  const ready = f.record(['add', 'Ready build', '--role', 'engineer']).split(' ')[0];
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  const baseline = coldStart({ cwd: f.repo, org: f.org, env: f.env });
+  const configFile = path.join(f.org, 'config.json'), config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  config.budget.max_unlanded = 1; fs.writeFileSync(configFile, JSON.stringify(config));
+  const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env });
+  assert.deepEqual(doc.unlanded, { count: 2, cap: 1, items: [runningItem, reported.item] });
+  assert.ok(doc.running.some(r => r.run === legacy.run && r.repository_binding === 'record_only'));
+  assert.ok(doc.reports.some(r => r.run === missing.run && r.checkout_missing));
+  assert.ok(!doc.running.some(r => r.run === foreign.run));
+  assert.deepEqual(doc.next, baseline.next, 'the cap changes display only');
+  assert.ok(doc.next.some(n => n.action === 'consider_dispatch' && n.item === ready));
+  assert.match(renderColdStart(doc), /Unlanded work: 2 items in live lanes \(advisory cap 1\)/);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  assert.equal(f.calls().length, 0);
 });
 
 for (const stage of ['review', 'correction']) {

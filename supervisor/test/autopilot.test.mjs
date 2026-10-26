@@ -416,6 +416,10 @@ test('one drain reloads policy after a fast-forward and wakes for the later awai
   f.git(['add', '.'], product); f.git(['commit', '-qm', 'Awaited landing policy'], product);
   const after = f.git(['rev-parse', 'HEAD'], product);
   f.git(['checkout', '-q', 'main'], product);
+  fs.writeFileSync(path.join(f.root, 'agents.json'), JSON.stringify({
+    'supervisor-test': { name: 'supervisor-test', agent: 'claude', agent_status: 'idle', cwd: f.repo,
+      pane_id: 'supervisor:p', workspace_id: 'w-parent', terminal_id: 'offline-supervisor-terminal' },
+  }));
   const inbox = path.join(f.org, 'supervisor/inbox.log');
   const driver = path.join(f.root, 'fresh-policy.mjs');
   fs.writeFileSync(driver, `

@@ -141,7 +141,10 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
   const item=rec(['add','Do the work','--role','engineer']).split('\n')[0].match(/ENG-\d+/)[0];
   const brief=path.join(root,'brief with spaces.md');fs.writeFileSync(brief,'# Do the work');
   const common=['--org',org,'--repo',repo, ...(timingRecord?['--org-cli',path.join(bin,'org')]:[]),'--lane-cli',path.join(bin,'lane'), ...(realWatch?[]:['--watch-cli',path.join(bin,'watch')])];
-  const dispatch=(args=[],options={})=>exec(process.execPath,[dispatchCLI,...common,...args],repo,{},options);
+  const dispatch=(args=[],options={})=>{
+    const {entry=dispatchCLI,...execution}=options;
+    return exec(process.execPath,[entry,...common,...args],repo,{},execution);
+  };
   const start=(extra=[],options={})=>dispatch([item,'--lane','topic','--route','engineer','--brief',brief,...extra],options);
   const calls=()=>fs.existsSync(path.join(root,'calls'))?fs.readFileSync(path.join(root,'calls'),'utf8').trim().split('\n').map(x=>JSON.parse(x)):[];
   const jobs=()=>fs.readdirSync(path.join(org,'dispatch')).filter(x=>x.endsWith('.json')&&!x.endsWith('.routes.json')).map(x=>path.join(org,'dispatch',x));

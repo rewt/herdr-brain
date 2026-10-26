@@ -266,11 +266,10 @@ test('dispatch owner delivery refuses a replaced occupant before watcher recover
 test('source-selected cold dispatch preserves home policy and saved-operation roots', async t => {
   const project = configFixture(t); await project.adopt();
   const f = fixture(t, { project, sourceEntry: true });
-  f.env.HERDR_MONITOR_HOME = project.installationHome;
   const source = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
-  const first = f.start(['--to', 'ops-project']); assert.equal(first.status, 0, first.stderr);
+  const first = f.start(['--to', 'ops-project'], {entry: path.join(project.bundle, 'dispatch/dispatch.mjs')}); assert.equal(first.status, 0, first.stderr);
   const savedFile = f.jobs()[0], saved = JSON.parse(fs.readFileSync(savedFile));
-  assert.equal(saved.release.root, project.bundle, 'without explicit source selection, home current still owns dispatch');
+  assert.equal(saved.release.root, project.bundle, 'the saved operation belongs to its original immutable bundle');
   f.env.HERDR_BRAIN_ROOT = source;
   const retry = f.dispatch(['--retry', saved.run]); assert.equal(retry.status, 0, retry.stderr);
   assert.equal(JSON.parse(fs.readFileSync(savedFile)).release.root, project.bundle);
@@ -278,7 +277,6 @@ test('source-selected cold dispatch preserves home policy and saved-operation ro
   assert.equal(f.calls().filter(c => c.type === 'watch').length, 1, 'saved retry retains its one watcher');
   const report = f.show(saved.run).report_path;
   fs.writeFileSync(report, `---\nrun: ${saved.run}\noutcome: done\nsummary: Fixture complete\n---\n`); f.rec(['ingest', report]);
-  f.rec(['config', 'set', 'pin.release', '"compatible"']);
   const pin = policyLocation(f.repo, 'pin', f.env).file, pinBytes = fs.readFileSync(pin);
   const item = f.rec(['add', 'Fresh source-selected work', '--role', 'engineer']);
   const fresh = f.dispatch([item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);

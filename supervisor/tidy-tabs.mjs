@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
-import { planRetirement, matchingRun } from '../lib/retire.mjs';
+import { planRetirement, matchingRun, matchingRunEvidence } from '../lib/retire.mjs';
 import { createRetirement, isShellOnly } from '../lib/retire-runtime.mjs';
 export { matchingRun, isShellOnly };
 
@@ -36,9 +36,11 @@ export function waitingOnRecord(snapshot, run) {
 export function reportEvidenceFromRecords(agents, runs, items) {
   const eligible = new Set(), reportKeepReasons = new Map();
   for (const agent of agents) {
-    const run = matchingRun(agent, runs);
+    const { run, ambiguous } = matchingRunEvidence(agent, runs);
     let why;
-    if (!run && runs.some((r) => r.meta?.agent === agent.name)) {
+    if (ambiguous) {
+      why = `ambiguous recorded launch identity for ${agent.name}`;
+    } else if (!run && runs.some((r) => r.meta?.agent === agent.name)) {
       why = `recorded launch identity does not match ${agent.name}`;
     } else if (!run?.report) {
       why = `no recorded report for ${agent.name}`;

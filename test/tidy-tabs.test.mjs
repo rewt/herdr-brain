@@ -1,6 +1,6 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
-import { planTidy, isShellOnly, matchingRun, reviewVerdict, reviewedAgentsFromRecords } from '../supervisor/tidy-tabs.mjs';
+import { planTidy, isShellOnly, matchingRun, reportEvidenceFromRecords, reviewVerdict, reviewedAgentsFromRecords } from '../supervisor/tidy-tabs.mjs';
 import { planRetirement } from '../lib/retire.mjs';
 
 function fixture() {
@@ -37,7 +37,34 @@ test('newer continuation on same pane defeats an old report even if its name cha
 });
 test('tied launch identity is ambiguous and does not release', () => {
   const s=fixture();s.record.runs.push({...s.record.runs[0],id:'R-2'});
-  assert.equal(matchingRun(s.agents[0],s.record.runs),null);assert.match(planTidy(s).keep[0].why,/identity/);
+  assert.equal(matchingRun(s.agents[0],s.record.runs),null);
+  assert.equal(planTidy(s).close.length,0);
+  assert.equal(planTidy(s).keep[0].why,'ambiguous recorded launch identity for lane-worker');
+  const evidence=reportEvidenceFromRecords(s.agents,s.record.runs,s.record.items);
+  assert.equal(evidence.reportedAgents.size,0);
+  assert.equal(evidence.reportKeepReasons.get('lane-worker'),'ambiguous recorded launch identity for lane-worker');
+});
+test('report keep reasons distinguish mismatched identity and missing report from ambiguity', () => {
+  const s=fixture(), run=s.record.runs[0];
+  run.meta.terminal_id='replacement';
+  let evidence=reportEvidenceFromRecords(s.agents,s.record.runs,s.record.items);
+  assert.equal(evidence.reportedAgents.size,0);
+  assert.equal(evidence.reportKeepReasons.get('lane-worker'),'recorded launch identity does not match lane-worker');
+  evidence=reportEvidenceFromRecords(s.agents,[],s.record.items);
+  assert.equal(evidence.reportKeepReasons.get('lane-worker'),'no recorded report for lane-worker');
+});
+test('only a tie between newest candidate runs is ambiguous, including reused panes', () => {
+  const s=fixture(), run=s.record.runs[0];
+  s.record.runs.push({...run,id:'R-2',meta:{...run.meta,agent:'renamed'}});
+  let evidence=reportEvidenceFromRecords(s.agents,s.record.runs,s.record.items);
+  assert.equal(evidence.reportedAgents.size,0);
+  assert.match(evidence.reportKeepReasons.get('lane-worker'),/^ambiguous/);
+  const latest={...run,id:'R-3',started:{seq:3}};
+  s.record.runs.push(latest);
+  assert.equal(matchingRun(s.agents[0],s.record.runs),latest);
+  evidence=reportEvidenceFromRecords(s.agents,s.record.runs,s.record.items);
+  assert.deepEqual([...evidence.reportedAgents],['lane-worker']);
+  assert.equal(evidence.reportKeepReasons.size,0);
 });
 test('verdict parsing remains evidence-only for compatibility readers', () => {
   assert.equal(reviewVerdict('\n**PASS**\n'),'PASS');assert.equal(reviewVerdict('heading\n**PASS**'),null);

@@ -208,15 +208,58 @@ test('failed timing record sets preserve STOP during the worker wait and its sto
   }
 });
 
-test('dispatch defaults to project ops from a chat environment and explicit --to wins', t => {
+test('dispatch defaults to its recorded worker while explicit and saved recipients win', t => {
   const f = fixture(t, {noticeRecipient: 'ops-project'}); f.fail('prepare');
   const first = f.start(); assert.equal(first.status, 1);
-  const job = JSON.parse(fs.readFileSync(f.jobs()[0])); assert.equal(job.to, 'ops-project');
-  assert.deepEqual(f.calls().find(c => c.type === 'herdr' && c.a[1] === 'get').a, ['agent', 'get', 'ops-project']);
+  const journal = f.jobs()[0];
+  assert.equal(JSON.parse(fs.readFileSync(journal)).to, null, 'default waits for actual worker recording');
+  assert.equal(f.calls().some(c => c.type === 'herdr' && c.a[2] === 'ops-project'), false);
+  f.fail(''); const resumed = f.dispatch(['--retry', journal]); assert.equal(resumed.status, 0, resumed.stderr);
+  const job = JSON.parse(fs.readFileSync(journal));
+  assert.equal(job.to, job.worker.agentName);
+  assert.equal(f.show(job.run).meta.agent, job.to, 'recipient is the recorded worker');
+  const watchers = () => f.calls().filter(c => c.type === 'watch');
+  assert.equal(watchers()[0].a[watchers()[0].a.indexOf('--to') + 1], job.to);
+  const prompt = promptCalls(f)[0].a[3];
+  assert.ok(prompt.includes(`--to ${job.to}`));
+  assert.match(prompt, /exceptions to ops-project/);
+  assert.match(prompt, /Self-land your own finished committed source/);
+  assert.match(prompt, /ONE independent async post-code review/);
+  f.env.MONITOR_SUPERVISOR_AGENT = 'ops-explicit';
+  const repeated = f.dispatch(['--retry', job.run]); assert.equal(repeated.status, 0, repeated.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(journal)).to, job.to);
+  assert.equal(watchers().length, 1); assert.equal(promptCalls(f).length, 1);
   const other = fixture(t, {noticeRecipient: 'ops-project'}); other.fail('prepare');
   assert.equal(other.start(['--to', 'ops-explicit']).status, 1);
-  assert.equal(JSON.parse(fs.readFileSync(other.jobs()[0])).to, 'ops-explicit');
+  const explicitJournal = other.jobs()[0];
+  assert.equal(JSON.parse(fs.readFileSync(explicitJournal)).to, 'ops-explicit');
+  assert.deepEqual(other.calls().find(c => c.type === 'herdr' && c.a[1] === 'get').a, ['agent', 'get', 'ops-explicit']);
+  other.fail(''); const explicit = other.dispatch(['--retry', explicitJournal]); assert.equal(explicit.status, 0, explicit.stderr);
+  const explicitJob = JSON.parse(fs.readFileSync(explicitJournal));
+  assert.equal(explicitJob.to, 'ops-explicit');
+  const watch = other.calls().find(c => c.type === 'watch');
+  assert.equal(watch.a[watch.a.indexOf('--to') + 1], 'ops-explicit');
+  const savedWatcher = explicitJob.watcher;
+  other.env.MONITOR_SUPERVISOR_AGENT = 'supervisor-herdr';
+  const retained = other.dispatch(['--retry', explicitJob.run]); assert.equal(retained.status, 0, retained.stderr);
+  assert.deepEqual(JSON.parse(fs.readFileSync(explicitJournal)).watcher, savedWatcher);
+  assert.equal(other.calls().filter(c => c.type === 'watch').length, 1);
+  assert.equal(promptCalls(other).length, 1);
   assert.equal(f.calls().some(c => c.a.includes('chat-operator')), false);
+});
+test('dispatch owner delivery refuses a replaced occupant before watcher recovery', t => {
+  const f = fixture(t); f.fail('watch');
+  const first = f.start(); assert.equal(first.status, 1);
+  const journal = f.jobs()[0], job = JSON.parse(fs.readFileSync(journal));
+  assert.equal(job.to, job.worker.agentName);
+  assert.equal(f.show(job.run).meta.agent, job.to);
+  const workersFile = path.join(f.root, 'workers'), workers = JSON.parse(fs.readFileSync(workersFile));
+  workers[job.to].terminal_id = 'foreign-terminal';
+  fs.writeFileSync(workersFile, JSON.stringify(workers)); f.fail('');
+  const retry = f.dispatch(['--retry', job.run]);
+  assert.equal(retry.status, 1); assert.match(retry.stderr, /worker occupant identity changed/);
+  assert.equal(f.calls().filter(c => c.type === 'watch').length, 1, 'no watcher is armed for a replacement');
+  assert.equal(promptCalls(f).length, 0);
 });
 test('open/prepare failures keep a visible request, create no run, and retry cleanly',t=>{
   for(const stage of ['open','prepare']) {

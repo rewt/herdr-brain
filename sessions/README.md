@@ -405,6 +405,10 @@ tab remains mandatory. Apply repeats this check before intent and at the physica
 close edge. If a workspace nevertheless vanishes after close, the controller
 names `unexpected workspace removal`, holds, and never respawns into a substitute
 workspace. Exact tab/pane/agent absence alone cannot acknowledge that close.
+When another slot has a pending respawn, the last-tab veto becomes a non-fencing
+`Defer` for that pass, including apply preflight. The closed slot can restore its
+tab before the sibling close is considered. Ownership and evidence Holds still
+fence the pass, and every close retains the fresh last-tab guards.
 
 The fake executor rechecks before and after journaling intent, closes only the
 fully owned exact tab, and requires both an exact close receipt and an observed

@@ -239,6 +239,16 @@ export function planSessions(input) {
     d.reset ??= { eligible: false, vetoes: [d.reason] };
     d.recovery ??= { state: 'unknown' };
   }
+  // A last-tab veto postpones that close, but must not fence a sibling's
+  // pending respawn: restoring its tab is what makes the close safe again.
+  // Keep every ownership/evidence Hold fencing, and leave the physical close
+  // guards (including their final fresh reads) unchanged.
+  if (decisions.some(d => d.action?.kind === 'lifecycle' && d.action.stage === 'respawn')) {
+    for (const d of decisions.filter(d => d.decision === 'Hold' && d.holdCode === 'last-tab-close')) {
+      d.decision = 'Defer';
+      d.reason += '; awaiting another slot respawn';
+    }
+  }
   // An unresolved ownership/launch hold fences the pass, including other slots.
   const held = decisions.find(d => d.decision === 'Hold');
   if (held) for (const d of decisions.filter(d => d.action)) {

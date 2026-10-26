@@ -22,7 +22,7 @@ import { nativeResumeVeto } from '../sessions/native-conversation.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const cli = path.join(root, 'sessions/sessions.mjs');
-import { fixture } from './helpers/session-live.mjs';
+import { fixture, document } from './helpers/session-live.mjs';
 const starts = f => f.read().calls.filter(a=>a[0]==='agent'&&a[1]==='start');
 const mutations = f => f.read().calls.filter(a=>['start','run','create','close'].includes(a[1]));
 const startInstructions = args => args.includes('--append-system-prompt-file')
@@ -294,6 +294,47 @@ test('last-tab plan and apply Hold before intent; an owned second slot permits e
   assert.deepEqual(f.read().panes.find(p=>p.pane_id==='keep-pane'),keeper);
   assert.equal(readControllerJournal(f.project.common).operations.at(-1).state,'acknowledged');
   assert.deepEqual(f.read().calls.filter(a=>a[1]==='close'),[['tab','close','tab']]);
+});
+
+for (const reverse of [false, true]) test(`concurrent owned resets respawn the closed slot before closing the last tab (${reverse ? 'reversed' : 'original'} manifest order)`, async t => {
+  const f=fixture(t);await f.apply();const chat=f.binding();
+  const supervisor=JSON.parse(fs.readFileSync(path.join(root,'sessions/templates/supervisor.md'),'utf8').split('```json')[1].split('```')[0]);
+  supervisor.spec.workspaceRef='w';
+  const file=path.join(f.scratch,'supervisor.md');fs.writeFileSync(file,document(supervisor));f.options.files.push(file);
+  recordStandardSlot({cwd:f.cwd,action:'adopt',uid:'second-owned-slot',actor:'fixture',why:'concurrent reset fixture',slot:{
+    server:f.env.HERDR_SOCKET_PATH,workspace:'w',checkout:f.cwd,tab:'keep-tab',standardSlot:'supervisor',panes:[{pane:'keep-pane',paneSlot:'primary'}]}});
+  assert.equal((await f.apply()).apply.state,'attempted');const sibling=f.binding();
+  await f.boundary();
+  f.updateEvidence(e=>{
+    e.quiescence[f.uid].binding=chat;
+    e.resetRequests[supervisor.metadata.uid]=structuredClone(e.resetRequests[f.uid]);
+    e.resetRequests[supervisor.metadata.uid].boundary.ref='sibling-boundary';
+    e.quiescence[supervisor.metadata.uid]={...structuredClone(e.quiescence[f.uid]),ref:'sibling-quiescence',binding:sibling};
+  });
+  if(reverse) f.options.files.reverse();
+  const selected=(await f.plan()).action.operation;
+  const survivor=selected.uid===f.uid?sibling:chat;
+  const closed=await f.apply();assert.equal(closed.apply.state,'attempted',JSON.stringify(closed));
+  assert.deepEqual(f.read().tabs,[{tab_id:survivor.tab,workspace_id:'w'}]);
+  const preview=await f.plan();
+  assert.equal(preview.action?.stage,'respawn',JSON.stringify(preview));
+  const deferred=preview.decisions.find(d=>d.uid!==selected.uid);
+  assert.equal(deferred.decision,'Defer');assert.equal(deferred.holdCode,'last-tab-close');assert.equal(deferred.action,null);
+  assert.match(deferred.reason,/awaiting another slot respawn/);
+  f.change(s=>s.agents.find(a=>a.name===survivor.agentName).agent_session.value='changed-native');
+  const held=await f.plan();assert.equal(held.action,null,'changed ownership still fences the respawn');
+  assert.equal(held.decisions.find(d=>d.uid!==selected.uid).decision,'Hold');
+  f.change(s=>s.agents.find(a=>a.name===survivor.agentName).agent_session.value=survivor.nativeSessionId);
+  const respawned=await f.apply();assert.equal(respawned.apply.state,'attempted',JSON.stringify(respawned));
+  assert.equal(f.read().tabs.length,2);assert.equal(starts(f).length,3);
+  assert.deepEqual(f.read().calls.filter(a=>a[1]==='close'),[['tab','close',selected.target.tab]]);
+  const next=await f.plan();assert.equal(next.action?.stage,'close',JSON.stringify(next));
+  assert.equal(next.action.operation.target.tab,survivor.tab);
+  assert.equal((await f.apply()).apply.state,'attempted');
+  assert.equal(f.read().workspaces.length,1);assert.equal(f.read().tabs.length,1);
+  assert.deepEqual(f.read().calls.filter(a=>a[1]==='close'),[['tab','close',selected.target.tab],['tab','close',survivor.tab]]);
+  const calls=f.read().calls.filter(a=>a[0]==='tab'&&['close','create'].includes(a[1]));
+  assert.deepEqual(calls.map(a=>a[1]),['close','create','close']);
 });
 
 test('physical close edge refuses when the surviving tab disappears after the adapter observation', async t => {

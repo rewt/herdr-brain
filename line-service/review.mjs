@@ -1,0 +1,149 @@
+// Conservative automatic-review eligibility. Receipts are evidence, not launch authority.
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { reviewScope } from '../settle/review-range.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { fileURLToPath } from 'node:url';
+import { projectPin, selectRelease } from '../lib/releases.mjs';
+
+const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
+const capabilityFiles = ['line-service/review.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
+const capability = capabilityFiles.map(file => createHash('sha256').update(fs.readFileSync(path.join(codeRoot, file))).digest('hex'));
+
+const sha = value => createHash('sha256').update(value).digest('hex');
+const commit = value => /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(value ?? '');
+const read = file => {
+  const stat = fs.lstatSync(file, { throwIfNoEntry: false });
+  if (!stat) return null;
+  if (!stat.isFile() || fs.realpathSync(file) !== path.resolve(file)) throw Error(`review inventory is redirected: ${file}`);
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+};
+function entries(directory) {
+  const stat = fs.lstatSync(directory, { throwIfNoEntry: false });
+  if (!stat) return [];
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error(`review inventory is redirected: ${directory}`);
+  return fs.readdirSync(directory, { withFileTypes: true });
+}
+const contains = (value, tokens) => {
+  if (typeof value === 'string') return tokens.has(value);
+  if (Array.isArray(value)) return value.some(v => contains(v, tokens));
+  return value && typeof value === 'object' && Object.values(value).some(v => contains(v, tokens));
+};
+
+export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService }) {
+  const cached = (kind, file, fn) => { const key = `${kind}:${file}`; if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); };
+  const readFile = file => cached('file', file, () => read(file));
+  const list = file => cached('directory', file, () => entries(file));
+  const runs = new Set(item.runs), tokens = new Set([item.id, ...runs]);
+  // Decision holds need no particular prose formula or native qualification.
+  if (events.some(e => e.type === 'note.added' && e.decision && tokens.has(e.id) && /review/i.test(e.text ?? ''))) return 'recorded independent review attempt/hold';
+  if (events.some(e => e.type === 'review.verdict' && runs.has(e.run))) return 'recorded verdict';
+  const pending = (actions, file) => Object.entries(actions ?? {}).some(([key, value]) => {
+    if (ignoreService && ignoreService.file === file && ignoreService.key === key && value.state === 'started' && JSON.stringify(value.review_target) === JSON.stringify(ignoreService.target)) return false;
+    return key === `review:${item.id}` ||
+    (/review/i.test(key) && contains(value, tokens)) || (value?.result?.result === 'review_pending' && contains(value, tokens));
+  });
+  if (pending(effects?.actions, ignoreService?.file)) return 'existing service review intent/result';
+  for (const id of runs) if (readFile(path.join(org, 'settle', `${id}.json`)) || readFile(path.join(org, 'settle', `${id}.review-launch.json`))) return `existing settle ${id}`;
+  for (const [relative, reason] of [['retirement/occupants', 'existing native reviewer'], ['retirement/reviews', 'existing review receipt'], ['settle', 'existing consumer review receipt']]) {
+    for (const entry of list(path.join(org, relative))) {
+      if (!entry.name.endsWith('.json')) continue;
+      const value = readFile(path.join(org, relative, entry.name));
+      if (relative === 'retirement/occupants' && value?.kind === 'watcher') continue;
+      if (contains(value, tokens)) return reason;
+      // Unknown native/review records cannot prove absence. Auxiliary routing
+      // snapshots and positively foreign run receipts are not review attempts.
+      if (relative !== 'settle' && value && !value.run && !value.item) throw Error(`unmapped review inventory: ${relative}/${entry.name}`);
+    }
+  }
+  for (const entry of list(path.join(org, 'line-service'))) if (entry.isDirectory()) {
+    const file = path.join(org, 'line-service', entry.name, 'effects.json'), saved = readFile(file);
+    if (pending(saved?.actions, file)) return 'existing service review intent/result';
+  }
+  const scanEvidence = directory => {
+    for (const entry of list(directory)) {
+      const file = path.join(directory, entry.name);
+      if (entry.isSymbolicLink()) throw Error(`unreadable/redirected source-owner review inventory: ${file}`);
+      if (entry.isDirectory()) { const found = scanEvidence(file); if (found) return found; }
+      else if (/review|settle/i.test(entry.name) && !/\.(?:mjs|js|cjs)$/.test(entry.name)) return `source-owner/direct review evidence retained: ${file}`;
+      else if (entry.name.endsWith('.json')) {
+        const value = readFile(file);
+        if (contains(value, tokens) && /review|reviewer|qualification/i.test(JSON.stringify(value))) return `source-owner review receipt/uncertainty retained: ${file}`;
+      }
+    }
+    return null;
+  };
+  const ownerEvidence = scanEvidence(path.join(org, 'evidence', item.id));
+  if (ownerEvidence) return ownerEvidence;
+  if (!state || !repo) return null; // Compatibility callers ask only for known attempts.
+  for (const id of runs) {
+    const run = state.runs.get(id);
+    if (!run?.owner || run.owner.legacy || run.owner.controller !== 'brain' || run.owner.release?.id !== 'source') throw Error(`legacy/manual review absence is UNKNOWN for ${id}`);
+    if (Object.keys(run.report?.extra ?? {}).some(key => /review|verdict|qualification/i.test(key))) return `report retains review/qualification uncertainty for ${id}`;
+    const artifacts = run.report?.artifacts ?? [];
+    for (const artifact of artifacts) if (typeof artifact === 'string' && path.isAbsolute(artifact) && /review|settle/i.test(path.basename(artifact))) {
+      const stat = fs.lstatSync(artifact, { throwIfNoEntry: false });
+      if (!stat) throw Error(`source-owner review evidence missing: ${artifact}`);
+      return `source-owner review evidence retained: ${artifact}`;
+    }
+    const roots = new Set([repo, run.workspace].filter(Boolean));
+    for (const root of roots) {
+      if (!fs.existsSync(root)) throw Error(`review consumer inventory unavailable: ${root}`);
+      for (const entry of list(root)) if (entry.name.startsWith('.lane-review-')) throw Error(`unmapped native/direct review delivery retained: ${path.join(root, entry.name)}`);
+      const topic = run.meta?.lane;
+      if (topic) for (const relative of ['.lane/reviews', '.lane/public-reviews', 'docs/reviews']) {
+        if (list(path.join(root, relative, topic)).length) return 'existing direct/native review output';
+      }
+    }
+  }
+  return null;
+}
+
+// Prove the actual owner-bound helper and any forwarded record consumer have
+// this implementation. A source pathname/selector is not a capability proof.
+export function selectedReviewConsumer({ run, repo, resolve = () => {
+  const pin = projectPin(repo);
+  return pin?.home_binding || (pin?.release && gitProject(codeRoot).identity !== pin.project.identity) ? selectRelease(repo).root : codeRoot;
+} }) {
+  const ownerRoot = run.owner?.release?.root;
+  if (!ownerRoot || run.owner.legacy || fs.realpathSync(ownerRoot) !== codeRoot) throw Error('selected saved review helper capability is UNKNOWN/old; no source or owner override');
+  const recordRoot = fs.realpathSync(resolve());
+  for (const root of new Set([ownerRoot, recordRoot])) for (let i = 0; i < capabilityFiles.length; i++) {
+    let actual;
+    try { actual = sha(fs.readFileSync(path.join(root, capabilityFiles[i]))); } catch { throw Error('actual selected/pinned consumer cannot certify immutable review/dedup capability'); }
+    if (actual !== capability[i]) throw Error('actual selected/pinned consumer has old/unknown immutable review/dedup capability');
+  }
+  return { ownerRoot, recordRoot, capability: [...capability] };
+}
+
+// Use the existing delivered-change artifact parser; live HEAD never chooses a
+// target. The dispatch receipt supplies only a baseline/negative admission check.
+export function bindReviewTarget({ item, run, events, repo, org, identity }) {
+  const reportFile = path.resolve(org, run.report?.file ?? '');
+  if (!run.report?.sha256 || !reportFile.startsWith(path.resolve(org) + path.sep) || sha(fs.readFileSync(reportFile)) !== run.report.sha256) throw Error('immutable report evidence is UNKNOWN or changed');
+  const start = events.find(e => e.type === 'run.started' && e.id === run.id), journal = start?.meta?.dispatch_journal;
+  if (!journal || !path.resolve(journal).startsWith(path.join(path.resolve(org), 'dispatch') + path.sep)) throw Error('native dispatch baseline is UNKNOWN');
+  const dispatch = read(journal);
+  if (!dispatch || dispatch.run !== run.id || dispatch.item !== item.id || dispatch.org !== org || dispatch.common !== identity ||
+      dispatch.token !== start.meta.dispatch_attempt || dispatch.workspace !== run.workspace || dispatch.stage !== 'complete') throw Error('native dispatch baseline binding is UNKNOWN');
+  let base = commit(dispatch.base) ? dispatch.base : null;
+  if (!base && dispatch.sourceSelection?.kind === 'explicit-brain-root' && gitProject(dispatch.sourceSelection.root).identity === identity) base = dispatch.sourceSelection.head;
+  if (!commit(base)) throw Error('immutable target-project baseline is UNKNOWN; dispatcher/admission head is not a review target');
+  const git = args => execFileSync('git', ['--no-optional-locks', '-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }).trim();
+  git(['cat-file', '-e', `${base}^{commit}`]);
+  const claims = reviewScope({ workspace: repo, base, head: base, artifacts: run.report.artifacts ?? [] });
+  if (claims.unresolved.length || !claims.claims.length) throw Error('committed delivered-source/evidence target is UNKNOWN; report/admission/live HEAD is insufficient');
+  const tips = claims.claims.filter(head => claims.claims.every(other => {
+    try { git(['merge-base', '--is-ancestor', other, head]); return true; } catch { return false; }
+  }));
+  if (tips.length !== 1) throw Error('delivered-source target is ambiguous');
+  const head = tips[0];
+  if (head === base) throw Error('admission HEAD has no positively bound committed change; preparation is not an owed code review');
+  const scope = reviewScope({ workspace: repo, base, head, artifacts: run.report.artifacts ?? [] });
+  if (scope.deferred || !scope.commits.length || scope.base !== base) throw Error('delivered-source target is outside its immutable dispatch baseline');
+  const diff = git(['diff', '--no-ext-diff', '--no-textconv', base, head]);
+  if (!diff) throw Error('captured target has no committed changed source');
+  return { head, base, scope, reportHash: run.report.sha256, evidence: reportFile, diff_sha256: sha(diff), dispatch: journal };
+}

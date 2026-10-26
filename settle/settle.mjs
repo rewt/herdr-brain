@@ -28,6 +28,7 @@ import { reviewScope } from './review-range.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { closeoutPolicy, retryCloseout, readCloseoutEntries, recordCompletedReview } from '../lib/closeout.mjs';
 import { readReviewVerdicts } from '../lib/review-verdict.mjs';
+import { bindReviewTarget, selectedReviewConsumer } from '../line-service/review.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node settle/settle.mjs R-n [OPTIONS]", allowPositionals: true, options: {
@@ -37,6 +38,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node settle/sett
   to: { type: 'string' }, reuse: { type: 'boolean' }, retry: { type: 'boolean' },
   'defer-review': { type: 'boolean' }, 'resolve-tests': { type: 'boolean' }, status: { type: 'boolean' }, 'review-again': { type: 'boolean' }, timeout: { type: 'string' },
   'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'followup-expected': { type: 'boolean' },
+  'captured-head': { type: 'string' }, 'captured-base': { type: 'string' },
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'dispatch-cli': { type: 'string' },
   'watch-cli': { type: 'string' },
 }});
@@ -657,7 +659,7 @@ function main() {
     // Reread under the lock; an older pending receipt binds its selection once.
     bindLaneConfig(job);
     if (!Object.hasOwn(job, 'laneConfig')) { job.laneConfig = laneConfig; save(); }
-    if (opt.retry && ['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout', 'review-round-cap', 'followup-expected'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
+    if (opt.retry && ['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout', 'review-round-cap', 'followup-expected', 'captured-head', 'captured-base'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
     if (opt['resolve-tests']) {
       if (!opt.retry || job.stage !== 'complete' || job.result?.result !== 'escalate' || job.result.reason !== TEST_ESCALATION || job.review?.verdict !== 'PASS') throw new Error('test resolution requires a saved PASS escalation solely for test evidence');
       unchanged({ movingMain: true }); cleanCanonical();
@@ -726,10 +728,18 @@ function main() {
     if (parsed.errors.length || parsed.report.run !== id) throw new Error(`invalid report for ${id}: ${parsed.errors.join('; ') || 'run field mismatch'}`);
     if (run.report && hash(reportText) !== run.report.sha256) throw new Error('recorded report bytes changed');
     const policy = reviewPolicy(item, settings, identity);
+    let target;
+    if (opt['captured-head'] !== undefined || opt['captured-base'] !== undefined) {
+      selectedReviewConsumer({ run, repo });
+      if (!resolveValidation({ root: repo }).landing_waiver) throw Error('explicit captured review requires the current post-code policy');
+      target = bindReviewTarget({ item, run, events: loadEvents(opt.org).events, repo, org: opt.org, identity });
+      if (target.head !== opt['captured-head'] || target.base !== opt['captured-base']) throw Error('captured target differs from immutable delivered source/evidence');
+    }
     job = { run: id, item: run.item, org: opt.org, repo, common: identity, workspace, lane, laneConfig, release: bundleRelease(),
       parallelReview: resolveValidation({ root: repo }).review === 'parallel',
-      main: config.main ?? 'main', head: git(['rev-parse', 'HEAD'], workspace),
-      mainHead: git(['rev-parse', config.main ?? 'main'], repo), ask, reviewRoute, fixRoute, timeout,
+      main: config.main ?? 'main', head: target?.head ?? git(['rev-parse', 'HEAD'], workspace),
+      mainHead: target?.base ?? git(['rev-parse', config.main ?? 'main'], repo), ask, reviewRoute, fixRoute, timeout,
+      ...(target ? { reviewScope: target.scope, capturedTargetEvidence: target } : {}),
       workerRoute: run.meta?.route ?? null,
       followupExpected: opt['followup-expected'] ?? false,
       reuse: opt.reuse ?? settings.reuse ?? false, to: opt.to ?? settings.to ?? 'supervisor-herdr',

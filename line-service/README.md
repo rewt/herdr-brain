@@ -86,6 +86,35 @@ The notice `--to` recipient does not override `MONITOR_SUPERVISOR_AGENT` in
 child commands. Dispatch retains its existing parent/launch/project-policy
 exception routing, independently of a brain-chat judgment recipient.
 
+Automatic review uses an immutable ingested report's explicit delivered-commit
+artifacts and the existing review-scope parser. A genuine dispatch receipt gives
+only an immutable target-project baseline; admission/live HEAD never selects the
+target. The delivered commits must identify one changed committed range, bound
+to report bytes and a captured diff digest. Blocked outcomes and red checks do
+not disqualify legitimate committed evidence. Unknown baseline/target/evidence
+holds review alone for T2; the existing settle/lane path receives explicit
+captured base/head and retains them when engineer source or cleanup advances.
+
+Item-wide inventory includes all runs, broad review decision holds, native/direct
+delivery/output and source-owner evidence, settle receipts, ambiguous/UNKNOWN
+qualification and prior service intents/results across saved heads/restarts.
+Unknown or unreadable legacy inventory holds; it never proves absence. A stable
+item lock plus the original item effect key prevents rekeying to a new review.
+An actual owner-bound helper and any forwarded record consumer must match the
+loaded implementation before launch. Source path/selector alone is insufficient;
+old/saved/pinned capability stays held without pin or owner overrides.
+
+Settled history is filtered from the derived fold before per-item Git/native or
+review-directory work. One pass reuses its read-only snapshot/index until an
+effect may have changed state; every new mutation still makes fresh reads.
+Historical skips/retained closeout are aggregated instead of fsyncing thousands
+of rows. The next real owner pass reports snapshot count/time, child command
+time and remaining scan/guard time separately. These passive observations are
+not a CPU attribution, benchmark, launch/verdict or elapsed-time failure gate.
+Affected controls are in `test/line-service-review.test.mjs` for the next full
+release and the once-selected focused runner; no real service/reviewer is started
+to measure them. Owner restart remains the existing same saved-job `restart`.
+
 The focused offline check is `node test/helpers/run.mjs
 test/line-service.test.mjs`, through `lane check --cmd` on committed
 source. These controls stub native effects while using real Git, record/fold and

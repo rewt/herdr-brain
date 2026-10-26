@@ -89,6 +89,7 @@ export function main(argv = process.argv.slice(2)) {
     workspace: { type: 'string' }, pane: { type: 'string' }, herdr: { type: 'string' },
     notice: { type: 'string' }, why: { type: 'string' }, to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || undefined }, brief: { type: 'string' },
     'review-route': { type: 'string' }, 'fix-route': { type: 'string' }, timeout: { type: 'string' },
+    'captured-head': { type: 'string' }, 'captured-base': { type: 'string' },
     'existing-worker': { type: 'boolean' }, retry: { type: 'boolean' }, 'review-again': { type: 'boolean' },
     'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'accept-findings': { type: 'boolean' },
     'required-tests': { type: 'string' }, 'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
@@ -247,7 +248,7 @@ export function main(argv = process.argv.slice(2)) {
           next: 'inspect the current run and its settlement or promotion receipts' }); return;
       }
     }
-    for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout', 'review-round-cap']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
+    for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout', 'review-round-cap', 'captured-head', 'captured-base']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
     for (const name of ['retry', 'review-again', 'fix-findings']) if (opt[name]) settleArgs.push(`--${name}`);
     const asyncReview = Boolean(resolveValidation({ root: project.canonical }).landing_waiver) && !opt['fix-findings'];
     const result = JSON.parse(call(settle, [...settleArgs, ...(asyncReview ? ['--defer-review'] : [])], { stdio: ['ignore', 'pipe', 'inherit'] }));

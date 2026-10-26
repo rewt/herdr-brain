@@ -28,6 +28,12 @@ entry installation probes, generated permission-profile verification and copied
 bch-cloak cutover rehearsals have been removed. The release lane supplies the
 small offline consumer contract check.
 
+The copied-project inventory (`existing-project.mjs`) and its cutover tests were
+deleted in commit `013f691d63c2790a8d4989059dfb83eff1b9ada5`. The follow-ups to
+remove that copier's support-file extension allowlist and extract its BCH runtime
+snapshot names (ENG-240) are superseded by that removal; they describe no current
+acceptance behavior. See [the closeout evidence](../docs/reports/ENG-240-cutover-copy-R-867.md).
+
 The run retains numbered command logs, load samples and a summary under its
 scratch evidence directory. PASS means the case completed. Product failures are
 FAIL; unavailable host prerequisites and measured load timeouts are PENDING.

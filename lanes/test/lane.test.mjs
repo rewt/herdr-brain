@@ -1223,7 +1223,7 @@ test("same-named repositories in equal-labeled roots keep distinct paths, labels
       ignoreLaneState(fixture);
       const path = join(rootIdentity, ".worktrees", "same-repo", "lane-shared-topic");
       const identity = repositoryIdentity(fixture.repo);
-      const readableLabel = "same-root/same-repo:lane-shared-topic";
+      const readableLabel = "shared-topic";
       const fake = writeFakeHerdr(fixture, {
         lanePath: path,
         branch: "lane/shared-topic",
@@ -1263,7 +1263,7 @@ test("same-named repositories in equal-labeled roots keep distinct paths, labels
       const firstAgentList = calls.findIndex((args) => args[0] === "agent" && args[1] === "list");
       const firstAgentStart = calls.findIndex((args) => args[0] === "agent" && args[1] === "start");
       assert.ok(firstAgentList >= 0 && firstAgentList < firstAgentStart);
-      assert.match(label, /^same-root\/same-repo:lane-shared-topic~[0-9a-f]{8}$/);
+      assert.match(label, /^shared-topic~[0-9a-f]{8}$/);
       assert.ok(label.endsWith(identityDigest(rootIdentity, identity, "shared-topic")));
       assert.match(agent, /^[a-z][a-z0-9_-]{0,31}$/);
       assert.ok(agent.includes(identityDigest(rootIdentity, identity, "shared-topic", 6)));
@@ -1275,13 +1275,13 @@ test("same-named repositories in equal-labeled roots keep distinct paths, labels
     assert.notEqual(records[0].identity, records[1].identity);
     assert.notEqual(records[0].label, records[1].label);
     assert.notEqual(records[0].agent, records[1].agent);
-    negativeControl("root/repository identity labels and agent names");
+    negativeControl("purpose labels with opaque identity disambiguation and agent names");
   } finally {
     for (const fixture of fixtures) fixture.cleanup();
   }
 });
 
-test("long Unicode workspace labels retain graphemes and fragments within 64 code points", () => {
+test("Unicode identity paths never appear in purpose-only workspace labels", () => {
   const accent = "e\u0301";
   const family = "👨‍👩‍👧‍👦";
   const fixtures = ["a", "b"].map((suffix) => makeFixture(undefined, {
@@ -1301,17 +1301,40 @@ test("long Unicode workspace labels retain graphemes and fragments within 64 cod
       const create = fake.calls().find((args) => args[0] === "worktree" && args[1] === "create");
       const label = create[create.indexOf("--label") + 1];
       assert.ok([...label].length <= 64, `${[...label].length} code points: ${label}`);
-      assert.match(label, new RegExp(`^(?:${accent})+…/`));
-      assert.ok(label.includes(`${family}${family}…:lane-common-prefix-`));
-      assert.match(label, /~[0-9a-f]{8,}$/);
-      assert.ok(label.endsWith(identityDigest(rootIdentity, repositoryIdentity(fixture.repo), topic)));
+      assert.equal(label, topic);
       labels.push(label);
     }
     assert.notEqual(labels[0], labels[1]);
-    negativeControl("bounded grapheme-safe identity labels");
+    negativeControl("purpose-only labels independent of Unicode identity paths");
   } finally {
     for (const fixture of fixtures) fixture.cleanup();
   }
+});
+
+test("dispatch reuses a purpose-labeled workspace by native ID without resetting its label", () => {
+  const fixture = makeFixture();
+  try {
+    ignoreLaneState(fixture);
+    const topic = 'topic-' + 'a'.repeat(55);
+    const path = lanePath(fixture, topic);
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}` });
+    const opened = lane(fixture, ['open', topic]);
+    assert.equal(opened.status, 0, opened.stderr);
+    assert.equal(fake.state().label, topic);
+    // Model an owner-applied display rename after creation, including a digest.
+    const retained = 'retained-purpose~12345678';
+    writeFileSync(fixture.env.FAKE_HERDR_STATE, JSON.stringify({ ...fake.state(), label: retained }));
+    const before = fake.calls().length;
+    const dispatched = lane(fixture, ['dispatch', topic, 'reuse the existing workspace', '--json']);
+    assert.equal(dispatched.status, 0, dispatched.stderr);
+    assert.equal(JSON.parse(dispatched.stdout).workspaceId, 'w-lane');
+    assert.equal(fake.state().label, retained);
+    const calls = fake.calls().slice(before);
+    assert.ok(!calls.some(args => args[0] === 'worktree' && ['create', 'open'].includes(args[1])));
+    assert.ok(!calls.some(args => args[0] === 'workspace' && args[1] === 'rename'));
+    const create = calls.find(args => args[0] === 'tab' && args[1] === 'create');
+    assert.equal(create[create.indexOf('--workspace') + 1], 'w-lane');
+  } finally { fixture.cleanup(); }
 });
 
 test("open refuses symlink escapes and destinations inside repository checkouts before mutation", () => {
@@ -1455,7 +1478,7 @@ test("linked invocation creates labeled children under the canonical repository 
     for (const args of controls) {
       assert.equal(args[args.indexOf("--workspace") + 1], "w-parent");
       assert.notEqual(args[args.indexOf("--workspace") + 1], "w-caller");
-      assert.equal(args[args.indexOf("--label") + 1], "repo/repo:lane-child-topic");
+      assert.equal(args[args.indexOf("--label") + 1], "child-topic");
     }
     assert.equal(
       fake.calls().filter((args) => args[0] === "workspace" && args[1] === "list").length,

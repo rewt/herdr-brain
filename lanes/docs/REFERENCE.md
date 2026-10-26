@@ -282,13 +282,19 @@ herdr workspace create --cwd /path/to/repository --label repository --focus
 
 Without Herdr, `open` falls back to `git worktree`; `dispatch` is unavailable.
 
-New lane workspace labels use `<root-label>/<repo-name>:lane-<topic>`. The root is
-the real directory containing the inherited parent configuration, or the canonical
-repository's real parent when no parent configuration is inherited. If the readable
-label exceeds 64 Unicode code points or matches another identity, `lane` keeps
-grapheme-safe root/repository/topic fragments and appends a SHA-256 identity suffix.
-Digest collisions lengthen the suffix while fragment budgets shrink to retain the
-bound. Existing open workspace labels are not renamed.
+New lane workspace labels use the topic alone. On collision or overflow beyond
+64 Unicode code points, `lane` keeps a grapheme-safe topic fragment and appends
+an opaque digest binding the canonical root/repository identity and topic. Digest
+collisions lengthen only the suffix as necessary, shrinking the topic budget to
+retain the bound. Identity/repository text and a synthetic `lane-` prefix never
+appear in display labels. Existing open workspace IDs and labels are reused.
+
+For an explicit development lane entry in a pinned project, set
+`HERDR_BRAIN_ROOT=/absolute/source/root` and invoke that same root's
+`lanes/lane.mjs` with the pinned Node interpreter. A mismatched selector refuses
+before any lane action. Without it normal project forwarding applies. Explicit
+immutable bundle invocations retain their runtime even with a source selector;
+this does not edit pins, installed bundles, saved jobs or retry bindings.
 
 Workspace controls use opaque Herdr IDs only after `repo_key`, `repo_root`,
 `checkout_path`, and linked-worktree metadata match Git's canonical identity and real

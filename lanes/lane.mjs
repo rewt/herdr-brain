@@ -12,7 +12,7 @@
 // (see README).
 
 import { cliHelp } from '../lib/cli-help.mjs';
-import { forwardRelease } from '../lib/releases.mjs';
+import { bundleRelease, forwardRelease } from '../lib/releases.mjs';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { readyLane } from '../lib/closeout.mjs';
 import { retirementHold } from '../lib/retire-hold.mjs';
@@ -70,7 +70,14 @@ import {
 } from "./routes.mjs";
 
 cliHelp(import.meta.url, 'Usage: lane open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|ready|close [TOPIC] [OPTIONS]');
-const forwardedRelease = forwardRelease('lanes/lane.mjs', process.cwd());
+// Explicit source entry also reaches pinned projects' lane children. Immutable
+// bundle invocations retain their saved runtime, regardless of this selector.
+const selectedBrain = process.env.HERDR_BRAIN_ROOT ? bundleRelease() : null;
+const selectedSource = selectedBrain && !selectedBrain.commit;
+if (selectedSource && realpathSync(process.env.HERDR_BRAIN_ROOT) !== selectedBrain.root) {
+  throw Error('HERDR_BRAIN_ROOT must match the invoked development source root; no lane action performed');
+}
+const forwardedRelease = selectedSource ? null : forwardRelease('lanes/lane.mjs', process.cwd());
 if (forwardedRelease !== null) process.exit(forwardedRelease);
 
 const IS_REVIEW_COMMAND = process.argv[2] === "review";
@@ -861,24 +868,14 @@ function laneIdentityDigest(topic, length = 8) {
 }
 
 function compactWorkspaceLabel(topic, digestLength) {
-  let reduction = digestLength - 8;
-  const budgets = { root: 12, repository: 16, topic: 20 };
-  for (const key of ["topic", "repository", "root"]) {
-    const amount = Math.min(reduction, budgets[key] - 4);
-    budgets[key] -= amount;
-    reduction -= amount;
-  }
-  return `${graphemeFragment(basename(ROOT_IDENTITY), budgets.root)}/` +
-    `${graphemeFragment(REPO_NAME, budgets.repository)}:lane-${graphemeFragment(topic, budgets.topic)}` +
-    `~${laneIdentityDigest(topic, digestLength)}`;
+  return `${graphemeFragment(topic, 64 - digestLength - 1)}~${laneIdentityDigest(topic, digestLength)}`;
 }
 
 function workspaceLabel(topic, path, workspaces = []) {
-  const readable = `${basename(ROOT_IDENTITY)}/${REPO_NAME}:lane-${topic}`;
   const collides = (label) => workspaces.some((workspace) =>
     workspace.label === label && !workspaceMatches(workspace, path, true));
-  if (codePointLength(readable) <= 64 && !collides(readable)) return readable;
-  for (let digestLength = 8; digestLength <= 44; digestLength += 1) {
+  if (codePointLength(topic) <= 64 && !collides(topic)) return topic;
+  for (let digestLength = 8; digestLength <= 62; digestLength += 1) {
     const label = compactWorkspaceLabel(topic, digestLength);
     if (codePointLength(label) <= 64 && !collides(label)) return label;
   }

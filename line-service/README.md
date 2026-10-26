@@ -1,5 +1,30 @@
 # Minimal line service
 
+For the contained startup-notice backlog, the owning native supervisor can run
+this explicit source control from its canonical project checkout:
+
+```sh
+HERDR_BRAIN_ROOT=/Users/rewt/development/rewt/herdr-brain /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/supervisor/prompt-supervisor.mjs --handle-pending-line --org /OWN/RECORD --id STABLE_BATCH_ID
+```
+
+It selects all currently safe PENDING `[line-service]` notices addressed to
+`brain-chat` in that record, not an old startup manifest. One immutable bounded
+manifest and one existing `session.message.v1` record envelope precede explicit
+handling. Original inbox bytes, sent entries, uncertain/in-flight attempts,
+obligations, unrelated recipients and order remain. Existing `autopilot` handled
+events let retained inbox readers recognize the disposition; no SENT, native
+delivery or model consumption is claimed. Retry the same ID only for the same
+saved batch. New arrivals stay pending and are returned explicitly.
+
+The control requires actual project/record/caller/recipient/source bindings and
+uses the SAME drain and journal locks without owner probes/recovery. An occupied
+lock, source/native change, redirected receipt, unknown project or changed
+notice state refuses before further handling. It never prompts, resumes,
+restarts or signals the inbox owner. A refusal is not authority to use an
+alternate executor or edit the journal. Only the project owner executes this
+control; the worker supplies source/affected evidence. This is not permission to
+restart either stopped line service.
+
 The operator's 2026-10-26 source hotfix runs one model-free pass per launchd
 interval. It uses conditional record intake, ordinary record reviewer items,
 guarded closeout drain and priority dispatch. It never promotes

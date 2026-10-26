@@ -71,9 +71,9 @@ export function readInbox(file) {
   return [...entries.values()];
 }
 
-function transaction(file, fn) {
+export function inboxTransaction(file, fn, lockOptions = {}) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const release = noticeLock(`${file}.lock`, { waitMs: 5000 });
+  const release = noticeLock(`${file}.lock`, { waitMs: 5000, ...lockOptions });
   try {
     const append = (event) => {
       const fd = fs.openSync(file, 'a', 0o600);
@@ -87,6 +87,7 @@ function transaction(file, fn) {
     return fn(readInbox(file), append);
   } finally { release(); }
 }
+const transaction = inboxTransaction;
 const record = (file, event) => transaction(file, (_entries, append) => append(event));
 const snapshot = (file) => transaction(file, (entries) => entries);
 
@@ -497,7 +498,16 @@ async function main() {
     inbox: { type: 'string' }, org: { type: 'string' }, herdr: { type: 'string' }, id: { type: 'string' }, run: { type: 'string' },
     drain: { type: 'boolean' }, resolve: { type: 'string' }, sent: { type: 'boolean' }, resend: { type: 'boolean' },
     'owner-worker': { type: 'boolean' }, settings: { type: 'string' },
+    'handle-pending-line': { type: 'boolean' },
   } });
+  if (opt['handle-pending-line']) {
+    if (positionals.length || Object.keys(opt).some(key => !['handle-pending-line', 'org', 'inbox', 'id', 'herdr'].includes(key))) throw Error('--handle-pending-line accepts only --org, --inbox, --id and --herdr');
+    const { handlePendingLineNotices } = await import('./line-notice-aggregate.mjs');
+    const result=handlePendingLineNotices(opt);
+    process.stdout.write(JSON.stringify(result) + '\n');
+    if(result.result==='pending-line-inflight-held'||result.pending_after?.length) process.exitCode=3;
+    return;
+  }
   const file = path.resolve(opt.inbox ?? inboxPath(opt));
   if (opt.run) {
     const project = noticeProject(file, opt);

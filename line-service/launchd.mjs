@@ -106,7 +106,7 @@ export function main(argv = process.argv.slice(2), { command = spawnSync } = {})
     for (const commit of commits) {
       git(['merge-base', '--is-ancestor', commit, 'HEAD']);
       const changed = git(['diff-tree', '--no-commit-id', '--name-only', '-r', commit]).split('\n');
-      if (!changed.length || changed.some(f => !f.startsWith('line-service/') && !['lib/product-files.mjs', 'test/line-service.test.mjs', 'test/line-service-review.test.mjs', 'test/line-service-queue.test.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs', 'supervisor/PROTOCOL.md', 'lanes/lane.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs', 'dispatch/unlanded-cap.mjs', 'AGENTS.md'].includes(f))) throw Error('revert commit contains files outside this hotfix; inspect exact source scope');
+      if (!changed.length || changed.some(f => !f.startsWith('line-service/') && !['lib/product-files.mjs', 'lib/store.mjs', 'test/line-service.test.mjs', 'test/line-service-review.test.mjs', 'test/line-service-queue.test.mjs', 'test/line-service-backlog.test.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs', 'supervisor/PROTOCOL.md', 'supervisor/prompt-supervisor.mjs', 'supervisor/notice-lock.mjs', 'supervisor/line-notice-aggregate.mjs', 'lanes/lane.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs', 'dispatch/unlanded-cap.mjs', 'AGENTS.md'].includes(f))) throw Error('revert commit contains files outside this hotfix; inspect exact source scope');
     }
     return { target, stopped: true, revert: git(['revert', '--no-edit', ...commits]) };
   }

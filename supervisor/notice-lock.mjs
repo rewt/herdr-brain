@@ -47,7 +47,10 @@ function dead(pid) {
   try { process.kill(pid, 0); return false; }
   catch (error) { return error.code === 'ESRCH'; }
 }
-export function noticeLock(directory, { waitMs = 0, deadline } = {}) {
+export function noticeLock(directory, { waitMs = 0, deadline, recover = true } = {}) {
+  // Explicit controls can refuse an occupied lock without probing or recovering
+  // its owner. This also respects old retained transport owners.
+  if (!recover) return acquireLock(directory, { waitMs, deadline });
   try {
     if (dead(ownerPid(directory))) throw new Error(`locked: ${directory}; dead owner`);
     return acquireLock(directory, { waitMs, deadline });

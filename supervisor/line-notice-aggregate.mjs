@@ -22,7 +22,7 @@ const capabilities=['supervisor/line-notice-aggregate.mjs','supervisor/prompt-su
 const loadedCapabilities=capabilities.map(f=>sha(fs.readFileSync(path.join(source,f))));
 const sourceHead=()=>execFileSync('git',['--no-optional-locks','-C',source,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
 const targetNotice = e => e.to === 'brain-chat' && /^\[line-service\](?:\s|$)/.test(e.message);
-const tuple = a => ({ name:a.name, pane:a.pane_id, workspace:a.workspace_id, terminal:a.terminal_id, session:a.agent_session?.value, cwd:fs.realpathSync(a.cwd) });
+const tuple = a => ({ name:a.name, pane:a.pane_id, workspace:a.workspace_id, terminal:a.terminal_id, session:a.agent_session?.value??null, cwd:fs.realpathSync(a.cwd) });
 const same = (a,b) => canonical(a) === canonical(b);
 function plain(file) {
   const stat=fs.lstatSync(file,{throwIfNoEntry:false});
@@ -46,7 +46,8 @@ export function handlePendingLineNotices({org, inbox, id, herdr='herdr', cwd=pro
     const binding=nativeSender(org,{cwd,env,call});
     if (binding.project.checkout!==binding.project.canonical) throw Error('pending-line control requires own canonical project context');
     const a=JSON.parse(call(herdr,['agent','get','brain-chat'])).result?.agent;
-    if (a?.name!=='brain-chat' || !a.pane_id || !a.workspace_id || !a.terminal_id || !a.agent_session?.value || gitProject(a.cwd).identity!==binding.project.identity) throw Error('actual Brain Chat recipient binding is missing/foreign');
+    if (a?.name!=='brain-chat' || !a.pane_id || !a.workspace_id || !a.terminal_id || typeof a.cwd!=='string' ||
+        fs.realpathSync(a.cwd)!==binding.project.canonical || gitProject(a.cwd).identity!==binding.project.identity) throw Error('actual Brain Chat recipient binding is missing/foreign');
     return {binding,caller:tuple(binding.native),recipient:tuple(a)};
   };
   const initial=bind(), file=path.resolve(inbox??inboxPath({org,cwd}));

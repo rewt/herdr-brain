@@ -45,6 +45,29 @@ test('pending backlog aggregates all 518 current pending notices, preserves hist
   const handled=fs.readFileSync(f.file,'utf8');assert.equal(f.run().handled,0);assert.equal(fs.readFileSync(f.file,'utf8'),handled);assert.equal(f.messages().length,1);
 });
 
+test('pending backlog actual recipient shape without session is record-only and preserves native caller session proof',t=>{
+  const f=fixture(t);f.put([{id:'pending'}]);
+  Object.assign(f.recipient,{name:'brain-chat',pane_id:'w3PD:p1',workspace_id:'w3PD',terminal_id:'term_65e986559ca3e1',agent:'codex',agent_status:'working'});delete f.recipient.agent_session;
+  const result=f.run('actual-shape'),manifest=JSON.parse(fs.readFileSync(result.manifest));
+  assert.equal(result.handled,1);assert.equal(result.delivered,false);assert.equal(result.model_consumed,false);
+  assert.equal(manifest.recipient.session,null);assert.equal(manifest.caller.session,f.actor.agent_session.value);
+  assert.equal(f.messages()[0].envelope.producer.epoch,f.actor.agent_session.value);
+  assert.equal(f.run('actual-shape').handled,0);assert.equal(f.messages().length,1);
+});
+
+test('pending backlog nullable recipient still refuses missing foreign or replaced physical binding and missing caller session',t=>{
+  const f=fixture(t);f.put([{id:'pending'}]);delete f.recipient.agent_session;
+  const original=structuredClone(f.recipient),before=fs.readFileSync(f.file,'utf8');
+  for(const change of [{name:'foreign'},{pane_id:null},{workspace_id:null},{terminal_id:null},{cwd:null},{cwd:f.scratch}]){
+    Object.assign(f.recipient,original,change);assert.throws(()=>f.run('binding-negative'),/recipient binding is missing\/foreign/);
+  }
+  Object.assign(f.recipient,original);const callerSession=f.actor.agent_session;delete f.actor.agent_session;
+  assert.throws(()=>f.run('caller-negative'),/native caller binding is missing or changed/);f.actor.agent_session=callerSession;
+  let reads=0;const call=(_h,args)=>{const value=args[2]===f.actor.pane_id?f.actor:{...f.recipient,terminal_id:++reads>1?'replacement-terminal':f.recipient.terminal_id};return JSON.stringify({result:{agent:value}});};
+  assert.throws(()=>f.run('replaced-negative',{call}),/native caller\/recipient changed/);
+  assert.equal(fs.readFileSync(f.file,'utf8'),before);assert.equal(f.messages().length,0);
+});
+
 test('pending backlog refuses existing drain or journal locks without probing, recovering or restarting their owner',t=>{
   const f=fixture(t);f.put([{id:'pending'}]);const before=fs.readFileSync(f.file,'utf8');
   for(const suffix of ['.drain.lock','.lock']) {

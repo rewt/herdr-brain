@@ -112,5 +112,5 @@ export function handlePendingLineNotices({org, inbox, id, herdr='herdr', cwd=pro
     }
     return {result:'handled-record-only',aggregate:saved.result.eventId,manifest:manifestFile,manifest_sha256:manifestHash,selected:selected.size,handled:count,
       retained_ambiguous:manifest.retained_ambiguous,sent_unchanged:manifest.sent_unchanged,pending_after:pendingAfter,delivered:false,model_consumed:false};
-  },{recover:false,waitMs:0}); } finally {release();}
+  },{recover:false}); } finally {release();}
 }

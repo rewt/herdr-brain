@@ -12,7 +12,7 @@ Every key is optional. A repository can inherit reusable settings from one paren
   "validate": "npm test",
   "registry": ".lane/sessions.json",
   "prepare": [
-    { "unless": "node_modules", "run": "npm ci" }
+    { "run": "pnpm install --prefer-offline --ignore-scripts --frozen-lockfile" }
   ],
   "dispatch": {
     "kind": "codex",
@@ -50,7 +50,7 @@ Every key is optional. A repository can inherit reusable settings from one paren
 | `worktree_root` | see below | Shared base directory for repository worktree containers |
 | `validate` | `npm test` | Shell command required for promotion |
 | `registry` | `.lane/sessions.json` | Gitignored legacy session array and base path for per-session display records |
-| `prepare` | none | `{unless, run}` steps for fresh worktrees |
+| `prepare` | none | `{run}` steps for worktree preparation; optional `unless` skips a step when its path exists. Never guard dependency installs: existing `node_modules` can be stale after a rebase. |
 | `dispatch.kind` | `claude` | Herdr agent kind |
 | `dispatch.model` | none | Model passed to the agent |
 | `dispatch.effort` | none | Reasoning effort passed to the agent and recorded for routed runs |

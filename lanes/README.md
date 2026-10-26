@@ -24,7 +24,7 @@ is unchanged. See [fleet mapping and adoption](../discovery/README.md#fleet).
   "archive": { "dirs": ["docs/reports", "../archive"] },
   "validate": "npm test",
   "registry": ".lane/sessions.json",
-  "prepare": [{ "unless": "node_modules", "run": "npm ci" }],
+  "prepare": [{ "run": "pnpm install --prefer-offline --ignore-scripts --frozen-lockfile" }],
   "dispatch": { "kind": "codex", "model": "model-name" },
   "always_args": { "codex": ["-p", "shared-profile"] },
   "routes": {
@@ -33,6 +33,12 @@ is unchanged. See [fleet mapping and adoption](../discovery/README.md#fleet).
   }
 }
 ```
+
+Run dependency installs unconditionally: an existing `node_modules` directory can
+be stale after a rebase changes the lockfile or adds packages. `--prefer-offline`
+uses cached packages while allowing missing ones to be fetched. Reserve the
+optional `unless` guard for preparation whose output remains valid whenever its
+path exists; see the [promotion preparation guidance](../promote/README.md#existing-project-gate-profile).
 
 `LANE_CONFIG` selects one configuration file. `LANE_VALIDATE` overrides the
 validation command, and `LANE_WORKTREE_ROOT` overrides the final per-repository

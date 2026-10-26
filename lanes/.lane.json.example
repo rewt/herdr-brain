@@ -4,7 +4,7 @@
   "validate": "npm test",
   "registry": ".lane/sessions.json",
   "prepare": [
-    { "unless": "node_modules", "run": "npm ci" }
+    { "run": "pnpm install --prefer-offline --ignore-scripts --frozen-lockfile" }
   ],
   "dispatch": {
     "kind": "codex"

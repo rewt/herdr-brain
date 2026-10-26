@@ -69,7 +69,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     try { fs.writeFileSync(fd, JSON.stringify({ at: now(), ...row }) + '\n'); fs.fsyncSync(fd); }
     finally { fs.closeSync(fd); }
   };
-  const childEnv = { ...env, ORG_DIR: org, HERDR_BRAIN_ROOT: sourceRoot, MONITOR_SUPERVISOR_AGENT: to };
+  const childEnv = { ...env, ORG_DIR: org, HERDR_BRAIN_ROOT: sourceRoot };
   // A launchd controller has no pane/session identity. Never inherit an installer's.
   for (const key of Object.keys(childEnv)) if (/^(HERDR_(ENV|PANE_ID|TAB_ID|WORKSPACE_ID)|CODEX_(SESSION_ID|THREAD_ID)|GIT_.*|LANE_CONFIG)$/.test(key)) delete childEnv[key];
   const invoke = (exe, args) => {

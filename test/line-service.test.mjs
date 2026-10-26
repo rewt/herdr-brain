@@ -42,11 +42,13 @@ function fixture(t) {
 
 test('priority READY dispatch uses existing admission and retains its one effect across restart', t => {
   const f = fixture(t); const high = f.add('High', 7);
-  f.service().pass(); f.service().pass();
+  const s = f.service({ to: 'brain-chat', env: { ...f.env, MONITOR_SUPERVISOR_AGENT: 'supervisor-test' } });
+  s.pass(); s.pass();
   assert.equal(f.calls.length, 1);
   const call = f.calls[0]; assert.equal(call.args[0], path.join(sourceRoot, 'dispatch/dispatch.mjs')); assert.equal(call.args[1], high);
   assert.ok(!call.args.includes('--to')); assert.ok(!call.args.includes('--reuse'));
   assert.equal(call.options.env.HERDR_PANE_ID, undefined); assert.equal(call.options.env.HERDR_ENV, undefined);
+  assert.equal(call.options.env.MONITOR_SUPERVISOR_AGENT, 'supervisor-test');
 });
 test('blocked and reserved work stays held while another READY item dispatches', t => {
   const f = fixture(t), blocker = f.add('Blocker'); const blocked = f.add('Blocked', 20);

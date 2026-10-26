@@ -42,268 +42,34 @@ async function homeCapFixture(t, cap) {
   return { ...fixture(t, { project }), project };
 }
 
-test('adopted home cap without LANE_CONFIG refuses at two and shares three fix/follow-up slots', async t => {
-  const f = await homeCapFixture(t, 2);
-  assert.equal(Object.hasOwn(process.env, 'LANE_CONFIG'), false);
-  assert.equal(Object.hasOwn(f.env, 'LANE_CONFIG'), false);
-  const selected = policyLocation(f.repo, 'lane', f.env);
-  assert.equal(selected.home, true);
-  assert.equal(selected.file, path.join(f.project.binding().directory, 'lane.json'));
-  assert.equal(JSON.parse(fs.readFileSync(selected.file)).dispatch.max_unlanded, 2);
-  unlandedSetting(f, 8); // A repo fallback would incorrectly admit the third item.
-  const pending = [pendingItem(f, { item: f.item }), pendingItem(f)];
-  const next = f.rec(['add', 'Third unlanded item', '--role', 'engineer']);
-  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
-  assert.equal(refused.status, 1, refused.stderr || refused.stdout);
-  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  assert.match(refused.stderr, /unlanded count 2, cap 2/);
-  for (const { item } of pending) assert.ok(JSON.parse(refused.stdout).reason.includes(item));
-  assert.deepEqual(f.show(next).runs, []);
-  assert.equal(f.calls().some(c => c.type === 'lane'), false);
-
-  f.rec(['claim', pending[0].run, '--controller', 'brain']);
-  const fix = f.start(['--from-run', pending[0].run]);
-  assert.equal(fix.status, 0, fix.stderr);
-  const fixed = JSON.parse(fix.stdout), fixJob = JSON.parse(fs.readFileSync(fixed.journal));
-  assert.equal(fixJob.unlandedCap.cap, 2);
-  assert.equal(fixJob.unlandedCap.count, 2);
-  assert.equal(fixJob.unlandedCap.admission.kind, 'fix');
-  assert.equal(fixJob.unlandedCap.exceptions.count, 0);
-  assert.equal(fixJob.sessionCap.cap, 4);
-  assert.equal(f.show(fixed.run).meta.dispatch_unlanded_admitted, true);
-  assert.equal(f.show(fixed.run).meta.dispatch_unlanded_exception, 'fix');
-  const active = [fixed.run];
-  for (let n = 1; n <= 2; n++) {
-    const item = f.rec(['add', 'Home-cap landing follow-up', '--role', 'engineer']);
-    const result = f.dispatch([item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--unblocks', pending[1].item]);
-    assert.equal(result.status, 0, result.stderr);
-    const receipt = JSON.parse(result.stdout), job = JSON.parse(fs.readFileSync(receipt.journal));
-    active.push(receipt.run);
-    assert.equal(job.unlandedCap.cap, 2);
-    assert.equal(job.unlandedCap.admission.kind, 'unblocks');
-    assert.equal(job.unlandedCap.exceptions.count, n);
-    assert.equal(f.show(receipt.run).meta.dispatch_unlanded_admitted, true);
-    assert.equal(f.show(receipt.run).meta.dispatch_unblocks, pending[1].item);
-    assert.ok(f.state().links.some(l => l.blocker === item && l.blocked === pending[1].item));
-  }
-  const fourth = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--unblocks', pending[1].item]);
-  assert.equal(fourth.status, 1, fourth.stderr);
-  assert.equal(JSON.parse(fourth.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  assert.match(fourth.stderr, /unlanded count 4, cap 2/);
-  assert.match(fourth.stderr, /All 3 active fix\/follow-up slots are occupied/);
-  for (const run of active) assert.ok(JSON.parse(fourth.stdout).reason.includes(run));
-  assert.deepEqual(f.show(next).runs, []);
-  assert.equal(f.state().links.some(l => l.blocker === next), false);
+test('running admission reaches lane preparation despite many unfinished unlanded records', t => {
+  const f=fixture(t);unlandedSetting(f,1);
+  const history=Array.from({length:10},()=>pendingItem(f));
+  const before=f.state();f.fail('prepare');
+  const result=f.start();assert.equal(result.status,1);assert.match(result.stderr,/injected prepare/);assert.notEqual(JSON.parse(result.stdout).code,'DISPATCH_UNLANDED_CAP');
+  assert.ok(f.calls().some(c=>c.type==='lane'&&c.a[0]==='open'));
+  for(const {item,run}of history){assert.equal(f.show(item).closed,false);assert.equal(f.show(run).meta.dispatch_unlanded_admitted,true);}
+  assert.equal(f.state().runs.size,before.runs.size,'no false completion or new run at failed preparation');
 });
 
-test('absent home policy without LANE_CONFIG defaults to eight unlanded items', async t => {
-  const f = await homeCapFixture(t);
-  assert.equal(Object.hasOwn(process.env, 'LANE_CONFIG'), false);
-  assert.equal(Object.hasOwn(f.env, 'LANE_CONFIG'), false);
-  const binding = f.project.binding();
-  assert.equal(binding.sources.lane.present, false);
-  assert.equal(binding.published.includes('lane'), false);
-  assert.equal(fs.existsSync(path.join(binding.directory, 'lane.json')), false);
-  assert.equal(policyLocation(f.repo, 'lane', f.env).home, false);
-  assert.equal(fs.existsSync(path.join(f.repo, '.lane.json')), false);
-  const pending = Array.from({ length: 7 }, () => pendingItem(f));
-  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
-  const job = JSON.parse(fs.readFileSync(JSON.parse(admitted.stdout).journal));
-  assert.equal(job.unlandedCap.cap, 8);
-  assert.equal(job.unlandedCap.count, 7);
-  const next = f.rec(['add', 'Ninth home-less item', '--role', 'engineer']);
-  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
-  assert.equal(refused.status, 1, refused.stderr);
-  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  assert.match(refused.stderr, /unlanded count 8, cap 8/);
-  for (const item of [...pending.map(p => p.item), f.item]) assert.ok(JSON.parse(refused.stdout).reason.includes(item));
-  assert.deepEqual(f.show(next).runs, []);
+test('running admission keeps adopted home history diagnostic rather than freezing new work', async t => {
+  const f=await homeCapFixture(t,1);assert.equal(Object.hasOwn(f.env,'LANE_CONFIG'),false);
+  assert.equal(policyLocation(f.repo,'lane',f.env).home,true);
+  for(let n=0;n<3;n++)pendingItem(f);f.fail('prepare');
+  const result=f.start();assert.equal(result.status,1);assert.match(result.stderr,/injected prepare/);assert.notEqual(JSON.parse(result.stdout).code,'DISPATCH_UNLANDED_CAP');
+  assert.ok(f.calls().some(c=>c.type==='lane'&&c.a[0]==='open'));
 });
 
-test('default unlanded cap admits the eighth item, then refuses a new item before lane/run or awaited writes', t => {
-  const f = fixture(t);
-  const pending = Array.from({ length: 7 }, () => pendingItem(f));
-  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
-  const receipt = JSON.parse(admitted.stdout), job = JSON.parse(fs.readFileSync(receipt.journal));
-  assert.equal(job.unlandedCap.cap, 8); assert.equal(job.unlandedCap.count, 7);
-  assert.equal(f.show(receipt.run).meta.dispatch_unlanded_admitted, true);
-  assert.equal(f.show(receipt.run).meta.dispatch_unlanded_exception, undefined);
-  const next = f.rec(['add', 'Ninth item', '--role', 'engineer']);
-  const events = fs.readFileSync(path.join(f.org, 'events.jsonl')), calls = f.calls().length;
-  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--awaited']);
-  assert.equal(refused.status, 1);
-  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  assert.match(refused.stderr, /unlanded count 8, cap 8/);
-  for (const id of [...pending.map(p => p.item), f.item]) assert.ok(JSON.parse(refused.stdout).reason.includes(id));
-  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
-  assert.equal(f.calls().slice(calls).some(c => c.type === 'lane'), false);
-  assert.equal(f.jobs().length, 1);
+test('running admission retains same-item origin and real unblocks target guards', t => {
+  const f=fixture(t);const other=pendingItem(f);f.fail('prepare');
+  const foreign=f.start(['--from-run',other.run]);assert.equal(foreign.status,1);assert.equal(JSON.parse(foreign.stdout).code,'FROM_RUN_OTHER_ITEM');
+  const bad=f.start(['--unblocks',f.item]);assert.equal(bad.status,1);assert.equal(JSON.parse(bad.stdout).code,'DISPATCH_UNBLOCKS_INVALID');
+  assert.equal(f.calls().some(c=>c.type==='lane'),false);
 });
 
-test('adoption admits new work despite done closures and pre-cap open runs, listing legacy work as not counted', t => {
-  const f = fixture(t); unlandedSetting(f, 1);
-  const done = pendingItem(f); f.rec(['close', done.item]);
-  const legacy = [pendingItem(f, { admitted: false }), pendingItem(f, { admitted: false })];
-  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
-  const receipt = JSON.parse(admitted.stdout), job = JSON.parse(fs.readFileSync(receipt.journal));
-  assert.equal(job.unlandedCap.count, 0);
-  assert.equal(job.unlandedCap.admission.kind, 'regular');
-  assert.equal(f.show(receipt.run).meta.dispatch_unlanded_admitted, true);
-  assert.equal(receipt.legacy.counted, false);
-  assert.equal(receipt.legacy.count, 2);
-  assert.deepEqual(receipt.legacy.items.map(i => i.item), legacy.map(i => i.item));
-  assert.deepEqual(receipt.legacy, job.unlandedCap.legacy);
-  const next = f.rec(['add', 'After first admitted start', '--role', 'engineer']);
-  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
-  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  assert.match(refused.stderr, /unlanded count 1, cap 1/);
-  assert.ok(refused.stderr.includes(`Legacy, not counted (2): ${legacy.map(i => i.item).join(', ')}`));
-  assert.deepEqual(f.show(next).runs, []);
-});
-
-for (const disposition of ['done', 'dropped', 'landed']) test(`${disposition} items release unlanded capacity`, t => {
-  const f = fixture(t); unlandedSetting(f, 1);
-  const prior = pendingItem(f);
-  const refused = f.start(); assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  if (disposition === 'done') f.rec(['close', prior.item]);
-  else if (disposition === 'dropped') f.rec(['close', prior.item, '--dropped']);
-  else {
-    // Fixture a recorded train landing; this test never runs a promotion gate.
-    const file = path.join(f.org, 'events.jsonl'), state = f.state();
-    fs.appendFileSync(file, JSON.stringify({ type: 'promotion.reconciled', seq: state.eventCount + 1,
-      at: new Date().toISOString(), by: 'dispatch-test-agent', identity: f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']),
-      items: [prior.item], runs: [prior.run], heads: [{ item: prior.item, run: prior.run, head: 'a'.repeat(40) }] }) + '\n');
-  }
-  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
-  assert.equal(JSON.parse(fs.readFileSync(JSON.parse(admitted.stdout).journal)).unlandedCap.count, 0);
-});
-
-test('a from-run fix dispatches over the unlanded cap and records its admission without changing the session cap', t => {
-  const f = fixture(t); unlandedSetting(f, 1);
-  const prior = pendingItem(f, { item: f.item });
-  f.rec(['claim', prior.run, '--controller', 'brain']);
-  const result = f.start(['--from-run', prior.run]); assert.equal(result.status, 0, result.stderr);
-  const receipt = JSON.parse(result.stdout), run = f.show(receipt.run), job = JSON.parse(fs.readFileSync(receipt.journal));
-  assert.equal(run.meta.dispatch_unlanded_exception, 'fix');
-  assert.equal(run.meta.dispatch_from_run, prior.run);
-  assert.equal(job.unlandedCap.admission.kind, 'fix');
-  assert.equal(job.unlandedCap.count, 1); assert.equal(job.sessionCap.cap, 7);
-  assert.equal(f.dispatch(['--retry', receipt.run]).status, 0, 'prompt recovery consumes no exception slot');
-  assert.equal(f.show(f.item).runs.length, 2);
-});
-
-test('landing follow-ups record their dependency and share three active slots; a fourth refuses until one finishes', t => {
-  const f = fixture(t); unlandedSetting(f, 1);
-  const landing = pendingItem(f), receipts = [];
-  for (let n = 0; n < 3; n++) {
-    const item = n === 0 ? f.item : f.rec(['add', 'Landing follow-up', '--role', 'engineer']);
-    const result = f.dispatch([item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--unblocks', landing.item]);
-    assert.equal(result.status, 0, result.stderr);
-    const receipt = JSON.parse(result.stdout), run = f.show(receipt.run); receipts.push(receipt);
-    assert.equal(run.meta.dispatch_unlanded_exception, 'unblocks');
-    assert.equal(run.meta.dispatch_unblocks, landing.item);
-    assert.ok(f.state().links.some(l => l.blocker === item && l.blocked === landing.item));
-    assert.equal(JSON.parse(fs.readFileSync(receipt.journal)).unblocks, landing.item);
-  }
-  const next = f.rec(['add', 'Fourth landing follow-up', '--role', 'engineer']);
-  const args = [next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--unblocks', landing.item];
-  const refused = f.dispatch(args); assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  assert.match(refused.stderr, /unlanded count 4, cap 1/);
-  assert.match(refused.stderr, /All 3 active fix\/follow-up slots are occupied/);
-  assert.deepEqual(f.show(next).runs, []);
-  assert.equal(f.state().links.some(l => l.blocker === next), false);
-  // A fix uses the same exception pool, not a separate allowance.
-  const fix = f.start(['--from-run', receipts[0].run]);
-  assert.equal(JSON.parse(fix.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  f.rec(['abandon', receipts[0].run]);
-  const admitted = f.dispatch(args); assert.equal(admitted.status, 0, admitted.stderr);
-  const job = JSON.parse(fs.readFileSync(JSON.parse(admitted.stdout).journal));
-  assert.equal(job.unlandedCap.count, 4, 'abandoning a run does not drop its item');
-  assert.equal(job.unlandedCap.exceptions.count, 2);
-  const changed = f.dispatch(['--retry', receipts[1].run, '--unblocks', next]);
-  assert.match(changed.stderr, /--retry uses the saved request/);
-});
-
-test('unblocks validates a pending landing before side effects and invalid configured caps fail on reuse too', t => {
-  const f = fixture(t), neverDispatched = f.rec(['add', 'No pending landing', '--role', 'engineer']);
-  for (const target of [neverDispatched, f.item, 'ENG-999']) {
-    const events = fs.readFileSync(path.join(f.org, 'events.jsonl'));
-    const result = f.start(['--unblocks', target, '--awaited']);
-    assert.equal(JSON.parse(result.stdout).code, 'DISPATCH_UNBLOCKS_INVALID');
-    assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
-    assert.equal(f.calls().some(c => c.type === 'lane'), false);
-  }
-  const first = f.start(); assert.equal(first.status, 0, first.stderr);
-  const prior = JSON.parse(first.stdout); f.rec(['abandon', prior.run]);
-  unlandedSetting(f, 0);
-  const result = f.start(['--reuse', prior.run]);
-  assert.match(result.stderr, /dispatch.max_unlanded must be a positive integer/);
-});
-
-test('reuse bypasses only session admission and needs an explicit continuation at the unlanded cap', t => {
-  const f = fixture(t); unlandedSetting(f, 1); capSetting(f, 1);
-  const first = f.start(); assert.equal(first.status, 0, first.stderr);
-  const prior = JSON.parse(first.stdout); f.rec(['abandon', prior.run]);
-  const file = path.join(f.root, 'workers'), workers = JSON.parse(fs.readFileSync(file));
-  workers[prior.agent].agent_status = 'idle'; fs.writeFileSync(file, JSON.stringify(workers));
-  const next = f.rec(['add', 'Unrelated item', '--role', 'engineer']);
-  const refused = f.dispatch([next, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, '--reuse', prior.run]);
-  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  const reused = f.start(['--from-run', prior.run, '--reuse', prior.run]); assert.equal(reused.status, 0, reused.stderr);
-  assert.equal(JSON.parse(reused.stdout).agent, prior.agent);
-  assert.equal(f.show(JSON.parse(reused.stdout).run).meta.dispatch_unlanded_exception, 'fix');
-  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
-});
-
-test('unlanded admission retries current config before starting a run and preserves an already recorded reservation', t => {
-  const f = fixture(t); f.fail('prepare');
-  assert.equal(f.start().status, 1); const journal = f.jobs()[0];
-  const landing = pendingItem(f); unlandedSetting(f, 1); f.fail('');
-  const retry = f.dispatch(['--retry', journal]); assert.equal(JSON.parse(retry.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  assert.deepEqual(f.show(f.item).runs, []);
-  f.rec(['close', landing.item, '--dropped']); f.fail('dispatch');
-  assert.equal(f.dispatch(['--retry', journal]).status, 1);
-  const reserved = JSON.parse(fs.readFileSync(journal)); assert.ok(reserved.run);
-  f.fail(''); const resumed = f.dispatch(['--retry', reserved.run, '--fresh']);
-  assert.equal(resumed.status, 0, resumed.stderr);
-  assert.equal(JSON.parse(resumed.stdout).run, reserved.run);
-  assert.equal(f.show(f.item).runs.length, 1, 'recovery reuses its durable reservation');
-});
-
-for (const exceptional of [false, true]) test(`concurrent unlanded ${exceptional ? 'exception' : 'item'} admissions grant only the last available slot`, async t => {
-  const f = fixture(t); unlandedSetting(f, 1);
-  let target;
-  if (exceptional) {
-    target = pendingItem(f).item;
-    for (let n = 0; n < 2; n++) pendingItem(f, { meta: ['dispatch_unlanded_exception=unblocks'] });
-  }
-  const other = f.rec(['add', 'Concurrent item', '--role', 'engineer']);
-  const hook = admissionHook(f, `const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
- const result=rename.call(this,from,to);
- if(once && String(to).endsWith('/dispatch-session-cap')) {once=false;pause();}
- return result;
-};`);
-  const args = item => [item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, ...(target ? ['--unblocks', target] : [])];
-  const first = f.concurrent(args(f.item), hook); let second;
-  try {
-    await until(() => fs.existsSync(hook.PAUSE_MARKER));
-    second = f.concurrent(args(other), hook);
-    await until(() => admissionAttempts(hook) === 2);
-    assert.equal(second.child.exitCode, null);
-  } finally {
-    fs.writeFileSync(hook.PAUSE_RELEASE, 'go'); await Promise.all([first.done, second?.done]);
-  }
-  const admitted = await first.done, refused = await second.done;
-  assert.equal(admitted.status, 0, admitted.stderr);
-  assert.equal(refused.status, 1, refused.stderr);
-  assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-  assert.equal(f.show(f.item).runs.length, 1); assert.deepEqual(f.show(other).runs, []);
-  assert.equal(promptCalls(f).length, 1);
-  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
-});
-test('dispatch help documents the unlanded limit, explicit exceptions and stable refusal', t => {
-  const result = fixture(t).dispatch(['--help']); assert.equal(result.status, 0, result.stderr);
-  for (const text of ['dispatch.max_unlanded defaults to 8', '--from-run', '--unblocks', '3 active exception runs', 'DISPATCH_UNLANDED_CAP']) assert.ok(result.stdout.includes(text));
+test('running admission help names native occupancy and preserves relation flags without cap bypass', t => {
+  const result=fixture(t).dispatch(['--help']);assert.equal(result.status,0,result.stderr);
+  for(const text of ['running native','dispatch.max_sessions','diagnostic only','--from-run','--unblocks','never bypasses'])assert.ok(result.stdout.includes(text));
 });
 
 test('session cap refuses before lane/run creation, lists occupants and admits after an ESRCH exit', t => {

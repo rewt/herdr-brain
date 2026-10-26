@@ -82,8 +82,14 @@ Historical closed, retired, missing and unclaimed work does not regenerate
 review debt. Existing settle/native attempts and explicit independent post-code
 review attempt/hold decision notes are retained. Closeout receives only explicit
 unattempted keys; previously evaluated failures/native holds stay with their
-existing owner and supported recovery. Actual cap holds are durable judgment
-notices; no cap is widened and no completion or unblocks link is invented.
+existing owner and supported recovery. Dispatch admission counts running native
+workers/reviewers plus durable uncertain starts, under the existing native
+session/resource limit. Unlanded lifecycle history does not stop the service or
+dispatcher. Finished reported source frees build admission while review/cleanup
+remains open. No cap is widened and no completion or unblocks link is invented.
+Review routes use their own registered worktree at the immutable captured head;
+nullable canonical chat anchors never authorize a target pane. Actual Git,
+path/head and fresh native target bindings still refuse foreign/stale evidence.
 
 After review delivery/retention and before physical closeout, an eligible current
 done report receives routine source completion through `record close ITEM

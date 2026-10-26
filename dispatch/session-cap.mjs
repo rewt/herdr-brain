@@ -9,6 +9,7 @@ import { lookupProcess } from '../lib/processes.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { nativeProcess } from './session-bind.mjs';
 import { loadTimeout, ADMISSION_WAIT_MS } from '../lib/deadline.mjs';
+import { matchesDispatchStart } from './unlanded-cap.mjs';
 
 export const DEFAULT_SESSION_CAP = 7;
 const positive = n => Number.isSafeInteger(n) && n > 0;
@@ -136,7 +137,7 @@ function sessionLiveness(owner, { kill = process.kill, readProcess = pid => look
 
 export const sessionAlive = (owner, options) => sessionLiveness(owner, options) !== 'dead';
 
-export function countSessions({ state, journals = [], reviewers = [], common, agent, processInfo,
+export function countSessions({ state, events = [], journals = [], reviewers = [], common, agent, processInfo, excludeStartJournal,
   projectIdentity = cwd => gitProject(cwd).identity, ...liveness }) {
   common = canonical(common);
   const sessions = [], jobs = new Map(journals.filter(j => j.run).map(j => [j.run, j]));
@@ -181,8 +182,21 @@ export function countSessions({ state, journals = [], reviewers = [], common, ag
       // not that its native process exited. Keep the slot until process proof
       // or an explicit report/abandon, and name it for operator inspection.
     }
-    add({ run: run.id, kind: 'worker', identity: launch, process: owner ?? null,
+    add({ run: run.id, kind: run.meta?.dispatch_role === 'review' ? 'reviewer' : 'worker', identity: launch, process: owner ?? null,
       evidence: owner ? 'native process' : job?.stage === 'launching' ? 'uncertain launch' : 'unknown liveness' });
+  }
+  // A surviving record/launch child retains its durable reservation. A real
+  // matching start replaces a starting reservation; coordinator death, age and
+  // missing process metadata cannot do so. The owning request may reconcile
+  // its own start under its request lock without reserving a second slot.
+  for (const j of journals) {
+    if (!belongs(j.common, j.workspace)) continue;
+    const starting = j.stage === 'starting' && !j.startRefused && j.journal !== excludeStartJournal &&
+      !events.some(e => e.type === 'run.started' && matchesDispatchStart(e,j));
+    const launching = j.stage === 'launching' && !sessions.some(s => s.runs.includes(j.run));
+    if (!starting && !launching) continue;
+    add({ run: j.run ?? null, journal: j.journal, kind: j.unlandedCap?.admission?.kind === 'review' ? 'reviewer' : 'worker',
+      identity: worker(j.worker), process: null, evidence: 'uncertain launch' });
   }
   // Reviewers have no worker run: the callback receipt binds the actual native
   // process to the already reported run under review. Retained live reviewers
@@ -195,11 +209,14 @@ export function countSessions({ state, journals = [], reviewers = [], common, ag
   return sessions;
 }
 
-function readJSON(directory, filter = name => name.endsWith('.json')) {
+function readJSON(directory, filter = name => name.endsWith('.json'), withJournal = false) {
   let files;
   try { files = fs.readdirSync(directory); }
   catch (e) { if (e.code === 'ENOENT') return []; throw e; }
-  return files.filter(filter).sort().map(name => JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8')));
+  return files.filter(filter).sort().map(name => {
+    const file=path.join(directory,name),value=JSON.parse(fs.readFileSync(file,'utf8'));
+    return withJournal ? {...value,journal:file} : value;
+  });
 }
 
 export function checkSessionCap({ config, org, ...options }) {
@@ -207,13 +224,16 @@ export function checkSessionCap({ config, org, ...options }) {
   if (!positive(cap)) throw Error('dispatch.max_sessions must be a positive integer');
   let sessions;
   try {
-    sessions = countSessions({ ...options, state: fold(loadEvents(org).events),
-      journals: readJSON(path.join(org, 'dispatch'), name => name.endsWith('.json') && !name.endsWith('.routes.json')),
+    // Journal first, then record: never miss both sides of a start transition.
+    const directory=path.join(org,'dispatch');
+    const journals=readJSON(directory, name => name.endsWith('.json') && !name.endsWith('.routes.json'), true);
+    const events=loadEvents(org).events;
+    sessions = countSessions({ ...options, events, state: fold(events), journals,
       reviewers: readJSON(path.join(org, 'retirement/occupants')) });
   } catch (e) { throw Error(`session count unavailable: ${e.message}`); }
   const evidence = { cap, count: sessions.length, sessions };
   if (sessions.length >= cap) {
-    const runs = list => [...new Set(list.flatMap(s => s.runs))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2))).join(', ');
+    const runs = list => [...new Set(list.flatMap(s => s.runs.filter(Boolean).length ? s.runs.filter(Boolean) : [`pending start ${s.journal ?? 'UNKNOWN'}`]))].sort((a,b)=>/^R-\d+$/.test(a)&&/^R-\d+$/.test(b)?Number(a.slice(2))-Number(b.slice(2)):a.localeCompare(b)).join(', ');
     const categories = ['observed live', 'unknown liveness', 'uncertain launch'].map(category =>
       `${category}: ${runs(sessions.filter(s => s.occupancy === category)) || 'none'}`).join('; ');
     const inspect = sessions.some(s => s.occupancy !== 'observed live')

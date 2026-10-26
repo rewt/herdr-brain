@@ -319,7 +319,7 @@ if (args[0] === "workspace" && args[1] === "list") {
   stallObservation('workspace');
   state.workspaceLists = (state.workspaceLists || 0) + 1;
   save();
-  const workspaces = process.env.FAKE_HERDR_NO_PARENT === "1" ? [] : [workspace("w-parent", "repository", process.env.FAKE_HERDR_REPO_ROOT, false)];
+  const workspaces = process.env.FAKE_HERDR_NO_PARENT === "1" ? [] : [process.env.FAKE_HERDR_CHAT_PARENT ? {workspace_id:'w3PD',label:'Brain Chat',worktree:null} : workspace("w-parent", "repository", process.env.FAKE_HERDR_REPO_ROOT, false)];
   if (process.env.FAKE_HERDR_CALLER_PATH) {
     workspaces.push(workspace("w-caller", "caller-lane", process.env.FAKE_HERDR_CALLER_PATH, true));
   }
@@ -347,7 +347,7 @@ if (args[0] === "workspace" && args[1] === "list") {
     ? [{ pane_id: 'w-lane:p1', tab_id: 'w-lane:t1', workspace_id: 'w-lane', terminal_id: 'fixture-terminal-1', foreground_cwd: process.env.FAKE_HERDR_LANE_PATH }] : process.env.FAKE_RETIREMENT_OWNER && state.agent && args.at(-1) === "w-lane"
     ? [{ pane_id: state.agentPane, tab_id: "w-lane:t2", workspace_id: "w-lane" }] : [] });
 } else if (args[0] === "worktree" && args[1] === "list") {
-  const openId = state.opened ? "w-lane" : process.env.FAKE_HERDR_STALE_ID;
+  const openId = process.env.FAKE_HERDR_TARGET_CHAT ? 'w3PD' : state.opened ? "w-lane" : process.env.FAKE_HERDR_STALE_ID;
   const worktrees = [{
     branch: "main", is_bare: false, is_detached: false, is_linked_worktree: false,
     is_prunable: false, label: "repository", open_workspace_id: "w-parent",
@@ -356,10 +356,10 @@ if (args[0] === "workspace" && args[1] === "list") {
   if (process.env.FAKE_HERDR_LANE_PATH) worktrees.push({
     branch: process.env.FAKE_HERDR_LANE_BRANCH, is_bare: false, is_detached: false,
     is_linked_worktree: true, is_prunable: false, label: state.label || "lane",
-    ...(openId ? { open_workspace_id: openId } : {}), path: process.env.FAKE_HERDR_LANE_PATH,
+    ...(openId ? { open_workspace_id: openId } : process.env.FAKE_HERDR_NULL_OPEN_ID ? {open_workspace_id:null} : {}), path: process.env.FAKE_HERDR_LANE_PATH,
   });
   result("cli:worktree:list", {
-    source: {
+    source: process.env.FAKE_HERDR_NULL_SOURCE ? {repo_key:null,repo_root:null,source_checkout_path:null,source_workspace_id:'w3PD'} : {
       repo_key: process.env.FAKE_HERDR_REPO_KEY,
       repo_name: process.env.FAKE_HERDR_REPO_NAME,
       repo_root: process.env.FAKE_HERDR_REPO_ROOT,

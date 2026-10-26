@@ -74,92 +74,40 @@ when the error has no code. A working occupant or newer open-run holder uses
 `DISPATCH_FAILED`; existing dispatch-owned codes are preserved. Inspect a late
 failure's journal to recover its started run.
 
-Dispatch also caps **unlanded items at 8** per canonical Git common-directory
-project. Set `dispatch.max_unlanded` to a positive integer beside
-`dispatch.max_sessions` in the existing dispatch configuration. Both use
-`loadDiscoveredRoutes` and its current project configuration layers (including
-the config home when supplied by that loader); there is no separate cap config
-path. The usual `.lane.json` fallback layers and explicit `LANE_CONFIG` apply.
-For example, `"dispatch": { "max_sessions": 7, "max_unlanded": 8 }` sets both.
+Current-source dispatch admits against running native workers and reviewers,
+under the existing per-project session/resource cap. Finished reported source
+frees worker admission even while review, physical cleanup or lifecycle records
+remain open. Old unlanded items and dispatch.max_unlanded are diagnostic history;
+neither the dispatcher nor line-service uses that backlog as a stop. Original
+admission facts and historical helpers remain intact; no stored count/status or
+false item completion is written. Reviewer work remains separate from build
+lifecycle accounting and still consumes total native resources.
 
-The unlanded count is derived from record events, once per open item whose
-latest `run.started` in this project carries `dispatch_unlanded_admitted=true`.
-Every newly admitted dispatch records this boolean in the original start,
-including regular admissions below the cap, fixes and follow-ups. It is an
-admission fact, not stored status; later display metadata edits cannot create
-or remove it, and older record readers continue to treat it as opaque metadata.
-Manual and pre-cap starts without that marker do not count. This lets a project
-with existing history adopt the cap without freezing dispatch; its first new
-cap-aware dispatch immediately consumes capacity.
+The shared admission lock still serializes the final recount and launch.
+Unmatched starting journals reserve capacity until a genuinely matching original
+run.started fact replaces them or a definitive start refusal is recorded. Failed
+or uncertain native launches retain their reservation even without a bound
+worker. Unknown process/identity evidence remains occupied, never observed zero.
+The owning locked request may reconcile its own start without counting a second
+slot; another request cannot reuse that reservation. Journals are read before
+record events so a transition cannot hide both forms. Age or coordinator death
+never frees an ambiguous start.
 
-A matching `promotion.reconciled` item/run/head tuple covers that attempt and
-earlier attempts; a later cap-admitted run makes the open item count again.
-An explicit current `item.closed` as **done or dropped releases the item**,
-including hand landings and non-code work without promotion receipts. Reopening
-restores its count only when its latest start was cap-admitted and remains
-unlanded. A done report or abandoned run alone does not release the item.
-Parked and kept lanes still count. Items with no run and another project's runs
-are excluded; promotion exclusions do not establish a landing.
+--from-run retains same-item/current-run ownership and source guards. --unblocks
+must identify a real other pending landing and retains its recorded dependency;
+neither flag bypasses running native capacity. Saved requests, original markers,
+exception facts and ambiguous attempts are preserved on recovery. New starts
+record dispatch_unlanded_admitted=false because lifecycle capacity is no longer
+charged. The core remains advisory for manual record starts.
 
-Open, unlanded items whose latest start lacks the marker appear as **legacy,
-not counted**. Dispatch's JSON receipt and admission journal include their IDs
-under `legacy.items`, with `legacy.counted=false`; cap refusals list them
-separately after the counted items. A pending start reservation takes precedence
-over a legacy listing for the same item. Legacy items remain valid landing
-targets for `--unblocks` while open. Original start metadata supplies project
-identity. A matching promotion item/run/head receipt identifies a legacy run's
-project before consulting its workspace through Git, so a removed foreign
-workspace cannot qualify as this project's landing to unblock. Without recorded
-project or matching promotion evidence, unavailable legacy workspace evidence
-remains visible in the diagnostic list. No worktree census or display session
-registry supplies authority.
-
-At or above the cap, only these explicit exceptions dispatch:
-
-- Fix rounds using `--from-run R-previous`, including settle's correction runs
-  on the same item/lane. Existing origin and current-run guards still apply.
-- Landing follow-ups using `--unblocks ITEM`, naming another unlanded item in
-  this project. Dispatch records `record block ITEM --by NEW-ITEM` before run
-  creation and records `dispatch_unblocks=ITEM` on the new run. An existing
-  dependency alone, a shared lane or `--reuse` alone grants no exception.
-
-These share **3 active exception runs**, including reused workers. Admission at
-the cap records `dispatch_unlanded_exception=fix|unblocks` in the original
-`run.started` metadata, an admission fact rather than stored status. A report
-or explicit abandonment ends that exception's occupancy; it does not itself
-land the item. Normal admissions below the cap consume no exception slot.
-`DISPATCH_UNLANDED_CAP` refuses ordinary work at the cap or a fourth active
-exception. Its message names the current count, cap and unlanded item IDs,
-and tells the caller to finish a listed landing or close that work as done or
-dropped; when exception slots are full it also names the active runs to finish first.
-An invalid target uses `DISPATCH_UNBLOCKS_INVALID`.
-
-Early unlanded checks precede lane, run and awaited-item writes. After the open
-memory wait and preparation, the authoritative recount and record start share
-the session cap's `<git-common-dir>/dispatch-session-cap/` admission lock. Before
-spawning `record start`, dispatch saves `starting` and its item/exception admission
-in the request journal. This pending start reserves capacity even if its
-coordinator dies and a surviving child can still append after the lock is
-reclaimed. An original `run.started` with the same project, item, journal,
-attempt token, admission marker and exception kind replaces the journal
-reservation exactly once; a stray journal reference or later display edit
-cannot release it. Automatic
-retry and explicit `--recover-run` use those same original start facts before
-advancing the journal; unmatched starts stay reserved. For pre-marker journals,
-both the saved admission and original start must lack the marker, preserving
-recovery of starts already in flight at upgrade. Their existing exception facts
-still occupy the shared three slots until report or abandonment. Admission
-snapshots journals before record events so concurrent
-start recovery cannot hide both forms of the reservation. An unmatched uncertain
-start remains occupied until reconciled; coordinator death or age never clears
-it. A definitive record refusal releases it. Refusals identify pending starts
-and their saved requests for inspection/retry; pending starts without a run do
-not qualify as `--unblocks` targets. Failed/uncertain launches keep their recorded
-run reservation. A retry after a definitive start refusal checks the current cap
-again; recovery of a recorded run consumes no new reservation.
-`--unblocks` is saved with the request and cannot be changed on retry. The record
-core remains advisory and never refuses a manual start for these caps. BCH's
-settle-watch and reconcile do not participate in this policy.
+Queued reviewers dispatch into their OWN registered review worktree at the exact
+captured immutable head. The dispatcher validates actual Git common-directory,
+canonical project, registered path and HEAD before effects, then passes the
+captured head to the lane launcher for fresh checks before native start. A null
+canonical chat-workspace anchor or unopened worktree ID is not project authority
+and does not select a chat pane. Actual Git and target workspace/native bindings
+remain required; contradictory foreign/stale/path/head evidence refuses. No held
+review is retried or replaced by this source change.
 
 The independent session cap limits new sessions per Git common-directory project
 to **7**, matching BCH's `MAX_SESSIONS` default and leaving room for the normal
@@ -214,7 +162,7 @@ and retrying. Age alone cannot establish safe ownership, so it never clears this
 legacy case automatically. Live `--reuse`
 continuations and retries that only record a worker, arm watch or deliver the
 saved prompt do not add a session and bypass session admission. New reused runs
-still require the unlanded admission described above. An explicit `--fresh`
+still require the source/origin relations described above. An explicit `--fresh`
 launch still checks capacity, including an uncertain earlier launch.
 
 Settle adds `--from-run R-previous` to bind a correction to its originating run.

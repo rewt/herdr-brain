@@ -113,7 +113,13 @@ function startJournals(org) {
   });
 }
 
-export function checkUnlandedCap({ config, org, events, journals, request, requireLink = false, ...options }) {
+export function checkSourceAdmission(options) {
+  // Current dispatch uses running native occupancy, not lifecycle debt. Keep
+  // relation validation and original journal/start matching for saved requests.
+  return checkUnlandedCap({ ...options, running: true });
+}
+
+export function checkUnlandedCap({ config, org, events, journals, request, requireLink = false, running = false, ...options }) {
   const cap = config.dispatch?.max_unlanded === undefined ? DEFAULT_UNLANDED_CAP : config.dispatch.max_unlanded;
   if (!Number.isSafeInteger(cap) || cap < 1) throw Error('dispatch.max_unlanded must be a positive integer');
   // Snapshot journals first. If recovery advances a journal after its start
@@ -143,6 +149,11 @@ export function checkUnlandedCap({ config, org, events, journals, request, requi
       throw refusal('DISPATCH_UNBLOCKS_INVALID', `recorded landing link missing: ${request.item} must block ${request.unblocks}`);
     }
   }
+  if (running) return { cap: null, count: null, accounting: 'running-workers', counted: false,
+    historical_unlanded: { cap, count: items.length, items, counted: false },
+    legacy: { count: legacy.length, counted: false, items: legacy },
+    pending_starts: reservations.map(j => ({ item: j.item, journal: j.journal })),
+    admission: { kind: 'regular', admitted: false, from_run: request.fromRun ?? null, unblocks: request.unblocks ?? null } };
   const kind = items.length < cap ? 'regular' : request.fromRun ? 'fix' : request.unblocks ? 'unblocks' : null;
   const evidence = { cap, count: items.length, items, legacy: { count: legacy.length, counted: false, items: legacy },
     pending_starts: reservations.map(j => ({ item: j.item, journal: j.journal })),

@@ -13,7 +13,6 @@ import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.m
 import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { checkSessionCap } from '../dispatch/session-cap.mjs';
-import { checkUnlandedCap } from '../dispatch/unlanded-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { readCloseoutEntries } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
@@ -281,7 +280,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             agent: name => native(['agent', 'get', name]).agent,
             processInfo: pane => native(['pane', 'process-info', '--pane', pane]).process_info }));
           const occupancy = count(); log({ action: 'capacity', ...occupancy });
-          checkUnlandedCap({ config, org, common: project.identity, request: { item: item.id } });
           const dispatched = effect(key, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
             if (!current || current.closed || itemStatus(fresh.state, item.id) !== 'ready' || reserved(current) || current.meta.hold || current.meta.held || (reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route) throw Error('dispatch readiness or route changed');

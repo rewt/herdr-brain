@@ -781,13 +781,19 @@ function openWorkspaceIdFor(path, { refuseStale = true, onMismatch, workspaces, 
   };
   const listed = herdrJson(["worktree", "list", "--cwd", REPO_ROOT], { deadline });
   if (listed === undefined) return undefined;
-  if (!samePath(listed.source?.repo_key, REPO_IDENTITY) ||
-      !samePath(listed.source?.repo_root, REPO_ROOT) ||
-      !samePath(listed.source?.source_checkout_path, REPO_ROOT)) {
+  // A canonical chat workspace can have null worktree/source metadata. Actual
+  // Git registration supplies project authority; explicit foreign evidence
+  // still contradicts it and must not be used to select a native workspace.
+  if (!candidateIsCanonicalCheckout(REPO_ROOT) || gitIdentityForPath(path)!==REPO_IDENTITY ||
+      !worktreeEntries().some(entry=>samePath(entry.path,path)) ||
+      (listed.source?.repo_key != null && !samePath(listed.source.repo_key, REPO_IDENTITY)) ||
+      (listed.source?.repo_root != null && !samePath(listed.source.repo_root, REPO_ROOT)) ||
+      (listed.source?.source_checkout_path != null && gitIdentityForPath(listed.source.source_checkout_path)!==REPO_IDENTITY)) {
     return mismatch(`Herdr worktree source has a repository identity mismatch for ${REPO_ROOT}`);
   }
+  if(!Array.isArray(listed.worktrees))return mismatch('Herdr worktree inventory is unavailable');
   const item = listed.worktrees.find((worktree) => samePath(worktree.path, path));
-  if (item?.open_workspace_id === undefined) return undefined;
+  if (item?.open_workspace_id == null) return undefined;
   const availableWorkspaces = workspaces ?? herdrJson(["workspace", "list"], { deadline })?.workspaces;
   const workspace = availableWorkspaces?.find((entry) => entry.workspace_id === item.open_workspace_id);
   if (!workspaceMatches(workspace, path, !samePath(path, REPO_ROOT))) {
@@ -1197,6 +1203,11 @@ function dispatch(topic, promptText, options = {}) {
   const resolved = resolveDispatch(options);
   const path = IS_REVIEW_COMMAND && options.capturedHead ? REPO_ROOT : worktreeFor(branch);
   if (path === undefined) fail(`lane ${branch} has no worktree; open it first`);
+  const checkCapturedWorktree=()=>{
+    if(options.expectedHead===undefined)return;
+    if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(options.expectedHead)||samePath(path,REPO_ROOT)||worktreeFor(branch)!==path||gitIdentityForPath(path)!==REPO_IDENTITY||tryGit(['rev-parse','HEAD'],{cwd:path})!==options.expectedHead)fail('review worktree path/common-directory/captured HEAD changed; no new reviewer may launch');
+  };
+  checkCapturedWorktree();
   // Dispatch is model-agnostic: the tier policy is the operator's, and the
   // operator-owned role->agent mappings live in .lane.json "routes". A named
   // route owns kind/model/effort; extra agent-CLI arguments are launch plumbing
@@ -1252,7 +1263,7 @@ function dispatch(topic, promptText, options = {}) {
   let pane = initial?.pane, tabId = initial?.tabId;
   if (initial === undefined) {
     const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
-    if (options.capturedHead) tabArgs.push('--cwd', path);
+    if (options.capturedHead || options.expectedHead) tabArgs.push('--cwd', path);
     for (const pair of resolved.env) tabArgs.push("--env", pair);
     const created = JSON.parse(execFileSync("herdr", tabArgs, {
       encoding: "utf8",
@@ -1341,6 +1352,7 @@ function dispatch(topic, promptText, options = {}) {
   let started = false;
   let lastError = "";
   for (let attempt = 0; attempt < startAttempts && !started && (options.deadline === undefined || Date.now() < options.deadline); attempt += 1) {
+    checkCapturedWorktree();
     // A failed start can leave the name registered, and a start that herdr
     // reports as failed can still have launched the agent in the pane: use a
     // fresh name per attempt and adopt whatever is already running there.
@@ -2816,7 +2828,7 @@ switch (command) {
     const options = { env: [], args: [] };
     const positional = [];
     for (let i = 0; i < rest.length; i += 1) {
-      if (["--route", "--route-config", "--model", "--kind", "--env", "--arg"].includes(rest[i]) &&
+      if (["--route", "--route-config", "--model", "--kind", "--env", "--arg", "--expected-head"].includes(rest[i]) &&
           (rest[i + 1] === undefined || rest[i + 1] === "")) {
         fail(`${rest[i]} requires a value`);
       }
@@ -2828,6 +2840,7 @@ switch (command) {
       else if (rest[i] === "--arg") options.args.push(rest[(i += 1)]);
       else if (rest[i] === "--json") options.silent = true;
       else if (rest[i] === "--memory-checked") options.memoryChecked = true;
+      else if (rest[i] === "--expected-head") options.expectedHead = rest[(i += 1)];
       else positional.push(rest[i]);
     }
     if (options.route !== undefined && (options.kind !== undefined || options.model !== undefined)) {

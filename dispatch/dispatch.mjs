@@ -23,12 +23,12 @@ import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/wor
 import { lookupProcess } from '../lib/processes.mjs';
 import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
-import { checkUnlandedCap, matchesDispatchStart } from './unlanded-cap.mjs';
+import { checkSourceAdmission, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
 import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from '../line-service/review-queue.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
-const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nUnlanded items: dispatch.max_unlanded defaults to 8 (current project config layers). At the cap, only --from-run R-n fix rounds and --unblocks ITEM landing follow-ups proceed, at most 3 active exception runs combined. --unblocks records that this item blocks the named unlanded landing. DISPATCH_UNLANDED_CAP names the count, cap and items to land or drop first. The independent session cap still applies to new workers.", allowPositionals: true, options: {
+const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
   controller: { type: 'string', default: BRAIN_CONTROLLER },
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
@@ -207,13 +207,13 @@ function captureLaunchProcess() {
 function admission(repo, org, common) {
   const { config } = loadDiscoveredRoutes({ cwd: repo });
   const evidence = checkSessionCap({ config, org, common, agent: name => herdr(['agent', 'get', name]).agent,
-    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info });
+    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info, excludeStartJournal: journal });
   if (job) job.sessionCap = evidence;
   return evidence;
 }
 function unlandedAdmission(request, { requireLink = false } = {}) {
   const { config } = loadDiscoveredRoutes({ cwd: request.repo });
-  return checkUnlandedCap({ config, org: request.org, common: request.common, request, requireLink });
+  return checkSourceAdmission({ config, org: request.org, common: request.common, request, requireLink });
 }
 function requestStarts() {
   return loadEvents(job.org).events.filter(event => event.type === 'run.started' && matchesDispatchStart(event, { ...job, journal }));
@@ -417,7 +417,11 @@ async function main() {
       if (!item || item.closed || item.meta.hold || item.meta.held) throw Error('queued review item closed/held before native effect');
       const target = validateQueuedReview({ item, state, events, org: job.org, repo: job.repo, allowRun: job.run, allowJournal: journal });
       if (JSON.stringify(target) !== JSON.stringify(job.reviewQueue)) throw Error('saved review dispatch target/evidence changed');
-      if (job.workspace && git(['rev-parse', 'HEAD'], job.workspace) !== target.head) throw Error('review lane no longer has the immutable captured source');
+      if (job.workspace) {
+        const actual=gitProject(job.workspace);
+        if(actual.identity!==job.common||actual.checkout!==job.workspace||actual.canonical!==job.repo||job.workspace===job.repo||fs.realpathSync(worktree())!==job.workspace)throw Error('review workspace path/common-directory differs from its own registered lane');
+        if(git(['rev-parse', 'HEAD'], job.workspace) !== target.head)throw Error('review lane no longer has the immutable captured source');
+      }
     }
   };
   if (opt['recover-run']) {
@@ -543,7 +547,8 @@ async function main() {
       admission(job.repo, job.org, common);
       checkStop();
       job.stage = 'launching'; save();
-      const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked']);
+      const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked',
+        ...(job.reviewQueue ? ['--expected-head',job.reviewQueue.head] : [])]);
       const launched = JSON.parse(output);
       if (launched.result === 'stopped') {
         job.stage = 'worker'; save();

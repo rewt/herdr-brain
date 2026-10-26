@@ -100,12 +100,12 @@ function rememberProcesses(root, org, realWatch, receipts) {
       '--controller', BRAIN_CONTROLLER, '--org', org, '--to', job.to, '--cwd', job.repo, '--log', path.join(org, 'dispatch', `${job.run}.watch.log`)].join(' ') : fakeCommand);
   }
 }
-function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure, lateSession = '', project } = {}) {
+function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure, lateSession = '', project, sourceEntry = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = project?.cwd ?? path.join(root, 'repo'), org = project?.env.ORG_DIR ?? path.join(root, 'org'), bin = path.join(root, 'bin');
   // Adopted source entry points select the installed release. Use the fixture's
   // immutable bundle to keep dispatch, record and run ownership in this product.
-  const dispatchCLI = project ? path.join(project.bundle, 'dispatch/dispatch.mjs') : DISPATCH;
+  const dispatchCLI = sourceEntry ? DISPATCH : project ? path.join(project.bundle, 'dispatch/dispatch.mjs') : DISPATCH;
   const recordCLI = project ? path.join(project.bundle, 'bin/org.mjs') : RECORD;
   if (!project) fs.mkdirSync(repo);
   fs.mkdirSync(bin);

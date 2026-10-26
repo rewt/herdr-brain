@@ -258,9 +258,16 @@ through `lane check --cmd COMMAND` on the clean committed candidate before the
 final report; no pre-main or generic/full-suite gate is added. Unrun is never PASS.
 
 Until a future release, select the changed source explicitly, for example
-`/PINNED/NODE /CANONICAL/dispatch/dispatch.mjs ...`. Sibling CLI defaults and new
-generated policy come from that source tree. Record the actual root/head and
-recipient; installed `current`, running sessions and saved claimed operations
+`HERDR_BRAIN_ROOT=/CANONICAL /PINNED/NODE /CANONICAL/dispatch/dispatch.mjs ...`.
+For a NEW request, this existing launcher selector must match the invoked
+development source root; the dispatcher records that root and Git head and does
+not forward its cold-worker recipient decision to the project's installed pin.
+Omit `--to` to select the actual recorded worker after creation. Without the
+explicit selector, normal project/home release selection remains in force.
+Retries and `--from-run` continuations always retain their saved claim/runtime;
+this selector never adopts old work or changes a project/global pin. Child CLI
+entry points retain their normal project and claimed-operation selection guards.
+Record the actual root/head and recipient; installed `current`, running sessions and saved claimed operations
 retain their existing runtime. Do not patch sealed bundles or use ineffective
 legacy `entry`/`chat` settings as an activation claim.
 When the immutable pre-prompt receipt has no native session, dispatch pins the

@@ -8,6 +8,8 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { runMetrics } from '../metrics.mjs';
 import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
+import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
+import { policyLocation } from '../../lib/config-home.mjs';
 import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts } from './dispatch-fixture.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
@@ -260,6 +262,40 @@ test('dispatch owner delivery refuses a replaced occupant before watcher recover
   assert.equal(retry.status, 1); assert.match(retry.stderr, /worker occupant identity changed/);
   assert.equal(f.calls().filter(c => c.type === 'watch').length, 1, 'no watcher is armed for a replacement');
   assert.equal(promptCalls(f).length, 0);
+});
+test('source-selected cold dispatch preserves home policy and saved-operation roots', async t => {
+  const project = configFixture(t); await project.adopt();
+  const f = fixture(t, { project, sourceEntry: true });
+  const source = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
+  const first = f.start(['--to', 'ops-project']); assert.equal(first.status, 0, first.stderr);
+  const savedFile = f.jobs()[0], saved = JSON.parse(fs.readFileSync(savedFile));
+  assert.equal(saved.release.root, project.bundle, 'without explicit source selection, home current still owns dispatch');
+  f.env.HERDR_BRAIN_ROOT = source;
+  const retry = f.dispatch(['--retry', saved.run]); assert.equal(retry.status, 0, retry.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(savedFile)).release.root, project.bundle);
+  assert.equal(f.show(saved.run).owner.release.root, project.bundle);
+  assert.equal(f.calls().filter(c => c.type === 'watch').length, 1, 'saved retry retains its one watcher');
+  const report = f.show(saved.run).report_path;
+  fs.writeFileSync(report, `---\nrun: ${saved.run}\noutcome: done\nsummary: Fixture complete\n---\n`); f.rec(['ingest', report]);
+  f.rec(['config', 'set', 'pin.release', '"compatible"']);
+  const pin = policyLocation(f.repo, 'pin', f.env).file, pinBytes = fs.readFileSync(pin);
+  const item = f.rec(['add', 'Fresh source-selected work', '--role', 'engineer']);
+  const fresh = f.dispatch([item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
+  assert.equal(fresh.status, 0, fresh.stderr);
+  const job = f.jobs().map(file => JSON.parse(fs.readFileSync(file))).find(job => job.run !== saved.run);
+  assert.equal(job.release.root, source);
+  assert.equal(job.sourceSelection.root, source); assert.match(job.sourceSelection.head, /^[a-f0-9]{40}$/);
+  assert.equal(f.show(job.run).owner.release.root, source, 'new claim binds the actual selected source');
+  assert.equal(job.to, job.worker.agentName); assert.equal(f.show(job.run).meta.agent, job.to);
+  const watchers = f.calls().filter(c => c.type === 'watch');
+  assert.equal(watchers.length, 2, 'one watcher per distinct run');
+  assert.equal(watchers[1].a[watchers[1].a.indexOf('--to') + 1], job.to);
+  assert.deepEqual(fs.readFileSync(pin), pinBytes, 'source selection never edits the adopted project pin');
+  f.env.HERDR_BRAIN_ROOT = f.repo;
+  const invalidItem = f.rec(['add', 'Mismatched source must not dispatch', '--role', 'engineer']);
+  const mismatch = f.dispatch([invalidItem, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
+  assert.equal(mismatch.status, 1); assert.match(mismatch.stderr, /must match the invoked development source root/);
+  assert.equal(f.jobs().length, 2); assert.deepEqual(f.show(invalidItem).runs, []);
 });
 test('open/prepare failures keep a visible request, create no run, and retry cleanly',t=>{
   for(const stage of ['open','prepare']) {

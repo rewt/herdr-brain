@@ -34,9 +34,12 @@ test('entry policies keep ordinary landing with workers and supervisor authority
   assert.match(supervisor, /do not invoke a second settle\/review/);
   assert.match(supervisor, /signed source-ready-to-land\/report-to-land gaps/);
   assert.match(supervisor, /direct source invocation does not update installed current/);
+  assert.match(supervisor, /HERDR_BRAIN_ROOT=\/CANONICAL \/PINNED\/NODE \/CANONICAL\/dispatch\/dispatch.mjs/);
+  assert.match(supervisor, /retries and --from-run always retain the original source\/release/);
   const dispatch = fs.readFileSync(path.join(root, 'dispatch/README.md'), 'utf8');
   assert.match(dispatch, /after `record worker` and fresh live occupant verification/);
   assert.match(dispatch, /retries retain it/);
   assert.match(dispatch, /must not launch a duplicate review/);
+  assert.match(dispatch, /selector never adopts old work or changes a project\/global pin/);
   assert.match(dispatch, /installed `current`, running sessions and saved claimed operations/);
 });

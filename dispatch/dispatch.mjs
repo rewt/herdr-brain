@@ -318,7 +318,16 @@ async function main() {
       const bound = continueOwnerRelease('dispatch/dispatch.mjs', predecessor.binding);
       if (bound !== null) { process.exitCode = bound; return; }
     }
-    const forwarded = predecessor ? null : forwardRelease('dispatch/dispatch.mjs', opt.repo);
+    // The existing launcher selector may explicitly choose this development
+    // dispatcher for a NEW request, including a home-bound/pinned project.
+    // Retry and predecessor handling above always retain their saved owner.
+    let sourceSelection;
+    if (!predecessor && process.env.HERDR_BRAIN_ROOT) {
+      const actual = bundleRelease(), requested = fs.realpathSync(process.env.HERDR_BRAIN_ROOT);
+      if (actual.commit || requested !== actual.root) throw new Error('HERDR_BRAIN_ROOT must match the invoked development source root; no dispatch created');
+      sourceSelection = { kind: 'explicit-brain-root', root: actual.root, head: git(['rev-parse', 'HEAD'], actual.root) };
+    }
+    const forwarded = predecessor || sourceSelection ? null : forwardRelease('dispatch/dispatch.mjs', opt.repo);
     if (forwarded !== null) { process.exitCode = forwarded; return; }
     if (opt.adopt || opt.fresh || opt.resend || opt['accept-delivered'] || opt['recover-run']) throw new Error('recovery flags require --retry');
     if (positionals.length !== 1 || !opt.lane || !opt.route || !opt.brief) throw new Error('usage: dispatch.mjs ITEM --org DIR --lane TOPIC --route ROUTE --brief FILE [--report FILE] [--to AGENT] [--base REF] [--reuse R-n] [--extra TEXT] | --retry R-n|JOURNAL | --status R-n|JOURNAL');
@@ -346,7 +355,7 @@ async function main() {
     const directory = path.join(org, 'dispatch');
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
-    job = { token, repo, org, common, predecessor, release: bundleRelease(), item: positionals[0], lane: opt.lane, route: opt.route,
+    job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null, item: positionals[0], lane: opt.lane, route: opt.route,
       brief, report: opt.report ?? null, to: opt.to ?? null,
       base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields,

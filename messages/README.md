@@ -474,8 +474,7 @@ for judgment uses `question` or `request` from the existing envelope kinds.
 From a natively bound Herdr session in the owning project:
 
 ```sh
-record messages send --id R-856:status:1 --kind notice --summary 'Source is committed' --run R-856 --item ENG-285
-record messages send --id R-856:question:1 --kind question --summary 'A technical decision is needed' --run R-856 --item ENG-285 --correlation decision-thread
+record messages send --id STABLE_ID --kind notice --summary 'Automatic reviews are paused.' --happened 'We are fixing how the system chooses work to review.' --action 'Nothing needed.' --details 'item and run references; evidence locator' --item ITEM
 record messages digest
 record messages digest --after 18599 --limit 5 --json
 ```
@@ -484,7 +483,7 @@ Before installation, an adopted/pinned project selects the development entry
 explicitly, preserving its owning record and actual native actor:
 
 ```sh
-HERDR_BRAIN_ROOT=/absolute/development/root ORG_DIR=/owning/.org ORG_ACTOR=actual-native-name /PINNED/NODE /absolute/development/root/bin/org.mjs messages send --id STABLE_ID --kind notice --item ITEM --summary 'one-line status'
+HERDR_BRAIN_ROOT=/absolute/development/root ORG_DIR=/owning/.org ORG_ACTOR=actual-native-name /PINNED/NODE /absolute/development/root/bin/org.mjs messages send --id STABLE_ID --kind notice --item ITEM --summary 'One-line headline.' --happened 'What happened in plain words.' --action 'Nothing needed.' --details 'technical references'
 ```
 
 The selector must resolve to the invoked real Git development root. A mismatch
@@ -493,6 +492,24 @@ selection and other record commands retain default project/home pin forwarding,
 and immutable installed release continuations retain their original runtime.
 Native/record/run guards still apply; selection supplies no authority. No pin,
 installed bundle or saved job is changed.
+
+Every OPERATOR-addressed message reads as headline, what happened, whether you need
+to do anything (usually Nothing needed), then ONE trailing Details line. Author
+plain main wording for a non-agent reader. Bare item/run IDs, hashes, receipt/source
+jargon, file paths and shorthand such as bootstrap5 or record-only belong in Details.
+Use Nothing needed only when true; pending reserved decisions need an explicit ask.
+The supported `--happened`, `--action`, `--details` options add optional
+`payload.operator_text` data to the same envelope; summary remains the headline.
+The human digest keeps all technical metadata on Details. The machine JSON keeps
+its original IDs, summary, refs, cursor and push fields and adds operator_text.
+These fields confer no authority and cannot make an ordinary T2 question reserved.
+Current pending reserved references override an authored Nothing needed with
+Your decision is needed. Old summary-only inputs/retries remain accepted exactly.
+Legacy entries use a neutral headline, their original summary in Details, and an
+explicit instruction to check whether action is needed unless a real pending reserved decision is known.
+No old envelope/receipt bytes are rewritten, body references opened, private files
+read or model paraphraser/API used. New dispatches include the supported composition
+options; old saved/delivered jobs and long-lived transports are unchanged.
 
 `send --file /absolute/envelope.json` consumes an existing envelope. Native
 sender session/terminal, run claim when present, canonical Git common directory,

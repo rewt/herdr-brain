@@ -276,6 +276,14 @@ AGENTS.md supplies the same instruction to cold-start workers and supervisors. C
 sessions receive the explicit live instruction through their existing delivery path;
 no installed c160/pin, saved job or long-lived process is edited or restarted.
 
+New source prompts also include `--happened`, `--action` and `--details`: write a
+plain one-line headline, what happened and whether the operator needs to act, then
+ONE trailing Details line containing IDs/hashes/receipt/source jargon. Usually the
+action is Nothing needed; a pending reserved decision must explicitly need a decision.
+This rule applies to OPERATOR-addressed messages, not internal technical coordination
+or owned callbacks. Saved jobs without the new composition marker retain their
+original guidance; source AGENTS supplies the current/cold instruction defaults.
+
 Under the current operator waiver, the finishing engineer self-lands immediately
 with `lane promote TOPIC --expected-head FULL_COMMIT`, preserving native claims,
 clean worktrees/rebase, exact source/CAS/fast-forward, STOP, HOLD and archives.

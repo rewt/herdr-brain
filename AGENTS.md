@@ -12,7 +12,13 @@
   the owning record's `messages send`, never operator-pane input. Until installation use the explicit
   source command `HERDR_BRAIN_ROOT=/Users/rewt/development/rewt/herdr-brain /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs`
   with `ORG_DIR` set to the owning record and `ORG_ACTOR` set to your actual native agent name:
-  `messages send --id STABLE_ID --kind notice --item ITEM --summary 'one-line status'`.
+  `messages send --id STABLE_ID --kind notice --item ITEM --summary 'One-line headline.' --happened 'What happened in plain words.' --action 'Nothing needed.' --details 'technical references'`.
+  EVERY message addressed to the operator must read naturally to a non-agent reader, in this order:
+  one-line headline, what happened, whether the operator needs to do anything, then ONE trailing
+  Details line. Put bare item/run IDs, hashes, receipt/source jargon and shorthand such as bootstrap5
+  and record-only in Details only. Author the plain wording; no model paraphraser is involved.
+  Use Nothing needed only when true; a pending reserved decision must say a decision is needed.
+  This composition rule does not change internal agent coordination or owned callback contracts.
   The selector must match that actual development root, including in adopted projects; omitting it
   keeps normal pin forwarding. Immutable release continuations and saved jobs keep their runtime.
   Use `notice` for status/done, `fyi` for fyi, `question`/`request` for judgment, and retain stable IDs,

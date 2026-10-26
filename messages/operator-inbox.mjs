@@ -10,6 +10,8 @@ import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { invokeHerdr } from '../supervisor/herdr-edge.mjs';
 import { enqueueSupervisor, inboxPath, readInbox, resumeInbox } from '../supervisor/prompt-supervisor.mjs';
 import { identityRootAt } from './journal.mjs';
+import { fold } from '../lib/state.mjs';
+import { validateOperatorText, operatorWording } from './operator-text.mjs';
 
 const fail = message => { throw new UserError(`operator inbox: ${message}`); };
 export function recordMessages(events) {
@@ -51,11 +53,14 @@ export function makeEnvelope(input, binding, events, at = new Date()) {
       session: { uid: n.agent_session.value, incarnation: n.terminal_id } },
     to: [{ identity, projectRef: project.identity, role: { name: 'operator', bindingRef: 'brain-chat' } }],
     kind: input.kind ?? 'fyi', summary: input.summary, refs, reply_to: input.replyTo ?? null,
-    priority: 'normal', reply_by: null, body_ref: null, decision_ref: null } };
+    priority: 'normal', reply_by: null, body_ref: null, decision_ref: null,
+    ...(input.happened !== undefined || input.action !== undefined || input.details !== undefined
+      ? { operator_text: { happened: input.happened, action: input.action, details: input.details ?? '' } } : {}) } };
 }
 
 export function prepareEnvelope(envelope, binding, state, events) {
   validateEvent(envelope);
+  validateOperatorText(envelope.payload.summary, envelope.payload.operator_text);
   const { native: n, identity, project, org } = binding, p = envelope.payload;
   if (envelope.type !== 'session.message.v1' || envelope.cursor || envelope.receivedAt || envelope.stream || envelope.shadow ||
       envelope.identity !== identity || envelope.project.commonDir !== project.identity || envelope.orgRef !== org ||
@@ -83,10 +88,14 @@ export function prepareEnvelope(envelope, binding, state, events) {
 
 export function reservedQuestion(envelope, state, org) {
   if (!['question', 'request'].includes(envelope.payload.kind)) return null;
-  const questions = [...new Set(envelope.payload.refs.filter(ref => ref.orgRef === org).map(ref => ref.item))]
-    .map(id => state.items.get(id)).filter(item => item?.role === 'human' && item.meta.operator_reserved === true && !item.closed && !item.meta.answer);
+  const questions = pendingReservedQuestions(envelope, state, org);
   if (questions.length > 1) fail('multiple reserved asks need separate envelopes');
   return questions[0] ?? null;
+}
+function pendingReservedQuestions(envelope, state, org) {
+  const questions = [...new Set(envelope.payload.refs.filter(ref => ref.orgRef === org).map(ref => ref.item))]
+    .map(id => state.items.get(id)).filter(item => item?.role === 'human' && item.meta.operator_reserved === true && !item.closed && !item.meta.answer);
+  return questions;
 }
 export const pushId = (org, id) => `operator-message-${digest(canonical([org, id]))}`;
 
@@ -113,11 +122,12 @@ export async function pushReserved(envelope, binding, state, { enqueue = enqueue
 
 export function operatorDigest(events, org, { limit = 5, after } = {}) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 20 || after !== undefined && (!Number.isSafeInteger(after) || after < 0)) fail('digest needs limit 1..20 and nonnegative record sequence');
-  const entries = readInbox(inboxPath({ org })), all = recordMessages(events);
+  const entries = readInbox(inboxPath({ org })), all = recordMessages(events), state = fold(events);
   const eligible = after === undefined ? all : all.filter(e => e.seq > after);
   const selected = after === undefined ? eligible.slice(-limit) : eligible.slice(0, limit);
   return { total: all.length, remaining: eligible.length - selected.length, next: selected.at(-1)?.seq ?? after ?? null,
     messages: selected.map(({ seq, envelope: e }) => ({ seq, id: e.eventId, kind: e.payload.kind, summary: e.payload.summary,
+      operator_text: operatorWording(e, { decisionNeeded: pendingReservedQuestions(e, state, org).length > 0 }),
       correlation: e.correlationId ?? null, reply_to: e.payload.reply_to, refs: e.payload.refs,
       push: ['question', 'request'].includes(e.payload.kind) ? entries.find(entry => e.payload.refs.some(ref =>
         ref.orgRef === org && ref.item && entry.id === pushId(org, ref.item)))?.state ?? 'record-only' : 'record-only' })) };

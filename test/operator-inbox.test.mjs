@@ -132,7 +132,7 @@ test('short on-demand digests retain stable record references, correlation and r
   assert.equal(doc.messages.length, 5); assert.equal(doc.total, 7); assert.equal(doc.remaining, 2);
   assert.deepEqual(doc.messages.map(m => m.id), ['m2', 'm3', 'm4', 'm5', 'm6']);
   assert.equal(doc.messages[0].correlation, 'thread'); assert.equal(doc.messages[0].reply_to, 'q1');
-  assert.equal(doc.messages[0].refs[0].run, 'R-1'); assert.match(renderOperatorDigest(doc), /thread=thread reply=q1/);
+  assert.equal(doc.messages[0].refs[0].run, 'R-1'); assert.match(renderOperatorDigest(doc), /thread=thread; reply=q1/);
   const page = operatorDigest(events, f.org, { after: 0, limit: 2 });
   assert.deepEqual(page.messages.map(m => m.id), ['m0', 'm1']);
   assert.equal(operatorDigest(events, f.org, { after: page.next, limit: 2 }).messages[0].id, 'm2');
@@ -183,4 +183,71 @@ test('native pre-input refusal and owner failure preserve their actual pending s
   fs.writeFileSync(path.join(f.root, 'mode'), 'refused');
   assert.equal((await f.drain()).delivered, false); assert.deepEqual(f.sent(), []);
   assert.equal(readInbox(f.inbox)[0].state, 'pending'); assert.match(readInbox(f.inbox)[0].error, /agent_blocked/);
+});
+
+test('operator plain wording sends authored content through the actual CLI with stable dedup and one Details line', t => {
+  const f = fixture(t), args = [cli, 'messages', 'send', '--id', 'plain:1', '--kind', 'notice', '--run', 'R-1', '--item', 'ENG-1',
+    '--summary', 'Automatic reviews are paused.', '--happened', 'We are fixing how the system chooses work to review.',
+    '--action', 'Nothing needed.', '--details', 'ENG-1; R-1; receipt=/evidence/one.json'];
+  const run = a => spawnSync(process.execPath, a, { cwd: f.root, env: f.env, encoding: 'utf8' });
+  for (let i = 0; i < 2; i++) { const r = run(args); assert.equal(r.status, 0, r.stderr); assert.equal(JSON.parse(r.stdout).push.state, 'record-only'); }
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  const digest = run([cli, 'messages', 'digest']); assert.equal(digest.status, 0, digest.stderr);
+  const lines = digest.stdout.trim().split('\n');
+  assert.deepEqual(lines.slice(0, 3), ['Automatic reviews are paused.', 'We are fixing how the system chooses work to review.', 'Nothing needed.']);
+  assert.equal(lines.length, 4); assert.match(lines[3], /^Details: .*ENG-1.*R-1.*message=plain:1/);
+  assert.equal(recordMessages(loadEvents(f.org).events).length, 1); assert.deepEqual(readInbox(f.inbox), []); assert.deepEqual(f.sent(), []);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
+  const changed = [...args]; changed[changed.indexOf('--details') + 1] = 'Different details';
+  assert.match(run(changed).stderr, /different content or target/);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
+});
+
+test('operator plain wording renders legacy technical summaries honestly without opening bodies or changing bytes', t => {
+  const f = fixture(t), raw = 'ENG-1 R-1 bootstrap5 conditionally source-closed d938eff7 record-only receipt=private.json';
+  transact(f.org, events => {
+    const b = f.binding(), e = makeEnvelope({ id: 'legacy', summary: raw, item: 'ENG-1' }, b, events);
+    e.payload.body_ref = { path: path.join(f.root, 'never-open-this-private-body'), sha256: 'a'.repeat(64), bytes: 1, mediaType: 'text/plain' };
+    return prepareEnvelope(e, b, fold(events), events);
+  });
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), doc = operatorDigest(loadEvents(f.org).events, f.org);
+  const lines = renderOperatorDigest(doc).trim().split('\n');
+  assert.deepEqual(lines.slice(0, 3), ['An update is available.', 'The original summary is included in the details.', 'Check the details to see whether you need to act.']);
+  assert.equal(lines.length, 4); assert.ok(lines[3].includes(raw)); assert.match(lines[3], /not opened/);
+  assert.equal(doc.messages[0].summary, raw); assert.equal(doc.messages[0].id, 'legacy');
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
+});
+
+test('operator plain wording derives decision-needed from actual pending reserved refs, including legacy and fyi', async t => {
+  const f = fixture(t);
+  const authored = { summary: 'A choice is waiting.', happened: 'We need permission before taking the next step.', action: 'Nothing needed.', details: 'HUM-1' };
+  const question = f.append({ id: 'reserved-plain', kind: 'question', question: 'HUM-1', ...authored }).result;
+  f.append({ id: 'reserved-legacy', kind: 'question', question: 'HUM-1', summary: 'HUM-1 reserved decision' });
+  const fyi = f.append({ id: 'reserved-fyi', kind: 'fyi', question: 'HUM-1', ...authored }).result;
+  const docs = operatorDigest(loadEvents(f.org).events, f.org).messages;
+  for (const row of docs) assert.equal(row.operator_text.action, 'Your decision is needed.');
+  assert.equal(question.payload.operator_text.action, 'Nothing needed.', 'stored author bytes remain unchanged');
+  assert.equal((await f.push(fyi)).state, 'record-only', 'presentation does not change the reserved push kinds');
+  assert.deepEqual(readInbox(f.inbox), []);
+});
+
+test('operator plain wording never promotes presentation or ordinary T2 judgment into reserved authority', async t => {
+  const f = fixture(t), e = f.append({ kind: 'question', question: 'HUM-2', summary: 'A choice is being discussed.',
+    happened: 'The project team is choosing the next step.', action: 'Your decision is needed.', details: 'HUM-2; claimed tier T3' }).result;
+  assert.equal((await f.push(e)).state, 'record-only'); assert.deepEqual(readInbox(f.inbox), []);
+  const events = loadEvents(f.org).events, malicious = structuredClone(e);
+  malicious.payload.operator_text.operator_reserved = true;
+  assert.throws(() => prepareEnvelope(malicious, f.binding(), fold(events), events), /operator wording/);
+});
+
+test('operator plain wording keeps identifiers/jargon out of authored main fields and rejects broken line composition', t => {
+  const f = fixture(t), plain = { happened: 'The update is ready.', action: 'Nothing needed.', details: 'ENG-1; R-1; d938eff7' };
+  for (const summary of ['ENG-1 is ready', 'R861 is done', 'bootstrap5 complete', 'record-only', 'receipt ready', 'd938eff7 is ready', '/private/file.json'])
+    assert.throws(() => f.append({ summary, ...plain }), /operator wording/);
+  for (const part of [{ happened: 'R-1 is ready' }, { action: 'See receipt' }, { details: 'one\ntwo' }])
+    assert.throws(() => f.append({ summary: 'The update is ready.', ...plain, ...part }), /operator wording/);
+  const args = [cli, 'messages', 'send', '--id', 'missing-action', '--summary', 'The update is ready.', '--happened', 'The work is ready.'];
+  const r = spawnSync(process.execPath, args, { cwd: f.root, env: f.env, encoding: 'utf8' });
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /requires both --happened and --action/);
+  assert.equal(recordMessages(loadEvents(f.org).events).length, 0);
 });

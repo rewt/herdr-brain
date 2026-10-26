@@ -163,3 +163,23 @@ test('dispatch messages source entry guidance preserves an older saved command w
   assert.match(prompt, /For OPERATOR-addressed/); assert.doesNotMatch(prompt, /HERDR_BRAIN_ROOT=/);
   assert.equal(promptCalls(f).length, 1); assert.equal(job.to, job.worker.agentName);
 });
+
+test('dispatch plain operator wording guidance supplies actual composition options and preserves technical callbacks', t => {
+  const f = fixture(t), { job, prompt } = delivered(f, f.start(), null);
+  assert.equal(job.operatorPlainText, true);
+  for (const option of ['--happened', '--action', '--details']) assert.ok(prompt.includes(option));
+  assert.match(prompt, /one-line headline, what happened, whether you need to do anything, then ONE trailing Details line/);
+  assert.match(prompt, /pending reserved decision must say a decision is needed, never Nothing needed/);
+  assert.match(prompt, /Internal agent coordination and owned callbacks keep their technical contracts/);
+  assert.equal(promptCalls(f).length, 1); assert.equal(job.to, job.worker.agentName);
+});
+
+test('dispatch plain operator wording guidance preserves older saved and delivered instructions', t => {
+  const f = fixture(t); f.fail('watch'); assert.equal(f.start().status, 1);
+  const file = f.jobs()[0], saved = JSON.parse(fs.readFileSync(file)); delete saved.operatorPlainText;
+  fs.writeFileSync(file, JSON.stringify(saved)); f.fail('');
+  const { job, prompt } = delivered(f, f.dispatch(['--retry', saved.run]), null);
+  assert.equal(job.operatorPlainText, undefined); assert.doesNotMatch(prompt, /--happened|--action|--details|EVERY message addressed/);
+  const again = f.dispatch(['--retry', saved.run]); assert.equal(again.status, 0, again.stderr);
+  assert.equal(promptCalls(f).length, 1, 'delivered instruction is never rewritten or sent again');
+});

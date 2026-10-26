@@ -21,7 +21,7 @@ for (const source of ['fake watcher receipt', 'real watcher journal']) {
     if (real) fs.writeFileSync(path.join(dir, 'job.json'), JSON.stringify({ run: 'R-1', to: 'supervisor', repo: root, watcher: { pid: 101 } }));
     else fs.writeFileSync(path.join(root, 'pids'), '101\n');
     const command = real ? [process.execPath, WATCH, 'R-1', '--controller', BRAIN_CONTROLLER, '--org', org, '--to', 'supervisor', '--cwd', root,
-      '--log', path.join(dir, 'R-1.watch.log')].join(' ') : [process.execPath, '-e', 'setTimeout(()=>{},10000)', '--', root].join(' ');
+      '--log', path.join(dir, 'R-1.watch.log')].join(' ') : [process.execPath, '-e', 'setInterval(()=>{},1000)', '--', root].join(' ');
     const suite = { pid: 700, ppid: 1, pgid: 700, state: 'S', identity: 'suite birth', command: 'suite worker' };
     const signals = [], rows = new Map([[700, suite]]);
     const receipts = createReceiptTracker({ suitePid: 700, tracker: createProcessTracker({

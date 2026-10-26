@@ -13,7 +13,7 @@ import { BRAIN_CONTROLLER } from '../../lib/run-owner.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
-const fake = `#!/usr/bin/env node
+const fake = `#!${process.execPath}
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';

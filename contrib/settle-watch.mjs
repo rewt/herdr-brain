@@ -22,6 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRetirement } from '../lib/retire-runtime.mjs';
 import { parseArgs } from '../lib/cli-help.mjs';
+import { turnBlockers } from './settle-turn.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const { values: opt, positionals } = parseArgs({
@@ -291,7 +292,8 @@ function takeTurn() {
       continue;
     }
     const agents = herdr(['agent', 'list']).result?.agents ?? [];
-    const busy = agents.filter((a) => /^(settle-|exec-)/.test(a.name ?? '') && a.agent_status === 'working');
+    const busy = turnBlockers({ agents, cwd: opt.cwd, org: opt.org,
+      getAgent: name => herdr(['agent', 'get', name]).result?.agent });
     if (busy.length === 0) return;
     fs.rmSync(openLock, { recursive: true });
     log(`waiting for ${busy.map((a) => a.name).join(', ')} to finish before opening another session`);

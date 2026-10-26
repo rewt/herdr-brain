@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { turnBlockers } from '../contrib/settle-turn.mjs';
 
 const WATCH = fileURLToPath(new URL('../contrib/settle-watch.mjs', import.meta.url));
 
@@ -129,4 +130,91 @@ test('a run lock held by a watcher this caller may not signal is not treated as 
   assert.match(r.stdout, /another watcher \(pid 1\) already owns R-1/);
   assert.equal(fs.readFileSync(lock, 'utf8'), '1');
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+function turnFixture(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'settle-turn-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const git = (cwd, ...args) => {
+    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  };
+  const repos = ['own/checkout', 'foreign/checkout'].map(relative => {
+    const cwd = path.join(root, relative);
+    fs.mkdirSync(cwd, { recursive: true });
+    git(cwd, 'init', '-q');
+    git(cwd, '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.test', 'commit', '--allow-empty', '-qm', 'initial');
+    return cwd;
+  });
+  const [cwd, foreign] = repos, org = path.join(root, '.org');
+  fs.mkdirSync(org);
+  const events = path.join(org, 'events.jsonl');
+  fs.writeFileSync(events, '');
+  const agent = { name: 'settle-r-1-1200', agent_status: 'working', cwd: foreign };
+  return { root, cwd, foreign, org, events, agent, git,
+    blockers: (row = agent) => turnBlockers({ cwd, org, agents: [row], getAgent: () => row }) };
+}
+
+test('turn check skips positively foreign projects but keeps canonical, linked and symlinked project sessions', t => {
+  const f = turnFixture(t);
+  assert.deepEqual(f.blockers(), [], 'another repository with the same basename is unrelated');
+  assert.deepEqual(f.blockers({ ...f.agent, name: 'exec-1200' }), []);
+  assert.equal(f.blockers({ ...f.agent, cwd: f.cwd }).length, 1);
+  const lane = path.join(f.root, 'lane'), alias = path.join(f.root, 'alias');
+  f.git(f.cwd, 'worktree', 'add', '-qb', 'lane', lane);
+  fs.symlinkSync(lane, alias);
+  for (const cwd of [lane, alias]) assert.equal(f.blockers({ ...f.agent, cwd }).length, 1);
+  const before = process.env.GIT_DIR;
+  process.env.GIT_DIR = path.join(f.cwd, '.git');
+  try { assert.deepEqual(f.blockers(), [], 'inherited Git selectors cannot supply identity'); }
+  finally { if (before === undefined) delete process.env.GIT_DIR; else process.env.GIT_DIR = before; }
+});
+
+test('turn check conservatively waits for unknown or conflicting native and durable identities', t => {
+  const f = turnFixture(t);
+  for (const cwd of [undefined, 'relative', path.join(f.root, 'missing'), f.root]) {
+    assert.equal(f.blockers({ ...f.agent, cwd }).length, 1);
+  }
+  const summary = { ...f.agent, pane_id: 'w1:p1' };
+  assert.equal(turnBlockers({ cwd: f.cwd, org: f.org, agents: [summary], getAgent: () => ({ ...summary, pane_id: 'w2:p1' }) }).length, 1);
+  assert.equal(turnBlockers({ cwd: f.cwd, org: f.org, agents: [f.agent], getAgent: () => undefined }).length, 1);
+  fs.writeFileSync(f.events, [
+    { seq: 1, type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: f.cwd, meta: { settled_by: f.agent.name } },
+    { seq: 2, type: 'run.claimed', run: 'R-1', record: f.org, project: path.join(f.cwd, '.git'), owner: { controller: 'brain' } },
+  ].map(e => JSON.stringify(e) + '\n').join(''));
+  assert.equal(f.blockers().length, 1, 'a local same-run binding cannot be bypassed by a foreign cwd');
+  fs.writeFileSync(f.events, '');
+  const occupants = path.join(f.org, 'retirement/occupants');
+  fs.mkdirSync(occupants, { recursive: true });
+  fs.writeFileSync(path.join(occupants, 'callback.json'), JSON.stringify({ schema: 'retirement-occupant/v1', common: path.join(f.cwd, '.git'), agent: f.agent.name, run: 'R-1' }));
+  assert.equal(f.blockers().length, 1, 'a durable callback also protects the same run');
+  fs.rmSync(occupants, { recursive: true });
+  fs.writeFileSync(f.events, '{torn');
+  assert.equal(f.blockers().length, 1);
+  fs.unlinkSync(f.events);
+  assert.equal(f.blockers().length, 1);
+});
+
+for (const scope of ['foreign', 'same', 'unknown']) test(`live turn path: ${scope} session ${scope === 'foreign' ? 'does not delay' : 'waits before'} the STOP brake`, t => {
+  const f = turnFixture(t), bin = path.join(f.root, 'bin'), ledger = path.join(f.root, 'ledger');
+  fs.mkdirSync(bin); fs.mkdirSync(ledger);
+  fs.writeFileSync(path.join(ledger, 'STOP'), 'test stops before launch\n');
+  const agent = { ...f.agent, ...(scope === 'same' ? { cwd: f.cwd } : scope === 'unknown' ? { cwd: undefined } : {}) };
+  const waited = path.join(f.root, 'waited');
+  script(path.join(bin, 'herdr'), `case "$1 $2" in
+  "agent list") if [ -f '${waited}' ]; then echo '{"result":{"agents":[]}}'; else echo '${JSON.stringify({ result: { agents: [agent] } })}'; fi ;;
+  "agent get") echo '${JSON.stringify({ result: { agent } })}' ;;
+  "agent wait") touch '${waited}'; echo '{"result":{}}' ;;
+  "notification show") echo '{"result":{}}' ;;
+  *) exit 99 ;;
+esac`);
+  const r = spawnSync(process.execPath, [WATCH, '--open', '--org', f.org, '--cwd', f.cwd,
+    '--lane-config', path.join(f.root, 'unused.json'), '--checklist', path.join(f.root, 'unused.md'), '--ledger-dir', ledger], {
+    encoding: 'utf8', timeout: loadTimeout(10_000), env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(r.error, undefined);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /STOP exists, so no session was opened/);
+  assert.equal(fs.existsSync(waited), scope !== 'foreign', r.stdout);
+  assert.equal(fs.existsSync(path.join(ledger, '.session-open.lock')), false);
 });

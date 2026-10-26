@@ -40,8 +40,8 @@ changes. This policy does not reactivate superseded rules or grant a release.
 
 | Tier | Decider and boundary | Existing record |
 |---|---|---|
-| T0 | Working engineer or reviewer. Implementation, refactoring, test design and diagnosis within approved scope and contract. Engineers select development checks within required acceptance; reviewers independently judge evidence and give verdicts. Routine security-code repair restoring an approved invariant can be T0, with required security review. | Material choices in the report or receipt; no note for every edit or command. |
-| T1 | Supervisor applying a standing rule. Dispatch, retained-session reuse, authorized bounded retries, queue order, promotion after required evidence, and safe lifecycle actions under the approved shared contract. Apply a cap or route its exception; never invent a waiver. Unknown identity or evidence is a hold to resolve, not permission to clean up. | Job, promotion or lifecycle receipt with the rule reference; a separate note only for a material disposition or exception needing one. |
+| T0 | Working engineer or reviewer. Implementation, refactoring, test design and diagnosis within approved scope and contract. Engineers select development checks within required acceptance and self-land OWN finished source through existing lane promote under the explicit current operator waiver. Reviewers independently judge evidence and give verdicts asynchronously. Routine security-code repair restoring an approved invariant can be T0, with required independent post-code boundary review. | Material choices and designated verification party/evidence in the existing report or receipt; no note for every edit or command. |
+| T1 | Supervisor applying a standing rule. Dispatch, retained-session reuse, authorized bounded retries, queue order and safe lifecycle actions under the approved shared contract. Consume designated-owner routine verification once. Worker self-landing needs no supervisor acknowledgment or review readiness gate; preserve native guards and the explicit current waiver. Apply a cap or route its exception; never invent a waiver. Unknown identity or evidence holds the affected action, not unrelated work. | Job, promotion or lifecycle receipt with the rule reference; a separate note only for a material disposition or exception needing one. |
 | T2 | An authorized technical delegate. New or changed technical or security contracts within the product mandate; bounded residual risk; unresolved engineer/reviewer evidence disagreement; an exception beyond the standing revision cap; a new cross-project priority agreement; new process mechanisms or required-evidence changes within delegated scope. Authorizing implementation scope is not a review PASS. | Concise item decision note: class, authority, choice, evidence and unknowns, limits, follow-up or revisit trigger. |
 | T3 | Operator. Reserved effects below, or a request to change the delegation itself. | Reuse or create the relevant HUM item, quote the answer exactly and bind its scope. Ordinary technical escalations do not all become HUM items. |
 
@@ -73,6 +73,34 @@ general permission here to message external parties, publish, buy infrastructure
 or transfer code to a new executor.
 
 ## Independent review and evidence
+
+### Verify once, effective immediately
+
+The operator's 2026-10-25 overnight direction applies to Brain and BCH now, in
+their separate tooling. Each routine fact/snapshot has ONE designated verifier:
+the producing worker or owning controller/supervisor. Record the named party,
+scope/source, observation time, result and evidence locator in the existing
+report, receipt or note. No new approval or parallel log is required.
+Supervisors and Brain Chat accept that report once, without rehashing routine
+hashes, bindings, receipts or landings, rerunning checks, or requiring a root
+acknowledgment before the worker lands, starts review or fixes forward.
+
+Fresh native identity, claim, ownership, source/head, clean Git, CAS and FF
+checks remain mandatory at a NEW mutation boundary, as do HOLD, STOP and
+recoverable archives. They protect the actual write and do not authorize another
+conversational audit of the producer's same snapshot. A concrete contradiction,
+changed relevant input or missing evidence returns only the affected fact to its
+designated owner for resolution; never turn all routine bindings into reserved
+exceptions. Session/display metadata supplies no authority.
+
+The independent reviewer judges immutable diff/evidence and findings, with ZERO
+producer suites. Brain Chat spot-checks reserved/outward permissions, publishing,
+funds and operator-command boundaries or a concrete contested exception. Ordinary
+notices return to the owning worker through existing supported mechanisms; actual
+unsafe/native/identity/ownership/reserved/failed exceptions go to supervisor-herdr.
+BCH's supervisor-opus/original owners apply the same direction to BCH's own files;
+Brain workers never write across identities. See the small
+[verification and measurement reference](../docs/reference/VERIFY-ONCE.md).
 
 No self-certification: an implementer cannot independently accept their own change,
 erase a negative finding, approve their own missing-authority exception or expand
@@ -139,16 +167,24 @@ requirements, disclosed accepted residuals, execution bugs and newly available
 evidence; any rework does not justify escalating the whole class. Urgent containment
 of a real boundary failure need not await a numerical threshold.
 
-Independent agents may audit sampled T0/T1/T2 decisions and summarize evidence for
-the operator without operator code review. Sample technical disagreements, residual
-risk acceptances and proposed standing-rule boundaries. A periodic digest may give
+Use designated-owner reports for calibration without a second routine verification
+pass. Separately authorized independent policy judgment can inspect technical
+disagreements, residual-risk acceptances and proposed standing-rule boundaries;
+it does not replay producer checks or add another item review. A digest may give
 counts, observed/pending outcomes, erroneous overturns, escapes and turnaround;
-this document starts no scheduler or service.
+this document starts no audit, scheduler or service.
 
 Measure separately: ready to reviewer start; start to report available; observable
 compute/queue time; report to ingestion; ready to integration. Distinguish substantive
 re-reviews from receipt-only resumptions, and new findings from already-red evidence.
 Claim time saved only against a comparable measured workflow, not a removed prompt.
+The [measurement reference](../docs/reference/VERIFY-ONCE.md) also defines hourly
+active/idle observations, supervisor busy/queue wait, notice-to-pickup, self-landed
+items, source-ready-to-land and report-to-land clocks, and verification passes per
+item. Preserve original cohorts/cutoffs, including 16:08; missing history is UNKNOWN.
+Keep land-before-final-report flags and negative report-to-land gaps. No overnight
+bottleneck research: the one reserved read-only Sol max session waits until the
+operator has actually read the morning numbers, never automatically at 08:00.
 
 The cited analysis is
 `/Users/rewt/development/bastian/archive/REVIEW-EFFECTIVENESS-ANALYSIS-20261014.md`,
@@ -245,10 +281,14 @@ directions taking precedence where changed.
   - This supersedes the operator-only handling in the reserved-effects row “Native permissions and actual harness/classifier refusals” for this case only. Native sandbox and permission-setting refusals remain operator-reserved as that row says.
 - The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “Ensure everything defaults to Sol, and Astra is used only for graphical situations and UI/UX design.”
 - Sol (`gpt-6.1-sol`) is the default Codex model. The explicit `chore` and `monitor` routes keep their cheaper models for mechanical and read-only work (main chat, 2026-10-21 10:1x); Astra (`gpt-6-astra`, via `research-astra-max`) is for graphical and UI/UX design only; authority and ruling reviews use `review-sol-max`.
-- Focused pre-merge package checks and direct-dependent typechecks remain the
-  validation direction. No post-merge run for now: restarting specifically requires
-  a new operator decision under bch seq 18209. This is no exemption from required
-  release-candidate evidence. C1 retains its single aggregate cutover run.
+- The current operator direction supersedes the older pre-merge package/typecheck
+  readiness gate: the finishing BCH engineer self-lands OWN source under the
+  existing explicit waiver, preserving native identity/claim/source/CAS, clean
+  rebase/FF, HOLD, STOP and recovery. Focused checks run once per actually changed
+  behavior and are recorded by their designated owner; supervisors consume that
+  evidence without routine re-execution. No generic post-merge replay or unrun
+  PASS. The one full final-release/adoption obligation and C1's single aggregate
+  cutover run remain distinct; preserve completed evidence and actual failures.
 - Native harness sandboxes remain. Engineers run their own authorized package
   checks and builds; supervisor-only host-check handoffs are dropped. The shared
   slot is only for proving and aggregation, including real proofs, live
@@ -263,8 +303,9 @@ directions taking precedence where changed.
   references. A run/report ending alone never authorizes closing a session or lane;
   ingest reports first. Release a pane only after its review/correction/integration
   chain is terminal with no returning callback, or an explicit confirmed handoff
-  to a retained successor. Recheck live identities, Git, jobs and the record at
-  execution. Preserve desks, operator workspaces and lab-owned workspaces.
+  to a retained successor. The executor freshly checks live identities, Git, jobs
+  and the record at the new mutation boundary and records that evidence once.
+  Preserve desks, operator workspaces and lab-owned workspaces.
 - Lane removal also requires clean Git, the exact tip integrated or a verified
   recoverable archive tag, hashed evidence outside swept paths, no live resource
   users, and tag-collision/durability preflight. Parked unique or non-code work

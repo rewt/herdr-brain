@@ -97,18 +97,18 @@ test('launchd uses only actual transport paths, an explicit project and no calle
 
 test('historical closed, retired and unclaimed reports do not recreate review debt or disturb a held review', t => {
   const f = fixture(t);
-  const reported = (title, workspace, owned = false) => {
+  const reported = (title, workspace, owned = false, outcome = 'done') => {
     const item = f.add(title), run = f.record(['start', item, '--workspace', workspace]).match(/R-\d+/)[0];
     if (owned) f.record(['claim', run, '--controller', 'brain']);
     const file = f.show(run).report_path;
-    fs.writeFileSync(file, `---\nrun: ${run}\noutcome: done\nsummary: Historical completed work.\nheadline: Historical work finished\nblockers: []\nproposals: []\nartifacts: []\n---\n`);
+    fs.writeFileSync(file, `---\nrun: ${run}\noutcome: ${outcome}\nsummary: Historical completed work.\nheadline: Historical work finished\nblockers: []\nproposals: []\nartifacts: []\n---\n`);
     f.record(['ingest', file]); return { item, run };
   };
   const old = reported('Old closed work', f.repo); f.record(['close', old.item]);
   const retired = path.join(f.repo, 'retired'); fs.mkdirSync(retired);
   const missing = reported('Retired work', retired, true); fs.rmSync(retired, { recursive: true });
   reported('Old unclaimed work', f.repo);
-  const held = reported('Recent held async review', f.repo, true), saved = path.join(f.org, 'settle', `${held.run}.json`);
+  const held = reported('Recent held async review', f.repo, true, 'blocked'), saved = path.join(f.org, 'settle', `${held.run}.json`);
   fs.mkdirSync(path.dirname(saved), { recursive: true }); const receipt = '{"stage":"reviewing","reason":"native refusal; preserve original attempt"}\n'; fs.writeFileSync(saved, receipt);
   const ready = f.add('Independent ready work', 9);
   f.service().pass(); f.service().pass();
@@ -131,4 +131,57 @@ test('source inventory includes line-service and its release controls while reta
   fs.unlinkSync(path.join(f.repo, 'lib/.DS_Store'));
   fs.writeFileSync(path.join(f.repo, 'lib/untracked-runtime.mjs'), 'export const extra = true;\n');
   assert.throws(() => captureProductCheckout(f.repo), /source runtime inventory mismatch/);
+});
+
+function completedSource(f) {
+  fs.appendFileSync(path.join(f.repo, '.git/info/exclude'), '\n.org/\n.lane/\n');
+  f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Committed fixture routing']);
+  const item = f.add('Finished source'), run = f.record(['start', item, '--workspace', f.repo]).match(/R-\d+/)[0];
+  f.record(['claim', run, '--controller', 'brain']);
+  const file = f.show(run).report_path;
+  fs.writeFileSync(file, `---\nrun: ${run}\noutcome: done\nsummary: The committed source is finished.\nheadline: The source is finished\nblockers: []\nproposals: []\nartifacts: []\n---\n`);
+  f.record(['ingest', file]);
+  const saved = path.join(f.org, 'settle', `${run}.json`), review = '{"stage":"reviewing","reason":"native review held; no retry"}\n';
+  fs.mkdirSync(path.dirname(saved), { recursive: true }); fs.writeFileSync(saved, review);
+  const command = (exe, args, options) => {
+    f.calls.push({ exe, args, options });
+    if (args[0] === path.join(sourceRoot, 'bin/org.mjs') && args[1] === 'close') {
+      const directory = f.activeService.directory, effects = JSON.parse(fs.readFileSync(path.join(directory, 'effects.json')));
+      assert.equal(Object.entries(effects.actions).find(([key]) => key.startsWith(`source-complete:${run}:`))?.[1].state, 'started');
+      assert.equal(options.env.ORG_GUARD_OVERRIDE, undefined); assert.equal(options.env.ORG_ACTOR, 'line-service');
+      return spawnSync(exe, args, options); // Real conditional record transaction, not an invented receipt.
+    }
+    return { status: 0, stdout: JSON.stringify({ result: 'dispatched' }), stderr: '' };
+  };
+  return { item, run, saved, review, command };
+}
+
+test('conditional source completion closes real done source while retaining review and physical holds', t => {
+  const f = fixture(t), done = completedSource(f);
+  fs.mkdirSync(path.join(f.repo, '.lane/supervisor'), { recursive: true }); fs.writeFileSync(path.join(f.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'), 'physical hold');
+  const ready = f.add('Independent ready work', 9);
+  f.activeService = f.service({ command: done.command, env: { ...f.env, ORG_GUARD_OVERRIDE: 'forbidden-inherited-override' } });
+  f.activeService.pass(); f.activeService.pass();
+  assert.equal(f.show(done.item).closed.as, 'done'); assert.equal(fs.readFileSync(done.saved, 'utf8'), done.review);
+  assert.ok(fs.existsSync(path.join(f.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE')));
+  const closes = f.calls.filter(c => c.args[1] === 'close'); assert.equal(closes.length, 1);
+  assert.deepEqual(closes[0].args.slice(1, 5), ['close', done.item, '--if-current-run', done.run]);
+  assert.ok(f.calls.some(c => c.args[0].endsWith('/dispatch/dispatch.mjs') && c.args[1] === ready));
+  const effects = JSON.parse(fs.readFileSync(path.join(f.activeService.directory, 'effects.json'))), entry = Object.entries(effects.actions).find(([key]) => key.startsWith(`source-complete:${done.run}:`))[1];
+  assert.equal(entry.state, 'complete'); assert.equal(entry.result.close.status, 0); assert.equal(entry.result.report_sha256, f.show(done.run).report.sha256);
+});
+
+test('conditional source completion retains an exact needs-judgment refusal once and continues independent work', t => {
+  const f = fixture(t), done = completedSource(f);
+  f.record(['close', done.item, '--if-current-run', done.run]); f.record(['reopen', done.item]);
+  const ready = f.add('Independent ready work', 9);
+  f.activeService = f.service({ command: done.command }); f.activeService.pass(); f.activeService.pass();
+  assert.equal(f.show(done.item).closed, null); assert.equal(fs.readFileSync(done.saved, 'utf8'), done.review);
+  const closes = f.calls.filter(c => c.args[1] === 'close'); assert.equal(closes.length, 1);
+  assert.ok(closes[0].args.includes('--if-current-run'));
+  const notes = f.notes.filter(n => n.text.includes(`source-complete:${done.run}:`));
+  assert.equal(notes.length, 1); assert.match(notes[0].text, /reopened after completion.*conditional close needs supervisor judgment/);
+  assert.ok(f.calls.some(c => c.args[0].endsWith('/dispatch/dispatch.mjs') && c.args[1] === ready));
+  const effects = JSON.parse(fs.readFileSync(path.join(f.activeService.directory, 'effects.json'))), entry = Object.entries(effects.actions).find(([key]) => key.startsWith(`source-complete:${done.run}:`))[1];
+  assert.equal(entry.state, 'held'); assert.notEqual(entry.receipt.status, 0); assert.match(entry.receipt.stderr, /supervisor judgment/);
 });

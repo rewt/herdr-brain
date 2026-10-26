@@ -3,13 +3,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold, itemStatus, sortItems } from '../lib/state.mjs';
 import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
-import { readOwnedRun, requireController } from '../lib/run-owner.mjs';
+import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { checkUnlandedCap } from '../dispatch/unlanded-cap.mjs';
@@ -69,16 +69,20 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     try { fs.writeFileSync(fd, JSON.stringify({ at: now(), ...row }) + '\n'); fs.fsyncSync(fd); }
     finally { fs.closeSync(fd); }
   };
-  const childEnv = { ...env, ORG_DIR: org, HERDR_BRAIN_ROOT: sourceRoot };
+  const childEnv = { ...env, ORG_DIR: org, ORG_ACTOR: 'line-service', HERDR_BRAIN_ROOT: sourceRoot };
   // A launchd controller has no pane/session identity. Never inherit an installer's.
   for (const key of Object.keys(childEnv)) if (/^(HERDR_(ENV|PANE_ID|TAB_ID|WORKSPACE_ID)|CODEX_(SESSION_ID|THREAD_ID)|GIT_.*|LANE_CONFIG)$/.test(key)) delete childEnv[key];
-  const invoke = (exe, args) => {
+  delete childEnv.ORG_GUARD_OVERRIDE; // A routine line never inherits an explicit judgment override.
+  const invoke = (exe, args, { receipt = false } = {}) => {
     const r = command(exe, args, { cwd: repo, env: childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
     if (r.error || r.status !== 0) throw Object.assign(Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()), { receipt: { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr } });
-    return r.stdout?.trim() ?? '';
+    return receipt ? { status: r.status, signal: r.signal ?? null, stdout: r.stdout ?? '', stderr: r.stderr ?? '' } : r.stdout?.trim() ?? '';
   };
   const native = args => JSON.parse(invoke(herdr, args)).result;
-  const cli = (file, args) => invoke(process.execPath, [path.join(sourceRoot, file), ...args]);
+  const cli = (file, args, options) => invoke(process.execPath, [path.join(sourceRoot, file), ...args], options);
+  const sourceGit = (cwd, args) => execFileSync('git', ['--no-optional-locks', '-C', cwd, ...args], {
+    env: childEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024,
+  }).trim();
   const observe = () => {
     const live = gitProject(repo);
     if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
@@ -117,7 +121,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (effects.actions[key]) {
           const prior = effects.actions[key];
           log({ action: 'effect-retained', key, state: prior.state });
-          if (prior.state !== 'complete') note(key, 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
+          if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
           return;
         }
         observe();
@@ -177,6 +181,38 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             return JSON.parse(cli('supervisor/supervisor.mjs', ['handle', run.id, '--repo', repo, '--org', org, '--role', 'supervisor', '--to', run.meta.agent ?? to, '--timeout', '0']));
           });
         } catch (e) { note(`review:${item.id}`, e.message); }
+      }
+      // Source completion releases the real admission slot independently of
+      // review verdicts and physical cleanup. The record owns the conditional
+      // current-run/report/blocker/reopen transaction; there is no override.
+      snapshot = observe();
+      for (const item of snapshot.state.items.values()) {
+        const run = snapshot.state.runs.get(item.runs.at(-1));
+        if (item.closed || run?.report?.outcome !== 'done' || run.abandoned || !run.workspace || !fs.existsSync(run.workspace) ||
+            !run.owner || run.owner.legacy || run.owner.controller !== 'brain') continue;
+        try {
+          if (gitProject(run.workspace).identity !== project.identity) continue;
+          if (reserved(item) || item.meta.hold || item.meta.held || run.report.blockers?.length || (run.report.questions ?? run.report.extra?.questions)?.length) {
+            note(`source-complete:${run.id}`, 'T2 source completion needs supervisor judgment: held/reserved item or report blockers/questions; no explicit-judgment override used'); continue;
+          }
+          effect(`source-complete:${run.id}:${run.report.sha256}`, () => {
+            const bound = guardRun(run.id), ownership = requireController(readOwnedRun(org, run.id), 'brain');
+            if (bound.item.closed) return { retained: 'already source-complete' };
+            if (bound.run.report.outcome !== 'done' || reserved(bound.item) || bound.item.meta.hold || bound.item.meta.held ||
+                bound.run.report.blockers?.length || (bound.run.report.questions ?? bound.run.report.extra?.questions)?.length) throw Error('T2 source completion needs supervisor judgment: current item/report scope changed');
+            const head = sourceGit(run.workspace, ['rev-parse', 'HEAD']), tip = sourceGit(repo, ['rev-parse', 'HEAD']);
+            if (sourceGit(run.workspace, ['status', '--porcelain=v1', '--untracked-files=all']) || sourceGit(repo, ['status', '--porcelain=v1', '--untracked-files=all'])) throw Error('T2 source completion needs supervisor judgment: source/canonical worktree is not clean');
+            try { sourceGit(repo, ['merge-base', '--is-ancestor', head, tip]); }
+            catch { throw Error(`T2 source completion needs supervisor judgment: reported source ${head} is not integrated at ${tip}`); }
+            const fresh = guardRun(run.id);
+            assertOwner(readOwnedRun(org, run.id), ownership);
+            if (fresh.run.report.sha256 !== run.report.sha256 || sourceGit(run.workspace, ['rev-parse', 'HEAD']) !== head || sourceGit(repo, ['rev-parse', 'HEAD']) !== tip) throw Error('T2 source completion needs supervisor judgment: owner/report/source boundary changed');
+            const args = ['close', item.id, '--if-current-run', run.id, '--note',
+              `Routine conditional source completion of current done report ${run.id} (${run.report.sha256}); clean source ${head} integrated at ${tip}. Preserve existing independent review/verdict holds, callbacks, HOLD, archives and next final-release/Major-correction obligations; physical cleanup is separate.`];
+            return { source_head: head, integrated_tip: tip, report_sha256: run.report.sha256, ownership,
+              command: [process.execPath, path.join(sourceRoot, 'bin/org.mjs'), ...args], close: cli('bin/org.mjs', args, { receipt: true }) };
+          });
+        } catch (e) { note(`source-complete:${run.id}`, `T2 source completion needs supervisor judgment: ${e.message}`); }
       }
       try {
         const current = observe();

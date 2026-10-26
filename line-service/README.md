@@ -60,6 +60,18 @@ unattempted keys; previously evaluated failures/native holds stay with their
 existing owner and supported recovery. Actual cap holds are durable judgment
 notices; no cap is widened and no completion or unblocks link is invented.
 
+After review delivery/retention and before physical closeout, an eligible current
+done report receives routine source completion through `record close ITEM
+--if-current-run RUN`. The service journals intent first, rechecks the genuine
+claim, immutable report, clean source/canonical Git and actual integrated HEAD,
+and retains the full conditional command receipt. The record enforces its own
+current-run, report, blocker, open-work and reopen checks atomically. A refusal
+becomes its exact durable judgment once; no unconditional close, explicit
+judgment override or fabricated promotion is used. Source completion preserves
+review/callback/HOLD/archive/final-release obligations and does not wait for
+physical cleanup. The service attributes these record writes to `line-service`
+and never inherits `ORG_GUARD_OVERRIDE`.
+
 Judgment is enqueued once per unchanged boundary through the existing native
 inbox. The service never resumes, probes or restarts the inbox owner; native
 inbox delivery/pull remains with its existing owner. Failed review/cleanup

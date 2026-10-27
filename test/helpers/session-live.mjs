@@ -91,7 +91,18 @@ else if (a[0] === 'pane' && a[1] === 'run') {
 export const document = m => `## Manifest\n\`\`\`json\n${JSON.stringify(m)}\n\`\`\`\n`;
 export function fixture(t, role = 'chat', kind = 'claude') {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'live-session-')));
-  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  // Fleet isolation alone does not isolate adopted configuration: homeProject
+  // also discovers HOME/.herdr-monitor, including from canonicalProject calls
+  // that use process.env. Keep both in-process and child reads in this fixture.
+  const before = { HOME: process.env.HOME, HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET };
+  const home = path.join(scratch, 'home'); fs.mkdirSync(home);
+  Object.assign(process.env, { HOME: home, HERDR_MONITOR_FLEET: path.join(scratch, 'fleet') });
+  t.after(() => {
+    for (const [key, value] of Object.entries(before)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
   const cwd = path.join(scratch, 'repo'); fs.mkdirSync(cwd);
   const git = (...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init', '-q', '-b', 'main'); git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.invalid');

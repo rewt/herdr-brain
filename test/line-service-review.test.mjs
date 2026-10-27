@@ -26,8 +26,10 @@ function fixture(t, { admission = false } = {}) {
   const text = `---\nrun: R-1\noutcome: blocked\nsummary: Committed implementation with red development evidence.\nartifacts:\n  - "Commit: ${head}"\n  - code.mjs\n---\n`;
   fs.writeFileSync(path.join(org, 'reports/R-1.md'), text);
   const hash = createHash('sha256').update(text).digest('hex');
+  const boundary = {id:'fixture-cutover',project:identity,repo,org,source:fs.realpathSync(sourceRoot),main:'main',canonical_head:base};
   const events = [
-    {type:'line-service.cutover',id:'fixture-cutover',project:identity,repo,org,source:fs.realpathSync(sourceRoot),main:'main',canonical_head:base,seq:1},
+    // The prior boundary is the real base, not the already-landed fixture head.
+    ...['line-service.cutover','line-service.phase0'].map(type=>({...boundary,type})),
     { type: 'item.added', id: 'ENG-1', role: 'engineer', title: 'Implement', meta: {}, seq: 1 },
     { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'topic', dispatch_journal: journal, dispatch_attempt: 'fixture' }, seq: 2 },
     { type: 'run.claimed', run: 'R-1', owner, record: org, project: identity, seq: 3 },

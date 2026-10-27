@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {transact,loadRecord} from '../lib/store.mjs';
-import {nextItemId,ancestors} from '../lib/state.mjs';
+import {nextItemId,ancestors,itemStatus,releases} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
 import {readReport} from '../lib/report.mjs';
 import {readOwnedRun,requireController,assertOwner,ownerBinding} from '../lib/run-owner-guard.mjs';
@@ -113,7 +113,7 @@ export function decisionApplyMutation({state,events,item,answer,archive,activati
     for(const link of links){
       if(link.blocker===successor.id||link.blocked===successor.id)throw Error('successor dependency would become self-referential; park');
       const other=state.items.get(link.blocker===subject.id?link.blocked:link.blocker);
-      if(!other||other.closed)continue;
+      if(!other||releases(state,other.id,itemStatus(state,other.id)))continue;
       const moved={blocker:link.blocker===subject.id?successor.id:link.blocker,blocked:link.blocked===subject.id?successor.id:link.blocked};
       const seen=new Set(),visit=id=>{if(id===moved.blocker)return true;if(seen.has(id))return false;seen.add(id);return state.links.filter(l=>l.blocker===id&&l.blocker!==subject.id&&l.blocked!==subject.id).some(l=>visit(l.blocked));};
       if(visit(moved.blocked))throw Error('dependency transfer would create a cycle; park');
@@ -215,7 +215,8 @@ export function decisionFailureMutation({state,events,item,run,reason,config}){
   if(prior.some(e=>e.judge_run===run.id))return{add:[],result:{existing:true}};
   let route;if(!prior.length)try{route=decisionRoute(config,{failedFamily:run.meta.harness});}catch{}
   const add=[{type:'decision.failed',id:request.subject,decision:item.id,key:request.key,judge_run:run.id,family:run.meta.harness,reason,count:prior.length+1}];
-  if(route)add.push({type:'item.updated',id:item.id,fields:{meta:{route}}},{type:'item.reopened',id:item.id,note:'One fresh other-family reframe of the immutable contract and failed-answer ledger.'});
+  if(route)add.push({type:'item.updated',id:item.id,fields:{meta:{route}}},{type:'item.reopened',id:item.id,note:'One fresh other-family reframe of the immutable contract and failed-answer ledger.'},
+    {type:'decision.reframe-authorized',id:item.id,key:request.key,run:run.id,report_sha256:run.report.sha256,route,failure_count:1});
   else add.push({type:'item.updated',id:item.id,fields:{meta:{hold:true,hold_reason:'Decision reframe exhausted/unavailable; reshape the contract.',decision_hold:request.key}}});
   return{add,result:{failed:true,reframe:route??null,parked:!route}};
 }
@@ -274,7 +275,7 @@ export function decisionRestoreMutation({events,state,key}){
   const undo=[...event.link_changes].reverse().map(change=>({type:change.type==='link.added'?'link.removed':'link.added',blocker:change.blocker,blocked:change.blocked}));
   // Expose every transferred edge to the EXISTING promotion write guard. The
   // final snapshot restores original link provenance after the guarded inverses.
-  return{add:[...undo,{type:'decision.restored',id:event.id,key,archive:event.archive,items:[before.subject],links}],result:{restored:true}};
+  return{add:[...undo,{type:'decision.restored',id:event.id,decision:event.decision,key,archive:event.archive,items:[before.subject],links}],result:{restored:true}};
 }
 
 // Owner activation is a supported, explicit local effect. No pins, runtime or

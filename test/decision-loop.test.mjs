@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {fold,itemStatus} from '../lib/state.mjs';
+import {fold,itemStatus,releases} from '../lib/state.mjs';
 import {decisionCapture,decisionCandidates,decisionActivation,decisionQueueMutation,decisionApplyMutation,decisionFailureMutation,typedDecision,decisionRoute,decisionBrief,decisionHash,isDecision,queueDecision,applyDecision,decisionRestoreMutation,observeDecisionConsequences} from '../line-service/decisions.mjs';
 import {blockedChangeKey,dispatchInput} from '../line-service/phase1.mjs';
 import {createLineService,serviceDirectory,sourceRoot,routeFor} from '../line-service/line-service.mjs';
@@ -12,6 +12,8 @@ import {transact,loadRecord} from '../lib/store.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {createHash} from 'node:crypto';
 import {createWorkerBrief,lineWorkerPrompt,renderWorkerBrief} from '../lib/worker-brief.mjs';
+import {checkSessionCap,dispatchPool,countSessions} from '../dispatch/session-cap.mjs';
+import {checkSourceAdmission} from '../dispatch/unlanded-cap.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
 
 const config={routes:{unblock:{kind:'codex'},review:{kind:'claude'},engineer:{kind:'codex'}}};
@@ -134,7 +136,7 @@ test('decision prompts are read-only typed sessions with no self-landing instruc
 
 // Integration through the actual existing pass lock, record transactions,
 // immutable report bytes and effects journal. Native calls are explicit fixtures.
-function diskFixture(t){
+function diskFixture(t,{originalOutcome='blocked'}={}){
   const scratch=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'decision-loop-'))),repo=path.join(scratch,'project'),org=path.join(repo,'.org');fs.mkdirSync(org,{recursive:true});
   t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));
   fs.writeFileSync(path.join(path.dirname(repo),'.identity-root'),'fixture\n');
@@ -153,11 +155,11 @@ function diskFixture(t){
     {type:'run.started',id:'R-1',item:'ENG-1',workspace:repo,meta:{}},
     {type:'run.claimed',run:'R-1',record:org,project:identity,owner:owner(identity)},
     {type:'line-service.phase0',id:'boundary',project:identity,repo,org,main:'main',canonical_head:head});
-  report('R-1','blocked');add({type:'line.decisions-activated',project:identity,org,subjects:['ENG-1']});
+  report('R-1',originalOutcome);add({type:'line.decisions-activated',project:identity,org,subjects:['ENG-1']});
   const calls=[];
   const native={name:'judge-fixture',pane_id:'w1:p1',workspace_id:'w1',terminal_id:'terminal',agent_session:{value:'session'},cwd:repo};
   const command=(exe,args)=>{calls.push(args);if(exe==='herdr')return{status:0,stdout:JSON.stringify({result:{agent:native}})};return {status:0,stdout:JSON.stringify({result:'detached'})};};
-  const service=()=>createLineService({repo,org,to:'supervisor-test',env,command,capacity:()=>({count:0,cap:4}),haltAfter:100});
+  const service=(overrides={})=>createLineService({repo,org,to:'supervisor-test',env,command,capacity:()=>({count:0,cap:4}),haltAfter:100,...overrides});
   return{repo,org,identity,env,add,report,calls,native,service,load:()=>loadRecord(org)};
 }
 
@@ -222,4 +224,82 @@ test('supersede rollback preserves a successor promotion guard after exact depen
   fs.unlinkSync(path.join(f.identity,'promote','queue.json'));
   const restored=fold([...events,...mutation.add]);assert.ok(restored.links.some(l=>l.blocker==='ENG-1'&&l.blocked==='ENG-3'));
   assert.ok(!restored.links.some(l=>l.blocker==='ENG-2'&&l.blocked==='ENG-3'));
+});
+
+test('formal correction preserves closed human refusals and closed failed reviews on an exact successor',()=>{
+  const f=fixture();
+  f.add({type:'item.added',id:'ENG-2',role:'engineer',title:'Successor',meta:{}});
+  f.add({type:'item.added',id:'HUM-1',role:'human',title:'Reserved refusal',meta:{operator_reserved:true,answer:'no'}});
+  f.add({type:'item.closed',id:'HUM-1',as:'done'});
+  f.add({type:'item.added',id:'REV-1',role:'reviewer',title:'Failed review',meta:{}});
+  f.add({type:'run.started',id:'R-7',item:'REV-1',meta:{}});
+  f.add({type:'report.ingested',run:'R-7',sha256:'failed-review',report:{outcome:'done',extra:{verdict:'FAIL'}}});
+  f.add({type:'item.closed',id:'REV-1',as:'done'});
+  for(const blocker of ['HUM-1','REV-1'])f.add({type:'link.added',blocker,blocked:'ENG-1'});
+  const a=f.answer('supersede',{successor:'ENG-2'}),id=f.queue();f.judge(id,a);
+  f.apply(id,a,{file:'/exact',sha256:'hash',source:{file:'/source',sha256:'tree'}}).add.forEach(f.add);
+  assert.equal(itemStatus(f.state(),'ENG-2'),'blocked');
+  for(const blocker of ['HUM-1','REV-1']){
+    assert.ok(f.state().links.some(l=>l.blocker===blocker&&l.blocked==='ENG-2'));
+    assert.equal(releases(f.state(),blocker,itemStatus(f.state(),blocker)),false);
+  }
+});
+
+test('formal correction keeps a failed original gated on native refusal and exhausted invalid done answers',t=>{
+  for(const mode of ['native-refusal','exhausted']){
+    const f=diskFixture(t,{originalOutcome:'failed'});f.service().pass();const item=[...f.load().state.items.values()].find(isDecision),r=item.meta.decision_request;
+    f.add({type:'run.started',id:'R-2',item:item.id,workspace:f.repo,meta:{agent:'judge-fixture',pane:'w1:p1',worker_workspace:'w1',terminal_id:'terminal',agent_session_id:'session',harness:'codex'}},
+      {type:'run.claimed',run:'R-2',record:f.org,project:f.identity,owner:owner(f.identity)});
+    if(mode==='exhausted')f.add({type:'decision.failed',id:'ENG-1',decision:item.id,key:r.key,judge_run:'R-old',count:1,family:'codex'});
+    f.report('R-2','done',mode==='native-refusal'?{decision:{version:1,key:r.key,action:'reopen',category:'design',reason:'Proceed within the contract.'}}:{});
+    if(mode==='native-refusal')f.native.terminal_id='replacement';
+    f.service().pass();f.service().pass();
+    assert.equal(f.load().events.filter(e=>e.type==='decision.applied').length,0);
+    assert.equal(itemStatus(f.load().state,'ENG-1'),'blocked');
+    assert.equal(f.calls.filter(args=>args[1]==='ENG-1').length,0);
+  }
+});
+
+test('formal correction actually dispatches one other-family reframe of a blocked judge and parks a second failure',t=>{
+  const f=diskFixture(t);f.service().pass();const item=[...f.load().state.items.values()].find(isDecision);
+  const start=id=>f.add({type:'run.started',id,item:item.id,workspace:f.repo,meta:{agent:'judge-fixture',pane:'w1:p1',worker_workspace:'w1',terminal_id:'terminal',agent_session_id:'session',harness:id==='R-2'?'codex':'claude'}},
+    {type:'run.claimed',run:id,record:f.org,project:f.identity,owner:owner(f.identity)});
+  start('R-2');f.report('R-2','blocked');f.service().pass();f.service().pass();
+  const dispatches=()=>f.calls.filter(args=>args[1]===item.id);
+  assert.equal(dispatches().length,2,'initial judge plus exactly one reframe');
+  assert.equal(dispatches()[1][dispatches()[1].indexOf('--route')+1],'review');
+  assert.equal(f.load().state.runs.get('R-2').report.outcome,'blocked');
+  start('R-3');f.report('R-3','blocked');f.service().pass();f.service().pass();
+  assert.equal(dispatches().length,2);assert.equal(f.load().state.items.get(item.id).meta.hold,true);
+  assert.equal(f.load().events.filter(e=>e.type==='decision.failed').length,2);
+  assert.equal(itemStatus(f.load().state,'ENG-1'),'blocked');
+});
+
+test('formal correction admits one judge independently of full build slots and retains an uncertain decision reservation',t=>{
+  const f=diskFixture(t);f.add({type:'item.added',id:'ENG-2',role:'engineer',title:'Second blocked subject',meta:{}},
+    {type:'run.started',id:'R-4',item:'ENG-2',workspace:f.repo,meta:{}},
+    {type:'run.claimed',run:'R-4',record:f.org,project:f.identity,owner:owner(f.identity)},
+    {type:'item.added',id:'ENG-9',role:'engineer',title:'Full build pool',priority:9000,meta:{}},
+    {type:'line.decisions-activated',project:f.identity,org:f.org,subjects:['ENG-1','ENG-2']});
+  f.report('R-4','blocked');let judged=0;
+  const capacity=kind=>{
+    if(kind==='decision'){if(judged++)throw Object.assign(Error('one decision already reserved'),{code:'DISPATCH_DECISION_CAP'});return{kind,count:0,cap:1};}
+    throw Object.assign(Error('build pool full'),{code:'DISPATCH_SESSION_CAP',sessions:{kind:'build',native_count:1,native_cap:5}});
+  };
+  f.service({capacity}).pass();f.service({capacity}).pass();
+  assert.equal(f.calls.filter(a=>/^DEC-/.test(a[1])).length,1);
+  assert.equal(f.calls.filter(a=>a[1]==='ENG-9').length,0);
+  const directory=path.join(f.org,'dispatch');fs.mkdirSync(directory,{recursive:true});
+  // Native dispatcher uses the same pool classifier and the same durable count.
+  const loaded=f.load(),candidate=[...loaded.state.items.values()].find(isDecision);
+  assert.equal(dispatchPool({item:candidate}),'decision');
+  assert.equal(checkSourceAdmission({config:{dispatch:{max_unlanded:1}},org:f.org,events:loaded.events,journals:[],request:{item:candidate.id},common:f.identity}).admission.kind,'decision');
+  // A full worker pool does not consume the independent judge slot.
+  f.add({type:'run.started',id:'R-9',item:'ENG-9',workspace:f.repo,meta:{agent:'worker',pane:'p',worker_workspace:'w',terminal_id:'t',dispatch_project:f.identity}});
+  const options={config:{dispatch:{max_sessions:1,max_review_sessions:1}},org:f.org,common:f.identity,agent:()=>{throw Error('native unknown');},processInfo:()=>{},kind:'decision'};
+  assert.equal(checkSessionCap(options).count,0);
+  const pending={item:candidate.id,common:f.identity,stage:'launching',decisionQueue:{key:candidate.meta.decision_request.key},token:'uncertain',native_launch_attempted:true};
+  fs.writeFileSync(path.join(directory,'uncertain.json'),JSON.stringify(pending));
+  assert.throws(()=>checkSessionCap(options),e=>e.code==='DISPATCH_DECISION_CAP'&&e.sessions.count===1&&e.sessions.sessions[0].occupancy==='uncertain launch');
+  assert.equal(checkSessionCap({...options,kind:'review'}).count,0);
 });

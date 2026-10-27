@@ -14,7 +14,7 @@ import { itemStatus, sortItems } from '../lib/state.mjs';
 import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
 import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
-import { checkSessionCap } from '../dispatch/session-cap.mjs';
+import { checkSessionCap,dispatchPool } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation,scheduleLineCloseouts,closeoutEvaluations } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
@@ -423,7 +423,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const precedingWork=workClock()-workStarted;workStarted=workClock();
       let starts=0,admissionLogged=false,latestOccupancy;
       const countCapacity = kind => (capacity??(()=>checkSessionCap({config,org,kind,common:project.identity,
-        agent:name=>native(['agent','get',name]).agent,processInfo:pane=>native(['pane','process-info','--pane',pane]).process_info})))();
+        agent:name=>native(['agent','get',name]).agent,processInfo:pane=>native(['pane','process-info','--pane',pane]).process_info})))(kind);
       const admitItems = (items,repair=false) => { for (const item of items) {
         if(expired()||!repair&&starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
         snapshot=current();
@@ -466,7 +466,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           }
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
           const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config) : routeFor(item, config));
-          const occupancy = countCapacity(reviewTarget?'review':'build');latestOccupancy=occupancy; log({ action: 'capacity', ...occupancy });
+          const occupancy = countCapacity(dispatchPool({item:snapshot.state.items.get(item.id),job:{reviewQueue:reviewTarget}}));latestOccupancy=occupancy; log({ action: 'capacity', ...occupancy });
           if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
@@ -487,8 +487,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if (dispatched?.state === 'complete') starts++;
         } catch (e) {
           if(e.code==='REVIEW_CUTOFF'){timings.historical_review_skipped++;continue;}
-          if(e.code==='DISPATCH_REVIEW_CAP'){log({action:'capacity-held',code:e.code,reason:e.message});note(`capacity:${e.code}`,e.message);continue;}
-          if (['DISPATCH_SESSION_CAP', 'DISPATCH_UNLANDED_CAP'].includes(e.code)) { log({ action: 'capacity-held', code: e.code, reason: e.message }); note(`capacity:${e.code}`, e.message); break; }
+          if(['DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(e.code)){log({action:'capacity-held',code:e.code,reason:e.message});note(`capacity:${e.code}`,e.message);continue;}
+          if (['DISPATCH_SESSION_CAP', 'DISPATCH_UNLANDED_CAP'].includes(e.code)) { log({ action: 'capacity-held', code: e.code, reason: e.message }); note(`capacity:${e.code}`, e.message); if(e.code==='DISPATCH_UNLANDED_CAP'||e.sessions?.kind==='build'&&e.sessions.native_count<e.sessions.native_cap)continue;break; }
           note(`dispatch:${item.id}`, e.message);
         }
       }};

@@ -8,7 +8,7 @@ import {validateWorkerBrief} from '../lib/worker-brief.mjs';
 const implementation=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const plain=file=>{const s=fs.lstatSync(file);if(!s.isFile()||fs.realpathSync(file)!==path.resolve(file))throw Error('redirected original preflight evidence');return fs.readFileSync(file,'utf8');};
-const capacityCodes=new Set(['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP']);
+const capacityCodes=new Set(['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP']);
 const implementationErrors=new Set(['loaded queue/dispatch implementation changed; wait for next real pass','immutable saved queue/dispatch implementation changed; retain its owner']);
 export function implementationChangeOutcome(job){
   if(job.failure?.code!=='DISPATCH_IMPLEMENTATION_CHANGED'&&!implementationErrors.has(job.error))return null;

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fold } from '../lib/state.mjs';
+import {roleIs} from '../lib/roles.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
@@ -15,6 +16,11 @@ import {resolvedReviewJournal} from '../line-service/review-resolutions.mjs';
 
 export const DEFAULT_SESSION_CAP = 7;
 export const DEFAULT_REVIEW_SESSION_CAP = 3;
+export const DECISION_SESSION_CAP = 1;
+export function dispatchPool({item,run,job}={}){
+  if(roleIs(item,'DEC')||run?.meta.dispatch_role==='decision'||job?.decisionQueue||job?.workerBrief?.guidance?.role==='decision')return 'decision';
+  return run?.meta.dispatch_role==='review'||job?.reviewQueue||job?.unlandedCap?.admission?.kind==='review'?'review':'build';
+}
 const positive = n => Number.isSafeInteger(n) && n > 0;
 const canonical = file => { try { return fs.realpathSync(file); } catch { return path.resolve(file); } };
 const bound = w => w?.agent && w.pane && w.worker_workspace && (w.terminal_id || w.agent_session_id);
@@ -185,7 +191,7 @@ export function countSessions({ state, events = [], journals = [], reviewers = [
       // not that its native process exited. Keep the slot until process proof
       // or an explicit report/abandon, and name it for operator inspection.
     }
-    add({ run: run.id, kind: run.meta?.dispatch_role === 'review'||job?.reviewQueue ? 'reviewer' : 'worker', identity: launch, process: owner ?? null,
+    add({ run: run.id, kind: ({review:'reviewer',decision:'decision',build:'worker'})[dispatchPool({item:state.items?.get(run.item),run,job})], identity: launch, process: owner ?? null,
       evidence: owner ? 'native process' : job?.stage === 'launching' ? 'uncertain launch' : 'unknown liveness' });
   }
   // A surviving record/launch child retains its durable reservation. A real
@@ -199,7 +205,7 @@ export function countSessions({ state, events = [], journals = [], reviewers = [
     const launching = j.stage === 'launching' && !sessions.some(s => s.runs.includes(j.run));
     const detached=j.detached&&!j.detached_refused&&['open','start','worker'].includes(j.stage)&&!j.worker&&j.journal!==excludePendingJournal;
     if (!starting && !launching && !detached) continue;
-    add({ run: j.run ?? null, journal: j.journal, kind: j.reviewQueue || j.unlandedCap?.admission?.kind === 'review' ? 'reviewer' : 'worker',
+    add({ run: j.run ?? null, journal: j.journal, kind: ({review:'reviewer',decision:'decision',build:'worker'})[dispatchPool({item:state.items?.get(j.item),job:j})],
       identity: worker(j.worker), process: null, evidence: 'uncertain launch' });
   }
   // Reviewers have no worker run: the callback receipt binds the actual native
@@ -226,13 +232,11 @@ function readJSON(directory, filter = name => name.endsWith('.json'), withJourna
 export function checkSessionCap({ config, org, kind='all', ...options }) {
   const buildCap = config.dispatch?.max_sessions ?? DEFAULT_SESSION_CAP;
   const reviewCap=config.dispatch?.max_review_sessions??DEFAULT_REVIEW_SESSION_CAP;
-  if(!['all','build','review'].includes(kind))throw Error('unknown session admission pool');
-  // Current source admission has separate fixed build/review pools. A genuine
-  // explicitly configured shared ceiling still constrains BOTH pools. Legacy
+  if(!['all','build','review','decision'].includes(kind))throw Error('unknown session admission pool');
+  // The judge pool is independent; an explicit shared ceiling still bounds all.
+  // Projects without a decision request/occupant keep their original totals. Legacy
   // kind=all callers retain their original combined max_sessions behavior.
-  const nativeCap=config.dispatch?.max_total_sessions??(kind==='all'?buildCap:buildCap+reviewCap);
-  if (!positive(buildCap)||!positive(reviewCap)||!positive(nativeCap)) throw Error('dispatch session/review/shared caps must be positive integers');
-  const cap=kind==='review'?reviewCap:kind==='all'?nativeCap:buildCap;
+  if (!positive(buildCap)||!positive(reviewCap)||config.dispatch?.max_total_sessions!==undefined&&!positive(config.dispatch.max_total_sessions)) throw Error('dispatch session/review/shared caps must be positive integers');
   let sessions;
   try {
     // Journal first, then record: never miss both sides of a start transition.
@@ -243,10 +247,13 @@ export function checkSessionCap({ config, org, kind='all', ...options }) {
     sessions = countSessions({ ...options, events, state: fold(events), journals,
       reviewers: readJSON(path.join(org, 'retirement/occupants')) });
   } catch (e) { throw Error(`session count unavailable: ${e.message}`); }
-  const total=sessions;
+  const total=sessions,judges=kind==='decision'||total.some(s=>s.kind==='decision');
+  const nativeCap=config.dispatch?.max_total_sessions??(kind==='all'?buildCap:buildCap+reviewCap+(judges?DECISION_SESSION_CAP:0));
+  const cap=kind==='decision'?DECISION_SESSION_CAP:kind==='review'?reviewCap:kind==='all'?nativeCap:buildCap;
   if(kind==='review')sessions=total.filter(s=>s.kind==='reviewer');
   else if(kind==='build')sessions=total.filter(s=>s.kind==='worker');
-  const evidence = { cap, count: sessions.length, sessions,kind,build_cap:buildCap,review_cap:reviewCap,native_cap:nativeCap,native_count:total.length,shared_cap_source:config.dispatch?.max_total_sessions!==undefined?'explicit shared ceiling':kind==='all'?'legacy combined ceiling':'sum of separate build and review pools' };
+  else if(kind==='decision')sessions=total.filter(s=>s.kind==='decision');
+  const evidence = { cap, count: sessions.length, sessions,kind,build_cap:buildCap,review_cap:reviewCap,decision_cap:DECISION_SESSION_CAP,native_cap:nativeCap,native_count:total.length,shared_cap_source:config.dispatch?.max_total_sessions!==undefined?'explicit shared ceiling':kind==='all'?'legacy combined ceiling':'sum of separate build, review and decision pools' };
   if (sessions.length >= cap || total.length>=nativeCap) {
     const poolFull=sessions.length>=cap,held=poolFull?sessions:total,limit=poolFull?cap:nativeCap;
     const runs = list => [...new Set(list.flatMap(s => s.runs.filter(Boolean).length ? s.runs.filter(Boolean) : [`pending start ${s.journal ?? 'UNKNOWN'}`]))].sort((a,b)=>/^R-\d+$/.test(a)&&/^R-\d+$/.test(b)?Number(a.slice(2))-Number(b.slice(2)):a.localeCompare(b)).join(', ');
@@ -255,7 +262,7 @@ export function checkSessionCap({ config, org, kind='all', ...options }) {
     const inspect = held.some(s => s.occupancy !== 'observed live')
       ? '; inspect unknown-liveness and uncertain-launch runs and explicitly abandon stale runs after checking their workers' : '';
     const error = Error(`${poolFull&&kind==='review'?'review':'session'} cap ${limit} reached: ${runs(held)} (counted ${held.filter(s => s.kind === 'worker').length} workers, ${held.filter(s => s.kind === 'reviewer').length} reviewers; ${categories}${inspect})`);
-    error.code = kind==='review'&&sessions.length>=cap?'DISPATCH_REVIEW_CAP':'DISPATCH_SESSION_CAP';
+    error.code = kind==='decision'&&sessions.length>=cap?'DISPATCH_DECISION_CAP':kind==='review'&&sessions.length>=cap?'DISPATCH_REVIEW_CAP':'DISPATCH_SESSION_CAP';
     error.sessions = evidence;
     throw error;
   }

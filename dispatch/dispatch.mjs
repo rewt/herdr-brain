@@ -20,7 +20,7 @@ import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
-import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
+import { acquireSessionCapLock, checkSessionCap, dispatchPool } from './session-cap.mjs';
 import { checkSourceAdmission, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
 import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute,reserveUnstartedReview } from '../line-service/review-queue.mjs';
@@ -222,7 +222,7 @@ function captureLaunchProcess() {
   job.launchProcess = null;
   try { job.launchProcess = observeNative().process; } catch {}
 }
-function admission(repo, org, common,kind=job?.reviewQueue?'review':'build') {
+function admission(repo, org, common,kind=dispatchPool({job})) {
   const { config } = loadDiscoveredRoutes({ cwd: repo });
   const evidence = checkSessionCap({ config, org, common, agent: name => herdr(['agent', 'get', name]).agent,
     processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info, excludeStartJournal: journal,excludePendingJournal:journal,kind });
@@ -393,7 +393,7 @@ async function main() {
     if (opt.reuse) checkReuse(json(record(['show', opt.reuse, '--json'])), { lane: opt.lane, route: opt.route, declared: declaredFields });
     const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir'], repo));
     unlandedAdmission({ repo, org, common, item: item.id, fromRun: opt['from-run'], unblocks: opt.unblocks });
-    if (!opt.reuse) admission(repo, org, common,reviewQueue?'review':'build');
+    if (!opt.reuse) admission(repo, org, common,dispatchPool({item,job:{reviewQueue}}));
     const token = randomUUID();
     const directory = path.join(org, 'dispatch');
     fs.mkdirSync(directory, { recursive: true });
@@ -404,6 +404,7 @@ async function main() {
       operatorPlainText: true,
       item: positionals[0], lane: opt.lane, route: opt.route, reviewQueueProtocol: 1,
       ...(reviewQueue ? { reviewQueue, reviewQueueBrief: reviewQueueBrief(item) } : {}),
+      ...(dispatchPool({item})==='decision'?{decisionQueue:{key:item.meta.decision_request?.key}}:{}),
       brief, report: opt.report ?? null, to: opt.to ?? null,
       base: git(['rev-parse', `${opt.base ?? 'HEAD'}^{commit}`], repo), extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress, ...(workerBrief ? { workerBrief } : {}),
@@ -534,10 +535,10 @@ async function main() {
       '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`,
       '--meta', `dispatch_unlanded_admitted=${job.unlandedCap.admission.admitted}`,
       ...(job.workerBrief ? ['--meta', `worker_brief=${JSON.stringify(job.workerBrief)}`] : []),
-      ...(job.unlandedCap.admission.kind === 'review' ? ['--meta', 'dispatch_role=review'] : []),
+      ...(['review','decision'].includes(job.unlandedCap.admission.kind) ? ['--meta', `dispatch_role=${job.unlandedCap.admission.kind}`] : []),
       ...(job.fromRun ? ['--meta', `dispatch_from_run=${job.fromRun}`] : []),
       ...(job.unblocks ? ['--meta', `dispatch_unblocks=${job.unblocks}`] : []),
-      ...(!['regular', 'review'].includes(job.unlandedCap.admission.kind) ? ['--meta', `dispatch_unlanded_exception=${job.unlandedCap.admission.kind}`] : []),
+      ...(!['regular', 'review','decision'].includes(job.unlandedCap.admission.kind) ? ['--meta', `dispatch_unlanded_exception=${job.unlandedCap.admission.kind}`] : []),
       ...(job.fromRun ? ['--if-current-run', job.fromRun] : []),
       ...(job.reuse ? ['--meta', `continuation_of=${job.reuse}`, '--meta', 'same_session=true'] : []),
       ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
@@ -732,7 +733,7 @@ try { await main(); }
 catch (error) {
   if (job && journal && ownsLock) {
     job.error = error.message;
-    job.failure={code:error.code??null,kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP'].includes(error.code)?'capacity':'guard-or-command',stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
+    job.failure={code:error.code??null,kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':'guard-or-command',stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
     if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
     save();
     if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}

@@ -255,13 +255,14 @@ export function blockedChangeKey({events,state,item,run,brief}) {
   if(run?.report?.outcome!=='blocked')return 'ordinary';
   const seq=run.report.seq??0,ids=new Set([item.id,run.id]);
   const answer=events.findLast(e=>e.type==='decision.restart'&&e.by==='line-service'&&e.seq>seq&&e.id===item.id&&e.run===run.id&&e.report_sha256===run.report.sha256&&!events.some(r=>r.type==='decision.restored'&&r.key===e.key)&&events.some(a=>a.type==='decision.applied'&&a.key===e.key&&a.id===item.id&&a.restart_required));
+  const reframe=roleIs(item,'DEC')&&events.findLast(e=>e.type==='decision.reframe-authorized'&&e.by==='line-service'&&e.seq>seq&&e.id===item.id&&e.run===run.id&&e.report_sha256===run.report.sha256&&e.key===item.meta.decision_request?.key&&e.route===item.meta.route&&e.failure_count===1&&events.some(f=>f.type==='decision.failed'&&f.key===e.key&&f.judge_run===run.id&&f.count===1));
   const inputs=events.filter(e=>e.seq>seq&&e.by!=='line-service'&&!/^\[watch record-only\]/.test(e.text??'')&&(
     e.type==='question.answered'&&(ids.has(e.id)||state?.items.get(e.id)?.parent===item.id)||
     e.type==='link.removed'&&(ids.has(e.blocked)||ids.has(e.blocker))||e.type==='item.updated'&&e.id===item.id&&Object.keys(e.fields??{}).some(k=>['accept','title'].includes(k))||e.type==='item.reopened'&&e.id===item.id||
     e.type==='item.closed'&&events.some(l=>l.type==='link.added'&&l.blocked===item.id&&l.blocker===e.id)));
   const original=events.find(e=>e.type==='report.ingested'&&e.run===run.id)?.brief_sha256;
-  if(!answer&&!inputs.length&&!(original&&brief&&original!==brief))return null;
-  return hash(JSON.stringify([run.report.sha256,inputs.map(e=>e.seq),brief??null,...(answer?[answer.key]:[])]));
+  if(!answer&&!reframe&&!inputs.length&&!(original&&brief&&original!==brief))return null;
+  return hash(JSON.stringify([run.report.sha256,inputs.map(e=>e.seq),brief??null,...(answer?[answer.key]:[]),...(reframe?[reframe.key,reframe.seq]:[])]));
 }
 
 // Existing original requests keep their exact immutable partial scopes. This

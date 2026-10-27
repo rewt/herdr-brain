@@ -19,7 +19,9 @@ After the existing mechanical rules, the line derives one decision per actual
 subject/report/claim/current-intent tuple. Real holds, reserved ancestry and
 unselected proposals remain ineligible. It archives the full report, contract,
 standing intent and attempt ledger, creates an ordinary `decision` item, and
-uses the existing `unblock` route, dispatch journal and session admission.
+uses the existing `unblock` route, dispatch journal and a separate one-judge pool.
+The native dispatcher and service share that pool and preserve uncertain starts;
+full build slots do not consume it. Explicit shared native ceilings remain.
 Unknown starts are retained. No code calls a model or runs another loop.
 
 The new role's sole output is its report. `decision` in report front matter is a
@@ -33,10 +35,12 @@ owners retain those actions. Safety/identity/native holds are never cleared.
 
 Application rechecks current intent, report bytes, both claims, native judge,
 original source and STOP/HOLD under the existing record lock and effects intent.
-A service-authored `decision.restart` tied to `decision.applied` explicitly
+A done judge report does not release its blocker; only a committed applied/stale
+disposition can do that. A service-authored `decision.restart` tied to `decision.applied` explicitly
 restores ordinary dispatch eligibility; incidental service notes cannot do so.
 A stale answer closes only its obsolete decision item. Invalid typed reports
-count once, get one configured other-family reframe, then park. A repeated
+count once, get one configured other-family reframe with an explicit guarded
+restart authorization (also for blocked reports), then park. A repeated
 same-premise application gets one other-family answer, then stays parked. A
 quiet or uncertain native start consumes its original slot; it is never timed
 out or replaced. Missing other-family support parks rather than inventing it.
@@ -44,7 +48,8 @@ out or replaced. Missing other-family support parks rather than inventing it.
 Before superseding, the exact clean source tree and application state are
 archived under `.org/evidence/decisions/KEY/`. All unfinished incoming and outgoing
 dependencies transfer to the exact selected successor; missing recovery,
-reserved/held successors and dependency cycles refuse closure. No source/data is
+reserved/held successors and dependency cycles refuse closure. Closed human refusals and closed failed
+reviews remain unresolved prerequisites and transfer too. No source/data is
 deleted. Existing guarded closeout owns session retirement and lane archives.
 
 `--restore KEY` in place of `--activate` is a guarded native owner operation on

@@ -9,10 +9,11 @@ import {ancestors,itemStatus,nextItemId} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {serviceRecordBinding,canonicalFailure} from './record-inbox.mjs';
+import {queuePolicy,queueClass,queueSelected} from './priority-order.mjs';
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const repair=item=>item?.meta?.halt_repair===1;
-const readyItems=state=>[...state.items.values()].filter(i=>i.kind!=='goal'&&!repair(i)&&!roleIs(i,'REV')&&i.role!=='human'&&itemStatus(state,i.id)==='ready');
+const readyItems=state=>[...state.items.values()].filter(i=>i.kind!=='goal'&&queueSelected(i)&&!repair(i)&&!roleIs(i,'REV')&&i.role!=='human'&&itemStatus(state,i.id)==='ready');
 const held=i=>[i.id,i.meta.hold??null,i.meta.held??null,i.meta.reserved??null,i.meta.operator_reserved??null,i.meta.category??null];
 
 export function haltObservation({state,events,identity,config,occupancy,actions={}}) {
@@ -21,11 +22,12 @@ export function haltObservation({state,events,identity,config,occupancy,actions=
   const productive=(occupancy?.sessions??[]).filter(s=>s.occupancy==='observed live'&&s.kind==='worker'&&s.runs?.some(engineering)).map(s=>s.runs);
   const progress=events.filter(e=>e.type==='change.landed'&&e.project===identity&&e.landed_at&&e.producer&&engineering(e.run)||
     e.type==='run.session_bound'&&engineering(e.run)||e.type==='report.ingested'&&engineering(e.run??e.id)).at(-1)?.seq??0;
-  const causes=ready.map(i=>({item:i.id,created:i.created.seq,role:i.role,capability:i.capability,route:i.meta.route,last_run:i.runs.at(-1)??null,report:state.runs.get(i.runs.at(-1))?.report?.file??null,
+  const policy=queuePolicy(state);
+  const causes=ready.map(i=>({item:i.id,created:i.created.seq,role:i.role,capability:i.capability,route:i.meta.route,queue_class:queueClass(state,i,policy),priority:i.priority,last_run:i.runs.at(-1)??null,report:state.runs.get(i.runs.at(-1))?.report?.file??null,
     holds:[held(i),...ancestors(state,i.id).map(held)],
     failures:Object.entries(actions).filter(([key])=>key.startsWith(`dispatch:${i.id}:`)).map(([key,e])=>[key,canonicalFailure(e.error)])}));
-  const source=['line-service/line-service.mjs','line-service/halt-repair.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
-  return {ready:ready.map(i=>i.id),productive,progress,causes,signature:hash([causes,progress,config.routes,config.selection_policy,source])};
+  const source=['line-service/line-service.mjs','line-service/priority-order.mjs','line-service/halt-repair.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
+  return {ready:ready.map(i=>i.id),productive,progress,causes,signature:hash([causes,policy,progress,config.routes,config.selection_policy,source])};
 }
 
 export function completeHaltPass({repo,org,env,pass,previous,observation,route,after=3,audit,effects}) {

@@ -1,5 +1,48 @@
 # Minimal line service
 
+## Standing order and explicit selection
+
+The existing record's single open `meta.queue_order` owner declares the operator's
+ordered outcome names (an array or JSON array string). `meta.queue_class` on an
+item, or its nearest classified ancestor, assigns an outcome; `queue_default`
+on the order owner classifies otherwise unclassified descendants. Existing work
+with runs uses `finish-open-owned-work` unless it has its own explicit class.
+A captured source review serves its source item's outcome. Numeric item priority
+and queued-review preference break ties within an outcome. Independent lower
+ready work is considered when higher work is held or otherwise ineligible;
+rehearsal/withdrawal ordering adds no dependency. Invalid or ambiguous standing
+order refuses admission. Only the operator changes standing order; delegates
+apply the adopted order and classify/select its on-path work.
+
+Report proposals remain records until their own `meta.queue_selected=true` is
+recorded. Parent selection never selects future proposals. `queue_selected=false`
+also keeps any ordinary item outside admission. Directly commissioned existing
+line items and captured post-code review obligations retain their normal selection.
+This is an admission seam; proposal intake, typed deduplication and lapse policy
+are separate work. Held, reserved, dependent, active and UNKNOWN requests retain
+all existing launch/native guards. Queue order never clears a hold.
+
+For the positively identified old Phase 0 priority-only hold, first record an
+explicit own-item selection and an adopted on-path `queue_class`. Then the normal
+owning worker can archive one disposition and apply it from clean landed source:
+
+```sh
+node line-service/priority-migration.mjs --org /OWN/RECORD --plan /OWN/RECORD/evidence/SELECTED/priority-plan.json --authority ADOPTED_DIRECTION_REFERENCE
+node line-service/priority-migration.mjs --org /OWN/RECORD --run R-n --apply /OWN/RECORD/evidence/SELECTED/priority-plan.json
+node line-service/priority-migration.mjs --org /OWN/RECORD --run R-n --restore /OWN/RECORD/evidence/SELECTED/priority-plan.json
+```
+
+The plan records exact before/after metadata and every retained hold. Only selected
+never-started items with the exact priority-only reason and provenance qualify;
+earlier independent holds, hold notes, reserved subjects, runs and saved attempts
+exclude migration. The existing owning native worker, claim, source, record lock,
+promotion write guard and STOP/HOLD fences are checked at mutation. Restore uses
+the same archive and refuses changed subjects; it restores absent keys exactly.
+There is no bulk-clear, duplicate closure, dependency rewrite, new scheduler or
+consumer/pin edit. Older folds ignore the disposition and retain the old holds.
+The ordinary pass audit records its actual order and classifications; source and
+focused checks alone do not prove installed execution or release acceptance.
+
 For the contained startup-notice backlog, the owning native supervisor can run
 this explicit source control from its canonical project checkout:
 

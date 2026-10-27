@@ -96,6 +96,33 @@ test('priority READY dispatch uses existing admission and retains its one effect
   assert.equal(call.options.env.HERDR_PANE_ID, undefined); assert.equal(call.options.env.HERDR_ENV, undefined);
   assert.equal(call.options.env.MONITOR_SUPERVISOR_AGENT, 'supervisor-test');
 });
+test('standing order changes the next native dispatch and skips held, reserved, dependent and unselected proposals',t=>{
+  const f=fixture(t),a=f.add('Stable Brain',1),b=f.add('Rehearsal',9999),ready=f.add('Independent normal work',-1);
+  const goal=f.record(['add','Standing outcomes','--goal']).split(' ')[0];
+  const setOrder=order=>f.record(['set',goal,`meta.queue_order=${JSON.stringify(order)}`]);
+  setOrder(['stable','rehearsal']);
+  f.record(['set',a,'meta.queue_class=stable']);f.record(['set',b,'meta.queue_class=rehearsal']);
+  const held=f.add('Real hold',20000),reserved=f.add('Reserved',19000),dependent=f.add('Dependent',18000),proposal=f.add('Unselected record',17000);
+  f.record(['set',held,'meta.hold=true','meta.queue_class=stable']);
+  f.record(['set',reserved,'meta.operator_reserved=true','meta.queue_class=stable']);
+  f.record(['block',dependent,'--by',held]);f.record(['set',dependent,'meta.queue_class=stable']);
+  // Simulate normal report-proposal provenance without invoking intake.
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-900',kind:'work',role:'engineer',title:'Spawned proposal',from_run:'R-previous',priority:30000,meta:{queue_class:'stable'}},
+    {type:'item.updated',id:proposal,fields:{meta:{queue_selected:false}}}]}));
+  f.service({maxStarts:1}).pass();assert.equal(f.calls.at(-1).args[1],a);
+  setOrder(['rehearsal','stable']);f.service({maxStarts:1}).pass();assert.equal(f.calls.at(-1).args[1],b);
+  f.service({maxStarts:1}).pass();assert.equal(f.calls.at(-1).args[1],ready,'lower ready work is not gated by blocked higher outcomes');
+  assert.ok(f.calls.every(c=>![held,reserved,dependent,proposal,'ENG-900'].includes(c.args[1])));
+  f.record(['set','ENG-900','meta.queue_selected=true']);f.service({maxStarts:1}).pass();assert.equal(f.calls.at(-1).args[1],'ENG-900');
+  const trace=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(trace.filter(r=>r.action==='queue-order').at(-1).policy.order,['rehearsal','stable']);
+});
+test('standing outcome selection does not launch a child of a held or reserved ancestor',t=>{
+  const f=fixture(t),parent=f.add('Held ancestor'),child=f.add('Child',999,['--parent',parent]),ready=f.add('Independent');
+  f.record(['set',parent,'meta.hold=true']);f.record(['set',child,'meta.queue_selected=true']);
+  f.service().pass();assert.deepEqual(f.calls.map(c=>c.args[1]),[ready]);
+  f.record(['set',parent,'meta.hold=false','meta.operator_reserved=true']);f.service().pass();assert.ok(!f.calls.some(c=>c.args[1]===child));
+});
 test('blocked and reserved work stays held while another READY item dispatches', t => {
   const f = fixture(t), blocker = f.add('Blocker'); const blocked = f.add('Blocked', 20);
   f.record(['block', blocked, '--by', blocker]); const reserved = f.add('Reserved', 30); f.record(['set', reserved, 'meta.operator_reserved=true']);

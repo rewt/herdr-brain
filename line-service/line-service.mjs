@@ -30,6 +30,7 @@ import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 import {haltObservation,completeHaltPass} from './halt-repair.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
+import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -394,6 +395,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }catch(e){note(key,e.message,{item});}
       }
       const { config } = loadDiscoveredRoutes({ cwd: repo, env: childEnv });
+      const standing=queuePolicy(snapshot.state);
       // Productive cleanup is allowed to finish. It cannot consume READY work's
       // independent admission allowance. All actual effects still recount and
       // re-read native/record/source/STOP/HOLD; no worker is stopped by a clock.
@@ -404,6 +406,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const admitItems = (items,repair=false) => { for (const item of items) {
         if(expired()||!repair&&starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
         snapshot=current();
+        if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)){log({action:'queue-selection-changed'});break;}
+        if(!queueSelected(snapshot.state.items.get(item.id)))continue;
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
         if(!admissionLogged){log({action:'admission-stage',preceding_work_ms:precedingWork,preceding_budget_exhausted:precedingWork>=passBudgetMs,work_budget_ms:passBudgetMs});admissionLogged=true;}
@@ -445,7 +449,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
-            if (!current || itemLaunchHold(fresh.state,item.id) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if (!current || !queueSelected(current) || itemLaunchHold(fresh.state,item.id) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(continuation){
               const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});
               if(!checked||checked.request_sha256!==continuation.request_sha256||checked.capability!==continuation.capability)throw Error('original preflight progress/source changed before continuation');
@@ -467,7 +471,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           note(`dispatch:${item.id}`, e.message);
         }
       }};
-      admitItems(sortItems([...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal')).sort((a,b)=>Number(isQueueReview(b))-Number(isQueueReview(a))));
+      const ordered=orderQueue(snapshot.state,[...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal'),standing);
+      log({action:'queue-order',policy:standing,candidates:ordered.map(item=>({item:item.id,class:queueClass(snapshot.state,item,standing)}))});
+      admitItems(ordered);
       // Detached acknowledgements and review activity are not engineering
       // progress. This is the end of a completed pass, under the same lock.
       try {

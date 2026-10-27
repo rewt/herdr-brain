@@ -43,7 +43,14 @@ const contains = (value, tokens) => {
 // base end in hex letters and run straight into the hash).
 const holdDirective=/^(?:(?:new\s+)?(?:independent\s+)?review\s+hold\b|hold\s+(?:the\s+)?(?:independent\s+)?review\b|independent\s+(?:post-code\s+)?review\s+(?:attempt\s+)?held\b|(?:C\d+\s+)?retain(?:ed)?\s+(?:the\s+)?(?:independent\s+)?review(?:er|\s+attempt)\b)/i;
 export const explicitReviewHold=e=>e.type==='note.added'&&Boolean(e.decision)&&holdDirective.test((e.text??'').trim());
-const namesCommit=(text,head)=>{for(let i=text.indexOf(head);i>=0;i=text.indexOf(head,i+1))if(!/[a-f0-9]/.test(text[i+head.length]??''))return true;return false;};
+const namesCommit=(text,head)=>{
+  for(let i=text.indexOf(head);i>=0;i=text.indexOf(head,i+1)){
+    const before=text.slice(0,i);
+    const startsCommit=!/[a-f0-9]$/i.test(before)||/(?:^|\W)(?:head|base)$/i.test(before);
+    if(startsCommit&&!/[a-f0-9]/i.test(text[i+head.length]??''))return true;
+  }
+  return false;
+};
 
 function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal=false,ignoreQueues=[]}) {
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);

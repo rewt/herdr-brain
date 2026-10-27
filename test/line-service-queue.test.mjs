@@ -68,11 +68,25 @@ test('explicit review holds ignore incidental decision wording at queue creation
     {type:'note.added',id:'ENG-1',decision:true,text:`Independent review hold for old source ${f.base}; retain that historical judgment.`},
     {type:'note.added',id:'ENG-1',decision:true,text:`REVIEW HOLD: base${f.base}; the earlier admission only.`},
     {type:'note.added',id:'R-1',decision:true,text:`REVIEW HOLD: digest ${f.head}${'a'.repeat(24)}; a 64-hex value is not this commit.`},
+    {type:'note.added',id:'R-1',decision:true,text:`REVIEW HOLD: digest ${'a'.repeat(24)}${f.head}; a suffix of a 64-hex value is not this commit.`},
+    {type:'note.added',id:'R-1',decision:true,text:`REVIEW HOLD: digest ${'a'.repeat(12)}${f.head}${'b'.repeat(12)}; an interior substring is not this commit.`},
   ]}));
   const before=f.context().events.filter(e=>e.type==='note.added'),created=f.create(),c=f.context(),q=c.state.items.get(created.review_item);
   assert.equal(validateQueuedReview({...c,item:q}).head,f.head);
   assert.equal(f.create().review_item,q.id);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,1);
   assert.deepEqual(f.context().events.filter(e=>e.type==='note.added'),before,'decision history remains immutable');
+});
+
+test('explicit review holds require both hex boundaries for captured 40- and 64-character commits',t=>{
+  const f=fixture(t),c=f.context();
+  for(const head of [f.head,'c'.repeat(64)]){
+    const target={head,base:f.base,reportHash:'d'.repeat(64)};
+    const attempt=text=>reviewAttempt(c.item,{...c,capturedRun:'R-1',target,events:[...c.events,{type:'note.added',id:'R-1',decision:true,text:`REVIEW HOLD: ${text}`,seq:c.events.at(-1).seq+1}]});
+    for(const value of [`${head}a`,`a${head}`,`a${head}b`,`${head}A`,`A${head}`,`A${head}B`,`head0${head}`,`base0${head}`])
+      assert.equal(attempt(value),null,`longer hexadecimal value ${value}`);
+    for(const value of [head,`head${head}`,`base${head}`,`head:${head}`,`(${head})`,`a${head}; then head${head}`])
+      assert.match(attempt(value),/independent review hold/,`explicit full commit ${value}`);
+  }
 });
 
 test('explicit review holds retain scoped directives and real UNKNOWN attempts before queue or native launch',t=>{

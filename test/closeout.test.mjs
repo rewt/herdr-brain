@@ -104,6 +104,23 @@ test('phase1 conditional source completion binds one real landed worktree remova
   const result=f.drain({keys:[target.key]});assert.equal(result.evaluated[0]?.completed,true);assert.equal(fs.existsSync(f.lane),false);
 });
 
+test('phase1 deadline-deferred closeout retries its original unattempted target and exits once with a fresh budget',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  const first=f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}});
+  assert.equal(first.evaluated[0].completed,false);assert.match(first.evaluated[0].reason,/deadline/);assert.equal(effects(f).some(e=>e.action==='agent-exit-requested'),false);
+  const next=f.drain({keys:[entry.key],retrySafe:true});assert.equal(next.evaluated[0]?.completed,true,JSON.stringify(next));
+  assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(fs.existsSync(f.lane),false);
+});
+
+test('phase1 deadline retry preserves an unresolved original native exit intent without another prompt',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}});
+  f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'fixture-original-exit-intent',outcome:{action:'agent-exit-requested',run:'R-1',pane:'w:p',tab_id:'w:t',occupant:['worker','codex','w:p','w',f.lane,'term','session'],shell:{pid:1,identity:'shell',command:'[zsh]'}}}]);
+  const held=f.drain({keys:[entry.key],retrySafe:true});assert.equal(held.evaluated.length,0);assert.deepEqual(f.read().actions,[]);
+  f.append([{type:'closeout.retry',identity:f.common,keys:[entry.key],why:'fixture explicit observation; no permission to replay the native intent'}]);
+  const observed=f.drain({keys:[entry.key]});assert.equal(observed.evaluated[0]?.completed,false);assert.match(observed.evaluated[0].reason,/unresolved native/);assert.deepEqual(f.read().actions,[]);
+});
+
 test('default landing and named requests, full-source opt-in, opt-out and canonical ownership', t => {
   const f = fixture(t, { occupied: false });
   fs.unlinkSync(path.join(f.repo, '.lane.json'));

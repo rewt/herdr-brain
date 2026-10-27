@@ -252,7 +252,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;
           if(prior&&/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/i.test(prior.reason??'')){timings.closeout_retained++;return false;}
-          return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior);
+          return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior,{entry:e,events:observed.events});
         }).sort((a,b)=>b.source.seq-a.source.seq).slice(0,maxStepsPerStage);
         if (entries.length) {
           const revisions = entries.map(e=>closeoutRevision(e,observed.events,observed.state));

@@ -29,9 +29,12 @@ no re-review chain. Majors require specific correction checks before release.
 Phase1 reviews use a separate default-three pool within actual native resource
 limits. Findings create linked engineer work with no re-review chain. The line
 owns guarded cleanup and never waits for a chat callback to source-complete.
-The overnight plan has no22:00/23:00 stop. Supervisor-herdr applies its plain
-Phase1 commit-revert rule on observed no-pass/no-landing/all-failing conditions
-without another operator ask; the engineer continues until proofs pass.
+The current overnight guidelines have no22:00/23:00 stop. Quiet chat is the
+operator delegate inside the fences; the existing watcher remains the only one.
+Supervisor-herdr owns proof-based go/no-go and rollback if Phase1 freezes a line
+or stops landing. Fix non-fence blockers in the same run without an ACK wait;
+change approach after two or three failed attempts. New discoveries wait for
+morning. The same engineer continues until proofs pass.
 
 New cold source calls use pinned Node20.19.4 and matching HERDR_BRAIN_ROOT.
 Normal pin forwarding, saved retries and native ownership remain intact.

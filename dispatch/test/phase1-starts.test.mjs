@@ -4,6 +4,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fixture} from './dispatch-fixture.mjs';
 
+async function driverResult(journal){
+  const file=`${journal}.driver/results.jsonl`,until=Date.now()+60000;
+  while(!fs.existsSync(file)&&Date.now()<until)await new Promise(resolve=>setTimeout(resolve,25));
+  assert.equal(fs.existsSync(file),true,'owned detached fixture reaches a durable terminal receipt');
+  return JSON.parse(fs.readFileSync(file,'utf8').trim());
+}
+
+test('phase1 detached native start keeps one original prompt and its record-only watcher while a fresh STOP prevents input',async t=>{
+  for(const stopped of [false,true]){
+    const f=fixture(t);
+    if(stopped){const file=path.join(f.root,'bin/watch');fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace("} else if(type==='watch') {", "} else if(type==='watch') {\n fs.mkdirSync(path.join(process.cwd(),'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(process.cwd(),'.lane/supervisor/STOP'),'fixture STOP after launch, before prompt');"));}
+    const started=f.start(['--detach']);assert.equal(started.status,0,started.stderr);const receipt=JSON.parse(started.stdout),result=await driverResult(receipt.journal);
+    const prompts=f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt');
+    assert.equal(prompts.length,stopped?0:1);
+    if(stopped)assert.match(result.error,/STOP/);else{assert.equal(result.exit_code,0,JSON.stringify(result));assert.equal(result.stage,'complete');}
+    assert.ok(f.calls().find(c=>c.type==='watch').a.includes('--record-only'));
+  }
+});
+
 test('phase1 dispatch memory admission pauses only for proving and does not wait on low-memory ordering',t=>{
   const f=fixture(t),memory=path.join(f.root,'memory.json');fs.writeFileSync(memory,JSON.stringify({available:0,swap_used:1024**3}));f.fail('prepare');
   const result=f.start([],{env:{...f.env,TEST_MEMORY_FILE:memory}});assert.equal(result.status,1);assert.match(result.stderr,/injected prepare/);assert.doesNotMatch(result.stderr,/waiting; memory pressure/);

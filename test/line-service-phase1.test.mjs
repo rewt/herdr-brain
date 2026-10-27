@@ -98,6 +98,14 @@ test('phase1 dedup retains same-change UNKNOWN but unrelated old attempts and pr
   assert.match(reviewAttempt(c.item,{...c,target}),/same-change.*UNKNOWN/);
 });
 
+test('phase1 explicit current-source manual review reference holds without inspecting another identity',t=>{
+  const f=fixture(t),c=f.context(),target=discoverChanges(c).changes[1].target;
+  c.run.report.artifacts.push('/outside-owner/archive/source-review.json');
+  let probes=0;const stat=fs.lstatSync;fs.lstatSync=(file,...args)=>{if(String(file).startsWith('/outside-owner/'))probes++;return stat(file,...args);};
+  try{assert.match(reviewAttempt(c.item,{...c,target}),/source-owner review reference UNKNOWN/);}finally{fs.lstatSync=stat;}
+  assert.equal(probes,0);
+});
+
 test('phase1 creates one queue item per landed change with immutable evidence and never duplicates the same key',t=>{
   const f=fixture(t),c=f.context(),changes=discoverChanges(c).changes;
   const before=process.cwd(),env={...f.env,ORG_ACTOR:'line-service',HERDR_ENV:'',HERDR_PANE_ID:''};process.chdir(f.cwd);

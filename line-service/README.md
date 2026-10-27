@@ -158,13 +158,16 @@ clean committed candidate after self-landing; no full/default/reviewer suite.
 One independent async post-code review per landed change remains nonblocking.
 
 Supervisor-herdr owns proof-based go/no-go and plain Git revert of the listed
-Phase1 commits, without another operator ask, if either line writes no pass for
-15 minutes, lands nothing for60 minutes while READY work exists, or fails every
-pass. The pre-source archive is `archive/phase1-land-first-20261026-pre` at
+Phase1 commits if it freezes a line or stops landing. The current
+`OVERNIGHT-GUIDELINES-20261026.md` supersedes the narrower overnight plan; quiet
+chat is the operator delegate, and the existing watcher remains the only one.
+Fix local non-fence blockers in the same run, change approach after two or three
+failed attempts, and leave new discoveries for morning. There is no ACK or
+22:00/23:00 deadline wait. The pre-source archive is
+`archive/phase1-land-first-20261026-pre` at
 `f1a4abc30d3b08d2887612f19946c165603db43d`. Use ordinary `git revert` on the exact
-newest-first commit list, preserving all record evidence; the older narrow
-launchd revert allowlist is not the Phase1 rollback entry. There is no22:00/23:00
-stop: the same engineer fixes forward until proofs pass, with last-good source
-live if proof fails. Quiet owns the one overnight watcher; this module creates
-no second monitor. Final full-release/adoption obligations stay with the release
-coordinator; public, funds, secrets and other-identity effects stay reserved.
+newest-first Phase1 commit list, preserving record evidence; the older narrow
+launchd revert allowlist is not this rollback entry. The last-good code stays
+live if proof fails. Public, mainnet, secrets, other-identity files and unarchived
+work stay fenced. The release coordinator retains the final full-release and
+adoption obligations.

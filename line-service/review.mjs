@@ -46,12 +46,19 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     return runs.has(run);
   };
   for(const q of state.items.values())if(q.id!==ignoreQueue&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&q.meta.review_target?.head===target.head)return 'existing same-change record review';
+  for(const id of runs)for(const artifact of state.runs.get(id)?.report?.artifacts??[]){
+    // A producer's explicit current-source review locator is evidence of an
+    // attempt, including outside-org manual receipts. Never probe another
+    // identity to turn unreadability into absence.
+    if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0]))return 'same-change source-owner review reference UNKNOWN; retain without external probe';
+  }
   for(const e of events){
     if(e.type==='change.reviewed'&&e.item===item.id&&e.head===target.head)return 'recorded same-change verdict';
     if(e.type==='review.verdict'&&item.runs.includes(e.run)&&matches(e,e.run))return 'recorded same-change verdict';
     if(e.type==='note.added'&&e.decision&&tokens.has(e.id)&&/review/i.test(e.text??'')){
       const named=(e.text.match(/\b[a-f0-9]{40,64}\b/g)??[]);
-      if(named.includes(target.head)||!named.length&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))))return 'recorded same-change independent review hold';
+      const atNote=item.runs.filter(id=>(state.runs.get(id)?.started.seq??Infinity)<e.seq).at(-1);
+      if(named.includes(target.head)||!named.length&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))||e.id===item.id&&runs.has(atNote)&&(state.runs.get(atNote)?.report?.seq??Infinity)<e.seq))return 'recorded same-change independent review hold';
     }
   }
   const pending=(actions,file)=>Object.entries(actions??{}).some(([key,value])=>{

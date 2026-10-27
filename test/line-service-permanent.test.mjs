@@ -17,7 +17,7 @@ function fixture(t){
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,base=f.git('rev-parse','HEAD');fs.writeFileSync(path.join(f.cwd,'source'),'actual changed source');f.git('add','source');f.git('commit','-qm','Source change');
   const head=f.git('rev-parse','HEAD'),workspace=path.join(f.ownerRoot,'review-lane');f.git('worktree','add','-qb','lane/review-source-1',workspace);
   const sourceText=`---\nrun: R-0\noutcome: done\nsummary: Landed source.\nartifacts:\n  - "Commit: ${head}"\n---\n`;fs.writeFileSync(path.join(org,'reports/R-0.md'),sourceText);
-  const target={head,base,reportHash:hash(sourceText),evidence:path.join(org,'reports/R-0.md')},key=`ENG-1:${head}`,directory=serviceDirectory(org,identity),owner={controller:'brain',legacy:false,release:{id:'source',root:sourceRoot,identity:gitProject(sourceRoot).identity}};
+  const target={head,base,reportHash:hash(sourceText),evidence:path.join(org,'reports/R-0.md')},key=`ENG-1:${head}`,directory=serviceDirectory(org,identity),owner={controller:'brain',legacy:false,release:{id:'source',root:sourceRoot,commit:null,identity:gitProject(sourceRoot).identity}};
   const text='---\nrun: R-1\noutcome: done\nsummary: Completed independent judgment.\nverdict: FAIL\nproposals: []\n---\nVerdict: **FAIL**\n- [Major] source:1 - correction remains independently owned.\n';fs.writeFileSync(path.join(org,'reports/R-1.md'),text);
   transact(org,()=>({add:[{type:'item.added',id:'G-1',kind:'goal',title:'Goal'}, {type:'item.added',id:'ENG-1',role:'engineer',title:'Source',parent:'G-1'},
     {type:'run.started',id:'R-0',item:'ENG-1',workspace:f.cwd},{type:'run.claimed',run:'R-0',record:org,project:identity,owner},
@@ -54,7 +54,7 @@ test('permanent flow completion retains missing verdict held reopened foreign-ow
       if(kind==='reopened')f.add([{type:'item.closed',id:'REV-1',as:'done'},{type:'item.reopened',id:'REV-1'}]);
       if(kind==='blocker')f.add([{type:'item.added',id:'ENG-99',role:'engineer',title:'Independent unfinished work'},{type:'link.added',blocker:'ENG-99',blocked:'REV-1'}]);
       if(kind==='question')f.add([{type:'item.added',id:'HUM-1',role:'human',parent:'REV-1',title:'Reserved decision',meta:{operator_reserved:true}}]);
-      if(kind==='owner')f.add([{type:'run.claimed',run:'R-1',record:f.org,project:f.identity,owner:{controller:'foreign',release:{id:'source',root:sourceRoot},legacy:false}}]);
+      if(kind==='owner')f.add([{type:'run.claimed',run:'R-1',record:f.org,project:f.identity,owner:{...f.context().state.runs.get('R-1').owner,controller:'foreign'}}]);
       assert.throws(()=>recordReviewCompletion(f.args),/verdict|judgment|reopened|blocker|OWNED|controller/i);assert.equal(f.context().state.items.get('REV-1').closed,null);
     }finally{release();}
   }

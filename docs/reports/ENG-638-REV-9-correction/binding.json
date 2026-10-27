@@ -1,0 +1,157 @@
+{
+  "schema": "review-correction-disposition/v1",
+  "run": "R-892",
+  "item": "ENG-638",
+  "review": "REV-9",
+  "original_source_item": "ENG-635",
+  "original_source_run": "R-880",
+  "reviewer_run": "R-889",
+  "verified_by": "lane-line-eng-638--245092-f14c55",
+  "verified_at": "2026-10-27T02:57:48.462Z",
+  "lane_baseline": "291c4da2e2dfecda82c8626588ae841d7cc21a28",
+  "finding": {
+    "severity": "Major",
+    "location": "test/helpers/session-live.mjs:100",
+    "disposition": "corrected in existing landed source; specific correction evidence bound; captured FAIL unchanged"
+  },
+  "immutable_review_target": {
+    "head": "dcd04839184dfeeeefe713db7a74783d531a738a",
+    "base": "eb0ba252714f4556d21a5fd87a00023a64474bf8",
+    "reportHash": "5a398f101d2198e19acf01eda4eb91309941c3da3143ed1b6c546375587c104d",
+    "evidence": "/Users/rewt/development/rewt/.org/reports/R-880.md",
+    "diff_sha256": "2e8900cb3d9500ae5303b39e2e8c37a6cd3749d04667b00f745c0a5d5dd31028",
+    "dispatch": "/Users/rewt/development/rewt/.org/dispatch/cd990fb6-d03f-4e5a-b556-f60d515a926c.json",
+    "scope": {
+      "base": "eb0ba252714f4556d21a5fd87a00023a64474bf8",
+      "commits": [
+        "dcd04839184dfeeeefe713db7a74783d531a738a"
+      ],
+      "claims": [
+        "dcd04839184dfeeeefe713db7a74783d531a738a"
+      ],
+      "unresolved": [],
+      "deferred": false
+    }
+  },
+  "corrected_landing": {
+    "base": "eb0ba252714f4556d21a5fd87a00023a64474bf8",
+    "head": "59e96da75d9912db1e9287fe853278b1cbf87609",
+    "commits": [
+      "dcd04839184dfeeeefe713db7a74783d531a738a",
+      "59e96da75d9912db1e9287fe853278b1cbf87609"
+    ],
+    "verified_by": "lane-line-eng-635--d52c9a-d3d5ba"
+  },
+  "focused": {
+    "head": "d83b7e4de75d1e37b505968b3ece02a4165cbac0",
+    "command": "NODE_OPTIONS=--max-old-space-size=256 /Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/run.mjs --test-name-pattern=\"^(fake-native fixture|in-process planning|STOP or terminal replacement|A2 opted-in)\" test/session-fixture-isolation.test.mjs test/session-live.test.mjs",
+    "node_version": "v20.19.4",
+    "exit_code": 0,
+    "tap_totals": [
+      {
+        "tests": 48,
+        "suites": 0,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 44,
+        "todo": 0
+      }
+    ],
+    "execution_attempts": 1,
+    "duration_s": 19.870423667
+  },
+  "blobs": [
+    {
+      "file": "test/helpers/session-live.mjs",
+      "tested": "6ea2b30a3c6e3a41b0e0204fd196e875b0c53b2d",
+      "corrected_landing": "6ea2b30a3c6e3a41b0e0204fd196e875b0c53b2d",
+      "lane_baseline": "6ea2b30a3c6e3a41b0e0204fd196e875b0c53b2d"
+    },
+    {
+      "file": "test/session-fixture-isolation.test.mjs",
+      "tested": "63489a78fc67e76b804c04fe73adb260766d2a3a",
+      "corrected_landing": "63489a78fc67e76b804c04fe73adb260766d2a3a",
+      "lane_baseline": "63489a78fc67e76b804c04fe73adb260766d2a3a"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-635/R-880/landing.json",
+      "sha256": "a3068923fdf856f2ddc958005688757a874718f6351a54b58d9d936c7cfd0a73"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-635/R-880/rebased-source.diff",
+      "sha256": "cccdb39104e7b848ae3e1a13451db445846a40fd6af4742c2a44c7649df3f033"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-635/R-880/focused-gate.json",
+      "sha256": "38912d14b15e816881c0f653d17742e46351c97ebe80dfaac6d405a68ee20e05"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-635/R-880/focused-execution.json",
+      "sha256": "b20ab4f612ad17226ef6ed22c075fdbc906ec43fd32b0b4f87ccb173b1c079c5"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-635/R-880/focused.tap",
+      "sha256": "14e90566f4e2ac41ddf657bc71491f8990c38e12d539b305c5ee2746434381fd"
+    }
+  ],
+  "inherited_manifest_verified": [
+    {
+      "file": "source.diff",
+      "sha256": "cccdb39104e7b848ae3e1a13451db445846a40fd6af4742c2a44c7649df3f033"
+    },
+    {
+      "file": "rebased-source.diff",
+      "sha256": "cccdb39104e7b848ae3e1a13451db445846a40fd6af4742c2a44c7649df3f033"
+    },
+    {
+      "file": "whole-file-gate.json",
+      "sha256": "3a4dca40eef391fef99db5f2b3b81861447af9cea2939cc28c9fe128acf5f963"
+    },
+    {
+      "file": "whole-file.tap",
+      "sha256": "08ab61f854448cbfc9b499a1a373fba771144d201668a2bb5b8c4332eb98ab6f"
+    },
+    {
+      "file": "focused-gate.json",
+      "sha256": "38912d14b15e816881c0f653d17742e46351c97ebe80dfaac6d405a68ee20e05"
+    },
+    {
+      "file": "focused.tap",
+      "sha256": "14e90566f4e2ac41ddf657bc71491f8990c38e12d539b305c5ee2746434381fd"
+    },
+    {
+      "file": "diagnostic.tap",
+      "sha256": "eb65c1e8b7fe94a9b8f8aad8f0b4a823d6dd0368095a63680d2d8e4edabf7157"
+    },
+    {
+      "file": "diagnostic-execution.json",
+      "sha256": "dc39aafcf8e405847e79258959421e4ab7b123e19a7b13fe90c184b2f8087f6f"
+    },
+    {
+      "file": "promote.log",
+      "sha256": "852a1c2e7748d1a0dbdb84b699f6c165b92c8f5013f8a33104099fe038293bba"
+    },
+    {
+      "file": "promotion-waiver.json",
+      "sha256": "812a1d09c959cb3106b3907fe6df036bb3fd5b10e435c310d1b0516731d774d7"
+    },
+    {
+      "file": "prepromote.json",
+      "sha256": "a2dd32e5f8286e7e301b2c234376cd792bf340229d00665607cd599bed7410e5"
+    },
+    {
+      "file": "postpromote.json",
+      "sha256": "bc053e65568117bdc5f8d226cd6923affe578c5d599f013e5dd82a930bbaee96"
+    }
+  ],
+  "new_test_executions": 0,
+  "limits": [
+    "44 skipped controls remain unrun",
+    "Original review verdict remains FAIL at its captured immutable tuple",
+    "No automatic second review; this is the single formal correction under REV-9",
+    "Full final-release coverage and actual live acceptance remain with the release coordinator"
+  ]
+}

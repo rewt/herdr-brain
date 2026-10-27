@@ -65,8 +65,8 @@ test('a changed supervisor address recovers only the exact zero-effect pre-journ
   const original={state:'held',at:'2026-10-27T00:00:00Z',error:'dispatch: '+reason,receipt:{status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_FAILED',reason}),stderr:'dispatch: '+reason}};
   fs.writeFileSync(path.join(directory,'effects.json'),JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:original}}));
   s.pass();assert.equal(f.calls.length,0,'an unchanged missing address never retries');
-  fs.writeFileSync(path.join(f.repo,'.promote.json'),JSON.stringify({to:'supervisor-test'}));
-  f.service().pass();f.service().pass();assert.equal(f.calls.length,1);assert.equal(f.calls[0].args[1],item);
+  const changed={env:{...f.env,MONITOR_SUPERVISOR_AGENT:'supervisor-test'}};
+  f.service(changed).pass();f.service(changed).pass();assert.equal(f.calls.length,1,fs.readFileSync(path.join(directory,'passes.jsonl'),'utf8'));assert.equal(f.calls[0].args[1],item);
   const actions=JSON.parse(fs.readFileSync(path.join(directory,'effects.json'))).actions;
   assert.deepEqual(actions[key].receipt,original.receipt);assert.ok(actions[key].prejournal_recovery);
   assert.equal(actions[actions[key].prejournal_recovery.key].state,'complete');

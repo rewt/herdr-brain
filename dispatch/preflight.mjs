@@ -60,7 +60,7 @@ export function preflightContinuation({journal,repo,org,common,root=implementati
   if(job.native_launch_attempted!==false&&!terminalZero&&!original)return null;
   const capacity=job.failure?.kind==='capacity'||capacityCodes.has(failure?.code)||/^(?:review|session) cap \d+ reached:/.test(job.error)?capacityEvidence({job,journal,org,common,failure,terminal}):null;
   if(/unknown|uncertain/i.test(job.error??'')&&!capacity&&!original)return null;
-  const files=['dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs','line-service/review-queue.mjs','line-service/review-group.mjs','dispatch/session-cap.mjs','dispatch/unlanded-cap.mjs'];
+  const files=['dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs','dispatch/launch-guard.mjs','lib/item-launch-hold.mjs','lib/worker-brief.mjs','line-service/review-queue.mjs','line-service/review-group.mjs','dispatch/session-cap.mjs','dispatch/unlanded-cap.mjs'];
   const capability=hash(JSON.stringify(files.map(file=>[file,hash(fs.readFileSync(path.join(root,file)))])));
   if(!capacity&&job.preflightContinuations?.some(p=>p.capability===capability))return null;
   const terminalHash=terminal?hash(JSON.stringify(terminal)):null;

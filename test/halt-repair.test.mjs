@@ -39,11 +39,21 @@ test('zero-ready passes never file a repair and completed idle passes deduplicat
   f.item();const lock=noticeLock(path.join(f.directory,'pass.lock'));
   try{
     const observe=()=>haltObservation({...f.read(),identity:f.identity,config:f.config});
-    const pass=id=>completeHaltPass({repo:f.repo,org:f.org,env:f.env,pass:id,observation:observe(),route:'engineer-xhigh',after:3,audit:path.join(f.directory,'passes.jsonl'),effects:path.join(f.directory,'effects.json')});
+    let previous;
+    const pass=id=>{const result=completeHaltPass({repo:f.repo,org:f.org,env:f.env,pass:id,previous,observation:observe(),route:'engineer-xhigh',after:3,audit:path.join(f.directory,'passes.jsonl'),effects:path.join(f.directory,'effects.json')});previous=result.progress;return result;};
     assert.equal(pass('one').count,1);assert.equal(pass('two').count,2);const third=pass('three');assert.ok(third.item);
-    assert.equal(pass('three').repair_item,third.item,'a repeated completed pass is a readback, not a second count');
+    assert.equal(pass('three').item,third.item,'a repeated completed pass is a readback, not a second count');
     assert.equal(pass('four').item,third.item);assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,1);
   }finally{lock();}
+  assert.equal(f.read().events.some(e=>e.type==='line-service.halt-pass'),false,'routine counts never enter the event record');
+});
+
+test('selection and final launch use the same ancestor hold while independent ready work still admits',t=>{
+  const f=fixture(t);f.add([{type:'item.added',id:'G-1',kind:'goal',title:'Actual reserved ancestor',meta:{reserved:true}}]);
+  f.item();f.add([{type:'item.updated',id:'ENG-1',fields:{parent:'G-1'}}]);f.item('ENG-2');
+  f.service({haltAfter:100}).pass();
+  assert.equal(f.calls.filter(a=>a[1]==='ENG-1').length,0);assert.equal(f.calls.filter(a=>a[1]==='ENG-2').length,1);
+  assert.throws(()=>checkDispatchEligibility({org:f.org,item:'ENG-1',common:f.identity,token:'same'},'/unused'),/G-1 is closed\/held\/reserved/);
 });
 
 test('review activity and detached acknowledgements do not hide a stall; productive native engineering does',t=>{

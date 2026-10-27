@@ -506,8 +506,8 @@ engineering, the same line files and immediately admits one ordinary halt-repair
 engineer. `HERDR_LINE_HALT_PASSES` sets a positive completed-pass threshold. A
 detached acknowledgement or unrelated review does not reset that count. Native
 engineering progress, an observed productive engineer, or changed ready/hold/
-routing inputs resets the episode. The record retains the counter and one item;
-full item/report/hold observations remain in `passes.jsonl`. Pending, working,
+routing inputs resets the episode. Counters and full item/report/hold observations
+remain in the diagnostic journal; only the repair intent enters the record. Pending, working,
 held and uncertain repair owners exclude another repair; completion permits a
 new owner only after changed inputs and another counted stall. Actual admission
 still uses the existing capacity, native, ownership, reserved and STOP/HOLD gates.

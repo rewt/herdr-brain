@@ -1,5 +1,5 @@
-// Completed engineering-idle passes are record facts. One existing line owns
-// the pass lock; the record transaction deduplicates intent across lost replies.
+// Completed engineering-idle counts stay in the existing diagnostic journal.
+// The record transaction deduplicates only the repair intent across lost replies.
 // This module files ordinary engineering work, never grants launch authority.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,31 +24,31 @@ export function haltObservation({state,events,identity,config,occupancy,actions=
   const causes=ready.map(i=>({item:i.id,created:i.created.seq,role:i.role,capability:i.capability,route:i.meta.route,last_run:i.runs.at(-1)??null,report:state.runs.get(i.runs.at(-1))?.report?.file??null,
     holds:[held(i),...ancestors(state,i.id).map(held)],
     failures:Object.entries(actions).filter(([key])=>key.startsWith(`dispatch:${i.id}:`)).map(([key,e])=>[key,canonicalFailure(e.error)])}));
-  const source=['line-service/line-service.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
+  const source=['line-service/line-service.mjs','line-service/halt-repair.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
   return {ready:ready.map(i=>i.id),productive,progress,causes,signature:hash([causes,progress,config.routes,config.selection_policy,source])};
 }
 
-export function completeHaltPass({repo,org,env,pass,observation,route,after=3,audit,effects}) {
+export function completeHaltPass({repo,org,env,pass,previous,observation,route,after=3,audit,effects}) {
   if(!Number.isSafeInteger(after)||after<1)throw Error('halt repair threshold must be a positive completed-pass count');
   const binding=serviceRecordBinding({repo,org,env});
+  if(previous&&(previous.project!==binding.identity||previous.org!==org||!Number.isSafeInteger(previous.count)||previous.count<0))throw Error('halt progress project/count binding changed');
+  if(previous?.pass===pass)return {...previous,progress:previous,existing:true,dispatch:false};
+  const idle=observation.ready.length>0&&observation.productive.length===0;
+  const count=idle?(previous?.signature===observation.signature?previous.count+1:1):0;
+  const episode=hash([binding.identity,org,observation.signature]);
+  const progress={project:binding.identity,org,pass,signature:observation.signature,episode,count,item:null};
+  if(!idle||count<after)return {progress,episode,count,item:null,dispatch:false};
   return transact(org,(events,state)=>{
     serviceRecordBinding({repo,org,env});
     for(const file of [path.join(binding.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])
       if(fs.existsSync(file))throw Error('STOP/HOLD prevents halt repair intent');
     // Input changed after the completed scan: let the next real pass observe it.
     if(JSON.stringify(readyItems(state).map(i=>i.id).sort())!==JSON.stringify([...observation.ready].sort()))throw Error('halt ready inputs changed before record intent');
-    const rows=events.filter(e=>e.type==='line-service.halt-pass'&&e.project===binding.identity&&e.org===org);
-    const repeated=rows.find(e=>e.pass===pass);if(repeated)return {add:[],result:{...repeated,existing:true}};
-    const prior=rows.at(-1),idle=observation.ready.length>0&&observation.productive.length===0;
-    const count=idle?(prior?.signature===observation.signature?prior.count+1:1):0;
-    const episode=hash([binding.identity,org,observation.signature]);
-    const row={type:'line-service.halt-pass',project:binding.identity,org,pass,signature:observation.signature,episode,count,threshold:after,audit,effects};
-    if(!idle&&!prior?.count)return {add:[],result:{count:0,item:null,dispatch:false}};
     const previous=[...state.items.values()].filter(repair);
     // Pending, working, held and ambiguous owners are exclusive even if the
     // cause changes. A completed owner is exclusive for its unchanged episode.
     const existing=previous.find(i=>!['done','dropped'].includes(itemStatus(state,i.id)))??previous.find(i=>i.meta.halt_episode===episode);
-    let item=existing?.id,add=[row];
+    let item=existing?.id,add=[];
     if(idle&&count>=after&&!existing){
       item=nextItemId(state,{kind:'work',role:'engineer'});
       const evidence=`Completed pass ${pass}; ${audit}; ${effects}; ready items ${observation.ready.join(', ')}. Original effects and uncertain requests remain authoritative.`;
@@ -59,8 +59,8 @@ export function completeHaltPass({repo,org,env,pass,observation,route,after=3,au
           scope:`One bounded diagnosis/fix of episode ${episode}. ${evidence} Do not create recursive halt repairs or take reserved actions. File unrelated work separately.`,
           evidence,halt_evidence:{audit,effects,pass,signature:observation.signature},halt_pass:pass,halt_threshold:after}});
     }
-    row.repair_item=item??null;
-    const mutation={add,result:{episode,count,item:item??null,existing:Boolean(existing),dispatch:idle&&count>=after&&Boolean(item)&&itemStatus(state,item)!=='done'}};
+    progress.item=item??null;
+    const mutation={add,result:{progress,episode,count,item:item??null,existing:Boolean(existing),dispatch:Boolean(item)&&!['done','dropped'].includes(itemStatus(state,item))}};
     return protectRecordMutation({org,state,events,command:'automatic halt repair',mutation});
   },{actor:'line-service',strictTail:true,lockOptions:{recover:false}}).result;
 }

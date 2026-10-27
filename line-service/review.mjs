@@ -13,9 +13,10 @@ import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewComm
 import {canonical} from '../messages/schema.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {additionalTarget,disjointCapture,captureEvidence} from './review-targets.mjs';
+import {producerReviewObservation} from './review-observation.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const capabilityFiles = ['line-service/review.mjs','line-service/review-targets.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
+const capabilityFiles = ['line-service/review.mjs','line-service/review-observation.mjs','line-service/review-targets.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
 const capability = capabilityFiles.map(file => createHash('sha256').update(fs.readFileSync(path.join(codeRoot, file))).digest('hex'));
 
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -70,7 +71,9 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   const runtimeAttempt=v=>['stage','review','reviewer','verdict','qualification','native_launch_attempted','worker','launchProcess','deliveryRange','review_item','review_run'].some(k=>Object.hasOwn(v,k));
   const producerProof=(file,seen=new Set())=>{
     if(!file.startsWith(ownerEvidence+path.sep)||seen.has(file))return false;if(proofCache.has(file))return proofCache.get(file);seen.add(file);
-    const v=read(file);if(!v||v.run!==capturedRun||runtimeAttempt(v))return false;
+    const v=read(file);if(!v||runtimeAttempt(v))return false;
+    if(producerReviewObservation(v,{events,state,item:item.id,run:capturedRun,identity,nativeHeads})){proofCache.set(file,true);return true;}
+    if(v.run!==capturedRun)return false;
     // A copied foreign reviewer outcome is an observation, not an attempt for
     // its observer's build. Bind every copied row to the actual existing record.
     const t=v.target,q=state.items.get(t?.item),judgment=events.find(e=>e.seq===t?.review?.seq&&e.type==='change.reviewed'&&e.review_run===t?.run&&e.review_item===t?.item&&e.item===t?.review?.item&&e.head===t?.review?.head);

@@ -29,6 +29,7 @@ import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal} from '
 import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 import {haltObservation,completeHaltPass} from './halt-repair.mjs';
+import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -49,6 +50,10 @@ function replayNoticeAudit(file,effects){
   const text=bytes.toString('utf8');if(text&&!text.endsWith('\n'))throw Error('notice audit tail is incomplete; preserve it');
   const restored=new Set();for(const line of text.split('\n').filter(Boolean)){const row=JSON.parse(line);
     if(row.action==='review-health'&&row.health){if(row.health.project!==effects.identity||row.health.org!==effects.org)throw Error('diagnostic health project binding changed');effects.review_health=row.health;}
+    if(row.action==='engineering-idle'&&row.progress){
+      const p=row.progress;if(p.project!==effects.identity||p.org!==effects.org||!Number.isSafeInteger(p.count)||p.count<0||typeof p.pass!=='string'||!p.signature)throw Error('halt progress audit binding changed');
+      effects.halt_progress=p;
+    }
     const notice=row.notice_record;if(!notice)continue;const {key,entry}=notice;
     if(!entry||!Number.isSafeInteger(entry.count)||entry.count<1||!Number.isFinite(Date.parse(entry.first_at)))throw Error('notice audit source/count is inconsistent');
     noticeBoundary(key,entry,row.boundary);
@@ -406,7 +411,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           try{sourceGit(repo,['merge-base','--is-ancestor',item.meta.review_target.head,cutoff.canonical_head]);timings.historical_review_skipped++;continue;}catch{/* Unlanded/unknown targets are errors, never historical skips. */}
         }
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); continue; }
-        if (reserved(item) || item.meta.hold || item.meta.held) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment'); continue; }
+        const hold=itemLaunchHold(snapshot.state,item.id);
+        if (reserved(item) || hold) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment',hold?{subject:hold.subject}:{}); continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
           let continuation,retryAdmission,briefRecovery,dispatchKey=key;
@@ -439,7 +445,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
-            if (!current || current.closed || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || current.meta.hold || current.meta.held || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if (!current || itemLaunchHold(fresh.state,item.id) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(continuation){
               const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});
               if(!checked||checked.request_sha256!==continuation.request_sha256||checked.capability!==continuation.capability)throw Error('original preflight progress/source changed before continuation');
@@ -473,8 +479,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const route=config.routes?.['engineer-xhigh']?'engineer-xhigh':routeFor({role:'engineer',meta:{}},config);
           const completedPass=randomUUID();
           log({action:'engineering-idle-observation',pass:completedPass,observation:observed});
-          const repair=completeHaltPass({repo,org,env:childEnv,pass:completedPass,observation:observed,route,after:haltAfter,audit:path.join(directory,'passes.jsonl'),effects:journal});
+          const repair=completeHaltPass({repo,org,env:childEnv,pass:completedPass,previous:effects.halt_progress,observation:observed,route,after:haltAfter,audit:path.join(directory,'passes.jsonl'),effects:journal});
           log({action:'engineering-idle',...repair});
+          effects.halt_progress=repair.progress;save();
           if(repair.dispatch){
             // One diagnosis has an independent scheduling allowance; actual
             // native/shared capacity is still recounted by ordinary admission.

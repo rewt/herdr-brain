@@ -8,6 +8,7 @@ import {assertOwner,readOwnedRun} from '../lib/run-owner-guard.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {bundleRelease} from '../lib/releases.mjs';
 import {dispatchInput} from '../line-service/phase1.mjs';
+import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 
 export const launchDigest = bytes => createHash('sha256').update(bytes).digest('hex');
 const changed = (reason, input) => {
@@ -20,16 +21,8 @@ export function checkDispatchEligibility(job, journal) {
     release:job.release,observed_seq:events.at(-1)?.seq??0};
   const refuse=(reason,subject=job.item)=>changed(reason,{...input,subject});
   if(tornTail)refuse('incomplete record input');
-  const item=state.items.get(job.item),seen=new Set();
-  for(let id=job.item;id;){
-    if(seen.has(id))refuse(`ancestor cycle at ${id}`,id);
-    seen.add(id);
-    const current=state.items.get(id);
-    if(!current)refuse(`item/ancestor ${id} is missing`,id);
-    if(current.closed||current.meta.hold||current.meta.held||current.meta.operator_reserved||current.meta.reserved||current.role==='human')
-      refuse(`item/ancestor ${id} is closed/held/reserved`,id);
-    id=current.parent;
-  }
+  const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item);
+  if(hold)refuse(hold.reason,hold.subject);
   if(job.run){
     const run=assertOwner(readOwnedRun(job.org,job.run,events),job.ownership);
     if(item.runs.at(-1)!==job.run||run.report||run.abandoned)refuse('current run was superseded or finished');

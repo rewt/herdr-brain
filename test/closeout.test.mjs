@@ -38,6 +38,8 @@ import { readProjectPolicy } from '../lib/config-policy.mjs';
 import { kickCloseout } from '../lib/closeout.mjs';
 import {closeoutEvaluations} from '../lib/closeout.mjs';
 import {readCloseoutObservations,appendCloseoutObservation} from '../lib/closeout-diagnostics.mjs';
+import {closeoutWaitId,closeoutWaitState} from '../lib/closeout-status.mjs';
+import {unresolvedCloseoutEffect} from '../lib/closeout.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const closer = fileURLToPath(new URL('../supervisor/closeout.mjs', import.meta.url));
@@ -613,6 +615,58 @@ test('continuity service reconciles a successful tab close with no saved closed 
   service.pass();assert.equal(evaluations(f).at(-1).completed,true);assert.equal(fs.existsSync(f.lane),false);
   assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(f.read().actions.filter(a=>a[0]==='tab'&&a[1]==='close').length,1);
   assert.equal(drains.length,4);
+});
+
+test('midpoint progress line passes carry a retired session to physical removal and resolve its ready twin with no decision or wait',t=>{
+  const f=setup(t,{merged:true});f.append([{type:'line-service.phase0',id:'bound',project:f.common,repo:f.repo,org:f.org,main:'main',canonical_head:f.head}]);
+  const ready=f.report()[0].closeout_targets.find(t=>t.signal==='ready'),rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),landed=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  const drains=[],service=createLineService({repo:f.repo,org:f.org,to:'brain-chat',env:f.env,maxStarts:0,recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
+    const keys=JSON.parse(args[args.indexOf('--keys')+1]),result=f.drain({keys,retrySafe:true,sessionsOnly:args.includes('--sessions-only')});
+    drains.push([keys[0],args.includes('--sessions-only'),result]);return{status:0,stdout:JSON.stringify(result),stderr:''};
+  }});
+  service.pass();
+  const retired=evaluations(f).findLast(e=>e.key===landed.key);assert.equal(retired.sessions_retired,true,JSON.stringify(drains));assert.equal(retired.waiting.next,'physical');
+  assert.match(evaluations(f).findLast(e=>e.key===ready.key).reason,/^landed or parked request owns/);
+  // The 052 flood stored a defect wait for this exact midpoint; it is old evidence, not a gate.
+  f.append([{type:'closeout.waiting',identity:f.common,key:landed.key,run:'R-1',item:'ENG-1',source:retired.source,revision:retired.revision,wait_id:closeoutWaitId(readCloseoutEntries(f.common).find(e=>e.key===landed.key),retired),
+    waiting:{owner:'line-service',defect:'No existing completion writer for this exact wait: bound sessions retired; physical cleanup remains queued',producers:[]}}]);
+  for(let pass=0;pass<4;pass++)service.pass();
+  assert.equal(fs.existsSync(f.lane),false,JSON.stringify(drains.map(d=>[d[0]===landed.key?'landed':'ready',d[1],d[2].evaluated?.[0]?.reason??d[2].evaluated?.[0]?.completed])));
+  assert.equal(evaluations(f).findLast(e=>e.key===landed.key).completed,true);
+  const twin=evaluations(f).findLast(e=>e.key===ready.key);assert.equal(twin.completed,true);assert.match(twin.reason,/retired by a later bound request/);
+  const all=events(f),state=fold(all);
+  assert.equal([...state.items.values()].filter(i=>i.role==='decision').length,0,'ordinary progress never becomes a decision');
+  assert.deepEqual(all.filter(e=>e.type==='closeout.waiting'&&e.revision!==undefined).map(e=>e.waiting.defect),['No existing completion writer for this exact wait: bound sessions retired; physical cleanup remains queued'],'only the injected historical wait exists');
+  assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(f.read().actions.filter(a=>a[0]==='tab'&&a[1]==='close').length,1);
+  const count=drains.length;for(let pass=0;pass<3;pass++)service.pass();assert.equal(drains.length,count,'settled history is not re-drained');
+});
+
+test('session_bound supersession binds its predecessor once under the current and historical event names',t=>{
+  const f=setup(t,{merged:true});f.report();const key=closeoutKey(fs.realpathSync(f.lane),'R-1','ready');
+  f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane,meta:{lane:'topic'}}]);
+  for(const type of ['run.session_bound','run.session_bound','run.session-bound']){
+    const [bound]=f.append([{type,run:'R-2',session:{agent_session_id:'later'}}]);
+    assert.deepEqual(bound.closeout_targets.map(t=>[t.run,t.signal,t.key]),[['R-1','ready',key]],type);
+    assert.ok(bound.closeout_targets[0].panes.every(p=>p.run==='R-1'),'no successor identity is fabricated');
+    assert.equal(readCloseoutEntries(f.common).filter(e=>e.run==='R-1'&&e.signal==='ready').length,1,type);
+  }
+  assert.ok(closeoutRevision(readCloseoutEntries(f.common).find(e=>e.key===key),events(f))>events(f).find(e=>e.type==='report.ingested').seq);
+});
+
+test('code handoff after a journaled exit intent records zero native start and strands no UNKNOWN intent',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),key=rows[0].closeout_targets.find(t=>t.signal==='landed').key;
+  let moved=false;const log=f.options.log;
+  f.options.log=row=>{log(row);if(row.action==='agent-exit-requested'&&!moved){moved=true;f.git(['checkout','-qb','moved-main']);}};
+  let first;try{first=f.drain({keys:[key],sessionsOnly:true});}finally{f.options.log=log;if(moved)f.git(['checkout','-q','main']);}
+  assert.equal(moved,true);assert.deepEqual(first.evaluated,[],JSON.stringify(first));assert.ok(first.restart?.keys?.includes(key),JSON.stringify(first));
+  assert.deepEqual(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt'),[],'the refused guard ran before any native command');
+  const all=events(f),intent=all.find(e=>e.type==='closeout.effect'&&e.key===key&&e.outcome.action==='agent-exit-requested'),unsent=all.filter(e=>e.type==='closeout.command-not-started');
+  assert.equal(unsent.length,1);assert.equal(unsent[0].intent,intent.effect);assert.equal(unsent[0].native_started,false);assert.equal(unsent[0].code,'CLOSEOUT_CODE_CHANGED');
+  const entry=readCloseoutEntries(f.common).find(e=>e.key===key);assert.equal(unresolvedCloseoutEffect(entry,all),undefined);
+  assert.equal(closeoutWaitState(all.find(e=>e.type==='closeout.waiting'&&e.waiting.producers?.[0]?.intent===intent.effect),all),'complete');
+  assert.equal(all.some(e=>e.type==='closeout.command-failed'),false);assert.ok(all.some(e=>e.type==='closeout.code-handoff'&&e.keys.includes(key)));
+  const next=f.drain({keys:[key],sessionsOnly:true});assert.equal(next.evaluated[0]?.sessions_retired,true,JSON.stringify(next));
+  assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1,'the first actual send happens once, after the handoff');
 });
 
 test('continuity tab-close readback protects present replaced held refused and unbound targets without another native effect',t=>{

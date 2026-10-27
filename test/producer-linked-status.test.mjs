@@ -2,7 +2,7 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import {closeoutWaitState,registerCloseoutWait,linkedCloseoutStatuses,nativeCloseoutWait,closeoutProducer} from '../lib/closeout-status.mjs';
+import {closeoutWaitState,registerCloseoutWait,linkedCloseoutStatuses,nativeCloseoutWait,closeoutProducer,closeoutNextStage,closeoutCommandNotStarted} from '../lib/closeout-status.mjs';
 import {closeoutRevision,bindCloseoutSources} from '../lib/closeout.mjs';
 import {outcomeFailure,uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
@@ -87,4 +87,28 @@ test('producer linked completed pass health remains diagnostic with no bulk reco
   service.pass();const row=fs.readFileSync(path.join(service.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).findLast(r=>r.action==='pass-complete');
   for(const field of ['unknown_open','unknown_oldest_min','unknown_settled','unknown_escalated'])assert.equal(row[field],0);
   assert.equal(loadEvents(f.env.ORG_DIR).events.some(e=>e.type?.includes('unknown')),false);
+});
+
+test('producer linked midpoint and ready-twin stages are owned progress while refusals and unknown intents stay single decisions',()=>{
+  const midpoint={revision:4,completed:false,sessions_retired:true,reason:'bound sessions retired; physical cleanup remains queued'};
+  assert.deepEqual(closeoutNextStage(entry,midpoint,events),{stage:'physical',ready:true});
+  for(let i=0;i<100;i++)assert.deepEqual(registerCloseoutWait(entry,midpoint,events,[entry]),[],'repeated folded progress registers no wait');
+  assert.equal(closeoutNextStage(entry,{...midpoint,sessions_retired:undefined},events),undefined,'the label alone is not a stage fact');
+  const ready={...entry,key:'d'.repeat(64),signal:'ready',panes:[]},owner={...ready,key:'e'.repeat(64),signal:'landed',source:{seq:4,type:'item.closed'}};
+  const twin={revision:4,completed:false,reason:'landed or parked request owns the remaining bound sessions; awaiting its retirement effects'};
+  const bound=append(events,[{type:'item.closed',id:'ENG-1',as:'done',closeout_targets:[{key:owner.key,panes:owner.panes}]}]);
+  assert.deepEqual(closeoutNextStage(ready,twin,bound,[ready,owner]),{stage:'twin-removal',ready:false});
+  assert.deepEqual(registerCloseoutWait(ready,twin,bound,[ready,owner]),[]);
+  assert.deepEqual(closeoutNextStage(ready,twin,append(bound,[{type:'closeout.evaluated',key:owner.key,completed:true}]),[ready,owner]),{stage:'twin-removal',ready:true});
+  assert.deepEqual(closeoutNextStage(ready,twin,bound,[ready]),{stage:'twin-removal',ready:true},'a pruned sibling is not a missing producer');
+  const refused={revision:4,completed:false,reason:'EPERM native refusal'};assert.equal(closeoutNextStage(entry,refused,events),undefined);
+  const [wait]=registerCloseoutWait(entry,refused,events,[entry]);assert.match(wait.waiting.defect,/native refusal/);
+  assert.deepEqual(registerCloseoutWait(entry,refused,append(events,[wait]),[entry]),[],'a true refusal is retained once');
+  const intent={type:'closeout.effect',effect:'intent',identity:entry.common,key:entry.key,source:entry.source,outcome:{action:'shell-close-requested',tab_id:'tab',panes:[{pane:'pane',terminal:'terminal'}]}};
+  assert.equal(closeoutNextStage(entry,midpoint,append(events,[intent]),[entry]),undefined,'an unresolved original intent is never progress');
+  const unsent=closeoutCommandNotStarted(entry,'intent','shell-close-requested',Object.assign(Error('closer code changed'),{code:'CLOSEOUT_CODE_CHANGED'}));
+  assert.deepEqual(closeoutNextStage(entry,midpoint,append(events,[intent,unsent]),[entry]),{stage:'physical',ready:true});
+  const native=nativeCloseoutWait(entry,{action:'shell-close-requested',tab_id:'tab'},'intent'),base=append(events,[intent,native]);
+  assert.equal(closeoutWaitState(native,append(base,[unsent,...linkedCloseoutStatuses(base,[unsent])])),'complete');
+  assert.equal(closeoutWaitState(native,append(base,[{...unsent,intent:'other'},...linkedCloseoutStatuses(base,[{...unsent,intent:'other'}])])),'pending');
 });

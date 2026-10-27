@@ -248,6 +248,22 @@ test('phase1 post-FF producer facts bind actual source ownership and keep the re
   assert.throws(()=>recordOwnLanding({...args,head:f.base}),/CAS/);
 });
 
+test('phase1 post-FF landing attributes a same-session continuation to its one open run, never its reported predecessor',t=>{
+  const f=fixture(t),actor=structuredClone(f.observation.agents[0]);actor.cwd=f.workspace;
+  const meta={agent:actor.name,pane:actor.pane_id,worker_workspace:actor.workspace_id,terminal_id:actor.terminal_id,agent_session_id:actor.agent_session.value};
+  const {type,record,project,owner}=f.context().events.find(e=>e.type==='run.claimed'),claim=run=>({type,run,record,project,owner});
+  f.add([{type:'run.updated',id:'R-1',meta},{type:'item.added',id:'ENG-2',title:'Continuation',role:'engineer'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:f.workspace,meta:{lane:'source',...meta}},claim('R-2'),
+    {type:'item.added',id:'ENG-3',title:'Second open owner',role:'engineer'},{type:'run.started',id:'R-3',item:'ENG-3',workspace:f.workspace,meta:{lane:'source',...meta}},claim('R-3')]);
+  const env={...f.env,HERDR_ENV:'1',HERDR_PANE_ID:actor.pane_id,HERDR_WORKSPACE_ID:actor.workspace_id,CODEX_THREAD_ID:actor.agent_session.value};
+  const args={canonical:f.cwd,workspace:f.workspace,base:f.base,head:f.heads[1],landedAt:'2026-10-27T01:30:00Z',env,call:()=>JSON.stringify({result:{agent:actor}})};
+  assert.throws(()=>recordOwnLanding(args),/ambiguous/,'two open runs on one native tuple stay ambiguous');
+  assert.equal(f.context().events.some(e=>e.type==='change.landed'),false);
+  f.add([{type:'run.abandoned',id:'R-3',note:'not the landing owner'}]);
+  const landed=recordOwnLanding(args).changes;assert.equal(landed.length,2);assert.ok(landed.every(c=>c.run==='R-2'&&c.item==='ENG-2'),JSON.stringify(landed));
+  assert.equal(f.context().events.filter(e=>e.type==='change.landed').every(e=>e.run==='R-2'&&e.landed_at===args.landedAt),true,'the reported predecessor is never bound and no time is invented');
+});
+
 test('phase1 only pre-effect lifecycle mutex refusal receives automatic closeout retry',()=>{
   assert.equal(safeCloseoutRetry({completed:false,reason:'locked: lane-promote.lock'}),true);
   for(const reason of ['EPERM native refusal','queued native identity changed','HOLD-WORKER-TAB-CLOSE','callback unknown','unconfirmed exit','ordinary unknown'])assert.equal(safeCloseoutRetry({completed:false,reason}),false);

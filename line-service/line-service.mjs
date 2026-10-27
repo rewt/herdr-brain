@@ -34,7 +34,7 @@ import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.
 import {isDecision,decisionActivation,decisionRoute,decisionBrief,decisionCandidates,queueDecision,applyDecision,observeDecisionConsequences} from './decisions.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {queueOutcomeDecision} from './outcome-decision.mjs';
-import {registerCloseoutWait,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
+import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
 import {transact} from '../lib/store.mjs';
 export { reviewAttempt } from './review.mjs';
 
@@ -397,7 +397,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const observed = current(), evaluationRows=closeoutEvaluations(project.identity,org,observed.events),evaluations = new Map(evaluationRows.map(e => [e.key, e]));
         const ownedEntries=readCloseoutEntries(project.identity);
         for(const e of ownedEntries){const prior=evaluations.get(e.key);if(e.org!==org||e.project!==repo||!prior||prior.completed)continue;
-          if(!closeoutWait(e,prior,observed.events)){transact(org,events=>({add:registerCloseoutWait(e,prior,events,ownedEntries)}),{actor:'line-service'});stale=true;}
+          if(!closeoutNextStage(e,prior,observed.events,ownedEntries)&&!closeoutWait(e,prior,observed.events)){transact(org,events=>({add:registerCloseoutWait(e,prior,events,ownedEntries)}),{actor:'line-service'});stale=true;}
         }
         const linked=current();
         const entries = ownedEntries.filter(e => {
@@ -408,6 +408,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;
           if(prior){
+            // The closer owns its next stage: progress, never a missing-producer decision.
+            const next=closeoutNextStage(e,prior,linked.events,ownedEntries);
+            if(next){if(next.ready)return true;timings.closeout_retained++;return false;}
             const wait=closeoutWait(e,prior,linked.events),status=closeoutWaitState(wait,linked.events);
             if(['defect','failed'].includes(status)){
               effects.outcome_decisions??={};const key=`closeout:${e.key}`;
@@ -422,7 +425,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,evaluationRows,{batch:true,attempts:effects.closeout_attempts})){
           if(expired())break;
           const revision=closeoutRevision(entry,linked.events,linked.state),outcomeReadback=Boolean(evaluations.get(entry.key)&&closeoutWaitState(closeoutWait(entry,evaluations.get(entry.key),linked.events),linked.events)==='complete');
-          effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest([entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
+          const next=evaluations.get(entry.key)&&closeoutNextStage(entry,evaluations.get(entry.key),linked.events,ownedEntries);
+          effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest(next?[entry.key,revision,next.stage]:[entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
           effects.closeout_attempts[entry.key]=++attempt;save();
         }
       } catch (e) { note('closeout', e.message); }

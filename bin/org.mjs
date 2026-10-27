@@ -364,9 +364,13 @@ function add(argv) {
 }
 
 async function queueReview(argv) {
-  const { values, positionals } = args(argv, { head: { type: 'string' }, base: { type: 'string' } }, { min: 1, max: 1, usage: 'record queue-review R-n [--head SHA --base SHA]' });
+  const { values, positionals } = args(argv, { head: { type: 'string' }, base: { type: 'string' },'recover-inactive':{type:'boolean'},role:{type:'string'},resolution:{type:'string'},'decision-seq':{type:'string'},id:{type:'string'} }, { min: 1, max: 1, usage: 'record queue-review R-n [--head SHA --base SHA] [--recover-inactive --role supervisor --resolution OWN.json --decision-seq N --id STABLE]' });
   const { queueReviewMutation } = await import('../line-service/review-queue.mjs');
   const ctx = openOrg(), repo = gitProject(process.cwd()).canonical;
+  if(values['recover-inactive']){
+    const {recoverInactiveReview}=await import('../line-service/review-recovery.mjs');
+    const result=recoverInactiveReview({repo,org:ctx.dir,runId:positionals[0],head:values.head,base:values.base,resolution:values.resolution,decisionSeq:Number(values['decision-seq']),id:values.id,role:values.role});out(JSON.stringify(result)+'\n');return 0;
+  }
   if (loadEvents(ctx.dir).tornTail) throw new UserError('incomplete record tail prevents review queue creation');
   const { result } = mutate(ctx, (state, events) => queueReviewMutation({ state, events, org: ctx.dir, repo, runId: positionals[0], head: values.head, base: values.base }));
   out(JSON.stringify(result) + '\n');

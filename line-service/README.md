@@ -131,6 +131,34 @@ launch receipt, and recounts admission under the existing locks before handoff.
 Missing zero-native evidence, a live/unknown native attempt, permission/identity
 refusal, a different saved helper or an already spent continuation remains held.
 
+For the explicitly authorized inactive legacy attempts, the owning native
+supervisor uses the existing record queue entry from its own canonical checkout:
+
+```sh
+HERDR_BRAIN_ROOT=/absolute/shared/brain node /absolute/shared/brain/bin/org.mjs queue-review SOURCE_RUN --head ACTUAL_HEAD --base ACTUAL_BASE --recover-inactive --role supervisor --resolution /own/inactive-review.json --decision-seq OWN_DECISION_SEQ --id STABLE_ID
+```
+
+The decision is an existing normal `record note SOURCE_ITEM "..." --decision`
+by that actual canonical native supervisor, recording the delegated choice and
+the full source item/head. No new approval round is required. The resolution
+input names the actual tuple and original evidence, never a packet/admission head:
+
+```json
+{"item":"SOURCE_ITEM","run":"SOURCE_RUN","head":"ACTUAL_HEAD","base":"ACTUAL_BASE","evidence":"/own/.org/reports/SOURCE_RUN.md","attempts":["/own/archive/original-review.json","/own/archive/original-review.log"],"inactive":{"kind":"never-created","verified_by":"ACTUAL_OWN_SUPERVISOR","reviewer":null,"evidence":"/own/archive/OUTCOMES.md"}}
+```
+
+For a recorded absent reviewer use `kind: "absent"` and its known `reviewer.pane`;
+unknown agent/terminal/session values stay null. The control requires fresh native
+inventory and positive pane-not-found, source ownership/clean/head CAS, exact
+landed nonempty claimed source and immutable report bytes. Completed same-head
+verdicts are preserved. A durable intent precedes fsynced evidence copies and an
+exact-change resolution event. Originals, native intents, saved jobs and old
+caps remain; at most one fresh cap1 normal-route review is queued. No boundary is
+reset and no direct lane-review or native start occurs in this control. Changed
+evidence/native ambiguity refuses that effect. A damaged archive cannot block
+an unrelated change. Brain and BCH supervisors alone execute their own controls;
+the implementation worker performs no BCH action.
+
 Ingest and conditional close retry through their idempotent contracts. Named
 closeout retries automatically on new target revisions or a pre-effect lifecycle
 mutex/budget deferral with no unresolved native intent. A pre-effect changed-code

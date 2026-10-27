@@ -11,6 +11,7 @@ import {readReport} from '../lib/report.mjs';
 import {readOwnedRun,requireController,assertOwner} from '../lib/run-owner.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {serviceRecordBinding} from './record-inbox.mjs';
+import {reviewResolution} from './review-resolutions.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();
@@ -26,6 +27,7 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
   try{boundary??=phase0Boundary(events,{repo,org,identity});}catch(e){return {changes,holds:[{reason:e.message}]};}
   const tip=readGit(repo,['rev-parse',`refs/heads/${boundary.main??'main'}`]),seen=new Set();
   const eligible=new Set(readGit(repo,['rev-list',`${boundary.canonical_head}..${tip}`]).split('\n').filter(Boolean));
+  const authorized=new Map();for(const e of events)if(e.type==='review.recovery-completed'&&e.project===identity&&e.org===org&&e.target?.head)authorized.set(`${e.item}:${e.target.head}`,e);
   const settled=new Set([...state.items.values()].filter(i=>roleIs(i,'REV')&&i.meta.review_key).map(i=>i.meta.review_key));
   for(const e of events)if(e.type==='change.reviewed')settled.add(`${e.item}:${e.head}`);
   const landed=new Map();for(const e of events)if(e.type==='change.landed'&&e.project===identity&&eligible.has(e.head)){
@@ -37,9 +39,10 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
     // Two Git reads index the owed interval. Settled history performs no Git,
     // filesystem/native inventory or per-report hash read.
     const tokens=claimedCommitTokens(run.report.artifacts??[]);
-    const owed=head=>eligible.has(head)&&(!pendingOnly||!settled.has(`${item.id}:${head}`));
-    if(!(landed.get(run.id)??[]).some(owed)&&!tokens.some(token=>[...eligible].some(head=>head.startsWith(token)&&owed(head))))continue;
-    let claims;try{claims=[...new Set([...reviewScope({workspace:repo,base:boundary.canonical_head,head:boundary.canonical_head,artifacts:run.report.artifacts??[]}).claims,...(landed.get(run.id)??[])])];}
+    const backfills=[...authorized.values()].filter(e=>e.run===run.id&&e.item===item.id),candidates=[...eligible,...backfills.map(e=>e.target.head)];
+    const owed=head=>(eligible.has(head)||authorized.get(`${item.id}:${head}`)?.run===run.id)&&(!pendingOnly||!settled.has(`${item.id}:${head}`));
+    if(!(landed.get(run.id)??[]).some(owed)&&!backfills.some(e=>owed(e.target.head))&&!tokens.some(token=>candidates.some(head=>head.startsWith(token)&&owed(head))))continue;
+    let claims;try{claims=[...new Set([...reviewScope({workspace:repo,base:boundary.canonical_head,head:boundary.canonical_head,artifacts:run.report.artifacts??[]}).claims,...(landed.get(run.id)??[]),...backfills.map(e=>e.target.head)])];}
     catch(e){holds.push({item:item.id,run:run.id,reason:e.message});continue;}
     for(const head of claims) {
       if(!owed(head))continue;
@@ -51,11 +54,12 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
         if(!file||!path.resolve(file).startsWith(path.join(path.resolve(org),'dispatch')+path.sep))throw Error('original dispatch/source attribution missing');
         const dispatch=JSON.parse(fs.readFileSync(file,'utf8'));
         if(dispatch.item!==item.id||dispatch.run!==run.id||dispatch.common!==identity||dispatch.org!==org||dispatch.token!==start.meta.dispatch_attempt||dispatch.workspace!==run.workspace)throw Error('original source ownership/project attribution changed');
-        const base=git(repo,['rev-parse',`${head}^1`]),diff=git(repo,['diff','--no-ext-diff','--no-textconv',base,head]);
+        const authorization=authorized.has(key)?reviewResolution({events,org,item:item.id,head})?.event:null,base=authorization?.target.base??git(repo,['rev-parse',`${head}^1`]),diff=git(repo,['diff','--no-ext-diff','--no-textconv',base,head]);
         if(!diff)continue;
         const target={head,base,reportHash:run.report.sha256,evidence:reportFile,diff_sha256:hash(diff),dispatch:file,
-          scope:{base,commits:[head],claims:[head],unresolved:[],deferred:false}};
-        changes.push({item,run,target,cutoff:{id:boundary.id,seq:boundary.seq,head:boundary.canonical_head,main:boundary.main??'main',time_qualification:boundary.time_qualification??'intended source boundary; exact adoption-time head UNKNOWN'}});seen.add(key);
+          scope:authorization?.target.scope??{base,commits:[head],claims:[head],unresolved:[],deferred:false}};
+        if(authorization&&JSON.stringify(authorization.target)!==JSON.stringify(target))throw Error('authorized legacy source/evidence tuple changed');
+        changes.push({item,run,target,...(authorization?{authorization}:{}),cutoff:{id:boundary.id,seq:boundary.seq,head:boundary.canonical_head,main:boundary.main??'main',time_qualification:boundary.time_qualification??'intended source boundary; exact adoption-time head UNKNOWN'}});seen.add(key);
       }catch(e){holds.push({item:item.id,run:run.id,head,reason:e.message});}
     }
   }

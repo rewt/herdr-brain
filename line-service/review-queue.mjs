@@ -16,7 +16,7 @@ import { reviewAttempt } from './review.mjs';
 import { discoverChanges } from './phase1.mjs';
 
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const files = ['line-service/review-queue.mjs', 'line-service/review.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
+const files = ['line-service/review-queue.mjs', 'line-service/review.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
 const hashes = files.map(file => createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const git = (repo, args) => execFileSync('git', ['--no-optional-locks', '-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -41,42 +41,44 @@ export function queueConsumer({ run, env = process.env }) {
   for (let i = 0; i < files.length; i++) if (createHash('sha256').update(fs.readFileSync(path.join(root, files[i]))).digest('hex') !== hashes[i]) throw Error('loaded queue/dispatch implementation changed; wait for next real pass');
   return root;
 }
-function source({ state, events, org, repo, identity, runId, head, base }) {
+function source({ state, events, org, repo, identity, runId, head, base,env=process.env }) {
   const run = state.runs.get(runId), item = run && state.items.get(run.item);
   if (!run || !item || !roleIs(item, 'ENG') || !run.report) throw Error('review queue needs an immutable reported build run');
   if (roleIs(state.items.get(item.parent), 'REV')) throw Error('linked formal correction retains its original review; no automatic re-review chain');
   const current = readOwnedRun(org, run.id);
   requireController(current, 'brain'); assertOwner(current, { owner: run.owner, generation: run.owner_generation });
-  queueConsumer({ run });
+  queueConsumer({ run,env });
   const discovered=discoverChanges({state,events,org,repo,identity});
   const choices=discovered.changes.filter(c=>c.run.id===runId&&(!head||c.target.head===head));
   if(choices.length!==1)throw Error(`landed change target missing/ambiguous: ${discovered.holds.filter(h=>h.run===runId).map(h=>h.reason).join('; ')}`);
-  const {target,cutoff}=choices[0];
+  const {target,cutoff,authorization}=choices[0];
   if(base&&base!==target.base)throw Error('review base differs from captured landed change');
   try { git(repo, ['merge-base', '--is-ancestor', target.head, 'HEAD']); }
   catch { throw Error('review source is not actually landed in the canonical project'); }
-  return { run, item, target, cutoff };
+  return { run, item, target, cutoff,authorization };
 }
 function ignoreIntent(org, identity, item, target) {
   return { file: journalFor(org, identity), key: `review:${item.id}:${target.head}`, target, operation: 'record-queue' };
 }
 
 // Called inside the existing record transaction and promotion write guard.
-export function queueReviewMutation({ state, events, org, repo, runId, head, base, env = process.env }) {
+export function queueReviewMutation({ state, events, org, repo, runId, head, base, env = process.env,recoveryBinding }) {
   const project = gitProject(repo), identity = project.identity;
   if (project.checkout !== project.canonical) throw Error('queue-review uses the canonical project checkout');
   const record = findOrgDir({ cwd: repo, env: { ...env, ORG_DIR: '' } });
   if (!record || fs.realpathSync(record) !== fs.realpathSync(org)) throw Error('queue-review record differs from the actual project');
   openBoundary(org, repo, identity);
-  const bound = source({ state, events, org, repo, identity, runId,head,base }), { item, run, target } = bound;
+  const bound = source({ state, events, org, repo, identity, runId,head,base,env }), { item, run, target } = bound;
   if (head && head !== target.head || base && base !== target.base) throw Error('queue request differs from immutable landed tuple/evidence');
   if (env.ORG_ACTOR === 'line-service') {
     if (gitProject(process.cwd()).checkout !== repo || env.HERDR_ENV === '1' || env.HERDR_PANE_ID) throw Error('line-service queue producer requires its genuine canonical non-session context');
   } else {
-    const binding = nativeSender(org, { cwd: process.cwd(), env }), worker = effectiveWorkerIdentity(run, state), native = binding.native;
-    if (worker.agent !== native.name || worker.terminal_id !== native.terminal_id || worker.agent_session_id !== native.agent_session.value) throw Error('queue producer differs from actual source worker');
+    const binding = recoveryBinding??nativeSender(org, { cwd: process.cwd(), env }), worker = effectiveWorkerIdentity(run, state), native = binding.native;
+    const recovery=bound.authorization;
+    const supervisorRecovery=recovery&&recovery.native_caller?.name===native.name&&recovery.native_caller?.agent_session?.value===native.agent_session.value&&binding.project.checkout===repo;
+    if (!supervisorRecovery&&(worker.agent !== native.name || worker.terminal_id !== native.terminal_id || worker.agent_session_id !== native.agent_session.value)) throw Error('queue producer differs from actual source worker');
   }
-  const key = `${item.id}:${target.head}`, existing = [...state.items.values()].filter(q => q.meta.review_key === key);
+  const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`, existing = [...state.items.values()].filter(q => q.meta.review_key === key&&!archived.has(q.id));
   if (existing.length) {
     if (existing.length !== 1 || !isQueueReview(existing[0]) || existing[0].meta.review_source_run !== run.id || !same(existing[0].meta.review_target, target)) throw Error('review queue key has ambiguous/different evidence; retain it');
     return { add: [], result: { result: 'review_queued', review_item: existing[0].id, source_item: item.id, head: target.head, existing: true } };
@@ -91,7 +93,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   }];
   return { add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
     title: `Review ${item.title}`, budget: {}, accept: ['Independent immutable diff/evidence review; zero suites and no edits. Record PASS or FAIL verdict. Major findings become linked engineer follow-up proposals, never an automatic second review.'],
-    meta: { review_key: key, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_cutover:bound.cutoff } }],
+    meta: { review_key: key, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
     result: { result: 'review_queued', review_item: id, source_item: item.id, head: target.head, existing: false } };
 }
 
@@ -99,7 +101,8 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
   if (!isQueueReview(item) || item.meta.review_round_cap !== 1) throw Error('not a supported single-review queue item');
   const project = gitProject(repo), bound = source({ state, events, org, repo: project.canonical, identity: project.identity, runId: item.meta.review_source_run,head:item.meta.review_target?.head,base:item.meta.review_target?.base });
   openBoundary(org, project.canonical, project.identity);
-  if(!same(item.meta.review_cutover,bound.cutoff)||item.created.seq<=bound.cutoff.seq)throw Object.assign(Error('historical review queue predates recorded service cutover; retained without dispatch'),{code:'REVIEW_CUTOFF'});
+  if(!same(item.meta.review_cutover,bound.cutoff)||!bound.authorization&&item.created.seq<=bound.cutoff.seq)throw Object.assign(Error('historical review queue predates recorded service cutover; retained without dispatch'),{code:'REVIEW_CUTOFF'});
+  if(bound.authorization&&item.meta.review_recovery_id!==bound.authorization.id)throw Error('archived review item cannot consume the one replacement');
   if (bound.item.id !== item.meta.review_source_item || item.meta.review_key !== `${bound.item.id}:${bound.target.head}` || !same(item.meta.review_target, bound.target)) throw Error('queued review immutable target/evidence changed');
   if (item.runs.some(id => id !== allowRun)) throw Error('queued review already has a run; no replacement/re-review');
   journals ??= fs.readdirSync(path.join(org, 'dispatch')).filter(file => file.endsWith('.json') && !file.endsWith('.routes.json')).map(file => ({

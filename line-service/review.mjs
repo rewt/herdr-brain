@@ -8,6 +8,7 @@ import { gitProject } from '../lib/project.mjs';
 import { fileURLToPath } from 'node:url';
 import { projectPin, selectRelease } from '../lib/releases.mjs';
 import { roleIs } from '../lib/roles.mjs';
+import {reviewResolution,archivedReviewFile,reviewDigest} from './review-resolutions.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const capabilityFiles = ['line-service/review.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
@@ -34,6 +35,7 @@ const contains = (value, tokens) => {
 };
 
 function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue}) {
+  const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   const runs=new Set(item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head))));
   const tokens=new Set([item.id,...item.runs]);
   const heads=value=>{
@@ -45,12 +47,12 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     const run=value.run??value.source_run??runHint;
     return runs.has(run);
   };
-  for(const q of state.items.values())if(q.id!==ignoreQueue&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&q.meta.review_target?.head===target.head)return 'existing same-change record review';
+  for(const q of state.items.values())if(q.id!==ignoreQueue&&!archivedItems.has(q.id)&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&q.meta.review_target?.head===target.head)return 'existing same-change record review';
   for(const id of runs)for(const artifact of state.runs.get(id)?.report?.artifacts??[]){
     // A producer's explicit current-source review locator is evidence of an
     // attempt, including outside-org manual receipts. Never probe another
     // identity to turn unreadability into absence.
-    if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0]))return 'same-change source-owner review reference UNKNOWN; retain without external probe';
+    if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])&&!archivedReviewFile(resolution,artifact.split(/[ #]/)[0]))return 'same-change source-owner review reference UNKNOWN; retain without external probe';
   }
   for(const e of events){
     if(e.type==='change.reviewed'&&e.item===item.id&&e.head===target.head)return 'recorded same-change verdict';
@@ -62,6 +64,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     }
   }
   const pending=(actions,file)=>Object.entries(actions??{}).some(([key,value])=>{
+    if(resolution?.effects.some(e=>e.file===file&&e.key===key&&e.sha256===reviewDigest(JSON.stringify(value))))return false;
     if(ignoreService&&ignoreService.file===file&&ignoreService.key===key&&value.review_operation===ignoreService.operation&&JSON.stringify(value.review_target)===JSON.stringify(ignoreService.target)&&
       (['started','held'].includes(value.state)&&!ignoreQueue||value.state==='complete'&&value.result?.review_item===ignoreQueue))return false;
     if(!/review/i.test(key))return false;
@@ -69,7 +72,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   });
   if(pending(effects?.actions,ignoreService?.file))return 'existing same-change service intent/result';
   for(const dir of ['retirement/occupants','retirement/reviews','settle'])for(const entry of entries(path.join(org,dir))){
-    if(!entry.name.endsWith('.json'))continue;const hint=entry.name.match(/R-\d+/)?.[0];let value;
+    if(!entry.name.endsWith('.json'))continue;const file=path.join(org,dir,entry.name);if(archivedReviewFile(resolution,file))continue;const hint=entry.name.match(/R-\d+/)?.[0];let value;
     try{value=read(path.join(org,dir,entry.name));}catch(e){if(runs.has(hint))throw e;continue;}
     if(value?.kind==='watcher')continue;
     if(matches(value,hint))return `existing same-change ${dir} attempt/UNKNOWN`;
@@ -85,7 +88,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     // Receipt attribution is scoped to its source run/head. An unrelated old
     // directory or opaque filename is never a project-wide review hold.
     if(runs.has(id))for(const entry of entries(evidence))if(/review|settle/i.test(entry.name)&&entry.name.endsWith('.json')){
-      const value=read(path.join(evidence,entry.name));if(matches(value,id))return 'same-change source-owner review receipt/UNKNOWN';
+      const file=path.join(evidence,entry.name);if(archivedReviewFile(resolution,file))continue;const value=read(file);if(matches(value,id))return 'same-change source-owner review receipt/UNKNOWN';
     }
     for(const root of new Set([repo,run.workspace].filter(Boolean))){
       if(!fs.existsSync(root))continue;

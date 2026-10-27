@@ -590,13 +590,12 @@ missing clocks null and reuse explicit. File mtime is an observation, not a
 claim about when the engineer finished writing. Awaited landing delivery is not
 an exception. No scheduler or timing service is installed.
 
-**Second-project adapter seam (BCH joins later).** The existing queue remains
-the integration authority: bind a request with `--expected-head`,
-`--if-current-run`, `--org` and the approved required-check plan (including
-`--required-tests` for Brain's deferred full-file test evidence). The
-automatic caller also needs the current run-bound completed settle/PASS receipt;
-BCH must bind its own accepted review evidence at that seam, never infer PASS
-from a done report. The owning project supplies its canonical
+**Saved second-project adapter seam (compatibility reference).** Admitted requests
+retain their captured record/run/check bindings and receipts. New workers land OWN
+finished source with `lane promote TOPIC --expected-head FULL_SHA`, then report;
+no report-first flag, completed settle or review PASS is a pre-main step. Do not
+retrofit this older adapter's admission sequence onto new workers. The project
+supplies its canonical
 `.lane.validation.json` promotion command/planner and `.promote.json` gate preparation, Node/environment and resource declarations.
 Its existing selector/receipt adapter runs against the queue's actual scratch
 candidate and base; reuse requires its full existing input binding, and a miss

@@ -108,9 +108,11 @@ canonical promotion workflow.
 Native record-bound requests and unbound Git requests form separate batches.
 Each member derives the shared completion transaction before any gate; invalid
 members are refused individually. The final fast-forward guard rechecks each
-original completion fingerprint while holding the record lock. Native enqueue
-supports `--superseded-runs '["R-OLD"]'` with `--if-current-run R-NEW` to name older
-open attempts explicitly; omitted attempts refuse admission and remain intact.
+original completion fingerprint while holding the record lock. Saved native
+enqueue requests retain their explicit superseded/current-run bindings; omitted
+attempts remain intact. New workers land first with
+`lane promote TOPIC --expected-head FULL_SHA`, then report. This compatibility
+transaction is not a report-first or review-readiness instruction for workers.
 
 1. Rebase and independently review the exact candidate. Record every included
    item's final report and finish its review/approval blockers. List every item

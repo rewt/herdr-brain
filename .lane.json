@@ -17,5 +17,10 @@
   },
   "dispatch": {
     "max_sessions": 12
+  },
+  "selection_policy": {
+    "by_task_class": {
+      "review": "review-sol-max"
+    }
   }
 }

@@ -822,8 +822,10 @@ function ingestFile(ctx, file, runHint, currentRun) {
     const taken = new Set();
     const created = [];
     const queuedReview=s.items.get(run.item)?.meta.review_key;
+    const correctionIntake=queuedReview&&roleIs(s.items.get(run.item),'REV')&&s.items.get(run.item).meta.review_target&&s.items.get(run.item).meta.review_source_item;
     for (const p of report.proposals) {
       if(queuedReview&&roleIs(p,'REV'))throw new UserError('a landed-change review cannot propose another review; retain cap1 and use linked engineer correction');
+      if(correctionIntake&&roleIs(p,'ENG'))continue;
       const id = nextItemId(s, { kind: 'work', role: p.role }, taken);
       taken.add(id);
       events.push({
@@ -836,6 +838,8 @@ function ingestFile(ctx, file, runHint, currentRun) {
       created.push({ id, title: p.title, role: p.role, blocking, reviewHold });
     }
     const reviewFacts=reviewResultEvents({state:s,events:committedEvents,run,report,sha256,body:parsed.body,usedIds:taken});
+    for(const e of reviewFacts)if(e.type==='item.added')created.push({id:e.id,title:e.title,role:e.role,
+      blocking:reviewFacts.some(link=>link.type==='link.added'&&link.blocker===e.id&&link.blocked===run.item),reviewHold:false});
     const reviewed=reviewFacts.find(e=>e.type==='change.reviewed');
     // Normalize the explicit judgment for existing folded-report consumers.
     // The immutable stored bytes/hash retain its original body/frontmatter.

@@ -796,7 +796,7 @@ test('phase1 current service records an old selected consumers immutable review 
   f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Review',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_key:key,review_target:target,review_round_cap:1}},
     {type:'run.started',id:'R-2',item:'REV-1',workspace:f.cwd}, {type:'run.claimed',run:'R-2',record:f.org,project:f.identity,owner},
     {type:'report.ingested',run:'R-2',file:'reports/R-2.md',sha256:hash(text),report:{outcome:'done',summary:'Review',extra:{verdict:'FAIL'},proposals:[{role:'engineer',title:'Fix the source'}]}},
-    {type:'item.added',id:'ENG-2',role:'engineer',title:'Fix the source',parent:'REV-1',from_run:'R-2'}]);
+    {type:'item.added',id:'ENG-2',role:'engineer',title:'Fix the source',why:'Resolve the Major.',parent:'REV-1',from_run:'R-2'}]);
   fs.mkdirSync(f.directory,{recursive:true});fs.writeFileSync(path.join(f.directory,'installation.json'),JSON.stringify({at:'2026-10-27T01:00:00Z',repo:f.cwd,org:f.org,source:sourceRoot,node:process.execPath,file:path.join(f.directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(f.directory)}`}));
   const env={...f.env};delete env.HERDR_ENV;delete env.HERDR_PANE_ID;
   const release=noticeLock(path.join(f.directory,'pass.lock'));

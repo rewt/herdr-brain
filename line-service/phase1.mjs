@@ -4,7 +4,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {reviewScope,claimedCommitTokens,declaredSourceRanges} from '../settle/review-range.mjs';
-import {nextItemId,fold,extendFold,itemStatus,blockersOf,releases} from '../lib/state.mjs';
+import {fold,extendFold,itemStatus,blockersOf,releases} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
 import {transact} from '../lib/store.mjs';
 import {readReport} from '../lib/report.mjs';
@@ -19,6 +19,7 @@ import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
 import {additionalTarget,supplementalTarget,canonicalTarget,canonicalSelector,validateAdditionalTarget} from './review-targets.mjs';
+import {reviewCorrectionEvents} from './review-findings.mjs';
 
 export function reviewCompletionPlan({events,state,runId}){
   const run=state.runs.get(runId),item=state.items.get(run?.item),key=item?.meta.review_key;
@@ -339,20 +340,9 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   const findings=[];
   for(const line of String(body).split('\n')){const m=/^\s*[-*]\s*\[(Major|Minor)\]\s*(.+)$/i.exec(line);if(m)findings.push({severity:m[1].toLowerCase(),text:m[2].trim()});}
   const raw=report.extra?.findings;if(Array.isArray(raw))for(const f of raw)if(f&&['major','minor'].includes(String(f.severity).toLowerCase()))findings.push({severity:String(f.severity).toLowerCase(),text:String(f.text??f.summary??'')});
-  // A reviewer may use ordinary proposals. Keep them linked to this one change,
-  // not an additional reviewer or recursive review chain.
-  const add=[{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_group_key:queueProducerGroup(review),covered_commits:capturedReviewCommits(target),review_item:review.id,review_run:run.id,verdict,
-    verdict_evidence:{frontmatter:report.extra?.verdict!==undefined,body_lines:bodyLines},findings,report_sha256:sha256}];
-  const taken=new Set(usedIds);
-  for(const severity of ['major','minor']) {
-    const rows=findings.filter(f=>f.severity===severity);if(!rows.length&&!(severity==='major'&&verdict!=='PASS'))continue;
-    if((report.proposals??[]).some(p=>p.role==='engineer'&&(severity==='major'||p.extra?.severity==='minor')))continue;
-    const id=nextItemId(state,{kind:'work',role:'engineer'},taken);taken.add(id);
-    add.push({type:'item.added',id,kind:'work',role:'engineer',title:`${severity==='major'?'Fix':'Follow up'} ${source} at ${target.head.slice(0,10)}`,parent:review.id,from_run:run.id,
-      accept:rows.map(f=>f.text),why:rows.length?rows.map(f=>f.text).join('\n'):`Review ${verdict}; resolve its findings without a second review.`,
-      meta:{review_fix_of:key,review_source_item:source,review_source_run:review.meta.review_source_run,review_owner_run:review.meta.review_source_run,severity,review_round_cap:1}});
-  }
-  return add;
+  const corrections=reviewCorrectionEvents({state,events,run,review,report,findings,verdict,sha256,usedIds});
+  return [{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_group_key:queueProducerGroup(review),covered_commits:capturedReviewCommits(target),review_item:review.id,review_run:run.id,verdict,
+    verdict_evidence:{frontmatter:report.extra?.verdict!==undefined,body_lines:bodyLines},findings:corrections.findings,report_sha256:sha256},...corrections.add];
 }
 
 // Selected installed record CLIs retain their forwarding. The current service
@@ -369,10 +359,8 @@ export function recordReviewResults({repo,org,runId,env=process.env}) {
     const file=path.resolve(org,run.report.file),text=fs.readFileSync(file,'utf8');
     if(!file.startsWith(path.resolve(org)+path.sep)||hash(text)!==run.report.sha256)throw Error('ingested review bytes changed');
     const parsed=readReport(text);if(parsed.errors.length)throw Error('immutable queued review report is invalid');
-    const proposals=[...state.items.values()].filter(i=>i.created?.run===run.id&&roleIs(i,'ENG'));
     const add=reviewResultEvents({state,events,run,report:parsed.report,sha256:run.report.sha256,body:parsed.body});
     if(!add.length)return {add:[]};
-    for(const child of proposals)if(!child.meta.review_fix_of)add.push({type:'item.updated',id:child.id,fields:{meta:{review_fix_of:item.meta.review_key,review_owner_run:item.meta.review_source_run,review_source_item:item.meta.review_source_item,review_round_cap:1}}});
     return protectRecordMutation({org,state,events,mutation:{add},command:'line-service immutable review result'});
   },{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
 }

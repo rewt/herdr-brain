@@ -79,9 +79,19 @@ for (const kind of ['pending', 'native', 'manual', 'decision', 'unknown', 'legac
     } else if (kind === 'decision') f.events.push({ type: 'note.added', id: 'ENG-1', seq: 5, decision: true, text: 'C1 retained reviewer; qualification UNKNOWN; do not replace' });
     else if (kind === 'unknown') { fs.mkdirSync(path.join(f.org, 'retirement/reviews'), { recursive: true }); fs.writeFileSync(path.join(f.org, 'retirement/reviews/unmapped.json'), '{"qualification":"UNKNOWN"}'); }
     else { const claim=f.events.find(e=>e.type==='run.claimed');claim.owner = { ...claim.owner, legacy: true }; }
+    const unbound = kind === 'manual' || kind === 'unknown';
+    const evidence = kind === 'manual' ? path.join(f.org, 'evidence/ENG-1/owner/review-launch.json') : kind === 'unknown' ? path.join(f.org, 'retirement/reviews/unmapped.json') : null;
+    const original = evidence && fs.readFileSync(evidence);
     f.write(); const next = f.context();
     try { assert.ok(reviewAttempt(next.item, next)); } catch (e) { assert.match(e.message, /UNKNOWN|unmapped/); }
-    f.service().pass(); f.service().pass(); assert.equal(f.calls.length, 0, kind);
+    // Unattributed UNKNOWN evidence stays visible; it cannot hold this commit.
+    if (unbound) assert.equal(reviewAttempt(next.item, { ...next, target: bindReviewTarget(next) }), null);
+    f.service().pass(); f.service().pass(); assert.equal(f.calls.length, unbound ? 1 : 0, kind);
+    if (unbound) {
+      assert.equal(f.calls[0].args[1], 'queue-review');
+      assert.equal(f.calls[0].args[f.calls[0].args.indexOf('--head') + 1], f.head);
+    }
+    if (evidence) assert.deepEqual(fs.readFileSync(evidence), original);
   });
 }
 
@@ -112,7 +122,11 @@ test('settled history sweep has constant identity work and bounded log rows whil
   try { s = f.service({ identify: cwd => { identities++; return gitProject(cwd); } }); s.pass(); } finally { fs.existsSync = exists; }
   assert.equal(identities, 2); assert.equal(historicalReads, 0); assert.equal(f.calls.length, 0);
   const rows = fs.readFileSync(path.join(s.directory, 'passes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(rows.length <= 4, JSON.stringify(rows, null, 2)); assert.ok(rows.some(r => r.action === 'review-retained'));
+  assert.ok(rows.length <= 4, JSON.stringify(rows, null, 2));
+  const retained = rows.find(r => r.action === 'review-retained'); assert.ok(retained);
+  assert.equal(retained.notice_record.entry.count, 1);
+  assert.equal(retained.notice_record.entry.scope.head, f.head);
+  assert.equal(rows.find(r => r.action === 'review-health').errors.occurrences, 1);
   const timing = rows.find(r => r.action === 'pass-complete').timing;
   assert.equal(timing.snapshots, 1); assert.equal(timing.historical_intake_skipped, 2035); assert.equal(timing.effect_command_ms, 0);
 });

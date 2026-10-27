@@ -163,7 +163,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }catch(e){entry.state='record-uncertain';entry.error=e.message;log({action:'record-inbox-held',canonical_key:key,error:e.message});}
         noticesDirty=true;
       };
-      const note = (boundary, reason, scope = {}, force = false) => {
+      const note = (boundary, reason, scope = {}, force = false, row = {}) => {
         scope=Object.fromEntries(Object.entries(scope).filter(([,value])=>value!==undefined));
         const scoped=scope.item??/^dispatch:([A-Z]+-\d+)/.exec(boundary)?.[1],review=scope.review===true||/^review|DISPATCH_REVIEW/i.test(boundary)||roleIs(snapshot?.state.items.get(scoped),'REV');
         const normalized=canonicalFailure(reason),key=createHash('sha256').update(canonical([boundary,normalized,scope])).digest('hex');
@@ -173,7 +173,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         entry.count++;entry.last_at=now();if(review){entry.review=true;pendingErrors.set(key,errorRow(key,entry));}noticesDirty=true;
         // The compact fsynced delta precedes the record mutation. A lost full
         // checkpoint replays notice counts only, never native effect intents.
-        log({action:'hold',boundary,reason,canonical_key:key,scope,notice_record:{key,entry}});
+        log({action:'hold',...row,boundary,reason,canonical_key:key,scope,notice_record:{key,entry}});
         if(!force&&!review&&entry.count<alertAfter)return;
         deliverNotice(key,entry);
       };
@@ -217,7 +217,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       let intakeSteps=0;
       for (const run of snapshot.state.runs.values()) {
         if(expired()||intakeSteps>=maxStepsPerStage)break;
-        if(run.report||run.abandoned||!run.report_path||!fs.existsSync(run.report_path))continue;
+        if(run.report||run.abandoned){if(snapshot.state.items.get(run.item)?.closed)timings.historical_intake_skipped++;continue;}
+        if(!run.report_path||!fs.existsSync(run.report_path))continue;
         const item=snapshot.state.items.get(run.item);if(!item)continue;
         if(item.closed||!run.owner||run.owner.legacy||run.owner.controller!=='brain'||item.runs.at(-1)!==run.id&&snapshot.state.runs.get(item.runs.at(-1))?.report){timings.historical_intake_skipped++;continue;}
         try{
@@ -268,7 +269,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           reviewLock=noticeLock(path.join(directory,`review-change-${digest([item.id,target.head])}.lock`),{recover:false});
           const ignoreService={file:journal,key,target,operation:'record-queue'};
           const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,capturedRun:run.id,ignoreService});
-          if(attempt){log({action:'review-retained',item:item.id,head:target.head,reason:attempt});note(key,attempt,{item:item.id,run:run.id,head:target.head,review:true});continue;}
+          if(attempt){note(key,attempt,{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-retained',item:item.id,head:target.head});continue;}
           queueConsumer({run,env:childEnv});reviewSteps++;
           effect(key,()=>{
             const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
@@ -394,13 +395,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // independent admission allowance. All actual effects still recount and
       // re-read native/record/source/STOP/HOLD; no worker is stopped by a clock.
       const precedingWork=workClock()-workStarted;workStarted=workClock();
-      log({action:'admission-stage',preceding_work_ms:precedingWork,preceding_budget_exhausted:precedingWork>=passBudgetMs,work_budget_ms:passBudgetMs});
-      let starts=0;
+      let starts=0,admissionLogged=false;
       for (const item of sortItems([...snapshot.state.items.values()].filter(item => !item.closed && item.kind !== 'goal')).sort((a, b) => Number(isQueueReview(b)) - Number(isQueueReview(a)))) {
         if(expired()||starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
         snapshot=current();
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
+        if(!admissionLogged){log({action:'admission-stage',preceding_work_ms:precedingWork,preceding_budget_exhausted:precedingWork>=passBudgetMs,work_budget_ms:passBudgetMs});admissionLogged=true;}
         if(roleIs(item,'REV')&&cutoff&&isQueueReview(item)&&!index?.heads.includes(item.meta.review_target?.head)&&!snapshot.events.some(e=>e.type==='review.recovery-completed'&&e.item===item.meta.review_source_item&&e.target?.head===item.meta.review_target?.head)){
           try{sourceGit(repo,['merge-base','--is-ancestor',item.meta.review_target.head,cutoff.canonical_head]);timings.historical_review_skipped++;continue;}catch{/* Unlanded/unknown targets are errors, never historical skips. */}
         }

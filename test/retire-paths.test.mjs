@@ -23,6 +23,14 @@ import { fixture, hold, heldReason, isolatedEnv, RETIREMENT_ENV_KEYS, assertNoRe
 const root = fileURLToPath(new URL('../', import.meta.url));
 const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
 
+async function checkRetirementRestoration(t, body) {
+  const keys = ['HOME', ...RETIREMENT_ENV_KEYS];
+  const snapshot = () => Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const before = snapshot();
+  await t.test('fixture lifecycle', body);
+  assert.deepEqual(snapshot(), before, 'completed child restores the caller environment');
+}
+
 function adoptStandard(f) {
   return recordStandardSlot({ cwd: f.lane, action: 'adopt', uid: 'fixture-chat', actor: 'fixture', why: 'offline proven binding',
     slot: { server: 'default', workspace: 'w', checkout: f.lane, tab: 'w:t', standardSlot: 'chat', panes: [{ pane: 'w:p', paneSlot: 'primary' }] } });
@@ -480,9 +488,7 @@ test('promotion keeps integrated success on a live reference and retries cleanup
   queue.transaction(data => data.results.push({...f.job,...result})); fs.unlinkSync(ref);
   requestRetirement({ org:f.org, key:'host completed', source:'host completion' });
   // Product helpers inherit the fixture's source declarations, never the live host slot.
-  const old = {};
-  for(const key of ['MONITOR_TEST_SLOT_PATH','MONITOR_TEST_SLOT_COMPAT_PATH','XDG_STATE_HOME']) {old[key]=process.env[key];process.env[key]=f.env[key];}
-  t.after(()=>{for(const [key,value] of Object.entries(old)) {if(value===undefined)delete process.env[key];else process.env[key]=value;}});
+  isolatedEnv(t, f, ['MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME']);
   retryCleanup(queue); assert.equal(queue.load().results[0].cleanup.state,'complete'); assert.equal(fs.existsSync(f.lane),false);
   const actions = f.read().actions; retryCleanup(queue); assert.deepEqual(f.read().actions,actions);
   assert.equal(fs.readFileSync(f.eventFile,'utf8'),f.eventBytes);
@@ -701,15 +707,15 @@ test('the consume CLI reaches its own deadline cleanly, retaining the hint and r
   assert.deepEqual(f.read().actions, []);
 });
 
-test('promote drain consumes requests at both foreground boundaries without running a gate', async t => {
+test('promote drain consumes requests at both foreground boundaries without running a gate', t => checkRetirementRestoration(t, async t => {
   const f=fixture(t);f.state.triggerOnClose=true;f.save();const queue=f.queue();
   isolatedEnv(t, f);
   requestRetirement({org:f.org,eventSeq:4,source:'disposition'});await drain(queue);
   const handled=JSON.parse(fs.readFileSync(path.join(f.org,'retirement/handled.json')));
   assert.equal(handled.revision,5);assert.deepEqual(f.read().actions,[['tab','close','w:t']]);assert.deepEqual(queue.load().results,[]);
-});
+}));
 
-test('promote sends its ready acknowledgment before observing a pending retirement hint', async t => {
+test('promote sends its ready acknowledgment before observing a pending retirement hint', t => checkRetirementRestoration(t, async t => {
   const f = fixture(t), queue = f.queue(), marker = path.join(f.scratch, 'ready');
   f.state.readyMarker = marker; f.save();
   isolatedEnv(t, f);
@@ -725,9 +731,9 @@ test('promote sends its ready acknowledgment before observing a pending retireme
   assert.deepEqual(messages, [{ ready: true }]);
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.org, 'retirement/handled.json'))).revision, 4);
   assert.deepEqual(f.read().actions, [['tab', 'close', 'w:t']]);
-});
+}));
 
-test('a dequeued job is persisted before retirement catch-up and is never left current during it', async t => {
+test('a dequeued job is persisted before retirement catch-up and is never left current during it', t => checkRetirementRestoration(t, async t => {
   let inbox;
   t.after(async () => { if (inbox) await stopFixtureInbox(inbox, { script: path.join(root, 'supervisor/prompt-supervisor.mjs') }); });
   const f = fixture(t), queue = f.queue(), fakeLane = path.join(f.scratch, 'refused-lane.mjs');
@@ -754,7 +760,7 @@ test('a dequeued job is persisted before retirement catch-up and is never left c
   assert.equal(f.read().observedCurrent ?? false, false, 'catch-up observed the dequeued job as current');
   assert.equal(f.read().catchupCurrent, null); assert.equal(f.read().catchupPersisted, 1);
   assert.equal(queue.load().results[0].outcome, 'refused');
-});
+}));
 
 test('the final re-observation crossing a deadline inside a callback owner lookup leaves its hint pending', t => {
   const f = fixture(t); f.retirement().recordCallback({ kind: 'executive', pane: 'w:p', pid: 2, agent: 'worker' });
@@ -774,8 +780,7 @@ test('the final re-observation crossing a deadline inside a callback owner looku
 
 test('cleanup retries are capped with backoff, record the refusal, and reset on a new request', t => {
   const f=fixture(t), queue=f.queue(); f.state.failClose=true;f.save();
-  const old={};for(const key of ['MONITOR_TEST_SLOT_PATH','MONITOR_TEST_SLOT_COMPAT_PATH','XDG_STATE_HOME']){old[key]=process.env[key];process.env[key]=f.env[key];}
-  t.after(()=>{for(const[key,value]of Object.entries(old)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
+  isolatedEnv(t, f, ['MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME']);
   const result=finishCleanup(f.job,{outcome:'promoted',tip:f.head,workspace:f.lane},queue,{now:1000});
   assert.match(result.cleanup.last_refusal,/injected tab failure/);queue.transaction(data=>data.results.push({...f.job,...result}));
   retryCleanup(queue,{now:1001});assert.equal(queue.load().results[0].cleanup.attempts,1);

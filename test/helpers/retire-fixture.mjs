@@ -28,8 +28,8 @@ export function hold(f, kind = 'file', cwd = f.repo) {
 }
 export const RETIREMENT_ENV_KEYS = ['HOME', 'TEST_MEMORY_FILE', 'NODE_OPTIONS', 'HERDR_MONITOR_FLEET',
   'HERDR_TEST_SCRATCH_ROOTS', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME', ...PROMOTION_REQUEST_KEYS];
-export function isolatedEnv(t, f) {
-  setSessionEnvironment(t, Object.fromEntries(RETIREMENT_ENV_KEYS.map(key => [key, f.env[key]])));
+export function isolatedEnv(t, f, keys = RETIREMENT_ENV_KEYS) {
+  setSessionEnvironment(t, Object.fromEntries(keys.map(key => [key, f.env[key]])));
 }
 export function assertNoRemoval(f) {
   assert.deepEqual(f.read().actions.filter(a => ['close', 'remove'].includes(a[1])), []);

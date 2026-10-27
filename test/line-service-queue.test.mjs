@@ -18,7 +18,7 @@ import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { fixture as dispatchFixture, promptCalls } from '../dispatch/test/dispatch-fixture.mjs';
 
 const root = fs.realpathSync(sourceRoot), entry = path.join(root, 'bin/org.mjs');
-function fixture(t, { outcome = 'blocked' } = {}) {
+function fixture(t, { outcome = 'blocked', beforeReport = () => [] } = {}) {
   const f = configFixture(t, { custom: true }), org = f.env.ORG_DIR, identity = gitProject(f.cwd).identity;
   const git = (args, cwd = f.cwd) => { const r = spawnSync('git', ['-C', cwd, ...args], { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
   fs.writeFileSync(path.join(f.cwd, 'code.mjs'), 'export const value=0;\n'); git(['add', 'code.mjs']); git(['commit', '-qm', 'Base']);
@@ -35,6 +35,7 @@ function fixture(t, { outcome = 'blocked' } = {}) {
     { type: 'item.added', id: 'ENG-1', title: 'Build', role: 'engineer', meta: {} },
     { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'implementation', dispatch_journal: dispatch, dispatch_attempt: 'fixture' } },
     { type: 'run.claimed', run: 'R-1', record: org, project: identity, owner: { controller: 'brain', legacy: false, release: { id: 'source', commit: null, root, identity: gitProject(root).identity } } },
+    ...beforeReport({head,base}),
     { type: 'report.ingested', run: 'R-1', item: 'ENG-1', file: 'reports/R-1.md', sha256: reportHash, report: { outcome, summary: 'Committed red code', artifacts: [`Commit: ${head}`, 'code.mjs'], blockers: [], extra: {} } },
   ] }));
   const env = { ...f.env, ORG_ACTOR: 'line-service', HERDR_BRAIN_ROOT: root };
@@ -65,6 +66,7 @@ test('explicit review holds ignore incidental decision wording at queue creation
   transact(f.org,()=>({add:[
     {type:'note.added',id:'ENG-1',decision:true,text:`No duplicate worker/review for ENG-1 R-1 ${f.head}; retain routine phase evidence and the original producer.`},
     {type:'note.added',id:'R-1',decision:true,text:`Source recovery is complete at ${f.head}; preserve old review receipts and final-release obligations.`},
+    {type:'note.added',id:'R-1',decision:true,text:`Keep the preview of ${f.head} with the producer evidence.`},
     {type:'note.added',id:'ENG-1',decision:true,text:`Independent review hold for old source ${f.base}; retain that historical judgment.`},
     {type:'note.added',id:'ENG-1',decision:true,text:`REVIEW HOLD: base${f.base}; the earlier admission only.`},
     {type:'note.added',id:'R-1',decision:true,text:`REVIEW HOLD: digest ${f.head}${'a'.repeat(24)}; a 64-hex value is not this commit.`},
@@ -73,8 +75,46 @@ test('explicit review holds ignore incidental decision wording at queue creation
   ]}));
   const before=f.context().events.filter(e=>e.type==='note.added'),created=f.create(),c=f.context(),q=c.state.items.get(created.review_item);
   assert.equal(validateQueuedReview({...c,item:q}).head,f.head);
+  transact(f.org,()=>({add:[{type:'note.added',id:'R-1',decision:true,text:`Archive the preview for ${f.head}; preserve old review receipts.`}]}));
+  const fresh=f.context();assert.equal(validateQueuedReview({...fresh,item:fresh.state.items.get(q.id)}).head,f.head,'routine wording added after queue creation does not strand launch');
   assert.equal(f.create().review_item,q.id);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,1);
-  assert.deepEqual(f.context().events.filter(e=>e.type==='note.added'),before,'decision history remains immutable');
+  assert.deepEqual(f.context().events.filter(e=>e.type==='note.added').slice(0,before.length),before,'decision history remains immutable');
+});
+
+test('explicit review holds on the source item before its producer report guard creation and a retained queue launch',t=>{
+  for(const prefix of ['', 'head']){
+    const note=head=>({type:'note.added',id:'ENG-1',decision:true,text:`New independent review hold for ENG-1 ${prefix}${head}; unresolved.`});
+    const f=fixture(t,{beforeReport:({head})=>[note(head)]}),c=f.context();
+    const hold=c.events.find(e=>e.type==='note.added'),run=c.state.runs.get('R-1');
+    assert.ok(run.started.seq<hold.seq&&hold.seq<run.report.seq,'hold predates the producer report');
+    const bytes=fs.readFileSync(path.join(f.org,'events.jsonl'));
+    const result=f.run(['queue-review','R-1','--head',f.head,'--base',f.base]);
+    assert.notEqual(result.status,0,prefix);assert.match(result.stderr,/independent review hold/);
+    assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),bytes,'refusal preserves the source decision and creates no reviewer');
+
+    // Model a queue captured by the old hold-bypass bug. Only the in-memory
+    // launch snapshot receives the early hold; persisted history is untouched.
+    const queued=fixture(t),qid=queued.create().review_item,original=queued.context();
+    const reportIndex=original.events.findIndex(e=>e.type==='report.ingested');
+    const events=[...original.events.slice(0,reportIndex),note(queued.head),...original.events.slice(reportIndex)].map((e,i)=>({...e,seq:i+1}));
+    const state=fold(events),queue=state.items.get(qid),target=structuredClone(queue.meta.review_target),saved=fs.readFileSync(path.join(queued.org,'events.jsonl'));
+    assert.throws(()=>validateQueuedReview({...original,events,state,item:queue}),/independent review hold/,'pre-report hold stops the existing immutable launch');
+    assert.deepEqual(queue.meta.review_target,target);assert.equal(queue.runs.length,0);
+    assert.deepEqual(fs.readFileSync(path.join(queued.org,'events.jsonl')),saved);
+  }
+  const old=fixture(t,{beforeReport:({base})=>[{type:'note.added',id:'ENG-1',decision:true,text:`New independent review hold for ENG-1 head${base}; unresolved.`}]}),qid=old.create().review_item,c=old.context();
+  assert.equal(validateQueuedReview({...c,item:c.state.items.get(qid)}).head,old.head,'an early hold for another source retains its own scope');
+});
+
+test('explicit review holds compatibility ignores evidence preservation and preview decisions',t=>{
+  const f=fixture(t);
+  transact(f.org,()=>({add:[
+    {type:'note.added',id:'R-1',decision:true,text:`Source recovery is complete at ${f.head}; preserve old review receipts and final-release obligations.`},
+    {type:'note.added',id:'ENG-1',decision:true,text:`Keep the preview for ${f.head}.`},
+  ]}));
+  const c=f.context();assert.equal(reviewAttempt(c.item,c),null);
+  const qid=f.create().review_item,fresh=f.context();
+  assert.equal(validateQueuedReview({...fresh,item:fresh.state.items.get(qid)}).head,f.head);
 });
 
 test('explicit review holds require both hex boundaries for captured 40- and 64-character commits',t=>{

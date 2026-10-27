@@ -21,7 +21,8 @@ function inject(f,script,marker,commands){
     const changed=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...${JSON.stringify(args)}],{encoding:'utf8'});
     if(changed.status!==0)throw Error(changed.stderr);
   }`).join('\n');
-  fs.writeFileSync(file,source.replace(marker,marker+'\n'+mutation));
+  const injection=script==='lane'?`if(a[0]==='prepare'){\n${mutation}\n}`:mutation;
+  fs.writeFileSync(file,source.replace(marker,marker+'\n'+injection));
 }
 const effects=f=>f.calls().filter(c=>c.type==='lane'&&c.a[0]==='dispatch');
 
@@ -31,6 +32,7 @@ for(const [subject,field]of [['item','meta.hold=true'],['parent','meta.held=true
     inject(f,'lane',"if(a[0]==='prepare' && !entry()) process.exit(1);",[['set',ids[subject],field]]);
     const result=f.start();
     assert.equal(result.status,1,result.stderr);assert.match(result.stderr,/closed\/held\/reserved/);
+    assert.equal(f.calls().filter(c=>c.type==='lane'&&c.a[0]==='prepare').length,1);
     assert.equal(effects(f).length,0);assert.equal(promptCalls(f).length,0);
     const job=JSON.parse(fs.readFileSync(f.jobs()[0]));
     assert.equal(job.failure.code,'DISPATCH_INPUT_CHANGED');
@@ -76,6 +78,7 @@ test('a fresh actual parent chain is followed after preparation, without holding
   f.rec(['set',next,'meta.hold=true']);
   inject(f,'lane',"if(a[0]==='prepare' && !entry()) process.exit(1);",[['set',ids.parent,`parent=${next}`]]);
   const result=f.start();assert.equal(result.status,1,result.stderr);assert.equal(effects(f).length,0);
+  assert.equal(f.calls().filter(c=>c.type==='lane'&&c.a[0]==='prepare').length,1);
   assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).failure.launch_input.subject,next);
   const other=f.rec(['add','Independent launch','--role','engineer']).match(/ENG-\d+/)[0];
   const independent=f.dispatch([other,'--lane','topic','--route','engineer','--brief',f.brief]);

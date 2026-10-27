@@ -10,7 +10,9 @@ import { waitForChange, until, producerOutcome } from '../../test/helpers/produc
 function childProducer(t, source) {
   const child = spawn(process.execPath, ['-e', source], { stdio: 'ignore' });
   const exited = once(child, 'exit');
-  t.after(async () => { if (child.exitCode === null && child.signalCode === null) child.kill(); await exited; });
+  // These controls terminate themselves. Join the actual child exit rather
+  // than adding a signal path without a native birth-identity check.
+  t.after(() => exited);
   return { exited, observe: () => ({
     state: child.exitCode === null && child.signalCode === null ? 'live' : 'exited',
     detail: `child exit ${child.exitCode}/${child.signalCode}`,

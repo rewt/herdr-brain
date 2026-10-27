@@ -2,6 +2,7 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeBindings, homeProject, readConfigJSON } from '../lib/config-home.mjs';
 
@@ -61,4 +62,15 @@ test('config verification selects only claimed projects while selected damage an
   fs.writeFileSync(path.join(directory, 'project.json'), JSON.stringify({ ...foreign, record: binding.record,
     adoption: { ...foreign.adoption, authorization: { ...foreign.adoption.authorization, record: binding.record } } }));
   assert.throws(() => f.binding(), /canonical checkout unavailable/, 'a foreign claimant of the selected record cannot be skipped');
+});
+
+test('config verification leaves unrelated identity audits untouched and still holds damaged selected identity', async t => {
+  const f = configFixture(t); await f.adopt(); const binding = f.binding();
+  const checkout = path.join(f.ownerRoot, 'unadopted'); fs.mkdirSync(checkout);
+  execFileSync('git', ['-C', checkout, 'init', '-qb', 'main'], { env: f.env, stdio: 'ignore' });
+  const selected = { common: path.join(checkout, '.git'), checkout };
+  const identityRecord = path.join(path.dirname(binding.identityFile), '.org');
+  assert.equal(countRecordReads(identityRecord, () => assert.equal(homeBindings(f.env, selected).bindings.length, 0)), 0);
+  fs.writeFileSync(binding.identityFile, JSON.stringify({ ...binding.defaults, identity_root: 'relative' }));
+  assert.throws(() => f.binding(), /identity_root must be a canonical absolute directory/);
 });

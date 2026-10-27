@@ -476,7 +476,7 @@ test('continuity base notices retain identity and recorded state across recurren
   const boundary=`review:ENG-1:${f.heads[1]}`,reason='selected helper native refusal; preserve original attempt',scope={},key=hash(canonical([boundary,reason,scope])),id=`line-record-${key}`,first_at='2026-10-26T00:00:00.000Z';
   const file=path.join(f.directory,'effects.json'),audit=path.join(f.directory,'passes.jsonl'),prior={first_at,reason,scope,state:'recorded',id,count:4,record:{id,state:'record-only'}};
   fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{},record_notices:{[key]:prior},notice_audit_offset:0}));
-  let calls=0,deliveries=0;const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),recordNotice:()=>{deliveries++;throw Error('recorded notice must not redeliver');},command:(_exe,args)=>{calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:reason};}});
+  let calls=0,deliveries=0;const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),recordNotice:d=>{if(d.id===id){deliveries++;throw Error('recorded notice must not redeliver');}return{id:d.id,state:'record-only'};},command:(_exe,args)=>{calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:reason};}});
   // Simulate interruption after the compact fsync but before any journal or
   // counter checkpoint. This executes the real pass/log path, not a made-up delta.
   const write=fs.writeFileSync;let interrupted=false;

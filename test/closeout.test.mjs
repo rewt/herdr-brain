@@ -204,13 +204,15 @@ test('phase1 safe outcome readback keeps a still-live or replaced exit target an
 test('continuity service reconciles a successful tab close with no saved closed receipt then completes cleanup without replay',t=>{
   const f=setup(t,{merged:true});f.report();f.append([{type:'line-service.phase0',id:'bound',project:f.common,repo:f.repo,org:f.org,main:'main',canonical_head:f.head}]);
   const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}},base=f.options.command;
-  let lost=false;f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(!lost&&exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'){lost=true;return{...result,status:1,stderr:'lost tab-close acknowledgement'};}return result;};
+  const now=Date.now,deadline=now()+60000;
+  let lost=false;f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(!lost&&exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'){lost=true;Date.now=()=>deadline;return{...result,status:1,stderr:'lost tab-close acknowledgement'};}return result;};
   const drains=[],service=createLineService({repo:f.repo,org:f.org,to:'brain-chat',env:f.env,maxStarts:0,recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
     assert.equal(args[0],path.join(sourceRoot,'supervisor/closeout.mjs'));assert.ok(args.includes('--retry-safe'));
     const keys=JSON.parse(args[args.indexOf('--keys')+1]);assert.deepEqual(keys,[entry.key]);
-    const result=f.drain({keys,retrySafe:true,sessionsOnly:args.includes('--sessions-only')});drains.push(result);return{status:0,stdout:JSON.stringify(result),stderr:''};
+    const result=f.drain({keys,retrySafe:true,sessionsOnly:args.includes('--sessions-only'),retirementOptions:{...f.options,...(!drains.length?{deadline}:{})}});drains.push(result);return{status:0,stdout:JSON.stringify(result),stderr:''};
   }});
-  service.pass();assert.equal(lost,true);assert.equal(effects(f).some(e=>e.action==='closed'&&e.tab_id==='w:t'),false);assert.equal(f.read().tabs.length,0);
+  try{service.pass();}finally{Date.now=now;}
+  assert.equal(lost,true);assert.equal(effects(f).some(e=>e.action==='closed'&&e.tab_id==='w:t'),false);assert.equal(f.read().tabs.length,0);
   const original=f.read().actions;assert.deepEqual(original,[['agent','prompt','worker','/quit'],['tab','close','w:t']]);
   assert.equal(closeoutOutcomeObservation(evaluations(f).at(-1),{entry,events:events(f)}),true);
   service.pass();assert.equal(drains.at(-1).evaluated[0].reason,'original native outcome reconciled; fresh drain required');assert.deepEqual(f.read().actions,original);assert.ok(fs.existsSync(f.lane));

@@ -456,8 +456,18 @@ path, supervisor target, route, brief/report paths and optional base.
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
 
-Dispatch also [waits for memory pressure to clear](../docs/reference/memory-gate.md)
+Legacy saved dispatchers [wait for memory pressure to clear](../docs/reference/memory-gate.md)
 before opening a lane or launching a worker, retaining the same durable request.
 If the canonical project's `.lane/supervisor/STOP` appears during either wait,
 dispatch returns `result: stopped` and keeps its current stage. After clearing
 STOP, use `--retry` with the returned journal or run to resume that request.
+
+Current Phase1 service starts use `--detach`: one frozen original journal reserves
+admission, returns immediately and owns one bounded detached driver. Its launch
+and terminal receipts live beside that journal in `.driver/`. Unknown starts or
+prompts never replay automatically. Default review capacity is three separately
+from build slots, inside the existing total native session/resource limit. New
+detached watches use `--record-only`; saved watchers remain unchanged. The two
+legacy memory timing phases now wait only on live proving reservations, with
+finite command/controller allowances. Low-memory observations do not pause
+starts. See the [current service contract](../line-service/README.md).

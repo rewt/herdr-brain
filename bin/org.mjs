@@ -20,6 +20,7 @@ import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
+import { reviewResultEvents } from '../line-service/phase1.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
@@ -631,7 +632,7 @@ function close(argv) {
       }
     }
     if (item.closed?.as === as) return { add: [], result: [] };
-    return { add: [{ type: 'item.closed', id, as, note: values.note ?? null }], result: openRuns(s, id).map((r) => r.id) };
+    return { add: [{ type: 'item.closed', id, as, note: values.note ?? null,...(values['if-current-run']?{completed_run:values['if-current-run']}:{}) }], result: openRuns(s, id).map((r) => r.id) };
   }, { closeRun: values['if-current-run'] });
   if (!added.length) {
     out(`${id} is already ${as}\n`);
@@ -791,7 +792,7 @@ function ingestFile(ctx, file, runHint, currentRun) {
     return fail([`the report says run ${parsed.report.run} but --run is ${runHint}`]);
   }
   const sha256 = crypto.createHash('sha256').update(text).digest('hex');
-  const { result } = mutate(ctx, (s) => {
+  const { result } = mutate(ctx, (s, committedEvents) => {
     const run = s.runs.get(runId);
     if (!run) throw new UserError(`unknown run ${runId}`);
     if (currentRun !== undefined) {
@@ -809,23 +810,28 @@ function ingestFile(ctx, file, runHint, currentRun) {
     writeFileAtomic(path.join(ctx.dir, stored), text, 0o444);
     const report = { ...parsed.report, run: runId };
     const late = laterRuns(s, runId).some((r) => r.report);
-    const events = [{ type: 'report.ingested', run: runId, item: run.item, file: stored, source: abs, sha256, late, report }];
+    let brief_sha256;
+    try{if(run.brief_path&&fs.lstatSync(run.brief_path).isFile())brief_sha256=crypto.createHash('sha256').update(fs.readFileSync(run.brief_path)).digest('hex');}catch{/* Unknown brief does not fabricate a revision. */}
+    const events = [{ type: 'report.ingested', run: runId, item: run.item, file: stored, source: abs, sha256, late, report,...(brief_sha256?{brief_sha256}:{}) }];
     const categoryFlags = reportCategoryFlags(ctx.config, report);
     for (const flag of categoryFlags) events.push({ type: 'category.flagged', id: run.item, run: runId, ...flag });
     const taken = new Set();
     const created = [];
+    const queuedReview=s.items.get(run.item)?.meta.review_key;
     for (const p of report.proposals) {
+      if(queuedReview&&roleIs(p,'REV'))throw new UserError('a landed-change review cannot propose another review; retain cap1 and use linked engineer correction');
       const id = nextItemId(s, { kind: 'work', role: p.role }, taken);
       taken.add(id);
       events.push({
         type: 'item.added', id, kind: 'work', title: p.title, role: p.role ?? null, capability: p.capability ?? null,
-        parent: run.item, accept: p.accept ?? [], why: p.why ?? null, from_run: runId, meta: p.extra ?? {},
+        parent: run.item, accept: p.accept ?? [], why: p.why ?? null, from_run: runId, meta: { ...(p.extra??{}),...(queuedReview&&roleIs(p,'ENG')?{review_fix_of:queuedReview,review_owner_run:s.items.get(run.item).meta.review_source_run,review_source_item:s.items.get(run.item).meta.review_source_item,review_round_cap:1}:{}) },
       });
       const blocking = p.blocking ?? report.outcome === 'blocked';
       if (blocking) events.push({ type: 'link.added', blocker: id, blocked: run.item, from_run: runId });
       const reviewHold = s.items.get(run.item)?.kind === 'work' && roleIs(p, 'REV');
       created.push({ id, title: p.title, role: p.role, blocking, reviewHold });
     }
+    events.push(...reviewResultEvents({state:s,events:committedEvents,run,report,sha256,body:parsed.body,usedIds:taken}));
     return {
       add: events,
       actor: `run:${runId}`,

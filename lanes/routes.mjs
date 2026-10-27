@@ -84,6 +84,7 @@ export function validateRoutesConfig(config, options = {}) {
       (!Number.isSafeInteger(config.dispatch.max_sessions) || config.dispatch.max_sessions < 1)) {
     throw new Error("dispatch.max_sessions must be a positive integer");
   }
+  if(config.dispatch?.max_review_sessions!==undefined&&(!Number.isSafeInteger(config.dispatch.max_review_sessions)||config.dispatch.max_review_sessions<1))throw Error('dispatch.max_review_sessions must be a positive integer');
   if (config.routes !== undefined && !record(config.routes)) throw new Error("routes must be an object");
   for (const [name, route] of Object.entries(config.routes ?? {})) {
     string(name, "route name");

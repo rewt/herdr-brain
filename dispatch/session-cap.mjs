@@ -12,6 +12,7 @@ import { loadTimeout, ADMISSION_WAIT_MS } from '../lib/deadline.mjs';
 import { matchesDispatchStart } from './unlanded-cap.mjs';
 
 export const DEFAULT_SESSION_CAP = 7;
+export const DEFAULT_REVIEW_SESSION_CAP = 3;
 const positive = n => Number.isSafeInteger(n) && n > 0;
 const canonical = file => { try { return fs.realpathSync(file); } catch { return path.resolve(file); } };
 const bound = w => w?.agent && w.pane && w.worker_workspace && (w.terminal_id || w.agent_session_id);
@@ -137,7 +138,7 @@ function sessionLiveness(owner, { kill = process.kill, readProcess = pid => look
 
 export const sessionAlive = (owner, options) => sessionLiveness(owner, options) !== 'dead';
 
-export function countSessions({ state, events = [], journals = [], reviewers = [], common, agent, processInfo, excludeStartJournal,
+export function countSessions({ state, events = [], journals = [], reviewers = [], common, agent, processInfo, excludeStartJournal,excludePendingJournal,
   projectIdentity = cwd => gitProject(cwd).identity, ...liveness }) {
   common = canonical(common);
   const sessions = [], jobs = new Map(journals.filter(j => j.run).map(j => [j.run, j]));
@@ -194,8 +195,9 @@ export function countSessions({ state, events = [], journals = [], reviewers = [
     const starting = j.stage === 'starting' && !j.startRefused && j.journal !== excludeStartJournal &&
       !events.some(e => e.type === 'run.started' && matchesDispatchStart(e,j));
     const launching = j.stage === 'launching' && !sessions.some(s => s.runs.includes(j.run));
-    if (!starting && !launching) continue;
-    add({ run: j.run ?? null, journal: j.journal, kind: j.unlandedCap?.admission?.kind === 'review' ? 'reviewer' : 'worker',
+    const detached=j.detached&&!j.detached_refused&&['open','start','worker'].includes(j.stage)&&!j.worker&&j.journal!==excludePendingJournal;
+    if (!starting && !launching && !detached) continue;
+    add({ run: j.run ?? null, journal: j.journal, kind: j.reviewQueue || j.unlandedCap?.admission?.kind === 'review' ? 'reviewer' : 'worker',
       identity: worker(j.worker), process: null, evidence: 'uncertain launch' });
   }
   // Reviewers have no worker run: the callback receipt binds the actual native
@@ -219,9 +221,11 @@ function readJSON(directory, filter = name => name.endsWith('.json'), withJourna
   });
 }
 
-export function checkSessionCap({ config, org, ...options }) {
-  const cap = config.dispatch?.max_sessions ?? DEFAULT_SESSION_CAP;
-  if (!positive(cap)) throw Error('dispatch.max_sessions must be a positive integer');
+export function checkSessionCap({ config, org, kind='all', ...options }) {
+  const nativeCap = config.dispatch?.max_sessions ?? DEFAULT_SESSION_CAP;
+  const reviewCap=config.dispatch?.max_review_sessions??DEFAULT_REVIEW_SESSION_CAP;
+  if (!positive(nativeCap)||!positive(reviewCap)) throw Error('dispatch session/review caps must be positive integers');
+  const cap=kind==='review'?reviewCap:nativeCap;
   let sessions;
   try {
     // Journal first, then record: never miss both sides of a start transition.
@@ -231,15 +235,19 @@ export function checkSessionCap({ config, org, ...options }) {
     sessions = countSessions({ ...options, events, state: fold(events), journals,
       reviewers: readJSON(path.join(org, 'retirement/occupants')) });
   } catch (e) { throw Error(`session count unavailable: ${e.message}`); }
-  const evidence = { cap, count: sessions.length, sessions };
-  if (sessions.length >= cap) {
+  const total=sessions;
+  if(kind==='review')sessions=total.filter(s=>s.kind==='reviewer'&&s.evidence!=='settle launch receipt');
+  else if(kind==='build')sessions=total.filter(s=>s.kind==='worker');
+  const evidence = { cap, count: sessions.length, sessions,kind,native_cap:nativeCap,native_count:total.length };
+  if (sessions.length >= cap || total.length>=nativeCap) {
+    const poolFull=sessions.length>=cap,held=poolFull?sessions:total,limit=poolFull?cap:nativeCap;
     const runs = list => [...new Set(list.flatMap(s => s.runs.filter(Boolean).length ? s.runs.filter(Boolean) : [`pending start ${s.journal ?? 'UNKNOWN'}`]))].sort((a,b)=>/^R-\d+$/.test(a)&&/^R-\d+$/.test(b)?Number(a.slice(2))-Number(b.slice(2)):a.localeCompare(b)).join(', ');
     const categories = ['observed live', 'unknown liveness', 'uncertain launch'].map(category =>
-      `${category}: ${runs(sessions.filter(s => s.occupancy === category)) || 'none'}`).join('; ');
-    const inspect = sessions.some(s => s.occupancy !== 'observed live')
+      `${category}: ${runs(held.filter(s => s.occupancy === category)) || 'none'}`).join('; ');
+    const inspect = held.some(s => s.occupancy !== 'observed live')
       ? '; inspect unknown-liveness and uncertain-launch runs and explicitly abandon stale runs after checking their workers' : '';
-    const error = Error(`session cap ${cap} reached: ${runs(sessions)} (counted ${sessions.filter(s => s.kind === 'worker').length} workers, ${sessions.filter(s => s.kind === 'reviewer').length} settle reviewers; ${categories}${inspect})`);
-    error.code = 'DISPATCH_SESSION_CAP';
+    const error = Error(`${poolFull&&kind==='review'?'review':'session'} cap ${limit} reached: ${runs(held)} (counted ${held.filter(s => s.kind === 'worker').length} workers, ${held.filter(s => s.kind === 'reviewer').length} reviewers; ${categories}${inspect})`);
+    error.code = kind==='review'&&sessions.length>=cap?'DISPATCH_REVIEW_CAP':'DISPATCH_SESSION_CAP';
     error.sessions = evidence;
     throw error;
   }

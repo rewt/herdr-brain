@@ -2,9 +2,9 @@
 
 The operator sets priorities; routine reversible engineering remains delegated.
 Sessions build and judge; model-free services run routine flow. The 2026-10-26
-land-first design is adopted. Phase 0 changes config/data/instructions. Phase 1/2
-implementations require their own start; do not describe planned service behavior
-as already live.
+land-first design is adopted. Phase 0 changes config/data/instructions. Phase1 implementation is operator-approved;
+source and offline checks do not establish live acceptance. Brain proof precedes
+BCH proof under its own supervisor. Phase2 still requires its own start.
 
 ## Run the current line
 
@@ -23,10 +23,15 @@ completion or discarding active claims.
 Workers self-land OWN source with lane promote TOPIC --expected-head FULL_SHA,
 then report. Main admits no test/review readiness gate under the current waiver.
 The same owner rebases moved main and captures its new head. ONE async post-code
-immutable diff/evidence review per change/item, cap1, zero suites; about30 minutes
+immutable diff/evidence review per source item/landed head, cap1, zero suites; about30 minutes
 is advisory. Retain prior pending/ambiguous/UNKNOWN attempts. One formal correction,
 no re-review chain. Majors require specific correction checks before release.
-Until Phase 2 implements new-commit reverts plus owner fix items, fix forward.
+Phase1 reviews use a separate default-three pool within actual native resource
+limits. Findings create linked engineer work with no re-review chain. The line
+owns guarded cleanup and never waits for a chat callback to source-complete.
+The overnight plan has no22:00/23:00 stop. Supervisor-herdr applies its plain
+Phase1 commit-revert rule on observed no-pass/no-landing/all-failing conditions
+without another operator ask; the engineer continues until proofs pass.
 
 New cold source calls use pinned Node20.19.4 and matching HERDR_BRAIN_ROOT.
 Normal pin forwarding, saved retries and native ownership remain intact.

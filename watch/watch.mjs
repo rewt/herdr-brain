@@ -55,6 +55,7 @@ const { values: opt, positionals, tokens } = parseArgs({ usage: "Usage: node wat
     herdr: { type: 'string', default: 'herdr' },
     spawn: { type: 'boolean', default: false },
     detach: { type: 'boolean', default: false },
+    'record-only':{type:'boolean',default:false},
     log: { type: 'string' },
     workspace: { type: 'string' },
     cwd: { type: 'string', default: process.cwd() },
@@ -112,6 +113,7 @@ function run(command, args, { env } = {}) {
   return spawnSync(command, args, {
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
+    timeout:120000,killSignal:'SIGTERM',
     env: { ...process.env, ...env },
   });
 }
@@ -266,6 +268,12 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp, recordC
 async function deliver(message, sound = 'request', id, { allowQueued = false, shadowEvidence } = {}) {
   log(message);
   if (dry) return true;
+  if(opt['record-only']){
+    reserveWatch('record-only',id);
+    const r=org(['note',runId,`[watch record-only] ${message}`]);
+    if(r.error||r.status!==0)throw Error(`record-only watch notice refused: ${r.stderr||r.error?.message||r.status}`);
+    finishWatch();return true;
+  }
   reserveWatch('delivery', id);
   let correlation;
   try { correlation = { run: runId, record: opt.org, project: gitProject(opt.cwd).identity }; }

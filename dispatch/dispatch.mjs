@@ -4,14 +4,13 @@ import { ownerAlive } from '../lib/process-owner.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawnSync,spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { BRAIN_CONTROLLER, brainOwner, claimRun, readOwnedRun, requireController, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { findOrgDir, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
-import { waitForMemory } from '../lib/memory.mjs';
 import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { admissionDeadline } from '../lib/deadline.mjs';
 import { readTiming, timedMemoryWait, timingMetadata, readAdmissionTiming, admissionTimingMetadata } from '../lib/run-timing.mjs';
@@ -26,6 +25,7 @@ import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
 import { checkSourceAdmission, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
 import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from '../line-service/review-queue.mjs';
+import { dispatchInput } from '../line-service/phase1.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -38,6 +38,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
   'accept-delivered': { type: 'boolean' }, 'recover-run': { type: 'string' },
   'from-run': { type: 'string' }, unblocks: { type: 'string' },
+  detach:{type:'boolean'},
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'watch-cli': { type: 'string' },
 }});
 const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [process.execPath, local(fallback)];
@@ -46,6 +47,7 @@ const laneCLI = cli('lane', '../lanes/lane.mjs');
 const watchCLI = cli('watch', '../watch/watch.mjs');
 let job, journal, lock, contender, ownsLock = false, observationDeadline;
 let releaseAdmission;
+let controllerDeadline=Infinity;
 const atomic = (file, value) => {
   const temp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -65,12 +67,12 @@ function claimAdmission() {
   save();
 }
 function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
-  const remaining = observationDeadline === undefined ? undefined : observationDeadline - Date.now();
+  const remaining = Math.min(observationDeadline??Infinity,controllerDeadline)-Date.now();
   if (remaining !== undefined && remaining <= 0) throw Error('session observation deadline expired');
   const result = spawnSync(argv[0], [...argv.slice(1), ...args], {
     cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, ORG_DIR: job?.org ?? opt.org },
-    ...(remaining === undefined ? {} : { timeout: Math.max(1, remaining), killSignal: 'SIGKILL' }),
+    timeout:Math.max(1,Math.min(120000,remaining??120000)),killSignal:'SIGTERM',
   });
   if (result.error || result.status !== 0) {
     const error = new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
@@ -160,7 +162,7 @@ function syncTiming() {
 function memoryGate(kind, label, check) {
   const deadline = admissionDeadline();
   return timedMemoryWait({ journal, run: job.run, item: job.item, lane: job.lane, kind,
-    wait: () => { waitForProvingHold({ label, check, deadline }); return waitForMemory({ label, check }); }, persist: syncTiming, onError: timingFailure });
+    wait: () => waitForProvingHold({ label, check, deadline }), persist: syncTiming, onError: timingFailure });
 }
 function locate(value) {
   if (!/^R-\d+$/.test(value)) return path.resolve(value);
@@ -207,7 +209,7 @@ function captureLaunchProcess() {
 function admission(repo, org, common) {
   const { config } = loadDiscoveredRoutes({ cwd: repo });
   const evidence = checkSessionCap({ config, org, common, agent: name => herdr(['agent', 'get', name]).agent,
-    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info, excludeStartJournal: journal });
+    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info, excludeStartJournal: journal,excludePendingJournal:journal,kind:job?.reviewQueue?'review':'build' });
   if (job) job.sessionCap = evidence;
   return evidence;
 }
@@ -326,6 +328,7 @@ async function main() {
       return;
     }
     job = saved;
+    if(job.detached)controllerDeadline=Date.now()+600000;
     if (opt['from-run'] !== undefined) {
       if (job.fromRun && job.fromRun !== opt['from-run']) throw new Error('--from-run cannot replace the saved origin');
       checkOrigin(opt['from-run'], json(record(['show', job.item, '--json'])), !job.run && job.stage !== 'starting');
@@ -407,10 +410,20 @@ async function main() {
       (job.stage === 'launching' && opt.fresh))) admission(job.repo, job.org, common);
   const stop = path.join(gitProject(job.repo).canonical, '.lane/supervisor/STOP');
   const checkStop = () => {
+    if(Date.now()>=controllerDeadline)throw Object.assign(Error('detached controller command budget exhausted; original journal retained'),{code:'DISPATCH_CONTROLLER_DEADLINE'});
     if (fs.existsSync(stop) || fs.existsSync(path.join(path.dirname(stop), 'HOLD'))) {
       const error = new Error('Supervisor STOP appeared before dispatch; no new worker launched');
       error.code = 'DISPATCH_STOPPED';
       throw error;
+    }
+    if(job.lineInput){
+      const events=loadEvents(job.org).events,state=fold(events),item=state.items.get(job.item);
+      if(!item||item.closed||item.meta.hold||item.meta.held||item.meta.operator_reserved||item.meta.reserved||item.role==='human')throw Error('detached item closed/held/reserved before native effect');
+      if(job.run){
+        if(item.runs.at(-1)!==job.run)throw Error('detached run superseded before native effect');
+        state.items.set(item.id,{...item,runs:item.runs.filter(id=>id!==job.run)});state.runs.delete(job.run);
+      }
+      if(dispatchInput({events,state,item:state.items.get(job.item)})!==job.lineInput)throw Error('detached readiness or genuine changed input differs from its frozen request');
     }
     if (job.reviewQueue) {
       const events = loadEvents(job.org).events, state = fold(events), item = state.items.get(job.item);
@@ -424,6 +437,28 @@ async function main() {
       }
     }
   };
+  if(opt.detach){
+    if(opt.retry||job.stage!=='open'||job.detached)throw Error('--detach is only for one new frozen request; never resubmit a saved launch');
+    const release=acquireSessionCapLock(common,{check:checkStop});
+    try{
+      const events=loadEvents(job.org).events,state=fold(events);job.lineInput=dispatchInput({events,state,item:state.items.get(job.item)});
+      if(!job.lineInput)throw Error('detached start needs ready work or a genuinely changed blocked report');
+      admission(job.repo,job.org,common);checkStop();job.detached=true;job.recordOnlyNotices=true;job.phase1_protocol=1;save();
+    }finally{release();}
+    // Durable original request precedes spawn. The child takes the SAME request
+    // lock; a lost spawn result is retained and never automatically relaunched.
+    const output=fs.openSync(`${journal}.driver.log`,'a',0o600);
+    try{
+      if(!ownsLock||fs.readFileSync(lock,'utf8')!==String(process.pid))throw Error('detached request ownership changed before handoff');
+      fs.unlinkSync(lock);ownsLock=false;if(contender){fs.unlinkSync(contender);contender=null;}
+      const args=[local('../dispatch/dispatch.mjs'),'--retry',journal,'--repo',job.repo,'--org',job.org,'--controller',opt.controller,
+        ...(opt['org-cli']?['--org-cli',opt['org-cli']]:[]),...(opt['lane-cli']?['--lane-cli',opt['lane-cli']]:[]),...(opt['watch-cli']?['--watch-cli',opt['watch-cli']]:[])];
+      const child=spawn(process.execPath,args,{cwd:job.repo,env:process.env,detached:true,stdio:['ignore',output,output]});child.on('error',e=>fs.appendFileSync(`${journal}.driver.log`,`${e.message}\n`));child.unref();
+      fs.mkdirSync(`${journal}.driver`,{recursive:true});
+      fs.writeFileSync(`${journal}.driver/launch.json`,JSON.stringify({pid:child.pid??null,at:new Date().toISOString(),journal,command_limit_ms:120000,controller_budget_ms:600000})+'\n',{flag:'wx',mode:0o600});
+      process.stdout.write(JSON.stringify({result:'detached',journal,run:null,item:job.item,pid:child.pid??null})+'\n');return;
+    }finally{fs.closeSync(output);}
+  }
   if (opt['recover-run']) {
     if (job.run || !requestStarts().some(start => start.id === opt['recover-run'])) throw new Error('recovery run does not belong to this request');
     job.run = opt['recover-run']; claimAdmission(); job.stage = 'worker'; save();
@@ -547,6 +582,7 @@ async function main() {
       admission(job.repo, job.org, common);
       checkStop();
       job.stage = 'launching'; save();
+      job.native_launch_attempted=true;save();
       const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked',
         ...(job.reviewQueue ? ['--expected-head',job.reviewQueue.head] : [])]);
       const launched = JSON.parse(output);
@@ -585,7 +621,7 @@ async function main() {
       save();
       job.watcher = json(command(watchCLI, [job.run, '--controller', opt.controller, '--org', job.org, '--to', job.to,
         '--cwd', job.repo, '--detach', '--log', path.join(job.org, 'dispatch', `${job.run}.watch.log`),
-        ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : [])]));
+        ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : []),...(job.recordOnlyNotices?['--record-only']:[])]));
       save();
     } else {
       if (!ownerAlive(job.watcher)) {
@@ -654,7 +690,9 @@ function outputReceipt() {
 try { await main(); }
 catch (error) {
   if (job && journal && ownsLock) {
-    job.error = error.message; save();
+    job.error = error.message;
+    if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
+    save();
     if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}
   }
   process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}\n`);
@@ -677,6 +715,10 @@ catch (error) {
   }
 } finally {
   releaseAdmission?.();
+  if(opt.retry&&job?.detached&&journal&&ownsLock){
+    fs.mkdirSync(`${journal}.driver`,{recursive:true});const fd=fs.openSync(`${journal}.driver/results.jsonl`,'a',0o600);
+    try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,native_launch_attempted:job.native_launch_attempted??false})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+  }
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
   if (contender) try { fs.unlinkSync(contender); } catch {}
 }

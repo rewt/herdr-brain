@@ -50,6 +50,7 @@ import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, 
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, requireExactPlan, selectionUnknown } from './exact-validation.mjs';
 import { changedPaths, plannedCommand } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
+import { recordOwnLanding } from '../lib/landing-receipt.mjs';
 
 import {
   loadRegistry,
@@ -2707,6 +2708,13 @@ function promoteLocked(topic, root, options) {
     fail("worktree branch or lane tip changed during validation; re-run promote");
   }
   guard(() => git(["merge", "--ff-only", validatedHead], { cwd: root }));
+  const landedAt=new Date().toISOString();
+  // The FF is finished. A receipt failure retains that fact and is reported
+  // separately; it never turns source landing into a report/review gate.
+  if(process.env.HERDR_ENV==='1')try{
+    const receipt=recordOwnLanding({canonical:root,workspace:path,base:mainHead,head:validatedHead,landedAt});
+    process.stdout.write(`landing receipt: ${JSON.stringify(receipt)}\n`);
+  }catch(error){process.stderr.write(`post-FF landing receipt held: ${error.message}; source is landed, exact record timing UNKNOWN\n`);}
   process.stdout.write(
     `promoted ${branch}: ${MAIN} ${mainHead.slice(0, 7)} -> ${git(["rev-parse", "--short", MAIN])} (fast-forward)\n`,
   );

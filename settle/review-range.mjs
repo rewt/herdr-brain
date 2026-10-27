@@ -6,9 +6,16 @@ const TOKEN = /(?<![A-Za-z0-9/._~-])[a-f0-9]{7,64}(?![A-Za-z0-9/._~-])/gi;
 const CLAIM_LABEL = /^(?:commit|head|branch\s+head)\s*(?:[:=]\s*|\s+)[`"']?$/i;
 const BARE = /^[`"']?[a-f0-9]{7,64}[`"']?(?:\s+on\s+lane\/[a-z0-9][a-z0-9-]*)?$/i;
 
+export function claimedCommitTokens(artifacts=[]) {
+  return [...new Set(artifacts.flatMap(artifact=>{
+    const entry=String(artifact).trim();
+    return [...entry.matchAll(TOKEN)].filter(match=>CLAIM_LABEL.test(entry.slice(0,match.index))||BARE.test(entry)).map(match=>match[0].toLowerCase());
+  }))];
+}
+
 export function reviewScope({ workspace, base, head, artifacts = [] }) {
   const git = (args, optional = false) => {
-    const result = spawnSync('git', args, { cwd: workspace, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    const result = spawnSync('git', args, { cwd: workspace, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:10000 });
     if (result.error || (result.status !== 0 && !(optional && result.status === 1))) {
       throw new Error(`review scope ${args[0]}: ${(result.stderr || result.error?.message || `exit ${result.status}`).trim()}`);
     }

@@ -14,15 +14,15 @@ import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.m
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { readCloseoutEntries } from '../lib/closeout.mjs';
+import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
-import { reviewAttempt, bindReviewTarget } from './review.mjs';
+import { reviewAttempt } from './review.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
-import { serviceCutoff,postCutoffLanding } from './cutoff.mjs';
 import { canonical } from '../messages/schema.mjs';
+import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults } from './phase1.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -44,7 +44,8 @@ export function routeFor(item, config) {
 }
 
 export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = spawnSync,
-  recordNotice = recordLineNotice, wakeDecision = enqueueNamedDecision, capacity, identify = gitProject, now = () => new Date().toISOString() }) {
+  recordNotice = recordLineNotice, wakeDecision = enqueueNamedDecision, capacity, identify = gitProject, now = () => new Date().toISOString(),
+  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3 }) {
   const project = identify(repo);
   if (project.checkout !== project.canonical) throw Error('line service requires the canonical project checkout');
   repo = project.canonical;
@@ -67,15 +68,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   const invoke = (exe, args, { receipt = false } = {}) => {
     const started = performance.now();
     let r;
-    try { r = command(exe, args, { cwd: repo, env: childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }); }
+    try { r = command(exe, args, { cwd: repo, env: childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:childTimeoutMs,killSignal:'SIGTERM' }); }
     finally { if (timings) timings.effect_command_ms += performance.now() - started; }
-    if (r.error || r.status !== 0) throw Object.assign(Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()), { receipt: { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr } });
+    if (r.error || r.status !== 0) throw Object.assign(Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()), { code:r.error?.code,receipt: { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr,error:r.error?.code } });
     return receipt ? { status: r.status, signal: r.signal ?? null, stdout: r.stdout ?? '', stderr: r.stderr ?? '' } : r.stdout?.trim() ?? '';
   };
   const native = args => JSON.parse(invoke(herdr, args)).result;
   const cli = (file, args, options) => invoke(process.execPath, [path.join(sourceRoot, file), ...args], options);
   const sourceGit = (cwd, args) => execFileSync('git', ['--no-optional-locks', '-C', cwd, ...args], {
-    env: childEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024,
+    env: childEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024,timeout:10000,
   }).trim();
   const observe = () => {
     const started = performance.now();
@@ -89,52 +90,63 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (timings) timings.record_snapshot_ms += performance.now() - started;
     return result;
   };
-  const guardRun = (id, { reported = true } = {}) => {
+  const guardRun = (id, { reported = true,current=true,workspace=true } = {}) => {
     const snapshot = observe(), run = snapshot.state.runs.get(id), item = run && snapshot.state.items.get(run.item);
-    if (!run || run.abandoned || !item || item.runs.at(-1) !== id) throw Error('unknown, abandoned or superseded run');
+    if (!run || run.abandoned || !item || current&&item.runs.at(-1) !== id) throw Error('unknown, abandoned or superseded run');
     requireController(readOwnedRun(org, id), 'brain');
-    if (identify(run.workspace).identity !== project.identity) throw Error('foreign run workspace');
+    if (workspace&&identify(run.workspace).identity !== project.identity) throw Error('foreign run workspace');
+    if(!workspace&&snapshot.events.find(e=>e.type==='run.started'&&e.id===id)?.meta?.dispatch_project!==project.identity)throw Error('original run project binding is missing/foreign');
     if (reported && !run.report) throw Error('report not ingested');
     return { ...snapshot, run, item };
   };
   function pass() {
-    const release = noticeLock(path.join(directory, 'pass.lock'),{recover:false});
+    const release = noticeLock(path.join(directory, 'pass.lock'));
     let effects;
+    const passAt=now(),heartbeat=phase=>writeFileAtomic(path.join(directory,'heartbeat.json'),JSON.stringify({at:now(),started_at:passAt,project:project.identity,source:sourceRoot,phase,pid:process.pid})+'\n',0o600);
+    heartbeat('starting');
     try {
       const passStarted = performance.now();
+      const expired=()=>performance.now()-passStarted>=passBudgetMs;
       timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0 };
       effects = read(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
       const save = () => writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);
       let snapshot, stale = true, reviewCache = new Map();
       const current = () => { if (stale) { snapshot = observe(); stale = false; reviewCache = new Map(); } return snapshot; };
-      const note = (boundary, reason, scope = {}) => {
+      const note = (boundary, reason, scope = {}, force = false) => {
         const normalized=canonicalFailure(reason),key=createHash('sha256').update(canonical([boundary,normalized,scope])).digest('hex');
         log({ action: 'hold', boundary, reason, canonical_key:key,scope });
         effects.record_notices??={};
         const prior=effects.record_notices[key],entry=effects.record_notices[key]=prior??{first_at:now(),reason:normalized,scope,state:'recording',id:`line-record-${key}`,count:0};
         entry.count++;entry.last_at=now();save();
+        if(!force&&entry.count<alertAfter)return;
         if(entry.state==='recorded')return;
         try {
           const receipt=recordNotice({repo,org,id:entry.id,boundary,reason:entry.reason,scope:entry.scope,first_at:entry.first_at,audit:path.join(directory,'passes.jsonl'),counts:`${journal}#record_notices/${key}`,env:childEnv});
           entry.state='recorded';entry.record={id:receipt.id,state:receipt.state};save();
         } catch (e) { entry.state='record-uncertain';entry.error=e.message;save();log({ action:'record-inbox-held',canonical_key:key,error:e.message }); }
       };
-      const effect = (key, run, binding, operation) => {
+      const effect = (key, run, binding, operation, safe=false) => {
         if (effects.actions[key]) {
           const prior = effects.actions[key];
-          log({ action: 'effect-retained', key, state: prior.state });
-          if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
-          return;
+          const unsafe=/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/.test(prior.error??'');
+          if(!safe||prior.state==='complete'||unsafe){
+            log({ action: 'effect-retained', key, state: prior.state });
+            if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
+            return prior;
+          }
         }
+        if(expired())return;
         observe();
         stale = true;
-        const entry = effects.actions[key] = { state: 'started', at: now(), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
+        const prior=effects.actions[key],history=prior?[...(prior.history??[]),Object.fromEntries(Object.entries(prior).filter(([k])=>k!=='history'))]:[];
+        const entry = effects.actions[key] = { state: 'started', at: now(),...(history.length?{history}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
         try {
           entry.result = run(); entry.state = 'complete';
           if (['escalate', 'failed', 'stopped', 'judge_promotion'].includes(entry.result?.result)) {
             entry.state = 'held'; entry.error = entry.result.reason ?? entry.result.result;
           }
+          if(entry.result?.already_running){entry.state='held';entry.error='ordinary closeout consumer contention; unchanged request retained';}
           const deferred = entry.result?.evaluated?.filter(row => !row.completed);
           if (deferred?.length) { entry.state = 'held'; entry.error = deferred.map(row => `${row.run}: ${row.reason}`).join('; '); }
         }
@@ -145,67 +157,62 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       };
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:sourceGit(sourceRoot,['rev-parse','HEAD']) });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
-      for (const item of snapshot.state.items.values()) {
-        if (item.closed) { timings.historical_intake_skipped++; continue; }
-        const run = snapshot.state.runs.get(item.runs.at(-1));
-        if (!run || run.abandoned || run.report || !run.workspace || !run.report_path || !fs.existsSync(run.report_path) || !fs.existsSync(run.workspace)) continue;
-        try {
-          if (identify(run.workspace).identity !== project.identity) continue;
-          if (effects.actions[`ingest:${run.id}`]) continue;
-          const bound = guardRun(run.id, { reported: false }), w = effectiveWorkerIdentity(bound.run, bound.state), receipt = workerReceipt(bound.run, bound.state);
-          if (!receipt || w.identity_conflict || !w.agent || !w.terminal_id || ['agent', 'pane', 'worker_workspace', 'terminal_id'].some(k => receipt[k] !== w[k])) throw Error('native worker receipt missing or conflicted');
-          const a = native(['agent', 'get', w.agent])?.agent;
-          if (!a || a.name !== w.agent || a.pane_id !== w.pane || a.workspace_id !== w.worker_workspace || a.terminal_id !== w.terminal_id ||
-              (w.agent_session_id && a.agent_session?.value !== w.agent_session_id) || fs.realpathSync(a.cwd) !== fs.realpathSync(run.workspace)) throw Error('native worker identity differs from its recorded receipt');
-          if (!['idle', 'done'].includes(a.agent_status)) { log({ action: 'report-in-flight', run: run.id }); continue; }
-          effect(`ingest:${run.id}`, () => { guardRun(run.id, { reported: false }); return cli('bin/org.mjs', ['ingest', run.report_path, '--run', run.id, '--if-current-run', run.id]); });
-        } catch (e) { note(`intake:${run.id}`, e.message); }
-      }
-      snapshot = current();
-      let cutoff;
-      try{cutoff=serviceCutoff(snapshot.events,{repo,org,identity:project.identity});}
-      catch(e){note('review-cutoff',e.message);}
-      for (const item of snapshot.state.items.values()) {
-        const run = snapshot.state.runs.get(item.runs.at(-1));
-        if (!run?.report || run.abandoned || !run.workspace) continue;
-        if (item.closed || !run.owner || run.owner.legacy || run.owner.controller !== 'brain') { timings.historical_review_skipped++; continue; }
-        if (!fs.existsSync(run.workspace)) { timings.historical_review_skipped++; continue; }
-        if (!roleIs(item, 'ENG')) continue; // Reviews never generate their own review.
-        if (roleIs(snapshot.state.items.get(item.parent), 'REV')) continue; // Linked formal correction, no re-review chain.
-        if(!cutoff){timings.historical_review_skipped++;continue;}
-        let target;
+      let intakeSteps=0;
+      for (const run of snapshot.state.runs.values()) {
+        if(expired()||intakeSteps>=maxStepsPerStage)break;
+        if(run.report||run.abandoned||!run.report_path||!fs.existsSync(run.report_path))continue;
+        const item=snapshot.state.items.get(run.item);if(!item)continue;
+        if(item.closed||!run.owner||run.owner.legacy||run.owner.controller!=='brain'||item.runs.at(-1)!==run.id&&snapshot.state.runs.get(item.runs.at(-1))?.report){timings.historical_intake_skipped++;continue;}
         try{
-          target=bindReviewTarget({item,run,events:snapshot.events,repo,org,identity:project.identity});
-          postCutoffLanding({events:snapshot.events,repo,org,identity:project.identity,head:target.head});
-        }catch(e){timings.historical_review_skipped++;continue;}
-        let reviewLock;
-        try {
-          reviewLock = noticeLock(path.join(directory, `review-item-${digest(item.id)}.lock`),{recover:false});
-          const attempt = reviewAttempt(item, { org, identity: project.identity, events: snapshot.events, state: snapshot.state, repo, effects, cache: reviewCache });
-          if (attempt) { log({ action: 'review-retained', item: item.id, reason: attempt }); continue; }
-          if (identify(run.workspace).identity !== project.identity) continue;
-          if (run.report.outcome !== 'done' || run.report.blockers?.length || (run.report.questions ?? run.report.extra?.questions)?.length) note(`report:${run.id}:${run.report.sha256}`, 'worker report needs supervisor judgment');
-          if (reserved(item) || item.meta.hold || item.meta.held) { note(`review:${item.id}`, 'held or reserved item needs judgment'); continue; }
-          const consumer = queueConsumer({ run, env: childEnv });
-          effect(`review:${item.id}`, () => {
-            guardRun(run.id);
-            const fresh = observe();
-            const changed = reviewAttempt(fresh.state.items.get(item.id), { org, identity: project.identity, events: fresh.events, state: fresh.state, repo, effects,
-              ignoreService: { file: journal, key: `review:${item.id}`, target, operation: 'record-queue' } });
-            if (changed) throw Error(`review inventory changed before launch: ${changed}`);
-            if (queueConsumer({ run: fresh.state.runs.get(run.id), env: childEnv }) !== consumer) throw Error('actual queue consumer changed before creation');
-            const checked = bindReviewTarget({ item: fresh.state.items.get(item.id), run: fresh.state.runs.get(run.id), events: fresh.events, repo, org, identity: project.identity });
-            if (JSON.stringify(checked) !== JSON.stringify(target)) throw Error('immutable review target/evidence changed before capture');
-            return JSON.parse(cli('bin/org.mjs', ['queue-review', run.id, '--head', target.head, '--base', target.base]));
-          }, target, 'record-queue');
-        } catch (e) { if(e.code==='REVIEW_CUTOFF')timings.historical_review_skipped++;else note(`review:${item.id}`, `T2 automatic review held: ${e.message}`,{item:item.id,run:run.id,report:run.report.sha256}); }
-        finally { reviewLock?.(); }
+          const workspace=Boolean(run.workspace&&fs.existsSync(run.workspace));
+          guardRun(run.id,{reported:false,current:false,workspace});
+          intakeSteps++;
+          effect(`ingest:${run.id}`,()=>{
+            guardRun(run.id,{reported:false,current:false,workspace});
+            return cli('bin/org.mjs',['ingest',run.report_path,'--run',run.id,...(item.runs.at(-1)===run.id?['--if-current-run',run.id]:[])]);
+          },undefined,undefined,true);
+        }catch(e){note(`ingest:${run.id}`,e.message);}
+      }
+      snapshot=current();
+      let cutoff;try{cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch(e){note('review-cutoff',e.message);}
+      const recordedReviews=new Set(snapshot.events.filter(e=>e.type==='change.reviewed').map(e=>e.review_run));let resultSteps=0;
+      for(const run of snapshot.state.runs.values()){
+        if(expired()||resultSteps>=maxStepsPerStage)break;
+        const review=snapshot.state.items.get(run.item);
+        if(cutoff&&review?.created.seq>cutoff.seq&&run.report&&isQueueReview(review)&&!recordedReviews.has(run.id)){
+          resultSteps++;
+          effect(`review-result:${run.id}:${run.report.sha256}`,()=>recordReviewResults({repo,org,runId:run.id,env:childEnv}),undefined,undefined,true);
+        }
+      }
+      snapshot=current();
+      let discovered;try{discovered=discoverChanges({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,pendingOnly:true});}catch(e){discovered={changes:[],holds:[{reason:e.message}]};}
+      for(const held of discovered.holds)note(`review-source:${held.run??'boundary'}:${held.head??''}`,held.reason);
+      let reviewSteps=0;
+      for(const {item,run,target}of discovered.changes){
+        if(expired()||reviewSteps>=maxStepsPerStage)break;
+        const key=`review:${item.id}:${target.head}`;let reviewLock;
+        try{
+          reviewLock=noticeLock(path.join(directory,`review-change-${digest([item.id,target.head])}.lock`),{recover:false});
+          const ignoreService={file:journal,key,target,operation:'record-queue'};
+          const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,ignoreService});
+          if(attempt){log({action:'review-retained',item:item.id,head:target.head,reason:attempt});continue;}
+          queueConsumer({run,env:childEnv});reviewSteps++;
+          effect(key,()=>{
+            const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
+            if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))throw Error('immutable landed target/evidence changed before queue mutation');
+            queueConsumer({run:checked.run,env:childEnv});
+            return JSON.parse(cli('bin/org.mjs',['queue-review',run.id,'--head',target.head,'--base',target.base]));
+          },target,'record-queue',true);
+        }catch(e){note(key,e.message,{item:item.id,run:run.id,head:target.head});}
+        finally{reviewLock?.();}
       }
       // Source completion releases the real admission slot independently of
       // review verdicts and physical cleanup. The record owns the conditional
       // current-run/report/blocker/reopen transaction; there is no override.
       snapshot = current();
-      for (const item of snapshot.state.items.values()) {
+      let closeSteps=0;
+      for (const item of [...snapshot.state.items.values()].sort((a,b)=>(snapshot.state.runs.get(b.runs.at(-1))?.report?.seq??0)-(snapshot.state.runs.get(a.runs.at(-1))?.report?.seq??0))) {
+        if(expired()||closeSteps>=maxStepsPerStage)break;
         const run = snapshot.state.runs.get(item.runs.at(-1));
         if (item.closed || run?.report?.outcome !== 'done' || run.abandoned || !run.workspace || !fs.existsSync(run.workspace) ||
             !run.owner || run.owner.legacy || run.owner.controller !== 'brain') continue;
@@ -214,6 +221,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if (reserved(item) || item.meta.hold || item.meta.held || run.report.blockers?.length || (run.report.questions ?? run.report.extra?.questions)?.length) {
             note(`source-complete:${run.id}`, 'T2 source completion needs supervisor judgment: held/reserved item or report blockers/questions; no explicit-judgment override used'); continue;
           }
+          closeSteps++;
           effect(`source-complete:${run.id}:${run.report.sha256}`, () => {
             const bound = guardRun(run.id), ownership = requireController(readOwnedRun(org, run.id), 'brain');
             if (bound.item.closed) return { retained: 'already source-complete' };
@@ -230,7 +238,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               `Routine conditional source completion of current done report ${run.id} (${run.report.sha256}); clean source ${head} integrated at ${tip}. Preserve existing independent review/verdict holds, callbacks, HOLD, archives and next final-release/Major-correction obligations; physical cleanup is separate.`];
             return { source_head: head, integrated_tip: tip, report_sha256: run.report.sha256, ownership,
               command: [process.execPath, path.join(sourceRoot, 'bin/org.mjs'), ...args], close: cli('bin/org.mjs', args, { receipt: true }) };
-          });
+          },undefined,undefined,true);
         } catch (e) { note(`source-complete:${run.id}`, `T2 source completion needs supervisor judgment: ${e.message}`); }
       }
       try {
@@ -238,13 +246,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const entries = readCloseoutEntries(project.identity).filter(e => {
           if (e.org !== org || e.project !== repo) return false;
           const prior = evaluations.get(e.key);
-          if (prior) timings.closeout_retained++;
+          if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;
-          return !prior; // Never automatically retry a named failed/native effect.
-        });
+          if(prior&&/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/i.test(prior.reason??'')){timings.closeout_retained++;return false;}
+          return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior);
+        }).sort((a,b)=>b.source.seq-a.source.seq).slice(0,maxStepsPerStage);
         if (entries.length) {
-          const revisions = observed.events.filter(e => ['closeout.retry', 'closeout.handoff', 'closeout.code-handoff', 'closeout.migrated'].includes(e.type)).at(-1)?.seq;
-          effect(`closeout:${digest([entries, revisions])}`, () => JSON.parse(cli('supervisor/closeout.mjs', ['drain', '--repo', repo, '--org', org, '--keys', JSON.stringify(entries.map(e => e.key)), '--no-restart'])));
+          const revisions = entries.map(e=>closeoutRevision(e,observed.events,observed.state));
+          effect(`closeout:${digest([entries.map(e=>e.key), revisions])}`, () => JSON.parse(cli('supervisor/closeout.mjs', ['drain', '--repo', repo, '--org', org, '--keys', JSON.stringify(entries.map(e => e.key)), '--no-restart','--retry-safe','--deadline',String(Date.now()+Math.max(1,childTimeoutMs-5000))])),undefined,undefined,true);
         }
       } catch (e) { note('closeout', e.message); }
       // A routine error never creates a decision. Only a real post-cutover
@@ -266,49 +275,56 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Failed cleanup/review never prevents considering independent ready work.
       snapshot = current();
       const { config } = loadDiscoveredRoutes({ cwd: repo, env: childEnv });
+      let starts=0;
       for (const item of sortItems([...snapshot.state.items.values()].filter(item => !item.closed && item.kind !== 'goal')).sort((a, b) => Number(isQueueReview(b)) - Number(isQueueReview(a)))) {
-        if (item.kind === 'goal' || item.closed || itemStatus(snapshot.state, item.id) !== 'ready') continue;
+        if(expired()||starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
+        snapshot=current();
+        const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id)});
+        if(!input)continue;
         if(roleIs(item,'REV')&&(!cutoff||item.created.seq<=cutoff.seq)){timings.historical_review_skipped++;continue;}
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); continue; }
         if (reserved(item) || item.meta.hold || item.meta.held) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment'); continue; }
         try {
-          const key = `dispatch:${item.id}:${item.runs.at(-1) ?? item.created.seq}`;
+          const key = `dispatch:${item.id}:${input}`;
           if (effects.actions[key]) { log({ action: 'dispatch-retained', key, state: effects.actions[key].state }); continue; }
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo }) : null;
           const route = reviewTarget ? reviewQueueRoute(config) : routeFor(item, config);
-          const count = capacity ?? (() => checkSessionCap({ config, org, common: project.identity,
+          const count = capacity ?? (() => checkSessionCap({ config, org, kind:reviewTarget?'review':'build',common: project.identity,
             agent: name => native(['agent', 'get', name]).agent,
             processInfo: pane => native(['pane', 'process-info', '--pane', pane]).process_info }));
           const occupancy = count(); log({ action: 'capacity', ...occupancy });
           const dispatched = effect(key, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
-            if (!current || current.closed || itemStatus(fresh.state, item.id) !== 'ready' || reserved(current) || current.meta.hold || current.meta.held || (reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route) throw Error('dispatch readiness or route changed');
+            if (!current || current.closed || dispatchInput({...fresh,item:current}) !== input || reserved(current) || current.meta.hold || current.meta.held || (reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route) throw Error('dispatch readiness or route changed');
             const brief = path.join(directory, `${digest(key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item/run brief and accepted directions. Self-land OWN source and hand its immutable landed tuple/evidence to record queue-review; never start a parallel settle/lane review. Preserve STOP/HOLD, claims and native guards. Escalate judgment to ${to} through the existing native inbox.\n`, 0o600);
-            return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : [])]));
+            return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : []),'--detach']));
           });
-          // Fresh occupancy and readiness on the next scheduled pass. Dispatch
-          // performs the authoritative, locked applicable-cap admission itself.
-          if (dispatched?.state === 'complete') break;
+          // Each original detached journal reserves admission before returning.
+          // The next candidate gets a fresh native count; no launch is replayed.
+          if (dispatched?.state === 'complete') starts++;
         } catch (e) {
           if(e.code==='REVIEW_CUTOFF'){timings.historical_review_skipped++;continue;}
+          if(e.code==='DISPATCH_REVIEW_CAP'){log({action:'capacity-held',code:e.code,reason:e.message});note(`capacity:${e.code}`,e.message);continue;}
           if (['DISPATCH_SESSION_CAP', 'DISPATCH_UNLANDED_CAP'].includes(e.code)) { log({ action: 'capacity-held', code: e.code, reason: e.message }); note(`capacity:${e.code}`, e.message); break; }
           note(`dispatch:${item.id}`, e.message);
         }
       }
       const duration_ms = performance.now() - passStarted;
-      log({ action: 'pass-complete', timing: { ...timings, duration_ms, other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
+      if(duration_ms>600000)note('long-pass','line pass exceeded ten minutes',{},true);
+      log({ action: 'pass-complete', starts,timing: { ...timings, duration_ms, other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
       return { result: 'pass-complete', directory };
-    } finally { release(); }
+    } finally { try{heartbeat('finished');}finally{release();} }
   }
   return { pass, directory, log };
 }
 
 export async function main(argv = process.argv.slice(2)) {
   const { values } = parseArgs({ args: argv, usage: 'line-service.mjs --once --repo CANONICAL --org RECORD --to SUPERVISOR', options: {
-    once: { type: 'boolean' }, repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' },
+    once: { type: 'boolean' },digest:{type:'boolean'},since:{type:'string'}, repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' },
   } });
+  if(values.digest){if(!values.org)throw Error('--digest needs --org RECORD');process.stdout.write(JSON.stringify(morningDigest({events:loadEvents(values.org).events,since:values.since}),null,2)+'\n');return;}
   if (!values.once || !values.repo) throw Error('use --once --repo CANONICAL; launchd owns the schedule');
   const source = gitProject(sourceRoot);
   if (source.checkout !== source.canonical) throw Error('live line service must use the canonical development source');

@@ -97,6 +97,13 @@ function assertRemoved(f) {
   assert.ok(effects(f).some(e => e.action === 'lane-removed'));
 }
 
+test('phase1 conditional source completion binds one real landed worktree removal without promotion callback',t=>{
+  const f=setup(t,{occupied:false});f.git(['merge','--ff-only',f.head]);f.report();
+  const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);
+  const target=rows[0].closeout_targets.find(t=>t.signal==='landed');assert.ok(target);assert.equal(target.head,f.head);
+  const result=f.drain({keys:[target.key]});assert.equal(result.evaluated[0]?.completed,true);assert.equal(fs.existsSync(f.lane),false);
+});
+
 test('default landing and named requests, full-source opt-in, opt-out and canonical ownership', t => {
   const f = fixture(t, { occupied: false });
   fs.unlinkSync(path.join(f.repo, '.lane.json'));

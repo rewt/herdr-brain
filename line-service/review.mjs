@@ -33,7 +33,69 @@ const contains = (value, tokens) => {
   return value && typeof value === 'object' && Object.values(value).some(v => contains(v, tokens));
 };
 
-export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun }) {
+function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue}) {
+  const runs=new Set(item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head))));
+  const tokens=new Set([item.id,...item.runs]);
+  const heads=value=>{
+    const out=new Set();const visit=(v,key='')=>{if(typeof v==='string'&&/head|commit|reviewed/i.test(key)&&!/^base$/i.test(key)&&commit(v))out.add(v);else if(Array.isArray(v))for(const x of v)visit(x,key);else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v))visit(x,k);};visit(value);return out;
+  };
+  const matches=(value,runHint)=>{
+    if(!value)return false;const named=heads(value);
+    if(named.size)return named.has(target.head)&&(contains(value,tokens)||item.runs.includes(runHint));
+    const run=value.run??value.source_run??runHint;
+    return runs.has(run);
+  };
+  for(const q of state.items.values())if(q.id!==ignoreQueue&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&q.meta.review_target?.head===target.head)return 'existing same-change record review';
+  for(const e of events){
+    if(e.type==='change.reviewed'&&e.item===item.id&&e.head===target.head)return 'recorded same-change verdict';
+    if(e.type==='review.verdict'&&item.runs.includes(e.run)&&matches(e,e.run))return 'recorded same-change verdict';
+    if(e.type==='note.added'&&e.decision&&tokens.has(e.id)&&/review/i.test(e.text??'')){
+      const named=(e.text.match(/\b[a-f0-9]{40,64}\b/g)??[]);
+      if(named.includes(target.head)||!named.length&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))))return 'recorded same-change independent review hold';
+    }
+  }
+  const pending=(actions,file)=>Object.entries(actions??{}).some(([key,value])=>{
+    if(ignoreService&&ignoreService.file===file&&ignoreService.key===key&&value.review_operation===ignoreService.operation&&JSON.stringify(value.review_target)===JSON.stringify(ignoreService.target)&&
+      (['started','held'].includes(value.state)&&!ignoreQueue||value.state==='complete'&&value.result?.review_item===ignoreQueue))return false;
+    if(!/review/i.test(key))return false;
+    return key===`review:${item.id}:${target.head}`||key.includes(item.id)&&heads(value).has(target.head)||matches(value,key.match(/R-\d+/)?.[0]);
+  });
+  if(pending(effects?.actions,ignoreService?.file))return 'existing same-change service intent/result';
+  for(const dir of ['retirement/occupants','retirement/reviews','settle'])for(const entry of entries(path.join(org,dir))){
+    if(!entry.name.endsWith('.json'))continue;const hint=entry.name.match(/R-\d+/)?.[0];let value;
+    try{value=read(path.join(org,dir,entry.name));}catch(e){if(runs.has(hint))throw e;continue;}
+    if(value?.kind==='watcher')continue;
+    if(matches(value,hint))return `existing same-change ${dir} attempt/UNKNOWN`;
+  }
+  for(const entry of entries(path.join(org,'line-service')))if(entry.isDirectory()){
+    const file=path.join(org,'line-service',entry.name,'effects.json');let saved;try{saved=read(file);}catch(e){if(entry.name===sha(JSON.stringify(identity)).slice(0,20))throw e;continue;}
+    if(saved&&!saved.actions&&entry.name===sha(JSON.stringify(identity)).slice(0,20))throw Error('current service review journal is UNKNOWN');
+    if(pending(saved?.actions,file))return 'existing same-change service intent/result';
+  }
+  for(const id of item.runs){
+    const run=state.runs.get(id);if(!run)continue;
+    const evidence=path.join(org,'evidence',item.id,id);
+    // Receipt attribution is scoped to its source run/head. An unrelated old
+    // directory or opaque filename is never a project-wide review hold.
+    if(runs.has(id))for(const entry of entries(evidence))if(/review|settle/i.test(entry.name)&&entry.name.endsWith('.json')){
+      const value=read(path.join(evidence,entry.name));if(matches(value,id))return 'same-change source-owner review receipt/UNKNOWN';
+    }
+    for(const root of new Set([repo,run.workspace].filter(Boolean))){
+      if(!fs.existsSync(root))continue;
+      for(const relative of ['.lane/reviews','.lane/public-reviews','docs/reviews'])if(run.meta?.lane){
+        const dir=path.join(root,relative,run.meta.lane);
+        if(entries(dir).some(e=>e.name.startsWith(target.head.slice(0,7))))return 'existing same-change direct review output';
+      }
+      for(const entry of entries(root))if(entry.isDirectory()&&entry.name.startsWith('.lane-review-')){
+        for(const file of ['request.json','review.json','manifest.json']){let value;try{value=read(path.join(root,entry.name,file));}catch{continue;}if(matches(value))return 'existing same-change private native attempt';}
+      }
+    }
+  }
+  return null;
+}
+
+export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun,target }) {
+  if(target)return changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun});
   const cached = (kind, file, fn) => { const key = `${kind}:${file}`; if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); };
   const readFile = file => cached('file', file, () => read(file));
   const list = file => cached('directory', file, () => entries(file));

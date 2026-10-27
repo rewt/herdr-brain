@@ -25,197 +25,146 @@ alternate executor or edit the journal. Only the project owner executes this
 control; the worker supplies source/affected evidence. This is not permission to
 restart either stopped line service.
 
-The operator's 2026-10-26 source hotfix runs one model-free pass per launchd
-interval. It uses conditional record intake, ordinary record reviewer items,
-guarded closeout drain and priority dispatch. It never promotes
-another owner's source or invokes a model API. Existing fold READY plus the
-existing route, no hold and no reserved effect is today's dispatch authority.
+## Phase1 source contract
 
-Only the owning project supervisor installs it, from the canonical development
-checkout, with the pinned Node. Brain's supervisor installs first; BCH's owner
-installs its project separately. No pins, installed releases, active saved jobs,
-watcher recipients or owner claims are changed. This is separate from the
-project housekeeping schedule, which the worker never starts.
+The operator approved the whole Phase1 implementation on 2026-10-26. Source
+landing and offline checks do not claim live acceptance. Brain must first prove
+one existing small item through start, land, report, review, verdict, source close,
+worktree removal and session retirement without a chat session operating it.
+Then BCH's own supervisor performs the same proof. No Fera or public effects.
 
-```sh
-/Users/rewt/.nvm/versions/node/v20.19.4/bin/node line-service/launchd.mjs install --repo /CANONICAL/PROJECT --org /RECORD --to PROJECT_SUPERVISOR --herdr /ABS/herdr --socket /ACTUAL/herdr.sock
-```
-
-The launchd job runs the development source `line-service/line-service.mjs
---once`. Its environment contains executable paths and the actual Herdr socket,
-never a fabricated pane, SID or `HERDR_ENV`. Dispatch/review use the supported
-Herdr native launch commands with their original claims and guards. The existing
-dispatch CLI performs locked session and unlanded-cap admission. One new worker
-is considered per pass. The default interval is 30 seconds; `--interval` changes
-it at installation.
+Each model-free launchd pass uses the existing record, native dispatch, route,
+claim, closeout queue and transport. It never promotes another owner's work or
+calls a model API. The supervisor installs from committed canonical development
+source with pinned Node20.19.4, actual native path/socket and its own project.
+BCH effects belong only to BCH's supervisor. No pins, saved consumers, old
+watchers, claims or retained ambiguous/native-refused attempts are replaced.
 
 ```sh
-node line-service/launchd.mjs status --repo /CANONICAL/PROJECT
-node line-service/launchd.mjs stop --repo /CANONICAL/PROJECT
-node line-service/launchd.mjs restart --repo /CANONICAL/PROJECT
-node line-service/launchd.mjs revert --repo /CANONICAL/PROJECT --commit FULL_HOTFIX_SHA
+node line-service/launchd.mjs install --repo /OWN/CANONICAL --org /OWN/RECORD --to PROJECT_SUPERVISOR --herdr /ABS/herdr --socket /ACTUAL/herdr.sock
+node line-service/launchd.mjs status --repo /OWN/CANONICAL
+node line-service/launchd.mjs stop --repo /OWN/CANONICAL
+node line-service/launchd.mjs restart --repo /OWN/CANONICAL
 ```
 
-Stop writes a durable service STOP then boots out only this exact launchd job.
-Restart verifies that the saved job is absent, archives this service's own STOP,
-and bootstraps the saved plist once. It preserves the original installation and
-effect receipts; control attempts append to `controls.jsonl`. Native refusal or
-uncertainty restores STOP and retains its exact diagnostic. A still-loaded job
-is held, never duplicated. Project STOP/HOLD is never cleared by restart.
-Revert stops it first and uses ordinary Git revert on an explicit newest-first
-list of this hotfix's commits (repeat `--commit`). It refuses a dirty source,
-foreign paths or commits outside `line-service/` and its narrow
-`lib/product-files.mjs` inventory declaration and `test/line-service.test.mjs`
-release controls; it never resets history. Only the
-source project's owner reverts shared source; another project's stop is local.
-Keep the pre-hotfix archive tag and record the actual committed SHA list.
+Stop writes this service's STOP and boots out its exact saved job. Restart proves
+the saved job absent and archives its STOP before one bootstrap. Refusal or
+uncertainty retains STOP and its receipt; it grants no alternate-executor retry.
+Project STOP/HOLD, actual native identity, claims/generation, source cleanliness,
+main CAS/FF and archives remain mandatory. Ordinary lock recovery requires fresh
+positive ESRCH, existing recovery serialization, owner re-read/CAS and original
+owner archive; live, EPERM and unknown stay held. There is no force entry.
 
-The per-project directory under `RECORD/line-service/` contains `passes.jsonl`,
-`effects.json`, the plist, install receipt and native stdout/stderr. Every pass,
-effect and hold is logged. An effect intent precedes its command; failed or lost
-replies are retained for the named supervisor to inspect through the existing
-command's receipt. The service never automatically retries an ambiguous launch,
-native refusal or completed validation. Review attempts across an item's runs,
-native reviewer callbacks and verdict receipts all prevent another launch.
-Review never waits for a verdict here; zero reviewer suites applies.
-Historical closed, retired, missing and unclaimed work does not regenerate
-review debt. Existing settle/native attempts and explicit independent post-code
-review attempt/hold decision notes are retained. Closeout receives only explicit
-unattempted keys; previously evaluated failures/native holds stay with their
-existing owner and supported recovery. Dispatch admission counts running native
-workers/reviewers plus durable uncertain starts, under the existing native
-session/resource limit. Unlanded lifecycle history does not stop the service or
-dispatcher. Finished reported source frees build admission while review/cleanup
-remains open. No cap is widened and no completion or unblocks link is invented.
-Review routes use their own registered worktree at the immutable captured head;
-nullable canonical chat anchors never authorize a target pane. Actual Git,
-path/head and fresh native target bindings still refuse foreign/stale evidence.
-
-After review delivery/retention and before physical closeout, an eligible current
-done report receives routine source completion through `record close ITEM
---if-current-run RUN`. The service journals intent first, rechecks the genuine
-claim, immutable report, clean source/canonical Git and actual integrated HEAD,
-and retains the full conditional command receipt. The record enforces its own
-current-run, report, blocker, open-work and reopen checks atomically. A refusal
-becomes its exact durable judgment once; no unconditional close, explicit
-judgment override or fabricated promotion is used. Source completion preserves
-review/callback/HOLD/archive/final-release obligations and does not wait for
-physical cleanup. The service attributes these record writes to `line-service`
-and never inherits `ORG_GUARD_OVERRIDE`.
-
-Routine status, error and hold messages go ONLY to the existing record inbox as
-`session.message.v1`. The producer is a service role bound to the actual
-canonical project, saved installation and owned pass lock, with no fabricated
-session UID/SID. Stable message keys normalize volatile timestamps, stack frames
-and PIDs while retaining source scope. Raw occurrences stay in `passes.jsonl`;
-`effects.json#record_notices` keeps counts referenced by one immutable envelope.
-Lost record replies recover the same ID; record failure never falls back to a
-native notice. Old native notices/receipts remain retained unchanged.
-
-An error string never creates a decision item. Only an actual post-cutover,
-pending, explicitly reserved human decision naming `meta.decider: brain-chat`
-may enqueue the existing reserved-question pointer. Durable per-item intent and
-a persistent 60-second per-decider limit precede effect. An attempted/unknown
-decision is never retried automatically. This native-input branch retains its
-session proof requirement; the record-only recipient exception does not apply.
-Other/unknown decision routes remain record-only. The service never resumes,
-probes or restarts the inbox owner. Existing delivery stays with its owner.
-Failed review/cleanup
-branches leave unrelated dispatch eligible. STOP,
-project HOLD and incomplete record tails prevent further effects; the closer
-also preserves its specific worker-tab HOLD, lifecycle locks and archive guards.
-Removing a hold does not replay a refused effect: use the existing command's
-supported recovery after inspecting its evidence. No second transport or approval
-schema is introduced.
-
-Before any proposed restart, the owning native supervisor establishes ONE
-explicit recorded cutover while its own service STOP remains present:
+The original service cutover remains immutable. Before Phase1 activation, the
+owning native supervisor records its designated intended pre-Phase0 SOURCE
+boundary with the existing stopped-service helper:
 
 ```sh
-HERDR_BRAIN_ROOT=/Users/rewt/development/rewt/herdr-brain /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/line-service/cutoff.mjs --repo /OWN/CANONICAL --org /OWN/RECORD --id STABLE_CUTOVER_ID --cutover
+HERDR_BRAIN_ROOT=/Users/rewt/development/rewt/herdr-brain /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/line-service/cutoff.mjs --repo /OWN/CANONICAL --org /OWN/RECORD --id STABLE_PHASE0_ID --cutover --phase0-head FULL_DESIGNATED_HEAD --evidence /DESIGNATED/PRODUCER/LOCATOR
 ```
 
-This records canonical main under the existing promotion/pass/record locks and
-actual native/project/source guards. It does not start a runtime or clear STOP.
-A new installation uses explicit `--initialize` instead; no existing job may be
-relabelled as new. Restart retains the original record boundary and refuses a
-missing/ambiguous cutoff. A different ID cannot silently reset it.
+This appends one `line-service.phase0` event under pass/promotion/record locks and
+fresh own native/project/source guards. It never rewrites the earlier cutover or
+starts a runtime. Brain's designated intended source boundary is
+`ff88cae6cc7db0140debe47bc3f55fafed46d6c7`, archive
+`archive/phase0-land-first-20261026-pre`, captured before Phase0 instruction edits.
+Exact canonical main at18:55CDT and the archive-creation minute are UNKNOWN.
+The completion measurements are not an18:55 observation. BCH needs its own
+owner-designated boundary; Brain's SHA supplies no BCH authority.
 
-Review creation AND dispatch require an immutable delivered target strictly
-descending from that recorded canonical head and actually contained in current
-canonical main. This proves later landing under the FF contract; admission HEAD,
-mtime, report time, old unresolved IDs and display metadata do not prove it.
-Old/manual queues predating the boundary remain retained without dispatch or
-fresh debt. Closed/retired/missing history stays cheaply skipped. Existing OPEN
-READY build authority and independent ingest/source completion remain intact.
-These commands are restart PREPARATION; source/proof does not authorize an early
-restart or resolve another owner's native boundary.
+Reviews are owed for each actual landed build commit strictly after that source
+boundary, including a closed item or removed producer worktree. Two Git reads
+index the interval; old reports outside it perform no per-report Git, hashing or
+native inventory. Immutable report bytes and original dispatch/source attribution
+bind each parent/head diff. Unknown attribution holds only that review branch.
+Red checks or a blocked report do not disqualify genuinely landed changed code.
+Only an existing attempt for the SAME source item and head blocks a new review.
+Unrelated old private review directories do not establish an attempt. A real
+same-change UNKNOWN/native refusal remains held, with no retry or replacement.
 
-The notice `--to` recipient does not override `MONITOR_SUPERVISOR_AGENT` in
-child commands. Dispatch retains its existing parent/launch/project-policy
-exception routing, independently of a brain-chat judgment recipient.
+The current queue helper creates one ordinary reviewer item keyed `(item, head)`.
+Its bound immutable target/evidence is checked again before every native effect.
+New source dispatch uses the configured normal review selection (review-sol-max)
+and a registered `review-` worktree at that exact head. The review pool defaults
+to three sessions, separately from build admission; the existing total native
+resource cap remains. Old settle reviewers still consume real total resources.
+Saved owner/pinned consumers retain their original selection. A matching explicit
+source selector does not fabricate native/run authority. Unknown queue/helper
+capability holds before launch.
 
-Automatic review uses an immutable ingested report's explicit delivered-commit
-artifacts and the existing review-scope parser. A genuine dispatch receipt gives
-only an immutable target-project baseline; admission/live HEAD never selects the
-target. The delivered commits must identify one changed committed range, bound
-to report bytes and a captured diff digest. Blocked outcomes and red checks do
-not disqualify legitimate committed evidence. Unknown baseline/target/evidence
-holds review alone for T2. The target must actually be landed in the canonical
-project. The service journals creation intent, then calls `record queue-review
-RUN --head FULL_SHA --base FULL_SHA`. The existing record transaction creates
-exactly one ordinary reviewer item keyed to source item/landed commit, carrying
-the immutable target/report/diff evidence; concurrent or recovered creates
-return the same item. Any earlier item review prevents another key at a new head.
-Normal dispatch consumes that READY reviewer item on its normal reviewer route
-in a `review-` lane at the exact captured head. Review workloads are separate
-from build/unlanded slots; the native total-session cap is unchanged. Ambiguous
-dispatch journals and native qualification remain held, never replaced.
+Reviewers inspect only the immutable diff and producer evidence, with zero
+suites/edits. Their normal report says `outcome: done`, `verdict: PASS|FAIL` and
+uses `- [Major] path:line - explanation` / `- [Minor] ...` findings. The record
+stores verdict/findings against source item/head. FAIL/Major creates one linked
+engineer correction; Minor creates one follow-up. Existing engineer proposals
+are preserved and linked. Corrections retain the original review and never
+create a re-review chain. The current service can record these facts from
+immutable already-ingested bytes even when the selected record consumer is old;
+it uses its actual owned pass/installation and fresh run ownership, without
+changing that consumer, a pin or the report. Major correction checks remain
+required before final release.
 
-The NEW source `queue-review` record entry explicitly supports a matching
-`HERDR_BRAIN_ROOT` selector, including adopted projects. It requires the actual
-source owner and an actual source worker/native binding or the canonical
-non-session line-service context. Only this command is added to the previously
-messages-only source exception; other record commands, old pins and immutable
-saved consumers retain forwarding. Old/unknown queue capability holds before
-effects, without overriding source/owner/pins. Source `supervisor handle` does
-not start a new settle driver; unsaved settle requests hand off to queue-review.
-New current-policy `lane review` calls refuse before launch. Already-saved
-prompts and running/held native attempts are not migrated or signalled.
+Each pass writes a heartbeat, ingests an actual valid report as soon as its file
+exists, conditionally source-closes genuinely done integrated work, drains named
+closeout keys and considers independent READY work. It does not wait for native
+idle to ingest. A blocked report cannot start again until an actual note, answer,
+unblock or changed brief arrives; unresolved dependencies/HOLD still refuse.
 
-The normal reviewer prompt permits zero suites/edits and requires a PASS/FAIL
-record verdict with concrete findings. A formal fix is a linked engineer
-follow-up under that review, never an automatic re-review chain. Major
-correction/evidence obligations stay with the final-release coordinator.
+Starts use `dispatch --detach`. The original journal reserves capacity before
+spawn and returns immediately; each candidate and the child perform fresh
+admission/readiness checks. The child has a ten-minute controller budget and
+120-second command bounds. Each pass has an eight-minute work budget and bounded
+children; it logs a stuck child and continues independent branches. The two
+legacy-named memory phases now pause only for a genuine live proving reservation.
+Memory pressure is observed, never an admission wait. Lost launches/prompts are
+retained, never resubmitted. New detached watchers record callbacks without
+prompting a session; already-saved watchers keep their original recipients.
 
-Item-wide inventory includes all runs, broad review decision holds, native/direct
-delivery/output and source-owner evidence, settle receipts, ambiguous/UNKNOWN
-qualification and prior service intents/results across saved heads/restarts.
-Unknown or unreadable legacy inventory holds; it never proves absence. A stable
-item lock plus the original item effect key prevents rekeying to a new review.
-The actual owner-bound queue and dispatch helpers must match the loaded
-implementation before launch. Source path/selector alone is insufficient;
-old/saved queue capability stays held without pin or owner overrides.
+Ingest and conditional close retry through their idempotent contracts. Named
+closeout retries automatically only on new target revisions or a pre-effect
+lifecycle mutex refusal, preserving native/unknown/identity/HOLD outcomes and
+durable effect IDs. Conditional source completion binds a landed cleanup request;
+the executor still proves current identity, actual integration, callback release,
+clean Git and archive preservation before any retirement/removal. The installed
+line owns routine cleanup; competing automatic kicks/unnamed drains yield to it.
+A closer verifies its committed import graph and main branch, so unrelated main
+landings no longer invalidate it. A changed closer payload still hands off.
 
-Settled history is filtered from the derived fold before per-item Git/native or
-review-directory work. One pass reuses its read-only snapshot/index until an
-effect may have changed state; every new mutation still makes fresh reads.
-Historical skips/retained closeout are aggregated instead of fsyncing thousands
-of rows. The next real owner pass reports snapshot count/time, child command
-time and remaining scan/guard time separately. These passive observations are
-not a CPU attribution, benchmark, launch/verdict or elapsed-time failure gate.
-Affected controls are in `test/line-service-review.test.mjs` and
-`test/line-service-queue.test.mjs` for the next full
-release and the once-selected focused runner; no real service/reviewer is started
-to measure them. Owner restart remains the existing same saved-job `restart`.
+Routine holds and status use the existing record inbox, never session prompts.
+Three occurrences of the same normalized failure create one envelope; every raw
+occurrence/count is retained. A pass over ten minutes creates one record alert.
+Only an actual pending explicitly reserved human question naming its decider can
+use the existing one-shot native decision pointer, with the original stronger
+session binding. Record errors have no native fallback.
 
-The focused offline check is `node test/helpers/run.mjs
-test/line-service.test.mjs`, through `lane check --cmd` on committed
-source. These controls stub native effects while using real Git, record/fold and
-the real command argv. Actual installation and a real effect/readback belong to
-each project's supervisor; a process heartbeat is not acceptance. The full
-release test remains the release coordinator's next-release obligation.
-The runtime distribution includes `line-service/`. The release discovers its
-controls in `test/`. Untracked Finder metadata and runtime code still fail the
-source parity guard; the owning supervisor archives stray artifacts through the
-supported source recovery rather than weakening that guard.
+```sh
+node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
+```
+
+The morning digest derives landings, verdicts/findings, holds, idle hours and
+build-to-main minutes from record facts. New own lane promotions record their
+actual post-FF time under fresh native/claim/source CAS. Historical containment
+observations have `landed_at: null`; incomplete idle intervals stay UNKNOWN.
+The service directory retains `passes.jsonl`, `effects.json`, `heartbeat.json`,
+installation, STOP and original native output. Pass timings separate record/scan
+cost from effect command time; they are passive next-real-pass observations.
+
+The focused Phase1 selection uses the existing runner, core files together and
+dispatch files separately (at most four per group):
+`test/line-service-phase1.test.mjs`, the `phase1` control in
+`test/closeout.test.mjs`, and `dispatch/test/phase1-starts.test.mjs`.
+All are discovered by the next full release. Run once through lane check on the
+clean committed candidate after self-landing; no full/default/reviewer suite.
+One independent async post-code review per landed change remains nonblocking.
+
+Supervisor-herdr owns proof-based go/no-go and plain Git revert of the listed
+Phase1 commits, without another operator ask, if either line writes no pass for
+15 minutes, lands nothing for60 minutes while READY work exists, or fails every
+pass. The pre-source archive is `archive/phase1-land-first-20261026-pre` at
+`f1a4abc30d3b08d2887612f19946c165603db43d`. Use ordinary `git revert` on the exact
+newest-first commit list, preserving all record evidence; the older narrow
+launchd revert allowlist is not the Phase1 rollback entry. There is no22:00/23:00
+stop: the same engineer fixes forward until proofs pass, with last-good source
+live if proof fails. Quiet owns the one overnight watcher; this module creates
+no second monitor. Final full-release/adoption obligations stay with the release
+coordinator; public, funds, secrets and other-identity effects stay reserved.

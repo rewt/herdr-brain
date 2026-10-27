@@ -6,7 +6,7 @@ import { gitProject } from '../lib/project.mjs';
 
 export async function closeoutMain(argv = process.argv.slice(2)) {
   const { positionals, values } = parseArgs({ args: argv, allowPositionals: true, options: {
-    keys: { type: 'string' }, receipt: { type: 'string' }, deadline: { type: 'string' }, 'no-restart': { type: 'boolean' },
+    keys: { type: 'string' }, receipt: { type: 'string' }, deadline: { type: 'string' }, 'no-restart': { type: 'boolean' }, 'retry-safe': { type: 'boolean' },
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, seq: { type: 'string' }, why: { type: 'string' },
   } });
   const [command, topic] = positionals, cwd = values.repo;
@@ -21,7 +21,7 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
     if ((keys !== undefined && (!Array.isArray(keys) || keys.some(k => !/^[a-f0-9]{64}$/.test(k)))) || !Number.isSafeInteger(deadline)) throw Error('invalid closer keys/deadline');
     const { drainCloseout } = await import('../lib/closeout-consumer.mjs');
     const { restartCloseout } = await import('../lib/closeout-attempt.mjs');
-    result = drainCloseout({ cwd, org, keys, loadedCode, retirementOptions: { deadline } });
+    result = drainCloseout({ cwd, org, keys, loadedCode, retrySafe: values['retry-safe'], retirementOptions: { deadline } });
     if (result.restart) result.successor = restartCloseout({ cwd, org, restart: result.restart, deadline, noRestart: values['no-restart'] });
   }
   else if (command === 'handoff' && positionals.length === 1 && values.receipt) {

@@ -363,6 +363,54 @@ test('retirement phase fair selection finds native work among thousands of physi
   assert.deepEqual(chosen.map(c=>[c.entry.key,c.sessionsOnly]),[['review',true],['0',false]],'a retained original intent gets no priority over a never-attempted independent session');
 });
 
+test('cleanup retention selects removal work before a continuing stream of empty ready bookkeeping',()=>{
+  const landed={key:'landed',signal:'landed',source:{seq:1},panes:[{pane:'retired:p'}]},
+    parked={key:'parked',signal:'parked',source:{seq:2},panes:[]},
+    review={key:'review',signal:'review-done',source:{seq:3},panes:[{pane:'review:p'}]};
+  const rows=[{type:'closeout.evaluated',key:landed.key,seq:100,sessions_retired:true}];
+  const ready=Array.from({length:1000},(_,n)=>({key:`ready-${n}`,signal:'ready',source:{seq:1000+n},panes:[]}));
+  const before=JSON.stringify([ready,rows,landed,parked,review]);
+  let selected=scheduleLineCloseouts([...ready,landed,review],rows);
+  assert.deepEqual(selected.map(s=>[s.entry.key,s.sessionsOnly]),[['review',true],['landed',false]]);
+  selected=scheduleLineCloseouts([...ready,landed,parked,review],rows);
+  assert.deepEqual(selected.map(s=>[s.entry.key,s.sessionsOnly]),[['review',true],['parked',false]],'unattempted removal keeps its normal order within removal work');
+  assert.deepEqual(scheduleLineCloseouts(ready,rows).map(s=>[s.entry.key,s.sessionsOnly]),[['ready-0',false]],'bookkeeping still runs when removal work is exhausted');
+  assert.equal(JSON.stringify([ready,rows,landed,parked,review]),before,'selection never rewrites queued bytes or evidence');
+});
+
+test('cleanup retention advances a retired landed session to guarded physical removal ahead of empty ready requests',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=readCloseoutEntries(f.common).find(e=>e.key===rows[0].closeout_targets.find(t=>t.signal==='landed').key);
+  const first=f.drain({keys:[entry.key],sessionsOnly:true});
+  assert.equal(first.evaluated[0]?.sessions_retired,true,JSON.stringify(first));assert.equal(first.evaluated[0].completed,false);assert.equal(fs.existsSync(f.lane),true);
+  const ready=Array.from({length:32},(_,n)=>({key:`ready-${n}`,signal:'ready',source:{seq:rows[0].seq+n+1},panes:[]}));
+  const selected=scheduleLineCloseouts([...ready,entry],closeoutEvaluations(f.common,f.org,events(f)));
+  assert.deepEqual(selected.map(s=>[s.entry.key,s.sessionsOnly]),[[entry.key,false]]);
+  const result=f.drain({keys:[selected[0].entry.key],retrySafe:true,sessionsOnly:selected[0].sessionsOnly});
+  assert.equal(result.evaluated[0]?.completed,true,JSON.stringify(result));assert.equal(fs.existsSync(f.lane),false);
+  assert.ok(effects(f).some(e=>e.action==='lane-removed'));assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1,'physical selection never replays the session exit');
+});
+
+test('cleanup retention priority preserves HOLD dirty source and original unknown native effects',t=>{
+  for(const kind of ['hold','dirty','unknown']){
+    const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=readCloseoutEntries(f.common).find(e=>e.key===rows[0].closeout_targets.find(t=>t.signal==='landed').key);
+    if(kind==='unknown'){
+      f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:entry.run,item:entry.item,source:entry.source,effect:'original-unknown',outcome:{action:'workspace-close-requested',workspace_id:'original-unknown-workspace'}}]);
+    }else{
+      const first=f.drain({keys:[entry.key],sessionsOnly:true});assert.equal(first.evaluated[0]?.sessions_retired,true,JSON.stringify(first));
+      if(kind==='hold')hold(f);else fs.writeFileSync(path.join(f.lane,'unique-untracked-evidence'),'must remain');
+    }
+    const ready={key:'ready',signal:'ready',source:{seq:rows[0].seq+1},panes:[]},
+      selected=scheduleLineCloseouts([ready,entry],[{type:'closeout.evaluated',key:entry.key,seq:rows[0].seq+2,sessions_retired:true}]);
+    assert.equal(selected[0].entry.key,entry.key);assert.equal(selected[0].sessionsOnly,false);
+    const file=path.join(f.common,'closeout/entries',entry.key+'.json'),bytes=fs.readFileSync(file),before=f.read().actions.length;
+    const result=f.drain({keys:[entry.key],retrySafe:true});assert.equal(result.evaluated[0]?.completed,false,JSON.stringify(result));
+    assert.match(result.evaluated[0].reason,kind==='hold'?/HOLD/:kind==='dirty'?/clean|dirty|untracked/:/unresolved native/);
+    assert.equal(fs.existsSync(f.lane),true);assert.deepEqual(fs.readFileSync(file),bytes);
+    assert.equal(effects(f).some(e=>e.action==='lane-removed'),false);
+    if(kind==='unknown')assert.equal(f.read().actions.length,before,'unknown original outcome grants no native effect');
+  }
+});
+
 test('retirement phase retains original unknown exits and a fresh service STOP before any native effect',t=>{
   for(const kind of ['unknown','stop','absent']){
     const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');

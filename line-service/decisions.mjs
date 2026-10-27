@@ -46,7 +46,7 @@ export function decisionCapture({state,events,item,activation}) {
   if(activation.subjects?.length&&!activation.subjects.includes(item.id))return null;
   if(!run.owner||run.owner.legacy||run.owner.controller!=='brain')return null;
   const ownDecisionIds=new Set([...state.items.values()].filter(isDecision).map(i=>i.id));
-  const inputs=events.filter(e=>!ownDecisionIds.has(e.id)&&!ownDecisionIds.has(e.blocker)&&e.type!=='decision.applied');
+  const inputs=events.filter(e=>!ownDecisionIds.has(e.id)&&!ownDecisionIds.has(e.blocker));
   let brief=null;try{brief=bytesHash(fs.readFileSync(run.brief_path));}catch{}
   if(run.report.outcome==='blocked'&&blockedChangeKey({events:inputs,state,item,run,brief}))return null; // existing restart rule owns it
   const links=relatedLinks(state,item.id),lineage=ancestors(state,item.id);

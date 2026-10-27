@@ -23,5 +23,28 @@
     "by_task_class": {
       "review": "review-sol-max"
     }
+  },
+  "routes": {
+    "engineer": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "args": [],
+      "use": "Default new routine engineering. Explicit Sol high; operator policy 2026-10-27."
+    },
+    "engineer-xhigh": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "args": [],
+      "use": "New cross-package, concurrency or harder engineering; explicit Sol xhigh."
+    },
+    "engineer-max": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "max",
+      "args": [],
+      "use": "Engineering escalation ONLY after a documented unsuccessful high or xhigh attempt; never the default. Saved/in-flight runs retain their frozen declarations."
+    }
   }
 }

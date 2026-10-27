@@ -831,7 +831,12 @@ function ingestFile(ctx, file, runHint, currentRun) {
       const reviewHold = s.items.get(run.item)?.kind === 'work' && roleIs(p, 'REV');
       created.push({ id, title: p.title, role: p.role, blocking, reviewHold });
     }
-    events.push(...reviewResultEvents({state:s,events:committedEvents,run,report,sha256,body:parsed.body,usedIds:taken}));
+    const reviewFacts=reviewResultEvents({state:s,events:committedEvents,run,report,sha256,body:parsed.body,usedIds:taken});
+    const reviewed=reviewFacts.find(e=>e.type==='change.reviewed');
+    // Normalize the explicit judgment for existing folded-report consumers.
+    // The immutable stored bytes/hash retain its original body/frontmatter.
+    if(reviewed)report.extra={...report.extra,verdict:reviewed.verdict};
+    events.push(...reviewFacts);
     return {
       add: events,
       actor: `run:${runId}`,

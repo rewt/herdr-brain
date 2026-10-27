@@ -21,6 +21,7 @@ import {safeCloseoutRetry} from '../lib/closeout.mjs';
 import {establishCutover,developmentRoot} from '../line-service/cutoff.mjs';
 import {recordOwnLanding} from '../lib/landing-receipt.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
+import {readReport} from '../lib/report.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true}={}){
@@ -123,6 +124,26 @@ test('phase1 verdict and Major FAIL plus Minor findings become immutable scoped 
   const added=reviewResultEvents({...c,run,report,sha256:'a'.repeat(64)});assert.equal(added.filter(e=>e.type==='change.reviewed').length,1);
   const work=added.filter(e=>e.type==='item.added');assert.equal(work.length,2);assert.ok(work.every(e=>e.parent==='REV-1'&&e.meta.review_fix_of===`ENG-1:${target.head}`));
   f.add(added);assert.equal(reviewResultEvents({...f.context(),run,report,sha256:'a'.repeat(64)}).length,0);
+});
+
+test('phase1 ingests an explicit immutable body verdict and holds missing quoted fenced or contradictory judgments',t=>{
+  const f=fixture(t),target=discoverChanges(f.context()).changes[0].target;
+  f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Review',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_key:`ENG-1:${target.head}`,review_target:target,review_round_cap:1}},
+    {type:'run.started',id:'R-2',item:'REV-1',workspace:f.workspace},
+    {type:'run.claimed',run:'R-2',record:f.org,project:f.identity,owner:{controller:'brain',legacy:false,release:{id:'compatible',root:f.bundle,commit:'1'.repeat(40)}}}]);
+  const text='---\nrun: R-2\noutcome: done\nsummary: Independently reviewed the immutable diff.\nproposals: []\n---\n\nVerdict: PASS\n\nNo findings.\n',parsed=readReport(text),c=f.context(),run=c.state.runs.get('R-2');
+  const facts=reviewResultEvents({...c,run,report:parsed.report,body:parsed.body,sha256:hash(text)});
+  assert.equal(facts[0].verdict,'PASS');assert.deepEqual(facts[0].verdict_evidence,{frontmatter:false,body_lines:[1]});assert.equal(facts[0].report_sha256,hash(text));
+  for(const body of ['No findings.','> Verdict: PASS','```text\nVerdict: PASS\n```','Verdict: PASS\nVerdict: FAIL','Verdict: UNKNOWN'])
+    assert.throws(()=>reviewResultEvents({...c,run,report:parsed.report,body,sha256:hash(text)}),/explicit|ambiguous/);
+  assert.throws(()=>reviewResultEvents({...c,run,report:{...parsed.report,extra:{verdict:'FAIL'}},body:parsed.body,sha256:hash(text)}),/ambiguous/);
+  const file=path.join(f.org,'body-review.md');fs.writeFileSync(file,text);
+  const policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:false};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+  const env={...f.env,ORG_ACTOR:'line-service',HERDR_BRAIN_ROOT:f.bundle};for(const k of ['HERDR_ENV','HERDR_PANE_ID','HERDR_WORKSPACE_ID','CODEX_SESSION_ID','CODEX_THREAD_ID'])delete env[k];
+  const result=spawnSync(process.execPath,[path.join(f.bundle,'bin/org.mjs'),'ingest',file,'--run','R-2'],{cwd:f.cwd,env,encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);assert.equal(f.context().state.runs.get('R-2').report.extra.verdict,'PASS');
+  assert.equal(f.context().events.filter(e=>e.type==='change.reviewed'&&e.review_run==='R-2').length,1);
+  assert.equal(fs.readFileSync(path.join(f.org,'reports/R-2.md'),'utf8'),text,'original report bytes stay immutable');
 });
 
 test('phase1 current service records an old selected consumers immutable review result without changing its owner or pin',t=>{

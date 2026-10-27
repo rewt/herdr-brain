@@ -94,14 +94,26 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   if(!roleIs(review,'REV')||!target||!source)return [];
   const key=`${source}:${target.head}`;
   if(events.some(e=>e.type==='change.reviewed'&&e.review_run===run.id&&e.review_key===key))return [];
-  const verdict=String(report.extra?.verdict??'').trim().toUpperCase();
-  if(!['PASS','FAIL','NEEDS-WORK'].includes(verdict))throw Error('queued review report requires explicit PASS, FAIL or NEEDS-WORK verdict');
+  const declarations=[],bodyLines=[];
+  if(report.extra?.verdict!==undefined)declarations.push(String(report.extra.verdict).trim().toUpperCase());
+  let fence=null;
+  for(const [index,line]of String(body).split('\n').entries()){
+    const marker=/^\s{0,3}(`{3,}|~{3,})/.exec(line);
+    if(marker){if(!fence)fence=marker[1];else if(marker[1][0]===fence[0]&&marker[1].length>=fence.length)fence=null;continue;}
+    if(fence)continue;
+    const match=/^\s{0,3}Verdict:\s*(.*?)\s*$/i.exec(line);
+    if(match){declarations.push(match[1].toUpperCase());bodyLines.push(index+1);}
+  }
+  const distinct=new Set(declarations),verdict=declarations[0];
+  if(!declarations.length||declarations.some(v=>!['PASS','FAIL','NEEDS-WORK'].includes(v)))throw Error('queued review report requires explicit PASS, FAIL or NEEDS-WORK verdict');
+  if(distinct.size!==1)throw Error('queued review report has ambiguous contradictory verdicts; retain immutable bytes for judgment');
   const findings=[];
   for(const line of String(body).split('\n')){const m=/^\s*[-*]\s*\[(Major|Minor)\]\s*(.+)$/i.exec(line);if(m)findings.push({severity:m[1].toLowerCase(),text:m[2].trim()});}
   const raw=report.extra?.findings;if(Array.isArray(raw))for(const f of raw)if(f&&['major','minor'].includes(String(f.severity).toLowerCase()))findings.push({severity:String(f.severity).toLowerCase(),text:String(f.text??f.summary??'')});
   // A reviewer may use ordinary proposals. Keep them linked to this one change,
   // not an additional reviewer or recursive review chain.
-  const add=[{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_item:review.id,review_run:run.id,verdict,findings,report_sha256:sha256}];
+  const add=[{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_item:review.id,review_run:run.id,verdict,
+    verdict_evidence:{frontmatter:report.extra?.verdict!==undefined,body_lines:bodyLines},findings,report_sha256:sha256}];
   const taken=new Set(usedIds);
   for(const severity of ['major','minor']) {
     const rows=findings.filter(f=>f.severity===severity);if(!rows.length&&!(severity==='major'&&verdict!=='PASS'))continue;

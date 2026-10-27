@@ -504,10 +504,10 @@ test('permanent review verdict accepts the actual PASS sentence and bold FAIL pr
   }
 });
 
-test('full-bold R3404-shaped immutable verdict records FAIL and one Major on its original feature scope while preserving the separate fixture PASS',t=>{
+test('full-bold R3404-shaped verdict with following text records one FAIL and Major while preserving its immutable feature scope and separate fixture PASS',t=>{
   const f=fixture(t),target=partialReview(f,'REV-1204',{head:f.heads[0],base:f.base,run:'R-3404'});
   partialReview(f,'REV-1203',{head:f.heads[1],base:f.heads[0],run:'R-3403',verdict:'PASS'});
-  const text='---\nrun: R-3404\noutcome: done\nsummary: Reviewed the captured initial feature.\nproposals: []\n---\n\n**Verdict: FAIL.**\n\n- [Major] codec.mjs:41 - decoded aggregate objects passed as paths\n',parsed=readReport(text),file=path.join(f.org,'reports/R-3404.md'),owner=f.context().run.owner;
+  const text='---\nrun: R-3404\noutcome: done\nsummary: Reviewed the captured initial feature.\nproposals: []\n---\n\n**Verdict: FAIL.** Review work is complete; the Major below still needs correction.\n\n- [Major] codec.mjs:41 - decoded aggregate objects passed as paths\n',parsed=readReport(text),file=path.join(f.org,'reports/R-3404.md'),owner=f.context().run.owner;
   assert.deepEqual(parsed.errors,[]);fs.writeFileSync(file,text);
   f.add([{type:'run.claimed',run:'R-3404',record:f.org,project:f.identity,owner},{type:'report.ingested',run:'R-3404',file:'reports/R-3404.md',sha256:hash(text),report:parsed.report}]);
   const before=f.context(),peer=before.events.find(e=>e.type==='change.reviewed'&&e.review_run==='R-3403'),env=installedService(f),release=noticeLock(path.join(f.directory,'pass.lock'));
@@ -516,10 +516,10 @@ test('full-bold R3404-shaped immutable verdict records FAIL and one Major on its
   const fixes=[...c.state.items.values()].filter(i=>i.meta.review_fix_of===`ENG-1:${f.heads[0]}`);assert.equal(fixes.length,1);assert.equal(fixes[0].meta.review_round_cap,1);assert.equal(fixes[0].meta.severity,'major');assert.deepEqual(c.events.find(e=>e.type==='change.reviewed'&&e.review_run==='R-3403'),peer);assert.deepEqual(c.state.items.get('REV-1204').meta.review_target,target);assert.equal(c.state.items.get('REV-1204').closed,null);assert.equal(fs.readFileSync(file,'utf8'),text);assert.deepEqual(c.state.runs.get('R-3404').owner,owner);
 });
 
-test('full-bold verdict refuses conflicting frontmatter quoted fenced malformed and indented declarations without changing scope or creating another review',t=>{
+test('full-bold verdict suffix preserves frontmatter agreement and quoted fenced malformed or indented holds without a new review',t=>{
   const f=fixture(t),target=partialReview(f,'REV-1204',{head:f.heads[0],base:f.base,run:'R-3404'}),c=f.context(),run=c.state.runs.get('R-3404'),report={outcome:'done',proposals:[],extra:{verdict:'PASS'}};
-  assert.throws(()=>reviewResultEvents({...c,run,report,body:'**Verdict: FAIL.**',sha256:'a'.repeat(64)}),/ambiguous/);
-  for(const body of ['> **Verdict: FAIL.**','```text\n**Verdict: FAIL.**\n```','    **Verdict: FAIL.**','**Verdict: FAIL.','**Verdict: UNKNOWN.**'])assert.throws(()=>reviewResultEvents({...c,run,report:{...report,extra:{}},body,sha256:'a'.repeat(64)}),/explicit|ambiguous/);
+  assert.throws(()=>reviewResultEvents({...c,run,report,body:'**Verdict: FAIL.** Review work is complete.',sha256:'a'.repeat(64)}),/ambiguous/);
+  for(const body of ['> **Verdict: FAIL.** Review work is complete.','```text\n**Verdict: FAIL.** Review work is complete.\n```','    **Verdict: FAIL.** Review work is complete.','**Verdict: FAIL. Review work is complete.','**Verdict: UNKNOWN.** Review work is complete.'])assert.throws(()=>reviewResultEvents({...c,run,report:{...report,extra:{}},body,sha256:'a'.repeat(64)}),/explicit|ambiguous/);
   assert.deepEqual(f.context().state.items.get('REV-1204').meta.review_target,target);assert.equal(f.context().events.some(e=>e.type==='change.reviewed'),false);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,1);
 });
 

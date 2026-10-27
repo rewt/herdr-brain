@@ -314,7 +314,7 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
       let value=match[2];
       // Markdown may emphasize the entire declaration, including its label.
       // An unmatched outer marker is not an independent explicit judgment.
-      if(match[1])value=value.endsWith('**')?value.slice(0,-2):'UNBALANCED';
+      if(match[1]){const end=value.indexOf('**');value=end>0?value.slice(0,end):'UNBALANCED';}
       const verdict=/^\**\s*(PASS|FAIL|NEEDS-WORK)\b/i.exec(value);declarations.push(verdict?verdict[1].toUpperCase():value.toUpperCase());bodyLines.push(index+1);
     }
   }

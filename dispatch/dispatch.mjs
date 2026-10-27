@@ -214,10 +214,10 @@ function captureLaunchProcess() {
   job.launchProcess = null;
   try { job.launchProcess = observeNative().process; } catch {}
 }
-function admission(repo, org, common) {
+function admission(repo, org, common,kind=job?.reviewQueue?'review':'build') {
   const { config } = loadDiscoveredRoutes({ cwd: repo });
   const evidence = checkSessionCap({ config, org, common, agent: name => herdr(['agent', 'get', name]).agent,
-    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info, excludeStartJournal: journal,excludePendingJournal:journal,kind:job?.reviewQueue?'review':'build' });
+    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info, excludeStartJournal: journal,excludePendingJournal:journal,kind });
   if (job) job.sessionCap = evidence;
   return evidence;
 }
@@ -376,7 +376,7 @@ async function main() {
     if (opt.reuse) checkReuse(json(record(['show', opt.reuse, '--json'])), { lane: opt.lane, route: opt.route, declared: declaredFields });
     const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir'], repo));
     unlandedAdmission({ repo, org, common, item: item.id, fromRun: opt['from-run'], unblocks: opt.unblocks });
-    if (!opt.reuse) admission(repo, org, common);
+    if (!opt.reuse) admission(repo, org, common,reviewQueue?'review':'build');
     const token = randomUUID();
     const directory = path.join(org, 'dispatch');
     fs.mkdirSync(directory, { recursive: true });

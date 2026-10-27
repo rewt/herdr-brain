@@ -138,12 +138,34 @@ and fresh admission, not words such as "unknown" in another session's occupancy
 diagnostics. Real native/identity/ownership refusals stay stopped. An unavailable
 native-launch flag is recorded as null, never defaulted to false.
 
-Every review error is recorded in the existing record inbox on its first
-occurrence, with a durable count and stable deduplication. Each real pass records
-owed/queued/running/done producer groups and separate commit coverage,
-attribution gaps and formal-fix exemptions. More than three real passes with a
-queue/coverage gap create one deduplicated notice. The morning digest includes
-these observations; no extra scan, native prompt or benchmark is started.
+Future review errors, repeated counters and routine notices stay in the existing
+`passes.jsonl` diagnostic journal and its `effects.json` checkpoint. Each key has
+one cumulative count, first/last occurrence and inspection flag. A fsynced delta
+precedes the checkpoint, so a lost checkpoint replays counts without replaying
+native effects or claiming delivery/consumption. Historical record events and
+already-recorded notice references remain unchanged. Each real pass observes
+owed/queued/running/done groups, commit coverage, attribution gaps and formal-fix
+exemptions in diagnostics. A queue/coverage gap after three passes sets one
+inspection flag; recurrence only advances its count. `--digest --org RECORD
+--repo CANONICAL` combines these diagnostics with historical record facts.
+`morningDigest({events, diagnostics})` is the same read API for future consumers;
+an events-only caller sees retained historical health/counters. These are
+observations, never authority for a native effect or a claim of release PASS.
+Only actual pending named reserved decisions use this service's record-inbox
+producer and existing native decision transport. Durable intent, decisions,
+claims/generations, review/verdict/report, disappearance, recovery, dedup and
+effect intent/outcome facts remain authoritative record data.
+
+Ordinary pre-effect cleanup deferrals use structured diagnostic rows in the
+existing `GIT_COMMON_DIR/closeout/worker.log`. These rows suppress unchanged
+evaluations across restarts. Named retry or a related record revision can request
+a fresh guarded observation. They cannot establish completion, retired sessions,
+native outcome, ownership or an effect's authority. Unknown/safety-sensitive
+refusals, unresolved native intents, session-retirement milestones and completed
+evaluations stay in the record; a diagnostic cannot replace them. Duplicate
+durable refusal facts are retained once per exact source/revision/outcome.
+Every actual cleanup effect still uses its fresh native/source/claim/STOP/HOLD,
+archive and content guards. No extra transport, process or history rewrite occurs.
 
 The installed service observes normal queue progress across real passes. With
 unchanged source/request evidence it can archive one inactive attempt and create

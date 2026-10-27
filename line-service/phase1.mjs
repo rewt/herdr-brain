@@ -6,11 +6,11 @@ import {createHash} from 'node:crypto';
 import {reviewScope,claimedCommitTokens,declaredSourceRanges} from '../settle/review-range.mjs';
 import {fold,extendFold,itemStatus,blockersOf,releases} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
-import {transact} from '../lib/store.mjs';
+import {transact,loadRecord} from '../lib/store.mjs';
 import {readReport} from '../lib/report.mjs';
 import {readOwnedRun,requireController,assertOwner} from '../lib/run-owner.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
-import {serviceRecordBinding,reviewErrorFacts} from './record-inbox.mjs';
+import {serviceRecordBinding} from './record-inbox.mjs';
 import {reviewResolution} from './review-resolutions.mjs';
 import {resolvedDispatchInput} from '../dispatch/not-started.mjs';
 import {bindCloseoutSources,publishCloseoutEvents} from '../lib/closeout.mjs';
@@ -170,28 +170,16 @@ export function publishLandedReviewEvidence(target){
   const directory=fs.openSync(path.dirname(target.evidence),'r');try{fs.fsyncSync(directory);}finally{fs.closeSync(directory);}
 }
 
-export function recordReviewError({repo,org,key,count,boundary,reason,scope,env=process.env}){
-  return recordReviewErrors({repo,org,rows:[{key,count,boundary,reason,scope}],env});
-}
-export function recordReviewErrors({repo,org,rows,env=process.env}){
-  serviceRecordBinding({repo,org,env});
-  return transact(org,(events,state)=>{const b=serviceRecordBinding({repo,org,env});
-    return protectRecordMutation({org,events,state,command:'line-service review error',mutation:{add:reviewErrorFacts(events,b,org,rows)}});
-  },{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
-}
-
-export function recordReviewHealth({repo,org,index,passId,errorCounts,env=process.env}){
+export function observeReviewHealth({repo,org,index,passId,errorCounts,prior,env=process.env}){
   const guard=()=>{const b=serviceRecordBinding({repo,org,env});for(const f of [path.join(b.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(f))throw Error('STOP/HOLD prevents review health observation');return b;};
-  guard();
-  return transact(org,(events,state)=>{
-    const b=guard(),prior=events.findLast(e=>e.type==='line-service.review-health'&&e.project===b.identity&&e.org===org);
-    if(prior?.pass_id===passId)return{add:[],result:prior};
-    if(git(repo,['rev-parse',`refs/heads/${index.boundary.main}`])!==index.tip)throw Error('canonical review index advanced; next real pass supplies fresh counts');
-    const refreshed=canonicalReviewIndex({events,state,repo,org,identity:b.identity,boundary:index.boundary,readGit:(_repo,args)=>args[0]==='rev-parse'?index.tip:index.graphRows.join('\n')}),counts=reviewHealth({events,state,index:refreshed});
-    const event={type:'line-service.review-health',project:b.identity,org,pass_id:passId,tip:index.tip,boundary:{id:index.boundary.id,head:index.boundary.canonical_head},...counts,errors:errorCounts,
-      gap_passes:counts.missing_queue||counts.coverage_gaps.length?(prior?.gap_passes??0)+1:0};
-    return protectRecordMutation({org,events,state,command:'line-service review health',mutation:{add:[event],result:event}});
-  },{actor:'line-service',strictTail:true,lockOptions:{recover:false}}).result;
+  const b=guard(),{events,state,tornTail}=loadRecord(org);
+  if(tornTail)throw Error('incomplete record prevents review health observation');
+  prior??=events.findLast(e=>e.type==='line-service.review-health'&&e.project===b.identity&&e.org===org);
+  if(prior?.pass_id===passId)return prior;
+  if(git(repo,['rev-parse',`refs/heads/${index.boundary.main}`])!==index.tip)throw Error('canonical review index advanced; next real pass supplies fresh counts');
+  const refreshed=canonicalReviewIndex({events,state,repo,org,identity:b.identity,boundary:index.boundary,readGit:(_repo,args)=>args[0]==='rev-parse'?index.tip:index.graphRows.join('\n')}),counts=reviewHealth({events,state,index:refreshed});
+  return {project:b.identity,org,pass_id:passId,tip:index.tip,boundary:{id:index.boundary.id,head:index.boundary.canonical_head},...counts,errors:errorCounts,
+    gap_passes:counts.missing_queue||counts.coverage_gaps.length?(prior?.gap_passes??0)+1:0};
 }
 
 export function discoverChanges({events,state,repo,org,identity,boundary,readGit=git,pendingOnly=false,index}) {
@@ -365,7 +353,7 @@ export function recordReviewResults({repo,org,runId,env=process.env}) {
   },{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
 }
 
-export function morningDigest({events,since,now=new Date().toISOString()}) {
+export function morningDigest({events,diagnostics=[],since,now=new Date().toISOString()}) {
   const inWindow=e=>!since||Date.parse(e.at)>=Date.parse(since),state=fold(events);
   const landings=events.filter(e=>e.type==='change.landed'&&inWindow(e)).map(e=>{
     const start=state.runs.get(e.run)?.started.at;
@@ -382,11 +370,12 @@ export function morningDigest({events,since,now=new Date().toISOString()}) {
     }
     const end=Date.parse(now);if(end>previous&&[...partial.items.values()].some(i=>itemStatus(partial,i.id)==='ready')&&![...partial.runs.values()].some(r=>!r.report&&!r.abandoned))idle+=(end-previous)/3600000;
   }
-  const health=events.findLast(e=>e.type==='line-service.review-health'),before=new Map(),through=new Map();
+  const health=diagnostics.findLast(e=>e.action==='review-health'&&e.health)?.health??events.findLast(e=>e.type==='line-service.review-health'),before=new Map(),through=new Map();
   const counted=(e,key,count)=>{through.set(key,Math.max(through.get(key)??0,count));if(!inWindow(e))before.set(key,Math.max(before.get(key)??0,count));};
   for(const e of events)if(e.type==='line-service.review-error')counted(e,e.key,Number.isSafeInteger(e.count)?e.count:1);
   else if(e.type==='line-service.review-error-counts'&&e.counts&&typeof e.counts==='object')for(const [key,count]of Object.entries(e.counts))if(Number.isSafeInteger(count))counted(e,key,count);
+  for(const e of diagnostics)if(e.notice_record?.entry?.review)counted(e,e.notice_record.key,e.notice_record.entry.count);
   const errors=[...through].map(([key,count])=>({key,count:count-(before.get(key)??0)})).filter(e=>e.count>0);
   return {since:since??null,through:now,landings,reviews,findings:reviews.flatMap(r=>r.findings??[]),holds,idle_hours:idle,review_health:health??null,
-    review_errors:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0),scope:'Durable cumulative typed error counts within this window; batched checkpoints preserve raw hold audit and prior events.'},scope:'Record-observed facts; unknown exact landing/idle intervals stay null.'};
+    review_errors:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0),scope:'Diagnostic cumulative error counts plus retained historical record counts within this window; no delivery or consumption is inferred.'},scope:'Durable intent and outcomes from the record; health and counters from diagnostic journals when supplied. Unknown exact landing/idle intervals stay null.'};
 }

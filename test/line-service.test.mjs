@@ -61,7 +61,7 @@ test('blocked and reserved work stays held while another READY item dispatches',
   f.record(['block', blocked, '--by', blocker]); const reserved = f.add('Reserved', 30); f.record(['set', reserved, 'meta.operator_reserved=true']);
   const ready = f.add('Ready', 10); f.service().pass(); f.service().pass(); f.service().pass();
   assert.ok(f.calls.every(call => ![blocked, reserved].includes(call.args[1])));
-  assert.equal(f.calls[0].args[1], ready); assert.equal(f.notes.length, 1); assert.match(f.notes[0].text, /reserved/);
+  assert.equal(f.calls[0].args[1], ready); assert.equal(f.notes.length,0);const notices=Object.values(JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json'))).record_notices);assert.ok(notices.some(n=>/reserved/.test(n.reason)&&n.count===3));
 });
 test('STOP, HOLD and an incomplete tail prevent all effects', t => {
   const f = fixture(t); f.add('Ready'); const s = f.service();
@@ -186,8 +186,8 @@ test('conditional source completion retains an exact needs-judgment refusal once
   assert.equal(f.show(done.item).closed, null); assert.equal(fs.readFileSync(done.saved, 'utf8'), done.review);
   const closes = f.calls.filter(c => c.args[1] === 'close'); assert.equal(closes.length, 1);
   assert.ok(closes[0].args.includes('--if-current-run'));
-  const notes = f.notes.filter(n => n.options.boundary.startsWith(`source-complete:${done.run}:`));
-  assert.equal(notes.length, 1); assert.match(notes[0].text, /reopened after completion.*conditional close needs supervisor judgment/);
+  const notes=Object.values(JSON.parse(fs.readFileSync(path.join(f.activeService.directory,'effects.json'))).record_notices).filter(n=>n.boundary.startsWith(`source-complete:${done.run}:`));
+  assert.equal(notes.length,1);assert.match(notes[0].reason,/reopened after completion.*conditional close needs supervisor judgment/);assert.equal(f.notes.length,0);
   assert.ok(f.calls.some(c => c.args[0].endsWith('/dispatch/dispatch.mjs') && c.args[1] === ready));
   const effects = JSON.parse(fs.readFileSync(path.join(f.activeService.directory, 'effects.json'))), entry = Object.entries(effects.actions).find(([key]) => key.startsWith(`source-complete:${done.run}:`))[1];
   assert.equal(entry.state, 'held'); assert.notEqual(entry.receipt.status, 0); assert.match(entry.receipt.stderr, /supervisor judgment/);

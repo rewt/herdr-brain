@@ -60,11 +60,10 @@ for (const directory of ['current', 'foreign']) for (const root of [null, false,
     const after = fs.readFileSync(path.join(f.org, 'events.jsonl'));
     assert.deepEqual(after.subarray(0, events.length), events, 'existing record history stays immutable');
     const added = after.subarray(events.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);
-    assert.deepEqual(added.map(e => e.type), directory === 'current' ? [] : ['line-service.review-error', 'line-service.review-health']);
+    assert.deepEqual(added, []);
     if (directory === 'foreign') {
-      assert.match(added[0].reason, /absence UNKNOWN/);
-      assert.equal(added[0].scope.head, f.head);
-      assert.equal(added[1].queued, 0);
+      const rows=fs.readFileSync(path.join(s.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse),held=rows.find(r=>r.notice_record);
+      assert.match(held.reason,/absence UNKNOWN/);assert.equal(held.scope.head,f.head);assert.equal(rows.find(r=>r.health).health.queued,0);
     }
     assert.equal(fs.readFileSync(file, 'utf8'), bytes);
   });
@@ -149,7 +148,7 @@ test('settled history sweep has constant identity work and bounded log rows whil
   const retained = rows.find(r => r.action === 'review-retained'); assert.ok(retained);
   assert.equal(retained.notice_record.entry.count, 1);
   assert.equal(retained.notice_record.entry.scope.head, f.head);
-  assert.equal(rows.find(r => r.action === 'review-health').errors.occurrences, 1);
+  assert.equal(rows.find(r => r.action === 'review-health').health.errors.occurrences, 1);
   const timing = rows.find(r => r.action === 'pass-complete').timing;
   assert.equal(timing.snapshots, 1); assert.equal(timing.historical_intake_skipped, 2035); assert.equal(timing.effect_command_ms, 0);
 });

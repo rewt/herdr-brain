@@ -5,7 +5,7 @@ import path from 'node:path';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { countSessions,checkSessionCap,acquireSessionCapLock } from '../dispatch/session-cap.mjs';
 import { checkSourceAdmission,matchesDispatchStart } from '../dispatch/unlanded-cap.mjs';
-import { createLineService,sourceRoot } from '../line-service/line-service.mjs';
+import { createLineService,sourceRoot,serviceDirectory } from '../line-service/line-service.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { loadEvents,transact } from '../lib/store.mjs';
 
@@ -83,5 +83,5 @@ test('running line service dispatches genuine READY work despite lifecycle backl
   // Independent actually-ready item receives no effect when native occupancy is full.
   transact(org,()=>({add:[{type:'item.added',id:'ENG-100',title:'Another ready',priority:9,role:'engineer'}]}));
   createLineService({...options,capacity:()=>{throw Object.assign(Error('native full'),{code:'DISPATCH_SESSION_CAP'});}}).pass();
-  assert.equal(calls.length,1);assert.ok(notes.some(n=>n.reason==='native full'));
+  assert.equal(calls.length,1);assert.equal(notes.length,0);assert.ok(Object.values(JSON.parse(fs.readFileSync(path.join(serviceDirectory(org,identity),'effects.json'))).record_notices).some(n=>n.reason==='native full'));
 });

@@ -36,6 +36,8 @@ import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { readProjectPolicy } from '../lib/config-policy.mjs';
 import { kickCloseout } from '../lib/closeout.mjs';
+import {closeoutEvaluations} from '../lib/closeout.mjs';
+import {readCloseoutObservations,appendCloseoutObservation} from '../lib/closeout-diagnostics.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const closer = fileURLToPath(new URL('../supervisor/closeout.mjs', import.meta.url));
@@ -94,7 +96,7 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
   if (terminal) { f.report(); f.land(); }
   return f;
 }
-const evaluations = f => events(f).filter(e => e.type === 'closeout.evaluated');
+const evaluations = f => [...events(f).filter(e => e.type === 'closeout.evaluated'),...readCloseoutObservations(f.common,f.org,events(f))].sort((a,b)=>(a.seq??a.observed_seq)-(b.seq??b.observed_seq));
 const effects = f => events(f).filter(e => e.type === 'closeout.effect').map(e => e.outcome);
 function selectCurrentCleanup(f) {
   const directory = path.join(f.org, 'line-service', createHash('sha256').update(JSON.stringify(f.common)).digest('hex').slice(0, 20));
@@ -318,10 +320,27 @@ test('phase1 conditional source completion binds one real landed worktree remova
 
 test('phase1 deadline-deferred closeout retries its original unattempted target and exits once with a fresh budget',t=>{
   const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  const bytes=fs.readFileSync(f.eventFile);
   const first=f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}});
   assert.equal(first.evaluated[0].completed,false);assert.match(first.evaluated[0].reason,/deadline/);assert.equal(effects(f).some(e=>e.action==='agent-exit-requested'),false);
+  assert.equal(first.evaluated[0].diagnostic,true);assert.deepEqual(fs.readFileSync(f.eventFile),bytes);
+  assert.equal(readCloseoutObservations(f.common,f.org,events(f)).length,1);
+  assert.deepEqual(f.drain({keys:[entry.key]}).evaluated,[],'restart suppresses the unchanged observation');
+  assert.deepEqual(fs.readFileSync(f.eventFile),bytes);
   const next=f.drain({keys:[entry.key],retrySafe:true});assert.equal(next.evaluated[0]?.completed,true,JSON.stringify(next));
   assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(fs.existsSync(f.lane),false);
+});
+
+test('future telemetry diagnostics cannot override a durable native refusal or manufacture completion',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=readCloseoutEntries(f.common).find(e=>e.key===rows[0].closeout_targets.find(t=>t.signal==='landed').key);
+  const revision=closeoutRevision(entry,events(f));
+  const row={type:'closeout.evaluated',key:entry.key,identity:f.common,item:entry.item,run:entry.run,source:entry.source,revision,completed:false,reason:'native refusal; original identity retained'};
+  transact(f.org,()=>({add:[row]}));
+  appendCloseoutObservation(f.common,f.org,{...row,reason:'retirement deadline reached; request remains pending'},events(f));
+  assert.equal(closeoutEvaluations(f.common,f.org,events(f)).find(e=>e.key===entry.key).reason,row.reason);
+  const bytes=fs.readFileSync(f.eventFile);assert.deepEqual(f.drain({keys:[entry.key],retrySafe:true}).evaluated,[]);assert.deepEqual(f.read().actions,[]);assert.deepEqual(fs.readFileSync(f.eventFile),bytes);
+  const log=path.join(f.common,'closeout/worker.log');fs.appendFileSync(log,JSON.stringify({schema:'closeout-diagnostic/v1',org:f.org,observed_seq:events(f).at(-1).seq,evaluation:{...row,completed:true}})+'\n');
+  assert.throws(()=>f.drain({keys:[entry.key],retrySafe:true}),/invalid closeout diagnostic/);assert.deepEqual(f.read().actions,[]);
 });
 
 test('retirement phase closes its one bound session after slow preparation and leaves physical cleanup independent',t=>{

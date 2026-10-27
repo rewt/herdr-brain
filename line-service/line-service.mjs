@@ -16,7 +16,7 @@ import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.m
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation,scheduleLineCloseouts } from '../lib/closeout.mjs';
+import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation,scheduleLineCloseouts,closeoutEvaluations } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt, readServiceJournal } from './review.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
@@ -24,7 +24,7 @@ import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
-import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,recordReviewErrors,recordReviewHealth } from './phase1.mjs';
+import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
 import {preflightContinuation,initialCapacityRefusal} from '../dispatch/preflight.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 export { reviewAttempt } from './review.mjs';
@@ -45,11 +45,13 @@ function replayNoticeAudit(file,effects){
   const offset=effects.notice_audit_offset??stat.size;if(!Number.isSafeInteger(offset)||offset<0||offset>stat.size)throw Error('notice audit checkpoint is inconsistent');
   const bytes=Buffer.alloc(stat.size-offset),fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);try{let n=0;while(n<bytes.length){const got=fs.readSync(fd,bytes,n,bytes.length-n,offset+n);if(!got)throw Error('notice audit changed during read');n+=got;}}finally{fs.closeSync(fd);}
   const text=bytes.toString('utf8');if(text&&!text.endsWith('\n'))throw Error('notice audit tail is incomplete; preserve it');
-  const restored=new Set();for(const line of text.split('\n').filter(Boolean)){const row=JSON.parse(line),notice=row.notice_record;if(!notice)continue;const {key,entry}=notice;
+  const restored=new Set();for(const line of text.split('\n').filter(Boolean)){const row=JSON.parse(line);
+    if(row.action==='review-health'&&row.health){if(row.health.project!==effects.identity||row.health.org!==effects.org)throw Error('diagnostic health project binding changed');effects.review_health=row.health;}
+    const notice=row.notice_record;if(!notice)continue;const {key,entry}=notice;
     if(!entry||!Number.isSafeInteger(entry.count)||entry.count<1||!Number.isFinite(Date.parse(entry.first_at)))throw Error('notice audit source/count is inconsistent');
     noticeBoundary(key,entry,row.boundary);
     effects.record_notices??={};const prior=effects.record_notices[key];if(prior){noticeBoundary(key,prior,entry.boundary);if(prior.first_at!==entry.first_at)throw Error('notice audit first occurrence is inconsistent');}
-    if(!prior||entry.count>prior.count){effects.record_notices[key]={...entry,state:prior?.state==='recorded'?'recorded':'recording',...(prior?.record?{record:prior.record}:{}),review_count_recorded:prior?.review_count_recorded??0};restored.add(key);}
+    if(!prior||entry.count>prior.count){effects.record_notices[key]={...entry,state:prior?.state==='recorded'?'recorded':'diagnostic-only',...(prior?.record?{record:prior.record}:{}),...(prior?.review_count_recorded!==undefined?{review_count_recorded:prior.review_count_recorded}:{})};restored.add(key);}
   }
   return [...restored];
 }
@@ -129,49 +131,32 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     try {
       const passStarted = performance.now();
       let workStarted=workClock();const expired=()=>workClock()-workStarted>=passBudgetMs;
-      timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,effects_journal_writes:0,notice_record_attempts:0,review_error_batches:0 };
+      timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,effects_journal_writes:0,notice_record_attempts:0 };
       effects = readServiceJournal(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
-      const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects),pendingErrors=new Map();let noticesDirty=false,counterFailed=false;
+      const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects);let noticesDirty=false;
       timings.notice_audit_replayed=restored.length;
-      const errorRow=(key,e)=>({key,count:e.count,boundary:e.boundary,reason:e.reason,scope:e.scope});
-      // An older row that cannot prove its canonical boundary stays retained and
-      // counted; it never fails the batch for every other bound counter.
+      // Older unbound rows remain visible and unchanged; they grant no effect.
       timings.review_error_unbound=0;
-      for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review&&(e.review_count_recorded??0)<e.count){try{noticeBoundary(key,e);pendingErrors.set(key,errorRow(key,e));}catch{timings.review_error_unbound++;}}
+      for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review){try{noticeBoundary(key,e);}catch{timings.review_error_unbound++;}}
       const save = () => {effects.notice_audit_offset=fs.statSync(audit,{throwIfNoEntry:false})?.size??0;writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);timings.effects_journal_writes++;noticesDirty=false;};
-      const flushErrors=()=>{
-        if(!pendingErrors.size||counterFailed)return;
-        try{timings.review_error_batches++;recordReviewErrors({repo,org,rows:[...pendingErrors.values()],env:childEnv});for(const [key,row]of pendingErrors)effects.record_notices[key].review_count_recorded=row.count;pendingErrors.clear();noticesDirty=true;}
-        catch(e){counterFailed=true;log({action:'review-error-counter-held',error:e.message});}
-      };
-      checkpointNotices=()=>{flushErrors();if(noticesDirty)save();};
+      checkpointNotices=()=>{if(noticesDirty)save();};
       if(effects.pass_number!==undefined&&(!Number.isSafeInteger(effects.pass_number)||effects.pass_number<0))throw Error('service pass counter is inconsistent');
       effects.pass_number=(effects.pass_number??0)+1;save();
       let snapshot, stale = true, reviewCache = new Map();
       const current = () => { if (stale) { snapshot = observe(); stale = false; reviewCache = new Map(); } return snapshot; };
-      const deliverNotice=(key,entry)=>{
-        if(entry.state==='recorded')return;
-        try{
-          timings.notice_record_attempts++;
-          const receipt=recordNotice({repo,org,id:entry.id,boundary:entry.boundary,reason:entry.reason,scope:entry.scope,first_at:entry.first_at,audit,counts:`${journal}#record_notices/${key}`,env:childEnv,...(entry.review?{reviewError:errorRow(key,entry)}:{})});
-          entry.state='recorded';entry.record={id:receipt.id,state:receipt.state};if(receipt.review_error_recorded){entry.review_count_recorded=entry.count;pendingErrors.delete(key);}
-        }catch(e){entry.state='record-uncertain';entry.error=e.message;log({action:'record-inbox-held',canonical_key:key,error:e.message});}
-        noticesDirty=true;
-      };
       const note = (boundary, reason, scope = {}, force = false, row = {}) => {
         scope=Object.fromEntries(Object.entries(scope).filter(([,value])=>value!==undefined));
         const scoped=scope.item??/^dispatch:([A-Z]+-\d+)/.exec(boundary)?.[1],review=scope.review===true||/^review|DISPATCH_REVIEW/i.test(boundary)||roleIs(snapshot?.state.items.get(scoped),'REV');
         const normalized=canonicalFailure(reason),key=createHash('sha256').update(canonical([boundary,normalized,scope])).digest('hex');
         effects.record_notices??={};
-        const prior=effects.record_notices[key],entry=effects.record_notices[key]=prior??{first_at:now(),reason:normalized,scope,boundary,state:'recording',id:`line-record-${key}`,count:0};
+        const prior=effects.record_notices[key],entry=effects.record_notices[key]=prior??{first_at:now(),reason:normalized,scope,boundary,state:'diagnostic-only',id:`line-record-${key}`,count:0};
         noticeBoundary(key,entry,boundary);
-        entry.count++;entry.last_at=now();if(review){entry.review=true;pendingErrors.set(key,errorRow(key,entry));}noticesDirty=true;
-        // The compact fsynced delta precedes the record mutation. A lost full
-        // checkpoint replays notice counts only, never native effect intents.
-        log({action:'hold',...row,boundary,reason,canonical_key:key,scope,notice_record:{key,entry}});
-        if(!force&&!review&&entry.count<alertAfter)return;
-        deliverNotice(key,entry);
+        entry.count++;entry.last_at=now();if(review)entry.review=true;noticesDirty=true;
+        const alert=!entry.inspection_due&&(force||review||entry.count>=alertAfter);if(alert)entry.inspection_due=true;
+        // One cumulative diagnostic per key. A lost checkpoint replays the
+        // fsynced delta, never native intents or a SENT/consumed assertion.
+        log({action:'hold',...row,boundary,reason,canonical_key:key,scope,...(alert?{inspection_due:true}:{}),notice_record:{key,entry}});
       };
       const effect = (key, run, binding, operation, safe=false, outcomeReadback=false) => {
         const pendingHandoff = result => key.startsWith('closeout:') && Array.isArray(result?.evaluated) && result.evaluated.length===0 &&
@@ -209,7 +194,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       };
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:sourceGit(sourceRoot,['rev-parse','HEAD']) });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
-      for(const key of restored){const entry=effects.record_notices[key];if(entry.review||entry.count>=alertAfter)deliverNotice(key,entry);}
       let intakeSteps=0;
       for (const run of snapshot.state.runs.values()) {
         if(expired()||intakeSteps>=maxStepsPerStage)break;
@@ -291,8 +275,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       if(index)try{
         checkpointNotices();
-        const errors=Object.values(effects.record_notices??{}).filter(e=>e.review),health=recordReviewHealth({repo,org,index,passId:`${directory}:${effects.pass_number}`,errorCounts:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0)},env:childEnv});
-        log({action:'review-health',owed:health.owed,queued:health.queued,running:health.running,done:health.done,missing_queue:health.missing_queue,gap_passes:health.gap_passes,errors:health.errors});
+        const errors=Object.values(effects.record_notices??{}).filter(e=>e.review),health=observeReviewHealth({repo,org,index,passId:`${directory}:${effects.pass_number}`,errorCounts:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0)},prior:effects.review_health,env:childEnv});
+        log({action:'review-health',health});effects.review_health=health;noticesDirty=true;
         for(const gap of health.attribution_gaps)note(`review-attribution:${gap.head}`,gap.reason,{item:gap.item,run:gap.run,head:gap.head,review:true});
         const attribution=new Set(health.attribution_gaps.map(g=>g.head));
         for(const gap of health.coverage_gaps)if(!attribution.has(gap.head)&&gap.retained)note(`review-coverage:${gap.head}`,'Retained producer review scopes do not cover this landed source; preserve immutable attempts and verdicts, judgment is needed.',{item:gap.item,run:gap.run,head:gap.head,review:true});
@@ -341,7 +325,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         } catch (e) { note(`source-complete:${run.id}`, `T2 source completion needs supervisor judgment: ${e.message}`); }
       }
       try {
-        const observed = current(), evaluations = new Map(observed.events.filter(e => e.type === 'closeout.evaluated').map(e => [e.key, e]));
+        const observed = current(), evaluationRows=closeoutEvaluations(project.identity,org,observed.events),evaluations = new Map(evaluationRows.map(e => [e.key, e]));
         const entries = readCloseoutEntries(project.identity).filter(e => {
           if (e.org !== org || e.project !== repo) return false;
           // Retained legacy/native-held requests keep their existing owner.
@@ -354,7 +338,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior,{entry:e,events:observed.events})||
             closeoutOutcomeObservation(prior,{entry:e,events:observed.events});
         });
-        for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,observed.events)){
+        for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,evaluationRows)){
           const revision=closeoutRevision(entry,observed.events,observed.state),outcomeReadback=closeoutOutcomeObservation(evaluations.get(entry.key),{entry,events:observed.events});
           effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest([entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
         }
@@ -369,6 +353,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const time=Date.parse(now());if(time<(effects.decider_next[item.meta.decider]??0))continue;
         effects.decisions[item.id]={state:'intent',at:now(),decider:item.meta.decider};effects.decider_next[item.meta.decider]=time+60000;save();
         try{
+          timings.notice_record_attempts++;
           const message=recordNotice({repo,org,id:`line-decision-${digest([project.identity,item.id])}`,boundary:`decision:${item.id}`,reason:'actual pending explicitly named reserved decision',scope:{item:item.id},first_at:effects.decisions[item.id].at,audit:path.join(directory,'passes.jsonl'),counts:`${journal}#decisions/${item.id}`,env:childEnv,kind:'question',question:item.id});
           const result=wakeDecision({envelope:message.envelope,binding:message.binding,state:snapshot.state,fresh:observe});
           effects.decisions[item.id]={...effects.decisions[item.id],state:'queued-or-retained',result};
@@ -459,7 +444,14 @@ export async function main(argv = process.argv.slice(2)) {
   const { values } = parseArgs({ args: argv, usage: 'line-service.mjs --once --repo CANONICAL --org RECORD --to SUPERVISOR', options: {
     once: { type: 'boolean' },digest:{type:'boolean'},since:{type:'string'}, repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' },
   } });
-  if(values.digest){if(!values.org)throw Error('--digest needs --org RECORD');process.stdout.write(JSON.stringify(morningDigest({events:loadEvents(values.org).events,since:values.since}),null,2)+'\n');return;}
+  if(values.digest){
+    if(!values.org)throw Error('--digest needs --org RECORD');
+    const repo=values.repo??process.cwd(),identity=gitProject(repo).identity,audit=path.join(serviceDirectory(fs.realpathSync(values.org),identity),'passes.jsonl');
+    const stat=fs.lstatSync(audit,{throwIfNoEntry:false});if(stat&&(!stat.isFile()||fs.realpathSync(audit)!==audit))throw Error('line diagnostics are redirected');
+    const raw=stat?fs.readFileSync(audit,'utf8'):'';if(raw&&!raw.endsWith('\n'))throw Error('incomplete line diagnostic tail; preserve it');
+    const diagnostics=raw.split('\n').filter(Boolean).map(JSON.parse);
+    process.stdout.write(JSON.stringify(morningDigest({events:loadEvents(values.org).events,diagnostics,since:values.since}),null,2)+'\n');return;
+  }
   if (!values.once || !values.repo) throw Error('use --once --repo CANONICAL; launchd owns the schedule');
   const source = gitProject(sourceRoot);
   if (source.checkout !== source.canonical) throw Error('live line service must use the canonical development source');

@@ -34,6 +34,7 @@ function fixture(t,{cutoff=true,before=[]}={}) {
   const git=(args,cwd=f.cwd)=>{const r=spawnSync('git',['-C',cwd,...args],{env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   const events=()=>loadEvents(org).events, state=()=>fold(events()), messages=()=>recordMessages(events());
   const add=(items)=>transact(org,()=>({add:items}));
+  const diagnostics=()=>fs.readFileSync(path.join(directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
   const calls=[];
   const service=options=>createLineService({repo:f.cwd,org,to:'brain-chat',env,capacity:()=>({cap:7,count:0}),command:(_exe,args)=>{calls.push(args);return {status:0,stdout:'{"result":"fixture"}',stderr:''};},...options});
   const build=({historical=false,outcome='blocked'}={})=>{
@@ -47,7 +48,7 @@ function fixture(t,{cutoff=true,before=[]}={}) {
       {type:'report.ingested',run:'R-1',item:'ENG-1',file:'reports/R-1.md',sha256:createHash('sha256').update(text).digest('hex'),report:{outcome,summary:'Bound source',artifacts:[`Commit: ${head}`],blockers:[],extra:{}}}]);
     return {head,base,workspace};
   };
-  return {...f,org,identity,directory,actor,nativeEnv,native,env,cut,boundary,git,events,state,messages,add,service,calls,build};
+  return {...f,org,identity,directory,actor,nativeEnv,native,env,cut,boundary,git,events,state,messages,add,service,calls,build,diagnostics};
 }
 
 test('producer cutoff is explicit durable canonical evidence and survives restarts without reopening history',t=>{
@@ -77,50 +78,49 @@ test('producer review creation and dispatch require actual post-cutoff landing w
   assert.ok(g.calls.some(a=>a[1]==='ENG-3'));assert.equal(g.events().some(e=>e.role==='reviewer'),false);
 });
 
-test('producer old reported source skips cheaply while an unresolved manual review records one error without a native notice',t=>{
+test('producer old reported source skips cheaply while an unresolved manual review stays diagnostic',t=>{
   const f=fixture(t,{before:[{type:'item.added',id:'REV-90',role:'reviewer',title:'Old manual review',meta:{}}]});f.build({historical:true});
   const before=f.events().length;f.service().pass();f.service().pass();
-  assert.equal(f.calls.length,0);assert.equal(f.messages().length,1);assert.match(f.messages()[0].envelope.payload.service_notice.reason,/legacy\/manual.*UNKNOWN/);
-  assert.ok(f.events().slice(before).filter(e=>e.type==='line-service.review-health').every(e=>e.owed===0));assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,1);assert.equal(morningDigest({events:f.events()}).review_errors.occurrences,2);
+  assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);assert.match(f.diagnostics().find(r=>r.notice_record).reason,/legacy\/manual.*UNKNOWN/);
+  assert.deepEqual(f.events().slice(before),[]);assert.ok(f.diagnostics().filter(e=>e.action==='review-health').every(e=>e.health.owed===0));assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,2);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 
-test('producer routine failures use one service-role record envelope with stable counts across volatile occurrences and reload',t=>{
+test('producer routine failures collapse in diagnostics with stable counts across volatile occurrences and reload',t=>{
   const f=fixture(t);f.add([{type:'item.added',id:'ENG-1',role:'engineer',title:'Ready',meta:{}}]);
   let n=0;const capacity=()=>{n++;throw Object.assign(Error(`capacity PID ${100+n} at 2026-10-26T21:00:0${n}.000Z\n    at volatile.mjs:${n}:2`),{code:'DISPATCH_SESSION_CAP'});};
   f.service({capacity}).pass();f.service({capacity}).pass();f.service({capacity}).pass();
-  assert.equal(f.messages().length,1);const envelope=f.messages()[0].envelope;
-  assert.equal(envelope.sessionUid,undefined);assert.equal(envelope.incarnation,undefined);assert.equal(envelope.payload.from.role.name,'line-service');assert.equal(envelope.payload.kind,'fyi');
+  assert.equal(f.messages().length,0);assert.equal(f.diagnostics().filter(e=>e.inspection_due).length,1);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);assert.equal(f.calls.length,0);
   const journal=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))),notices=Object.values(journal.record_notices);assert.equal(notices.length,1);assert.equal(notices[0].count,3);
   assert.equal(canonicalFailure('PID 1 at 2026-10-26T21:00:00.000Z\n at a.mjs:1'),canonicalFailure('pid 2 at 2026-10-26T22:00:00.000Z\n at b.mjs:99'));
 });
 
-test('producer lost record reply recovers the same immutable envelope without native fallback',t=>{
-  const f=fixture(t);f.add([{type:'item.added',id:'ENG-1',role:'engineer',title:'Ready',meta:{}}]);let lost=true;
-  const recordNotice=data=>{const result=recordLineNotice(data);if(lost){lost=false;throw Error('lost record acknowledgment');}return result;};
-  const capacity=()=>{throw Object.assign(Error('same native capacity hold'),{code:'DISPATCH_SESSION_CAP'});};
-  for(let n=0;n<4;n++)f.service({recordNotice,capacity}).pass();assert.equal(f.messages().length,1,'third occurrence sends, fourth resolves the deliberately lost reply');
-  assert.equal(Object.values(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).record_notices)[0].state,'recorded');assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
+test('producer reserved decision lost record reply deduplicates its immutable envelope without native fallback',t=>{
+  const f=fixture(t);f.add([{type:'item.added',id:'HUM-1',role:'human',title:'Actual decision',meta:{operator_reserved:true,decider:'brain-chat'}}]);
+  const input={repo:f.cwd,org:f.org,id:'decision-lost-reply',boundary:'decision:HUM-1',reason:'actual decision',scope:{item:'HUM-1'},first_at:'2026-10-27T01:00:00Z',audit:path.join(f.directory,'passes.jsonl'),counts:'diagnostic-only',env:f.env,kind:'question',question:'HUM-1'};
+  const release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{const first=recordLineNotice(input),bytes=fs.readFileSync(path.join(f.org,'events.jsonl'));assert.deepEqual(recordLineNotice(input).envelope,first.envelope);assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),bytes);assert.equal(f.messages().length,1);assert.throws(()=>recordLineNotice({...input,kind:'fyi',question:undefined}),/diagnostics/);}finally{release();}
+  assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 
-test('useful error persistence records first errors immediately and batches repeated counters and large journal checkpoints by stage rather than hold count',t=>{
+test('useful error persistence keeps first errors and repeat counters off the record and checkpoints by stage',t=>{
   const f=fixture(t),number=24;f.add(Array.from({length:number},(_,n)=>({type:'item.added',id:`REV-${n+1}`,role:'reviewer',title:'Retained manual review',meta:{}})));
   const journal=path.join(f.directory,'effects.json');fs.writeFileSync(journal,JSON.stringify({identity:f.identity,org:f.org,actions:{},notices:{},fixture_padding:'x'.repeat(10*1024*1024)}));
   const open=fs.openSync,close=fs.closeSync,flush=fs.fsyncSync,rename=fs.renameSync,handles=new Map();let fullWrites=0,recordCommits=0;
   fs.openSync=(file,...args)=>{const fd=open(file,...args);handles.set(fd,path.resolve(String(file)));return fd;};fs.closeSync=fd=>{handles.delete(fd);return close(fd);};fs.fsyncSync=fd=>{if(handles.get(fd)===path.join(f.org,'events.jsonl'))recordCommits++;return flush(fd);};fs.renameSync=(from,to)=>{if(path.resolve(String(to))===journal)fullWrites++;return rename(from,to);};
   try{
-    f.service().pass();assert.ok(fullWrites<=5,`first pass used ${fullWrites} full writes for ${number} holds`);assert.ok(recordCommits<=number+3,`first notice and typed error share the same record mutation: ${recordCommits}`);assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,number);assert.equal(f.messages().length,number);
-    fullWrites=0;recordCommits=0;f.service().pass();assert.ok(fullWrites<=5,`repeat pass used ${fullWrites} full writes`);assert.ok(recordCommits<=3,`repeat counters are one batch, not ${number} mutations: ${recordCommits}`);assert.equal(f.messages().length,number);assert.equal(morningDigest({events:f.events()}).review_errors.occurrences,number*2);
+    f.service().pass();assert.ok(fullWrites<=5,`first pass used ${fullWrites} full writes for ${number} holds`);assert.equal(recordCommits,0,'first observations perform no record append');assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,0);assert.equal(f.messages().length,0);
+    fullWrites=0;recordCommits=0;f.service().pass();assert.ok(fullWrites<=5,`repeat pass used ${fullWrites} full writes`);assert.equal(recordCommits,0,'no-change repeats perform no record append');assert.equal(f.messages().length,0);assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,number*2);
   }finally{fs.openSync=open;fs.closeSync=close;fs.fsyncSync=flush;fs.renameSync=rename;}
-  assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);assert.ok(Object.values(JSON.parse(fs.readFileSync(journal)).record_notices).every(n=>n.count===2&&n.state==='recorded'));
+  assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);assert.ok(Object.values(JSON.parse(fs.readFileSync(journal)).record_notices).every(n=>n.count===2&&n.state==='diagnostic-only'));
 });
 
 test('useful error persistence replays only durable notice deltas after a lost journal checkpoint without duplicate envelopes counters or native effects',t=>{
   const f=fixture(t);f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Retained manual review',meta:{}}]);const journal=path.join(f.directory,'effects.json');f.service().pass();const checkpoint=fs.readFileSync(journal);f.service().pass();fs.writeFileSync(journal,checkpoint);f.service().pass();
-  const notices=Object.values(JSON.parse(fs.readFileSync(journal)).record_notices);assert.equal(notices.length,1);assert.equal(notices[0].count,3);assert.equal(f.messages().length,1);const errors=f.events().filter(e=>e.type==='line-service.review-error'),repeats=f.events().filter(e=>e.type==='line-service.review-error-counts');assert.deepEqual(errors.map(e=>e.count),[1]);assert.deepEqual(repeats.map(e=>e.counts[errors[0].key]),[2,3]);assert.equal(new Set(repeats.map(e=>e.id)).size,2);assert.equal(morningDigest({events:f.events()}).review_errors.occurrences,3);assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
+  const notices=Object.values(JSON.parse(fs.readFileSync(journal)).record_notices);assert.equal(notices.length,1);assert.equal(notices[0].count,3);assert.equal(f.messages().length,0);assert.equal(f.events().filter(e=>/^line-service.review-(error|health)/.test(e.type)).length,0);assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,3);assert.equal(f.diagnostics().findLast(r=>r.health).health.gap_passes,0);assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
   // Replay validates the canonical key/boundary binding before merging audit counts.
-  const log=path.join(f.directory,'passes.jsonl'),record={key:'a'.repeat(64),entry:{id:'line-record-'+ 'a'.repeat(64),count:4,first_at:'2026-10-27T01:00:00Z',last_at:'2026-10-27T01:00:01Z',boundary:'dispatch:REV-1',reason:'different reason',scope:{},review:true,state:'recording'}};fs.appendFileSync(log,JSON.stringify({action:'hold',notice_record:record})+'\n');assert.throws(()=>f.service().pass(),{message:'notice boundary/source is inconsistent'});assert.equal(f.messages().length,1);assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
+  const log=path.join(f.directory,'passes.jsonl'),record={key:'a'.repeat(64),entry:{id:'line-record-'+ 'a'.repeat(64),count:4,first_at:'2026-10-27T01:00:00Z',last_at:'2026-10-27T01:00:01Z',boundary:'dispatch:REV-1',reason:'different reason',scope:{},review:true,state:'recording'}};fs.appendFileSync(log,JSON.stringify({action:'hold',notice_record:record})+'\n');assert.throws(()=>f.service().pass(),{message:'notice boundary/source is inconsistent'});assert.equal(f.messages().length,0);assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 
 test('producer only actual named pending reserved decisions enqueue once after durable intent and persistent decider rate limit',t=>{

@@ -55,6 +55,9 @@ function fixture(t,{reported=true}={}){
   return {...f,org,identity,base,heads,workspace,directory,report,file,git,context,add};
 }
 
+const diagnostics=f=>fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+const diagnosticHealth=f=>diagnostics(f).findLast(r=>r.health)?.health;
+
 function independentProducer(f){
   fs.writeFileSync(path.join(f.cwd,'independent-source'),'separate owner');f.git(['add','.'],f.cwd);f.git(['commit','-qm','Independent source'],f.cwd);const head=f.git(['rev-parse','HEAD'],f.cwd),dispatch=path.join(f.org,'dispatch/independent.json');
   fs.writeFileSync(dispatch,JSON.stringify({token:'independent',stage:'complete',run:'R-3',item:'ENG-2',org:f.org,common:f.identity,workspace:f.cwd,base:f.heads[1]}));
@@ -313,7 +316,7 @@ test('landing-before-report actual source queue command is reached by the instal
   const f=fixture(t,{reported:false});unreportedNativeLandings(f);const env=installedService(f),calls=[],before=process.cwd();let capacityCalls=0;process.chdir(f.cwd);
   try{createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,maxStarts:1,capacity:()=>{capacityCalls++;throw Object.assign(Error('review pool is occupied'),{code:'DISPATCH_REVIEW_CAP'});},command:(exe,args,options)=>{calls.push(args);if(args[1]==='queue-review')return spawnSync(exe,args,options);assert.equal(args[0].endsWith('dispatch.mjs'),false,'capacity prevents a native launch');return{status:0,stdout:'{}',stderr:''};}}).pass();}
   finally{process.chdir(before);}
-  assert.equal(calls.filter(a=>a[1]==='queue-review').length,1);assert.equal(capacityCalls,1,'the selected current helper actually validates this evidence before native capacity');const c=f.context(),q=[...c.state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,1);assert.equal(q[0].meta.review_target.evidence_kind,'native-landings/v1');assert.equal(c.run.report,null);assert.equal(c.events.some(e=>e.type==='run.started'&&e.item===q[0].id),false);assert.equal(c.events.findLast(e=>e.type==='line-service.review-health').queued,1);
+  assert.equal(calls.filter(a=>a[1]==='queue-review').length,1);assert.equal(capacityCalls,1,'the selected current helper actually validates this evidence before native capacity');const c=f.context(),q=[...c.state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,1);assert.equal(q[0].meta.review_target.evidence_kind,'native-landings/v1');assert.equal(c.run.report,null);assert.equal(c.events.some(e=>e.type==='run.started'&&e.item===q[0].id),false);assert.equal(diagnosticHealth(f).queued,1);
 });
 
 test('landing-before-report retains an original UNKNOWN attempt and refuses admission-only foreign or unqualified ownership as positive source evidence',t=>{
@@ -449,7 +452,7 @@ test('canonical unattributed targets retain exact-head UNKNOWN attempts, ownersh
 test('canonical unattributed discovery uses the installed ordinary queue and review pool without a producer run or parallel transport',t=>{
   const f=fixture(t,{reported:false}),env=installedService(f),calls=[],before=process.cwd();process.chdir(f.cwd);
   try{createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,maxStarts:1,capacity:()=>{throw Object.assign(Error('review pool is occupied'),{code:'DISPATCH_REVIEW_CAP'});},command:(exe,args,options)=>{calls.push(args);if(args[1]==='queue-review')return spawnSync(exe,args,options);assert.equal(args[0].endsWith('dispatch.mjs'),false,'native capacity stays authoritative');return{status:0,stdout:'{}',stderr:''};}}).pass();}finally{process.chdir(before);}
-  const q=[...f.context().state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,2);assert.equal(calls.filter(a=>a[1]==='queue-review'&&a[2].startsWith('canonical:')).length,2);assert.equal(q.every(i=>i.meta.review_source_item===i.id&&i.meta.review_source_run===null),true);assert.equal(f.context().events.findLast(e=>e.type==='line-service.review-health').queued_commits,2);assert.equal(calls.some(a=>/settle\//.test(a[0])),false);
+  const q=[...f.context().state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,2);assert.equal(calls.filter(a=>a[1]==='queue-review'&&a[2].startsWith('canonical:')).length,2);assert.equal(q.every(i=>i.meta.review_source_item===i.id&&i.meta.review_source_run===null),true);assert.equal(diagnosticHealth(f).queued_commits,2);assert.equal(calls.some(a=>/settle\//.test(a[0])),false);
 });
 
 test('permanent boundary auto records first actual main once and preserves explicit qualified boundaries and STOP native-context fences',t=>{
@@ -650,15 +653,14 @@ test('original worker continuation refuses UNKNOWN native flags changed claim re
   }
 });
 
-test('permanent health records the first review error immediately and one gap notice after four real passes without a session prompt',t=>{
-  const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);
+test('permanent health and first errors remain visible in diagnostics with one gap alert and no record appends',t=>{
+  const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);const bytes=fs.readFileSync(path.join(f.org,'events.jsonl'));
   let calls=0;const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),command:(_exe,args)=>{calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:'selected helper cannot certify immutable review target'};}});
-  service().pass();let events=f.context().events;assert.equal(events.filter(e=>e.type==='line-service.review-error').length,1);assert.equal(events.filter(e=>e.type==='session.message.v1').length,1);
-  for(let n=0;n<4;n++)service().pass();events=f.context().events;const messages=events.filter(e=>e.type==='session.message.v1'),health=events.filter(e=>e.type==='line-service.review-health');
-  assert.equal(health.length,5);assert.equal(health.at(-1).gap_passes,5);assert.equal(health.at(-1).owed,1);assert.equal(health.at(-1).owed_commits,2);assert.equal(health.at(-1).queued,0);
-  assert.equal(messages.filter(e=>e.envelope.payload.service_notice.boundary==='review-gap').length,1);assert.equal(messages.filter(e=>e.envelope.payload.service_notice.boundary.startsWith('review:')).length,1);assert.equal(calls,5);
-  const digest=morningDigest({events});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.at(-1).pass_id);
-  assert.equal(fs.existsSync(path.join(f.org,'supervisor/inbox.log')),false);assert.ok(messages.every(e=>e.envelope.source.kind==='service'&&e.envelope.sessionUid===undefined));
+  for(let n=0;n<5;n++)service().pass();const health=diagnosticHealth(f),rows=diagnostics(f);
+  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),bytes);assert.equal(health.gap_passes,5);assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.queued,0);
+  assert.equal(rows.filter(r=>r.boundary==='review-gap'&&r.inspection_due).length,1);assert.equal(calls,5);
+  const digest=morningDigest({events:f.context().events,diagnostics:rows});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.pass_id);
+  assert.equal(fs.existsSync(path.join(f.org,'supervisor/inbox.log')),false);
 });
 
 test('continuity discovery producer and index failures preserve diagnostics while independent cleanup and READY admission proceed',t=>{
@@ -672,14 +674,14 @@ test('continuity discovery producer and index failures preserve diagnostics whil
       calls.push(args);return{status:0,stdout:args[0].endsWith('closeout.mjs')?JSON.stringify({evaluated:[{key:added[0].closeout_targets[0].key,completed:true}]}):args[0].endsWith('dispatch.mjs')?JSON.stringify({result:'detached',journal:path.join(f.org,'dispatch/new.json')}):'{}',stderr:''};
     }});
     service.pass();assert.ok(calls.some(a=>a[0].endsWith('closeout.mjs')),kind);assert.equal(calls.filter(a=>a[0].endsWith('dispatch.mjs')).length,1,kind);
-    const notices=f.context().events.filter(e=>e.type==='session.message.v1').map(e=>e.envelope.payload.service_notice),held=notices.find(e=>e.boundary.startsWith('review-source:'));
+    const notices=diagnostics(f).filter(e=>e.notice_record),held=notices.find(e=>e.boundary.startsWith('review-source:'));
     assert.ok(held,kind);assert.equal(held.scope.review,true);assert.equal('head' in held.scope,false);
     if(kind==='producer'){assert.match(held.reason,/immutable producer report/);assert.equal(held.scope.item,'ENG-1');assert.equal(held.scope.run,'R-1');}
     else{assert.match(held.reason,/bad object|revision|unknown|invalid|not a valid/i);assert.deepEqual(held.scope,{review:true});}
   }
 });
 
-test('an older review error row without a provable boundary is retained and counted while bound counters still record once per key',t=>{
+test('an older unbound review error is retained while future bound counters stay diagnostic',t=>{
   const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);
   const legacyKey='b'.repeat(64),legacy={first_at:'2026-10-26T00:00:00.000Z',reason:'old reason',scope:{},state:'recorded',id:`line-record-${legacyKey}`,count:3,review:true,review_count_recorded:0};
   const file=path.join(f.directory,'effects.json'),audit=path.join(f.directory,'passes.jsonl');
@@ -689,8 +691,8 @@ test('an older review error row without a provable boundary is retained and coun
   const rows=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse),events=f.context().events,typed=events.filter(e=>e.type==='line-service.review-error'),repeats=events.filter(e=>e.type==='line-service.review-error-counts');
   assert.equal(rows.some(r=>r.action==='review-error-counter-held'),false,'one unbound row never fails the batch');
   assert.equal(rows.findLast(r=>r.action==='pass-complete').timing.review_error_unbound,1);
-  assert.equal(typed.some(e=>e.key===legacyKey),false);assert.equal(typed.length,1);assert.equal(repeats.length,2,'one aggregate event per later batch, not one per repeat');
-  assert.equal(morningDigest({events}).review_errors.occurrences,3);
+  assert.equal(typed.length,0);assert.equal(repeats.length,0,'future counters never append to the record');
+  assert.equal(morningDigest({events,diagnostics:rows}).review_errors.occurrences,3);
   const saved=JSON.parse(fs.readFileSync(file)).record_notices[legacyKey];assert.equal(saved.review_count_recorded,0);assert.equal(saved.count,3);assert.equal(saved.boundary,undefined);
 });
 
@@ -708,12 +710,12 @@ test('continuity base notices retain identity and recorded state across recurren
   assert.equal(interrupted,true);const interruptedRows=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse),delta=interruptedRows.find(e=>e.notice_record)?.notice_record;
   assert.equal(delta.entry.boundary,boundary);assert.equal(delta.entry.id,id);assert.equal(delta.entry.count,5);assert.equal(delta.entry.first_at,first_at);assert.equal(delta.entry.state,'recorded');
   service.pass();const saved=JSON.parse(fs.readFileSync(file)),entry=saved.record_notices[key];
-  assert.equal(entry.boundary,boundary);assert.equal(entry.id,id);assert.equal(entry.first_at,first_at);assert.equal(entry.state,'recorded');assert.deepEqual(entry.record,prior.record);assert.equal(entry.count,6);assert.equal(entry.review_count_recorded,6);assert.equal(deliveries,0);
+  assert.equal(entry.boundary,boundary);assert.equal(entry.id,id);assert.equal(entry.first_at,first_at);assert.equal(entry.state,'recorded');assert.deepEqual(entry.record,prior.record);assert.equal(entry.count,6);assert.equal(entry.review_count_recorded,undefined);assert.equal(deliveries,0);
   const rows=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse),last=rows.findLast(r=>r.action==='pass-complete');
   // The checkpoint failure itself also has a retained review-health delta.
-  const interruptedKeys=new Set(interruptedRows.filter(r=>r.notice_record).map(r=>r.notice_record.key));assert.ok(interruptedKeys.has(key));assert.equal(last.timing.notice_audit_replayed,interruptedKeys.size);assert.equal(last.timing.review_error_batches,1);
+  const interruptedKeys=new Set(interruptedRows.filter(r=>r.notice_record).map(r=>r.notice_record.key));assert.ok(interruptedKeys.has(key));assert.equal(last.timing.notice_audit_replayed,interruptedKeys.size);assert.equal(last.timing.notice_record_attempts,0);
   assert.equal(calls,1,'replay must retain the prior held effect rather than requeue it');
-  const typed=f.context().events.filter(e=>e.type==='line-service.review-error'&&e.key===key),repeats=f.context().events.filter(e=>e.type==='line-service.review-error-counts'&&key in e.counts);assert.equal(typed.length,1);assert.equal(Math.max(...typed.map(e=>e.count),...repeats.map(e=>e.counts[key])),6);assert.equal(new Set(repeats.map(e=>e.id)).size,repeats.length);
+  const typed=f.context().events.filter(e=>e.type==='line-service.review-error'&&e.key===key),repeats=f.context().events.filter(e=>e.type==='line-service.review-error-counts'&&key in e.counts);assert.equal(typed.length,0);assert.equal(repeats.length,0);assert.equal(entry.count,6);
   service.pass();assert.equal(calls,1);assert.equal(JSON.parse(fs.readFileSync(file)).record_notices[key].count,7);assert.equal(deliveries,0);
 });
 
@@ -869,10 +871,10 @@ test('phase1 measured inactive owned child failure does not freeze independent w
   assert.ok(calls.some(a=>a[0].endsWith('dispatch.mjs')));assert.equal(fs.existsSync(path.join(f.directory,'pass.lock')),false);
 });
 
-test('phase1 three repeated failures make one record-inbox alert and every pass writes a heartbeat',t=>{
+test('phase1 three repeated failures make one diagnostic alert and every pass writes a heartbeat',t=>{
   const f=fixture(t,{reported:false});fs.mkdirSync(path.join(f.org,'runs/R-1'),{recursive:true});fs.writeFileSync(path.join(f.org,'runs/R-1/report.md'),f.report);const notes=[];
   const options={repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,command:()=>({status:1,stdout:'',stderr:'temporarily locked'}),capacity:()=>({cap:1,count:0}),recordNotice:d=>{notes.push(d);return {id:d.id};}};
-  for(let n=0;n<3;n++)createLineService(options).pass();assert.equal(notes.filter(n=>n.boundary.startsWith('ingest:')).length,1);
+  for(let n=0;n<3;n++)createLineService(options).pass();assert.equal(notes.length,0);assert.equal(diagnostics(f).filter(n=>n.boundary?.startsWith('ingest:')&&n.inspection_due).length,1);
   const heartbeat=JSON.parse(fs.readFileSync(path.join(f.directory,'heartbeat.json')));assert.ok(heartbeat.at);assert.equal(heartbeat.project,f.identity);
 });
 

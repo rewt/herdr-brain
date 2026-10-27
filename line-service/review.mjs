@@ -35,7 +35,7 @@ const contains = (value, tokens) => {
   return value && typeof value === 'object' && Object.values(value).some(v => contains(v, tokens));
 };
 
-function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun}) {
+function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal=false,ignoreQueues=[]}) {
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   capturedRun??=target.source_group?.run;
   const runs=new Set(capturedRun?[capturedRun]:item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head)))),group=producerGroupKey(item.id,capturedRun,target.reportHash),covered=new Set(capturedReviewCommits(target));
@@ -50,7 +50,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     const run=value.run??value.source_run??runHint;
     return runs.has(run);
   };
-  for(const q of state.items.values())if(q.id!==ignoreQueue&&!archivedItems.has(q.id)&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&(q.meta.review_target?.head===target.head||capturedRun&&sameProducerQueue(q,item.id,capturedRun)))return 'existing whole producer/same-change record review';
+  for(const q of state.items.values())if(q.id!==ignoreQueue&&!ignoreQueues.includes(q.id)&&!archivedItems.has(q.id)&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&(q.meta.review_target?.head===target.head||capturedRun&&sameProducerQueue(q,item.id,capturedRun)))return 'existing whole producer/same-change record review';
   for(const id of runs)for(const artifact of state.runs.get(id)?.report?.artifacts??[]){
     // A producer's explicit current-source review locator is evidence of an
     // attempt, including outside-org manual receipts. Never probe another
@@ -58,7 +58,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])&&!archivedReviewFile(resolution,artifact.split(/[ #]/)[0]))return 'same-change source-owner review reference UNKNOWN; retain without external probe';
   }
   for(const e of events){
-    if(e.type==='change.reviewed'&&e.item===item.id&&(covered.has(e.head)||group&&(e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===group))return 'recorded same-change/producer-group verdict';
+    if(e.type==='change.reviewed'&&e.item===item.id&&(covered.has(e.head)||!capturedOriginal&&group&&(e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===group))return 'recorded same-change/producer-group verdict';
     if(e.type==='review.verdict'&&item.runs.includes(e.run)&&matches(e,e.run))return 'recorded same-change verdict';
     if(e.type==='note.added'&&e.decision&&tokens.has(e.id)&&/review/i.test(e.text??'')){
       // The validated archival authorization is not another independent
@@ -110,8 +110,8 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   return null;
 }
 
-export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun,target }) {
-  if(target)return changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun});
+export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun,target,capturedOriginal,ignoreQueues }) {
+  if(target)return changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal,ignoreQueues});
   const cached = (kind, file, fn) => { const key = `${kind}:${file}`; if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); };
   const readFile = file => cached('file', file, () => read(file));
   const list = file => cached('directory', file, () => entries(file));

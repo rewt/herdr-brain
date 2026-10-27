@@ -13,8 +13,9 @@ import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { nativeSender } from '../messages/operator-inbox.mjs';
 import { selectRoute,resolveLaunchRoute } from '../lanes/routes.mjs';
 import { reviewAttempt } from './review.mjs';
-import { discoverChanges } from './phase1.mjs';
-import {producerGroupKey,queueProducerGroup,sameProducerQueue,sameCapturedTarget} from './review-group.mjs';
+import { discoverChanges,capturedProducerTarget } from './phase1.mjs';
+import {producerGroupKey,queueProducerGroup,sameProducerQueue,sameCapturedTarget,capturedReviewCommits} from './review-group.mjs';
+import {originalPrestartProof,reviewPlain,reviewDigest} from './review-resolutions.mjs';
 
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const files = ['line-service/review-queue.mjs', 'line-service/review.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
@@ -47,7 +48,7 @@ export function queueConsumer({ run, env = process.env }) {
   if(immutableCode)for (let i = 0; i < files.length; i++) if (createHash('sha256').update(fs.readFileSync(path.join(root, files[i]))).digest('hex') !== hashes[i]) throw Error('immutable saved queue/dispatch implementation changed; retain its owner');
   return root;
 }
-function source({ state, events, org, repo, identity, runId, head, base,env=process.env }) {
+function source({ state, events, org, repo, identity, runId, head, base,env=process.env,originalCapture }) {
   const run = state.runs.get(runId), item = run && state.items.get(run.item);
   if (!run || !item || !roleIs(item, 'ENG') || !run.report) throw Error('review queue needs an immutable reported build run');
   if (roleIs(state.items.get(item.parent), 'REV')) throw Error('linked formal correction retains its original review; no automatic re-review chain');
@@ -55,13 +56,16 @@ function source({ state, events, org, repo, identity, runId, head, base,env=proc
   requireController(current, 'brain'); assertOwner(current, { owner: run.owner, generation: run.owner_generation });
   queueConsumer({ run,env });
   const discovered=discoverChanges({state,events,org,repo,identity});
-  const choices=discovered.changes.filter(c=>c.run.id===runId&&(!head||c.target.head===head));
+  const whole=discovered.changes.filter(c=>c.run.id===runId);let choices=whole.filter(c=>!head||c.target.head===head),capturedOriginal=false;
+  if(originalCapture&&whole.length===1&&!sameCapturedTarget(originalCapture,whole[0].target)){
+    capturedProducerTarget({repo,target:originalCapture,whole:whole[0]});choices=[{...whole[0],target:originalCapture}];capturedOriginal=true;
+  }
   if(choices.length!==1)throw Error(`landed change target missing/ambiguous: ${discovered.holds.filter(h=>!h.run||h.run===runId).map(h=>h.reason).join('; ')||'source is not actually landed after the recorded boundary; historical, unlanded or absent source is not a new target'}`);
   const {target,cutoff,authorization}=choices[0];
   if(base&&base!==target.base)throw Error('review base differs from captured landed change');
   try { git(repo, ['merge-base', '--is-ancestor', target.head, 'HEAD']); }
   catch { throw Error('review source is not actually landed in the canonical project'); }
-  return { run, item, target, cutoff,authorization };
+  return { run, item, target, cutoff,authorization,capturedOriginal,whole:whole[0] };
 }
 function ignoreIntent(org, identity, item, target) {
   return { file: journalFor(org, identity), key: `review:${item.id}:${target.head}`, target, operation: 'record-queue' };
@@ -105,12 +109,20 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
 
 export function validateQueuedReview({ item, state, events, org, repo, allowRun, allowJournal, journals }) {
   if (!isQueueReview(item) || item.meta.review_round_cap !== 1) throw Error('not a supported single-review queue item');
-  const project = gitProject(repo), bound = source({ state, events, org, repo: project.canonical, identity: project.identity, runId: item.meta.review_source_run,head:item.meta.review_target?.head,base:item.meta.review_target?.base });
+  const project = gitProject(repo);let originalCapture;
+  if(allowJournal&&path.dirname(path.resolve(allowJournal))===path.join(org,'dispatch')){
+    const bytes=reviewPlain(allowJournal),job=JSON.parse(bytes),proof=originalPrestartProof({events,org,common:project.identity,journal:allowJournal,job,requestHash:reviewDigest(bytes)});
+    if(proof&&proof.review_item===item.id&&same(item.meta.review_target,job.reviewQueue))originalCapture=item.meta.review_target;
+  }
+  const bound = source({ state, events, org, repo: project.canonical, identity: project.identity, runId: item.meta.review_source_run,head:item.meta.review_target?.head,base:item.meta.review_target?.base,originalCapture });
   openBoundary(org, project.canonical, project.identity);
   if(!same(item.meta.review_cutover,bound.cutoff))throw Error('review queue boundary differs from its actual landed target; retain exact evidence');
   if(bound.authorization&&item.meta.review_recovery_id!==bound.authorization.id)throw Error('archived review item cannot consume the one replacement');
   const archived=new Set(bound.authorization?.archived_review_items??[]),peers=[...state.items.values()].filter(q=>q.id!==item.id&&!archived.has(q.id)&&sameProducerQueue(q,bound.item.id,bound.run.id));
-  if(peers.length)throw Error('another record entry retains this whole producer review; no duplicate native launch, cancellation or retarget');
+  if(peers.length){
+    if(!bound.capturedOriginal)throw Error('another record entry retains this whole producer review; no duplicate native launch, cancellation or retarget');
+    const captured=new Set(capturedReviewCommits(bound.target));for(const peer of peers){capturedProducerTarget({repo:project.canonical,target:peer.meta.review_target,whole:bound.whole});if(capturedReviewCommits(peer.meta.review_target).some(h=>captured.has(h)))throw Error('overlapping/UNKNOWN original review scope retained; no duplicate launch');}
+  }
   if (bound.item.id !== item.meta.review_source_item || item.meta.review_key !== `${bound.item.id}:${bound.target.head}` || !sameCapturedTarget(item.meta.review_target,bound.target)) throw Error('queued review immutable whole producer target/evidence changed');
   if (item.runs.some(id => id !== allowRun)) throw Error('queued review already has a run; no replacement/re-review');
   journals ??= fs.readdirSync(path.join(org, 'dispatch')).filter(file => file.endsWith('.json') && !file.endsWith('.routes.json')).map(file => ({
@@ -118,7 +130,7 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
   }));
   if (journals.some(j => j.item === item.id && j.journal !== allowJournal && (!allowRun || j.run !== allowRun))) throw Error('queued review has existing/ambiguous saved dispatch; retain it');
   const prior = reviewAttempt(bound.item, { state, events, org, repo: project.canonical, identity: project.identity, ignoreQueue: item.id, capturedRun: bound.run.id,
-    target:bound.target,
+    target:bound.target,capturedOriginal:bound.capturedOriginal,ignoreQueues:bound.capturedOriginal?peers.map(q=>q.id):[],
     ignoreService: ignoreIntent(org, project.identity, bound.item, bound.target) });
   if (prior) throw Error(`queued review launch held by existing item attempt: ${prior}`);
   return bound.target;

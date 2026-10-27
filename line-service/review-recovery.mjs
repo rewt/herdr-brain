@@ -20,8 +20,8 @@ import {queueConsumer,queueReviewMutation} from './review-queue.mjs';
 import {lineDirectory} from './cutoff.mjs';
 import {reviewDigest as hash,reviewPlain,reviewResolution} from './review-resolutions.mjs';
 import {serviceRecordBinding} from './record-inbox.mjs';
-import {discoverChanges} from './phase1.mjs';
-import {sameCapturedTarget,sameProducerQueue} from './review-group.mjs';
+import {discoverChanges,capturedProducerTarget} from './phase1.mjs';
+import {sameCapturedTarget,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
 import {lockRequest} from '../dispatch/request-lock.mjs';
 import {lookupProcess} from '../lib/processes.mjs';
 const root=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
@@ -75,7 +75,7 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
   if(!progress||progress.pass!==effects.pass_number||progress.stable_passes<2)throw Error('review has no unchanged original-request proof across real passes');
   const initial=loadEvents(org).events,state=fold(initial),q=state.items.get(reviewId),source=state.items.get(q?.meta.review_source_item),run=state.runs.get(q?.meta.review_source_run);
   if(!q||!source||!run?.report||q.closed||q.runs.some(id=>state.runs.get(id)?.report)||!roleIs(q,'REV')||q.meta.review_round_cap!==1)throw Error('review progressed/completed or is not an owned normal queue attempt');
-  const peers=[...state.items.values()].filter(i=>sameProducerQueue(i,source.id,run.id));if(peers.length!==1||peers[0].id!==q.id)throw Error('partial/ambiguous producer attempts remain immutable; no automatic replacement');
+  const peers=[...state.items.values()].filter(i=>sameProducerQueue(i,source.id,run.id));
   const journal=progress.journal;if(path.dirname(journal)!==path.join(org,'dispatch'))throw Error('original review request is outside its owning record');
   const bytes=reviewPlain(journal),job=JSON.parse(bytes),target=q.meta.review_target,id=`service-${hash(JSON.stringify([source.id,run.id,target.reportHash,target.head])).slice(0,48)}`;
   const driver=originalDriverFiles(journal);if(JSON.stringify(driver.map(f=>({original:f.original,sha256:hash(f.bytes)})))!==JSON.stringify(progress.driver_files))throw Error('original reviewer driver progressed; observe its changed input');
@@ -83,7 +83,14 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
   if(/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|STOP/i.test(job.error??'')||q.meta.hold||q.meta.held||q.meta.reserved||q.meta.operator_reserved)throw Error('native/ownership/reserved refusal remains stopped; no automatic replacement');
   const prior=reviewResolution({events:initial,org,item:source.id,head:target.head});if(prior)throw Error('one exact producer replacement budget already spent');
   const current=discoverChanges({events:initial,state,repo,org,identity:project.identity}).changes.find(c=>c.item.id===source.id&&c.run.id===run.id);
-  if(!current||current.authorization||!sameCapturedTarget(target,current.target))throw Error('historical/partial target differs from its actual whole producer group; retain it');
+  if(!current||current.authorization)throw Error('historical/unknown target differs from its actual producer source; retain it');
+  const originalScope=peers.length!==1||!sameCapturedTarget(target,current.target),validatePeers=fresh=>{
+    capturedProducerTarget({repo,target,whole:current});const ours=new Set(capturedReviewCommits(target));
+    for(const peer of fresh.items.values())if(peer.id!==q.id&&sameProducerQueue(peer,source.id,run.id)){
+      capturedProducerTarget({repo,target:peer.meta.review_target,whole:current});if(capturedReviewCommits(peer.meta.review_target).some(h=>ours.has(h)))throw Error('overlapping/UNKNOWN original producer scopes remain held; no duplicate review');
+    }
+  };
+  if(originalScope)validatePeers(state);
   const reviewRuns=q.runs.map(id=>state.runs.get(id));if(reviewRuns.length>1||reviewRuns.some(r=>r.abandoned||r.report||r.report_path&&fs.existsSync(r.report_path)))throw Error('original reviewer report/attempt needs intake or judgment, not replacement');
   const original=reviewRuns[0];
   if(original&&(job.run!==original.id||original.meta.dispatch_journal!==journal||original.meta.dispatch_attempt!==job.token))throw Error('original reviewer claim/request binding differs');
@@ -91,6 +98,7 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
   if(!original&&(job.run||initial.some(e=>e.type==='run.started'&&(e.item===q.id||e.meta?.dispatch_journal===journal||e.meta?.dispatch_attempt===job.token))))throw Error('original request has unbound record-start progress; retain it');
   const prestart=!original&&['open','start'].includes(job.stage)&&!job.worker&&!job.launchProcess&&!job.sessionBinding&&job.native_launch_attempted!==true;
   const zeroWorker=original&&job.stage==='worker'&&job.native_launch_attempted===false&&!job.worker&&!job.launchProcess&&!job.sessionBinding;
+  if(originalScope&&!prestart)throw Error('partial/ambiguous producer attempts remain immutable; no replacement or retarget');
   if(!prestart&&!zeroWorker&&(!original||job.stage!=='complete'||!job.worker))throw Error('original native launch outcome remains UNKNOWN; no missing-run inference');
   const owner=readOwnedRun(org,run.id);requireController(owner,'brain');assertOwner(owner,{owner:run.owner,generation:run.owner_generation});queueConsumer({run,env});
   const authority={kind:'installed-service-progress',project:project.identity,org,installation:binding.installationFile,installation_sha256:hash(reviewPlain(binding.installationFile))};
@@ -102,6 +110,7 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
     assertOwner(readOwnedRun(org,run.id),{owner:run.owner,generation:run.owner_generation});
     if(original){assertOwner(readOwnedRun(org,original.id),{owner:original.owner,generation:original.owner_generation});if(original.report_path&&fs.existsSync(original.report_path))throw Error('original reviewer report appeared; retain it for intake');}
     if(events){const fresh=fold(events),old=fresh.items.get(q.id);if(old?.closed||old?.meta.hold||old?.meta.held||old?.meta.reserved||old?.meta.operator_reserved||JSON.stringify(old?.meta.review_target)!==JSON.stringify(target)||JSON.stringify(old?.runs)!==JSON.stringify(q.runs)||q.runs.some(id=>fresh.runs.get(id)?.report)||events.some(e=>e.type==='change.reviewed'&&e.item===source.id&&e.head===target.head))throw Error('review progressed, was held or received a verdict');
+      if(originalScope)validatePeers(fresh);
       if(original&&events.some(e=>e.type==='closeout.effect'&&e.run===original.id&&['agent-exit-requested','shell-close-requested'].includes(e.outcome?.action)))throw Error('original native retirement intent remains retained');}
   };
   const native=args=>{let raw;try{raw=JSON.parse(call('herdr',args));}catch(e){if(args[0]==='pane'&&args[1]==='get'&&/"code"\s*:\s*"pane_not_found"/.test(e.message))return{error:{code:'pane_not_found'}};throw e;}if(raw.error){if(args[0]==='pane'&&args[1]==='get'&&raw.error.code==='pane_not_found')return raw;throw Error(JSON.stringify(raw.error));}return raw.result;};
@@ -124,6 +133,14 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
     guard(initial);try{requestLock=lockRequest(journal,{kill});}catch(e){if(/already running/.test(e.message))return{result:'review_retained',reason:'original request owner remains live'};throw e;}
     release=acquireLock(path.join(project.identity,'lane-promote.lock'));guard(loadEvents(org).events);if(!inactive())return{result:'review_retained',reason:'original native reviewer still present'};
     const sourceHead=git(repo,['rev-parse','HEAD']);git(repo,['merge-base','--is-ancestor',target.head,sourceHead]);
+    if(originalScope){
+      const preparation=`original-${hash(JSON.stringify([q.id,journal,hash(bytes),progress.signature])).slice(0,48)}`,old=initial.find(e=>e.type==='review.original-prestart'&&e.id===preparation);
+      if(old)return{result:'original_prestart_ready',review_item:q.id,journal,proof:old.seq,existing:true};
+      const directory=path.join(org,'evidence/review-recovery',preparation);fs.mkdirSync(directory,{recursive:true});const files=[{original:journal,bytes},{original:target.evidence,bytes:reviewPlain(target.evidence)},...driver];
+      const snapshots=files.map((f,i)=>{const archive=path.join(directory,`${i}-${path.basename(f.original)}`);immutable(archive,f.bytes);return{original:f.original,archive,sha256:hash(f.bytes)};}),manifest={id:preparation,review_item:q.id,target,request_sha256:hash(bytes),files:snapshots},manifestBytes=Buffer.from(JSON.stringify(manifest,null,2)+'\n'),file=path.join(directory,'manifest.json');immutable(file,manifestBytes);const fd=fs.openSync(directory,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+      const result=transact(org,events=>{guard(events);if(!inactive())throw Error('original reviewer became live before prestart confirmation');const existing=events.find(e=>e.type==='review.original-prestart'&&e.id===preparation);if(existing)return{add:[],result:existing.seq};return protectRecordMutation({org,events,state:fold(events),command:'original review prestart proof',mutation:{add:[{type:'review.original-prestart',id:preparation,project:project.identity,org,review_item:q.id,item:source.id,run:run.id,journal,target,request_sha256:hash(bytes),original_native_launch_attempted:job.native_launch_attempted??null,service_authority:authority,archive:{file,sha256:hash(manifestBytes)}}]}});},{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
+      return{result:'original_prestart_ready',review_item:q.id,journal,proof:result.added[0]?.seq??result.result};
+    }
     const effectRows=[];for(const [key,value]of Object.entries(effects.actions??{}))if(key.startsWith(`review:${source.id}:`)&&JSON.stringify(value.review_target)===JSON.stringify(target))effectRows.push({file:journalFile,key,sha256:hash(JSON.stringify(value))});
     let files=[{original:journal,bytes},{original:target.evidence,bytes:reviewPlain(target.evidence)},...driver,...(effectRows.length?[{original:journalFile,bytes:reviewPlain(journalFile)}]:[])];
     const proof={kind:prestart?'serialized-pre-record-start-barrier':zeroWorker?'typed-pre-native-worker-barrier':'confirmed-ended-bound-native',review_item:q.id,review_run:original?.id??null,original_journal:journal,request_sha256:hash(bytes),original_native_launch_attempted:job.native_launch_attempted??null,progress_signature:progress.signature};

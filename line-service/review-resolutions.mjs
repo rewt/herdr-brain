@@ -27,6 +27,21 @@ export function resolvedReviewJournal({events,org,journal}){
   }
   return false;
 }
+export function originalPrestartProof({events,org,common,journal,job,requestHash}){
+  const rows=events.filter(e=>e.type==='review.original-prestart'&&e.project===common&&e.org===org&&e.journal===journal&&e.review_item===job.item);
+  for(const e of rows.reverse()){
+    const linked=e.request_sha256===requestHash||job.preflightContinuations?.some(c=>c.original_prestart_seq===e.seq&&c.request_sha256===e.request_sha256);
+    if(!linked)continue;
+    if(e.by!=='line-service'||e.service_authority?.kind!=='installed-service-progress'||e.service_authority.project!==common||e.service_authority.org!==org||JSON.stringify(e.target)!==JSON.stringify(job.reviewQueue)||!e.archive?.file?.startsWith(path.join(org,'evidence/review-recovery')+path.sep)||reviewDigest(reviewPlain(e.archive.file))!==e.archive.sha256)throw Error('original prestart proof lost its service/source/archive authority');
+    const manifest=JSON.parse(reviewPlain(e.archive.file));if(manifest.id!==e.id||manifest.request_sha256!==e.request_sha256||JSON.stringify(manifest.target)!==JSON.stringify(e.target))throw Error('original prestart archive scope changed');
+    let original;
+    for(const f of manifest.files){if(!f.archive.startsWith(path.dirname(e.archive.file)+path.sep)||reviewDigest(reviewPlain(f.archive))!==f.sha256)throw Error('original prestart archived bytes changed');if(f.original===journal){if(f.sha256!==e.request_sha256)throw Error('original prestart request SHA differs');original=JSON.parse(reviewPlain(f.archive));}}
+    if(!original)throw Error('original prestart request bytes missing');
+    for(const key of ['token','repo','org','common','item','lane','route','base','brief','release','reviewQueue','reviewQueueProtocol'])if(JSON.stringify(original[key])!==JSON.stringify(job[key]))throw Error('original request continuation changes immutable ownership/scope');
+    return e;
+  }
+  return null;
+}
 export function archivedReviewFile(resolution,file){
   const entry=resolution?.files.get(path.resolve(file));if(!entry)return false;
   try{if(reviewDigest(reviewPlain(file))!==entry.sha256)throw Error('resolved original review evidence changed; retain new progress');}catch(e){if(e.code!=='ENOENT')throw e;}

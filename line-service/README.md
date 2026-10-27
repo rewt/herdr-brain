@@ -143,6 +143,14 @@ is invented, callbacks are retained, and cap1 permits only one replacement.
 Prepared archives resume with the same bytes when an unrelated service update
 occurs. Neither this path nor the explicit legacy recovery launches a reviewer;
 the ordinary guarded queue dispatcher owns the new worktree/session.
+An existing pre-start partial request with disjoint immutable sibling scopes can
+instead continue its ORIGINAL request, target and cap. The service records and
+archives a positive serialized prestart proof; its old UNKNOWN launch flag stays
+null. Current source validates the captured landed range and evidence, and
+refuses overlap, changed ownership, source/evidence, native presence and HOLD.
+No new review item, replacement or target expansion occurs. A completed sibling
+PASS remains scoped to its own exact range. This exception is for the proven
+original request only; new producers still enqueue one whole report/source group.
 
 Reviewers inspect only the immutable diff and producer evidence, with zero
 suites/edits. Their normal report says `outcome: done`, `verdict: PASS|FAIL` and

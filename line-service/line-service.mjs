@@ -203,9 +203,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const observed=observeReviewProgress({state:snapshot.state,org,identity:project.identity,pass:effects.pass_number,previous:effects.review_progress});effects.review_progress=observed.progress;save();let recoveries=0;
         for(const id of observed.candidates){
           if(expired()||recoveries>=maxStepsPerStage)break;const q=snapshot.state.items.get(id),target=q.meta.review_target;
-          const held=effects.review_recovery_holds?.[id];if(held?.signature===observed.progress[id].signature)continue;
-          try{const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(result.result==='review_queued')stale=true;}
-          catch(e){effects.review_recovery_holds??={};if(/EPERM|EACCES|native refusal|identity|reserved|HOLD|STOP|UNKNOWN|partial|ambiguous/i.test(e.message))effects.review_recovery_holds[id]={signature:observed.progress[id].signature,reason:e.message};save();note(`review-progress:${id}`,e.message,{item:id,review:true});}
+          const held=effects.review_recovery_holds?.[id],capability='original-scope-continuation/v1',productHold=held&&/partial\/ambiguous producer|historical\/partial target/.test(held.reason);
+          if(held?.signature===observed.progress[id].signature&&!(productHold&&held.capability!==capability))continue;
+          try{const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(['review_queued','original_prestart_ready'].includes(result.result))stale=true;}
+          catch(e){effects.review_recovery_holds??={};if(/EPERM|EACCES|native refusal|identity|reserved|HOLD|STOP|UNKNOWN|partial|ambiguous/i.test(e.message))effects.review_recovery_holds[id]={signature:observed.progress[id].signature,reason:e.message,capability};save();note(`review-progress:${id}`,e.message,{item:id,review:true});}
           recoveries++;
         }
       }catch(e){note('review-progress',e.message);}

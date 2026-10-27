@@ -297,7 +297,7 @@ async function main() {
     if(resolvedNotStarted({events:loadEvents(saved.org).events,org:saved.org,common:saved.common,journal}))throw Error('original request archived NOT STARTED; never retry it; only the existing line may use its changed input');
     if(opt['continue-preflight']){
       preflight=preflightContinuation({journal,repo:saved.repo,org:saved.org,common:saved.common,root:bundleRelease().root,events:loadEvents(saved.org).events});
-      if(!preflight)throw Error('original preflight has no positive zero-native continuation; retain unknown/native/foreign/spent request');
+      if(!preflight)throw Error('original preflight has no positive original prelaunch continuation; retain unknown/native/foreign/spent request');
     }
     const boundRun = saved.run ?? saved.fromRun;
     if (boundRun) {
@@ -441,8 +441,8 @@ async function main() {
       if(!input||job.lineInput&&job.lineInput!==input)throw Error('detached start needs unchanged ready work or genuinely changed blocked input');
       if(preflight){const fresh=preflightContinuation({journal,repo:job.repo,org:job.org,common,root:bundleRelease().root,events});
         if(!fresh||fresh.request_sha256!==preflight.request_sha256||fresh.capability!==preflight.capability)throw Error('original preflight evidence changed before continuation');
-        job.preflightContinuations=[...(job.preflightContinuations??[]),{at:new Date().toISOString(),capability:fresh.capability,request_sha256:fresh.request_sha256,terminal_sha256:fresh.terminal_sha256,prior_error:job.error,native_launch_attempted:false}];
-        delete job.error;delete job.failure;job.detached_refused=false;job.native_launch_attempted=false;}
+        job.preflightContinuations=[...(job.preflightContinuations??[]),{at:new Date().toISOString(),capability:fresh.capability,request_sha256:fresh.original_prestart?.request_sha256??fresh.request_sha256,terminal_sha256:fresh.terminal_sha256,prior_error:job.error,native_launch_attempted:fresh.native_launch_attempted,...(fresh.original_prestart?{original_prestart_seq:fresh.original_prestart.seq}:{})}];
+        delete job.error;delete job.failure;job.detached_refused=false;if(!fresh.original_prestart)job.native_launch_attempted=false;}
       job.lineInput=input;admission(job.repo,job.org,common);checkStop();job.detached=true;job.recordOnlyNotices=true;job.phase1_protocol=1;save();
     }finally{release();}
     // Durable original request precedes spawn. The child takes the SAME request

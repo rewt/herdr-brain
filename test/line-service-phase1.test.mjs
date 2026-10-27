@@ -15,6 +15,8 @@ import {discoverChanges,blockedChangeKey,reviewResultEvents,morningDigest,record
 import {reviewAttempt,selectedReviewConsumer} from '../line-service/review.mjs';
 import {queueReviewMutation,reviewQueueRoute,validateQueuedReview} from '../line-service/review-queue.mjs';
 import {ROUTE_PRESET} from '../lanes/preset.mjs';
+import {loadDiscoveredRoutes,resolveRoute} from '../lanes/routes.mjs';
+import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
 import {countSessions,checkSessionCap} from '../dispatch/session-cap.mjs';
 import {closeoutCodeIdentity,bindCloseoutCode} from '../lib/closeout-code.mjs';
 import {kickCloseout,bindCloseoutSources,publishCloseoutEvents,CLOSEOUT_EXIT_PENDING} from '../lib/closeout.mjs';
@@ -23,7 +25,7 @@ import {establishCutover,developmentRoot} from '../line-service/cutoff.mjs';
 import {recordOwnLanding} from '../lib/landing-receipt.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {readReport} from '../lib/report.mjs';
-import {recoverInactiveReview} from '../line-service/review-recovery.mjs';
+import {recoverInactiveReview,observeReviewProgress,recoverServiceReview} from '../line-service/review-recovery.mjs';
 import {claimedCommitTokens} from '../settle/review-range.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
@@ -306,6 +308,45 @@ test('permanent group capability contains an old adopted or saved helper before 
   assert.throws(()=>selectedReviewConsumer({...c,resolve:()=>f.bundle}),/old\/unknown.*capability/);
   assert.throws(()=>selectedReviewConsumer({...c,run:{...c.run,owner:{...c.run.owner,release:{...c.run.owner.release,root:f.bundle}}}}),/saved review helper capability/);
   assert.equal([...f.context().state.items.values()].some(q=>q.role==='reviewer'),false);
+});
+
+function originalPartialFixture(t){
+  const f=fixture(t),target=partialReview(f,'REV-4',{head:f.heads[0],base:f.base});partialReview(f,'REV-5',{head:f.heads[1],base:f.heads[0],run:'R-885',verdict:'PASS'});f.add([{type:'item.closed',id:'REV-5',as:'done'},{type:'item.closed',id:'ENG-1',as:'done'}]);
+  const d=dispatchFixture(t,{project:f,sourceEntry:true}),workspace=path.join(f.scratch,'original-review');f.git(['worktree','add','-qb','lane/review-original',workspace,f.heads[0]],f.cwd);
+  const lane=path.join(d.root,'bin/lane');fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replaceAll('lane/topic','lane/review-original'));
+  const root=fs.realpathSync(sourceRoot),journal=path.join(f.org,'dispatch/original-r4.json'),route='review-codex',config=loadDiscoveredRoutes({cwd:f.cwd,env:f.env}).config,resolved=resolveRoute(config,{route}),routeConfig=journal.replace('.json','.routes.json');fs.writeFileSync(routeConfig,JSON.stringify(config));
+  const job={token:'original-r4',repo:f.cwd,org:f.org,common:f.identity,release:{root,id:null,commit:null,protocol:1},item:'REV-4',lane:'review-original',route,reviewQueueProtocol:1,reviewQueue:target,reviewQueueBrief:`Original saved partial review. Captured immutable HEAD ${target.head}, base ${target.base}. Zero suites.`,workspace,brief:d.brief,report:null,to:null,base:target.head,extra:'',reuse:null,fromRun:null,unblocks:null,declared:{harness:resolved.kind,model:resolved.model??null,effort:resolved.effort??null},routeConfig,operatorRecordCommand:[process.execPath,path.join(root,'bin/org.mjs')],operatorRecordRoot:root,operatorPlainText:true,stage:'open',run:null,error:'loaded queue/dispatch implementation changed; wait for next real pass'};fs.writeFileSync(journal,JSON.stringify(job));
+  const env=installedService(f),q=f.context().state.items.get('REV-4'),key=`dispatch:REV-4:${q.created.seq}:ordinary`,effects={identity:f.identity,org:f.org,pass_number:0,actions:{[key]:{state:'held',error:job.error,receipt:{status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_FAILED',reason:job.error,journal}),stderr:job.error}},[`review:ENG-1:${target.head}`]:{state:'complete',review_target:target,review_operation:'record-queue',result:{review_item:q.id}}}};
+  for(let pass=1;pass<=2;pass++){effects.pass_number=pass;effects.review_progress=observeReviewProgress({...f.context(),pass,previous:effects.review_progress}).progress;}
+  effects.review_recovery_holds={'REV-4':{signature:effects.review_progress['REV-4'].signature,reason:'partial/ambiguous producer attempts remain immutable; no automatic replacement'}};const effectFile=path.join(f.directory,'effects.json');fs.writeFileSync(effectFile,JSON.stringify(effects));
+  return{...f,d,env,target,journal,job,effects,effectFile};
+}
+
+test('original REV4-shaped continuation preserves its disjoint PASS peer and UNKNOWN journal then uses one same-request native launch without replacement',async t=>{
+  const f=originalPartialFixture(t),before=f.context(),original=fs.readFileSync(f.journal),verdict=before.events.find(e=>e.type==='change.reviewed'),calls=[];
+  const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:3,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
+    calls.push(args);if(exe==='herdr')return{status:0,stdout:'{"result":{"agents":[]}}',stderr:''};
+    assert.equal(args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));assert.equal(args[args.indexOf('--retry')+1],f.journal);assert.ok(args.includes('--continue-preflight'));return f.d.dispatch(args.slice(1),{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});
+  }});service.pass();
+  const c=f.context(),proof=c.events.find(e=>e.type==='review.original-prestart');assert.ok(proof,'legacy product hold is reconsidered on the checked original-scope capability');assert.equal(proof.original_native_launch_attempted,null);assert.equal(c.state.items.get('REV-4').closed,null);assert.equal(c.events.some(e=>e.type==='review.recovery-completed'),false);assert.deepEqual(c.events.find(e=>e.seq===verdict.seq),verdict);
+  assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,1);const archived=JSON.parse(fs.readFileSync(proof.archive.file)),savedOriginal=archived.files.find(f=>f.original===proof.journal);assert.deepEqual(fs.readFileSync(savedOriginal.archive),original);
+  const file=f.journal+'.driver/results.jsonl';let terminal;
+  for(;;){if(fs.existsSync(file)){terminal=JSON.parse(fs.readFileSync(file,'utf8').trim().split('\n').at(-1));if(terminal.stage==='complete'||terminal.exit_code!==0)break;}await new Promise(resolve=>setTimeout(resolve,25));}
+  assert.equal(terminal.stage,'complete',JSON.stringify(terminal));assert.equal(promptCalls(f.d).length,1);const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.token,'original-r4');assert.equal(saved.reviewQueue.head,f.heads[0]);assert.equal(saved.reviewQueue.base,f.base);assert.equal(saved.native_launch_attempted,true);assert.equal(saved.preflightContinuations[0].native_launch_attempted,null);assert.equal(saved.preflightContinuations[0].original_prestart_seq,proof.seq);assert.equal(f.context().state.items.get('REV-4').runs.length,1);assert.deepEqual(f.context().events.find(e=>e.seq===verdict.seq),verdict);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,2);
+});
+
+test('original partial continuation holds overlap active native owners altered evidence and admission captures without spending a replacement',t=>{
+  for(const kind of ['overlap','active','changed','admission']){
+    const f=originalPartialFixture(t),cwd=process.cwd(),release=noticeLock(path.join(f.directory,'pass.lock'));process.chdir(f.cwd);
+    try{
+      if(kind==='overlap')f.add([{type:'item.added',id:'REV-99',role:'reviewer',title:'Overlapping UNKNOWN attempt',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_target:f.target,review_round_cap:1}}]);
+      if(kind==='changed')fs.appendFileSync(f.journal,' ');
+      if(kind==='admission'){const events=f.context().events;events.find(e=>e.type==='item.added'&&e.id==='REV-4').meta.review_target.head=f.base;fs.writeFileSync(path.join(f.org,'events.jsonl'),events.map(e=>JSON.stringify(e)+'\n').join(''));}
+      const call=()=>JSON.stringify({result:{agents:kind==='active'?[{name:'working',cwd:f.job.workspace}]:[]}}),args={repo:f.cwd,org:f.org,reviewId:'REV-4',env:f.env,call,kill:()=>{throw Object.assign(Error('gone'),{code:'ESRCH'});}};
+      if(kind==='active')assert.equal(recoverServiceReview(args).result,'review_retained');else assert.throws(()=>recoverServiceReview(args),/overlapping|CAS|differs|unknown|scope/i);
+      assert.equal(f.context().events.some(e=>e.type==='review.original-prestart'||e.type==='review.recovery-completed'),false);assert.equal(f.context().state.items.get('REV-4').closed,null);
+    }finally{process.chdir(cwd);release();}
+  }
 });
 
 test('permanent health records the first review error immediately and one gap notice after four real passes without a session prompt',t=>{

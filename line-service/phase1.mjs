@@ -215,6 +215,18 @@ export function blockedChangeKey({events,state,item,run,brief}) {
   return hash(JSON.stringify([run.report.sha256,inputs.map(e=>e.seq),brief??null]));
 }
 
+// Existing original requests keep their exact immutable partial scopes. This
+// is never a new queue producer or permission to retarget a saved request.
+export function capturedProducerTarget({repo,target,whole}){
+  const full=whole?.target;if(!full||whole.authorization||target.source_group)throw Error('partial/UNKNOWN capture is not a supported original legacy scope');
+  for(const key of ['reportHash','evidence','dispatch'])if(target[key]!==full[key])throw Error('original capture differs from immutable producer evidence');
+  const owned=new Set(capturedReviewCommits(full)),captured=capturedReviewCommits(target);
+  if(!captured.length||!owned.has(target.head)||captured.some(h=>!owned.has(h))||target.scope?.unresolved?.length||target.scope?.deferred)throw Error('original captured scope is unknown/admission/foreign to this producer');
+  const range=git(repo,['rev-list','--reverse',`${target.base}..${target.head}`]).split('\n').filter(Boolean);git(repo,['merge-base','--is-ancestor',target.base,target.head]);
+  if(!range.length||JSON.stringify(range)!==JSON.stringify(target.scope?.commits)||hash(git(repo,['diff','--no-ext-diff','--no-textconv',target.base,target.head]))!==target.diff_sha256)throw Error('original immutable capture range/diff changed');
+  return target;
+}
+
 export function dispatchInput({events,state,item,org,identity}) {
   if (!item || item.closed || item.kind === 'goal') return null;
   const run = state.runs.get(item.runs.at(-1));

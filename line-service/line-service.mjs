@@ -488,7 +488,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         } catch (e) {
           if(e.code==='REVIEW_CUTOFF'){timings.historical_review_skipped++;continue;}
           if(['DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(e.code)){log({action:'capacity-held',code:e.code,reason:e.message});note(`capacity:${e.code}`,e.message);continue;}
-          if (['DISPATCH_SESSION_CAP', 'DISPATCH_UNLANDED_CAP'].includes(e.code)) { log({ action: 'capacity-held', code: e.code, reason: e.message }); note(`capacity:${e.code}`, e.message); if(e.code==='DISPATCH_UNLANDED_CAP'||e.sessions?.kind==='build'&&e.sessions.native_count<e.sessions.native_cap)continue;break; }
+          if (['DISPATCH_SESSION_CAP', 'DISPATCH_UNLANDED_CAP'].includes(e.code)) { log({ action: 'capacity-held', code: e.code, reason: e.message }); note(`capacity:${e.code}`, e.message); if(decisionActivation(snapshot.events,project.identity,org)&&(e.code==='DISPATCH_UNLANDED_CAP'||e.sessions?.kind==='build'&&e.sessions.native_count<e.sessions.native_cap))continue;break; }
           note(`dispatch:${item.id}`, e.message);
         }
       }};

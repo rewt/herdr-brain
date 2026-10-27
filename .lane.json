@@ -21,7 +21,11 @@
   },
   "selection_policy": {
     "by_task_class": {
-      "review": "review-sol-max"
+      "review": "review-sol-max",
+      "review-other-family": {
+        "codex": "review",
+        "claude": "review-codex"
+      }
     }
   },
   "routes": {
@@ -59,6 +63,20 @@
       "effort": "xhigh",
       "args": [],
       "use": "Legacy route name: independent fixed-commit Sol xhigh review. New reviews never use max; one async post-code review, no reviewer suites. Saved attempts retain frozen settings."
+    },
+    "review": {
+      "kind": "claude",
+      "model": "opus",
+      "effort": "high",
+      "args": [],
+      "use": "Independent other-family judgment and outward review of Codex producers."
+    },
+    "review-codex": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "args": [],
+      "use": "Independent other-family judgment and outward review of Claude producers."
     }
   }
 }

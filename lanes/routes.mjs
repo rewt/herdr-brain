@@ -18,6 +18,14 @@ const launchData = Object.freeze({
 });
 export const exitCommandFor = kind => Object.hasOwn(launchData, kind) ? launchData[kind].exit : null;
 
+export function resumeSessionArguments(route, id) {
+  if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id ?? '')) throw Error('resume requires an explicit saved native conversation UUID');
+  if (!route.launch?.some(word => basename(word) === 'ai')) throw Error('saved-session resume requires the configured ai identity wrapper');
+  if (route.kind === 'codex') return ['resume', id];
+  if (route.kind === 'claude') return ['--resume', id];
+  throw Error('route has no supported saved-session resume syntax');
+}
+
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

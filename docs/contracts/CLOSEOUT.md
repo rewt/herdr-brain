@@ -1,3 +1,40 @@
+# Direct report closeout (current policy)
+
+When a worker report is in, close its session and remove its worktree folder in the same step; delete its branch only if it is already on main, otherwise keep the branch so a fix can continue from it, and keep the folder only if it has unsaved changes. Reviews and fixes start fresh from the record and may resume a saved session by its ID; nothing stays open waiting.
+
+The current line derives reported allocations from the owning record, including
+already-ingested reports with no cleanup cutoff or cursor. New direct targets
+are stored in their existing report/cleanup binding event; no new per-lane queue
+file or session/physical midpoint is required. One combined closed/kept outcome
+names the allocation owner and reason. Unchanged kept outcomes are deduplicated.
+Reported historical runs sharing a native session are not active owners.
+
+The executor rechecks actual native identity/status, active owners, source/head,
+branch generation, Git common directory, cwd/process references and STOP/HOLD.
+It saves an immutable author packet plus ignored evidence before folder removal.
+A clean unlanded branch stays at its exact ref; dirty/untracked work retains its
+folder while a finished session can close. A fresh fix uses that branch, or main
+when no unlanded branch remains. It receives both reports, immutable diff, failed
+and unrun proof, and each Major's correction check. One async review, cap1, one
+formal correction and no reviewer suites/re-review remain.
+
+Old queue files, source bindings, UNKNOWN intents, refused effects and c160
+remain untouched. Existing uncertain effects cannot be replaced by a derived
+backlog binding. Saved/in-flight native requests keep their own runtime and
+contract. A current allocation absence is not historical exit or claim-release
+proof. R824/R850 boundaries and actual BCH owner adoption remain unchanged.
+
+For routing, new queue reviews use `review-other-family` keyed by the producer's
+declared harness/route profile (codex -> review/Claude; claude -> review-codex),
+never by a display label. Missing/unsupported family policy refuses that subject.
+Engineering remains high/xhigh, with maximum effort an explicit escalation.
+BCH's owner must add that policy and corresponding supported routes through its
+own policy writer after adopting the shared implementation; this source change
+edits no BCH config, pins or services. Brain resume, full final-release coverage,
+actual live proof, seal/activation and consumer readback remain coordinator work.
+
+The following sections retain the legacy queue compatibility contract.
+
 # Event-driven lane closeout
 
 **Option B implementation (ENG-536), 2026-10-22.** Implements the accepted

@@ -65,6 +65,7 @@ import { herdrSocketPath } from "./board/herdr-client.mjs";
 import {
   readRoutesSnapshot,
   resolveLaunchRoute,
+  resumeSessionArguments,
   routeNames as configuredRouteNames,
   selectRoute,
   validateRoutesConfig,
@@ -1209,9 +1210,10 @@ function dispatch(topic, promptText, options = {}) {
     if(options.expectedHead===undefined)return;
     if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(options.expectedHead)||samePath(path,REPO_ROOT)||worktreeFor(branch)!==path||gitIdentityForPath(path)!==REPO_IDENTITY||tryGit(['rev-parse','HEAD'],{cwd:path})!==options.expectedHead)fail('review worktree path/common-directory/captured HEAD changed; no new reviewer may launch');
   };
+  let launchRequest;
   const checkLaunch=()=>{
     if(!options.dispatchJournal)return;
-    try{checkDispatchLaunch({journal:options.dispatchJournal,sha256:options.dispatchSha256,repo:REPO_ROOT,workspace:path,topic});}
+    try{launchRequest=checkDispatchLaunch({journal:options.dispatchJournal,sha256:options.dispatchSha256,repo:REPO_ROOT,workspace:path,topic});}
     catch(error){
       process.stdout.write(JSON.stringify({result:'failed',code:error.code??'DISPATCH_FAILED',reason:error.message,
         journal:options.dispatchJournal,...(error.launch_input?{launch_input:error.launch_input}:{})})+'\n');
@@ -1243,6 +1245,7 @@ function dispatch(topic, promptText, options = {}) {
     env: { ...process.env, ...Object.fromEntries(resolved.env.map(pair => {
       const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
     })) } });
+  if (launchRequest?.resumeSession) agentArgs.push(...resumeSessionArguments(resolved, launchRequest.resumeSession));
   let registryPath;
   try {
     registryPath = preflightRegistryAutomation();
@@ -1353,9 +1356,10 @@ function dispatch(topic, promptText, options = {}) {
   // The stem remains readable, while repository identity and random suffixes
   // keep names distinct across equal topics and retry leftovers. Herdr limits
   // names to 32 characters and [a-z][a-z0-9_-]*.
-  const liveAgentNames = new Set(
-    (herdrJson(["agent", "list"], { deadline: options.deadline })?.agents ?? []).map((agent) => agent.name),
-  );
+  const liveAgents = herdrJson(["agent", "list"], { deadline: options.deadline })?.agents ?? [];
+  if (launchRequest?.resumeSession && liveAgents.some(a => (a.agent_session?.value ?? a.agent_session_id) === launchRequest.resumeSession))
+    fail('saved native conversation still has a live allocation; retain it and do not resume concurrently');
+  const liveAgentNames = new Set(liveAgents.map(agent => agent.name));
   let agentName = newAgentName(topic, liveAgentNames);
   const startArgsFor = (name) => {
     const args = ["agent", "start", name, "--kind", resolved.kind, "--pane", pane];

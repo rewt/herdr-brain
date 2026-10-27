@@ -24,7 +24,7 @@ import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyL
 import { reconcile } from '../supervisor/reconcile.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
-import { drainCloseout } from '../lib/closeout-consumer.mjs';
+import { drainCloseout, refreshCloseouts } from '../lib/closeout-consumer.mjs';
 import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeeping.mjs';
 import { enqueue, finishCleanup, retryCleanup, drain as drainPromotions, queueFor } from '../promote/promote.mjs';
 import { stopFixtureInbox } from './helpers/inbox.mjs';
@@ -41,6 +41,8 @@ import {readCloseoutObservations,appendCloseoutObservation} from '../lib/closeou
 import {closeoutWaitId,closeoutWaitState,registerCloseoutWait} from '../lib/closeout-status.mjs';
 import {obsoleteOutcomeDecision} from '../line-service/outcome-decision.mjs';
 import {unresolvedCloseoutEffect} from '../lib/closeout.mjs';
+import {currentCloseoutEntries} from '../lib/closeout.mjs';
+import {correctionSource} from '../lib/report-closeout.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const closer = fileURLToPath(new URL('../supervisor/closeout.mjs', import.meta.url));
@@ -51,7 +53,7 @@ async function waitForChange(_files, predicate, { timeoutMs = 60000 } = {}) {
   const deadline = Date.now() + loadTimeout(timeoutMs);
   while (!predicate()) { if (Date.now() >= deadline) throw Error('bounded fixture observation timed out'); await pause(25); }
 }
-function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
+function setup(t, { occupied = true, merged = false, terminal = false, direct = false } = {}) {
   const f = occupied ? exitFixture(t) : fixture(t, { occupied, merged });
   if (occupied && !merged) f.git(['reset', '--hard', `${f.head}^`]);
   isolatedEnv(t, f);
@@ -80,7 +82,13 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
       f.receipts.set(id, receipt);
       return { ...e, batch: id, base: payload.base, tip: payload.tip, gate: payload.gate, fingerprint: digest(payload), heads: payload.items.map(({item,run,head}) => ({item,run,head})) };
     });
-    const result = transact(f.org, current => bindCloseoutSources({ cwd: f.repo, org: f.org, events: current, mutation: { add } }), { actor: 'fixture' });
+    const result = transact(f.org, current => {
+      const mutation = bindCloseoutSources({ cwd: f.repo, org: f.org, events: current, mutation: { add } });
+      // Existing controls model saved pre-direct requests. New direct controls
+      // opt in to today's writer and record-only target representation.
+      if (!direct) for (const event of mutation.add) for (const target of event.closeout_targets ?? []) delete target.reportCloseout;
+      return mutation;
+    }, { actor: 'fixture' });
     publishCloseoutEvents({ cwd: f.repo, org: f.org, added: result.added, start: false, env: f.env });
     if (f.autoTail) for (const source of result.added.filter(e => e.type === 'promotion.reconciled')) {
       const state = fold(events(f));
@@ -101,6 +109,86 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
 }
 const evaluations = f => [...events(f).filter(e => e.type === 'closeout.evaluated'),...readCloseoutObservations(f.common,f.org,events(f))].sort((a,b)=>(a.seq??a.observed_seq)-(b.seq??b.observed_seq));
 const effects = f => events(f).filter(e => e.type === 'closeout.effect').map(e => e.outcome);
+
+test('direct report all outcomes close the allocation and clean unlanded folder together with durable fixer evidence',t=>{
+  for(const outcome of ['done','blocked','needs_human','failed']){
+    const f=setup(t,{direct:true});
+    f.append([{type:'report.ingested',run:'R-1',report:{outcome,summary:'Finished',artifacts:['failed-control.tap','unrun-controls.md']},sha256:'fixture'}]);
+    const [entry]=currentCloseoutEntries(f.common,f.org,events(f));
+    assert.equal(entry.reportCloseout,true);assert.equal(readCloseoutEntries(f.common).length,0,'no new per-lane queue file');
+    const result=f.drain({keys:[entry.key],sessionsOnly:true});
+    assert.equal(result.evaluated[0].completed,true,JSON.stringify(result));
+    assert.equal(fs.existsSync(f.lane),false);assert.equal(f.read().tabs.length,0);
+    assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head,'exact unlanded branch survives');
+    const packet=effects(f).find(e=>e.action==='report-evidence');
+    const saved=JSON.parse(fs.readFileSync(packet.packet));
+    assert.equal(saved.head,f.head);assert.match(saved.diff,/changed/);assert.equal(saved.check.outcome,'unrun');
+    assert.deepEqual(saved.proof_locations,['failed-control.tap','unrun-controls.md']);
+    const state=fold(events(f));
+    state.items.set('REV-1',{id:'REV-1',runs:['R-2'],meta:{review_source_run:'R-1',review_target:{base:saved.base,head:f.head,diff_sha256:'diff',evidence:packet.packet}}});
+    state.runs.set('R-2',{id:'R-2',report:{file:'runs/R-2/report.md'}});
+    const fix={id:'ENG-2',parent:'REV-1',runs:[],accept:['specific Major control'],meta:{review_fix_of:'ENG-1:'+f.head,review_source_run:'R-1'}};
+    const finding={type:'review.finding-linked',correction_item:'ENG-2',review_run:'R-2',finding_key:'major-1',finding:{severity:'major',text:'path:1 - reproduce the failed saved-branch trigger'}};
+    const source=correctionSource({item:fix,state,events:[...events(f),finding],repo:f.repo,org:f.org});
+    assert.equal(source.base,f.head);assert.equal(source.ref,'refs/heads/lane/topic');
+    assert.match(source.brief,/runs\/R-1\/report.md/);assert.match(source.brief,/runs\/R-2\/report.md/);assert.match(source.brief,/specific Major control/);
+    assert.match(source.brief,/failed-control.tap/);
+    const before=events(f).length;assert.deepEqual(f.drain({keys:[entry.key]}).evaluated,[]);assert.equal(events(f).length,before);
+  }
+});
+
+test('direct report merged branch is deleted in the same pass with no landed twin or session midpoint',t=>{
+  const f=setup(t,{direct:true,merged:true});const [report]=f.report();
+  const [entry]=currentCloseoutEntries(f.common,f.org,events(f));
+  assert.deepEqual(scheduleLineCloseouts([entry],events(f),{batch:true}).map(e=>e.sessionsOnly),[false]);
+  const [closed]=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);
+  assert.equal(closed.closeout_targets,undefined);
+  const result=f.drain({keys:[entry.key]});assert.equal(result.evaluated[0].disposition,'closed',JSON.stringify(result));
+  assert.equal(fs.existsSync(f.lane),false);assert.equal(f.git(['branch','--list','lane/topic']),'');
+  assert.ok(effects(f).some(e=>e.action==='branch-removed'));assert.equal(evaluations(f).filter(e=>e.sessions_retired).length,0);
+  assert.equal(report.closeout_targets[0].reportCloseout,true);
+});
+
+test('direct report dirty and untracked work closes the finished session but keeps the folder and fixer refuses to branch around it',t=>{
+  for(const name of ['seed','untracked']){
+    const f=setup(t,{direct:true});f.report();fs.writeFileSync(path.join(f.lane,name),'unsaved work');
+    const [entry]=currentCloseoutEntries(f.common,f.org,events(f));const result=f.drain({keys:[entry.key]});
+    assert.equal(result.evaluated[0].disposition,'kept',JSON.stringify(result));assert.match(result.evaluated[0].reason,/not clean/);
+    assert.equal(f.read().tabs.length,0);assert.equal(fs.readFileSync(path.join(f.lane,name),'utf8'),'unsaved work');
+    const state=fold(events(f));state.items.set('REV-1',{id:'REV-1',runs:[],meta:{review_source_run:'R-1',review_target:{head:f.head}}});
+    assert.throws(()=>correctionSource({item:{id:'ENG-2',parent:'REV-1',runs:[],meta:{review_fix_of:'fix',review_source_run:'R-1'}},state,events:events(f),repo:f.repo,org:f.org}),/unsaved author work/);
+  }
+});
+
+test('direct report protects working other-run and HOLD allocations and deduplicates unchanged kept outcomes',t=>{
+  for(const kind of ['working','other-run','HOLD']){
+    const f=setup(t,{direct:true,merged:true});f.report();
+    if(kind==='working'){f.state.agents[0].agent_status='working';f.save();}
+    if(kind==='other-run')f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane,meta:{...events(f).find(e=>e.type==='run.started').meta}}]);
+    if(kind==='HOLD')hold(f);
+    const [entry]=currentCloseoutEntries(f.common,f.org,events(f));const first=f.drain({keys:[entry.key]});
+    assert.equal(first.evaluated[0].disposition,'kept',JSON.stringify(first));assert.equal(fs.existsSync(f.lane),true);assert.equal(f.read().actions.length,0);
+    const count=events(f).filter(e=>e.type==='closeout.evaluated').length;
+    f.drain({keys:[entry.key]});assert.equal(events(f).filter(e=>e.type==='closeout.evaluated').length,count);
+    if(kind==='working'){
+      const live=f.read();live.agents[0].agent_status='idle';fs.writeFileSync(f.file,JSON.stringify(live));
+      const next=f.drain({keys:[entry.key]});assert.equal(next.evaluated[0].completed,true,JSON.stringify(next));assert.equal(fs.existsSync(f.lane),false);
+    }
+  }
+});
+
+test('direct report backlog derives already-ingested unlanded allocations and does not treat old shared-session reports as active',t=>{
+  const f=setup(t);selectCurrentCleanup(f);
+  const meta=events(f).find(e=>e.type==='run.started').meta;
+  transact(f.org,()=>({add:[{type:'report.ingested',run:'R-1',report:{outcome:'failed'},sha256:'old'},
+    {type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane,meta:{...meta}},
+    {type:'report.ingested',run:'R-2',report:{outcome:'blocked'},sha256:'new'}]}));
+  const refresh=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+  const entry=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.reportCloseout);
+  assert.ok(entry,JSON.stringify(refresh));assert.equal(entry.run,'R-2');assert.equal(readCloseoutEntries(f.common).length,0);
+  const result=f.drain({keys:[entry.key]});assert.equal(result.evaluated[0].completed,true,JSON.stringify(result));
+  assert.equal(fs.existsSync(f.lane),false);assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head);
+});
 
 test('producer linked ordinary native exit and close publish exact completion links and passive stage timings',t=>{
   const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');

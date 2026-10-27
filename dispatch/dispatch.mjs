@@ -7,7 +7,8 @@ import { randomUUID,createHash } from 'node:crypto';
 import { spawnSync,spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
-import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
+import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, resolveLaunchRoute, resumeSessionArguments } from '../lanes/routes.mjs';
+import { correctionSource } from '../lib/report-closeout.mjs';
 import { BRAIN_CONTROLLER, brainOwner, claimRun, readOwnedRun, requireController, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
@@ -43,6 +44,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   awaited: { type: 'boolean' }, 'awaited-step': { type: 'string' },
   to: { type: 'string' }, base: { type: 'string' }, extra: { type: 'string' },
   reuse: { type: 'string' }, retry: { type: 'string' }, status: { type: 'string' },
+  'resume-session': { type: 'string' },
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
   'accept-delivered': { type: 'boolean' }, 'recover-run': { type: 'string' },
   'from-run': { type: 'string' }, unblocks: { type: 'string' },
@@ -298,7 +300,7 @@ async function main() {
     return;
   }
   if (opt.retry) {
-    if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra', 'awaited', 'awaited-step', 'unblocks'].some((key) => opt[key] !== undefined)) {
+    if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'resume-session', 'base', 'extra', 'awaited', 'awaited-step', 'unblocks'].some((key) => opt[key] !== undefined)) {
       throw new Error('--retry uses the saved request; do not supply new work flags');
     }
     journal = locate(opt.retry);
@@ -364,6 +366,7 @@ async function main() {
     const forwarded = predecessor || sourceSelection ? null : forwardRelease('dispatch/dispatch.mjs', opt.repo);
     if (forwarded !== null) { process.exitCode = forwarded; return; }
     if (opt.adopt || opt.fresh || opt.resend || opt['accept-delivered'] || opt['recover-run']) throw new Error('recovery flags require --retry');
+    if (opt.reuse) throw refusal('REUSE_REMOVED', 'new work starts fresh; use --resume-session UUID through the ai identity wrapper to resume saved context in a fresh allocation');
     if (positionals.length !== 1 || !opt.lane || !opt.route || !opt.brief) throw new Error('usage: dispatch.mjs ITEM --org DIR --lane TOPIC --route ROUTE --brief FILE [--report FILE] [--to AGENT] [--base REF] [--reuse R-n] [--extra TEXT] | --retry R-n|JOURNAL | --status R-n|JOURNAL');
     if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(opt.lane)) throw new Error('lane must be short kebab-case');
     const repo = fs.realpathSync(path.resolve(opt.repo));
@@ -385,9 +388,12 @@ async function main() {
     }
     if (opt.to !== undefined) herdr(['agent', 'get', opt.to]);
     const { config } = loadDiscoveredRoutes({ cwd: repo });
-    if (reviewQueue && opt.route !== reviewQueueRoute(config)) throw Error('queued review must use the normal reviewer route');
+    if (reviewQueue && opt.route !== reviewQueueRoute(config, item, fold(loadEvents(org).events))) throw Error('queued review must use the normal reviewer route');
     const declared = resolveRoute(config, { route: opt.route });
     resolveLaunchRoute(config, { route: opt.route });
+    if (opt['resume-session']) resumeSessionArguments(resolveLaunchRoute(config, { route: opt.route }), opt['resume-session']);
+    const correction = correctionSource({ item, state: fold(loadEvents(org).events), events: loadEvents(org).events, repo, org });
+    if (correction && opt.base && git(['rev-parse', `${opt.base}^{commit}`], repo) !== correction.base) throw Error('fix base differs from actual saved author branch or main');
     const declaredFields = { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null };
     const exceptionAddress = projectExceptionAddress(repo, config, opt.route);
     const workerBrief = opt.detach ? createWorkerBrief({ item, ask: brief, askText: fs.readFileSync(brief, 'utf8'), extra: opt.extra,
@@ -409,7 +415,8 @@ async function main() {
       ...(reviewQueue ? { reviewQueue, reviewQueueBrief: reviewQueueBrief(item) } : {}),
       ...(dispatchPool({item})==='decision'?{decisionQueue:{key:item.meta.decision_request?.key}}:{}),
       brief, report: opt.report ?? null, to: opt.to ?? null,
-      base: git(['rev-parse', `${opt.base ?? 'HEAD'}^{commit}`], repo), extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
+      base: git(['rev-parse', `${correction?.base ?? opt.base ?? 'HEAD'}^{commit}`], repo), extra: (opt.extra ?? '') + (correction?.brief ?? ''), reuse: null, resumeSession: opt['resume-session'] ?? null,
+      ...(correction ? { correction } : {}), fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress, ...(workerBrief ? { workerBrief } : {}),
       stage: 'open', run: null,native_launch_attempted:false,completion_protocol:1,...(opt.detach?{phase1_protocol:1,detachedRequested:true}:{}) };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.

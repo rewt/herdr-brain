@@ -9,6 +9,8 @@ import {gitProject} from '../lib/project.mjs';
 import {bundleRelease} from '../lib/releases.mjs';
 import {dispatchInput} from '../line-service/phase1.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
+import {correctionSource} from '../lib/report-closeout.mjs';
+import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 
 export const launchDigest = bytes => createHash('sha256').update(bytes).digest('hex');
 const changed = (reason, input) => {
@@ -23,6 +25,13 @@ export function checkDispatchEligibility(job, journal) {
   if(tornTail)refuse('incomplete record input');
   const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item);
   if(hold)refuse(hold.reason,hold.subject);
+  if(job.correction) {
+    const source=correctionSource({item:job.run?{...item,runs:item.runs.filter(id=>id!==job.run)}:item,state,events,repo:job.repo,org:job.org});
+    if(source?.base!==job.correction.base||source?.ref!==job.correction.ref)refuse('saved author source changed before fresh fix launch');
+  }
+  if(job.resumeSession && [...state.runs.values()].some(r=>r.id!==job.run&&!r.report&&!r.abandoned&&
+    effectiveWorkerIdentity(r,state).agent_session_id===job.resumeSession))
+    refuse('an active run owns the requested native conversation');
   if(job.run){
     const run=assertOwner(readOwnedRun(job.org,job.run,events),job.ownership);
     if(item.runs.at(-1)!==job.run||run.report||run.abandoned)refuse('current run was superseded or finished');
@@ -62,5 +71,5 @@ export function checkDispatchLaunch({journal,sha256,repo,workspace,topic}) {
   const stops=[path.join(directory,'STOP'),path.join(directory,'HOLD')];
   if(job.detached||job.detachedRequested)stops.push(path.join(job.org,'line-service',launchDigest(JSON.stringify(job.common)).slice(0,20),'STOP'));
   if(stops.some(file=>fs.existsSync(file)))throw Object.assign(Error('STOP/HOLD prevents native dispatch effect'),{code:'DISPATCH_STOPPED'});
-  return {...checkDispatchEligibility(job,journal),request_sha256:sha256};
+  return {...checkDispatchEligibility(job,journal),request_sha256:sha256,resumeSession:job.resumeSession??null};
 }

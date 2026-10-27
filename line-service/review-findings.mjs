@@ -99,6 +99,8 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
       const meta = { review_fix_of: reviewKey, review_source_item: source,
         review_source_run: review.meta.review_source_run, review_owner_run: review.meta.review_source_run,
         review_round_cap: 1, severity, review_finding_keys: missing };
+      meta.review_correction_checks = Object.fromEntries(selected.filter(row => row.severity === 'major').map(row =>
+        [row.key, proposal?.extra?.correction_check ?? `Reproduce and correct this exact Major trigger: ${row.text}`]));
       if (!historical) {
         taken.add(id);
         add.push({ type: 'item.added', id, kind: 'work', role: proposal?.role ?? 'engineer',

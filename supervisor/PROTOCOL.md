@@ -54,10 +54,8 @@ choice, not every command. Other identities execute their own actions.
 
 ## Close and release
 
-Guarded retirement keeps working/protected/unlanded or unknown occupants.
-Archive unmerged/uncommitted content before authorized removal. Source completion,
-review obligations and physical cleanup are separate. Preserve callbacks/HOLD and
-native receipts; no forced lock or tab cleanup.
+When a worker report is in, close its session and remove its worktree folder in the same step; delete its branch only if it is already on main, otherwise keep the branch so a fix can continue from it, and keep the folder only if it has unsaved changes. Reviews and fixes start fresh from the record and may resume a saved session by its ID; nothing stays open waiting.
+Preserve current native identity, active runs, callbacks, STOP/HOLD, source/CAS and recoverable evidence. Unknown or refused native effects remain with their original owner; never replay them.
 
 ONE FULL final release test is shared by all fixes. Preserve valid completed
 coverage; after corrections run only failing, affected or unrun checks, binding

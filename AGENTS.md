@@ -30,7 +30,7 @@ task needs them, not as another admission stage.
 
 - Hand immutable landed base/head and evidence through the report to the existing
   record queue-review path. ONE async post-code diff/evidence review, cap1,
-  about30-minute planning target, zero reviewer suites. An uncertain attempt blocks only its own subject (that lane, head or recipient) until its completion is recorded. Whatever completes or fails (a worker, a command, the runtime reporting an exit) writes its status to the record, linked to the queue entry waiting on it; nothing waits on a manual command, a timer or a re-check. A pending status with no producer is a defect and becomes a decision item. Elapsed time never proves absence or completion. A native refusal is a recorded status and becomes a decision item. Unlanded work, claims, STOP/HOLD and outward actions stay protected. No pre-code or serial concurrence stages. One
+  about30-minute planning target, zero reviewer suites. When a worker report is in, close its session and remove its worktree folder in the same step; delete its branch only if it is already on main, otherwise keep the branch so a fix can continue from it, and keep the folder only if it has unsaved changes. Reviews and fixes start fresh from the record and may resume a saved session by its ID; nothing stays open waiting. No pre-code or serial concurrence stages. One
   formal correction; later findings fix forward. Majors require specific correction
   checks before release.
 - Verify each routine fact once and name verifier/evidence in the normal report.

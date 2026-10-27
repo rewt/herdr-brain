@@ -7,7 +7,7 @@ export const ROUTE_PRESET = {
   routes: {
     engineer: { kind: 'codex', model: 'gpt-6.1-sol', effort: 'high', use: 'Default implementation' },
     'engineer-xhigh': { kind: 'codex', model: 'gpt-6.1-sol', effort: 'xhigh', use: 'Difficult implementation' },
-    'engineer-max': { kind: 'codex', model: 'gpt-6.1-sol', effort: 'max', use: 'Correctness-critical implementation' },
+    'engineer-max': { kind: 'codex', model: 'gpt-6.1-sol', effort: 'xhigh', use: 'Difficult implementation; maximum effort requires explicit escalation' },
     chore: { kind: 'codex', model: 'gpt-5.6-terra', effort: 'medium', use: 'Mechanical changes' },
     unblock: { kind: 'codex', model: 'gpt-6.1-sol', effort: 'xhigh', use: 'Bounded planning' },
     review: { kind: 'claude', model: 'opus', effort: 'high', use: 'Independent review' },
@@ -24,6 +24,7 @@ export const ROUTE_PRESET = {
   selection_policy: { primary_implementation_pool: 'codex', by_task_class: {
     implementation: 'engineer', difficult: 'engineer-xhigh', critical: 'engineer-max',
     chore: 'chore', planning: 'unblock', review: { claude: 'review', codex: 'review-codex' },
+    'review-other-family': { codex: 'review', claude: 'review-codex' },
     status: 'monitor', settle: 'settle', executive: 'executive', writing: 'writer', research: 'research',
   } },
 };

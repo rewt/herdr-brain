@@ -1,3 +1,8 @@
+> Current policy: new reviews and fixes start fresh. New `--reuse` requests are
+> refused; explicit `--resume-session UUID` uses a fresh guarded allocation through
+> the configured ai identity wrapper. The reuse descriptions below document
+> compatibility for existing saved/in-flight requests, which remain immutable.
+
 # Continuation and revision cap
 
 ENG-444 / ARCH-36, additive contract for dispatch and settle. Owner: herdr

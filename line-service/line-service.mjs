@@ -14,6 +14,8 @@ import { itemStatus, sortItems } from '../lib/state.mjs';
 import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
 import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
+import { correctionSource } from '../lib/report-closeout.mjs';
+import { directCloseoutObservation, currentCloseoutEntries, closeoutEvaluation } from '../lib/closeout.mjs';
 import { checkSessionCap,dispatchPool } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { readCloseoutEntries, closeoutRevision, scheduleLineCloseouts,closeoutEvaluations,lineServiceOwnsCleanup } from '../lib/closeout.mjs';
@@ -395,7 +397,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }catch(e){note('closeout-binding',e.message);}
       try {
         const observed = current(), evaluationRows=closeoutEvaluations(project.identity,org,observed.events),evaluations = new Map(evaluationRows.map(e => [e.key, e]));
-        const ownedEntries=readCloseoutEntries(project.identity);
+        const ownedEntries=currentCloseoutEntries(project.identity,org,observed.events);
+        for(const entry of ownedEntries)if(entry.reportCloseout){const prior=closeoutEvaluation(entry,observed.events);if(prior)evaluations.set(entry.key,prior);else evaluations.delete(entry.key);}
         for(const e of ownedEntries){const prior=evaluations.get(e.key);if(e.org!==org||e.project!==repo||!prior||prior.completed)continue;
           if(!closeoutNextStage(e,prior,observed.events,ownedEntries)&&!closeoutWait(e,prior,observed.events)){transact(org,events=>({add:registerCloseoutWait(e,prior,events,ownedEntries)}),{actor:'line-service'});stale=true;}
         }
@@ -407,6 +410,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const prior = evaluations.get(e.key);
           if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;
+          if(directCloseoutObservation(e,prior,linked.events))return true;
           if(prior){
             // The closer owns its next stage: progress, never a missing-producer decision.
             const next=closeoutNextStage(e,prior,linked.events,ownedEntries);
@@ -424,7 +428,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         let attempt=Math.max(0,...Object.values(effects.closeout_attempts));
         for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,evaluationRows,{batch:true,attempts:effects.closeout_attempts})){
           if(expired())break;
-          const revision=closeoutRevision(entry,linked.events,linked.state),outcomeReadback=Boolean(evaluations.get(entry.key)&&closeoutWaitState(closeoutWait(entry,evaluations.get(entry.key),linked.events),linked.events)==='complete');
+          const revision=closeoutRevision(entry,linked.events,linked.state),outcomeReadback=directCloseoutObservation(entry,evaluations.get(entry.key),linked.events)||Boolean(evaluations.get(entry.key)&&closeoutWaitState(closeoutWait(entry,evaluations.get(entry.key),linked.events),linked.events)==='complete');
           const next=evaluations.get(entry.key)&&closeoutNextStage(entry,evaluations.get(entry.key),linked.events,ownedEntries);
           effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest(next?[entry.key,revision,next.stage]:[entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
           effects.closeout_attempts[entry.key]=++attempt;save();
@@ -527,11 +531,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             if(!continuation&&!retryAdmission&&!briefRecovery){log({ action: 'dispatch-retained', key:dispatchKey, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
           }
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
-          const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config) : routeFor(item, config));
+          const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config, item, snapshot.state) : routeFor(item, config));
           const occupancy = countCapacity(dispatchPool({item:snapshot.state.items.get(item.id),job:{reviewQueue:reviewTarget}}));latestOccupancy=occupancy; log({ action: 'capacity', ...occupancy });
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, fresh => {
             const current = fresh.state.items.get(item.id);
-            if (!current || !queueSelected(current) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if (!current || !queueSelected(current) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
             if(continuation){
               const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});
@@ -541,8 +545,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             }
             const brief = path.join(directory, `${digest(key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
-            writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
-            return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : []),'--detach']));
+            const correction = correctionSource({ item: current, state: fresh.state, events: fresh.events, repo, org });
+            writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\n${correction?.brief ?? ''}Work from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
+            return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']));
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
             if(queueSelection(fresh.state)===selection)return true;
             log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});

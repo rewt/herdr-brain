@@ -44,35 +44,20 @@ New lanes use `lane open --git-only`, deferring their Herdr workspace until
 `lane dispatch` can start the worker in its initial selected tab. This leaves one
 agent tab and preserves operator focus. Existing workspaces retain their tabs.
 
-A fix round starts a new run on the same item and lane. The default starts a fresh
-worker, on the requested route. To prompt the existing stopped worker, add
-`--reuse R-previous --extra 'Read the review and fix its findings.'`. Reuse requires
-the same lane, route and declared harness/model/effort, an idle/done worker,
-a live matching cwd/pane/workspace, and matching immutable occupant evidence
-recorded on the previous run. Older manually dispatched runs without that evidence
-need a fresh worker. The session registry is never read to choose or reuse workers.
-The previous run must already be reported or abandoned, even when its worker is
-idle; an open run cannot share its worker with a new fix round.
-Reuse records `meta.continuation_of=R-previous` and `meta.same_session=true`
-through `record start --meta`. These are display facts and authorize nothing.
-The supervisor may explicitly reuse across items on the same lane under the
-same checks; omit `--from-run` across items. Starting a continuation neither
-consumes nor resets either item's independent-review count.
+Reviews and fixes start in fresh native allocations and lanes. A fresh fixer uses
+the exact kept unlanded author branch, otherwise main. A dirty saved author
+folder is retained and reported to its owner; dispatch does not branch around it.
+The brief carries both reports, immutable base/head/diff, failed and unrun proof
+locations, and the specific correction control for each Major.
 
-Open-run, lane/route/declared-field and newer open-run occupant refusals happen
-before lane preparation, run creation or awaited-item writes. Dispatch also
-rechecks the occupant immediately before prompting: an older completed run cannot
-lend a worker held by a newer unreported, unabandoned run, even if idle or done.
-The check uses recorded agent, pane, terminal and effective session identity;
-the dispatch's own run is excluded. Failed JSON adds a stable `code` alongside
-the unchanged reason: `REUSE_RUN_OPEN`, `REUSE_MISMATCH`,
-`FROM_RUN_OTHER_ITEM` or `FROM_RUN_SUPERSEDED` (the reason names later runs).
-Workspace and live occupant checks remain late; missing/conflicting/replaced
-identity uses `REUSE_IDENTITY_UNKNOWN` only at the initial reuse identity check
-when the error has no code. A working occupant or newer open-run holder uses
-`REUSE_WORKER_BUSY`. Later transport failures and Node system error codes use
-`DISPATCH_FAILED`; existing dispatch-owned codes are preserved. Inspect a late
-failure's journal to recover its started run.
+New `--reuse` requests refuse with `REUSE_REMOVED`. To recover saved context, use
+`--resume-session UUID`. This launches a new allocation through the configured
+`ai` identity wrapper with supported native `codex resume UUID` or
+`claude --resume UUID` arguments. Current native identity, admission, claim,
+source/head and STOP/HOLD checks still apply. A live allocation or active run
+owning that conversation prevents concurrent resume. A saved ID grants no
+ownership or permission. Existing saved/in-flight reuse journals keep their
+original contract and runtime; they are not rewritten or silently replaced.
 
 Current-source dispatch admits against running native workers and reviewers,
 under the existing per-project session/resource cap. Finished reported source
@@ -176,7 +161,7 @@ each other out. An older owner-less or unreadable-owner directory refuses with
 `DISPATCH_SESSION_CAP_LOCK_OWNER_UNREADABLE`, its path, and an instruction to
 inspect surviving dispatch processes before manually removing that lock directory
 and retrying. Age alone cannot establish safe ownership, so it never clears this
-legacy case automatically. Live `--reuse`
+legacy case automatically. Saved legacy `--reuse`
 continuations and retries that only record a worker, arm watch or deliver the
 saved prompt do not add a session and bypass session admission. New reused runs
 still require the source/origin relations described above. An explicit `--fresh`

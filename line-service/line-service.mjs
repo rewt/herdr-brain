@@ -126,14 +126,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           entry.state='recorded';entry.record={id:receipt.id,state:receipt.state};save();
         } catch (e) { entry.state='record-uncertain';entry.error=e.message;save();log({ action:'record-inbox-held',canonical_key:key,error:e.message }); }
       };
-      const effect = (key, run, binding, operation, safe=false) => {
+      const effect = (key, run, binding, operation, safe=false, outcomeReadback=false) => {
         const pendingHandoff = result => key.startsWith('closeout:') && Array.isArray(result?.evaluated) && result.evaluated.length===0 &&
           Array.isArray(result.restart?.keys) && result.restart.keys.length>0 && result.successor?.pending===true &&
           result.successor.reason==='fresh drain required' && JSON.stringify(result.successor.keys)===JSON.stringify(result.restart.keys);
         if (effects.actions[key]) {
           const prior = effects.actions[key];
           const unsafe=/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|supervisor judgment/i.test(prior.error??'');
-          if(!safe||prior.state==='complete'&&!pendingHandoff(prior.result)||unsafe){
+          if(!safe||prior.state==='complete'&&!pendingHandoff(prior.result)||unsafe&&!outcomeReadback){
             log({ action: 'effect-retained', key, state: prior.state });
             if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
             return prior;
@@ -255,13 +255,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const prior = evaluations.get(e.key);
           if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;
-          if(prior&&/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/i.test(prior.reason??'')){timings.closeout_retained++;return false;}
+          if(prior&&/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/i.test(prior.reason??'')&&!closeoutOutcomeObservation(prior,{entry:e,events:observed.events})){timings.closeout_retained++;return false;}
           return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior,{entry:e,events:observed.events})||
             closeoutOutcomeObservation(prior,{entry:e,events:observed.events});
         }).sort((a,b)=>b.source.seq-a.source.seq).slice(0,maxStepsPerStage);
         if (entries.length) {
           const revisions = entries.map(e=>closeoutRevision(e,observed.events,observed.state));
-          effect(`closeout:${digest([entries.map(e=>e.key), revisions])}`, () => JSON.parse(cli('supervisor/closeout.mjs', ['drain', '--repo', repo, '--org', org, '--keys', JSON.stringify(entries.map(e => e.key)), '--no-restart','--retry-safe','--deadline',String(Date.now()+Math.max(1,childTimeoutMs-5000))])),undefined,undefined,true);
+          const outcomeReadback=entries.some(entry=>closeoutOutcomeObservation(evaluations.get(entry.key),{entry,events:observed.events}));
+          effect(`closeout:${digest([entries.map(e=>e.key), revisions])}`, () => JSON.parse(cli('supervisor/closeout.mjs', ['drain', '--repo', repo, '--org', org, '--keys', JSON.stringify(entries.map(e => e.key)), '--no-restart','--retry-safe','--deadline',String(Date.now()+Math.max(1,childTimeoutMs-5000))])),undefined,undefined,true,outcomeReadback);
         }
       } catch (e) { note('closeout', e.message); }
       // A routine error never creates a decision. Only a real post-cutover

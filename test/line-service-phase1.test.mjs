@@ -16,7 +16,7 @@ import {reviewAttempt} from '../line-service/review.mjs';
 import {queueReviewMutation} from '../line-service/review-queue.mjs';
 import {countSessions,checkSessionCap} from '../dispatch/session-cap.mjs';
 import {closeoutCodeIdentity,bindCloseoutCode} from '../lib/closeout-code.mjs';
-import {kickCloseout,bindCloseoutSources,publishCloseoutEvents} from '../lib/closeout.mjs';
+import {kickCloseout,bindCloseoutSources,publishCloseoutEvents,CLOSEOUT_EXIT_PENDING} from '../lib/closeout.mjs';
 import {safeCloseoutRetry} from '../lib/closeout.mjs';
 import {establishCutover,developmentRoot} from '../line-service/cutoff.mjs';
 import {recordOwnLanding} from '../lib/landing-receipt.mjs';
@@ -238,6 +238,22 @@ test('phase1 pending pre-effect closeout source handoff continues its original k
   assert.equal(final.result.evaluated[0].completed,true);
   final.result={...final.history[0].result,evaluated:[{key,completed:false,reason:'unresolved native exit intent'}]};
   fs.writeFileSync(file,JSON.stringify(completed));service.pass();assert.equal(calls.length,2,'a native/ambiguous evaluated request is not a pre-effect handoff');
+});
+
+test('phase1 service retains unknown exit authority while scheduling only the original supported outcome readback',t=>{
+  const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+  const a=f.observation.agents[0];f.add([{type:'run.updated',id:'R-1',meta:{agent:a.name,pane:a.pane_id,worker_workspace:a.workspace_id,terminal_id:a.terminal_id,agent_session_id:a.agent_session.value}}]);
+  const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
+  publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});const target=added[0].closeout_targets.find(t=>t.signal==='landed'),source={seq:added[0].seq,type:'item.closed'};
+  f.add([{type:'closeout.effect',key:target.key,identity:f.identity,source,outcome:{action:'agent-exit-requested',run:'R-1',pane:a.pane_id,tab_id:a.tab_id,occupant:[a.name,a.agent,a.pane_id,a.workspace_id,f.workspace,a.terminal_id,a.agent_session.value],shell:{pid:1,identity:'original-shell',command:'[zsh]'}}},
+    {type:'closeout.evaluated',key:target.key,completed:false,revision:source.seq,reason:CLOSEOUT_EXIT_PENDING}]);
+  const calls=[],service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){calls.push(args);assert.ok(args.includes('--retry-safe'));assert.deepEqual(JSON.parse(args[args.indexOf('--keys')+1]),[target.key]);return{status:0,stdout:JSON.stringify({evaluated:[{key:target.key,run:'R-1',completed:false,reason:CLOSEOUT_EXIT_PENDING}]}),stderr:''};}
+    return{status:0,stdout:'{}',stderr:''};
+  }});
+  service.pass();service.pass();assert.equal(calls.length,2,'pending identity/outcome wording is an observation protocol, not a native-identity waiver or a completed effect');
+  const entry=Object.values(JSON.parse(fs.readFileSync(path.join(service.directory,'effects.json'),'utf8')).actions).find(e=>e.result?.evaluated?.[0]?.key===target.key);
+  assert.equal(entry.state,'held');assert.equal(entry.history.length,1);assert.equal(f.context().events.some(e=>e.type==='closeout.effect'&&e.outcome?.action==='exit-observed'),false);
 });
 
 test('phase1 morning digest is record-derived and marks unknown durations rather than inventing zero',()=>{

@@ -103,6 +103,10 @@ immutable already-ingested bytes even when the selected record consumer is old;
 it uses its actual owned pass/installation and fresh run ownership, without
 changing that consumer, a pin or the report. Major correction checks remain
 required before final release.
+An explicit verdict may be in frontmatter or a standalone `Verdict: PASS`,
+`FAIL` or `NEEDS-WORK` body line. Quoted/fenced examples grant no verdict;
+missing, unknown or contradictory declarations hold intake. The fact records
+the declaration location and original report hash; report bytes are unchanged.
 
 Each pass writes a heartbeat, ingests an actual valid report as soon as its file
 exists, conditionally source-closes genuinely done integrated work, drains named
@@ -121,9 +125,14 @@ retained, never resubmitted. New detached watchers record callbacks without
 prompting a session; already-saved watchers keep their original recipients.
 
 Ingest and conditional close retry through their idempotent contracts. Named
-closeout retries automatically only on new target revisions or a pre-effect
-lifecycle mutex refusal, preserving native/unknown/identity/HOLD outcomes and
-durable effect IDs. Conditional source completion binds a landed cleanup request;
+closeout retries automatically on new target revisions or a pre-effect lifecycle
+mutex/budget deferral with no unresolved native intent. A pre-effect changed-code
+handoff retains its original requests for the next fresh drain. An unresolved
+bound agent-exit intent permits outcome observation only: no prompt, tab close
+or removal in that pass. A fresh exact shell/native readback can record the exit;
+only that positive receipt permits the next guarded cleanup pass. Still-live,
+replaced, permission-refused or unknown outcomes remain held, without replay.
+Durable effect IDs and original bindings remain intact. Conditional source completion binds a landed cleanup request;
 the executor still proves current identity, actual integration, callback release,
 clean Git and archive preservation before any retirement/removal. The installed
 line owns routine cleanup; competing automatic kicks/unnamed drains yield to it.

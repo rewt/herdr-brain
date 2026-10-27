@@ -116,13 +116,13 @@ test('phase1 deadline retry preserves an unresolved original native exit intent 
   const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
   f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}});
   f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'fixture-original-exit-intent',outcome:{action:'agent-exit-requested',run:'R-1',pane:'w:p',tab_id:'w:t',occupant:['worker','codex','w:p','w',f.lane,'term','session'],shell:{pid:1,identity:'shell',command:'[zsh]'}}}]);
-  const held=f.drain({keys:[entry.key],retrySafe:true});assert.equal(held.evaluated.length,0);assert.deepEqual(f.read().actions,[]);
+  const held=f.drain({keys:[entry.key],retrySafe:true});assert.equal(held.evaluated[0]?.completed,false);assert.match(held.evaluated[0].reason,/unresolved native/);assert.deepEqual(f.read().actions,[]);
   f.append([{type:'closeout.retry',identity:f.common,keys:[entry.key],why:'fixture explicit observation; no permission to replay the native intent'}]);
   const observed=f.drain({keys:[entry.key]});assert.equal(observed.evaluated[0]?.completed,false);assert.match(observed.evaluated[0].reason,/unresolved native/);assert.deepEqual(f.read().actions,[]);
 });
 
 test('phase1 safe outcome readback confirms an original lost exit reply without another quit or a close in that pass',t=>{
-  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed'),base=f.options.command;
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}},base=f.options.command;
   const now=Date.now,deadline=now()+60000;
   f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(exe===f.job.herdr&&args[0]==='agent'&&args[1]==='prompt'){Date.now=()=>deadline;return{...result,status:1,stderr:'lost exit acknowledgement'};}return result;};
   let first;try{first=f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline}});}finally{Date.now=now;}
@@ -138,7 +138,7 @@ test('phase1 safe outcome readback confirms an original lost exit reply without 
 });
 
 test('phase1 safe outcome readback keeps a still-live or replaced exit target and never bypasses native refusals',t=>{
-  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}};
   const candidate=f.retirement(f.options).plan(f.lane).close[0];assert.equal(candidate.decision,'exit');
   f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'original-unknown-exit',outcome:{action:'agent-exit-requested',run:candidate.run,pane:candidate.pane,tab_id:candidate.tab_id,occupant:candidate.occupant,shell:candidate.shell}}]);
   const first=f.drain({keys:[entry.key],retrySafe:true});assert.equal(first.evaluated[0].completed,false);assert.match(first.evaluated[0].reason,/unresolved native/);assert.deepEqual(f.read().actions,[]);

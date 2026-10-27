@@ -49,7 +49,8 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
   };
   const requireCorrection = item => {
     if (!roleIs(item, 'ENG') || item.meta.review_fix_of && item.meta.review_fix_of !== reviewKey ||
-      item.meta.review_source_item && item.meta.review_source_item !== source)
+      item.meta.review_source_item && item.meta.review_source_item !== source ||
+      ['review_source_run', 'review_owner_run'].some(key => item.meta[key] && item.meta[key] !== review.meta.review_source_run))
       throw Error('immutable finding correction source is missing/UNKNOWN or changed; retain its binding');
   };
   // Recheck committed bindings regardless of open/closed/active/UNKNOWN state.
@@ -69,15 +70,30 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
   const create = (keys, proposal) => {
     const missing = keys.filter(key => !linked.has(key));
     if (missing.length) {
-      // Old selected consumers already created ordinary proposals. Reuse their
-      // exact immutable proposal rather than generating a second correction.
-      const historical = proposal && [...state.items.values()].filter(item => roleIs(item, 'ENG') &&
-        item.created.run === run.id && item.parent === review.id && item.title === proposal.title &&
-        (item.created.why ?? null) === (proposal.why ?? null) &&
-        JSON.stringify(item.accept) === JSON.stringify(proposal.accept ?? []) &&
-        Object.entries(proposal.extra ?? {}).every(([key, value]) => JSON.stringify(item.meta[key]) === JSON.stringify(value)))
-        .sort((a, b) => a.created.seq - b.created.seq)[0];
-      if (historical) requireCorrection(historical);
+      // Old consumers created ordinary proposals before finding intake. Match
+      // their immutable creation, never mutable display, parent or metadata.
+      const creations = proposal ? events.filter(event => event.type === 'item.added' && roleIs(event, 'ENG') &&
+        event.from_run === run.id && event.parent === review.id && event.title === proposal.title &&
+        (event.why ?? null) === (proposal.why ?? null) &&
+        JSON.stringify(event.accept ?? []) === JSON.stringify(proposal.accept ?? []) &&
+        Object.entries(proposal.extra ?? {}).every(([key, value]) => JSON.stringify(event.meta?.[key]) === JSON.stringify(value))) : [];
+      for (const event of creations) {
+        const item = state.items.get(event.id);
+        requireCorrection({ ...event, meta: event.meta ?? {} });
+        requireCorrection(item);
+        if (item.created.seq !== event.seq || item.created.run !== event.from_run)
+          throw Error('legacy correction ownership is missing/ambiguous; retain historical items and attempts');
+      }
+      // Historical duplicates remain untouched. A retained finding binding
+      // selects its original owner; otherwise use the earliest exact creation.
+      const owners = new Set(keys.filter(key => linked.has(key)).map(key => linked.get(key)));
+      let historical;
+      if (creations.length) {
+        if (owners.size > 1 || owners.size === 1 && !creations.some(event => owners.has(event.id)))
+          throw Error('legacy correction has conflicting finding ownership; retain historical items and attempts');
+        const creation = creations.find(event => owners.has(event.id)) ?? creations.reduce((a, b) => a.seq < b.seq ? a : b);
+        historical = state.items.get(creation.id);
+      }
       const selected = missing.map(key => rows.get(key)), severity = selected.some(row => row.severity === 'major') ? 'major' : 'minor';
       const id = historical?.id ?? nextItemId(state, { kind: 'work', role: 'engineer' }, taken);
       const meta = { review_fix_of: reviewKey, review_source_item: source,
@@ -113,11 +129,9 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
       });
     }
     if (!keys) {
-      const content = [proposal.title, proposal.why, ...(proposal.accept ?? [])].map(text);
-      keys = [...rows.values()].filter(row => content.some(value => value.includes(text(row.text)))).map(row => row.key);
       // The established single formal correction covers the report's findings,
-      // including Minor findings. Multiple proposals need actual finding links.
-      if (!keys.length && (proposals.length === 1 || rows.size === 1)) keys = [...rows.keys()];
+      // even if its prose quotes only one. Narrower coverage needs explicit refs.
+      keys = proposals.length === 1 || rows.size === 1 ? [...rows.keys()] : [];
     }
     if (!keys.length) throw Error('multiple correction proposals need explicit review_findings links to their immutable findings');
     create([...new Set(keys)], proposal);

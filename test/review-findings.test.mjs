@@ -50,6 +50,23 @@ test('finding intake: one formal proposal covers Major and Minor findings withou
   assert.deepEqual(intake(stamped([...events, ...add]), data), []);
 });
 
+test('finding intake: quoting only the Major never narrows a sole unbound whole-report proposal', () => {
+  const events = stamped(seed()), body = `- [Major] ${major}\n- [Minor] ${minor}`;
+  for (const quote of [{ title: major }, { why: major }, { accept: [major] }]) {
+    const data = report([{ role: 'engineer', title: 'Resolve all findings', ...quote }]);
+    const bytes = JSON.stringify(data), add = intake(events, data, body);
+    assert.equal(items(add).length, 1);
+    assert.equal(bindings(add).length, 2);
+    assert.equal(new Set(bindings(add).map(event => event.finding_key)).size, 2);
+    assert.deepEqual(new Set(bindings(add).map(event => event.correction_item)), new Set([items(add)[0].id]));
+    assert.equal(JSON.stringify(data), bytes);
+  }
+  const narrow = intake(events, report([{ role: 'engineer', title: 'Repair the Major',
+    extra: { review_findings: [major] } }]), body);
+  assert.equal(items(narrow).length, 2, 'only explicit references narrow coverage');
+  assert.notEqual(bindings(narrow)[0].correction_item, bindings(narrow)[1].correction_item);
+});
+
 test('finding intake: separate findings at the same location keep separate corrections', () => {
   const events = stamped(seed()), body = `- [Minor] ${minor}\n- [Minor] codec.mjs:50 - Preserve native claims`;
   const add = intake(events, report(), body);
@@ -103,6 +120,8 @@ test('finding intake: explicit finding links distinguish equal titles and coales
   assert.throws(() => intake(events, report([proposal('unknown finding')]), body), /missing\/ambiguous/);
   assert.throws(() => intake(events, report([{ role: 'engineer', title: 'Unbound A' },
     { role: 'engineer', title: 'Unbound B' }]), body), /explicit review_findings/);
+  assert.throws(() => intake(events, report([{ role: 'engineer', title: major },
+    { role: 'engineer', title: minor }]), body), /explicit review_findings/);
 });
 
 test('finding intake: exact legacy proposals are reused while historical duplicate items and verdicts remain', () => {
@@ -118,6 +137,65 @@ test('finding intake: exact legacy proposals are reused while historical duplica
   assert.deepEqual(fold([...events, ...add]).items.get('ENG-3'), before.items.get('ENG-3'));
   assert.deepEqual(fold([...events, ...add]).runs.get('R-4'), before.runs.get('R-4'));
   assert.equal(add.some(event => ['item.closed', 'run.abandoned', 'run.started'].includes(event.type)), false);
+});
+
+test('finding intake: renamed legacy corrections recover immutable creation while active and UNKNOWN attempts remain', () => {
+  const proposal = { role: 'engineer', title: 'Repair all findings', why: 'Resolve the review',
+    accept: [major], extra: { severity: 'major', detail: 'Original proposal detail' } };
+  for (const attempt of ['active', 'UNKNOWN']) {
+    const events = stamped([...seed(), { type: 'item.added', id: 'ENG-2', role: 'engineer',
+      title: proposal.title, why: proposal.why, accept: proposal.accept, meta: proposal.extra,
+      parent: 'REV-1', from_run: 'R-2' },
+    { type: 'item.updated', id: 'ENG-2', fields: { title: 'Renamed correction', parent: 'G-3',
+      accept: ['Refined acceptance'], meta: { detail: 'Edited display detail', original_review_parent: 'REV-1', hold: true } } },
+    { type: 'run.started', id: 'R-4', item: 'ENG-2', meta: { dispatch_attempt: attempt } },
+    { type: 'change.reviewed', review_run: 'R-90', review_key: 'historical', verdict: 'FAIL' }]);
+    const before = fold(events), bytes = JSON.stringify(events);
+    const add = intake(events, report([proposal]), `- [Major] ${major}\n- [Minor] ${minor}`);
+    assert.equal(items(add).length, 0);
+    assert.deepEqual(bindings(add).map(event => event.correction_item), ['ENG-2', 'ENG-2']);
+    assert.equal(new Set(bindings(add).map(event => event.finding_key)).size, 2);
+    const after = fold([...events, ...add]), correction = after.items.get('ENG-2');
+    for (const field of ['title', 'parent', 'accept', 'created', 'runs'])
+      assert.deepEqual(correction[field], before.items.get('ENG-2')[field]);
+    assert.equal(correction.meta.detail, 'Edited display detail');
+    assert.equal(correction.meta.hold, true);
+    assert.equal(correction.meta.review_round_cap, 1);
+    assert.equal(correction.meta.review_fix_of, `ENG-1:${target.head}`);
+    assert.deepEqual(after.runs.get('R-4'), before.runs.get('R-4'));
+    assert.deepEqual(after.items.get('REV-1'), before.items.get('REV-1'));
+    assert.deepEqual(after.items.get('ENG-1'), before.items.get('ENG-1'));
+    assert.equal(add.some(event => ['item.closed', 'run.abandoned', 'run.started'].includes(event.type)), false);
+    assert.equal(JSON.stringify(events), bytes, 'original creations, verdicts and attempts retain their bytes');
+  }
+});
+
+test('finding intake: legacy recovery retains a bound duplicate and refuses ambiguous or conflicting ownership', () => {
+  const proposal = { role: 'engineer', title: 'Repair findings' };
+  const legacy = id => ({ type: 'item.added', id, role: 'engineer', title: proposal.title,
+    parent: 'REV-1', from_run: 'R-2' });
+  const events = stamped([...seed(), legacy('ENG-2'), legacy('ENG-3')]);
+  const finding = intake(stamped(seed()))[0].findings[0];
+  const binding = { type: 'review.finding-linked', finding_key: finding.key, correction_item: 'ENG-3' };
+  const add = intake(stamped([...events, binding]), report([proposal]), `- [Major] ${major}\n- [Minor] ${minor}`);
+  assert.equal(items(add).length, 0);
+  assert.deepEqual(bindings(add).map(event => event.correction_item), ['ENG-3']);
+  assert.deepEqual(fold([...events, ...add]).items.get('ENG-2'), fold(events).items.get('ENG-2'));
+  for (const corrupt of [
+    { type: 'item.updated', id: 'ENG-2', fields: { meta: { review_fix_of: 'another source' } } },
+    { type: 'item.updated', id: 'ENG-2', fields: { meta: { review_source_item: 'ENG-99' } } },
+    { type: 'item.updated', id: 'ENG-2', fields: { meta: { review_owner_run: 'R-99' } } },
+    { type: 'item.updated', id: 'ENG-2', fields: { role: 'writer' } },
+    { ...legacy('ENG-2'), title: 'A different creation reuses the ID' },
+  ]) {
+    const retained = stamped([...events, corrupt, { type: 'run.started', id: 'R-4', item: 'ENG-2',
+      meta: { dispatch_attempt: 'UNKNOWN' } }]), bytes = JSON.stringify(retained);
+    assert.throws(() => intake(retained, report([proposal]), `- [Major] ${major}\n- [Minor] ${minor}`), /missing\/UNKNOWN|ambiguous|changed/);
+    assert.equal(JSON.stringify(retained), bytes);
+  }
+  const foreign = stamped([...events, { type: 'item.added', id: 'ENG-4', role: 'engineer', title: 'Other correction' },
+    { ...binding, correction_item: 'ENG-4' }]);
+  assert.throws(() => intake(foreign, report([proposal]), `- [Major] ${major}\n- [Minor] ${minor}`), /conflicting/);
 });
 
 test('finding intake: final commit rechecks finding dedup after another intake appended during preparation', t => {

@@ -25,10 +25,6 @@ export function checkDispatchEligibility(job, journal) {
   if(tornTail)refuse('incomplete record input');
   const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item);
   if(hold)refuse(hold.reason,hold.subject);
-  if(job.correction) {
-    const source=correctionSource({item:job.run?{...item,runs:item.runs.filter(id=>id!==job.run)}:item,state,events,repo:job.repo,org:job.org});
-    if(source?.base!==job.correction.base||source?.ref!==job.correction.ref)refuse('saved author source changed before fresh fix launch');
-  }
   if(job.resumeSession && [...state.runs.values()].some(r=>r.id!==job.run&&!r.report&&!r.abandoned&&
     effectiveWorkerIdentity(r,state).agent_session_id===job.resumeSession))
     refuse('an active run owns the requested native conversation');
@@ -40,6 +36,10 @@ export function checkDispatchEligibility(job, journal) {
         fs.realpathSync(run.workspace)!==job.workspace||run.meta.route!==job.route||
         Object.entries(job.declared).some(([key,value])=>(run.meta[key]??null)!==value))
       refuse('run/intent no longer matches the saved request');
+  }
+  if(job.correction) {
+    const source=correctionSource({item,state,events,repo:job.repo,org:job.org,request:{job,journal}});
+    if(source?.base!==job.correction.base||source?.ref!==job.correction.ref)refuse('saved author source changed before fresh fix launch');
   }
   if(job.lineInput){
     // Exclude only this request's own admission. Its original predecessor and

@@ -176,11 +176,11 @@ test('conditional source completion retains an exact needs-judgment refusal once
   const f = fixture(t), done = completedSource(f);
   f.record(['close', done.item, '--if-current-run', done.run]); f.record(['reopen', done.item]);
   const ready = f.add('Independent ready work', 9);
-  f.activeService = f.service({ command: done.command }); f.activeService.pass(); f.activeService.pass();
+  f.activeService = f.service({ command: done.command,alertAfter:1 }); f.activeService.pass(); f.activeService.pass();
   assert.equal(f.show(done.item).closed, null); assert.equal(fs.readFileSync(done.saved, 'utf8'), done.review);
   const closes = f.calls.filter(c => c.args[1] === 'close'); assert.equal(closes.length, 1);
   assert.ok(closes[0].args.includes('--if-current-run'));
-  const notes = f.notes.filter(n => n.text.includes(`source-complete:${done.run}:`));
+  const notes = f.notes.filter(n => n.options.boundary.startsWith(`source-complete:${done.run}:`));
   assert.equal(notes.length, 1); assert.match(notes[0].text, /reopened after completion.*conditional close needs supervisor judgment/);
   assert.ok(f.calls.some(c => c.args[0].endsWith('/dispatch/dispatch.mjs') && c.args[1] === ready));
   const effects = JSON.parse(fs.readFileSync(path.join(f.activeService.directory, 'effects.json'))), entry = Object.entries(effects.actions).find(([key]) => key.startsWith(`source-complete:${done.run}:`))[1];

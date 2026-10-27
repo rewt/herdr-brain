@@ -129,7 +129,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const effect = (key, run, binding, operation, safe=false) => {
         if (effects.actions[key]) {
           const prior = effects.actions[key];
-          const unsafe=/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/.test(prior.error??'');
+          const unsafe=/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|supervisor judgment/i.test(prior.error??'');
           if(!safe||prior.state==='complete'||unsafe){
             log({ action: 'effect-retained', key, state: prior.state });
             if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');

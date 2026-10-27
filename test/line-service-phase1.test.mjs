@@ -16,7 +16,7 @@ import {reviewAttempt} from '../line-service/review.mjs';
 import {queueReviewMutation} from '../line-service/review-queue.mjs';
 import {countSessions,checkSessionCap} from '../dispatch/session-cap.mjs';
 import {closeoutCodeIdentity,bindCloseoutCode} from '../lib/closeout-code.mjs';
-import {kickCloseout} from '../lib/closeout.mjs';
+import {kickCloseout,bindCloseoutSources,publishCloseoutEvents} from '../lib/closeout.mjs';
 import {safeCloseoutRetry} from '../lib/closeout.mjs';
 import {establishCutover,developmentRoot} from '../line-service/cutoff.mjs';
 import {recordOwnLanding} from '../lib/landing-receipt.mjs';
@@ -214,6 +214,29 @@ test('phase1 cleanup identity survives unrelated main landings and competing kic
   fs.writeFileSync(path.join(f.cwd,'lib/closer.mjs'),'export const closer=2;\n');f.git('add','.');f.git('commit','-qm','Changed closer code');assert.throws(()=>bound.verify(),e=>e.code==='CLOSEOUT_CODE_CHANGED');
   const project=gitProject(f.cwd),directory=serviceDirectory(f.env.ORG_DIR,project.identity);fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({repo:f.cwd,org:f.env.ORG_DIR,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
   assert.equal(kickCloseout(project,f.env.ORG_DIR,{env:f.env}).owned_by,'line-service');
+});
+
+test('phase1 pending pre-effect closeout source handoff continues its original keys instead of becoming complete',t=>{
+  const f=fixture(t),added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
+  publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});
+  const key=added[0].closeout_targets.find(t=>t.signal==='landed').key,calls=[];
+  const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){
+      calls.push(args);assert.deepEqual(JSON.parse(args[args.indexOf('--keys')+1]),[key]);
+      return{status:0,stdout:JSON.stringify(calls.length===1?{evaluated:[],restart:{keys:[key],old:{source:'old'},current:{source:'new'}},successor:{pending:true,reason:'fresh drain required',keys:[key]}}:{evaluated:[{key,run:'R-1',completed:true}]}),stderr:''};
+    }
+    return{status:0,stdout:'{}',stderr:''};
+  }});
+  service.pass();const file=path.join(service.directory,'effects.json'),journal=JSON.parse(fs.readFileSync(file,'utf8'));
+  const entry=Object.values(journal.actions).find(e=>e.result?.restart);assert.equal(entry.state,'held');
+  // Retain compatibility with the actual previously written complete receipt.
+  entry.state='complete';delete entry.error;fs.writeFileSync(file,JSON.stringify(journal));
+  service.pass();service.pass();assert.equal(calls.length,2,'one fresh drain, then completed effect stays complete');
+  const completed=JSON.parse(fs.readFileSync(file,'utf8')),final=Object.values(completed.actions).find(e=>e.result?.evaluated?.[0]?.key===key);
+  assert.equal(final.state,'complete');assert.equal(final.history[0].result.successor.pending,true);
+  assert.equal(final.result.evaluated[0].completed,true);
+  final.result={...final.history[0].result,evaluated:[{key,completed:false,reason:'unresolved native exit intent'}]};
+  fs.writeFileSync(file,JSON.stringify(completed));service.pass();assert.equal(calls.length,2,'a native/ambiguous evaluated request is not a pre-effect handoff');
 });
 
 test('phase1 morning digest is record-derived and marks unknown durations rather than inventing zero',()=>{

@@ -127,10 +127,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         } catch (e) { entry.state='record-uncertain';entry.error=e.message;save();log({ action:'record-inbox-held',canonical_key:key,error:e.message }); }
       };
       const effect = (key, run, binding, operation, safe=false) => {
+        const pendingHandoff = result => key.startsWith('closeout:') && Array.isArray(result?.evaluated) && result.evaluated.length===0 &&
+          Array.isArray(result.restart?.keys) && result.restart.keys.length>0 && result.successor?.pending===true &&
+          result.successor.reason==='fresh drain required' && JSON.stringify(result.successor.keys)===JSON.stringify(result.restart.keys);
         if (effects.actions[key]) {
           const prior = effects.actions[key];
           const unsafe=/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|supervisor judgment/i.test(prior.error??'');
-          if(!safe||prior.state==='complete'||unsafe){
+          if(!safe||prior.state==='complete'&&!pendingHandoff(prior.result)||unsafe){
             log({ action: 'effect-retained', key, state: prior.state });
             if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
             return prior;
@@ -147,6 +150,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             entry.state = 'held'; entry.error = entry.result.reason ?? entry.result.result;
           }
           if(entry.result?.already_running){entry.state='held';entry.error='ordinary closeout consumer contention; unchanged request retained';}
+          if(pendingHandoff(entry.result)){entry.state='held';entry.error='closer implementation changed before effect; original requests need a fresh drain';}
           const deferred = entry.result?.evaluated?.filter(row => !row.completed);
           if (deferred?.length) { entry.state = 'held'; entry.error = deferred.map(row => `${row.run}: ${row.reason}`).join('; '); }
         }

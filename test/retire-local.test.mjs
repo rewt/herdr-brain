@@ -109,6 +109,20 @@ test('cleanup tail target seal refuses matching native receipts and canonical al
   }
 });
 
+test('cleanup tail target seal keeps non-string and inherited-name schemas sealed without crashing',async t=>{
+  const {sealScopedRemovalInputs}=await import('../lib/retire-local.mjs');
+  for(const schema of [7,true,{name:'retirement-occupant/v1'},['retirement-exit/v1'],'constructor','toString','__proto__']){
+    const f=fixture(t),n=nativeReceipts(f),row=path.join(f.occupants,'row.json'),foreign=path.join(f.occupants,'foreign.json');
+    const unrelated={schema,common:n.common,cwd:n.other,workspace:'wOther',tab:'tOther',pane:'pOther',run:'R-8'};
+    fs.writeFileSync(row,JSON.stringify(unrelated));fs.writeFileSync(foreign,JSON.stringify({...unrelated,common:path.join(f.root,'elsewhere','.git')}));
+    let verify;assert.doesNotThrow(()=>{verify=sealScopedRemovalInputs([f.retirement],n.context);},JSON.stringify(schema));
+    fs.writeFileSync(foreign,JSON.stringify({...unrelated,common:path.join(f.root,'elsewhere','.git'),changed:true}));
+    assert.doesNotThrow(verify,'a canonical foreign common stays outside the seal');
+    fs.writeFileSync(row,JSON.stringify({...unrelated,changed:true}));
+    assert.throws(verify,/changed/,`${JSON.stringify(schema)} is unknown authority and stays sealed`);
+  }
+});
+
 test('an ignored receipt symlink is sealed without following it', t => {
   const f = fixture(t), link = path.join(f.occupants, 'ignored.json');
   fs.symlinkSync(f.external, link);

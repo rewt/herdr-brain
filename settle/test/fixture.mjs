@@ -222,7 +222,9 @@ else if(args[0]==='agent'&&args[1]==='list') out({agents:liveAgents().map(a=>{
  if(!process.env.SETTLE_TEST_REVIEW_IDENTITY)return a;
  const {agent_session,...summary}=a;return summary;
 })});
-else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent:'claude',agent_status:'idle',cwd,pane_id:'original:p',workspace_id:'w-lane'}});
+// The foreground fallback recipient needs the same stable pane/terminal tuple
+// as registered clients so the real quiet-input gate can establish occupancy.
+else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent:'claude',agent_status:'idle',cwd,pane_id:'original:p',terminal_id:'original:t',workspace_id:'w-lane'}});
 else if(args[0]==='agent'&&args[1]==='read') console.log('');
 else if(args[0]==='agent'&&args[1]==='wait') {await new Promise(r=>setTimeout(r,100));out({});}
 else if(args[0]==='agent'&&args[1]==='prompt') {

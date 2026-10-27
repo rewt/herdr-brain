@@ -40,7 +40,11 @@ test('producer linked report ownership changes and other subjects cannot satisfy
 });
 
 test('producer linked lane-removal completion wakes only its exact dependent entry and preserves failure truth',()=>{
-  const owner={...entry,key:'b'.repeat(64),signal:'landed'},wait=registerCloseoutWait(entry,{...prior,reason:'landed or parked request owns the remaining bound sessions'},events,[entry,owner])[0];
+  // A ready twin is owned progress and registers no wait; a wait already
+  // recorded with this lane-removal producer still links only its exact receipt.
+  const owner={...entry,key:'b'.repeat(64),signal:'landed'},twin={...prior,reason:'landed or parked request owns the remaining bound sessions'};
+  assert.deepEqual(registerCloseoutWait({...entry,signal:'ready'},twin,events,[entry,owner]),[]);
+  const wait={type:'closeout.waiting',identity:entry.common,key:entry.key,source:entry.source,revision:prior.revision,wait_id:'recorded-twin',waiting:closeoutProducer(entry,twin,{events,entries:[entry,owner]})};
   let history=append(events,[wait]);const effect={type:'closeout.effect',identity:entry.common,key:owner.key,source:owner.source,outcome:{action:'lane-removed',cwd:entry.cwd,tip:entry.head}};
   assert.equal(linkedCloseoutStatuses(history,[{...effect,key:entry.key}]).length,0);
   const links=linkedCloseoutStatuses(history,[effect]);assert.equal(links.length,1);history=append(history,[effect,...links]);assert.equal(closeoutWaitState(wait,history),'complete');

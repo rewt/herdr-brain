@@ -18,7 +18,7 @@ import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation,scheduleLineCloseouts } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
-import { reviewAttempt } from './review.mjs';
+import { reviewAttempt, readServiceJournal } from './review.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
@@ -31,10 +31,6 @@ export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const read = file => {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-  catch (e) { if (e.code === 'ENOENT') return null; throw e; }
-};
 function noticeBoundary(key,entry,boundary){
   // Older journals omitted boundary. Only the original canonical key may
   // supply it on recurrence or from the retained audit row.
@@ -134,7 +130,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const passStarted = performance.now();
       let workStarted=workClock();const expired=()=>workClock()-workStarted>=passBudgetMs;
       timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,effects_journal_writes:0,notice_record_attempts:0,review_error_batches:0 };
-      effects = read(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
+      effects = readServiceJournal(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
       const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects),pendingErrors=new Map();let noticesDirty=false,counterFailed=false;
       timings.notice_audit_replayed=restored.length;

@@ -46,6 +46,48 @@ function fixture(t, { outcome = 'blocked', beforeReport = () => [] } = {}) {
   return { ...f, org, identity, workspace, base, head, git, env, run, context, create };
 }
 
+for (const directory of ['current', 'foreign']) {
+  for (const root of [null, false, 0, '', true, 1, 'opaque', [], {}, { actions: null }, { actions: [] }]) {
+    test(`service journal correction refuses ${JSON.stringify(root)} in ${directory} before queue and launch`, t => {
+      const f = fixture(t), file = path.join(f.org, 'line-service', directory === 'current'
+        ? createHash('sha256').update(JSON.stringify(f.identity)).digest('hex').slice(0, 20) : 'foreign', 'effects.json');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const bytes = ` ${JSON.stringify(root)}\n`;
+      fs.writeFileSync(file, bytes);
+      const events = fs.readFileSync(path.join(f.org, 'events.jsonl')), c = f.context();
+      assert.throws(() => reviewAttempt(c.item, c), /absence UNKNOWN/);
+      const refused = f.run(['queue-review', 'R-1', '--head', f.head, '--base', f.base]);
+      assert.notEqual(refused.status, 0); assert.match(refused.stderr, /absence UNKNOWN/);
+      assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+      assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+      // Capture the one legitimate queue with no journal, then restore the
+      // unknown bytes to exercise the final guard before native dispatch.
+      fs.unlinkSync(file); const qid = f.create().review_item; fs.writeFileSync(file, bytes);
+      const queued = f.context(), before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+      assert.throws(() => validateQueuedReview({ ...queued, item: queued.state.items.get(qid) }), /absence UNKNOWN/);
+      assert.equal(queued.state.items.get(qid).runs.length, 0);
+      assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+      assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+    });
+  }
+  for (const kind of ['missing', 'empty-map', 'other-head']) {
+    test(`service journal correction permits ${kind} in ${directory}`, t => {
+      const f = fixture(t), file = path.join(f.org, 'line-service', directory === 'current'
+        ? createHash('sha256').update(JSON.stringify(f.identity)).digest('hex').slice(0, 20) : 'foreign', 'effects.json');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const bytes = JSON.stringify({ actions: kind === 'other-head'
+        ? { [`review:ENG-1:${f.base}`]: { state: 'held', run: 'R-1', head: f.base, qualification: 'UNKNOWN' } } : {} });
+      if (kind !== 'missing') fs.writeFileSync(file, bytes);
+      const c = f.context(); if (kind !== 'other-head') assert.equal(reviewAttempt(c.item, c), null);
+      const qid = f.create().review_item, queued = f.context();
+      assert.equal(validateQueuedReview({ ...queued, item: queued.state.items.get(qid) }).head, f.head);
+      assert.equal([...queued.state.items.values()].filter(i => i.role === 'reviewer').length, 1);
+      if (kind === 'missing') assert.equal(fs.existsSync(file), false);
+      else assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+    });
+  }
+}
+
 test('review queue atomically creates one landed tuple item across concurrent create and replay', async t => {
   const f = fixture(t), args = [entry, 'queue-review', 'R-1', '--head', f.head, '--base', f.base];
   f.git(['reset','--hard',f.base]); const unlanded=f.run(['queue-review','R-1']); assert.notEqual(unlanded.status,0); assert.match(unlanded.stderr,/not actually landed/); f.git(['merge','--ff-only',f.head]);

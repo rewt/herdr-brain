@@ -47,6 +47,21 @@ function fixture(t, { admission = false } = {}) {
   return { root, repo, org, workspace, base, head, events, write, context, service, calls, notices, git, commit };
 }
 
+for (const directory of ['current', 'foreign']) for (const root of [null, false, 0, '']) {
+  test(`service journal correction preserves ${JSON.stringify(root)} in ${directory} before automatic effects`, t => {
+    const f = fixture(t), s = f.service(), file = path.join(directory === 'current'
+      ? s.directory : path.join(f.org, 'line-service/foreign'), 'effects.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const bytes = ` ${JSON.stringify(root)}\n`, events = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+    fs.writeFileSync(file, bytes);
+    if (directory === 'current') assert.throws(() => s.pass(), /absence UNKNOWN/);
+    else s.pass();
+    assert.equal(f.calls.length, 0, 'no queue or native helper is invoked');
+    assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+    assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  });
+}
+
 test('automatic review binds committed changed evidence despite blocked outcome and red tests', t => {
   const f = fixture(t), target = bindReviewTarget(f.context());
   assert.equal(target.head, f.head); assert.equal(target.base, f.base); assert.ok(target.diff_sha256);

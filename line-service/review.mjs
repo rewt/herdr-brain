@@ -20,12 +20,21 @@ const capability = capabilityFiles.map(file => createHash('sha256').update(fs.re
 
 const sha = value => createHash('sha256').update(value).digest('hex');
 const commit = value => /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(value ?? '');
-const read = file => {
+const read = (file, missing = null) => {
   const stat = fs.lstatSync(file, { throwIfNoEntry: false });
-  if (!stat) return null;
+  if (!stat) return missing;
   if (!stat.isFile() || fs.realpathSync(file) !== path.resolve(file)) throw Error(`review inventory is redirected: ${file}`);
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 };
+const missingJournal = Symbol('missing service journal');
+export function readServiceJournal(file) {
+  const saved = read(file, missingJournal);
+  if (saved === missingJournal) return null;
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved) ||
+      !saved.actions || typeof saved.actions !== 'object' || Array.isArray(saved.actions))
+    throw Error(`unrecognized service review inventory; absence UNKNOWN: ${file}`);
+  return saved;
+}
 function entries(directory) {
   const stat = fs.lstatSync(directory, { throwIfNoEntry: false });
   if (!stat) return [];
@@ -134,8 +143,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   }
   for(const entry of entries(path.join(org,'line-service')))if(entry.isDirectory()){
     // An unreadable or unrecognized journal cannot prove this change is absent.
-    const file=path.join(org,'line-service',entry.name,'effects.json'),current=entry.name===sha(JSON.stringify(identity)).slice(0,20);let saved;try{saved=read(file);}catch(e){if(current)throw e;throw Error(`unrecognized service review inventory; absence UNKNOWN: ${file}`);}
-    if(saved&&(!saved.actions||typeof saved.actions!=='object'||Array.isArray(saved.actions)))throw Error(current?'current service review journal is UNKNOWN':`unrecognized service review inventory; absence UNKNOWN: ${file}`);
+    const file=path.join(org,'line-service',entry.name,'effects.json'),current=entry.name===sha(JSON.stringify(identity)).slice(0,20);let saved;try{saved=readServiceJournal(file);}catch(e){if(current)throw e;throw Error(`unrecognized service review inventory; absence UNKNOWN: ${file}`);}
     if(pending(saved?.actions,file))return 'existing same-change service intent/result';
   }
   for(const id of item.runs){
@@ -194,8 +202,7 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
     }
   }
   for (const entry of list(path.join(org, 'line-service'))) if (entry.isDirectory()) {
-    const file = path.join(org, 'line-service', entry.name, 'effects.json'), saved = readFile(file);
-    if (saved && (!saved.actions || typeof saved.actions !== 'object' || Array.isArray(saved.actions))) throw Error(`unrecognized service review inventory; absence UNKNOWN: ${file}`);
+    const file = path.join(org, 'line-service', entry.name, 'effects.json'), saved = cached('service-journal', file, () => readServiceJournal(file));
     if (pending(saved?.actions, file)) return 'existing service review intent/result';
   }
   const scanEvidence = directory => {

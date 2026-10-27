@@ -396,6 +396,20 @@ test('phase1 build and three review slots are separate while uncertain starts an
   assert.equal(countSessions({state:{runs:new Map()},journals:[{stage:'launching',common}],common})[0].occupancy,'uncertain launch');
 });
 
+test('permanent review capacity admits review at a full build pool and retains independent review uncertain legacy and explicit shared ceilings',t=>{
+  const f=configFixture(t,{custom:true}),common=gitProject(f.cwd).identity,org=f.env.ORG_DIR,dir=path.join(org,'dispatch');fs.mkdirSync(dir,{recursive:true});
+  for(let n=0;n<7;n++)fs.writeFileSync(path.join(dir,`build-${n}.json`),JSON.stringify({stage:'open',detached:true,common,item:`ENG-${n+1}`}));
+  const config={dispatch:{max_sessions:7,max_review_sessions:3}},args={config,org,common,kill:()=>{throw Object.assign(Error('denied'),{code:'EPERM'});},readProcess:()=>({ok:false})};
+  const review=checkSessionCap({...args,kind:'review'});assert.equal(review.count,0);assert.equal(review.native_count,7);assert.equal(review.native_cap,10);assert.equal(review.cap,3);
+  assert.throws(()=>checkSessionCap({...args,kind:'build'}),e=>e.code==='DISPATCH_SESSION_CAP'&&e.sessions.count===7);
+  assert.throws(()=>checkSessionCap({...args,kind:'review',config:{dispatch:{...config.dispatch,max_total_sessions:7}}}),e=>e.code==='DISPATCH_SESSION_CAP'&&e.sessions.count===0&&e.sessions.native_cap===7);
+  for(let n=0;n<2;n++)fs.writeFileSync(path.join(dir,`review-${n}.json`),JSON.stringify({stage:'open',detached:true,common,item:`REV-${n+1}`,reviewQueue:{head:'a'.repeat(40)}}));
+  assert.equal(checkSessionCap({...args,kind:'review'}).count,2);
+  const occupants=path.join(org,'retirement/occupants');fs.mkdirSync(occupants,{recursive:true});fs.writeFileSync(path.join(occupants,'legacy.json'),JSON.stringify({schema:'retirement-occupant/v1',kind:'settle',run:'R-90',common,process:null}));
+  assert.throws(()=>checkSessionCap({...args,kind:'review'}),e=>e.code==='DISPATCH_REVIEW_CAP'&&e.sessions.count===3&&e.sessions.native_count===10&&e.sessions.sessions.some(s=>s.occupancy==='unknown liveness'));
+  assert.throws(()=>checkSessionCap({...args,kind:'all'}),e=>e.code==='DISPATCH_SESSION_CAP'&&e.sessions.native_cap===7,'old callers keep their combined ceiling');
+});
+
 test('phase1 blocked report requires genuine new input and ignores its own routine service notes',t=>{
   const f=fixture(t),c=f.context(),run={...c.run,report:{...c.run.report,outcome:'blocked'}},item=c.item;
   assert.equal(blockedChangeKey({...c,run,item}),null);

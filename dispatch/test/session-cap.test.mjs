@@ -36,6 +36,11 @@ test('cap defaults to BCH seven and validates the existing layered dispatch sett
   assert.equal(loadDiscoveredRoutes({ cwd: repo, file }).config.dispatch.max_sessions, 3);
 });
 
+test('permanent review pool validates and retains an explicit shared native ceiling through existing dispatch layers',()=>{
+  for(const value of [0,-1,1.5,'7',null,true])assert.throws(()=>validateRoutesConfig({dispatch:{max_total_sessions:value}}),/positive integer/);
+  const config=mergeRoutesConfig([{dispatch:{max_sessions:7,max_review_sessions:3,max_total_sessions:8}},{routes:{}}]);assert.equal(config.dispatch.max_total_sessions,8);assert.equal(config.dispatch.max_sessions,7);assert.equal(config.dispatch.max_review_sessions,3);
+});
+
 test('ESRCH frees capacity; EPERM, unknown probes and unreadable identity sources keep it', () => {
   assert.equal(count({ kill: () => { throw error('ESRCH'); } }).length, 0);
   for (const code of ['EPERM', 'EIO']) {

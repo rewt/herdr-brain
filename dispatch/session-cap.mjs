@@ -184,7 +184,7 @@ export function countSessions({ state, events = [], journals = [], reviewers = [
       // not that its native process exited. Keep the slot until process proof
       // or an explicit report/abandon, and name it for operator inspection.
     }
-    add({ run: run.id, kind: run.meta?.dispatch_role === 'review' ? 'reviewer' : 'worker', identity: launch, process: owner ?? null,
+    add({ run: run.id, kind: run.meta?.dispatch_role === 'review'||job?.reviewQueue ? 'reviewer' : 'worker', identity: launch, process: owner ?? null,
       evidence: owner ? 'native process' : job?.stage === 'launching' ? 'uncertain launch' : 'unknown liveness' });
   }
   // A surviving record/launch child retains its durable reservation. A real
@@ -223,10 +223,15 @@ function readJSON(directory, filter = name => name.endsWith('.json'), withJourna
 }
 
 export function checkSessionCap({ config, org, kind='all', ...options }) {
-  const nativeCap = config.dispatch?.max_sessions ?? DEFAULT_SESSION_CAP;
+  const buildCap = config.dispatch?.max_sessions ?? DEFAULT_SESSION_CAP;
   const reviewCap=config.dispatch?.max_review_sessions??DEFAULT_REVIEW_SESSION_CAP;
-  if (!positive(nativeCap)||!positive(reviewCap)) throw Error('dispatch session/review caps must be positive integers');
-  const cap=kind==='review'?reviewCap:nativeCap;
+  if(!['all','build','review'].includes(kind))throw Error('unknown session admission pool');
+  // Current source admission has separate fixed build/review pools. A genuine
+  // explicitly configured shared ceiling still constrains BOTH pools. Legacy
+  // kind=all callers retain their original combined max_sessions behavior.
+  const nativeCap=config.dispatch?.max_total_sessions??(kind==='all'?buildCap:buildCap+reviewCap);
+  if (!positive(buildCap)||!positive(reviewCap)||!positive(nativeCap)) throw Error('dispatch session/review/shared caps must be positive integers');
+  const cap=kind==='review'?reviewCap:kind==='all'?nativeCap:buildCap;
   let sessions;
   try {
     // Journal first, then record: never miss both sides of a start transition.
@@ -238,9 +243,9 @@ export function checkSessionCap({ config, org, kind='all', ...options }) {
       reviewers: readJSON(path.join(org, 'retirement/occupants')) });
   } catch (e) { throw Error(`session count unavailable: ${e.message}`); }
   const total=sessions;
-  if(kind==='review')sessions=total.filter(s=>s.kind==='reviewer'&&s.evidence!=='settle launch receipt');
+  if(kind==='review')sessions=total.filter(s=>s.kind==='reviewer');
   else if(kind==='build')sessions=total.filter(s=>s.kind==='worker');
-  const evidence = { cap, count: sessions.length, sessions,kind,native_cap:nativeCap,native_count:total.length };
+  const evidence = { cap, count: sessions.length, sessions,kind,build_cap:buildCap,review_cap:reviewCap,native_cap:nativeCap,native_count:total.length,shared_cap_source:config.dispatch?.max_total_sessions!==undefined?'explicit shared ceiling':kind==='all'?'legacy combined ceiling':'sum of separate build and review pools' };
   if (sessions.length >= cap || total.length>=nativeCap) {
     const poolFull=sessions.length>=cap,held=poolFull?sessions:total,limit=poolFull?cap:nativeCap;
     const runs = list => [...new Set(list.flatMap(s => s.runs.filter(Boolean).length ? s.runs.filter(Boolean) : [`pending start ${s.journal ?? 'UNKNOWN'}`]))].sort((a,b)=>/^R-\d+$/.test(a)&&/^R-\d+$/.test(b)?Number(a.slice(2))-Number(b.slice(2)):a.localeCompare(b)).join(', ');

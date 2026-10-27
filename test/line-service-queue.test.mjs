@@ -120,6 +120,17 @@ test('review queue dispatch uses normal native route and immutable lane with zer
   assert.equal(promptCalls(d).length,1);
 });
 
+test('permanent review capacity reaches the normal guarded reviewer launch at a full build pool and respects an explicit shared native ceiling',t=>{
+  for(const shared of [false,true]){
+    const f=fixture(t),qid=f.create().review_item,file=path.join(f.cwd,'.lane.json'),config=JSON.parse(fs.readFileSync(file));config.dispatch={...config.dispatch,max_sessions:1,max_review_sessions:3,...(shared?{max_total_sessions:1}:{})};fs.writeFileSync(file,JSON.stringify(config));
+    fs.writeFileSync(path.join(f.org,'dispatch/pending-build.json'),JSON.stringify({stage:'open',detached:true,item:'ENG-90',common:f.identity}));
+    const d=dispatchFixture(t,{project:f,sourceEntry:true}),lane=path.join(d.root,'bin/lane');fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replaceAll('lane/topic','lane/review-capacity'));
+    const result=d.dispatch([qid,'--lane','review-capacity','--route','review-codex','--base',f.head,'--brief',d.brief],{env:{...d.env,HERDR_BRAIN_ROOT:root}});
+    if(shared){assert.equal(result.status,1);assert.match(result.stderr,/session cap 1 reached/);assert.equal(promptCalls(d).length,0);}
+    else{assert.equal(result.status,0,result.stderr);assert.equal(promptCalls(d).length,1);const job=d.jobs().map(p=>JSON.parse(fs.readFileSync(p))).find(j=>j.item===qid);assert.equal(job.sessionCap.kind,'review');assert.equal(job.sessionCap.review_cap,3);assert.equal(job.sessionCap.native_cap,4);}
+  }
+});
+
 test('review queue current default refuses a parallel legacy lane-review before native effects', t => {
   const f=fixture(t), file=path.join(f.cwd,'.lane.validation.json'), policy=JSON.parse(fs.readFileSync(file));
   fs.writeFileSync(file,JSON.stringify({...policy,landing_waiver:'operator-20261025-until-stable-release'}));

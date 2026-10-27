@@ -103,8 +103,11 @@ producer has been reviewed; an uncovered remainder is a recorded judgment hold.
 Its bound immutable target/evidence is checked again before every native effect.
 New source dispatch uses the configured normal review selection (review-sol-max)
 and a registered `review-` worktree at that exact head. The review pool defaults
-to three sessions, separately from build admission; the existing total native
-resource cap remains. Old settle reviewers still consume real total resources.
+to three sessions, separately from the seven-build default. An explicit
+`dispatch.max_total_sessions` shared ceiling remains mandatory when configured;
+otherwise the combined ceiling is the sum of the two pool limits. Legacy
+combined callers retain their old bound. Old settle reviewers and uncertain
+native attempts still consume review and combined capacity.
 Saved owner/pinned consumers retain their original selection. A matching explicit
 source selector does not fabricate native/run authority. Unknown queue/helper
 capability holds before launch.

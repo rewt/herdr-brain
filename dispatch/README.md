@@ -109,9 +109,14 @@ and does not select a chat pane. Actual Git and target workspace/native bindings
 remain required; contradictory foreign/stale/path/head evidence refuses. No held
 review is retried or replaced by this source change.
 
-The independent session cap limits new sessions per Git common-directory project
-to **7**, matching BCH's `MAX_SESSIONS` default and leaving room for the normal
-4–6 concurrent lanes.
+Current-source admission uses separate build and review pools per Git
+common-directory project: **7** builds (`dispatch.max_sessions`) and **3** reviews
+(`dispatch.max_review_sessions`) by default. A full build pool cannot consume a
+review slot. Legacy settle reviewers and uncertain native launches still occupy
+their real pool and the combined count. `dispatch.max_total_sessions`, when
+explicitly configured, is an additional shared ceiling that neither pool can
+bypass; otherwise the current-source combined ceiling is the sum of the two
+pool limits. Legacy combined-cap callers retain their original behavior.
 Set `dispatch.max_sessions` to a positive integer in the existing `.lane.json`
 dispatch settings. The usual parent/repository layers and explicit `LANE_CONFIG`
 apply; like other dispatch fields, a later `dispatch` object replaces that object.

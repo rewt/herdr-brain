@@ -20,7 +20,7 @@ import { completedCloseoutKeys, handoffCloseout, migrateCloseout } from '../lib/
 import { completionFingerprint, digest } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
   closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout, closeoutKey,
-  recoverLane } from '../lib/closeout.mjs';
+  recoverLane,closeoutOutcomeObservation,safeCloseoutRetry } from '../lib/closeout.mjs';
 import { reconcile } from '../supervisor/reconcile.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -119,6 +119,33 @@ test('phase1 deadline retry preserves an unresolved original native exit intent 
   const held=f.drain({keys:[entry.key],retrySafe:true});assert.equal(held.evaluated.length,0);assert.deepEqual(f.read().actions,[]);
   f.append([{type:'closeout.retry',identity:f.common,keys:[entry.key],why:'fixture explicit observation; no permission to replay the native intent'}]);
   const observed=f.drain({keys:[entry.key]});assert.equal(observed.evaluated[0]?.completed,false);assert.match(observed.evaluated[0].reason,/unresolved native/);assert.deepEqual(f.read().actions,[]);
+});
+
+test('phase1 safe outcome readback confirms an original lost exit reply without another quit or a close in that pass',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed'),base=f.options.command;
+  const now=Date.now,deadline=now()+60000;
+  f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(exe===f.job.herdr&&args[0]==='agent'&&args[1]==='prompt'){Date.now=()=>deadline;return{...result,status:1,stderr:'lost exit acknowledgement'};}return result;};
+  let first;try{first=f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline}});}finally{Date.now=now;}
+  assert.equal(first.evaluated[0].completed,false);assert.deepEqual(f.read().actions,[['agent','prompt','worker','/quit']]);
+  assert.equal(safeCloseoutRetry(evaluations(f).at(-1),{entry,events:events(f)}),false);
+  assert.equal(closeoutOutcomeObservation(evaluations(f).at(-1),{entry,events:events(f)}),true);
+  const observed=f.drain({keys:[entry.key],retrySafe:true});assert.equal(observed.evaluated[0].completed,false);assert.equal(observed.evaluated[0].reason,'original native outcome reconciled; fresh drain required');
+  assert.deepEqual(f.read().actions,[['agent','prompt','worker','/quit']],'outcome readback has no prompt/close/removal effects');
+  assert.ok(effects(f).some(e=>e.action==='exit-observed'));
+  assert.equal(safeCloseoutRetry(evaluations(f).at(-1),{entry,events:events(f)}),true);
+  const final=f.drain({keys:[entry.key],retrySafe:true});assert.equal(final.evaluated[0].completed,true,JSON.stringify(final));
+  assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(fs.existsSync(f.lane),false);
+});
+
+test('phase1 safe outcome readback keeps a still-live or replaced exit target and never bypasses native refusals',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  const candidate=f.retirement(f.options).plan(f.lane).close[0];assert.equal(candidate.decision,'exit');
+  f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'original-unknown-exit',outcome:{action:'agent-exit-requested',run:candidate.run,pane:candidate.pane,tab_id:candidate.tab_id,occupant:candidate.occupant,shell:candidate.shell}}]);
+  const first=f.drain({keys:[entry.key],retrySafe:true});assert.equal(first.evaluated[0].completed,false);assert.match(first.evaluated[0].reason,/unresolved native/);assert.deepEqual(f.read().actions,[]);
+  for(const reason of ['EPERM native refusal','foreign source','native identity changed','HOLD'])assert.equal(closeoutOutcomeObservation({completed:false,reason},{entry,events:events(f)}),false,reason);
+  f.state.agents[0].agent_session={value:'replacement'};
+  const shell=f.state.info.process_tree[0];f.state.info={shell_pid:shell.pid,foreground_processes:[{pid:shell.pid,name:'zsh'}],process_tree_complete:true,process_tree:[shell]};f.save();
+  const replaced=f.drain({keys:[entry.key],retrySafe:true});assert.equal(replaced.evaluated[0].completed,false);assert.match(replaced.evaluated[0].reason,/identity changed/);assert.deepEqual(f.read().actions,[]);
 });
 
 test('default landing and named requests, full-source opt-in, opt-out and canonical ownership', t => {

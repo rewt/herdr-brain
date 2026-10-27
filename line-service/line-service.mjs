@@ -14,7 +14,7 @@ import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.m
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry } from '../lib/closeout.mjs';
+import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt } from './review.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
@@ -256,7 +256,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;
           if(prior&&/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/i.test(prior.reason??'')){timings.closeout_retained++;return false;}
-          return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior,{entry:e,events:observed.events});
+          return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior,{entry:e,events:observed.events})||
+            closeoutOutcomeObservation(prior,{entry:e,events:observed.events});
         }).sort((a,b)=>b.source.seq-a.source.seq).slice(0,maxStepsPerStage);
         if (entries.length) {
           const revisions = entries.map(e=>closeoutRevision(e,observed.events,observed.state));

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fixture} from './dispatch-fixture.mjs';
+import {preflightContinuation} from '../preflight.mjs';
 
 async function driverResult(journal){
   const file=`${journal}.driver/results.jsonl`,until=Date.now()+60000;
@@ -10,6 +11,29 @@ async function driverResult(journal){
   assert.equal(fs.existsSync(file),true,'owned detached fixture reaches a durable terminal receipt');
   return JSON.parse(fs.readFileSync(file,'utf8').trim());
 }
+
+test('permanent preflight continuation requires positive zero-native evidence and retains unknown refused foreign or spent attempts',t=>{
+  const f=fixture(t),root=fs.realpathSync(new URL('../../',import.meta.url)),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']);
+  const file=path.join(f.org,'dispatch','saved.json');fs.mkdirSync(path.dirname(file),{recursive:true});
+  const job={token:'saved',repo:f.repo,org:f.org,common,release:{root},reviewQueueProtocol:1,phase1_protocol:1,detached:true,detached_refused:true,stage:'start',run:null,worker:null,error:'loaded queue/dispatch implementation changed; wait for next real pass',native_launch_attempted:false};
+  const save=value=>fs.writeFileSync(file,JSON.stringify(value));save(job);
+  const args={journal:file,repo:f.repo,org:f.org,common,root,events:[]};assert.ok(preflightContinuation(args));
+  for(const patch of [{native_launch_attempted:true},{native_launch_attempted:undefined},{worker:{agentName:'existing'}},{stage:'launching'},{run:'R-9'},{error:'EPERM native refusal'},{error:'native identity changed'},{release:{root:f.root}}]){save({...job,...patch});assert.equal(preflightContinuation(args),null,JSON.stringify(patch));}
+  save(job);const proof=preflightContinuation(args);save({...job,preflightContinuations:[{capability:proof.capability}]});assert.equal(preflightContinuation(args),null);
+  save({...job,native_launch_attempted:undefined});fs.mkdirSync(file+'.driver');fs.writeFileSync(file+'.driver/results.jsonl',JSON.stringify({journal:file,stage:'start',run:null,exit_code:1,native_launch_attempted:false,error:job.error})+'\n');assert.ok(preflightContinuation(args),'retained explicit terminal false is positive evidence for an older journal');
+});
+
+test('permanent preflight continuation resumes one original detached request without replacing launch evidence or repeating native input',async t=>{
+  const f=fixture(t);f.fail('prepare');const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal);assert.equal(terminal.native_launch_attempted,false);
+  const launch=fs.readFileSync(journal+'.driver/launch.json');fs.unlinkSync(path.join(f.root,'fail'));
+  const resumed=f.dispatch(['--retry',journal,'--continue-preflight']);assert.equal(resumed.status,0,resumed.stderr);assert.equal(JSON.parse(resumed.stdout).journal,journal);
+  const results=journal+'.driver/results.jsonl',until=Date.now()+60000;let rows=[];
+  while(Date.now()<until){rows=fs.readFileSync(results,'utf8').trim().split('\n').map(JSON.parse);if(rows.length>=2&&rows.at(-1).stage==='complete')break;await new Promise(resolve=>setTimeout(resolve,25));}
+  assert.equal(rows.at(-1).stage,'complete',JSON.stringify(rows));assert.deepEqual(fs.readFileSync(journal+'.driver/launch.json'),launch);assert.equal(f.jobs().length,1);
+  assert.equal(f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt').length,1);
+  assert.equal(f.dispatch(['--retry',journal,'--continue-preflight']).status,1,'native-attempted continuation cannot be replayed');
+  assert.equal(f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt').length,1);
+});
 
 test('phase1 detached native start keeps one original prompt and its record-only watcher while a fresh STOP prevents input',async t=>{
   for(const stopped of [false,true]){

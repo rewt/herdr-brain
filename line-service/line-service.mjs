@@ -23,6 +23,7 @@ import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults } from './phase1.mjs';
+import {preflightContinuation} from '../dispatch/preflight.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -295,16 +296,29 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (reserved(item) || item.meta.hold || item.meta.held) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment'); continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
-          if (effects.actions[key]) { log({ action: 'dispatch-retained', key, state: effects.actions[key].state }); continue; }
-          const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo }) : null;
-          const route = reviewTarget ? reviewQueueRoute(config) : routeFor(item, config);
+          let continuation;
+          if (effects.actions[key]) {
+            const prior=effects.actions[key];let result=prior.result;
+            if(typeof result==='string')try{result=JSON.parse(result);}catch{}
+            if(!result?.journal&&prior.receipt?.stdout)try{result=JSON.parse(prior.receipt.stdout);}catch{}
+            if(result?.journal)continuation=preflightContinuation({journal:result.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:snapshot.events});
+            if(!continuation){log({ action: 'dispatch-retained', key, state: prior.state });continue;}
+          }
+          const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
+          const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config) : routeFor(item, config));
           const count = capacity ?? (() => checkSessionCap({ config, org, kind:reviewTarget?'review':'build',common: project.identity,
             agent: name => native(['agent', 'get', name]).agent,
             processInfo: pane => native(['pane', 'process-info', '--pane', pane]).process_info }));
           const occupancy = count(); log({ action: 'capacity', ...occupancy });
-          const dispatched = effect(key, () => {
+          const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.capability}`:key, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
-            if (!current || current.closed || dispatchInput({...fresh,item:current}) !== input || reserved(current) || current.meta.hold || current.meta.held || (reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route) throw Error('dispatch readiness or route changed');
+            if (!current || current.closed || dispatchInput({...fresh,item:current}) !== input || reserved(current) || current.meta.hold || current.meta.held || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if(continuation){
+              const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});
+              if(!checked||checked.request_sha256!==continuation.request_sha256||checked.capability!==continuation.capability)throw Error('original preflight progress/source changed before continuation');
+              if(reviewTarget)validateQueuedReview({item:current,state:fresh.state,events:fresh.events,org,repo,allowJournal:continuation.journal});
+              return JSON.parse(cli('dispatch/dispatch.mjs',['--retry',continuation.journal,'--repo',repo,'--org',org,'--continue-preflight']));
+            }
             const brief = path.join(directory, `${digest(key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item/run brief and accepted directions. Self-land OWN source and hand its immutable landed tuple/evidence to record queue-review; never start a parallel settle/lane review. Preserve STOP/HOLD, claims and native guards. Escalate judgment to ${to} through the existing native inbox.\n`, 0o600);

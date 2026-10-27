@@ -3,7 +3,7 @@
 import { ownerAlive } from '../lib/process-owner.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID,createHash } from 'node:crypto';
 import { spawnSync,spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
@@ -26,6 +26,7 @@ import { checkSourceAdmission, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
 import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from '../line-service/review-queue.mjs';
 import { dispatchInput } from '../line-service/phase1.mjs';
+import {preflightContinuation} from './preflight.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -39,6 +40,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   'accept-delivered': { type: 'boolean' }, 'recover-run': { type: 'string' },
   'from-run': { type: 'string' }, unblocks: { type: 'string' },
   detach:{type:'boolean'},
+  'continue-preflight':{type:'boolean'},
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'watch-cli': { type: 'string' },
 }});
 const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [process.execPath, local(fallback)];
@@ -48,6 +50,7 @@ const watchCLI = cli('watch', '../watch/watch.mjs');
 let job, journal, lock, contender, ownsLock = false, observationDeadline;
 let releaseAdmission;
 let controllerDeadline=Infinity;
+let preflight;
 const atomic = (file, value) => {
   const temp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -305,6 +308,10 @@ async function main() {
     lockJob();
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
+    if(opt['continue-preflight']){
+      preflight=preflightContinuation({journal,repo:saved.repo,org:saved.org,common:saved.common,root:bundleRelease().root,events:loadEvents(saved.org).events});
+      if(!preflight)throw Error('original preflight has no positive zero-native continuation; retain unknown/native/foreign/spent request');
+    }
     const boundRun = saved.run ?? saved.fromRun;
     if (boundRun) {
       const binding = requireController(readOwnedRun(saved.org, boundRun), opt.controller);
@@ -336,6 +343,7 @@ async function main() {
       job.predecessor ??= { run: job.fromRun, binding: requireController(readOwnedRun(job.org, job.fromRun), opt.controller) };
     }
   } else {
+    if(opt['continue-preflight'])throw Error('--continue-preflight requires the original --retry journal');
     let predecessor;
     if (opt['from-run']) {
       predecessor = { run: opt['from-run'], binding: requireController(readOwnedRun(opt.org, opt['from-run']), opt.controller) };
@@ -396,7 +404,7 @@ async function main() {
       brief, report: opt.report ?? null, to: opt.to ?? null,
       base: git(['rev-parse', `${opt.base ?? 'HEAD'}^{commit}`], repo), extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress: projectExceptionAddress(repo, config, opt.route),
-      stage: 'open', run: null };
+      stage: 'open', run: null,native_launch_attempted:false,...(opt.detach?{phase1_protocol:1,detachedRequested:true}:{}) };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
     job.routeConfig = path.join(directory, `${token}.routes.json`);
     atomic(job.routeConfig, mergeRoutesConfig([config]));
@@ -416,6 +424,8 @@ async function main() {
       error.code = 'DISPATCH_STOPPED';
       throw error;
     }
+    if((job.detached||job.detachedRequested)&&fs.existsSync(path.join(job.org,'line-service',
+      createHash('sha256').update(JSON.stringify(job.common)).digest('hex').slice(0,20),'STOP')))throw Object.assign(Error('service STOP appeared before detached effect'),{code:'DISPATCH_STOPPED'});
     if(job.lineInput){
       const events=loadEvents(job.org).events,state=fold(events),item=state.items.get(job.item);
       if(!item||item.closed||item.meta.hold||item.meta.held||item.meta.operator_reserved||item.meta.reserved||item.role==='human')throw Error('detached item closed/held/reserved before native effect');
@@ -437,13 +447,17 @@ async function main() {
       }
     }
   };
-  if(opt.detach){
-    if(opt.retry||job.stage!=='open'||job.detached)throw Error('--detach is only for one new frozen request; never resubmit a saved launch');
+  if(opt.detach||opt['continue-preflight']){
+    if(!preflight&&(opt.retry||job.stage!=='open'||job.detached))throw Error('--detach is only for one new frozen request; never resubmit a saved launch');
     const release=acquireSessionCapLock(common,{check:checkStop});
     try{
-      const events=loadEvents(job.org).events,state=fold(events);job.lineInput=dispatchInput({events,state,item:state.items.get(job.item)});
-      if(!job.lineInput)throw Error('detached start needs ready work or a genuinely changed blocked report');
-      admission(job.repo,job.org,common);checkStop();job.detached=true;job.recordOnlyNotices=true;job.phase1_protocol=1;save();
+      const events=loadEvents(job.org).events,state=fold(events),input=dispatchInput({events,state,item:state.items.get(job.item)});
+      if(!input||job.lineInput&&job.lineInput!==input)throw Error('detached start needs unchanged ready work or genuinely changed blocked input');
+      if(preflight){const fresh=preflightContinuation({journal,repo:job.repo,org:job.org,common,root:bundleRelease().root,events});
+        if(!fresh||fresh.request_sha256!==preflight.request_sha256||fresh.capability!==preflight.capability)throw Error('original preflight evidence changed before continuation');
+        job.preflightContinuations=[...(job.preflightContinuations??[]),{at:new Date().toISOString(),capability:fresh.capability,request_sha256:fresh.request_sha256,terminal_sha256:fresh.terminal_sha256,prior_error:job.error,native_launch_attempted:false}];
+        delete job.error;job.detached_refused=false;job.native_launch_attempted=false;}
+      job.lineInput=input;admission(job.repo,job.org,common);checkStop();job.detached=true;job.recordOnlyNotices=true;job.phase1_protocol=1;save();
     }finally{release();}
     // Durable original request precedes spawn. The child takes the SAME request
     // lock; a lost spawn result is retained and never automatically relaunched.
@@ -455,7 +469,9 @@ async function main() {
         ...(opt['org-cli']?['--org-cli',opt['org-cli']]:[]),...(opt['lane-cli']?['--lane-cli',opt['lane-cli']]:[]),...(opt['watch-cli']?['--watch-cli',opt['watch-cli']]:[])];
       const child=spawn(process.execPath,args,{cwd:job.repo,env:process.env,detached:true,stdio:['ignore',output,output]});child.on('error',e=>fs.appendFileSync(`${journal}.driver.log`,`${e.message}\n`));child.unref();
       fs.mkdirSync(`${journal}.driver`,{recursive:true});
-      fs.writeFileSync(`${journal}.driver/launch.json`,JSON.stringify({pid:child.pid??null,at:new Date().toISOString(),journal,command_limit_ms:120000,controller_budget_ms:600000})+'\n',{flag:'wx',mode:0o600});
+      const launch={pid:child.pid??null,at:new Date().toISOString(),journal,command_limit_ms:120000,controller_budget_ms:600000,...(preflight?{continuation:preflight.capability}:{})};
+      if(preflight)fs.appendFileSync(`${journal}.driver/continuations.jsonl`,JSON.stringify(launch)+'\n',{mode:0o600});
+      else fs.writeFileSync(`${journal}.driver/launch.json`,JSON.stringify(launch)+'\n',{flag:'wx',mode:0o600});
       process.stdout.write(JSON.stringify({result:'detached',journal,run:null,item:job.item,pid:child.pid??null})+'\n');return;
     }finally{fs.closeSync(output);}
   }
@@ -715,7 +731,7 @@ catch (error) {
   }
 } finally {
   releaseAdmission?.();
-  if(opt.retry&&job?.detached&&journal&&ownsLock){
+  if((opt.retry&&job?.detached||opt.detach&&process.exitCode)&&journal&&ownsLock){
     fs.mkdirSync(`${journal}.driver`,{recursive:true});const fd=fs.openSync(`${journal}.driver/results.jsonl`,'a',0o600);
     try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,native_launch_attempted:job.native_launch_attempted??false})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
   }

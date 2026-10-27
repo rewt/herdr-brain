@@ -123,6 +123,13 @@ legacy-named memory phases now pause only for a genuine live proving reservation
 Memory pressure is observed, never an admission wait. Lost launches/prompts are
 retained, never resubmitted. New detached watchers record callbacks without
 prompting a session; already-saved watchers keep their original recipients.
+An original preflight with positively recorded `native_launch_attempted: false`
+can continue through `dispatch --retry JOURNAL --continue-preflight`. The service
+uses that same entry after a deterministic preparation failure, once per actual
+helper capability. It preserves the request, route, immutable target and first
+launch receipt, and recounts admission under the existing locks before handoff.
+Missing zero-native evidence, a live/unknown native attempt, permission/identity
+refusal, a different saved helper or an already spent continuation remains held.
 
 Ingest and conditional close retry through their idempotent contracts. Named
 closeout retries automatically on new target revisions or a pre-effect lifecycle

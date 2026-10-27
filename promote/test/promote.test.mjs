@@ -10,7 +10,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
 import { resolveGateProfile } from '../gate-profile.mjs';
-import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
+import { readInbox, resolveNotice } from '../../supervisor/prompt-supervisor.mjs';
 import { stopOwnedInbox } from '../../test/helpers/inbox.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
@@ -489,17 +489,26 @@ test('replay conflict after clean merge-tree preflight names the file in the not
   assert.equal(fs.readFileSync(path.join(bad, 'shared'), 'utf8'), 'base\n');
 });
 
-test('capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements', async (t) => {
+test('capped promotion notices retain an owner and resolve lost acknowledgements without replaying input', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second'); fs.writeFileSync(path.join(f.root, 'delivery-fail'), '1');
   f.launch(['first', 'second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.ok(f.results().every((r) => r.outcome === 'promoted' && r.delivered === false && r.delivery_error));
   const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
   assert.ok(fs.existsSync(`${inbox}.owner.lock`));
+  const firstId = f.results()[0].delivery_id;
+  await until(() => readInbox(inbox).find(entry => entry.id === firstId)?.state === 'uncertain');
+  assert.equal(readInbox(inbox).find(entry => entry.id === f.results()[1].delivery_id).state, 'pending');
+  // This fake records input before losing its acknowledgement. Inspect that
+  // actual fixture evidence, then explicitly dispose the uncertain attempt.
+  // Clearing the failure does not authorize another input to the same notice.
+  assert.equal(f.messages().length, 1);
+  assert.ok(f.messages()[0][3].includes(`notice-id=${firstId}`));
   fs.unlinkSync(path.join(f.root, 'delivery-fail'));
+  resolveNotice(inbox, firstId, true);
   await until(() => readInbox(inbox).every((entry) => entry.state === 'sent'));
   const texts = f.messages().map((args) => args[3]);
-  assert.ok(texts.length >= 3);
-  assert.ok(texts.slice(0, -1).every((text) => text.includes(`notice-id=${f.results()[0].delivery_id}`)));
+  assert.equal(texts.length, 2, 'the uncertain input was acknowledged, never replayed');
+  assert.ok(texts[0].includes(`notice-id=${firstId}`));
   assert.ok(texts.at(-1).includes(`notice-id=${f.results()[1].delivery_id}`));
 });
 

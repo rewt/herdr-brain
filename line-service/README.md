@@ -152,6 +152,22 @@ No new review item, replacement or target expansion occurs. A completed sibling
 PASS remains scoped to its own exact range. This exception is for the proven
 original request only; new producers still enqueue one whole report/source group.
 
+A recorded `worker` barrier with explicit `native_launch_attempted: false` can
+also continue the original run, including a captured partial range. The current
+claim generation must match the saved ownership; no recorded worker, native
+process or session binding may contradict that barrier. Old implementation-change
+outcomes have an exact legacy mapping to a typed outcome, never a broad text
+exception or conversion of TRUE/UNKNOWN launch evidence to NOT STARTED.
+An unchanged `watch` or `prompt` request can finish its first prompt through
+`dispatch --retry JOURNAL --continue-review` after the installed progress path
+archives `review.original-continuation`. This requires the original fully qualified
+session, terminal, pane, workspace, process birth and claim, with fresh idle native
+readback. Unqualified sessions, working agents, `prompting`/complete requests,
+reports and ownership changes remain retained. The dispatcher rechecks the same
+process/session before delivery, uses the existing watcher contract and original
+callback, and never adopts, relaunches or resends uncertain input. These proofs
+authorize only the original request and captured range, without a replacement.
+
 Reviewers inspect only the immutable diff and producer evidence, with zero
 suites/edits. Their normal report says `outcome: done`, `verdict: PASS|FAIL` and
 uses `- [Major] path:line - explanation` / `- [Minor] ...` findings. The record

@@ -24,6 +24,7 @@ import {discoverChanges,capturedProducerTarget} from './phase1.mjs';
 import {sameCapturedTarget,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
 import {lockRequest} from '../dispatch/request-lock.mjs';
 import {lookupProcess} from '../lib/processes.mjs';
+import {implementationChangeOutcome} from '../dispatch/preflight.mjs';
 const root=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000,maxBuffer:32*1024*1024}).trim();
 const verdicts=new Set(['PASS','FAIL','NEEDS-WORK']);
@@ -97,9 +98,18 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
   if(original){const claim=readOwnedRun(org,original.id);requireController(claim,'brain');assertOwner(claim,{owner:original.owner,generation:original.owner_generation});}
   if(!original&&(job.run||initial.some(e=>e.type==='run.started'&&(e.item===q.id||e.meta?.dispatch_journal===journal||e.meta?.dispatch_attempt===job.token))))throw Error('original request has unbound record-start progress; retain it');
   const prestart=!original&&['open','start'].includes(job.stage)&&!job.worker&&!job.launchProcess&&!job.sessionBinding&&job.native_launch_attempted!==true;
+  const implementationOutcome=implementationChangeOutcome(job);
+  if(implementationOutcome&&prestart&&job.native_launch_attempted!==false)throw Error('old implementation-change outcome has UNKNOWN native launch evidence; retain original request');
   const zeroWorker=original&&job.stage==='worker'&&job.native_launch_attempted===false&&!job.worker&&!job.launchProcess&&!job.sessionBinding;
-  if(originalScope&&!prestart)throw Error('partial/ambiguous producer attempts remain immutable; no replacement or retarget');
-  if(!prestart&&!zeroWorker&&(!original||job.stage!=='complete'||!job.worker))throw Error('original native launch outcome remains UNKNOWN; no missing-run inference');
+  const unprompted=original&&['watch','prompt'].includes(job.stage)&&job.native_launch_attempted===true&&job.worker&&!job.sessionBinding;
+  const continueOriginal=zeroWorker||unprompted;
+  if(continueOriginal){
+    if(!job.ownership)throw Error('original continuation claim generation is UNKNOWN');
+    assertOwner(readOwnedRun(org,original.id),job.ownership);
+    if(zeroWorker&&['agent','pane','worker_workspace','terminal_id','agent_session_id'].some(k=>original.meta[k]))throw Error('zero-native barrier conflicts with recorded worker identity');
+  }
+  if(originalScope&&!prestart&&!continueOriginal)throw Error('partial/ambiguous producer attempts remain immutable; no replacement or retarget');
+  if(!prestart&&!continueOriginal&&(!original||job.stage!=='complete'||!job.worker))throw Error('original native launch outcome remains UNKNOWN; no missing-run inference');
   const owner=readOwnedRun(org,run.id);requireController(owner,'brain');assertOwner(owner,{owner:run.owner,generation:run.owner_generation});queueConsumer({run,env});
   const authority={kind:'installed-service-progress',project:project.identity,org,installation:binding.installationFile,installation_sha256:hash(reviewPlain(binding.installationFile))};
   const guard=events=>{
@@ -119,6 +129,18 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
     const trees=git(repo,['worktree','list','--porcelain']).split('\n\n').filter(Boolean).map(block=>Object.fromEntries(block.split('\n').map(row=>{const n=row.indexOf(' ');return[row.slice(0,n),row.slice(n+1)];}))).filter(w=>w.branch===`refs/heads/lane/${job.lane}`);
     if(trees.length>1||trees.some(w=>w.HEAD!==target.head)||job.workspace&&trees[0]?.worktree!==job.workspace)throw Error('original review lane/source binding changed');
     const w=original&&effectiveWorkerIdentity(original,state),saved=job.worker;
+    if(continueOriginal&&(trees.length!==1||git(job.workspace,['status','--porcelain=v1'])))throw Error('original continuation worktree/source is UNKNOWN or dirty');
+    if(unprompted){
+      if(trees.length!==1||!w?.agent||!w.pane||!w.worker_workspace||!w.terminal_id||!w.agent_session_id||w.identity_conflict||saved.agentName!==w.agent||saved.pane!==w.pane||saved.workspaceId!==w.worker_workspace||saved.terminalId!==w.terminal_id||saved.agentSessionId!==w.agent_session_id)throw Error('original unprompted native identity is UNKNOWN; owner must supply exact session qualification');
+      const matches=inventory.agents.filter(a=>a.cwd===job.workspace||a.name===w.agent||a.pane_id===w.pane||a.agent_session?.value===w.agent_session_id);
+      if(matches.length!==1)throw Error('original unprompted native presence is UNKNOWN/ambiguous');
+      const a=native(['agent','get',w.agent])?.agent;
+      if(!a||a.name!==w.agent||a.cwd!==job.workspace||a.pane_id!==w.pane||a.workspace_id!==w.worker_workspace||a.terminal_id!==w.terminal_id||a.agent_session?.value!==w.agent_session_id)throw Error('original unprompted native identity changed');
+      if(!['idle','done'].includes(a.agent_status))return false;
+      const process=job.launchProcess,observed=Number.isSafeInteger(process?.pid)&&process.identity&&readProcess(process.pid);
+      if(!observed?.ok||observed.value?.pid!==process.pid||observed.value?.identity!==process.identity)throw Error('original unprompted process continuity is UNKNOWN');
+      return true;
+    }
     if(inventory.agents.some(a=>trees.some(t=>a.cwd===t.worktree)||w&&[w.agent&&a.name===w.agent,w.pane&&a.pane_id===w.pane,w.agent_session_id&&a.agent_session?.value===w.agent_session_id].some(Boolean)))return false;
     if(prestart||zeroWorker)return true;
     if(!w?.agent||!w.pane||!w.terminal_id||!w.agent_session_id||w.identity_conflict||saved.agentName!==w.agent||saved.pane!==w.pane||saved.terminalId!==w.terminal_id||saved.agentSessionId!==w.agent_session_id)throw Error('original reviewer native identity is UNKNOWN');
@@ -133,13 +155,14 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
     guard(initial);try{requestLock=lockRequest(journal,{kill});}catch(e){if(/already running/.test(e.message))return{result:'review_retained',reason:'original request owner remains live'};throw e;}
     release=acquireLock(path.join(project.identity,'lane-promote.lock'));guard(loadEvents(org).events);if(!inactive())return{result:'review_retained',reason:'original native reviewer still present'};
     const sourceHead=git(repo,['rev-parse','HEAD']);git(repo,['merge-base','--is-ancestor',target.head,sourceHead]);
-    if(originalScope){
-      const preparation=`original-${hash(JSON.stringify([q.id,journal,hash(bytes),progress.signature])).slice(0,48)}`,old=initial.find(e=>e.type==='review.original-prestart'&&e.id===preparation);
-      if(old)return{result:'original_prestart_ready',review_item:q.id,journal,proof:old.seq,existing:true};
+    if(prestart&&(originalScope||implementationOutcome)||continueOriginal){
+      const preparation=`original-${hash(JSON.stringify([q.id,journal,hash(bytes),progress.signature])).slice(0,48)}`,old=initial.find(e=>['review.original-prestart','review.original-continuation'].includes(e.type)&&e.id===preparation);
+      if(old)return{result:continueOriginal?'original_review_ready':'original_prestart_ready',review_item:q.id,journal,proof:old.seq,existing:true};
       const directory=path.join(org,'evidence/review-recovery',preparation);fs.mkdirSync(directory,{recursive:true});const files=[{original:journal,bytes},{original:target.evidence,bytes:reviewPlain(target.evidence)},...driver];
       const snapshots=files.map((f,i)=>{const archive=path.join(directory,`${i}-${path.basename(f.original)}`);immutable(archive,f.bytes);return{original:f.original,archive,sha256:hash(f.bytes)};}),manifest={id:preparation,review_item:q.id,target,request_sha256:hash(bytes),files:snapshots},manifestBytes=Buffer.from(JSON.stringify(manifest,null,2)+'\n'),file=path.join(directory,'manifest.json');immutable(file,manifestBytes);const fd=fs.openSync(directory,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
-      const result=transact(org,events=>{guard(events);if(!inactive())throw Error('original reviewer became live before prestart confirmation');const existing=events.find(e=>e.type==='review.original-prestart'&&e.id===preparation);if(existing)return{add:[],result:existing.seq};return protectRecordMutation({org,events,state:fold(events),command:'original review prestart proof',mutation:{add:[{type:'review.original-prestart',id:preparation,project:project.identity,org,review_item:q.id,item:source.id,run:run.id,journal,target,request_sha256:hash(bytes),original_native_launch_attempted:job.native_launch_attempted??null,service_authority:authority,archive:{file,sha256:hash(manifestBytes)}}]}});},{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
-      return{result:'original_prestart_ready',review_item:q.id,journal,proof:result.added[0]?.seq??result.result};
+      const type=continueOriginal?'review.original-continuation':'review.original-prestart',kind=zeroWorker?'typed-pre-native-worker-barrier':'bound-unprompted-original';
+      const result=transact(org,events=>{guard(events);if(!inactive())throw Error('original reviewer changed before continuation confirmation');const existing=events.find(e=>e.type===type&&e.id===preparation);if(existing)return{add:[],result:existing.seq};return protectRecordMutation({org,events,state:fold(events),command:'original review continuation proof',mutation:{add:[{type,id:preparation,project:project.identity,org,review_item:q.id,item:source.id,run:run.id,journal,target,request_sha256:hash(bytes),original_native_launch_attempted:job.native_launch_attempted??null,...(continueOriginal?{kind,review_run:original.id,ownership:job.ownership}:{}),service_authority:authority,archive:{file,sha256:hash(manifestBytes)}}]}});},{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
+      return{result:continueOriginal?'original_review_ready':'original_prestart_ready',review_item:q.id,journal,proof:result.added[0]?.seq??result.result};
     }
     const effectRows=[];for(const [key,value]of Object.entries(effects.actions??{}))if(key.startsWith(`review:${source.id}:`)&&JSON.stringify(value.review_target)===JSON.stringify(target))effectRows.push({file:journalFile,key,sha256:hash(JSON.stringify(value))});
     let files=[{original:journal,bytes},{original:target.evidence,bytes:reviewPlain(target.evidence)},...driver,...(effectRows.length?[{original:journalFile,bytes:reviewPlain(journalFile)}]:[])];

@@ -45,7 +45,7 @@ export function queueConsumer({ run, env = process.env }) {
   // Development main may advance while a request runs: that does not change
   // its captured tuple or loaded capability. Immutable saved bundles retain
   // their byte fence; neither selection nor native/source ownership is replaced.
-  if(immutableCode)for (let i = 0; i < files.length; i++) if (createHash('sha256').update(fs.readFileSync(path.join(root, files[i]))).digest('hex') !== hashes[i]) throw Error('immutable saved queue/dispatch implementation changed; retain its owner');
+  if(immutableCode)for (let i = 0; i < files.length; i++) if (createHash('sha256').update(fs.readFileSync(path.join(root, files[i]))).digest('hex') !== hashes[i]) throw Object.assign(Error('immutable saved queue/dispatch implementation changed; retain its owner'),{code:'DISPATCH_IMPLEMENTATION_CHANGED'});
   return root;
 }
 function source({ state, events, org, repo, identity, runId, head, base,env=process.env,originalCapture }) {

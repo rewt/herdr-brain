@@ -248,9 +248,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const observed=observeReviewProgress({state:snapshot.state,org,identity:project.identity,pass:effects.pass_number,previous:effects.review_progress});effects.review_progress=observed.progress;save();let recoveries=0;
         for(const id of observed.candidates){
           if(expired()||recoveries>=maxStepsPerStage)break;const q=snapshot.state.items.get(id),target=q.meta.review_target;
-          const held=effects.review_recovery_holds?.[id],capability='original-scope-continuation/v1',productHold=held&&/partial\/ambiguous producer|historical\/partial target/.test(held.reason);
+          const held=effects.review_recovery_holds?.[id],capability='original-scope-continuation/v2',productHold=held&&/partial\/ambiguous producer|historical\/partial target/.test(held.reason);
           if(held?.signature===observed.progress[id].signature&&!(productHold&&held.capability!==capability))continue;
-          try{checkpointNotices();const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(['review_queued','original_prestart_ready'].includes(result.result))stale=true;}
+          try{checkpointNotices();const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(['review_queued','original_prestart_ready','original_review_ready'].includes(result.result))stale=true;
+            if(result.result==='original_review_ready')effect(`review-original:${id}:${result.proof}`,()=>JSON.parse(cli('dispatch/dispatch.mjs',['--retry',result.journal,'--repo',repo,'--org',org,'--continue-review'])));
+          }
           catch(e){effects.review_recovery_holds??={};if(/EPERM|EACCES|native refusal|identity|reserved|HOLD|STOP|UNKNOWN|partial|ambiguous/i.test(e.message))effects.review_recovery_holds[id]={signature:observed.progress[id].signature,reason:e.message,capability};save();note(`review-progress:${id}`,e.message,{item:id,review:true});}
           recoveries++;
         }

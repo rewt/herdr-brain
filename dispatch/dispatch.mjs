@@ -30,6 +30,7 @@ import {preflightContinuation} from './preflight.mjs';
 import {foregroundCommand} from './foreground-command.mjs';
 import {lockRequest} from './request-lock.mjs';
 import {resolvedNotStarted} from './not-started.mjs';
+import {originalPrestartProof,reviewDigest,reviewPlain} from '../line-service/review-resolutions.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -44,6 +45,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   'from-run': { type: 'string' }, unblocks: { type: 'string' },
   detach:{type:'boolean'},
   'continue-preflight':{type:'boolean'},
+  'continue-review':{type:'boolean'},
   'resolve-not-started':{type:'string'},disposition:{type:'string'},'decision-seq':{type:'string'},id:{type:'string'},'changed-source':{type:'string'},role:{type:'string'},
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'watch-cli': { type: 'string' },
 }});
@@ -55,6 +57,14 @@ let job, journal, lock, contender, ownsLock = false, observationDeadline;
 let releaseAdmission;
 let controllerDeadline=Infinity;
 let preflight;
+let reviewContinuation;
+function originalReviewContinuation(saved){
+  const events=loadEvents(saved.org).events,proof=originalPrestartProof({events,org:saved.org,common:saved.common,journal,job:saved,requestHash:reviewDigest(reviewPlain(journal))});
+  const zero=proof?.kind==='typed-pre-native-worker-barrier'&&saved.stage==='worker'&&saved.native_launch_attempted===false&&!saved.worker&&!saved.launchProcess&&!saved.sessionBinding;
+  const idle=proof?.kind==='bound-unprompted-original'&&['watch','prompt'].includes(saved.stage)&&saved.native_launch_attempted===true&&saved.worker&&!saved.sessionBinding;
+  if(proof?.type!=='review.original-continuation'||(!zero&&!idle)||saved.release?.root!==bundleRelease().root||saved.reviewContinuations?.some(c=>c.original_prestart_seq===proof.seq))throw Error('original review continuation is UNKNOWN, progressed or already consumed');
+  return proof;
+}
 const atomic = (file, value) => {
   const temp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -287,6 +297,7 @@ async function main() {
     return;
   }
   if (opt.retry) {
+    if(opt['continue-review']&&(opt.detach||opt['continue-preflight']||opt.adopt||opt.fresh||opt.resend||opt['accept-delivered']||opt['recover-run']))throw Error('original review continuation cannot change launch or delivery recovery');
     if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra', 'awaited', 'awaited-step', 'unblocks'].some((key) => opt[key] !== undefined)) {
       throw new Error('--retry uses the saved request; do not supply new work flags');
     }
@@ -295,6 +306,7 @@ async function main() {
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
     if(resolvedNotStarted({events:loadEvents(saved.org).events,org:saved.org,common:saved.common,journal}))throw Error('original request archived NOT STARTED; never retry it; only the existing line may use its changed input');
+    if(opt['continue-review'])reviewContinuation=originalReviewContinuation(saved);
     if(opt['continue-preflight']){
       preflight=preflightContinuation({journal,repo:saved.repo,org:saved.org,common:saved.common,root:bundleRelease().root,events:loadEvents(saved.org).events});
       if(!preflight)throw Error('original preflight has no positive original prelaunch continuation; retain unknown/native/foreign/spent request');
@@ -329,6 +341,7 @@ async function main() {
       job.predecessor ??= { run: job.fromRun, binding: requireController(readOwnedRun(job.org, job.fromRun), opt.controller) };
     }
   } else {
+    if(opt['continue-review'])throw Error('--continue-review requires the original --retry journal');
     if(opt['continue-preflight'])throw Error('--continue-preflight requires the original --retry journal');
     let predecessor;
     if (opt['from-run']) {
@@ -433,6 +446,16 @@ async function main() {
       }
     }
   };
+  if(reviewContinuation){
+    checkStop();const fresh=originalReviewContinuation(job);
+    if(fresh.seq!==reviewContinuation.seq)throw Error('original continuation proof changed');
+    if(git(['status','--porcelain=v1'],job.workspace))throw Error('original review continuation worktree is dirty');
+    if(fresh.kind==='bound-unprompted-original'){
+      const agent=liveWorker(job.worker),native=observeNative();
+      if(!['idle','done'].includes(agent.agent_status)||native.session!==job.worker.agentSessionId||native.process.pid!==job.launchProcess.pid||native.process.identity!==job.launchProcess.identity)throw Error('original unprompted native process/session changed or is active');
+    }
+    job.reviewContinuations=[...(job.reviewContinuations??[]),{original_prestart_seq:fresh.seq,request_sha256:fresh.request_sha256,kind:fresh.kind}];save();
+  }
   if(opt.detach||opt['continue-preflight']){
     if(!preflight&&(opt.retry||job.stage!=='open'||job.detached))throw Error('--detach is only for one new frozen request; never resubmit a saved launch');
     const release=acquireSessionCapLock(common,{check:checkStop});
@@ -643,7 +666,11 @@ async function main() {
     }
     if (job.stage === 'prompting' && !opt.resend) throw new Error('prompt delivery outcome is unknown; inspect worker, then --accept-delivered or --resend only if delivery did not land');
     if (job.stage === 'prompt' || (job.stage === 'prompting' && opt.resend)) {
-      liveWorker(job.worker);
+      const agent=liveWorker(job.worker);
+      if(reviewContinuation?.kind==='bound-unprompted-original'){
+        const native=observeNative();
+        if(!['idle','done'].includes(agent.agent_status)||native.session!==job.worker.agentSessionId||native.process.pid!==job.launchProcess.pid||native.process.identity!==job.launchProcess.identity)throw Error('original unprompted native process/session changed or is active before prompt');
+      }
       if (job.declared.harness === 'codex') {
         const screen = command(['herdr'], ['pane', 'read', job.worker.pane, '--source', 'visible', '--format', 'text']);
         const dialog = hookReviewDialog(screen);

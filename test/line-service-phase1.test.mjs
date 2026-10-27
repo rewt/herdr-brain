@@ -408,24 +408,24 @@ function originalPartialFixture(t){
   const d=dispatchFixture(t,{project:f,sourceEntry:true}),workspace=path.join(f.scratch,'original-review');f.git(['worktree','add','-qb','lane/review-original',workspace,f.heads[0]],f.cwd);
   const lane=path.join(d.root,'bin/lane');fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replaceAll('lane/topic','lane/review-original'));
   const root=fs.realpathSync(sourceRoot),journal=path.join(f.org,'dispatch/original-r4.json'),route='review-codex',config=loadDiscoveredRoutes({cwd:f.cwd,env:f.env}).config,resolved=resolveRoute(config,{route}),routeConfig=journal.replace('.json','.routes.json');fs.writeFileSync(routeConfig,JSON.stringify(config));
-  const job={token:'original-r4',repo:f.cwd,org:f.org,common:f.identity,release:{root,id:null,commit:null,protocol:1},item:'REV-4',lane:'review-original',route,reviewQueueProtocol:1,reviewQueue:target,reviewQueueBrief:`Original saved partial review. Captured immutable HEAD ${target.head}, base ${target.base}. Zero suites.`,workspace,brief:d.brief,report:null,to:null,base:target.head,extra:'',reuse:null,fromRun:null,unblocks:null,declared:{harness:resolved.kind,model:resolved.model??null,effort:resolved.effort??null},routeConfig,operatorRecordCommand:[process.execPath,path.join(root,'bin/org.mjs')],operatorRecordRoot:root,operatorPlainText:true,stage:'open',run:null,error:'loaded queue/dispatch implementation changed; wait for next real pass'};fs.writeFileSync(journal,JSON.stringify(job));
+  const job={token:'original-r4',repo:f.cwd,org:f.org,common:f.identity,release:{root,id:null,commit:null,protocol:1},item:'REV-4',lane:'review-original',route,reviewQueueProtocol:1,reviewQueue:target,reviewQueueBrief:`Original saved partial review. Captured immutable HEAD ${target.head}, base ${target.base}. Zero suites.`,workspace,brief:d.brief,report:null,to:null,base:target.head,extra:'',reuse:null,fromRun:null,unblocks:null,declared:{harness:resolved.kind,model:resolved.model??null,effort:resolved.effort??null},routeConfig,operatorRecordCommand:[process.execPath,path.join(root,'bin/org.mjs')],operatorRecordRoot:root,operatorPlainText:true,stage:'open',run:null,native_launch_attempted:false,error:'loaded queue/dispatch implementation changed; wait for next real pass'};fs.writeFileSync(journal,JSON.stringify(job));
   const env=installedService(f),q=f.context().state.items.get('REV-4'),key=`dispatch:REV-4:${q.created.seq}:ordinary`,effects={identity:f.identity,org:f.org,pass_number:0,actions:{[key]:{state:'held',error:job.error,receipt:{status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_FAILED',reason:job.error,journal}),stderr:job.error}},[`review:ENG-1:${target.head}`]:{state:'complete',review_target:target,review_operation:'record-queue',result:{review_item:q.id}}}};
   for(let pass=1;pass<=2;pass++){effects.pass_number=pass;effects.review_progress=observeReviewProgress({...f.context(),pass,previous:effects.review_progress}).progress;}
   effects.review_recovery_holds={'REV-4':{signature:effects.review_progress['REV-4'].signature,reason:'partial/ambiguous producer attempts remain immutable; no automatic replacement'}};const effectFile=path.join(f.directory,'effects.json');fs.writeFileSync(effectFile,JSON.stringify(effects));
   return{...f,d,env,target,journal,job,effects,effectFile};
 }
 
-test('original REV4-shaped continuation preserves its disjoint PASS peer and UNKNOWN journal then uses one same-request native launch without replacement',async t=>{
+test('original REV4-shaped continuation preserves its disjoint PASS peer and zero-native journal then uses one same-request native launch without replacement',async t=>{
   const f=originalPartialFixture(t),before=f.context(),original=fs.readFileSync(f.journal),verdict=before.events.find(e=>e.type==='change.reviewed'),calls=[];
   const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:3,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
     calls.push(args);if(exe==='herdr')return{status:0,stdout:'{"result":{"agents":[]}}',stderr:''};
     assert.equal(args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));assert.equal(args[args.indexOf('--retry')+1],f.journal);assert.ok(args.includes('--continue-preflight'));return f.d.dispatch(args.slice(1),{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});
   }});service.pass();
-  const c=f.context(),proof=c.events.find(e=>e.type==='review.original-prestart');assert.ok(proof,'legacy product hold is reconsidered on the checked original-scope capability');assert.equal(proof.original_native_launch_attempted,null);assert.equal(c.state.items.get('REV-4').closed,null);assert.equal(c.events.some(e=>e.type==='review.recovery-completed'),false);assert.deepEqual(c.events.find(e=>e.seq===verdict.seq),verdict);
+  const c=f.context(),proof=c.events.find(e=>e.type==='review.original-prestart');assert.ok(proof,'legacy product hold is reconsidered on the checked original-scope capability');assert.equal(proof.original_native_launch_attempted,false);assert.equal(c.state.items.get('REV-4').closed,null);assert.equal(c.events.some(e=>e.type==='review.recovery-completed'),false);assert.deepEqual(c.events.find(e=>e.seq===verdict.seq),verdict);
   assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,1);const archived=JSON.parse(fs.readFileSync(proof.archive.file)),savedOriginal=archived.files.find(f=>f.original===proof.journal);assert.deepEqual(fs.readFileSync(savedOriginal.archive),original);
   const file=f.journal+'.driver/results.jsonl';let terminal;
   for(;;){if(fs.existsSync(file)){terminal=JSON.parse(fs.readFileSync(file,'utf8').trim().split('\n').at(-1));if(terminal.stage==='complete'||terminal.exit_code!==0)break;}await new Promise(resolve=>setTimeout(resolve,25));}
-  assert.equal(terminal.stage,'complete',JSON.stringify(terminal));assert.equal(promptCalls(f.d).length,1);const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.token,'original-r4');assert.equal(saved.reviewQueue.head,f.heads[0]);assert.equal(saved.reviewQueue.base,f.base);assert.equal(saved.native_launch_attempted,true);assert.equal(saved.preflightContinuations[0].native_launch_attempted,null);assert.equal(saved.preflightContinuations[0].original_prestart_seq,proof.seq);assert.equal(f.context().state.items.get('REV-4').runs.length,1);assert.deepEqual(f.context().events.find(e=>e.seq===verdict.seq),verdict);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,2);
+  assert.equal(terminal.stage,'complete',JSON.stringify(terminal));assert.equal(promptCalls(f.d).length,1);const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.token,'original-r4');assert.equal(saved.reviewQueue.head,f.heads[0]);assert.equal(saved.reviewQueue.base,f.base);assert.equal(saved.native_launch_attempted,true);assert.equal(saved.preflightContinuations[0].native_launch_attempted,false);assert.equal(saved.preflightContinuations[0].original_prestart_seq,proof.seq);assert.equal(f.context().state.items.get('REV-4').runs.length,1);assert.deepEqual(f.context().events.find(e=>e.seq===verdict.seq),verdict);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,2);
 });
 
 test('original partial continuation holds overlap active native owners altered evidence and admission captures without spending a replacement',t=>{
@@ -439,6 +439,52 @@ test('original partial continuation holds overlap active native owners altered e
       if(kind==='active')assert.equal(recoverServiceReview(args).result,'review_retained');else assert.throws(()=>recoverServiceReview(args),/overlapping|CAS|differs|unknown|scope/i);
       assert.equal(f.context().events.some(e=>e.type==='review.original-prestart'||e.type==='review.recovery-completed'),false);assert.equal(f.context().state.items.get('REV-4').closed,null);
     }finally{process.chdir(cwd);release();}
+  }
+});
+
+function recordedPartialFixture(t){
+  const f=originalPartialFixture(t),id='R-886',meta={lane:f.job.lane,route:f.job.route,...f.job.declared,dispatch_project:f.identity,dispatch_record:f.org,dispatch_journal:f.journal,dispatch_attempt:f.job.token,dispatch_role:'review'};
+  f.add([{type:'run.started',id,item:'REV-4',workspace:f.job.workspace,brief_path:path.join(f.org,`runs/${id}/brief.md`),report_path:path.join(f.org,`runs/${id}/report.md`),meta},
+    {type:'run.claimed',run:id,project:f.identity,record:f.org,owner:f.context().run.owner}]);
+  const run=f.context().state.runs.get(id);f.job={...f.job,run:id,stage:'worker',ownership:{owner:run.owner,generation:run.owner_generation}};fs.writeFileSync(f.journal,JSON.stringify(f.job));
+  const pass=()=>{f.effects.pass_number++;f.effects.review_progress=observeReviewProgress({...f.context(),pass:f.effects.pass_number,previous:f.effects.review_progress}).progress;fs.writeFileSync(f.effectFile,JSON.stringify(f.effects));};
+  const recover=(extra={})=>{pass();pass();const cwd=process.cwd(),release=noticeLock(path.join(f.directory,'pass.lock'));process.chdir(f.cwd);try{return recoverServiceReview({repo:f.cwd,org:f.org,reviewId:'REV-4',env:f.env,call:()=>JSON.stringify({result:{agents:[]}}),...extra});}finally{process.chdir(cwd);release();}};
+  return{...f,pass,recover};
+}
+
+test('recorded partial zero-native worker continues only its original run and captured scope preserving completed sibling verdict',t=>{
+  const f=recordedPartialFixture(t),bytes=fs.readFileSync(f.journal),before=f.context(),verdict=before.events.find(e=>e.type==='change.reviewed'),result=f.recover();assert.equal(result.result,'original_review_ready');
+  const proof=f.context().events.find(e=>e.seq===result.proof);assert.equal(proof.kind,'typed-pre-native-worker-barrier');assert.deepEqual(fs.readFileSync(f.journal),bytes);assert.deepEqual(proof.ownership,f.job.ownership);
+  const dispatched=[];createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:0,recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
+    if(exe==='herdr')return{status:0,stdout:'{"result":{"agents":[]}}',stderr:''};
+    assert.equal(args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));assert.equal(args[args.indexOf('--retry')+1],f.journal);assert.ok(args.includes('--continue-review'));const result=f.d.dispatch(args.slice(1),{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});dispatched.push(result);return result;
+  }}).pass();assert.equal(dispatched.length,1);assert.equal(dispatched[0].status,0,dispatched[0].stderr);
+  const saved=JSON.parse(fs.readFileSync(f.journal)),after=f.context();assert.equal(saved.stage,'complete');assert.equal(saved.run,'R-886');assert.deepEqual(saved.reviewQueue,f.target);assert.equal(promptCalls(f.d).length,1);assert.deepEqual(after.state.items.get('REV-4').runs,['R-886']);assert.deepEqual(after.events.find(e=>e.seq===verdict.seq),verdict);assert.equal(after.events.some(e=>e.type==='review.recovery-completed'),false);
+  assert.equal(f.d.dispatch(['--retry',f.journal,'--continue-review']).status,1);assert.equal(promptCalls(f.d).length,1);
+});
+
+test('idle original reviewer resumes one prompt only after exact session and process qualification and retains unknown active and changed bindings',t=>{
+  const f=recordedPartialFixture(t);f.recover();f.d.fail('watch');const first=f.d.dispatch(['--retry',f.journal,'--continue-review'],{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});assert.equal(first.status,1);assert.equal(promptCalls(f.d).length,0);
+  fs.unlinkSync(path.join(f.d.root,'fail'));const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.stage,'watch');assert.equal(saved.native_launch_attempted,true);
+  const agents=Object.values(JSON.parse(fs.readFileSync(path.join(f.d.root,'workers')))),original=agents[0],process=saved.launchProcess;
+  const call=(_exe,args)=>JSON.stringify({result:args[1]==='list'?{agents}:{agent:original}}),options={call,readProcess:()=>({ok:true,value:process})};
+  original.agent_status='working';assert.equal(f.recover(options).result,'review_retained');
+  original.agent_status='idle';const session=original.agent_session;original.agent_session=null;assert.throws(()=>f.recover(options),/identity changed/);original.agent_session=session;
+  assert.throws(()=>f.recover({...options,readProcess:()=>({ok:false,error:'EPERM'})}),/continuity is UNKNOWN/);
+  const result=f.recover(options),proof=f.context().events.find(e=>e.seq===result.proof);assert.equal(proof.kind,'bound-unprompted-original');assert.equal(proof.original_native_launch_attempted,true);
+  const resumed=f.d.dispatch(['--retry',f.journal,'--continue-review'],{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});assert.equal(resumed.status,0,resumed.stderr);assert.equal(promptCalls(f.d).length,1);assert.equal(f.d.calls().filter(c=>c.type==='lane'&&c.a[0]==='dispatch').length,1);
+  assert.equal(JSON.parse(fs.readFileSync(f.journal)).run,'R-886');assert.equal(f.context().events.some(e=>e.type==='review.recovery-completed'),false);
+});
+
+test('original worker continuation refuses UNKNOWN native flags changed claim reports STOP and overlapping captures',t=>{
+  for(const kind of ['true','unknown','claim','report','STOP','overlap']){
+    const f=recordedPartialFixture(t);
+    if(['true','unknown'].includes(kind))fs.writeFileSync(f.journal,JSON.stringify({...f.job,native_launch_attempted:kind==='true'?true:null}));
+    if(kind==='claim')f.add([{type:'run.claimed',run:'R-886',project:f.identity,record:f.org,owner:{...f.job.ownership.owner,controller:'foreign'}}]);
+    if(kind==='report'){const file=f.context().state.runs.get('R-886').report_path;fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'Incoming original report');}
+    if(kind==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'STOP');
+    if(kind==='overlap')f.add([{type:'item.added',id:'REV-99',role:'reviewer',title:'UNKNOWN overlap',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_target:f.target,review_round_cap:1}}]);
+    assert.throws(()=>f.recover(),/UNKNOWN|partial|owner|controller|report|STOP|overlapping/i,kind);assert.equal(f.context().events.some(e=>e.type==='review.original-continuation'||e.type==='review.recovery-completed'),false,kind);assert.equal(promptCalls(f.d).length,0);
   }
 });
 

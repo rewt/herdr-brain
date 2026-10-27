@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fixture} from './dispatch-fixture.mjs';
-import {preflightContinuation,initialCapacityRefusal} from '../preflight.mjs';
+import {preflightContinuation,initialCapacityRefusal,implementationChangeOutcome} from '../preflight.mjs';
 import {createHash} from 'node:crypto';
 
 async function driverResult(journal){
@@ -32,6 +32,15 @@ test('typed preflight capacity evidence permits unknown occupancy wording while 
   for(const patch of [{native_launch_attempted:true},{native_launch_attempted:undefined},{worker:{agentName:'existing'}},{error:'EPERM native refusal'},{error:'native identity UNKNOWN'}]){save({...job,failure:typed,...patch});assert.equal(preflightContinuation(args),null);}
   save(job);const file=path.join(f.org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20),'effects.json');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify({identity:common,org:f.org,actions:{original:{receipt:{status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_REVIEW_CAP',reason,journal})}}}}));assert.ok(preflightContinuation(args),'actual retained typed source receipt works without rewriting the old journal');
   save({...job,native_launch_attempted:undefined});fs.mkdirSync(journal+'.driver');fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify({journal,stage:'open',run:null,exit_code:1,code:'DISPATCH_REVIEW_CAP',error:reason,native_launch_attempted:null})+'\n');assert.equal(preflightContinuation(args),null,'unavailable launch knowledge stays null');
+});
+
+test('old implementation-change outcome is typed without broad text exemptions or converting TRUE and unknown native attempts to zero',t=>{
+  const f=fixture(t),root=fs.realpathSync(new URL('../../',import.meta.url)),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']),journal=path.join(f.org,'dispatch/old-source.json');fs.mkdirSync(path.dirname(journal),{recursive:true});
+  const job={token:'old-source',repo:f.repo,org:f.org,common,release:{root},reviewQueueProtocol:1,stage:'open',run:null,error:'loaded queue/dispatch implementation changed; wait for next real pass',native_launch_attempted:false},args={journal,repo:f.repo,org:f.org,common,root};
+  fs.writeFileSync(journal,JSON.stringify(job));const result=preflightContinuation(args);assert.equal(result.journal,journal);assert.equal(result.outcome.kind,'implementation-changed');assert.equal(result.outcome.source,'exact-legacy-outcome');
+  for(const flag of [true,null,undefined]){const changed={...job,native_launch_attempted:flag};fs.writeFileSync(journal,JSON.stringify(changed));assert.equal(preflightContinuation(args),null);assert.equal(implementationChangeOutcome(changed).native_launch_attempted,flag===true?true:null);}
+  assert.equal(implementationChangeOutcome({...job,error:'another implementation changed UNKNOWN outcome'}),null);
+  assert.equal(implementationChangeOutcome({...job,error:'typed diagnostic',failure:{code:'DISPATCH_IMPLEMENTATION_CHANGED'}}).source,'typed-failure');
 });
 
 test('typed initial capacity refusal accepts only a completed no-journal guard response and never a native or unknown launch',()=>{

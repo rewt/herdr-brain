@@ -8,6 +8,11 @@ const implementation=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const plain=file=>{const s=fs.lstatSync(file);if(!s.isFile()||fs.realpathSync(file)!==path.resolve(file))throw Error('redirected original preflight evidence');return fs.readFileSync(file,'utf8');};
 const capacityCodes=new Set(['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP']);
+const implementationErrors=new Set(['loaded queue/dispatch implementation changed; wait for next real pass','immutable saved queue/dispatch implementation changed; retain its owner']);
+export function implementationChangeOutcome(job){
+  if(job.failure?.code!=='DISPATCH_IMPLEMENTATION_CHANGED'&&!implementationErrors.has(job.error))return null;
+  return{kind:'implementation-changed',source:job.failure?.code==='DISPATCH_IMPLEMENTATION_CHANGED'?'typed-failure':'exact-legacy-outcome',native_launch_attempted:typeof job.native_launch_attempted==='boolean'?job.native_launch_attempted:null};
+}
 export function initialCapacityRefusal(entry){
   if(entry?.receipt?.status!==1||entry.receipt.signal||/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|STOP/i.test(entry.error??''))return null;
   try{const value=JSON.parse(entry.receipt.stdout);return value.result==='failed'&&capacityCodes.has(value.code)&&!value.journal&&typeof value.reason==='string'?value:null;}catch{return null;}
@@ -42,5 +47,5 @@ export function preflightContinuation({journal,repo,org,common,root=implementati
   const capability=hash(JSON.stringify(files.map(file=>[file,hash(fs.readFileSync(path.join(root,file)))])));
   if(!capacity&&job.preflightContinuations?.some(p=>p.capability===capability))return null;
   const terminalHash=terminal?hash(JSON.stringify(terminal)):null;
-  return{journal,token:job.token,job,request_sha256:hash(bytes),terminal_sha256:terminalHash,capability,key:capacity?hash(JSON.stringify([capability,hash(bytes),terminalHash])):capability,capacity:!!capacity,native_launch_attempted:original?job.native_launch_attempted??null:false,...(original?{original_prestart:{seq:original.seq,request_sha256:original.request_sha256}}:{})};
+  return{journal,token:job.token,job,request_sha256:hash(bytes),terminal_sha256:terminalHash,capability,key:capacity?hash(JSON.stringify([capability,hash(bytes),terminalHash])):capability,capacity:!!capacity,outcome:implementationChangeOutcome(job),native_launch_attempted:original?job.native_launch_attempted??null:false,...(original?{original_prestart:{seq:original.seq,request_sha256:original.request_sha256}}:{})};
 }

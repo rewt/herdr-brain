@@ -21,7 +21,7 @@ export function sessionBindCommand(argv) {
     if (!run || job.org !== org || job.common !== gitProject(job.repo).identity ||
         fs.realpathSync(job.repo) !== job.repo || fs.realpathSync(job.workspace) !== run.workspace ||
         path.dirname(journal) !== path.join(org, 'dispatch') || job.stage !== 'complete' ||
-        !['observing', 'bound'].includes(binding?.status) ||
+        !['observing', 'bound', 'unbound'].includes(binding?.status) ||
         !proposed || Object.keys(proposed).some(k => !fields.includes(k)) || proposed.type !== 'run.session_bound' ||
         proposed.dispatch?.journal !== journal || proposed.dispatch.attempt !== job.token ||
         proposed.dispatch.project !== job.common || proposed.dispatch.record !== org ||
@@ -37,7 +37,8 @@ export function sessionBindCommand(argv) {
       return { add: [] }; // Lost reply remains recoverable after completion/deadline.
     }
     if (run.report || run.abandoned) throw new UserError('session bind requires an open, unreported run');
-    if (Date.now() > Date.parse(binding.deadline)) throw new UserError('dispatch session binding deadline expired');
+    // validSessionBind checks the saved observation against the original window.
+    // Record-lock/CLI latency must not turn a timely observation into a refusal.
     if ([...state.runs.values()].some(other => other.started.seq > run.started.seq &&
         (sharesWorker(run, other, state) || effectiveWorkerIdentity(other, state).agent_session_id === proposed.session)))
       throw new UserError('a newer run holds the worker occupant');

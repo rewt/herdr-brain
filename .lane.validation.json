@@ -2,7 +2,7 @@
   "fast": "npm run test:fast",
   "promotion_tests": "test/helpers/affected-tests.mjs",
   "promotion": "node test/helpers/affected-tests.mjs --promotion",
-  "release": "npm run test:release",
+  "release": "node test/helpers/run.mjs --test-name-pattern='^(config verification|an invalid project binding|unidentifiable JSON|record ownership|conflicting home ownership|a real identity folder|folder discovery|unadopted canonical, linked and nested lookups|home pins precede Git absence prechecks|record bind is separate|transaction refuses the |binding refuses changed receipts|timely |source-selected cold dispatch)' test/config-home-cache.test.mjs test/config-home.test.mjs dispatch/test/session-bind.test.mjs dispatch/test/dispatch-session.test.mjs dispatch/test/dispatch-recovery.test.mjs",
   "timeout_seconds": 0,
   "idle_timeout_seconds": 900,
   "review": "parallel",

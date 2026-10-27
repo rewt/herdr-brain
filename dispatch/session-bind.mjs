@@ -18,7 +18,7 @@ export function nativeProcess(agent, info, readOwner) {
 export async function observeSessionBinding({ job, save, observe, record, now = Date.now,
   monotonic = () => performance.now(), pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   const b = job.sessionBinding;
-  if (!b || ['bound', 'unbound'].includes(b.status)) return;
+  if (!b || b.status === 'bound' || b.status === 'unbound' && !b.proposed) return;
   const finish = (status, reason) => { b.status = status; if (reason) b.reason = reason; save(); };
   // Persist a proposal before calling record. A lost response replays exactly
   // that fact, including after ingestion or deadline, without another prompt.
@@ -39,7 +39,12 @@ export async function observeSessionBinding({ job, save, observe, record, now = 
   while (now() < Date.parse(b.deadline) && monotonic() - started < end) {
     let seen;
     try { seen = observe(); }
-    catch { finish('unbound', 'occupant changed or continuity evidence unavailable'); return; }
+    catch (error) {
+      const expired = now() >= Date.parse(b.deadline) || monotonic() - started >= end;
+      finish('unbound', expired ? 'native session observation deadline expired' :
+        `native session observation failed: ${error.message}`);
+      return;
+    }
     if (seen.process.pid !== b.process.pid || seen.process.identity !== b.process.identity) {
       finish('unbound', 'native process changed'); return;
     }

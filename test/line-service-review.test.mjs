@@ -57,7 +57,15 @@ for (const directory of ['current', 'foreign']) for (const root of [null, false,
     if (directory === 'current') assert.throws(() => s.pass(), /absence UNKNOWN/);
     else s.pass();
     assert.equal(f.calls.length, 0, 'no queue or native helper is invoked');
-    assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+    const after = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+    assert.deepEqual(after.subarray(0, events.length), events, 'existing record history stays immutable');
+    const added = after.subarray(events.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);
+    assert.deepEqual(added.map(e => e.type), directory === 'current' ? [] : ['line-service.review-error', 'line-service.review-health']);
+    if (directory === 'foreign') {
+      assert.match(added[0].reason, /absence UNKNOWN/);
+      assert.equal(added[0].scope.head, f.head);
+      assert.equal(added[1].queued, 0);
+    }
     assert.equal(fs.readFileSync(file, 'utf8'), bytes);
   });
 }

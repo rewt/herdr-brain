@@ -376,6 +376,12 @@ test('source-selected cold dispatch preserves home policy and saved-operation ro
   const f = fixture(t, { project });
   const source = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
   delete f.env.HERDR_BRAIN_ROOT;
+  // Production deliberately uses the account home, not HOME, for installation.
+  // Give this subprocess family its own account-home observation as well.
+  const account = path.join(f.root, 'account-home.mjs');
+  fs.writeFileSync(account, `import os from 'node:os';const userInfo=os.userInfo;os.userInfo=(...args)=>({...userInfo(...args),homedir:${JSON.stringify(project.home)}});`);
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${account}`;
+  fs.writeFileSync(policyLocation(f.repo, 'pin', f.env).file, JSON.stringify({ release: 'compatible' }));
   const first = f.start(['--to', 'ops-project'], {entry: path.join(source, 'dispatch/dispatch.mjs')}); assert.equal(first.status, 0, first.stderr);
   const savedFile = f.jobs()[0], saved = JSON.parse(fs.readFileSync(savedFile));
   assert.equal(saved.release.root, project.bundle, 'the saved operation belongs to its original immutable bundle');

@@ -182,7 +182,7 @@ test('predecessor preparation composes the full retained R858-shaped archive-cop
 test('predecessor preparation refuses changed archives callers completed or competing budgets and independent current holds without another reviewer',t=>{
   for(const kind of ['archive','caller','spent','competing','hold','original-progress']){
     const f=predecessorPreparationFixture(t);let args=f.corrected;
-    if(kind==='archive')fs.appendFileSync(f.manifest,'changed');
+    if(kind==='archive'){const value=JSON.parse(fs.readFileSync(f.manifest));fs.renameSync(f.manifest,f.manifest+'.retained-original');fs.writeFileSync(f.manifest,JSON.stringify({...value,request_sha256:'0'.repeat(64)}));}
     if(kind==='caller'){const a={...f.a,terminal_id:'different-terminal',agent_session:{value:'different-session'}};args={...args,call:(_exe,x)=>JSON.stringify({result:x[0]==='agent'&&x[1]==='list'?{agents:[a]}:{agent:a}})};}
     if(kind==='spent')f.add([{type:'review.recovery-completed',id:f.old.id,item:'ENG-1',run:'R-1',target:f.old.target,project:f.identity,org:f.org}]);
     if(kind==='competing')f.add([{type:'review.recovery-intent',id:'other-preparation',predecessor_preparation:{id:f.old.id},item:'ENG-1',run:'R-1',target:f.old.target,project:f.identity}]);

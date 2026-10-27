@@ -1,4 +1,4 @@
-import { isolateSessionEnvironment } from './session-environment.mjs';
+import { isolateSessionEnvironment, setSessionEnvironment } from './session-environment.mjs';
 import { fixtureEnvironment, PROMOTION_REQUEST_KEYS } from './fixture-environment.mjs';
 // Shared offline topology for retirement and the composed activation seam.
 import './memory-fixture.mjs';
@@ -26,14 +26,10 @@ export function hold(f, kind = 'file', cwd = f.repo) {
   else fs.writeFileSync(file, 'contents must never be read');
   return () => fs.rmSync(file, { recursive: true, force: true });
 }
+export const RETIREMENT_ENV_KEYS = ['HOME', 'TEST_MEMORY_FILE', 'NODE_OPTIONS', 'HERDR_MONITOR_FLEET',
+  'HERDR_TEST_SCRATCH_ROOTS', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME', ...PROMOTION_REQUEST_KEYS];
 export function isolatedEnv(t, f) {
-  const old = {};
-  for (const key of ['TEST_MEMORY_FILE', 'NODE_OPTIONS', 'HERDR_MONITOR_FLEET', 'HERDR_TEST_SCRATCH_ROOTS', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME', ...PROMOTION_REQUEST_KEYS]) {
-    // HOME/fleet restoration belongs to the fixture's once-per-test owner.
-    if (key !== 'HERDR_MONITOR_FLEET') old[key] = process.env[key];
-    if (f.env[key] === undefined) delete process.env[key]; else process.env[key] = f.env[key];
-  }
-  t.after(() => { for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  setSessionEnvironment(t, Object.fromEntries(RETIREMENT_ENV_KEYS.map(key => [key, f.env[key]])));
 }
 export function assertNoRemoval(f) {
   assert.deepEqual(f.read().actions.filter(a => ['close', 'remove'].includes(a[1])), []);
@@ -42,6 +38,7 @@ export function assertNoRemoval(f) {
 export function fixture(t, { merged = true, occupied = true } = {}) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'retire-path-')));
   isolateSessionEnvironment(t, scratch);
+  const realHome = setSessionEnvironment(t, {}).HOME;
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'repo'), lane = path.join(scratch, 'lane'), org = path.join(scratch, 'record');
   fs.mkdirSync(repo); fs.mkdirSync(org); fs.mkdirSync(path.join(org, 'references'));
@@ -122,7 +119,7 @@ else {console.error('unexpected fixture command '+a.join(' '));process.exit(1);}
     return result;
   };
   const job = { id: 'job', topic: 'topic', org, run: 'R-1', herdr, laneCLI };
-  return { scratch, repo, lane, org, env, git, head, common, state, save, file, retirement, close, job,
+  return { scratch, realHome, repo, lane, org, env, git, head, common, state, save, file, retirement, close, job,
     eventFile, eventBytes, read: () => JSON.parse(fs.readFileSync(file)), queue: () => queueFor(repo),
     herdrCalls: () => fs.existsSync(herdrLog) ? fs.readFileSync(herdrLog, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [],
     traceGit, gitCalls: () => fs.existsSync(gitLog) ? fs.readFileSync(gitLog, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [] };

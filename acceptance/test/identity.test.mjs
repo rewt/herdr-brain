@@ -42,7 +42,7 @@ function configuredFixture(t, { merged = true } = {}) {
   events[1].meta.pane = 'w:p1'; delete events[1].meta.agent_session_id;
   const saveEvents = () => fs.writeFileSync(f.eventFile, events.map(e => JSON.stringify(e) + '\n').join(''));
   saveEvents();
-  const env = harnessEnvironment(process.env, root);
+  const env = harnessEnvironment({ ...process.env, HOME: f.realHome }, root);
   env.PATH = `${bin}:${process.env.PATH}`; env.HERDR_RETIRE_HERDR = adapter;
   env.LANE_CONFIG = path.join(root, 'lane.json');
   fs.writeFileSync(env.LANE_CONFIG, JSON.stringify({ main: 'main', validate: 'true' }));
@@ -70,7 +70,7 @@ async function scriptedFixture(t) {
   // Only native lifecycle reporting is simulated. The actual worker, shell,
   // process reader, guarded retirement and cwd-removal guard run unchanged.
   fs.writeFileSync(path.join(root, 'herdr.mjs'), "console.log('{\"result\":{}}');\n");
-  fs.writeFileSync(path.join(root, 'product-home-env.json'), JSON.stringify({ realHome: process.env.HOME,
+  fs.writeFileSync(path.join(root, 'product-home-env.json'), JSON.stringify({ realHome: f.realHome,
     roots: [root], homes: scratchProductHomes(root) }));
   const executable = path.join(root, 'codex');
   fs.writeFileSync(executable, fs.readFileSync(process.execPath), { mode: 0o700, flag: 'wx' });

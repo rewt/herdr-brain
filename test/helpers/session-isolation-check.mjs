@@ -5,10 +5,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { canonicalProject } from '../../sessions/project.mjs';
 
-export async function checkSessionIsolation(t, create) {
+export async function checkSessionIsolation(t, create, extra = {}) {
   const foreign = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'session-inherited-')));
-  const before = { HOME: process.env.HOME, HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET };
-  const inherited = { HOME: foreign, HERDR_MONITOR_FLEET: path.join(foreign, 'fleet') };
+  const keys = ['HOME', 'HERDR_MONITOR_FLEET', ...Object.keys(extra)];
+  const before = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const inherited = { ...extra, HOME: foreign, HERDR_MONITOR_FLEET: path.join(foreign, 'fleet') };
   fs.mkdirSync(path.join(foreign, '.herdr-monitor', 'foreign'), { recursive: true });
   fs.writeFileSync(path.join(foreign, '.herdr-monitor', 'foreign', 'identity.json'), '{}');
   const reads = [], originals = {};
@@ -25,7 +26,7 @@ export async function checkSessionIsolation(t, create) {
     };
   }
   try {
-    for (const values of [inherited, { HOME: undefined, HERDR_MONITOR_FLEET: undefined }]) {
+    for (const values of [inherited, Object.fromEntries(keys.map(key => [key, undefined]))]) {
       for (const [key, value] of Object.entries(values)) {
         if (value === undefined) delete process.env[key]; else process.env[key] = value;
       }
@@ -34,10 +35,12 @@ export async function checkSessionIsolation(t, create) {
         for (let i = 0; i < 2; i++) {
           const f = await create(child), cwd = f.cwd ?? f.lane;
           scratches.push(f.scratch);
+          if (Object.hasOwn(f, 'realHome')) assert.equal(f.realHome, values.HOME, 'original caller home across fixtures');
           const expected = { HOME: path.join(f.scratch, 'home'), HERDR_MONITOR_FLEET: path.join(f.scratch, 'fleet') };
           for (const [key, value] of Object.entries(expected)) {
             assert.equal(process.env[key], value); assert.equal(f.env[key], value);
           }
+          for (const key of Object.keys(extra)) assert.equal(process.env[key], f.env[key], key);
           const project = canonicalProject(cwd);
           const actual = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e',
             `import { canonicalProject } from ${JSON.stringify(new URL('../../sessions/project.mjs', import.meta.url).href)};
@@ -46,7 +49,7 @@ export async function checkSessionIsolation(t, create) {
           assert.deepEqual(actual, { ...expected, project });
         }
       });
-      for (const [key, value] of Object.entries(values)) assert.equal(process.env[key], value);
+      for (const [key, value] of Object.entries(values)) assert.equal(process.env[key], value, `restored ${key}`);
       for (const scratch of scratches) assert.equal(fs.existsSync(scratch), false);
       assert.deepEqual(reads, []);
     }

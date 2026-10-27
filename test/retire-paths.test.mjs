@@ -18,7 +18,7 @@ import { createHousekeeping, tidyFinishedTabs } from '../housekeeping/housekeepi
 import { recordStandardSlot, slotReceiptFile } from '../sessions/receipts.mjs';
 import { classifyRetirement } from '../lib/retire-status.mjs';
 import { initialShellDirectory } from '../lib/initial-shell.mjs';
-import { fixture, hold, heldReason, isolatedEnv, assertNoRemoval, completionFixture, traceLane } from './helpers/retire-fixture.mjs';
+import { fixture, hold, heldReason, isolatedEnv, RETIREMENT_ENV_KEYS, assertNoRemoval, completionFixture, traceLane } from './helpers/retire-fixture.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
@@ -703,8 +703,7 @@ test('the consume CLI reaches its own deadline cleanly, retaining the hint and r
 
 test('promote drain consumes requests at both foreground boundaries without running a gate', async t => {
   const f=fixture(t);f.state.triggerOnClose=true;f.save();const queue=f.queue();
-  const old={};for(const key of ['ORG_DIR','HERDR_MONITOR_FLEET','HERDR_RETIRE_HERDR','MONITOR_TEST_SLOT_PATH','MONITOR_TEST_SLOT_COMPAT_PATH','XDG_STATE_HOME']){old[key]=process.env[key];process.env[key]=f.env[key];}
-  t.after(()=>{for(const[key,value]of Object.entries(old)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
+  isolatedEnv(t, f);
   requestRetirement({org:f.org,eventSeq:4,source:'disposition'});await drain(queue);
   const handled=JSON.parse(fs.readFileSync(path.join(f.org,'retirement/handled.json')));
   assert.equal(handled.revision,5);assert.deepEqual(f.read().actions,[['tab','close','w:t']]);assert.deepEqual(queue.load().results,[]);
@@ -713,13 +712,12 @@ test('promote drain consumes requests at both foreground boundaries without runn
 test('promote sends its ready acknowledgment before observing a pending retirement hint', async t => {
   const f = fixture(t), queue = f.queue(), marker = path.join(f.scratch, 'ready');
   f.state.readyMarker = marker; f.save();
-  const old = {};
-  for (const key of ['ORG_DIR', 'HERDR_MONITOR_FLEET', 'HERDR_RETIRE_HERDR', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME']) { old[key] = process.env[key]; process.env[key] = f.env[key]; }
+  isolatedEnv(t, f);
   const send = process.send, write = process.stderr.write, messages = [], earlyErrors = [];
   let ready = false;
   process.send = message => { messages.push(message); if (message.ready) { ready = true; fs.writeFileSync(marker, 'acknowledged'); } return true; };
   process.stderr.write = function(chunk, ...args) { if (!ready && String(chunk).includes('retirement catch-up')) earlyErrors.push(String(chunk)); return write.call(this, chunk, ...args); };
-  t.after(() => { process.send = send; process.stderr.write = write; for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  t.after(() => { process.send = send; process.stderr.write = write; });
   requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' });
   await drain(queue);
   assert.equal(f.read().preReadyObservation ?? false, false, 'retirement observed before ready');
@@ -739,11 +737,10 @@ test('a dequeued job is persisted before retirement catch-up and is never left c
   // foreground catch-up rather than an integration or its scoped cleanup.
   queue.transaction(data => data.pending.push({ ...f.job, laneCLI: fakeLane, to: 'fixture', attempts: 1, retry: 0 }));
   f.state.currentQueue = queue.file; f.save();
-  const old = {};
-  for (const key of ['ORG_DIR', 'HERDR_MONITOR_FLEET', 'HERDR_RETIRE_HERDR', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME']) { old[key] = process.env[key]; process.env[key] = f.env[key]; }
+  isolatedEnv(t, f);
   const send = process.send, messages = [];
   process.send = message => { messages.push(message); return true; };
-  t.after(() => { process.send = send; for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  t.after(() => { process.send = send; });
   requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' }); await drain(queue);
   assert.deepEqual(messages, [{ ready: true }]);
   assert.equal(f.read().observedCurrent ?? false, false, 'catch-up observed the dequeued job as current');
@@ -973,4 +970,5 @@ for (const gitOnly of [true, false]) test(`a planner KEEP refuses ${gitOnly ? 'g
 test('retirement fixture isolates inherited session configuration and restores its caller', t =>
   checkSessionIsolation(t, child => {
     const f = fixture(child); isolatedEnv(child, f); adoptStandard(f); return f;
-  }));
+  }, Object.fromEntries(RETIREMENT_ENV_KEYS.filter(key => !['HOME', 'HERDR_MONITOR_FLEET'].includes(key))
+    .map(key => [key, key === 'NODE_OPTIONS' ? '--no-warnings' : `/caller/${key}`]))));

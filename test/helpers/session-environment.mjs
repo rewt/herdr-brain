@@ -1,23 +1,31 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const owners = new WeakSet();
-export function isolateSessionEnvironment(t, scratch) {
-  // canonicalProject and receipt helpers can use process.env even when the
-  // fixture passes an explicit child environment. Isolate both discovery paths.
-  // Restore once per test: Node runs after hooks in registration order, and a
-  // test with several fixtures must never restore a deleted intermediate home.
+const owners = new WeakMap();
+// Every mutation in a test context shares one caller snapshot and restore hook.
+// Return that snapshot so composed fixtures retain the original home boundary.
+export function setSessionEnvironment(t, env) {
   if (!owners.has(t)) {
-    owners.add(t);
-    const before = { HOME: process.env.HOME, HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET };
+    const before = {};
+    owners.set(t, before);
     t.after(() => {
       for (const [key, value] of Object.entries(before)) {
         if (value === undefined) delete process.env[key]; else process.env[key] = value;
       }
     });
   }
+  const before = owners.get(t);
+  for (const [key, value] of Object.entries(env)) {
+    if (!Object.hasOwn(before, key)) before[key] = process.env[key];
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+  return before;
+}
+
+export function isolateSessionEnvironment(t, scratch) {
+  // Product discovery can use process.env despite an explicit child environment.
   const env = { HOME: path.join(scratch, 'home'), HERDR_MONITOR_FLEET: path.join(scratch, 'fleet') };
   fs.mkdirSync(env.HOME);
-  Object.assign(process.env, env);
+  setSessionEnvironment(t, env);
   return env;
 }

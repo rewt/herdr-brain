@@ -81,6 +81,25 @@ test('reserved outcomes and extra commands are rejected while actual operator qu
   assert.equal(dispatchInput({events:f.events,state:f.state(),item:f.state().items.get('ENG-1')}),null);
 });
 
+test('pending reserved question coalesces next passes and duplicate delivery until the explicit human answer restarts work',()=>{
+  const f=fixture(),a=f.answer('ask_operator',{category:'publish',question:'Publish this release?',recommend:'no'}),id=f.queue();f.judge(id,a);
+  f.apply(id,a).add.forEach(f.add);
+  const questions=()=>[...f.state().items.values()].filter(i=>i.role==='human');
+  for(let pass=0;pass<2;pass++){
+    // Repeated passes and a restarted process fold the same record: still a wait.
+    assert.equal(f.request(),null);
+    assert.equal(decisionCandidates({state:fold(f.events),events:f.events,identity:'/git',org:'/record'}).length,0);
+    assert.equal(f.apply(id,a).add.length,0,'duplicate delivery is a no-op');
+    assert.equal(questions().length,1);assert.equal(dispatchInput({events:f.events,state:f.state(),item:f.state().items.get('ENG-1')}),null);
+  }
+  const q=questions()[0];assert.equal(q.title,'Publish this release?');assert.equal(q.meta.recommend,'no');assert.equal(q.meta.answer,undefined);
+  assert.notEqual(f.state().items.get('ENG-1').meta.hold,true,'no park used to suppress the subject');
+  const human=e=>f.events.push({...e,seq:f.events.length+1,at:'2026-10-27T00:01:00Z',by:'human'});
+  human({type:'note.added',id:q.id,text:'yes',decision:true,kind:'answer'});human({type:'item.updated',id:q.id,fields:{meta:{answer:'yes',answered_by:'human'}}});human({type:'item.closed',id:q.id,as:'done'});
+  assert.equal(f.request(),null,'the existing human-answer restart owns the subject, not another judge');
+  assert.ok(dispatchInput({events:f.events,state:f.state(),item:f.state().items.get('ENG-1')}));
+});
+
 test('hold, reserved ancestry and unselected report proposals never become automatic decision candidates',()=>{
   for(const change of [{id:'ENG-1',fields:{meta:{hold:true}}},{id:'G-1',fields:{meta:{reserved:true}}},{id:'ENG-1',fields:{meta:{queue_selected:false}}}]){
     const f=fixture();f.add({type:'item.updated',...change});assert.equal(f.request(),null);

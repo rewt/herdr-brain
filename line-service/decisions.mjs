@@ -45,6 +45,9 @@ export function decisionCapture({state,events,item,activation}) {
   if(!activation||!item||item.closed||!queueSelected(item)||itemLaunchHold(state,item.id)||reserved(item)||isDecision(item)||!run?.report||run.abandoned||!['blocked','needs_human','failed'].includes(run.report.outcome))return null;
   if(activation.subjects?.length&&!activation.subjects.includes(item.id))return null;
   if(!run.owner||run.owner.legacy||run.owner.controller!=='brain')return null;
+  // A pending reserved question is a mechanical wait: its own blocker and notes
+  // must not become a new intent, judge or second human question.
+  if(state.links.some(l=>l.blocked===item.id&&(q=>q&&!q.closed&&(q.role==='human'||q.meta.operator_reserved))(state.items.get(l.blocker))))return null;
   const ownDecisionIds=new Set([...state.items.values()].filter(isDecision).map(i=>i.id));
   const inputs=events.filter(e=>!ownDecisionIds.has(e.id)&&!ownDecisionIds.has(e.blocker));
   let brief=null;try{brief=bytesHash(fs.readFileSync(run.brief_path));}catch{}
